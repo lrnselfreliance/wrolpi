@@ -447,15 +447,15 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
     archive3 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
 
     assert str(archive3.singlefile_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.html'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.html'
     assert str(archive3.readability_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.readability.html'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.html'
     assert str(archive3.readability_txt_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.readability.txt'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.txt'
     assert str(archive3.readability_json_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.readability.json'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.json'
     assert str(archive3.screenshot_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.png'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.png'
 
 
 @pytest.mark.asyncio

@@ -1,3 +1,5 @@
+from typing import List
+
 import pytest
 
 from modules.videos import schema
@@ -89,3 +91,35 @@ def test_channels_no_url(test_session, test_directory, test_channels_config):
 
     save_channels_config()
     import_channels_config()
+
+
+@pytest.mark.asyncio
+async def test_search_channels_by_name(test_session, channel_factory, video_factory):
+    """
+    Channels can be searched by their name.
+    """
+    # Create four channels with varying associated videos.
+    c1 = channel_factory(name='foo')
+    c2 = channel_factory(name='bar')
+    c3 = channel_factory(name='foo bar')
+    c4 = channel_factory(name='foobar')
+    video_factory(channel_id=c1.id)
+    for _ in range(2):
+        video_factory(channel_id=c2.id)
+    for _ in range(3):
+        video_factory(channel_id=c3.id)
+    for _ in range(4):
+        video_factory(channel_id=c4.id)
+    test_session.commit()
+
+    async def assert_search(name: str, channel_names: List[str], order_by_video_count=False):
+        channels = await lib.search_channels_by_name(name, order_by_video_count=order_by_video_count)
+        for channel in channels:
+            channel_name = channel_names.pop(0)
+            if channel.name != channel_name:
+                raise AssertionError(f'Channel does not match.  Expected: {channel_name}  Got: {channel.name}')
+        if channel_names:
+            raise AssertionError('More channels than expected.')
+
+    await assert_search('foo', ['foo', 'foo bar', 'foobar'])
+    await assert_search('bar', ['foobar', 'foo bar', 'bar'], True)

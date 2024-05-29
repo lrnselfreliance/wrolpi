@@ -54,7 +54,6 @@ MEDIA_DIRECTORY = Path(os.environ.get('MEDIA_DIRECTORY', DEFAULT_MEDIA_DIRECTORY
 CONFIG_DIR: Path = MEDIA_DIRECTORY / 'config'
 MODULES_DIR: Path = PROJECT_DIR / 'modules'
 
-DEFAULT_TIMEZONE_STR = 'America/Boise'
 DATE_FORMAT = '%Y-%M-%d'
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 DATETIME_FORMAT_MS = '%Y-%m-%d %H:%M:%S.%f'
@@ -82,8 +81,10 @@ FILE_MAX_TEXT_SIZE = int(os.environ.get('FILE_MAX_TEXT_SIZE', 100_000))
 VIDEO_COMMENTS_FETCH_COUNT = int(os.environ.get('VIDEO_COMMENTS_FETCH_COUNT', 80))
 YTDLP_CACHE_DIR = os.environ.get('YTDLP_CACHE_DIR', '/tmp/ytdlp_cache')
 
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.366'
+
 DEFAULT_HTTP_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116 Safari/537.36',
+    'User-Agent': USER_AGENT,
 }
 
 RPI_DEVICE_PATH = pathlib.Path('/proc/device-tree/model')
@@ -92,4 +93,5 @@ IS_RPI4 = 'Raspberry Pi 4' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONT
 IS_RPI5 = 'Raspberry Pi 5' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONTENTS else False
 IS_RPI = IS_RPI4 or IS_RPI5
 
-SIMULTANEOUS_DOWNLOAD_DOMAINS = int(os.environ.get('SIMULTANEOUS_DOWNLOAD_DOMAINS', 4))
+SIMULTANEOUS_DOWNLOAD_DOMAINS = int(os.environ.get('SIMULTANEOUS_DOWNLOAD_DOMAINS',
+                                                   2 if IS_RPI else 4))

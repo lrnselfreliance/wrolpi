@@ -16,7 +16,7 @@ from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST, DOCKERIZED
+from wrolpi.vars import PYTEST, DOCKERIZED, USER_AGENT
 from . import lib
 from .api import archive_bp  # noqa
 from .errors import InvalidArchive
@@ -72,7 +72,9 @@ class ArchiveDownloader(Downloader, ABC):
                download.url,
                '--browser-executable-path', CHROMIUM,
                '--browser-args', '["--no-sandbox"]',
-               '--dump-content')
+               '--dump-content',
+               '--user-agent', USER_AGENT,
+               )
         return_code, logs, stdout = await self.process_runner(
             download.id,
             download.url,
@@ -81,6 +83,15 @@ class ArchiveDownloader(Downloader, ABC):
         )
         if return_code != 0:
             raise RuntimeError(f'Archive singlefile exited with {return_code}')
+
+        if not stdout or SINGLEFILE_HEADER.encode() not in stdout[:1000]:
+            if logs and (stderr := logs.get('stderr')):
+                e = ChildProcessError(stderr.decode())
+                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+            if stdout:
+                e = ChildProcessError(stdout.decode())
+                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+            raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 
         return stdout, logs
 
@@ -98,12 +109,22 @@ class ArchiveDownloader(Downloader, ABC):
                 pathlib.Path('/home/wrolpi'),
             )
             if return_code == 0:
-                readability = json.loads(stdout)
+                try:
+                    readability = json.loads(stdout)
+                except TypeError:
+                    # JSON was invalid.
+                    e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
+                    if logs and (stderr := logs.get('stderr')):
+                        e = ChildProcessError(stderr.decode())
+                    raise RuntimeError(f'Failed to extract readability from {download.url}') from e
                 logger.debug(f'done readability for {download.url}')
                 return readability
             else:
                 logger.error(f'Failed to extract readability for {download.url}')
-                raise RuntimeError(f'Failed to extract readability for {download.url}')
+                e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
+                if logs and (stderr := logs.get('stderr')):
+                    e = ChildProcessError(stderr.decode())
+                raise RuntimeError(f'Failed to extract readability for {download.url} got {return_code}') from e
 
     @staticmethod
     async def do_screenshot_url(download: Download) -> bytes:
@@ -128,15 +149,6 @@ class ArchiveDownloader(Downloader, ABC):
         @warning: Will not raise errors if readability or screenshot cannot be extracted.
         """
         singlefile, logs = await self.do_singlefile(download)
-
-        if SINGLEFILE_HEADER.encode() not in singlefile[:1000]:
-            if logs and (stderr := logs.get('stderr') or ''):
-                e = RuntimeError(stderr)
-                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
-            if singlefile:
-                e = RuntimeError(singlefile)
-                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
-            raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 
         # Extract Readability from the Singlefile.
         try:

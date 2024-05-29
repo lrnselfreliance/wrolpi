@@ -219,7 +219,7 @@ async def start_single_tasks(app: Sanic):
     app.add_task(perpetual_check_db_is_up_worker())  # noqa
     app.add_task(perpetual_download_worker())  # noqa
 
-    # await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
+    await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
     await app.dispatch('wrolpi.periodic.bandwidth')
 
     try:

@@ -234,10 +234,10 @@ export function CalculatorsPage() {
     const activeCalculator = calc ?
         calculators.filter(i => i.key === calc)[0]
         : null;
-    const {button, title, contents} = activeCalculator || {};
+    const {icon, button, title, contents} = activeCalculator || {};
 
     const name = title || button + ' Calculator';
-    const header = activeCalculator ? name : 'Calculators';
+    const header = activeCalculator ? <Header><Icon name={icon}/>{name}</Header> : <Header>Calculators</Header>;
     useTitle(header);
 
     const calculatorButtons = calculators.map(i => {
@@ -256,7 +256,7 @@ export function CalculatorsPage() {
 
     // TODO add Breadcrumb here.
     return <>
-        <Header>{header}</Header>
+        {header}
         {body}
     </>
 }

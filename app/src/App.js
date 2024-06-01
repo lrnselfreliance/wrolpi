@@ -22,6 +22,7 @@ import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
 import {IframeViewer} from "./components/Common";
+import {CalculatorsRoute} from "./components/Calculators";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);

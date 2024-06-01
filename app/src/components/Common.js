@@ -1255,9 +1255,9 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
     </div>;
 }
 
-export const BackButton = () => {
+export const BackButton = ({...props}) => {
     const navigate = useNavigate();
-    return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>;
+    return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
 }
 
 export const ColorToSemanticHexColor = (color) => {
@@ -1715,4 +1715,8 @@ export function IframeViewer({title, viewerUrl}) {
                 }}/>
         </Media>
     </>
+}
+
+export function roundDigits(value, decimals = 2) {
+    return Number(Math.round(value + 'e' + decimals) + 'e-' + decimals);
 }

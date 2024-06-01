@@ -1186,3 +1186,8 @@ export const useDockerized = () => {
     const {status} = React.useContext(StatusContext);
     return status && status['dockerized'] === true;
 }
+
+export const useCalcQuery = () => {
+    const [calc, setCalc] = useOneQuery('calc');
+    return {calc, setCalc}
+}

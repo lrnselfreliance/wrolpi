@@ -1,5 +1,14 @@
 import React, {useContext} from 'react';
-import {Divider, Input, SegmentGroup, StatisticLabel, StatisticValue, TableCell, TableRow} from "semantic-ui-react";
+import {
+    Divider,
+    Input,
+    Label,
+    SegmentGroup,
+    StatisticLabel,
+    StatisticValue,
+    TableCell,
+    TableRow
+} from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router-dom";
 import {decryptOTP, encryptOTP} from "../api";
 import {
@@ -15,6 +24,7 @@ import {
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
+import {CalculatorsPage} from "./Calculators";
 
 class Encrypt extends React.Component {
     constructor(props) {
@@ -332,9 +342,15 @@ function StatisticsPage() {
 export function MoreRoute(props) {
     return <PageContainer>
         <Routes>
+            <Route path='calculators' element={<CalculatorsPage/>}/>
             <Route path='otp' exact element={<OTP/>}/>
             <Route path='statistics' exact element={<StatisticsPage/>}/>
             <Route path='vin' exact element={<VINDecoder/>}/>
         </Routes>
     </PageContainer>
+}
+
+export function ColoredInput({name, value, label, color, ...props}) {
+    label = label ? <Label color={color}>{label}</Label> : null;
+    return <Input value={value} name={name} label={label} {...props}/>
 }

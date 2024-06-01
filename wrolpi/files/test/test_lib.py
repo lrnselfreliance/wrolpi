@@ -839,7 +839,8 @@ async def test_move_deep_directory(test_async_client, test_session, test_directo
 
 
 @pytest.mark.asyncio
-async def test_move_directory(test_async_client, test_session, test_directory, make_files_structure, assert_directories):
+async def test_move_directory(test_async_client, test_session, test_directory, make_files_structure,
+                              assert_directories):
     """A Directory record is deleted when it's directory is deleted."""
     make_files_structure({
         'foo/one.txt': 'one',
@@ -890,7 +891,8 @@ async def test_move_error(test_session, test_directory, make_files_structure, vi
 
 
 @pytest.mark.asyncio
-async def test_file_group_move(test_async_client, test_session, make_files_structure, test_directory, video_bytes, srt_text):
+async def test_file_group_move(test_async_client, test_session, make_files_structure, test_directory, video_bytes,
+                               srt_text):
     """Test FileGroup's move method"""
     video, srt = make_files_structure({
         'video.mp4': video_bytes,
@@ -1049,3 +1051,24 @@ async def test_file_search_date_range(test_async_client, test_session, example_p
     files, total = lib.search_files('', 10, 0, to_year=2022)
     assert total == 1
     assert files[0]['id'] == pdf.id
+
+
+def test_replace_file(test_directory):
+    file = test_directory / 'foo.txt'
+    file.write_text('old contents')
+    assert file.read_text() == 'old contents'
+
+    lib.replace_file(file, 'new contents')
+    assert file.read_text() == 'new contents'
+    assert not (test_directory / 'foo.txt.tmp').exists()
+
+    lib.replace_file(file, b'new bytes')
+    assert file.read_bytes() == b'new bytes'
+    assert not (test_directory / 'foo.txt.tmp').exists()
+
+    # Default behavior is to refuse to replace a non-existent file.
+    with pytest.raises(FileNotFoundError):
+        lib.replace_file('does not exist', 'foo')
+
+    # Non-existent file can be overwritten.
+    lib.replace_file('does not exist', 'foo', missing_ok=True)

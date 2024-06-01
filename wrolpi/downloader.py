@@ -51,6 +51,11 @@ async def perpetual_download_worker():
                 logger.warning('DownloadManager stopped, quitting...')
                 return
 
+            if not flags.have_internet.is_set():
+                logger.warning('DownloadManager waiting for internet...')
+                await asyncio.sleep(10)
+                continue
+
             await download_manager.do_downloads()
         except asyncio.CancelledError:
             logger.info('perpetual_download cancelled...')

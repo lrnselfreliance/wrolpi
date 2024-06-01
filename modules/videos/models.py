@@ -9,10 +9,10 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, truncate_object_bytes
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
+from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, replace_file
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
@@ -487,7 +487,8 @@ class Video(ModelHelper, Base):
     def replace_info_json(self, info_json: dict):
         """Replace the info json file with the new json dict.  Handles adding new info_json file, if necessary."""
         info_json_path = self.info_json_path or self.video_path.with_suffix('.info.json')
-        info_json_path.write_text(json.dumps(info_json, indent=2))
+        info_json = json.dumps(info_json, indent=2)
+        replace_file(info_json_path, info_json, missing_ok=True)
 
         if not self.info_json_path:
             self.file_group.append_files(info_json_path)

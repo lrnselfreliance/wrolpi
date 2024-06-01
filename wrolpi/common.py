@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import shutil
+import socket
 import string
 import sys
 import tempfile
@@ -1791,3 +1792,17 @@ def get_title_from_html(html: str, url: str = None) -> str:
         return soup.title.string.strip()
     except Exception:  # noqa
         logger_.debug(f'Unable to extract title {url}')
+
+
+def can_connect_to_server(hostname: str) -> bool:
+    """Return True only if `hostname` responds on port 80."""
+    # Thanks https://stackoverflow.com/questions/20913411/test-if-an-internet-connection-is-present-in-python
+    try:
+        # connect to the host -- tells us if the host is actually
+        # reachable
+        conn = socket.create_connection((hostname, 53))
+        conn.close()
+        return True
+    except Exception:
+        pass  # We ignore any errors, returning False
+    return False

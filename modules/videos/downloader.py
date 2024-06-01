@@ -304,7 +304,7 @@ class VideoDownloader(Downloader, ABC):
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = (
                 str(YT_DLP_BIN),
-                '-cw',  # Continue downloads, do not clobber existing files.
+                '-c',  # Continue downloads
                 '-f', PREFERRED_VIDEO_FORMAT,
                 '--match-filter', '!is_live',  # Do not attempt to download Live videos.
                 '--write-subs',

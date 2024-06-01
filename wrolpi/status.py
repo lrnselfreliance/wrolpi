@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple
 
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import which
-from wrolpi.common import logger, limit_concurrent, get_warn_once
+from wrolpi.common import logger, get_warn_once
 from wrolpi.dates import now
 
 try:

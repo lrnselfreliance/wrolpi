@@ -12,12 +12,12 @@ from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
-    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config
+    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager, \
     perpetual_download_worker
-from wrolpi.vars import PROJECT_DIR, DOCKERIZED
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
@@ -218,6 +218,7 @@ async def start_single_tasks(app: Sanic):
     # Start perpetual tasks.  DO NOT AWAIT!
     app.add_task(perpetual_check_db_is_up_worker())  # noqa
     app.add_task(perpetual_download_worker())  # noqa
+    app.add_task(perpetual_have_internet_worker())  # noqa
 
     await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
     await app.dispatch('wrolpi.periodic.bandwidth')
@@ -299,10 +300,28 @@ async def perpetual_check_db_is_up_worker():
         logger.info('periodic_check_db_is_up was cancelled...')
 
 
+async def perpetual_have_internet_worker():
+    try:
+        while True:
+            try:
+                if can_connect_to_server(INTERNET_SERVER):
+                    flags.have_internet.set()
+                    # Check hourly once we have internet.
+                    await asyncio.sleep(float(Seconds.hour))
+                else:
+                    # Check every minute until the internet is back.
+                    flags.have_internet.clear()
+                    await asyncio.sleep(float(Seconds.minute))
+            except Exception as e:
+                logger.error('Failed to check if internet is up', exc_info=e)
+
+            await asyncio.sleep(10)
+    except asyncio.CancelledError:
+        logger.info('perpetual_check_have_internet_worker was cancelled...')
+
+
 @api_app.signal('wrolpi.periodic.start_video_missing_comments_download')
 async def periodic_start_video_missing_comments_download():
-    logger.debug('periodic_start_video_missing_comments_download is running')
-
     from modules.videos.video.lib import get_missing_videos_comments
 
     async with flags.refresh_complete.wait_for():
@@ -314,9 +333,17 @@ async def periodic_start_video_missing_comments_download():
 
     # Fetch comments for videos every hour.
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+        logger.debug('Waiting for downloads to be enabled before downloading comments...')
         await asyncio.sleep(10)
+    elif not flags.have_internet.is_set():
+        logger.debug('Waiting for internet before downloading comments...')
+        await asyncio.sleep(30)
     else:
-        await get_missing_videos_comments()
+        try:
+            await get_missing_videos_comments()
+        except Exception as e:
+            logger.error('Failed to get missing video comments', exc_info=e)
+
         await asyncio.sleep(int(Seconds.hour))
 
     await api_app.dispatch('wrolpi.periodic.start_video_missing_comments_download')

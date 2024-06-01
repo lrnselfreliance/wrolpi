@@ -114,6 +114,8 @@ outdated_zims = Flag('outdated_zims', store_db=True)
 kiwix_restart = Flag('kiwix_restart')
 # Map Importing
 map_importing = Flag('map_importing')
+# Used to disable or enable downloading when Internet is down.
+have_internet = Flag('have_internet')
 
 # Steps of refreshing.
 refresh_counting = Flag('refresh_counting')
@@ -130,10 +132,16 @@ def get_flags() -> dict:
     """Return a list of all Flags which are set."""
     flags = dict(
         db_up=db_up.is_set(),
-        refreshing=refreshing.is_set(),
-        refresh_complete=refresh_complete.is_set(),
-        outdated_zims=outdated_zims.is_set(),
         kiwix_restart=kiwix_restart.is_set(),
+        map_importing=map_importing.is_set(),
+        outdated_zims=outdated_zims.is_set(),
+        refresh_cleanup=refresh_cleanup.is_set(),
+        refresh_complete=refresh_complete.is_set(),
+        refresh_counting=refresh_counting.is_set(),
+        refresh_discovery=refresh_discovery.is_set(),
+        refresh_indexing=refresh_indexing.is_set(),
+        refresh_modeling=refresh_modeling.is_set(),
+        refreshing=refreshing.is_set(),
     )
     return flags
 

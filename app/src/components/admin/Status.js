@@ -1,9 +1,11 @@
-import {Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
+import {Accordion, Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, StatusContext} from "../../contexts/contexts";
+import {Media, SettingsContext, StatusContext, ThemeContext} from "../../contexts/contexts";
+import {AccordionContent, AccordionTitle, SegmentGroup} from "semantic-ui-react";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 
 function DriveInfo({used, size, percent, mount}) {
     let color;
@@ -162,7 +164,11 @@ export function MemoryUsageProgress({percent, label}) {
 export function StatusPage() {
     useTitle('Status');
 
+    const [activeIndex, setActiveIndex] = React.useState(null);
+
     const {status} = useContext(StatusContext);
+    const {settings} = useContext(SettingsContext);
+    const {s} = useContext(ThemeContext);
 
     let percent;
     let cores;
@@ -198,17 +204,21 @@ export function StatusPage() {
         memorySize = humanFileSize(memory_stats['total'], 0);
     }
 
-    const SizedHeader = ({children}) => {
+    const SizedHeader = ({children, sizeMobile = 'h1', sizeTablet = 'h2'}) => {
         return <div style={{marginBottom: '1em'}}>
-            <Media at='mobile'><Header as='h1'>{children}</Header></Media>
-            <Media greaterThanOrEqual='tablet'><Header as='h2'>{children}</Header></Media>
+            <Media at='mobile'><Header as={sizeMobile}>{children}</Header></Media>
+            <Media greaterThanOrEqual='tablet'><Header as={sizeTablet}>{children}</Header></Media>
         </div>
     }
 
     const cpuProgress = <CPUUsageProgress percent={percent} label={`CPU Usage (${cores} cores)`}/>;
     const memoryUsageProgress = <MemoryUsageProgress percent={memoryPercent} label={`RAM Usage (${memorySize})`}/>;
 
-    return <>
+    const handleAccordionClick = (e, {index}) => {
+        setActiveIndex(activeIndex === index ? -1 : index);
+    }
+
+    return <SegmentGroup>
         <Media at='mobile'>
             <Segment>
                 {cpuProgress}
@@ -261,5 +271,32 @@ export function StatusPage() {
             {drives && drives.length > 0 ? drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)
                 : <ProgressPlaceholder/>}
         </Segment>
-    </>
+
+        <Segment>
+            <SizedHeader sizeMobile={'h2'} sizeTablet={'h3'}>Developer</SizedHeader>
+            <Accordion>
+
+                <AccordionTitle onClick={handleAccordionClick} index={0}>
+                    <Icon name='dropdown'/>
+                    Status Details
+                </AccordionTitle>
+                <AccordionContent active={activeIndex === 0}>
+                <pre {...s}>
+                    {JSON.stringify(status, undefined, 1)}
+                </pre>
+                </AccordionContent>
+
+                <AccordionTitle onClick={handleAccordionClick} index={1}>
+                    <Icon name='dropdown'/>
+                    Settings Details
+                </AccordionTitle>
+                <AccordionContent active={activeIndex === 1}>
+                <pre {...s}>
+                    {JSON.stringify(settings, undefined, 1)}
+                </pre>
+                </AccordionContent>
+
+            </Accordion>
+        </Segment>
+    </SegmentGroup>
 }

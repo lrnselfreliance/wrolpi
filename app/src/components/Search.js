@@ -33,6 +33,16 @@ const SUGGESTED_APPS = [
     {location: '/videos/channel', title: 'Channels', description: 'View the Channels of your Videos'},
     {location: '/zim', title: 'Zim', description: 'View your Zims'},
     {location: '/zim/manage', title: 'Manage Zim', description: 'Manage your Zims'},
+    {
+        location: '/more/calculators?calc=temperature',
+        title: 'Temperature Calculator',
+        description: 'Convert Celsius, Fahrenheit, Kelvin'
+    },
+    {
+        location: '/more/calculators?calc=electrical',
+        title: 'Electrical Calculator',
+        description: 'Convert Volts, Ohms, Amps, Watts'
+    },
 ];
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
@@ -250,7 +260,9 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
 
         const matchingApps = SUGGESTED_APPS.filter(i =>
             i.title.toLowerCase().includes(lowerSearchStr)
-            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
+            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr)
+            || i.description.toLowerCase().includes(lowerSearchStr)
+            || fuzzyMatch(i.description.toLowerCase(), lowerSearchStr));
         if (matchingApps && matchingApps.length > 0) {
             // Match at most 5 apps.
             results.apps = {name: 'Apps', results: matchingApps.slice(0, 5)};

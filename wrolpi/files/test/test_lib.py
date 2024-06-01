@@ -1070,5 +1070,5 @@ def test_replace_file(test_directory):
     with pytest.raises(FileNotFoundError):
         lib.replace_file('does not exist', 'foo')
 
-    # Non-existent file can be overwritten.
-    lib.replace_file('does not exist', 'foo', missing_ok=True)
+    # Non-existent file can be created.
+    lib.replace_file(test_directory / 'will now exist', 'foo', missing_ok=True)

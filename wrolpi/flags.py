@@ -142,6 +142,7 @@ def get_flags() -> dict:
         refresh_indexing=refresh_indexing.is_set(),
         refresh_modeling=refresh_modeling.is_set(),
         refreshing=refreshing.is_set(),
+        have_internet=have_internet.is_set(),
     )
     return flags
 

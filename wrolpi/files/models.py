@@ -332,6 +332,7 @@ class FileGroup(ModelHelper, Base):
             new_files[idx]['path'] = new_path
         self.files = new_files
         self.primary_path = new_primary_path
+        self.title = self.primary_path.name
         # Need to re-index for self.data.
         self.indexed = False
         # Flush the changes to the FileGroup.

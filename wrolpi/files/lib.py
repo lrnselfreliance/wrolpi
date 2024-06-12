@@ -1289,7 +1289,7 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
         raise FileConflict(f'Cannot rename {path} because {new_path} already exists')
 
     with get_db_session(commit=True) as session:
-        fg = session.query(FileGroup).filter(FileGroup.primary_path == path).one_or_none()
+        fg: FileGroup = session.query(FileGroup).filter(FileGroup.primary_path == path).one_or_none()
         if not fg:
             # File wasn't yet in the DB.
             fg = FileGroup.from_paths(session, path)

@@ -1,14 +1,11 @@
-import json
-import sys
 from http import HTTPStatus
 
-import sanic.response
 from sanic import response, Blueprint
 from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.api_utils import json_response, CustomJSONEncoder
+from wrolpi.api_utils import json_response
 from wrolpi.common import logger, wrol_mode_check, run_after
 from wrolpi.errors import InvalidOrderBy, ValidationError
 from wrolpi.events import Events

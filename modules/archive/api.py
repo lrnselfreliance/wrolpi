@@ -4,9 +4,9 @@ from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
+from wrolpi.api_utils import json_response
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
-from wrolpi.api_utils import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
 

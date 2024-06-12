@@ -13,11 +13,11 @@ from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, model_archive_result, \
     get_domains
 from modules.archive.models import Archive, Domain
+from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
 
 

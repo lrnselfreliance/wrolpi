@@ -1,6 +1,6 @@
 import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {Media, QueryContext, SettingsContext, StatusContext} from "./contexts/contexts";
+import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
@@ -24,7 +24,7 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
-import {useSearchDate, useSearchFilter, useWROLMode} from "./hooks/customHooks";
+import {useSearchFilter, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 

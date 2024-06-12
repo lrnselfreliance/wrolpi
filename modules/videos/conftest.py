@@ -11,11 +11,11 @@ import pytest
 from PIL import Image
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
-from modules.videos.lib import set_test_channels_config, set_test_downloader_config, get_channels_config
+from modules.videos.lib import set_test_channels_config, set_test_downloader_config
 from modules.videos.models import Channel, Video
+from wrolpi.api_utils import api_app
 from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
 from wrolpi.files.models import FileGroup
-from wrolpi.api_utils import api_app
 from wrolpi.vars import PROJECT_DIR
 
 

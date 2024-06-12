@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useSearchDate, useSearchFilter} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useSearchDate, useSearchFiles, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateFiles, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
@@ -140,6 +140,7 @@ export function useSuggestions(searchStr, tagNames, filter) {
         JSON.stringify(tagNames),
         JSON.stringify(months),
         JSON.stringify(dateRange),
+        filter,
     ]);
 
     React.useEffect(() => {

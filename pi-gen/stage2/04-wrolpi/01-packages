@@ -2,6 +2,7 @@ apache2
 apache2-dev
 apache2-doc
 apt-transport-https
+aria2
 autoconf
 build-essential
 bzip2
@@ -82,6 +83,7 @@ python3-full
 python3-mapnik
 python3-pip
 python3-venv
+smartmontools
 renderd
 rsync
 software-properties-common

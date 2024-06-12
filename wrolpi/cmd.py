@@ -79,9 +79,9 @@ READABILITY_BIN = which('readability-extractor',
 
 # Videos
 YT_DLP_BIN = which(
+    '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
     'yt-dlp',
     '/usr/local/bin/yt-dlp',  # Location in docker container
-    '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
 )
 FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe')
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')

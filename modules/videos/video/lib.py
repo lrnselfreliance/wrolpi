@@ -231,6 +231,10 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
             # This video is skipped, do not try to get comments again.
             add_video_to_skip_list(url)
 
+        if download_manager.is_disabled or download_manager.is_stopped:
+            logger.info('Downloads disabled, stop getting comments...')
+            return
+
         with get_db_session(commit=True) as session:
             have_comments = False
             for video in session.query(Video).join(FileGroup).filter_by(url=url).all():
@@ -244,7 +248,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 continue
 
         try:
-            # Get info json about the video.  Retry until we have a list of comments.
+            # Get info json about the video.
             info = download_video_info_json(url)
 
             if not info or not isinstance(info.get('comments'), list):
@@ -254,14 +258,19 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
         except Exception as e:
             if 'no longer available' in str(e):
                 logger.error(f'Giving up on downloading comments because video does not exist: {url=}', exc_info=e)
+                add_video_to_skip_list(url)
             elif 'Comments are turned off' in str(e):
                 logger.error(f'Giving up on downloading comments because comments are disabled: {url=}', exc_info=e)
+                add_video_to_skip_list(url)
             elif 'Private video' in str(e):
                 logger.error(f'Giving up on downloading comments because video is private: {url=}', exc_info=e)
+                add_video_to_skip_list(url)
             elif 'Video unavailable' in str(e):
                 logger.error(f'Giving up on downloading comments because video is unavailable: {url=}', exc_info=e)
+                add_video_to_skip_list(url)
             elif ' members ' in str(e):
                 logger.error(f'Giving up on downloading comments because video is members-only: {url=}', exc_info=e)
+                add_video_to_skip_list(url)
             else:
                 logger.error(f'Got error when attempting to download video comments: {url=}', exc_info=e)
             continue

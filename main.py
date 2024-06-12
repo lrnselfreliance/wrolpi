@@ -298,6 +298,8 @@ async def perpetual_check_db_is_up_worker():
             await asyncio.sleep(10)
     except asyncio.CancelledError:
         logger.info('periodic_check_db_is_up was cancelled...')
+    except Exception as e:
+        logger.error('Failed to check db status', exc_info=e)
 
 
 async def perpetual_have_internet_worker():
@@ -332,7 +334,7 @@ async def periodic_start_video_missing_comments_download():
     await asyncio.sleep(5)
 
     # Fetch comments for videos every hour.
-    if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+    if download_manager.is_disabled or download_manager.is_stopped:
         logger.debug('Waiting for downloads to be enabled before downloading comments...')
         await asyncio.sleep(10)
     elif not flags.have_internet.is_set():

@@ -236,14 +236,14 @@ export function CalculatorsPage() {
         : null;
     const {icon, button, title, contents} = activeCalculator || {};
 
-    const name = title || button + ' Calculator';
-    const header = activeCalculator ? <Header><Icon name={icon}/>{name}</Header> : <Header>Calculators</Header>;
-    useTitle(header);
+    const name = activeCalculator ? title || button + ' Calculator' : 'Calculators';
+    const header = activeCalculator ? <Header><Icon name={icon}/>{name}</Header> : <Header>{name}</Header>;
+    useTitle(name);
 
     const calculatorButtons = calculators.map(i => {
         const {button, icon, key} = i;
-        return <Button key={key} onClick={() => setCalc(i.key)}>
-            {icon && <Icon name={i.icon}/>}
+        return <Button key={key} onClick={() => setCalc(key)}>
+            {icon && <Icon name={icon}/>}
             {button}
         </Button>
     });

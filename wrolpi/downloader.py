@@ -208,6 +208,15 @@ class Download(ModelHelper, Base):  # noqa
     def add_to_skip_list(self):
         download_manager.add_to_skip_list(self.url)
 
+    def delete(self):
+        # Do not download this automatically again.  This saves the config.
+        self.add_to_skip_list()
+
+        session = Session.object_session(self)
+        session.delete(self)
+        # Save download config again because this download is now removed from the download lists.
+        save_downloads_config(session=session)
+
 
 class Downloader:
     name: str = None
@@ -364,7 +373,7 @@ class DownloadManager:
         return api_app.shared_ctx.download_manager_disabled
 
     @property
-    def is_disabled(self):
+    def is_disabled(self) -> bool:
         return self.disabled.is_set()
 
     @property
@@ -373,7 +382,7 @@ class DownloadManager:
         return api_app.shared_ctx.download_manager_stopped
 
     @property
-    def is_stopped(self):
+    def is_stopped(self) -> bool:
         return self.stopped.is_set()
 
     @property
@@ -707,10 +716,7 @@ class DownloadManager:
         """Delete a Download.  Returns True if a Download was deleted, otherwise return False."""
         download = self.get_download(session, id_=download_id)
         if download:
-            url = download.url
-            session.delete(download)
-            session.commit()
-            self.add_to_skip_list(url)
+            download.delete()
             return True
         return False
 
@@ -977,12 +983,10 @@ class DownloadManager:
     @staticmethod
     def add_to_skip_list(*urls: str):
         get_download_manager_config().skip_urls = list(set(get_download_manager_config().skip_urls) | set(urls))
-        get_download_manager_config().save()
 
     @staticmethod
     def remove_from_skip_list(url: str):
         get_download_manager_config().skip_urls = [i for i in get_download_manager_config().skip_urls if i != url]
-        get_download_manager_config().save()
 
     @staticmethod
     def get_download_by_url(url: str) -> Optional[Download]:

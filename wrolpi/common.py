@@ -45,7 +45,7 @@ from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT
 
 LOGGING_CONFIG = {
     'version': 1,
-    'disable_existing_loggers': True,
+    'disable_existing_loggers': False,
     'loggers': {
         'sanic.root': {
             'level': 'INFO',
@@ -382,8 +382,6 @@ class ConfigFile:
         from wrolpi.api_utils import api_app
 
         config_file = self.get_file()
-        logger.warning(f'Save config called for {config_file}')
-        logger_.warning(f'Save config called for {config_file}')
         logger_.debug(f'Save config called for {config_file}')
         # Don't overwrite a real config while testing.
         if PYTEST and not str(config_file).startswith('/tmp'):
@@ -404,22 +402,23 @@ class ConfigFile:
             if config_file.is_file():
                 with config_file.open('rt') as fh:
                     config = yaml.load(fh, Loader=yaml.Loader)
-                # Copy the existing config to the backup directory.  One for each day.
-                if PYTEST and not TESTING_SKIP_BACKUP:
+                # Skip backups when testing when the test needs it.
+                if not PYTEST or TESTING_SKIP_BACKUP is False:
+                    # Copy the existing config to the backup directory.  One for each day.
                     if not backup_file.parent.exists():
                         backup_file.parent.mkdir(parents=True)
                     shutil.copy(config_file, backup_file)
+                    logger_.debug(f'Copied backup config: {config_file} -> {backup_file}')
             else:
                 # Config file does not yet exist.
                 config = dict()
 
             config.update({k: v for k, v in self._config.items() if v is not None})
             with config_file.open('wt') as fh:
-                yaml.dump(config, fh, width=self.width)
+                yaml.dump(config, fh, width=self.width, sort_keys=True)
                 # Wait for data to be written before releasing lock.
                 fh.flush()
                 os.fsync(fh.fileno())
-            logger.info(f'Saved config: {config_file}')
             logger_.info(f'Saved config: {config_file}')
         except Exception as e:
             # Configs are vital, raise a big error when this fails.
@@ -1059,14 +1058,14 @@ async def aiohttp_head(url: str, timeout: int = None) -> Tuple[ClientResponse, i
             return response, response.status
 
 
-async def speed_test(url: str) -> int:
+async def speed_test(url: str, timeout: int | None = 10) -> int:
     """Request the last megabyte of the provided url, return the content length divided by the time elapsed (speed)."""
     response, status = await aiohttp_head(url)
     content_length = response.headers['Content-Length']
     start_bytes = int(content_length) - 10485760
     range_ = f'bytes={start_bytes}-{content_length}'
     start_time = datetime.now()
-    content, status = await aiohttp_get(url, headers={'Range': range_})
+    content, status = await aiohttp_get(url, headers={'Range': range_}, timeout=timeout)
     elapsed = int((datetime.now() - start_time).total_seconds())
     return len(content) // elapsed
 
@@ -1077,9 +1076,11 @@ async def get_fastest_mirror(urls: List[str]) -> str:
     fastest_speed = 0
     for url in urls:
         try:
-            speed = await speed_test(url)
+            # Timeout after 5 minutes.  Mirror is less than 27 kbps.
+            speed = await speed_test(url, timeout=60 * 5)
+            download_logger.debug(f'Speed test of {url} was {speed} bps')
         except Exception as e:
-            logger_.error(f'Speedtest of {url} failed', exc_info=e)
+            download_logger.error(f'Speedtest of {url} failed', exc_info=e)
             continue
 
         if speed > fastest_speed:
@@ -1116,7 +1117,7 @@ FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
 async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
     """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
     response, status = await aiohttp_head(url, timeout)
-    logger_.debug(f'{response.headers=}')
+    download_logger.debug(f'{response.headers=}')
     try:
         links = response.headers.getall('Link')
     except KeyError:
@@ -1165,7 +1166,7 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
     return info
 
 
-download_logger = logger_.getChild('download')
+download_logger = logger.getChild('download')
 
 
 async def download_file(url: str, output_path: pathlib.Path = None, info: DownloadFileInfo = None,
@@ -1189,7 +1190,7 @@ async def download_file(url: str, output_path: pathlib.Path = None, info: Downlo
         url = await get_fastest_mirror(mirror_urls)
         info = await get_download_info(url, timeout)
 
-    logger_.debug(f'Final DownloadInfo fetched {info}')
+    download_logger.debug(f'Final DownloadInfo fetched {info}')
     total_size = info.size
 
     download_logger.info(f'Starting download of {url} with {total_size} total bytes')

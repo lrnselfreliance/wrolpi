@@ -35,6 +35,10 @@ function check_file() {
 
 echo
 
+echo "WROLPi version: $(cat /opt/wrolpi/wrolpi/version.txt)"
+
+echo
+
 rpi=false
 debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
@@ -108,6 +112,12 @@ if [ -f /opt/wrolpi/venv/bin/python3 ]; then
     echo 'OK: WROLPi main can be run'
   else
     echo "Failed: WROLPi main could not be run"
+  fi
+
+  if /opt/wrolpi/venv/bin/sanic --help 2>/dev/null > /dev/null; then
+    echo 'OK: Sanic can be run'
+  else
+    echo "Failed: Sanic could not be run"
   fi
 
 else
@@ -304,6 +314,12 @@ fi
 
 echo
 # Help Service
+if /opt/wrolpi-help/venv/bin/mkdocs --help &>/dev/null; then
+  echo "OK: Help mkdocs can be run"
+else
+  echo "FAILED: Help mkdocs cannot be run"
+fi
+
 if curl -s http://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
   echo "OK: Help service is running"
 else

@@ -25,9 +25,10 @@ systemctl stop nginx || :
 systemctl stop renderd || :
 systemctl stop apache2 || :
 
-# Reset any inadvertent changes to the WROLPi repo.
+# Reset any inadvertent changes to the WROLPi repo.  Restore ownership in case this repair script fails.
 git config --global --add safe.directory /opt/wrolpi
 git reset HEAD --hard
+chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Rebuild the app after reset.
 (cd app && npm run build)
@@ -68,7 +69,6 @@ systemctl enable wrolpi-help.service
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.
 cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
-cp /opt/wrolpi/etc/debian12/000-default.conf /etc/apache2/sites-available/000-default.conf
 # Copy Leaflet files to Apache's directory so they can be used offline.
 cp /opt/wrolpi/etc/raspberrypios/index.html \
   /opt/wrolpi/modules/map/leaflet.js \

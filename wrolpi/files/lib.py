@@ -1298,47 +1298,6 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
     return new_path
 
 
-def replace_file(file: pathlib.Path | str, contents: str | bytes, missing_ok: bool = False):
-    """Rename `file` to a temporary path, write contents to `file`, then, delete temporary file only if successful.
-    The original file will be restored if any of these steps fail."""
-    file = pathlib.Path(file)
-
-    if missing_ok is False and not file.is_file():
-        raise FileNotFoundError(f'Cannot replace non-existent file: {str(file)}')
-
-    temporary_path = pathlib.Path(str(file) + '.tmp')
-    if temporary_path.exists():
-        raise RuntimeError(f'Cannot replace file, temporary path already exists!  {str(temporary_path)}')
-
-    if not contents:
-        raise RuntimeError('Refusing to replace file with empty contents')
-
-    try:
-        if file.exists():
-            file.rename(temporary_path)
-        mode = 'wb' if isinstance(contents, bytes) else 'wt'
-        with file.open(mode) as fp:
-            fp.write(contents)
-        if file.exists() and temporary_path.exists():
-            # New contents have been written, delete the old file.
-            temporary_path.unlink()
-    except Exception as e:
-        logger.error(f'Failed to replace file: {str(file)}', exc_info=e)
-        if temporary_path.exists():
-            # Move original file back.
-            if file.exists():
-                file.unlink()
-            temporary_path.rename(file)
-        elif file.exists():
-            logger.error(f'Replacing file, but original file still exists: {str(file)}')
-        else:
-            logger.critical('Neither original, nor temporary file exist.  I am so sorry.')
-        raise
-    finally:
-        if file.is_file() and file.stat().st_size > 0 and temporary_path.is_file():
-            temporary_path.unlink()
-
-
 async def rename_directory(directory: pathlib.Path, new_name: str) -> pathlib.Path:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory."""
     new_directory = directory.with_name(new_name)

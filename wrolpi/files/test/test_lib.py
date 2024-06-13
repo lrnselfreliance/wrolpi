@@ -12,6 +12,7 @@ import mock
 import pytest
 from PIL import Image
 
+import wrolpi.common
 from wrolpi.common import timer
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
@@ -1058,17 +1059,17 @@ def test_replace_file(test_directory):
     file.write_text('old contents')
     assert file.read_text() == 'old contents'
 
-    lib.replace_file(file, 'new contents')
+    wrolpi.common.replace_file(file, 'new contents')
     assert file.read_text() == 'new contents'
     assert not (test_directory / 'foo.txt.tmp').exists()
 
-    lib.replace_file(file, b'new bytes')
+    wrolpi.common.replace_file(file, b'new bytes')
     assert file.read_bytes() == b'new bytes'
     assert not (test_directory / 'foo.txt.tmp').exists()
 
     # Default behavior is to refuse to replace a non-existent file.
     with pytest.raises(FileNotFoundError):
-        lib.replace_file('does not exist', 'foo')
+        wrolpi.common.replace_file('does not exist', 'foo')
 
     # Non-existent file can be created.
-    lib.replace_file(test_directory / 'will now exist', 'foo', missing_ok=True)
+    wrolpi.common.replace_file(test_directory / 'will now exist', 'foo', missing_ok=True)

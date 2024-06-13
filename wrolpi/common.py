@@ -213,6 +213,7 @@ __all__ = [
     'register_modeler',
     'register_refresh_cleanup',
     'remove_whitespace',
+    'replace_file',
     'resolve_generators',
     'run_after',
     'set_global_log_level',
@@ -1694,6 +1695,48 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
     return headlines
 
 
+def replace_file(file: pathlib.Path | str, contents: str | bytes, missing_ok: bool = False):
+    """Rename `file` to a temporary path, write contents to `file`, then, delete temporary file only if successful.
+    The original file will be restored if any of these steps fail."""
+    file = pathlib.Path(file)
+
+    if missing_ok is False and not file.is_file():
+        raise FileNotFoundError(f'Cannot replace non-existent file: {str(file)}')
+
+    temporary_path = pathlib.Path(str(file) + '.tmp')
+    if temporary_path.exists():
+        raise RuntimeError(f'Cannot replace file, temporary path already exists!  {str(temporary_path)}')
+
+    if not contents:
+        raise RuntimeError('Refusing to replace file with empty contents')
+
+    try:
+        if file.exists():
+            file.rename(temporary_path)
+        mode = 'wb' if isinstance(contents, bytes) else 'wt'
+        with file.open(mode) as fp:
+            fp.write(contents)
+            os.fsync(fp.fileno())
+        if file.exists() and temporary_path.exists():
+            # New contents have been written, delete the old file.
+            temporary_path.unlink()
+    except Exception as e:
+        logger.error(f'Failed to replace file: {str(file)}', exc_info=e)
+        if temporary_path.exists():
+            # Move original file back.
+            if file.exists():
+                file.unlink()
+            temporary_path.rename(file)
+        elif file.exists():
+            logger.error(f'Replacing file, but original file still exists: {str(file)}')
+        else:
+            logger.critical('Neither original, nor temporary file exist.  I am so sorry.')
+        raise
+    finally:
+        if file.is_file() and file.stat().st_size > 0 and temporary_path.is_file():
+            temporary_path.unlink()
+
+
 def format_json_file(file: pathlib.Path, indent: int = 2):
     """Reformat the contents of a JSON file to include indentation to increase readability."""
     if not indent or indent <= 0:
@@ -1701,17 +1744,9 @@ def format_json_file(file: pathlib.Path, indent: int = 2):
     if not file or not file.is_file():
         raise RuntimeError(f'File does not exist: {file}')
 
-    with file.open('rt') as fh:
-        content = json.load(fh)
-
-    copy = file.with_suffix('.json2')
-    try:
-        with copy.open('wt') as fh:
-            json.dump(content, fh, indent=indent)
-        copy.rename(file)
-    finally:
-        if copy.is_file():
-            copy.unlink()
+    content = json.loads(file.read_text())
+    content = json.dumps(content, indent=indent, sort_keys=True)
+    replace_file(file, content)
 
 
 def format_html_string(html: str) -> str:
@@ -1728,15 +1763,7 @@ def format_html_file(file: pathlib.Path):
         raise RuntimeError(f'File does not exist: {file}')
 
     pretty = format_html_string(file.read_text())
-
-    copy = file.with_suffix('.html2')
-    try:
-        with copy.open('wt') as fh:
-            fh.write(pretty)
-        copy.rename(file)
-    finally:
-        if copy.is_file():
-            copy.unlink()
+    replace_file(file, pretty)
 
 
 def html_screenshot(html: bytes) -> bytes:

@@ -163,13 +163,13 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
 
     if readability:
         # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
-        with archive_files.readability.open('wt') as fh:
+        with archive_files.readability.open('wt') as fp:
             content = format_html_string(readability.pop('content'))
-            fh.write(content)
-        with archive_files.readability_txt.open('wt') as fh:
+            fp.write(content)
+        with archive_files.readability_txt.open('wt') as fp:
             readability_txt = readability.pop('textContent')
             readability_txt = split_lines_by_length(readability_txt)
-            fh.write(readability_txt)
+            fp.write(readability_txt)
     else:
         # No readability was returned, so there are no files.
         archive_files.readability_txt = archive_files.readability = None
@@ -186,8 +186,8 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
     # Always write a JSON file that contains at least the URL.
     readability = readability or {}
     readability['url'] = url
-    with archive_files.readability_json.open('wt') as fh:
-        fh.write(json.dumps(readability, indent=2))
+    with archive_files.readability_json.open('wt') as fp:
+        json.dump(readability, fp, indent=2, sort_keys=True)
 
     # Create any File models that we can, index them all.
     paths = (

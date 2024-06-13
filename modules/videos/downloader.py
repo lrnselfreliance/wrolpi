@@ -584,7 +584,7 @@ def update_channel_catalog(channel: Channel, info: dict):
     if channel.directory:
         info_json_path = channel.directory / f'{channel.name}.info.json'
         with info_json_path.open('wt') as fh:
-            json.dump(info, fh, indent=2)
+            json.dump(info, fh, indent=2, sort_keys=True)
         logger.debug(f'Wrote channel info json to {info_json_path}')
     else:
         logger.debug(f'Skipping channel info json because it does not have a directory: {channel}')

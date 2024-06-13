@@ -9,10 +9,10 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, replace_file
+from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile

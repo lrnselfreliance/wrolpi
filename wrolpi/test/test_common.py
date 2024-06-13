@@ -726,17 +726,18 @@ def test_format_json_file():
             assert file.read_text() == unformatted
 
             common.format_json_file(file)
+            # Keys are sorted.
             assert file.read_text() == '''{
-  "one": 1,
-  "two": 2,
-  "three": 3,
-  "four": 4,
-  "five": 5,
-  "six": 6,
-  "seven": 7,
   "eight": 8,
+  "five": 5,
+  "four": 4,
   "nine": 9,
-  "ten": 10
+  "one": 1,
+  "seven": 7,
+  "six": 6,
+  "ten": 10,
+  "three": 3,
+  "two": 2
 }'''
             # The copy was deleted.
             assert len(list(file.parent.iterdir())) == 1

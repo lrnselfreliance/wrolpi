@@ -77,22 +77,38 @@ services:
       - './modules/map/leaflet.html:/var/www/html/index.html'
       - './modules/map/leaflet.js:/var/www/html/leaflet.js'
       - './modules/map/leaflet.css:/var/www/html/leaflet.css'
-    ports:
-      - '8084:80'
     command: 'run'
     shm_size: 1g  # Increase shared size to render large map tiles
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
       interval: 1m
 
+  map_https: # HTTPS for map tile server
+    depends_on:
+      - map
+    build:
+      context: .
+      dockerfile: docker/https_proxy/Dockerfile
+    ports:
+      - '8084:443'
+    volumes:
+      - './docker/map/nginx.map.conf:/etc/nginx/nginx.conf'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
+      interval: 1m
+
   web:
     depends_on:
       - app
-    image: nginx:latest
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
     ports:
       - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
+      - ${WEB_HOST-0.0.0.0}:${WEB_HTTPS_PORT-8443}:443
     volumes:
-      - './nginx.dev.conf:/etc/nginx/nginx.conf'
+      - './docker/web/nginx.dev.conf:/etc/nginx/nginx.conf'
+      - './docker/web/wrolpi.dev.conf:/etc/nginx/conf.d/wrolpi.conf'
       - './icon.ico:/etc/nginx/favicon.ico'
       - './icon.png:/etc/nginx/icon.png'
       - './test:/opt/media'
@@ -107,8 +123,23 @@ services:
     volumes:
       - './test:/media/wrolpi'
       - './docker/zim/entrypoint.sh:/entrypoint.sh'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
+      interval: 1m
+
+  zim_https: # HTTPS for Zim service.
+    depends_on:
+      - zim
+    build:
+      context: .
+      dockerfile: docker/https_proxy/Dockerfile
     ports:
-      - '8085:8085'
+      - '8085:443'
+    volumes:
+      - './docker/zim/nginx.zim.conf:/etc/nginx/nginx.conf'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
+      interval: 1m
 
   help: # The WROLPi Help documentation.
     build:
@@ -116,10 +147,22 @@ services:
       dockerfile: docker/help/Dockerfile
     volumes:
       - './docker/help/wrolpi-help:/opt/wrolpi-help'
-    ports:
-      - '8086:8086'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8086' ]
+      interval: 1m
+
+  help_https: # HTTPS for Help service.
+    depends_on:
+      - help
+    build:
+      context: .
+      dockerfile: docker/https_proxy/Dockerfile
+    ports:
+      - '8086:443'
+    volumes:
+      - './docker/help/nginx.help.conf:/etc/nginx/nginx.conf'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
       interval: 1m
 
 volumes:

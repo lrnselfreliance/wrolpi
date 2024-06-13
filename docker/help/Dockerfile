@@ -6,4 +6,4 @@ COPY docker/help/wrolpi-help /opt/wrolpi-help
 RUN pip3 install -r /opt/wrolpi-help/requirements.txt
 
 ENTRYPOINT ["mkdocs"]
-CMD ["serve", "-a", "0.0.0.0:8086"]
+CMD ["serve", "-a", "0.0.0.0:80"]

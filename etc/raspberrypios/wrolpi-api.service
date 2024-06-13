@@ -5,7 +5,7 @@ PartOf=wrolpi.target
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/wrolpi/venv/bin/sanic main:api_app --host 0.0.0.0 --port 8081 --fast
+ExecStart=/opt/wrolpi/venv/bin/sanic main:api_app --host 0.0.0.0 --port 8081 -w 2
 ExecReload=/bin/kill -HUP $MAINPID
 Group=wrolpi
 User=wrolpi

@@ -16,30 +16,9 @@ cat >/home/pi/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
-cat >/home/pi/Desktop/wrolpi.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi App
-Type=Link
-URL=http://127.0.0.1
-Icon=/opt/wrolpi/icon.png
-EOF
-cat >/home/pi/Desktop/wrolpi-help.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Help
-Type=Link
-URL=http://127.0.0.1:8086
-Icon=/opt/wrolpi-help/venv/lib/python3.11/site-packages/mkdocs/themes/mkdocs/img/favicon.ico
-EOF
-cat >/home/pi/Desktop/wrolpi-help-files.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Help Files
-Type=Link
-URL=/opt/wrolpi-help/docs/
-Icon=/usr/share/icons/gnome/48x48/places/folder.png
-EOF
+# Update desktop shortcuts.
+cp /opt/wrolpi/etc/raspberrypios/*desktop /home/pi/Desktop/
+# Fix permissions.
 chown -R pi:pi /home/pi
 chmod 0600 /home/pi/.pgpass
 usermod -aG wrolpi pi

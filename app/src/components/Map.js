@@ -7,6 +7,7 @@ import {
     humanFileSize,
     IframeViewer,
     InfoMessage,
+    MAP_VIEWER_URI,
     PageContainer,
     TabLinks,
     useTitle,
@@ -31,9 +32,6 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Loader, Placeholder, Table} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
 import _ from "lodash";
-
-
-const VIEWER_URL = `http://${window.location.hostname}:8084/`;
 
 function DockerMapImportWarning() {
     const {status} = useContext(StatusContext);
@@ -95,7 +93,7 @@ function DownloadMessage() {
 
 const ViewerMessage = () => {
     return <HandPointMessage>
-        <p>You can view your Map at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
+        <p>You can view your Map at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
     </HandPointMessage>
 }
 
@@ -293,7 +291,7 @@ class ManageMap extends React.Component {
 }
 
 function MapPage() {
-    return <IframeViewer title='map' viewerUrl={VIEWER_URL}/>
+    return <IframeViewer title='map' viewerUrl={MAP_VIEWER_URI}/>
 }
 
 export function MapRoute() {

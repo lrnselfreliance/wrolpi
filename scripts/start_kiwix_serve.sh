@@ -23,5 +23,5 @@ find /media/wrolpi/zims -iname '*.zim' -exec kiwix-manage ${LIBRARY} add {} \;
 
 [ ! -f ${LIBRARY} ] && echo "Could not find any Zim files to import" && exit 2
 
-# Serve kiwix on the
-kiwix-serve --library ${LIBRARY} --address 0.0.0.0 --port 8085
+# Serve HTTP kiwix on 9085.  nginx will serve HTTPS on 8085.
+kiwix-serve --library ${LIBRARY} --address 0.0.0.0 --port 9085

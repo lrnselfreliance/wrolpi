@@ -1,0 +1,6 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=WROLPi Help
+Type=Link
+URL=https://127.0.0.1:8086
+Icon=/opt/wrolpi-help/venv/lib/python3.11/site-packages/mkdocs/themes/mkdocs/img/favicon.ico

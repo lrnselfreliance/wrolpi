@@ -90,7 +90,7 @@ if sudo -i -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
   if sudo -i -u wrolpi psql wrolpi -c '\d' | grep "file_group" >/dev/null; then
     echo "OK: WROLPi database is initialized"
 
-    if [ "$(sudo -i -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout')" -gt 0 ]; then
+    if [ "$(sudo -i -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout' 2>/dev/null)" -gt 0 ]; then
       echo "OK: WROLPi database has files"
     else
       echo "FAILED: WROLPi database has no files"
@@ -212,7 +212,7 @@ else
   echo "FAILED: renderd systemd does not exist"
 fi
 
-if curl -s http://0.0.0.0:8084 2>/dev/null | grep -i openstreetmap >/dev/null; then
+if curl -k -s https://0.0.0.0:8084 2>/dev/null | grep -i openstreetmap >/dev/null; then
   echo "OK: Map app responded"
 else
   echo "FAILED: Map app did not respond"
@@ -226,7 +226,7 @@ echo
 # Kiwix
 
 check_file /media/wrolpi/zims/library.xml "The kiwix library file exists" "The kiwix library file does not exist at /media/wrolpi/zims/library.xml"
-if curl -s http://0.0.0.0:8085 2>/dev/null | grep -i kiwix >/dev/null; then
+if curl -k -s https://0.0.0.0:8085 2>/dev/null | grep -i kiwix >/dev/null; then
   echo "OK: Kiwix app responded"
 else
   echo "FAILED: Kiwix app did not respond"
@@ -249,9 +249,9 @@ else
   echo "FAILED: Media directory is not a mounted drive.  (This is fine if you don't have an external drive.)"
 fi
 
-if curl -s http://0.0.0.0/media/ | grep "Index of" >/dev/null; then
+if curl -k -s https://0.0.0.0/media/ | grep "Index of" >/dev/null; then
   echo "OK: Media directory files are served by nginx"
-  if curl -s -I http://0.0.0.0/media/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
+  if curl -k -s -I https://0.0.0.0/media/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
     echo "OK: Config can be fetched from nginx"
   else
     echo "FAILED: Media directory files are not being served"
@@ -320,7 +320,7 @@ else
   echo "FAILED: Help mkdocs cannot be run"
 fi
 
-if curl -s http://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
+if curl -k -s https://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
   echo "OK: Help service is running"
 else
   echo "FAILED: Help service is not running"

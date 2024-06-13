@@ -34,7 +34,21 @@ git reset HEAD --hard
 
 # Copy configs to system.
 cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
+[ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+
+# Generate nginx certificate for HTTPS.
+if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then
+  openssl genrsa -out /etc/nginx/cert.key 2048
+  openssl req -new -x509 -nodes -key /etc/nginx/cert.key -out /etc/nginx/cert.crt -days 3650  \
+      -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=$(hostname).local"
+  chmod 640 /etc/nginx/cert.key /etc/nginx/cert.crt
+fi
+
+# Update desktop shortcuts.
+cp /opt/wrolpi/etc/raspberrypios/*desktop /home/pi/Desktop/
+chown pi:pi /home/pi/Desktop/*desktop
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
@@ -60,6 +74,7 @@ cp /opt/wrolpi/etc/raspberrypios/index.html \
   /opt/wrolpi/modules/map/leaflet.js \
   /opt/wrolpi/modules/map/leaflet.css /var/www/html/
 chmod 644 /var/www/html/*
+a2enmod ssl
 
 systemctl enable renderd
 systemctl start renderd

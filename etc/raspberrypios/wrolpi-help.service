@@ -4,7 +4,7 @@ PartOf=wrolpi.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -c 'source /opt/wrolpi-help/venv/bin/activate && exec mkdocs serve -a 0.0.0.0:8086'
+ExecStart=/bin/bash -c 'source /opt/wrolpi-help/venv/bin/activate && exec mkdocs serve -a 0.0.0.0:9086'
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi-help/

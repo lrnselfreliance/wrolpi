@@ -89,7 +89,7 @@ You can try out WROLPi by running the docker containers.
 8. Start the docker containers.
     * `docker-compose up`
 9. Browse to WROLPi.
-    * http://0.0.0.0:8080
+    * https://0.0.0.0:8443
 
 # Debian 12 Install
 
@@ -106,7 +106,7 @@ Steps necessary to initialize your WROLPi after installing the Debian image from
 5. Switch to the root user: `su -`
 6. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
 7. Reboot: `reboot`
-8. Browse to http://wrolpi.local or the IP address of your WROLPi!
+8. Browse to https://wrolpi.local or the IP address of your WROLPi!
 
 # Raspberry Pi Install
 
@@ -118,7 +118,7 @@ Steps necessary to initialize your WROLPi after installing the Raspberry Pi imag
     * `echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | sudo tee -a /etc/fstab`
 4. Initialize the WROLPi databases using the repair script: `sudo /opt/wrolpi/repair.sh`
 5. Reboot `sudo reboot`
-6. Join the Hotspot or browse to http://wrolpi.local or the IP address of your WROLPi!
+6. Join the Hotspot or browse to https://wrolpi.local or the IP address of your WROLPi!
 
 # Charter
 

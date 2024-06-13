@@ -43,7 +43,8 @@ import {
     TabLinks,
     TagIcon,
     useTitle,
-    WarningMessage
+    WarningMessage,
+    ZIM_VIEWER_URI
 } from "./Common";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {TagsSelector} from "../Tags";
@@ -65,8 +66,6 @@ import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
-
-const VIEWER_URL = `http://${window.location.hostname}:8085/`;
 
 export const OutdatedZimsMessage = ({onClick}) => {
     const [open, setOpen] = React.useState(false);
@@ -339,7 +338,7 @@ const DownloadMessage = () => {
 
 const ViewerMessage = () => {
     return <HandPointMessage>
-        <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
+        <p>You can view your Zim files using the Kiwix app, or at <a href={ZIM_VIEWER_URI}>{ZIM_VIEWER_URI}</a></p>
     </HandPointMessage>
 }
 
@@ -536,7 +535,7 @@ class ManageZim extends React.Component {
 }
 
 function ZimViewer() {
-    return <IframeViewer title='zim' viewerUrl={VIEWER_URL}/>
+    return <IframeViewer title='zim' viewerUrl={ZIM_VIEWER_URI}/>
 }
 
 export function ZimRoute() {

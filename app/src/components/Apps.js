@@ -147,7 +147,7 @@ function OTP() {
 
     const {t} = useContext(ThemeContext);
 
-    let newPadURL = `http://${window.location.host}/api/otp/html`;
+    let newPadURL = `https://${window.location.host}/api/otp/html`;
     let cheatSheetURL = `${process.env.PUBLIC_URL}/one-time-pad-cheat-sheet.pdf`;
 
     return <>

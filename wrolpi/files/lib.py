@@ -731,8 +731,8 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     joins = []
 
     if search_str:
-        # Search by textsearch, and by matching url.
-        wheres.append("(textsearch @@ websearch_to_tsquery(%(search_str)s) OR fg.url ILIKE %(url_search_str)s)")
+        # Search by textsearch column.
+        wheres.append('textsearch @@ websearch_to_tsquery(%(search_str)s)')
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 

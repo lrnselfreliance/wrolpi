@@ -68,6 +68,7 @@ class FileGroup(ModelHelper, Base):
     id: int = Column(BigInteger, primary_key=True)
 
     author = Column(String)  # name of the author, maybe even a URL
+    censored = Column(Boolean)  # the file is no longer available for download
     data = Column(FancyJSON)  # populated by the modeler
     download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
     files = Column(FancyJSON, nullable=False)  # populated during discovery

@@ -47,10 +47,6 @@ if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then
   chmod 640 /etc/nginx/cert.key /etc/nginx/cert.crt
 fi
 
-# Update desktop shortcuts.
-cp /opt/wrolpi/etc/raspberrypios/*desktop /home/pi/Desktop/
-chown pi:pi /home/pi/Desktop/*desktop
-
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
 chmod 0440 /etc/sudoers.d/90-wrolpi

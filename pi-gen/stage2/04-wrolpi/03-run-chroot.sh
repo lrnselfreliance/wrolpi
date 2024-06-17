@@ -33,14 +33,6 @@ python3 -m venv /opt/wrolpi/venv
 # Install webapp.
 (cd /opt/wrolpi/app && npm install && npm run build)
 
-# Add wrolpi database password to pi user
-cat >/home/pi/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chown -R pi:pi /home/pi
-chmod 0600 /home/pi/.pgpass
-
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Configure nginx.

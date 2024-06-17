@@ -11,17 +11,13 @@ chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 
 # WROLPi user can access WROLPi and Map database.
-mkdir -p /home/pi/Desktop
-cat >/home/pi/.pgpass <<'EOF'
+cat >/etc/skel/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
 # Update desktop shortcuts.
-cp /opt/wrolpi/etc/raspberrypios/*desktop /home/pi/Desktop/
-# Fix permissions.
-chown -R pi:pi /home/pi
-chmod 0600 /home/pi/.pgpass
-usermod -aG wrolpi pi
+mkdir /etc/skel/Desktop
+cp /opt/wrolpi/etc/raspberrypios/*desktop /etc/skel/Desktop
 
 # Configure renderd.
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf

@@ -206,12 +206,11 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
                onClose={() => setOpen(false)}>
             <ModalContent>
                 <div className='full-height'>
-                    <iframe title='textModal' src={url}
-                            style={{
-                                height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
-                                // Use white to avoid iframe displaying with dark-theme.
-                                backgroundColor: '#ffffff',
-                            }}/>
+                    <ZimViewer src={url} style={{
+                        height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
+                        // Use white to avoid iframe displaying with dark-theme.
+                        backgroundColor: '#ffffff',
+                    }}/>
                 </div>
             </ModalContent>
             <ModalActions>
@@ -534,10 +533,10 @@ class ManageZim extends React.Component {
     }
 }
 
-function ZimViewer() {
+function ZimViewer({src = ZIM_VIEWER_URI, style=null}) {
     const fallback = <Segment>
         <Header as='h3'>Failed to fetch Zim service.</Header>
-        <p>You may need to give permission to access the page: <a href={ZIM_VIEWER_URI}>{ZIM_VIEWER_URI}</a></p>
+        <p>You may need to give permission to access the page: <a href={src}>{src}</a></p>
 
         <p>If the above does not work, try starting the service:</p>
         <pre>sudo systemctl start wrolpi-kiwix</pre>
@@ -546,7 +545,7 @@ function ZimViewer() {
         <pre>journalctl -u wrolpi-kiwix</pre>
     </Segment>;
 
-    return <IframeViewer title='zim' src={ZIM_VIEWER_URI} fallback={fallback}/>
+    return <IframeViewer title='zim' src={src} fallback={fallback} style={style}/>
 }
 
 export function ZimRoute() {

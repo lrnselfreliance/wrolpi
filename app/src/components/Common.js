@@ -5,7 +5,8 @@ import {
     Card,
     Confirm,
     Container,
-    Dimmer, DimmerDimmable,
+    Dimmer,
+    DimmerDimmable,
     Icon as SIcon,
     IconGroup,
     Input,
@@ -1693,8 +1694,9 @@ export const monthNames = [
     'December',
 ];
 
-export function IframeViewer({title, src, fallback, timeout = 5000}) {
-    // Bottom of iframe is hidden when height is 100%.  These values display the entire iframe.
+export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
+    // This function checks that an iframe can be fetched before displaying it.  Otherwise, it will display the fallback
+    // element which should help the maintainer to fix the issue.
     const [contentAvailable, setContentAvailable] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -1709,11 +1711,8 @@ export function IframeViewer({title, src, fallback, timeout = 5000}) {
 
         fetch(src, {signal: controller.signal})
             .then(response => {
-                if (response.ok) {
-                    setContentAvailable(true);  // If fetch is successful and response is ok, set to load the iframe
-                } else {
-                    setContentAvailable(false);  // If response is not ok, do not load the iframe
-                }
+                // Only display content if it can be fetched.
+                setContentAvailable(response.ok);
             })
             .catch(() => {
                 setContentAvailable(false);  // Handle fetch errors (including aborts)
@@ -1726,32 +1725,26 @@ export function IframeViewer({title, src, fallback, timeout = 5000}) {
         return () => clearTimeout(timeoutId);  // Cleanup timeout on unmount
     }, [src]);
 
+    // Mobile needs less height, otherwise it hides the content below the screen.
+    let mobileStyle = {
+        position: 'fixed',
+        height: '80%',
+        width: '100%',
+        border: 'none',
+        padding: 0,
+        backgroundColor: '#FFFFFF',
+    };
+    // Allow provided `style` to overwrite.
+    mobileStyle = style ? {...mobileStyle, ...style} : mobileStyle;
+    let tabletStyle = {...mobileStyle, height: '93%'};
+    tabletStyle = style ? {...tabletStyle, ...style} : tabletStyle;
+
     const iframeMedia = <>
         <Media at='mobile'>
-            <iframe
-                title={title}
-                src={src}
-                style={{
-                    position: 'fixed',
-                    height: '80%',
-                    width: '100%',
-                    border: 'none',
-                    padding: 0,
-                    backgroundColor: '#FFFFFF',
-                }}/>
+            <iframe title={title} src={src} style={mobileStyle}/>
         </Media>
         <Media greaterThan='mobile'>
-            <iframe
-                title={title}
-                src={src}
-                style={{
-                    position: 'fixed',
-                    height: '93%',
-                    width: '100%',
-                    border: 'none',
-                    padding: 0,
-                    backgroundColor: '#FFFFFF',
-                }}/>
+            <iframe title={title} src={src} style={tabletStyle}/>
         </Media>
     </>;
 

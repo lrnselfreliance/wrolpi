@@ -252,9 +252,9 @@ def seconds_to_import_rpi5(size_in_bytes: int) -> int:
     return max(int(size_in_bytes // RPI5_PBF_BYTES_PER_SECOND), 0)
 
 
-def seconds_to_import(size_in_bytes: int) -> int:
+def seconds_to_import(size_in_bytes: int, is_rpi_5: bool = IS_RPI5) -> int:
     """Attempt to predict how long it will take an RPi4 to import a given PBF file."""
-    if IS_RPI5:
+    if is_rpi_5:
         return seconds_to_import_rpi5(size_in_bytes)
 
     # Default to RPi4, because it's the most conservative estimate.

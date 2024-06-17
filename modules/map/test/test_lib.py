@@ -1,4 +1,3 @@
-import unittest.mock
 from unittest import mock
 
 import pytest
@@ -100,8 +99,7 @@ def test_seconds_to_import_rpi4(size, expected):
     (11346305075, 188040),
 ])
 def test_seconds_to_import_rpi5(size, expected):
-    with unittest.mock.patch('modules.map.lib.IS_RPI5', True):
-        assert lib.seconds_to_import(size) == expected
+    assert lib.seconds_to_import(size, True) == expected
 
 
 def test_get_custom_map_directory(test_directory, test_config):

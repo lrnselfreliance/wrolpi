@@ -12,7 +12,7 @@ from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import convert_image, update_view_counts, get_video_duration, generate_video_poster, is_valid_poster
+from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
 
 
@@ -102,22 +102,22 @@ async def test_update_view_count(test_session, channel_factory, video_factory):
     check_view_counts({'vid1': None, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 1 is updated, the other channels are left alone.
-    await update_view_counts(channel1.id)
+    await update_view_counts_and_censored(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
-    await update_view_counts(channel2.id)
+    await update_view_counts_and_censored(channel2.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': None, 'vid4': None})
 
     # All videos are updated.
-    await update_view_counts(channel3.id)
+    await update_view_counts_and_censored(channel3.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
     # An outdated view count will be overwritten.
     vid = test_session.query(Video).filter_by(id=1).one()
     vid.view_count = 8
     check_view_counts({'vid1': 8, 'vid2': 11, 'vid3': 13, 'vid4': 14})
-    await update_view_counts(channel1.id)
+    await update_view_counts_and_censored(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 

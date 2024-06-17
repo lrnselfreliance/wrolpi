@@ -302,8 +302,9 @@ def check_for_video_corruption(video_path: Path) -> bool:
     return corrupt
 
 
-async def update_view_counts(channel_id: int):
-    """Update view_count for all Videos in a channel using its info_json file."""
+async def update_view_counts_and_censored(channel_id: int):
+    """Update view_count for all Videos in a channel using its info_json file.  Also sets FileGroup.censored
+    if Video is no longer available on the Channel."""
     with get_db_session() as session:
         channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
         channel_name = channel.name
@@ -328,4 +329,19 @@ async def update_view_counts(channel_id: int):
         '''
         curs.execute(stmt, (view_counts_str, channel_id))
         count = len(curs.fetchall())
-        logger.debug(f'Updated {count} view counts in DB for {channel_name}.')
+        logger.info(f'Updated {count} view counts in DB for {channel_name}.')
+
+    source_ids = [i['id'] for i in info['entries']]
+    with get_db_curs(commit=True) as curs:
+        # Set FileGroup.censored if the video is no longer on the Channel.
+        stmt = '''
+            UPDATE file_group fg
+            SET censored = NOT (v.source_id = ANY(%(source_ids)s))
+            FROM video v
+            WHERE v.file_group_id = fg.id
+                AND v.channel_id = %(channel_id)s
+            RETURNING fg.id, fg.censored
+        '''
+        curs.execute(stmt, {'channel_id': channel_id, 'source_ids': source_ids})
+        censored = len([i for i in curs.fetchall() if i['censored']])
+        logger.info(f'Set {censored} censored videos for {channel_name}.')

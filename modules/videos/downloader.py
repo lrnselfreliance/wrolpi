@@ -23,7 +23,7 @@ from wrolpi.files.lib import glob_shared_stem
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
-from .common import get_no_channel_directory, get_videos_directory, update_view_counts, ffmpeg_video_complete
+from .common import get_no_channel_directory, get_videos_directory, update_view_counts_and_censored, ffmpeg_video_complete
 from .errors import UnknownChannel
 from .lib import get_downloader_config, YDL, ydl_logger
 from .models import Video, Channel
@@ -592,7 +592,7 @@ def update_channel_catalog(channel: Channel, info: dict):
     logger.info(f'Finished downloading video list for {channel} found {len(entries)} videos')
 
     # Update all view counts using the latest from the Channel's info_json.
-    background_task(update_view_counts(channel_id))
+    background_task(update_view_counts_and_censored(channel_id))
 
 
 UNRECOVERABLE_ERRORS = {

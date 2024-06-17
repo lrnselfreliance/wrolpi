@@ -657,15 +657,15 @@ class Channel(ModelHelper, Base):
         await refresh_files([self.directory], send_events=send_events)
 
         # Apply any info_json (update view counts) second.
-        from modules.videos.common import update_view_counts
+        from modules.videos.common import update_view_counts_and_censored
         if PYTEST:
-            await update_view_counts(self_id)
+            await update_view_counts_and_censored(self_id)
             self.refreshed = True
         else:
 
             # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
             async def _():
-                await update_view_counts(self_id)
+                await update_view_counts_and_censored(self_id)
                 with get_db_session(commit=True) as session:
                     channel: Channel = session.query(Channel).filter(Channel.id == self_id).one()
                     channel.refreshed = True

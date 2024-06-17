@@ -13,7 +13,7 @@ import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
-import {Header, ThemeProvider} from "./components/Theme";
+import {Header, Segment, ThemeProvider} from "./components/Theme";
 import {DashboardPage} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
 import {useEventsInterval} from "./Events";
@@ -21,7 +21,7 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
-import {HELP_VIEWER_URI} from "./components/Common";
+import {HELP_VIEWER_URI, IframeViewer} from "./components/Common";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -50,15 +50,18 @@ function Footer() {
 }
 
 function HelpPage() {
-    return <iframe
-        title='map'
-        src={HELP_VIEWER_URI}
-        style={{
-            position: 'fixed',
-            height: '100%',
-            width: '100%',
-            border: 'none',
-        }}/>
+    const fallback = <Segment>
+        <Header as='h3'>Failed to fetch Help service.</Header>
+        <p>You may need to give permission to access the page: <a href={HELP_VIEWER_URI}>{HELP_VIEWER_URI}</a></p>
+
+        <p>If the above does not work, try starting the service:</p>
+        <pre>sudo systemctl start wrolpi-kiwix</pre>
+
+        <p>Check the logs</p>
+        <pre>journalctl -u wrolpi-kiwix</pre>
+    </Segment>;
+
+    return <IframeViewer title='help' src={HELP_VIEWER_URI} fallback={fallback}/>
 }
 
 function Root() {

@@ -5,6 +5,7 @@ import {
     Card,
     Confirm,
     Container,
+    Dimmer, DimmerDimmable,
     Icon as SIcon,
     IconGroup,
     Input,
@@ -34,6 +35,7 @@ import {
     Header,
     Icon,
     lightTheme,
+    Loader,
     Menu,
     Modal,
     ModalActions,
@@ -41,6 +43,7 @@ import {
     ModalDescription,
     ModalHeader,
     Popup,
+    Segment,
     Statistic
 } from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
@@ -1690,13 +1693,44 @@ export const monthNames = [
     'December',
 ];
 
-export function IframeViewer({title, viewerUrl}) {
+export function IframeViewer({title, src, fallback, timeout = 5000}) {
     // Bottom of iframe is hidden when height is 100%.  These values display the entire iframe.
-    return <>
+    const [contentAvailable, setContentAvailable] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    const {s} = React.useContext(ThemeContext);
+    fallback = fallback || <pre {...s}>Frame could not load.</pre>;
+
+    useEffect(() => {
+        const controller = new AbortController();  // To manage fetch timeout
+        const timeoutId = setTimeout(() => {
+            controller.abort();  // Abort the fetch after 5 seconds
+        }, timeout);
+
+        fetch(src, {signal: controller.signal})
+            .then(response => {
+                if (response.ok) {
+                    setContentAvailable(true);  // If fetch is successful and response is ok, set to load the iframe
+                } else {
+                    setContentAvailable(false);  // If response is not ok, do not load the iframe
+                }
+            })
+            .catch(() => {
+                setContentAvailable(false);  // Handle fetch errors (including aborts)
+            })
+            .finally(() => {
+                setLoading(false);  // Update loading state regardless of result
+                clearTimeout(timeoutId);  // Clear the timeout
+            });
+
+        return () => clearTimeout(timeoutId);  // Cleanup timeout on unmount
+    }, [src]);
+
+    const iframeMedia = <>
         <Media at='mobile'>
             <iframe
                 title={title}
-                src={viewerUrl}
+                src={src}
                 style={{
                     position: 'fixed',
                     height: '80%',
@@ -1709,7 +1743,7 @@ export function IframeViewer({title, viewerUrl}) {
         <Media greaterThan='mobile'>
             <iframe
                 title={title}
-                src={viewerUrl}
+                src={src}
                 style={{
                     position: 'fixed',
                     height: '93%',
@@ -1719,6 +1753,14 @@ export function IframeViewer({title, viewerUrl}) {
                     backgroundColor: '#FFFFFF',
                 }}/>
         </Media>
+    </>;
+
+    const dimmer = <DimmerDimmable as={Segment} dimmed={true}><Dimmer active><Loader/></Dimmer></DimmerDimmable>;
+    return <>
+        {loading ? dimmer
+            : contentAvailable ? iframeMedia
+                : fallback
+        }
     </>
 }
 

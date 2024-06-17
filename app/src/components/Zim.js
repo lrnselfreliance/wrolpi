@@ -535,7 +535,18 @@ class ManageZim extends React.Component {
 }
 
 function ZimViewer() {
-    return <IframeViewer title='zim' viewerUrl={ZIM_VIEWER_URI}/>
+    const fallback = <Segment>
+        <Header as='h3'>Failed to fetch Zim service.</Header>
+        <p>You may need to give permission to access the page: <a href={ZIM_VIEWER_URI}>{ZIM_VIEWER_URI}</a></p>
+
+        <p>If the above does not work, try starting the service:</p>
+        <pre>sudo systemctl start wrolpi-kiwix</pre>
+
+        <p>Check the logs</p>
+        <pre>journalctl -u wrolpi-kiwix</pre>
+    </Segment>;
+
+    return <IframeViewer title='zim' src={ZIM_VIEWER_URI} fallback={fallback}/>
 }
 
 export function ZimRoute() {

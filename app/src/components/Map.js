@@ -29,7 +29,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Loader, Placeholder, Table} from "./Theme";
+import {Header, Loader, Placeholder, Segment, Table} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
 import _ from "lodash";
 
@@ -291,7 +291,20 @@ class ManageMap extends React.Component {
 }
 
 function MapPage() {
-    return <IframeViewer title='map' viewerUrl={MAP_VIEWER_URI}/>
+    const fallback = <Segment>
+        <Header as='h3'>Failed to fetch Map service.</Header>
+        <p>You may need to give permission to access the page: <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
+
+        <p>If the above does not work, try starting the service:</p>
+        <pre>sudo systemctl start renderd</pre>
+        <pre>sudo systemctl start apache2</pre>
+
+        <p>Check the logs</p>
+        <pre>journalctl -u renderd</pre>
+        <pre>sudo tail -f /var/log/apache2/*lo</pre>
+    </Segment>;
+
+    return <IframeViewer title='map' src={MAP_VIEWER_URI} fallback={fallback}/>
 }
 
 export function MapRoute() {

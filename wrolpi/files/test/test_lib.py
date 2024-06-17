@@ -383,15 +383,15 @@ async def test_refresh_a_text_no_indexer(test_async_client, test_session, make_f
 @pytest.mark.asyncio
 async def test_refresh_many_files(test_async_client, test_session, make_files_structure):
     """Used to profile file refreshing"""
-    count = 10_000
-    make_files_structure([f'{uuid4()}.txt' for _ in range(count)])
+    file_count = 10_000
+    make_files_structure([f'{uuid4()}.txt' for _ in range(file_count)])
     with timer('first refresh'):
         await lib.refresh_files()
-    assert test_session.query(FileGroup).count() == count
+    assert test_session.query(FileGroup).count() == file_count
 
     with timer('second refresh'):
         await lib.refresh_files()
-    assert test_session.query(FileGroup).count() == count
+    assert test_session.query(FileGroup).count() == file_count
 
 
 @pytest.mark.asyncio

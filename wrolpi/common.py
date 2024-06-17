@@ -1355,7 +1355,7 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Genera
 
 
 @contextlib.contextmanager
-def timer(name, level: str = 'debug'):
+def timer(name, level: str = 'debug', logger__: logging.Logger = logger_):
     """Prints out the time elapsed during the call of some block.
 
     Example:
@@ -1364,7 +1364,7 @@ def timer(name, level: str = 'debug'):
 
     """
     before = datetime.now()
-    log_method = getattr(logger_, level)
+    log_method = getattr(logger__, level)
     try:
         yield
     finally:

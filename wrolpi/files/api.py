@@ -8,7 +8,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
-    background_task, walk
+    background_task, walk, timer
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
 from ..api_utils import json_response, api_app
@@ -98,8 +98,9 @@ async def refresh_progress(request: Request):
 )
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
-    file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
-                                          body.tag_names, body.headline, body.months, body.from_year, body.to_year)
+    with timer('Searching all files', 'info', logger__=logger):
+        file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
+                                              body.tag_names, body.headline, body.months, body.from_year, body.to_year)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 

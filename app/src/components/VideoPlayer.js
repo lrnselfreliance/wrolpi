@@ -278,20 +278,35 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
     const aboutSegment = <Segment>
         <Header as='h2'>About Video</Header>
-        <h3>Size</h3>
-        <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
 
-        <h3>Source URL</h3>
-        <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
-
-        <h3>View Count</h3>
-        <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
-
-        <h3>Censored</h3>
-        <p>{video.censored ? 'Yes' : 'No'}</p>
-
-        <h3>Codec Names</h3>
-        <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
+        <Grid columns={2}>
+            <Grid.Row>
+                <Grid.Column>
+                    <h3>Size</h3>
+                    <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
+                </Grid.Column>
+                <Grid.Column>
+                    <h3>View Count</h3>
+                    <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <h3>Codec Names</h3>
+                    <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
+                </Grid.Column>
+                <Grid.Column>
+                    <h3>Censored</h3>
+                    <p>{video.censored ? 'Yes' : 'No'}</p>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <h3>Source URL</h3>
+                    <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
     </Segment>;
 
     const localAddTag = async (name) => {
@@ -377,16 +392,15 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         disabled={!videoFile.url}
                     >Refresh</APIButton>
                 </p>
-                <br/>
             </Segment>
 
             <Segment>
                 <TagsSelector selectedTagNames={videoFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
             </Segment>
 
-            <Tab menu={tabMenu} panes={tabPanes}/>
-
             {aboutSegment}
+
+            <Tab menu={tabMenu} panes={tabPanes}/>
 
             {prevNextVideosSegment}
         </Container>

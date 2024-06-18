@@ -1,0 +1,12 @@
+[Unit]
+Description=Run script at first startup
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wrolpi/wrolpi/scripts/first_startup.sh
+RemainAfterExit=true
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

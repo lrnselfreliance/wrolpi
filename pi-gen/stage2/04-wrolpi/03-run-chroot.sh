@@ -12,9 +12,7 @@ alias la='ll -a'
 EOF
 
 # Create WROLPi user.  This user will own the media directory, API, and App.
-# The `pi` user will be the maintainer's user.
 useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
-usermod -aG pi wrolpi
 
 # Change default postgresql port to 5432.
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
@@ -50,6 +48,8 @@ chown wrolpi:wrolpi /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
+# Enable first startup script.
+systemctl enable wrolpi-first-startup.service
 
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager

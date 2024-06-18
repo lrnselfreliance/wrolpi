@@ -301,7 +301,7 @@ function MapPage() {
 
         <p>Check the logs</p>
         <pre>journalctl -u renderd</pre>
-        <pre>sudo tail -f /var/log/apache2/*lo</pre>
+        <pre>sudo tail -f /var/log/apache2/*log</pre>
     </Segment>;
 
     return <IframeViewer title='map' src={MAP_VIEWER_URI} fallback={fallback}/>

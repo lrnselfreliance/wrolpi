@@ -71,6 +71,7 @@ cp /opt/wrolpi/etc/raspberrypios/index.html \
   /opt/wrolpi/modules/map/leaflet.css /var/www/html/
 chmod 644 /var/www/html/*
 a2enmod ssl
+a2enmod headers
 
 systemctl enable renderd
 systemctl start renderd

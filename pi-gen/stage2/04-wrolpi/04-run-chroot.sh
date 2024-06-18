@@ -10,16 +10,16 @@ git config --global --add safe.directory /opt/openstreetmap-carto
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 
-# WROLPi user can access WROLPi and Map database.
+# All users can access wrolpi and map database.
 cat >/etc/skel/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
-# Update desktop shortcuts.
+# Copy desktop shortcuts.
 mkdir /etc/skel/Desktop
 cp /opt/wrolpi/etc/raspberrypios/*desktop /etc/skel/Desktop
 
-# Configure renderd.
+# Configure renderd (map).
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.  Import renderd into apache.
 cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf

@@ -15,6 +15,11 @@ cat >/etc/skel/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
+cat >/etc/skel/.gitconfig  <<'EOF'
+[safe]
+	directory = /opt/wrolpi
+	directory = /opt/wrolpi-help
+EOF
 # Copy desktop shortcuts.
 mkdir /etc/skel/Desktop
 cp /opt/wrolpi/etc/raspberrypios/*desktop /etc/skel/Desktop

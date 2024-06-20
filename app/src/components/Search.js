@@ -43,6 +43,11 @@ const SUGGESTED_APPS = [
         title: 'Electrical Calculator',
         description: 'Convert Volts, Ohms, Amps, Watts'
     },
+    {
+        location: '/more/calculators?calc=antenna',
+        title: 'Antenna Calculator',
+        description: 'Calculate dipole length, wavelength.'
+    },
 ];
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

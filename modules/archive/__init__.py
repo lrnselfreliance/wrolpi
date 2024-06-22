@@ -86,10 +86,10 @@ class ArchiveDownloader(Downloader, ABC):
 
         if not stdout or SINGLEFILE_HEADER.encode() not in stdout[:1000]:
             if logs and (stderr := logs.get('stderr')):
-                e = ChildProcessError(stderr.decode())
+                e = ChildProcessError(stderr.decode()[:1000])
                 raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
             if stdout:
-                e = ChildProcessError(stdout.decode())
+                e = ChildProcessError(stdout.decode()[:1000])
                 raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
             raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 

@@ -202,6 +202,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
             Video.comments_failed == False,
             # Need a URL to try to get comments.
             FileGroup.url != None,  # noqa
+            FileGroup.censored != True,  # noqa
             # We want old videos (time for comments to accumulate), or those which we don't know the published date.
             or_(
                 one_month_ago > FileGroup.published_datetime,
@@ -214,12 +215,14 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
 
     logger.info(f'Found {len(video_urls)} videos missing comments')
 
-    def add_video_to_skip_list(video_url: str):
+    def add_video_to_skip_list(video_url: str, censored: bool = False):
         """Do not attempt to get comments of the provided Video again."""
         with get_db_session(commit=True) as session_:
-            for video_ in session_.query(Video).join(FileGroup).filter_by(url=video_url).all():
+            for video_, fg in session_.query(Video, FileGroup).join(FileGroup).filter_by(url=video_url).all():
                 video_.comments_failed = True
+                fg.censored = censored
         download_manager.add_to_skip_list(video_url)
+        logger.debug(f'add_video_to_skip_list: {video_url=} {censored=}')
 
     for url in video_urls:
         logger.info(f'Getting comments for: {url}')
@@ -258,19 +261,28 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
         except Exception as e:
             if 'no longer available' in str(e):
                 logger.error(f'Giving up on downloading comments because video does not exist: {url=}', exc_info=e)
-                add_video_to_skip_list(url)
+                add_video_to_skip_list(url, censored=True)
             elif 'Comments are turned off' in str(e):
                 logger.error(f'Giving up on downloading comments because comments are disabled: {url=}', exc_info=e)
                 add_video_to_skip_list(url)
             elif 'Private video' in str(e):
                 logger.error(f'Giving up on downloading comments because video is private: {url=}', exc_info=e)
-                add_video_to_skip_list(url)
+                add_video_to_skip_list(url, censored=True)
             elif 'Video unavailable' in str(e):
                 logger.error(f'Giving up on downloading comments because video is unavailable: {url=}', exc_info=e)
-                add_video_to_skip_list(url)
-            elif ' members ' in str(e):
+                add_video_to_skip_list(url, censored=True)
+            elif 'video has been removed' in str(e):
+                logger.error(f'Giving up on downloading comments because video is removed: {url=}', exc_info=e)
+                add_video_to_skip_list(url, censored=True)
+            elif ' members' in str(e):
                 logger.error(f'Giving up on downloading comments because video is members-only: {url=}', exc_info=e)
-                add_video_to_skip_list(url)
+                add_video_to_skip_list(url, censored=True)
+            elif 'rumble.com' in url and "'bool' object has no attribute 'get'" in str(e):
+                logger.error(f'Rumble error in yt-dlp', exc_info=e)
+                add_video_to_skip_list(url, censored=False)
+            elif 'not a valid URL' in str(e):
+                logger.error(f'URL is not valid: {url=}', exc_info=e)
+                add_video_to_skip_list(url, censored=True)
             else:
                 logger.error(f'Got error when attempting to download video comments: {url=}', exc_info=e)
             continue
@@ -286,7 +298,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 else:
                     logger.error(f'Attempting to replace comments for non-existent video!  {video}')
                     if len(videos) == 1:
-                        download_manager.add_to_skip_list(video.url)
+                        download_manager.add_to_skip_list(url)
                     video.comments_failed = True
 
         # Sleep a random amount of time, so we don't spam.

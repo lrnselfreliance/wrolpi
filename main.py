@@ -12,7 +12,7 @@ from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
-    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server
+    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager, \
@@ -174,6 +174,9 @@ async def initialize_configs(app: Sanic):
 
     try:
         initialize_configs_contexts(app)
+        await asyncio.sleep(0.5)
+        wrol_mode_enabled()
+        logger.info('initialize_configs succeeded')
     except Exception as e:
         logger.error('initialize_configs failed with', exc_info=e)
         raise

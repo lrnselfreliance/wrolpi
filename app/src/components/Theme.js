@@ -2,6 +2,7 @@ import React, {useContext, useEffect, useState} from 'react';
 import {ThemeContext} from "../contexts/contexts";
 import {
     Accordion as SAccordion,
+    Breadcrumb as SBreadcrumb,
     Button as SButton,
     Card as SCard,
     Divider as SDivider,
@@ -344,4 +345,17 @@ export function Card({color, ...props}) {
         props['style']['boxShadow'] = `0 0 0 2px ${borderColor}, 0 5px 0 0 ${emphasisColor}, 0 0px 3px 0 #d4d4d5`;
     }
     return <SCard {...props}/>
+}
+
+export function Breadcrumb({...props}) {
+    const {t} = useContext(ThemeContext);
+    return <SBreadcrumb {...props} {...t}/>
+}
+
+export function BreadcrumbDivider({...props}) {
+    const {inverted} = useContext(ThemeContext);
+
+    // TODO this only handles icons for now.
+    let className = `divider icon ${inverted} ${props.icon || ''}`;
+    return <i aria-hidden="true" className={className}></i>
 }

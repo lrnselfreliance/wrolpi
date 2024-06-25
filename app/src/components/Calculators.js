@@ -1,18 +1,19 @@
 import React from "react";
-import {BackButton, useTitle} from "./Common";
-import {Button, Header, Icon} from "./Theme";
+import {Breadcrumbs, useTitle} from "./Common";
+import {Button, Icon, Segment} from "./Theme";
 import {useCalcQuery} from "../hooks/customHooks";
 import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
-import {ElectricalCalculator} from "./calculators/ElectricalCalculators";
+import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
 import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
+import {Link} from "react-router-dom";
 
 export function CalculatorsPage() {
     const {calc, setCalc} = useCalcQuery();
 
     const calculators = [
-        {key: 'temperature', icon: 'thermometer', button: 'Temperature', contents: <TemperatureCalculator/>},
-        {key: 'electrical', icon: 'lightning', button: 'Electrical', contents: <ElectricalCalculator/>},
+        {key: 'electrical', icon: 'lightning', button: 'Electrical', contents: <ElectricalCalculators/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', contents: <DipoleAntennaCalculator/>},
+        {key: 'temperature', icon: 'thermometer', button: 'Temperature', contents: <TemperatureCalculator/>},
     ];
 
     const activeCalculator = calc ?
@@ -21,26 +22,30 @@ export function CalculatorsPage() {
     const {icon, button, title, contents} = activeCalculator || {};
 
     const name = activeCalculator ? title || button + ' Calculator' : 'Calculators';
-    const header = activeCalculator ? <Header><Icon name={icon}/>{name}</Header> : <Header>{name}</Header>;
     useTitle(name);
 
     const calculatorButtons = calculators.map(i => {
         const {button, icon, key} = i;
-        return <Button key={key} onClick={() => setCalc(key)}>
-            {icon && <Icon name={icon}/>}
-            {button}
-        </Button>
+        return <Link key={key} to={`/more/calculators?calc=${key}`}>
+            <Button style={{margin: '0.5em'}}>
+                {icon && <Icon name={icon}/>}
+                {button}
+            </Button>
+        </Link>
     });
 
-    const body = activeCalculator ? <>
-            <BackButton style={{marginBottom: '1em'}}/>
-            <span>{contents}</span>
-        </>
-        : calculatorButtons;
+    const body = activeCalculator ? <span>{contents}</span> : calculatorButtons;
 
-    // TODO add Breadcrumb here.
+    // Make first breadcrumb a link back to Calculators only when a calculator is active.
+    const crumbs = activeCalculator
+        ? [{text: 'Calculators', link: '/more/calculators'}, {text: name, icon: icon}]
+        : [{text: 'Calculators'}];
+
     return <>
-        {header}
-        {body}
+        <Breadcrumbs crumbs={crumbs} size='huge'/>
+
+        <div style={{marginTop: '1em'}}>
+            {body}
+        </div>
     </>
 }

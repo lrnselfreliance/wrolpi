@@ -237,3 +237,11 @@ textarea.otp {
 .search-clear {
     margin: 10px;
 }
+
+.icon.divider {
+    color: rgb(0, 0, 0, 0.4) !important;
+}
+
+.divider.inverted {
+    color: rgb(255, 255, 255, 0.6) !important;
+}

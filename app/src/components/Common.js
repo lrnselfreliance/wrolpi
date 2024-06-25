@@ -1,5 +1,6 @@
 import React, {useContext, useEffect, useState} from "react";
 import {
+    BreadcrumbSection,
     Button as SButton,
     ButtonGroup,
     Card,
@@ -29,6 +30,8 @@ import {
 } from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
+    Breadcrumb,
+    BreadcrumbDivider,
     Button,
     CardIcon,
     darkTheme,
@@ -1601,8 +1604,9 @@ export function HandPointMessage({children, size = null}) {
 }
 
 export function WarningMessage({children, size = null}) {
-    return <Message warning icon size={size}>
-        <SIcon name='hand point right'/>
+    // Use color='yellow' because "warning" does not work.
+    return <Message color='yellow' icon size={size}>
+        <SIcon name='exclamation'/>
         <Message.Content>
             {children}
         </Message.Content>
@@ -1759,4 +1763,28 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
 
 export function roundDigits(value, decimals = 2) {
     return Number(Math.round(value + 'e' + decimals) + 'e-' + decimals);
+}
+
+
+export function Breadcrumbs({crumbs, size = undefined}) {
+    function getSection(crumb) {
+        const {text, link, icon} = crumb;
+        let contents = text;
+        if (link) {
+            contents = <Link to={link}>
+                {icon && <Icon name={icon}/>}
+                {text}
+            </Link>;
+        }
+        return <BreadcrumbSection>{contents}</BreadcrumbSection>
+    }
+
+    return <Breadcrumb size={size}>
+        {crumbs.map((crumb, index) => (
+            <React.Fragment key={index}>
+                {getSection(crumb)}
+                {index < crumbs.length - 1 && <BreadcrumbDivider icon='right chevron'/>}
+            </React.Fragment>
+        ))}
+    </Breadcrumb>
 }

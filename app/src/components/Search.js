@@ -41,7 +41,7 @@ const SUGGESTED_APPS = [
     {
         location: '/more/calculators?calc=electrical',
         title: 'Electrical Calculator',
-        description: 'Convert Volts, Ohms, Amps, Watts'
+        description: 'Convert Volts, Ohms, Amps, Watts, Power Loss.'
     },
     {
         location: '/more/calculators?calc=antenna',

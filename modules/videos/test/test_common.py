@@ -6,13 +6,14 @@ from unittest import mock
 import pytest
 from PIL import Image
 
-from modules.videos.models import Channel, Video
+from modules.videos.models import Channel, Video, ChannelDownload
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, is_valid_poster
+from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, \
+    is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
 
 
@@ -134,15 +135,10 @@ def test_generate_video_poster(video_file):
 
 def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config):
     """Importing the Channels' config should create any missing download records"""
-    channel1 = channel_factory(source_id='foo')
-    channel2 = channel_factory(source_id='bar')
-    # channel2 has no url, but has a frequency.  Import should not create a download record.
-    channel2.url = None
-    channel2.download_frequency = DownloadFrequency.biweekly
-    test_session.commit()
-    assert channel1.download_frequency is None
+    channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
+    channel2 = channel_factory(source_id='bar', url='https://example.com/channel2')
     assert len(test_session.query(Channel).all()) == 2
-    assert test_session.query(Download).all() == []
+    test_session.commit()
 
     def update_channel_config(conf: ChannelsConfig, source_id, d):
         # Creat a copy of the old config, replace the data of the provided Channel.
@@ -156,37 +152,67 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     # Config has no channels with a download_frequency.
     save_channels_config()
     import_channels_config()
-    assert channel1.download_frequency is None
+    assert not channel1.channel_downloads
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []
 
     # Add a frequency to the Channel.
     channels_config = get_channels_config()
-    update_channel_config(channels_config, 'foo', {'download_frequency': DownloadFrequency.biweekly})
+    update_channel_config(channels_config, 'foo',
+                          {'channel_downloads': [
+                              {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly}
+                          ]})
 
     # Download record is created on import.
     import_channels_config()
-    assert channel1.download_frequency is not None
+    assert channel1.channel_downloads
     assert len(test_session.query(Channel).all()) == 2
     download: Download = test_session.query(Download).one()
     assert download.url == channel1.url
-    assert download.frequency == channel1.download_frequency
-
-    # Download frequency is adjusted when config file changes.
-    update_channel_config(channels_config,
-                          'foo', {'download_frequency': DownloadFrequency.weekly})
-    import_channels_config()
-    assert len(test_session.query(Channel).all()) == 2
-    assert download.url == channel1.url
-    assert download.frequency == channel1.download_frequency
-    assert download.downloader == 'video_channel'
-    assert download.next_download
-    assert not download.error
+    assert download.frequency
 
     next_download = str(download.next_download)
     import_channels_config()
     download: Download = test_session.query(Download).one()
     assert next_download == str(download.next_download)
+
+    # Creating Download that matches Channel2's URL creates a ChannelDownload on save.
+    download = Download(url=channel2.url, frequency=DownloadFrequency.weekly)
+    test_session.add(download)
+    test_session.commit()
+
+    save_channels_config()
+    channel2: Channel = test_session.query(Channel).filter_by(id=channel2.id).one()
+    cds = test_session.query(ChannelDownload).all()
+    assert len(cds) == 2, cds
+    assert channel2.channel_downloads and len(channel2.channel_downloads) == 1
+    assert channel1.channel_downloads and len(channel1.channel_downloads) == 1
+
+    # Add a Download to Channel2 which does not match Channel.url.
+    channel2.get_or_create_download('https://example.org')
+    test_session.commit()
+    save_channels_config()
+    # Check config is written to match new URLs.
+    config = get_channels_config()
+    assert len(config.channels) == 2
+    for channel_config in config.channels:
+        if channel_config['source_id'] == channel2.source_id:
+            assert channel_config['source_id'] == 'bar'
+            assert len(channel_config['channel_downloads']) == 2
+            assert set(channel_config['channel_downloads']) == {'https://example.com/channel2', 'https://example.org'}
+        else:
+            assert channel_config['source_id'] == 'foo'
+
+    # Reset Downloads.  Downloads and ChannelDownloads should be recreated.
+    [i.delete(skip=False) for i in test_session.query(Download).all()]
+    [i.delete() for i in test_session.query(ChannelDownload).all()]
+    import_channels_config()
+    channel1, channel2 = test_session.query(Channel).order_by(Channel.url).all()
+    assert channel1.url == 'https://example.com/channel1'
+    assert channel2.url == 'https://example.com/channel2'
+    assert {i.download.url for i in channel1.channel_downloads} == {'https://example.com/channel1'}
+    assert {i.download.url for i in channel2.channel_downloads} == {'https://example.com/channel2',
+                                                                    'https://example.org'}
 
 
 def test_import_channel_delete_missing_channels(test_session, channel_factory, test_channels_config):
@@ -255,7 +281,7 @@ def test_check_for_video_corruption(video_file, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_ffprobe_json(video_file, corrupted_video_file):
+async def test_ffprobe_json(test_async_client, video_file, corrupted_video_file):
     content = await common.ffprobe_json(video_file)
     assert not content['chapters']
     assert content['format']['duration'] == '5.312000'

@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytz
-from dateutil.tz import tzoffset
 from sqlalchemy import Column, Integer
 
 from wrolpi import dates
@@ -100,8 +99,8 @@ def test_timedelta_to_timestamp(td, expected):
     ('2022/8/1', datetime(2022, 8, 1)),
     ('2022-8-1', datetime(2022, 8, 1)),
     ('2023-08-22T02:45:59+0000', datetime(2023, 8, 22, 2, 45, 59, tzinfo=pytz.UTC)),
-    ('2023-08-29T15:29-0400', datetime(2023, 8, 29, 15, 29, tzinfo=tzoffset(None, -14400))),
-    ('2023-08-29T15:29+0400', datetime(2023, 8, 29, 15, 29, tzinfo=tzoffset(None, 14400))),
+    ('2023-08-29T15:29-0400', datetime(2023, 8, 29, 15, 29, tzinfo=timezone(timedelta(hours=-4)))),
+    ('2023-08-29T15:29+0400', datetime(2023, 8, 29, 15, 29, tzinfo=timezone(timedelta(hours=4)))),
     ('2011-11-04', datetime(2011, 11, 4, 0, 0)),
     ('20111104', datetime(2011, 11, 4, 0, 0)),
     ('2011-11-04T00:05:23', datetime(2011, 11, 4, 0, 5, 23)),
@@ -115,13 +114,14 @@ def test_timedelta_to_timestamp(td, expected):
     ('Tuesday, October 19, 1999 3:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
     ('Tue, October 19, 1999 3:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
     ('Tue, October 19, 1999 03:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
+    ('04/27/2024 18:52:55', datetime(2024, 4, 27, 18, 52, 55)),
+    ('6/24/2024 6:49:02 PM', datetime(2024, 6, 24, 6, 49, 2)),
     # From SingleFile.
     ('Fri Jun 17 2022 19:24:52', datetime(2022, 6, 17, 19, 24, 52)),
     # PDFs are the Wild West...
     ("D:20221226113758-07'00", datetime(2022, 12, 26, 11, 37, 58, tzinfo=timezone(timedelta(days=-1, seconds=61200)))),
     ('D:20200205184724', datetime(2020, 2, 5, 18, 47, 24)),
     ('D:20091019120104+', datetime(2009, 10, 19, 12, 1, 4)),
-    ('04/27/2024 18:52:55', datetime(2024, 4, 27, 18, 52, 55)),
 ])
 def test_strpdate(dt, expected):
     assert dates.strpdate(dt) == expected

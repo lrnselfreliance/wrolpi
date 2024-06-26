@@ -295,6 +295,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 if video.video_path.is_file():
                     video.replace_info_json(info)
                     video.have_comments = True
+                    video.comments_failed = False
                 else:
                     logger.error(f'Attempting to replace comments for non-existent video!  {video}')
                     if len(videos) == 1:

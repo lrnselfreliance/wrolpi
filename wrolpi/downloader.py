@@ -27,7 +27,7 @@ from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import pid_is_running
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    limit_concurrent, wrol_mode_enabled
+    limit_concurrent, wrol_mode_enabled, background_task
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -98,14 +98,14 @@ class Download(ModelHelper, Base):  # noqa
     """Model that is used to schedule downloads."""
     __tablename__ = 'download'  # noqa
     id = Column(Integer, primary_key=True)
-    url = Column(String, nullable=False)
+    url = Column(String, nullable=False, unique=True)
 
     attempts = Column(Integer, default=0)
     downloader = Column(Text)  # 'videos', 'archive', 'kiwix_zim', etc.
     sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
     error = Column(Text)  # traceback from an error during downloading.
     frequency = Column(Integer)  # seconds between re-downloading.
-    info_json = Column(JSONB)  # information retrieve WHILE downloading (from yt-dlp)
+    info_json = Column(JSONB)  # information retrieved WHILE downloading (from yt-dlp)
     last_successful_download = Column(TZDateTime)
     location = Column(Text)  # Relative App URL where the item is downloaded
     next_download = Column(TZDateTime)
@@ -208,11 +208,19 @@ class Download(ModelHelper, Base):  # noqa
     def add_to_skip_list(self):
         download_manager.add_to_skip_list(self.url)
 
-    def delete(self):
+    def delete(self, skip: bool = True):
         # Do not download this automatically again.  This saves the config.
-        self.add_to_skip_list()
+        if skip:
+            self.add_to_skip_list()
 
         session = Session.object_session(self)
+
+        # Delete ChannelDownload, if any exists.
+        from modules.videos.models import ChannelDownload
+        cds = session.query(ChannelDownload).filter(ChannelDownload.download == self).all()
+        for cd in cds:
+            session.delete(cd)
+
         session.delete(self)
         # Save download config again because this download is now removed from the download lists.
         save_downloads_config(session=session)
@@ -464,7 +472,21 @@ class DownloadManager:
                         f'Refusing to download {url} because it is in the download_manager.yaml skip list')
             download = Download(url=url, status='new')
             session.add(download)
-            session.flush()
+
+        from modules.videos.models import Channel, ChannelDownload
+        channel: Channel = session.query(Channel).filter(Channel.url == url).one_or_none()
+        if channel:
+            # This Download needs to be associated with the Channel.
+            cd = ChannelDownload.get_by_url(url, session)
+            if not cd:
+                cd = ChannelDownload(channel=channel, download=download)
+                session.add(cd)
+            else:
+                cd.download = download
+            if cd not in channel.channel_downloads:
+                channel.channel_downloads.append(cd)
+
+            session.flush([cd, channel])
         return download
 
     @optional_session
@@ -479,6 +501,7 @@ class DownloadManager:
         # Throws an error if no downloader is found.
         self.get_downloader_by_name(downloader_name)
 
+        logger.debug(f'Creating downloads: {urls=}')
         for url in urls:
             if url in get_download_manager_config().skip_urls and reset_attempts:
                 # User manually entered this download, remove it from the skip list.
@@ -806,15 +829,19 @@ class DownloadManager:
             stmt = f'''
                 SELECT
                     downloader,
+                    error,
                     frequency,
                     id,
                     last_successful_download,
-                    next_download,
-                    status,
-                    url,
                     location,
-                    error
+                    next_download,
+                    settings,
+                    status,
+                    sub_downloader,
+                    url,
+                    cd.channel_id
                 FROM download
+                LEFT OUTER JOIN channel_download cd on download.url = cd.download_url
                 WHERE frequency IS NOT NULL
                 ORDER BY
                     {self._status_order},

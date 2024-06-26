@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from modules.videos.video.lib import DEFAULT_VIDEO_ORDER, VIDEO_QUERY_LIMIT
+from wrolpi.errors import ValidationError
 
 
 @dataclass
@@ -9,9 +10,7 @@ class ChannelPostRequest:
     name: str
     directory: str
     calculate_duration: Optional[bool] = None
-    download_frequency: Optional[int] = None
     generate_posters: Optional[bool] = None
-    match_regex: Optional[str] = None
     mkdir: Optional[bool] = None
     url: Optional[str] = None
     source_id: Optional[str] = None
@@ -27,9 +26,7 @@ class ChannelPostRequest:
 class ChannelPutRequest:
     calculate_duration: Optional[bool] = None
     directory: Optional[str] = None
-    download_frequency: Optional[int] = None
     generate_posters: Optional[bool] = None
-    match_regex: Optional[str] = None
     mkdir: Optional[bool] = None
     name: Optional[str] = None
     url: Optional[str] = None
@@ -38,7 +35,22 @@ class ChannelPutRequest:
         self.name = self.name.strip() or None
         self.directory = self.directory.strip() or None
         self.url = self.url.strip() if self.url else None
-        self.match_regex = None if self.match_regex in ('None', '') else self.match_regex
+
+
+@dataclass
+class ChannelDownloadRequest:
+    url: str
+    frequency: int
+    settings: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.url = self.url.strip()
+        if not self.url:
+            raise ValidationError('url cannot be empty')
+
+        # Validate settings contents.  Remove empty values.
+        from wrolpi.schema import DownloadSettings
+        self.settings = {k: v for k, v in DownloadSettings(**self.settings).__dict__.items() if v not in ([], None)}
 
 
 @dataclass
@@ -51,7 +63,6 @@ class ChannelModel:
     id: int
     url: str
     name: str
-    match_regex: str
     directory: str
 
 
@@ -171,6 +182,9 @@ class VideoStatistics:
     sum_duration: int
     sum_size: int
     max_size: int
+    have_comments: int
+    missing_comments: int
+    failed_comments: int
 
 
 @dataclass

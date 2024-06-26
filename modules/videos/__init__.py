@@ -1,7 +1,7 @@
 import asyncio
 from typing import List, Tuple
 
-from modules.videos.models import Video, Channel
+from modules.videos.models import Video
 from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.files.models import FileGroup

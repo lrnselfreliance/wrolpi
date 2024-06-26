@@ -15,9 +15,10 @@ from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST
 from . import lib
-from .. import schema, Channel
+from .. import schema
 from ..errors import UnknownChannel
 from ..lib import save_channels_config
+from ..models import Channel
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')
 
@@ -109,13 +110,29 @@ def channel_refresh(_: Request, channel_id: int):
     return response.empty()
 
 
-@channel_bp.post('/download/<channel_id:int>')
-@openapi.description('Download the latest catalog for a Channel, download any missing videos.')
+@channel_bp.post('/<channel_id:int>/download', name='post_channel_download')
+@channel_bp.put('/<channel_id:int>/download/<download_id:int>', name='put_channel_download')
+@openapi.description('Create or update a Channel Download record')
+@validate(schema.ChannelDownloadRequest)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-def channel_download(_: Request, channel_id: int):
-    lib.download_channel(channel_id, reset_attempts=True)
-    if download_manager.disabled.is_set():
+async def channel_download(_: Request, channel_id: int, body: schema.ChannelDownloadRequest, download_id: int = None):
+    if download_id:
+        await lib.update_channel_download(
+            channel_id,
+            download_id,
+            body.url,
+            body.frequency,
+            body.settings,
+        )
+    else:
+        await lib.create_channel_download(
+            channel_id,
+            body.url,
+            body.frequency,
+            body.settings,
+        )
+    if download_manager.is_disabled:
         # Warn the user that downloads are disabled.
         Events.send_downloads_disabled('Channel download created. But downloads are disabled.')
     return response.empty()

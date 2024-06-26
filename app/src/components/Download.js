@@ -1,6 +1,14 @@
 import React, {useContext, useState} from "react";
 import {getDownloaders, postDownload} from "../api";
-import {APIButton, DirectorySearch, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
+import {
+    APIButton,
+    DirectorySearch,
+    frequencyOptions,
+    HelpPopup,
+    rssFrequencyOptions,
+    validURL,
+    WROLModeMessage
+} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
@@ -10,8 +18,6 @@ import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-
-const validUrl = /^(http|https):\/\/[^ "]+$/;
 
 class Downloader extends React.Component {
     constructor(props) {
@@ -58,9 +64,7 @@ class Downloader extends React.Component {
             let urls = this.state.urls.split(/\r?\n/);
             let valid = true;
             urls.forEach((url) => {
-                if (valid && url && !validUrl.test(url)) {
-                    valid = false;
-                }
+                valid = validURL(url);
             })
             this.setState({valid});
         }
@@ -192,7 +196,7 @@ class ChannelDownload extends React.Component {
 
     handleUrlChange = (e, {value}) => {
         e.preventDefault();
-        let ready = value && validUrl.test(value);
+        let ready = value && validURL(value);
         this.setState({url: value, ready, success: false});
     }
 

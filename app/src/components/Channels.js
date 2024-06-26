@@ -1,20 +1,21 @@
 import React, {useState} from "react";
+import {Dimmer, Dropdown, Grid, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
 import {
-    AccordionContent,
-    AccordionTitle,
-    Grid,
-    StatisticLabel,
-    StatisticValue,
-    TableCell,
-    TableRow,
-} from "semantic-ui-react";
-import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
+    createChannel,
+    createChannelDownload,
+    deleteChannel,
+    deleteDownload,
+    refreshChannel,
+    updateChannel,
+    updateChannelDownload
+} from "../api";
 import {
     APIButton,
     BackButton,
     DirectoryInput,
     ErrorMessage,
     frequencyOptions,
+    HelpHeader,
     humanFileSize,
     RequiredAsterisk,
     SearchInput,
@@ -22,18 +23,31 @@ import {
     secondsToFullDuration,
     Toggle,
     useTitle,
+    validURL,
     WROLModeMessage
 } from "./Common";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
+import {useChannel, useChannels, useOneQuery, useWROLMode} from "../hooks/customHooks";
 import _ from "lodash";
-import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, Statistic} from "./Theme";
-import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
+import {
+    Button,
+    Form,
+    FormField,
+    FormGroup,
+    FormInput,
+    Header,
+    Loader,
+    Modal,
+    ModalContent,
+    Segment,
+    Statistic
+} from "./Theme";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
+import {RecurringDownloadsTable} from "./admin/Downloads";
+import {TagsSelector, useTags} from "../Tags";
 
 
 function ChannelStatistics({statistics}) {
@@ -65,13 +79,13 @@ function ChannelStatistics({statistics}) {
 
 function ChannelPage({create, header}) {
     const [disabled, setDisabled] = useState(false);
-    const [validRegex, setValidRegex] = useState(true);
-    const [activeIndex, setActiveIndex] = useState(-1);
     const [errors, setErrors] = useState({});
     const [error, setError] = useState(false);
     const [success, setSuccess] = useState(false);
     const [messageHeader, setMessageHeader] = useState();
     const [messageContent, setMessageContent] = useState();
+    const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+    const [rssDownloadOpen, setRssDownloadOpen] = useState(false);
 
     const navigate = useNavigate();
     const {channelId} = useParams();
@@ -85,12 +99,6 @@ function ChannelPage({create, header}) {
 
     if (!channel) {
         return <Loader active/>;
-    }
-
-    const checkRegex = async (e, {value}) => {
-        changeValue('match_regex', value);
-        const valid = await validateRegex(value);
-        setValidRegex(valid);
     }
 
     const handleCheckbox = (e, {name, checked}) => {
@@ -130,8 +138,6 @@ function ChannelPage({create, header}) {
             directory: channel.directory,
             mkdir: channel.mkdir,
             url: channel.url,
-            download_frequency: channel.download_frequency,
-            match_regex: channel.match_regex,
         };
 
         setDisabled(true);
@@ -208,29 +214,6 @@ function ChannelPage({create, header}) {
         }
     }
 
-    const handleAdvancedClick = (e, {index}) => {
-        setActiveIndex(activeIndex === index ? -1 : index);
-    }
-
-    const handleDownloadChannel = async (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        try {
-            const response = await downloadChannel(channelId);
-            if (response.status === 204) {
-                toast({
-                    type: 'success',
-                    title: 'Download Created',
-                    description: 'Channel download has been started.',
-                    time: 5000,
-                });
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
     const handleRefreshChannel = async (e) => {
         if (e) {
             e.preventDefault();
@@ -255,6 +238,13 @@ function ChannelPage({create, header}) {
         } catch (e) {
             setErrorMessage('Failed to delete', 'Failed to delete this channel, check logs.');
         }
+    }
+
+    let channelDownloads = channel && channel.channel_downloads ? channel.channel_downloads : null;
+
+    const afterNewDownloadSave = async () => {
+        await fetchChannel();
+        setDownloadModalOpen(false);
     }
 
     return <>
@@ -326,7 +316,6 @@ function ChannelPage({create, header}) {
                             label="URL"
                             name="url"
                             type="url"
-                            disabled={disabled}
                             placeholder='https://example.com/channel/videos'
                             error={errors.url}
                             value={channel.url}
@@ -334,51 +323,6 @@ function ChannelPage({create, header}) {
                         />
                     </FormField>
                 </FormGroup>
-
-                <FormGroup>
-                    <FormField>
-                        <label>Download Frequency</label>
-                        <Dropdown selection clearable
-                                  name='download_frequency'
-                                  placeholder='Frequency'
-                                  error={errors.download_frequency}
-                                  value={channel.download_frequency}
-                                  disabled={disabled || !channel.url}
-                                  options={frequencyOptions}
-                                  onChange={handleInputChange}
-                        />
-                    </FormField>
-                </FormGroup>
-
-                <Accordion style={{marginBottom: '1em'}}>
-                    <AccordionTitle
-                        onClick={handleAdvancedClick}
-                        index={0}
-                        active={activeIndex === 0}
-                    >
-                        <Icon name='dropdown'/>
-                        Advanced Settings
-                    </AccordionTitle>
-                    <AccordionContent active={activeIndex === 0}>
-                        <Segment secondary>
-                            <Header as="h4">
-                                The following settings are encouraged by default, modify them at your own risk.
-                            </Header>
-                            <FormField>
-                                <FormInput
-                                    label="Title Match Regex"
-                                    name="match_regex"
-                                    type="text"
-                                    disabled={disabled}
-                                    error={!validRegex}
-                                    placeholder='.*([Nn]ame Matching).*'
-                                    value={channel.match_regex}
-                                    onChange={checkRegex}
-                                />
-                            </FormField>
-                        </Segment>
-                    </AccordionContent>
-                </Accordion>
 
                 <Message error
                          header={messageHeader}
@@ -401,18 +345,14 @@ function ChannelPage({create, header}) {
                                         confirmButton='Delete'
                                         onClick={handleDelete}
                                         obeyWROLMode={true}
+                                        style={{marginTop: '1em'}}
                                     >Delete</APIButton>
-                                    <APIButton
-                                        color='green'
-                                        size='small'
-                                        onClick={handleDownloadChannel}
-                                        obeyWROLMode={true}
-                                    >Download</APIButton>
                                     <APIButton
                                         color='blue'
                                         size='small'
                                         onClick={handleRefreshChannel}
                                         obeyWROLMode={true}
+                                        style={{marginTop: '1em'}}
                                     >Refresh</APIButton>
                                 </>
                             }
@@ -433,10 +373,216 @@ function ChannelPage({create, header}) {
             </Form>
         </Segment>
 
+        {!create && <Segment>
+            <Grid columns={2}>
+                <Grid.Row>
+                    <Grid.Column>
+                        <Header as='h1'>Downloads</Header>
+                    </Grid.Column>
+                    <Grid.Column>
+                        <Button floated='right'
+                                onClick={() => setDownloadModalOpen(!downloadModalOpen)}
+                        >
+                            New Download
+                        </Button>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+            <Modal open={downloadModalOpen} closeIcon onClose={() => setDownloadModalOpen(false)}>
+                <ModalContent>
+                    <Header as='h2'>New Channel Download</Header>
+                    <ChannelDownloadForm
+                        channel_id={channelId}
+                        afterSave={afterNewDownloadSave}
+                        closeModal={() => setDownloadModalOpen(false)}
+                    />
+                </ModalContent>
+            </Modal>
+
+            <RecurringDownloadsTable downloads={channelDownloads} fetchDownloads={fetchChannel}/>
+        </Segment>}
+
         <div style={{marginTop: '2em'}}>
             {channel.statistics && <ChannelStatistics statistics={channel.statistics}/>}
         </div>
     </>
+}
+
+export function ChannelDownloadForm({channel_id, afterSave, closeModal, download}) {
+    download = download || {};
+    channel_id = download ? download.channel_id || channel_id : channel_id;
+    const editing = download && !_.isEmpty(download);
+
+    const settings = download.settings ? download.settings : {};
+    const oldTagNames = download && download.settings && download.settings.tag_names ? download.settings.tag_names : [];
+    const [state, setState] = React.useState({
+        url: download ? download.url : '',
+        frequency: download.frequency ? download.frequency : 604800,
+        title_match: settings.title_match ? settings.title_match : '',
+        title_exclude: settings.title_exclude ? settings.title_exclude : '',
+    })
+    const [disabled, setDisabled] = React.useState(useWROLMode());
+    const [loading, setLoading] = React.useState(false);
+    const [urlValid, setUrlValid] = React.useState(true);
+    const [tagNames, setTagNames] = React.useState(oldTagNames);
+
+    const handleInputChange = (e, {name, value}) => {
+        if (e) {
+            e.preventDefault();
+        }
+        if (name === 'url') {
+            setUrlValid(validURL(value));
+        }
+        setState({...state, [name]: value});
+    }
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        setDisabled(true);
+        try {
+            let response;
+            if (editing) {
+                response = await updateChannelDownload(
+                    channel_id,
+                    download.id,
+                    state.url,
+                    state.frequency,
+                    state.title_match,
+                    state.title_exclude,
+                    tagNames,
+                );
+            } else {
+                response = await createChannelDownload(
+                    channel_id,
+                    state.url,
+                    state.frequency,
+                    state.title_match,
+                    state.title_exclude,
+                    tagNames,
+                );
+            }
+            if (!response.ok) {
+                throw 'Creating download failed';
+            }
+            if (afterSave) {
+                await afterSave();
+            }
+        } finally {
+            setLoading(false);
+            setDisabled(false);
+        }
+    }
+
+    const handleClose = (e) => {
+        if (e) e.preventDefault();
+        closeModal();
+    }
+
+    const handleDelete = async () => {
+        await deleteDownload(download.id);
+        if (afterSave) {
+            afterSave();
+        }
+        if (closeModal) {
+            closeModal();
+        }
+    };
+
+    const handleAddTag = (tagName) => {
+        setTagNames([...tagNames, tagName]);
+    }
+
+    const handleUntag = (tagName) => {
+        setTagNames(tagNames.filter(i => i !== tagName));
+    }
+
+    const deleteDownloadButton = <APIButton
+        color='red'
+        floated='left'
+        onClick={handleDelete}
+        confirmContent='Are you sure you want to delete this download?'
+        confirmButton='Delete'
+        disabled={disabled}
+        obeyWROLMode={true}
+    >Delete</APIButton>;
+
+    return <Form onSubmit={handleSubmit}>
+        {loading && <Dimmer active><Loader/></Dimmer>}
+        <Grid columns={2} stackable>
+            <Grid.Row>
+                <Grid.Column width={12}>
+                    <FormInput
+                        label='URL'
+                        name='url'
+                        type='url'
+                        value={state.url}
+                        placeholder='https://example.com/videos'
+                        onChange={handleInputChange}
+                        error={!urlValid}
+                    />
+                </Grid.Column>
+                <Grid.Column width={4}>
+                    <FormField>
+                        <label>Download Frequency</label>
+                        <Dropdown selection
+                                  name='frequency'
+                                  placeholder='Frequency'
+                                  value={state.frequency}
+                                  disabled={disabled}
+                                  options={frequencyOptions.slice(1)}
+                                  onChange={handleInputChange}
+                        />
+                    </FormField>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <HelpHeader
+                        headerSize='h4'
+                        headerContent='Title Match Words'
+                        popupContent='List of words, separated by commas, that Video titles must contain to be downloaded.'
+                        popupPosition='bottom center'
+                    />
+                    <FormInput
+                        name="title_match"
+                        type="text"
+                        disabled={disabled}
+                        placeholder='Shelter,Solar Power'
+                        value={state.title_match}
+                        onChange={handleInputChange}
+                    />
+                </Grid.Column>
+                <Grid.Column>
+                    <HelpHeader
+                        headerSize='h4'
+                        headerContent='Title Exclusion Words'
+                        popupContent='List of words, separated by commas, that may not appear in video titles to be downloaded.'
+                        popupPosition='bottom center'
+                    />
+                    <FormInput
+                        name="title_exclude"
+                        type="text"
+                        disabled={disabled}
+                        placeholder='Giveaway,Prize'
+                        value={state.title_exclude}
+                        onChange={handleInputChange}
+                    />
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <TagsSelector selectedTagNames={tagNames} onAdd={handleAddTag} onRemove={handleUntag}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column textAlign='right'>
+                    {editing && deleteDownloadButton}
+                    <Button onClick={handleClose}>Cancel</Button>
+                    <Button color='violet' disabled={!urlValid}>Save</Button>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
 }
 
 export function ChannelEditPage(props) {
@@ -463,7 +609,7 @@ function ChannelRow({channel}) {
             {channel.video_count}
         </TableCell>
         <TableCell>
-            {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
+            {channel.url && channel.minimum_frequency ? secondsToFrequency(channel.minimum_frequency) : null}
         </TableCell>
         <TableCell>
             {channel.size ? humanFileSize(channel.size) : null}
@@ -532,7 +678,7 @@ export function ChannelsPage() {
     const headers = [
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
         {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
-        {key: 'download_frequency', text: 'Download Frequency', sortBy: 'download_frequency', width: 2},
+        {key: 'download_frequency', text: 'Download Frequency', sortBy: 'minimum_frequency', width: 2},
         {key: 'size', text: 'Size', sortBy: 'size', width: 2},
         {key: 'manage', text: 'Manage', width: 2},
     ];

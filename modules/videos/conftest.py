@@ -14,7 +14,7 @@ from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.api_utils import api_app
-from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
+from wrolpi.downloader import DownloadFrequency, DownloadManager
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
 
@@ -26,7 +26,6 @@ def simple_channel(test_session, test_directory) -> Channel:
         directory=test_directory,
         name='Simple Channel',
         url='https://example.com/channel1',
-        download_frequency=None,  # noqa
     )
     test_session.add(channel)
     test_session.commit()
@@ -35,7 +34,7 @@ def simple_channel(test_session, test_directory) -> Channel:
 
 @pytest.fixture
 def channel_factory(test_session, test_directory):
-    """Create a random Channel with a directory, but no frequency."""
+    """Create a random Channel with a directory, ChannelDownload, and Download."""
 
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
                 directory: pathlib.Path = None):
@@ -47,10 +46,16 @@ def channel_factory(test_session, test_directory):
             directory=directory,  # noqa
             name=name,
             url=url or f'https://example.com/{name}',
-            download_frequency=download_frequency,
             source_id=source_id,
         )
         test_session.add(channel)
+        test_session.flush([channel])
+        assert channel.id and channel.url
+        if download_frequency:
+            cd = channel.get_or_create_download(channel.url)
+            cd.download.frequency = download_frequency
+            assert cd and cd.download_url == channel.url
+            assert channel.channel_downloads
         test_session.commit()
         return channel
 
@@ -61,22 +66,21 @@ def channel_factory(test_session, test_directory):
 def download_channel(test_session, test_directory, video_download_manager) -> Channel:
     """Get a test Channel that has a download frequency."""
     # Add a frequency to the test channel, then give it a download.
-    channel = Channel(
-        directory=test_directory,
-        name='Download Channel',
-        url='https://example.com/channel1',
-        download_frequency=DownloadFrequency.weekly,
-    )
-    download = Download(url=channel.url, downloader='video_channel', frequency=channel.download_frequency,
-                        sub_downloader='video')
-    test_session.add_all([channel, download])
+    channel = Channel(directory=test_directory, name='Download Channel', url='https://example.com/channel1',
+                      source_id='channel1')
+    test_session.add(channel)
+    test_session.flush([channel, ])
+    assert channel and channel.id and channel.url
+    cd = channel.get_or_create_download(channel.url, test_session)
+    assert cd.download_url == channel.url
+    cd.download.frequency = DownloadFrequency.weekly
     test_session.commit()
     return channel
 
 
 @pytest.fixture
 def simple_video(test_session, test_directory, simple_channel, video_file) -> Video:
-    """A Video with an empty video file whose channel is the Simple Channel."""
+    """A Video with a video file, the channel is `simple_channel`."""
     video_path = test_directory / 'simple_video.mp4'
     video_file.rename(video_path)
     video = Video.from_paths(test_session, video_path)
@@ -180,6 +184,12 @@ def test_downloader_config(test_directory):
 @pytest.fixture
 def mock_video_extract_info():
     with mock.patch('modules.videos.downloader.extract_info') as mock_extract_info:
+        # Add some simple data so the function can be called.
+        mock_extract_info.return_value = dict(
+            entries=[],
+            uploader='mock_video_extract_info',
+            id='mock_video_extract_info',
+        )
         yield mock_extract_info
 
 

@@ -8,13 +8,12 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger, \
     get_media_directory
 from wrolpi.db import get_db_curs, optional_session, get_db_session
-from wrolpi.downloader import download_manager
-from wrolpi.errors import UnknownDirectory, APIError, ValidationError
+from wrolpi.errors import UnknownDirectory, APIError, ValidationError, InvalidDownload
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel
 from ..lib import save_channels_config
-from ..models import Channel, Video
+from ..models import Channel, Video, ChannelDownload
 
 logger = logger.getChild(__name__)
 
@@ -24,17 +23,24 @@ async def get_minimal_channels() -> List[dict]:
     Get the minimum amount of information necessary about all channels.
     """
     with get_db_curs() as curs:
-        # Get all channels, even if they don't have videos.
+        # Get all channels, even if they don't have videos.  Also get the minimum frequency download because this is the
+        # one that will consume the most resources.
         stmt = '''
             SELECT
-                c.id, name, directory, c.url, download_frequency,
+                c.id, name, directory, c.url,
                 COUNT(v.id) as video_count,
-                SUM(fg.size)::BIGINT AS size
+                SUM(fg.size)::BIGINT AS size,
+                (
+                    select min(d.frequency)
+                    from download d
+                        left join channel_download cd on cd.download_url = d.url
+                    where cd.channel_id = c.id
+                ) AS minimum_frequency
             FROM
                 channel AS c
                 LEFT JOIN video v on c.id = v.channel_id
                 LEFT JOIN file_group fg on fg.id = v.file_group_id
-            GROUP BY 1, 2, 3, 4, 5
+            GROUP BY 1, 2, 3, 4
         '''
         curs.execute(stmt)
         channels = sorted([dict(i) for i in curs.fetchall()], key=lambda i: i['name'].lower())
@@ -183,24 +189,6 @@ def delete_channel(session: Session, *, channel_id: int):
     return channel_dict
 
 
-def download_channel(id_: int, reset_attempts: bool = False):
-    """Create a Download record for a Channel's entire catalog.  Start downloading."""
-    from modules.videos.downloader import ChannelDownloader, VideoDownloader
-    channel: Channel = get_channel(channel_id=id_, return_dict=False)
-    with get_db_session(commit=True) as session:
-        download = channel.get_download()
-        if not download and channel.url:
-            # Channel does not have recurring download, schedule a once-download.
-            download = download_manager.create_download(
-                session=session,
-                url=channel.url,
-                downloader_name=ChannelDownloader.name,
-                sub_downloader_name=VideoDownloader.name,
-                reset_attempts=reset_attempts,
-            )
-    logger.info(f'Created download for {channel} with {download}')
-
-
 @optional_session
 async def search_channels_by_name(name: str, limit: int = 5, session: Session = None,
                                   order_by_video_count: bool = False) -> List[Channel]:
@@ -227,3 +215,34 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
             .limit(limit)
         channels = stmt.all()
     return channels
+
+
+async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict) -> ChannelDownload:
+    """Create ChannelDownload."""
+    with get_db_session(commit=True) as session:
+        channel = get_channel(session, channel_id=channel_id, return_dict=False)
+        cd = channel.get_or_create_download(url, session, reset_attempts=True)
+        cd.download.frequency = cd.download.frequency or frequency
+        cd.download.settings = settings
+
+    save_channels_config()
+
+    return cd
+
+
+async def update_channel_download(channel_id: int, download_id: int, url: str, frequency: int, settings: dict) \
+        -> ChannelDownload:
+    """Fetch ChannelDownload, update its properties."""
+    with get_db_session(commit=True) as session:
+        channel = get_channel(session, channel_id=channel_id, return_dict=False)
+        cd = channel.get_download(download_id=download_id)
+        if not cd:
+            raise InvalidDownload('No Download with that ID on this Channel')
+
+        cd.download.url = url
+        cd.download.frequency = cd.download.frequency or frequency
+        cd.download.settings = settings
+
+    save_channels_config()
+
+    return cd

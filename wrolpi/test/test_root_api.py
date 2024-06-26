@@ -131,8 +131,8 @@ async def test_downloads_sorter_recurring(test_async_client, test_session):
         dict(status='failed', frequency=1),
         dict(status='failed', frequency=1),
     ]
-    for download in downloads:
-        test_session.add(Download(url='https://example.com', **download))
+    for idx, download in enumerate(downloads):
+        test_session.add(Download(url=f'https://example.com/{idx}', **download))
     test_session.commit()
 
     expected = [
@@ -164,8 +164,8 @@ async def test_downloads_sorter(test_async_client, test_session):
         dict(status='failed'),
         dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
     ]
-    for download in downloads:
-        test_session.add(Download(url=download.pop('url', 'https://example.com'), **download))
+    for idx, download in enumerate(downloads):
+        test_session.add(Download(url=download.pop('url', f'https://example.com/{idx}'), **download))
     test_session.commit()
 
     expected = [
@@ -389,8 +389,9 @@ async def test_get_status(test_async_client, test_session):
     assert 'flags' in response.json and isinstance(response.json['flags'], dict)
 
 
-def test_post_download(test_session, test_client, test_download_manager_config):
+def test_download_crud(test_session, test_client, test_download_manager_config, tag_factory):
     """Test creating once-downloads and recurring downloads."""
+    tag1, tag2 = tag_factory(), tag_factory()
 
     async def dispatch_downloads(*a, **kw):
         pass
@@ -407,15 +408,32 @@ def test_post_download(test_session, test_client, test_download_manager_config):
 
         assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
 
-        # Create to once-downloads.
+        # Create two once-downloads.
         content = dict(
             urls=['https://example.com/2', 'https://example.com/3'],
             downloader='archive',
         )
-        request, response = test_client.post('/api/download', content=json.dumps(content))
+        request, response = test_client.post('/api/download', json=content)
         assert response.status_code == HTTPStatus.NO_CONTENT
 
         assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
+
+        download1, download2, download3 = test_session.query(Download).order_by(Download.url).all()
+        assert not download1.settings
+        expected_download1 = dict(download1.__json__()).copy()
+
+        # Update a download.
+        content = dict(
+            urls=['https://example.com/1'],
+            downloader='archive',
+            settings={'tag_names': [tag1.name, tag2.name]},
+        )
+        expected_download1.update({'url': 'https://example.com/1', 'settings': {'tag_names': [tag1.name, tag2.name]}})
+        request, response = test_client.put(f'/api/download/{download1.id}', json=content)
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        test_session.flush([download2])
+        download2 = test_session.query(Download).filter_by(id=expected_download1['id']).first()
+        assert download2.__json__() == expected_download1
 
 
 def test_get_downloaders(test_client):
@@ -516,12 +534,10 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
 
     await assert_results(
         dict(search_str='foo'),
-        [{'directory': 'Fool',
-          'id': 2,
-          'name': 'Fool',
-          'url': 'https://example.com/Fool'},
-         {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
-         ],
+        [
+            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'channel_downloads': []},
+            {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'channel_downloads': []},
+        ],
         [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
     )
 
@@ -529,16 +545,15 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(
         dict(search_str='foo l'),
         [
-            {'directory': 'Fool',
-             'id': 2,
-             'name': 'Fool',
-             'url': 'https://example.com/Fool'}],
+            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'channel_downloads': []}],
         [],
     )
 
     await assert_results(
         dict(search_str='bar'),
-        [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}],
+        [
+            {'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'channel_downloads': []}
+        ],
         [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
     )
 

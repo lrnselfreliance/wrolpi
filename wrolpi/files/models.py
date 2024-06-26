@@ -104,33 +104,34 @@ class FileGroup(ModelHelper, Base):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
         return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
 
-    def __json__(self):
+    def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
         _, suffix = split_path_stem_and_suffix(self.primary_path)
         tags = sorted([i.tag.name for i in self.tag_files])
-        d = {
-            'author': self.author,
-            'data': self.data,
-            'directory': self.primary_path.parent,
-            'download_datetime': self.download_datetime,
-            'files': self.my_files(),
-            'id': self.id,
-            'key': self.primary_path,
-            'length': self.length,
-            'mimetype': self.mimetype,
-            'model': self.model,
-            'modified': self.modification_datetime or None,
-            'name': self.primary_path.name,
-            'primary_path': self.primary_path,
-            'published_datetime': self.published_datetime,
-            'published_modified_datetime': self.published_modified_datetime,
-            'size': self.size,
-            'suffix': suffix,
-            'tags': tags,
-            'title': self.title,
-            'url': self.url,
-            'viewed': self.viewed,
-        }
+        d = dict(
+            author=self.author,
+            censored=self.censored,
+            data=self.data,
+            directory=self.primary_path.parent,
+            download_datetime=self.download_datetime,
+            files=self.my_files(),
+            id=self.id,
+            key=self.primary_path,
+            length=self.length,
+            mimetype=self.mimetype,
+            model=self.model,
+            modified=self.modification_datetime or None,
+            name=self.primary_path.name,
+            primary_path=self.primary_path,
+            published_datetime=self.published_datetime,
+            published_modified_datetime=self.published_modified_datetime,
+            size=self.size,
+            suffix=suffix,
+            tags=tags,
+            title=self.title,
+            url=self.url,
+            viewed=self.viewed,
+        )
         return d
 
     @property
@@ -360,7 +361,7 @@ class Directory(ModelHelper, Base):
     name: str = Column(String, nullable=False)
     idempotency = Column(TZDateTime, default=lambda: now())
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = dict(
             path=self.path,
             name=self.name,

@@ -1026,7 +1026,7 @@ class RefreshProgress:
     total_file_groups: int = 0
     unindexed: int = 0
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = dict(
             counted_files=self.counted_files,
             counting=self.counting,

@@ -12,7 +12,7 @@ import re
 from difflib import SequenceMatcher
 from typing import List, Generator, Optional, Dict
 
-from modules.videos import Video, Channel
+from modules.videos.models import Video, Channel
 from modules.videos.lib import parse_video_file_name
 from wrolpi.common import get_relative_to_media_directory, chain
 from wrolpi.db import get_db_curs, get_db_session

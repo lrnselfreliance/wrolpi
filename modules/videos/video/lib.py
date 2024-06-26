@@ -198,11 +198,11 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
     with get_db_session() as session:
         videos = session.query(Video).filter(
             # Have yet to get comments.
-            Video.have_comments == False,
-            Video.comments_failed == False,
-            # Need a URL to try to get comments.
+            Video.have_comments != True,
+            Video.comments_failed != True,
+            # Needs to be downloadable.
             FileGroup.url != None,  # noqa
-            FileGroup.censored != True,  # noqa
+            FileGroup.censored != True,
             # We want old videos (time for comments to accumulate), or those which we don't know the published date.
             or_(
                 one_month_ago > FileGroup.published_datetime,
@@ -225,8 +225,6 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
         logger.debug(f'add_video_to_skip_list: {video_url=} {censored=}')
 
     for url in video_urls:
-        logger.info(f'Getting comments for: {url}')
-
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
@@ -249,6 +247,8 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
             if have_comments:
                 download_manager.add_to_skip_list(url)
                 continue
+
+        logger.info(f'Getting comments for: {url}')
 
         try:
             # Get info json about the video.
@@ -295,6 +295,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 if video.video_path.is_file():
                     video.replace_info_json(info)
                     video.have_comments = True
+                    video.comments_failed = False
                 else:
                     logger.error(f'Attempting to replace comments for non-existent video!  {video}')
                     if len(videos) == 1:

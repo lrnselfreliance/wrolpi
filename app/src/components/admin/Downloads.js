@@ -4,6 +4,7 @@ import {
     deleteDownload,
     deleteOnceDownloads,
     killDownload,
+    putDownload,
     restartDownload,
     retryOnceDownloads
 } from "../../api";
@@ -12,13 +13,18 @@ import {
     APIButton,
     DisableDownloadsToggle,
     ErrorMessage,
+    frequencyOptions,
     isoDatetimeToElapsedPopup,
     secondsToFrequency,
     useTitle,
+    validURL,
     WROLModeMessage
 } from "../Common";
 import {
     Button as SButton,
+    Dimmer,
+    Dropdown,
+    Grid,
     Label,
     Loader,
     PlaceholderLine,
@@ -29,9 +35,23 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
-import {useDownloads} from "../../hooks/customHooks";
+import {
+    Button,
+    Form,
+    FormField,
+    FormInput,
+    Header,
+    Modal,
+    ModalActions,
+    ModalContent,
+    ModalHeader,
+    Placeholder,
+    Segment,
+    Table
+} from "../Theme";
+import {useDownloads, useWROLMode} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
+import {ChannelDownloadForm} from "../Channels";
 
 function ClearDownloadsButton({callback}) {
     async function localClearDownloads() {
@@ -91,11 +111,134 @@ function DeleteOnceDownloadsButton({callback}) {
     >Delete</APIButton>
 }
 
+
+export function DownloadEditForm({afterSave, closeModal, download}) {
+    const [state, setState] = React.useState({
+        url: download.url || '',
+        frequency: download.frequency,
+        excluded_urls: download.excluded_urls || '',
+    })
+    const [disabled, setDisabled] = React.useState(useWROLMode());
+    const [loading, setLoading] = React.useState(false);
+    const [urlValid, setUrlValid] = React.useState(true);
+
+    const handleInputChange = (e, {name, value}) => {
+        if (e) {
+            e.preventDefault();
+        }
+        if (name === 'url') {
+            setUrlValid(validURL(value));
+        }
+        setState({...state, [name]: value});
+    }
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        setDisabled(true);
+        try {
+            const response = await putDownload(
+                [state.url],
+                download.id,
+                download.downloader,
+                download.sub_downloader,
+                state.frequency,
+                state.excluded_urls,
+            );
+            if (!response.ok) {
+                throw 'Updating download failed';
+            }
+        } finally {
+            setLoading(false);
+            setDisabled(false);
+            if (afterSave) {
+                afterSave();
+            }
+        }
+    }
+
+    const handleClose = (e) => {
+        if (e) e.preventDefault();
+        closeModal();
+    }
+
+    const handleDelete = async () => {
+        await deleteDownload(download.id);
+        if (afterSave) {
+            afterSave();
+        }
+        if (closeModal) {
+            closeModal();
+        }
+    };
+
+    const deleteDownloadButton = <APIButton
+        color='red'
+        floated='left'
+        onClick={handleDelete}
+        confirmContent='Are you sure you want to delete this download?'
+        confirmButton='Delete'
+        disabled={disabled}
+        obeyWROLMode={true}
+    >Delete</APIButton>;
+
+    return <Form onSubmit={handleSubmit}>
+        {loading && <Dimmer active><Loader/></Dimmer>}
+        <Grid columns={2} stackable>
+            <Grid.Row>
+                <Grid.Column width={12}>
+                    <FormInput
+                        label='URL'
+                        name='url'
+                        type='url'
+                        value={state.url}
+                        placeholder='https://example.com/videos'
+                        onChange={handleInputChange}
+                        error={!urlValid}
+                    />
+                </Grid.Column>
+                <Grid.Column width={4}>
+                    <FormField>
+                        <label>Download Frequency</label>
+                        <Dropdown selection
+                                  name='frequency'
+                                  placeholder='Frequency'
+                                  value={state.frequency}
+                                  disabled={disabled}
+                                  options={frequencyOptions.slice(1)}
+                                  onChange={handleInputChange}
+                        />
+                    </FormField>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <FormInput
+                        label='Excluded URLs'
+                        name='excluded_urls'
+                        type='text'
+                        value={state.excluded_urls}
+                        onChange={handleInputChange}
+                    />
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column textAlign='right'>
+                    {deleteDownloadButton}
+                    <Button onClick={handleClose}>Cancel</Button>
+                    <Button color='violet' disabled={!urlValid}>Save</Button>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+
 class RecurringDownloadRow extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             errorModalOpen: false,
+            editModalOpen: false,
         }
     }
 
@@ -133,7 +276,17 @@ class RecurringDownloadRow extends React.Component {
     }
 
     render() {
-        let {url, frequency, last_successful_download, status, location, next_download, error} = this.props;
+        let {
+            url,
+            frequency,
+            last_successful_download,
+            status,
+            location,
+            next_download,
+            error,
+            downloader,
+            channel_id
+        } = this.props;
         const {errorModalOpen} = this.state;
 
         const link = location ?
@@ -167,6 +320,10 @@ class RecurringDownloadRow extends React.Component {
             />
         </>;
 
+        const editButton = <>
+            <Button icon='edit' onClick={() => this.setState({editModalOpen: true})}/>
+        </>
+
         const restartButton = <>
             <APIButton
                 color='green'
@@ -184,6 +341,28 @@ class RecurringDownloadRow extends React.Component {
             next = isoDatetimeToElapsedPopup(next_download);
         }
 
+        const handleClose = () => this.setState({editModalOpen: false});
+        const afterSave = () => {
+            if (this.props.fetchDownloads) {
+                this.props.fetchDownloads();
+            }
+            handleClose();
+        }
+        const editModal = <Modal closeIcon
+                                 open={this.state.editModalOpen}
+                                 onClose={handleClose}
+        >
+            <ModalHeader>Edit Download</ModalHeader>
+            <ModalContent>
+                {downloader === 'video_channel' ?
+                    <ChannelDownloadForm download={this.props} closeModal={handleClose}
+                                         afterSave={afterSave}/>
+                    : <DownloadEditForm download={this.props} closeModal={handleClose}
+                                        afterSave={afterSave}/>
+                }
+            </ModalContent>
+        </Modal>;
+
         return <TableRow>
             <TableCell className='column-ellipsis'>
                 {link(url)}
@@ -194,11 +373,12 @@ class RecurringDownloadRow extends React.Component {
                 {status === 'pending' ? <Loader active inline size='tiny'/> : null}
             </TableCell>
             <TableCell>{next}</TableCell>
-            <TableCell>
+            <TableCell textAlign='right'>
                 {error && errorModal}
-                {deleteButton}
+                {editButton}
                 {restartButton}
             </TableCell>
+            {editModal}
         </TableRow>
     }
 }
@@ -348,14 +528,14 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
 
 export function RecurringDownloadsTable({downloads, fetchDownloads}) {
     if (downloads && downloads.length >= 1) {
-        return <Table className='table-ellipsis'>
+        return <Table compact className='table-ellipsis'>
             <TableHeader>
                 <TableRow>
                     <TableHeaderCell width={8}>URL</TableHeaderCell>
                     <TableHeaderCell width={2}>Download Frequency</TableHeaderCell>
                     <TableHeaderCell width={2}>Completed At</TableHeaderCell>
                     <TableHeaderCell width={1}>Next</TableHeaderCell>
-                    <TableHeaderCell width={3}>Control</TableHeaderCell>
+                    <TableHeaderCell width={3} textAlign='right'>Control</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>

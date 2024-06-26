@@ -251,16 +251,65 @@ export async function getVideosStatistics() {
     }
 }
 
-export async function downloadChannel(channelId) {
-    let url = `${VIDEOS_API}/channels/download/${channelId}`;
-    let response = await apiPost(url);
-    if (response.status === 400) {
+export async function createChannelDownload(channelId, url, frequency, title_match, title_exclude, tag_names) {
+    const body = {
+        url: url,
+        frequency: frequency,
+        settings: {
+            title_match: title_match,
+            title_exclude: title_exclude,
+            tag_names: tag_names,
+        },
+    }
+    url = `${VIDEOS_API}/channels/${channelId}/download`;
+    let response = await apiPost(url, body);
+    if (!response.ok) {
         const json = await response.json();
         if (json['code'] === 'INVALID_DOWNLOAD') {
             toast({
                 type: 'error',
                 title: 'Cannot Download!',
                 description: 'This channel does not have a download record.  Modify the frequency.',
+                time: 5000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to Download!',
+                description: 'Failed to create download.  See server logs.',
+                time: 5000,
+            });
+        }
+    }
+    return response;
+}
+
+export async function updateChannelDownload(channelId, downloadId, url, frequency, title_match, title_exclude, tag_names) {
+    const body = {
+        url: url,
+        frequency: frequency,
+        settings: {
+            title_match: title_match,
+            title_exclude: title_exclude,
+            tag_names: tag_names,
+        },
+    }
+    url = `${VIDEOS_API}/channels/${channelId}/download/${downloadId}`;
+    let response = await apiPut(url, body);
+    if (!response.ok) {
+        const json = await response.json();
+        if (json['code'] === 'INVALID_DOWNLOAD') {
+            toast({
+                type: 'error',
+                title: 'Cannot Download!',
+                description: 'This channel does not have a download record.  Modify the frequency.',
+                time: 5000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to Download!',
+                description: 'Failed to update download.  See server logs.',
                 time: 5000,
             });
         }
@@ -456,6 +505,18 @@ export async function getArchive(archiveId) {
     }
 }
 
+function getDownloadSettings(excludedURLs, depth, suffix, tagNames, downloadMetadataOnly, destination, max_pages) {
+    let settings = {};
+    if (excludedURLs) settings['excluded_urls'] = excludedURLs;
+    if (depth) settings['depth'] = depth;
+    if (suffix) settings['suffix'] = suffix;
+    if (tagNames) settings['tag_names'] = tagNames;
+    if (downloadMetadataOnly) settings['download_metadata_only'] = downloadMetadataOnly;
+    if (destination) settings['destination'] = destination;
+    if (max_pages) settings['max_pages'] = max_pages;
+    return settings;
+}
+
 export async function postDownload(
     urls,
     downloader,
@@ -467,7 +528,7 @@ export async function postDownload(
     depth,
     suffix,
     max_pages,
-    doNotDownload,
+    downloadMetadataOnly,
 ) {
     if (!downloader) {
         toast({
@@ -479,26 +540,46 @@ export async function postDownload(
         throw new Error('downloader is required, but was not provided');
     }
 
+    let settings = getDownloadSettings(excludedURLs, depth, suffix, tagNames, downloadMetadataOnly, destination,
+        max_pages);
     let body = {
         urls: urls,
         downloader: downloader,
+        sub_downloader: sub_downloader,
         frequency: frequency || null,
-        excluded_urls: excludedURLs,
-        destination: destination || null,
-        depth: depth || null,
-        suffix: suffix || null,
-        max_pages: max_pages || null,
+        settings: settings,
     };
-    if (sub_downloader) {
-        body['sub_downloader'] = sub_downloader;
-    }
-    if (tagNames) {
-        body['tag_names'] = tagNames;
-    }
-    if (doNotDownload) {
-        body['do_not_download'] = doNotDownload;
-    }
     const response = await apiPost(`${API_URI}/download`, body);
+    return response;
+}
+
+export async function putDownload(
+    urls,
+    download_id,
+    downloader,
+    sub_downloader,
+    frequency,
+    excludedURLs,
+) {
+    if (!downloader) {
+        toast({
+            type: 'error',
+            title: 'Failed to submit download',
+            description: 'downloader is required, but was not provided',
+            time: 5000,
+        })
+        throw new Error('downloader is required, but was not provided');
+    }
+
+    let settings = getDownloadSettings(excludedURLs)
+    let body = {
+        urls: urls,
+        downloader: downloader,
+        sub_downloader: sub_downloader,
+        frequency: frequency || null,
+        settings: settings,
+    };
+    const response = await apiPut(`${API_URI}/download`, body);
     return response;
 }
 

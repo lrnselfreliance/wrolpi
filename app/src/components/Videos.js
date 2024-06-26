@@ -242,7 +242,7 @@ function VideosStatistics() {
     ];
     const commentsNames = [
         {key: 'have_comments', label: 'Have Comments'},
-        {key: 'no_comments', label: 'Missing Comments'},
+        {key: 'missing_comments', label: 'Missing Comments'},
         {key: 'failed_comments', label: 'Failed Comments'},
     ];
     const historicalNames = [

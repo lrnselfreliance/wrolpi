@@ -3,7 +3,9 @@ from http import HTTPStatus
 
 import pytest
 
+from modules.videos.models import Channel, ChannelDownload
 from modules.videos.models import Video
+from wrolpi.downloader import Download, DownloadFrequency
 
 
 def test_delete_channel_no_url(test_session, test_client, channel_factory):
@@ -66,3 +68,42 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
            response.json['cause']['message'] == 'The directory is already used by another channel.'
+
+
+@pytest.mark.asyncio()
+async def test_channel_download_relationships(test_session, download_channel):
+    """Test relationships of ChannelDownload."""
+    test_session.flush()
+
+    download = test_session.query(Download).one()
+    cd = test_session.query(ChannelDownload).one()
+    channel = test_session.query(Channel).one()
+    assert len(channel.channel_downloads) == 1
+    assert channel.channel_downloads[0] == cd
+    assert channel.channel_downloads[0].download == download
+
+    test_session.commit()
+
+    download = test_session.query(Download).one()
+    cd = test_session.query(ChannelDownload).one()
+    channel = test_session.query(Channel).one()
+    assert len(channel.channel_downloads) == 1
+    assert channel.channel_downloads[0] == cd
+    assert channel.channel_downloads[0].download == download \
+           and channel.channel_downloads[0].download.url == 'https://example.com/channel1'
+    assert download.frequency == DownloadFrequency.weekly
+
+    # Deleting Download deletes the ChannelDownload, but not the Channel.
+    download.delete()
+    assert not test_session.query(Download).all()
+    assert not test_session.query(ChannelDownload).all()
+    assert test_session.query(Channel).one(), 'Channel should not have been deleted.'
+
+    # Create a Download again.
+    download_channel.get_or_create_download('https://example.com/1', test_session, reset_attempts=True)
+    assert test_session.query(Download).count() == 1
+    assert test_session.query(ChannelDownload).count() == 1
+    # Delete the Channel, and any relationships.
+    download_channel.delete_with_videos()
+    assert test_session.query(Download).count() == 0
+    assert test_session.query(ChannelDownload).count() == 0

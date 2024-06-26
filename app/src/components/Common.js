@@ -735,23 +735,23 @@ export function CardPoster({to, file}) {
     }
 }
 
-export function HelpPopup({icon, size, content, position, iconSize = 'small'}) {
+export function HelpPopup({icon = 'question', size = null, content, position = 'left center', iconSize = 'small'}) {
     return <Popup
         content={content}
-        size={size || null}
-        position={position || 'left center'}
-        trigger={<Icon circular link name={icon || 'question'} size={iconSize}
+        size={size}
+        position={position}
+        trigger={<Icon circular link name={icon} size={iconSize}
                        style={{marginLeft: '0.25em', marginRight: '0.25em'}}
         />}
     />
 }
 
-export function HelpHeader({icon, headerSize, iconSize, headerContent, popupContent}) {
+export function HelpHeader({icon, headerSize = 'h2', iconSize, headerContent, popupContent, popupPosition = 'top center'}) {
     return <div className='inline-header'>
-        <Header as={headerSize || 'h2'}>{headerContent}</Header>
+        <Header as={headerSize}>{headerContent}</Header>
         <span>
-                <HelpPopup content={popupContent} size={iconSize} icon={icon}/>
-            </span>
+            <HelpPopup content={popupContent} size={iconSize} icon={icon} position={popupPosition}/>
+        </span>
     </div>
 }
 
@@ -1787,4 +1787,10 @@ export function Breadcrumbs({crumbs, size = undefined}) {
             </React.Fragment>
         ))}
     </Breadcrumb>
+}
+
+const validUrlRegex = /^(http|https):\/\/[^ "]+$/;
+
+export function validURL(url) {
+    return !(url && !validUrlRegex.test(url));
 }

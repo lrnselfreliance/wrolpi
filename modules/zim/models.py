@@ -335,7 +335,7 @@ class ZimSubscription(Base):
         download_id = self.download_id
         return f'<ZimSubscription id={self.id} {name=} {language=} {download_id=}>'
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = dict(
             id=self.id,
             name=self.name,

@@ -42,7 +42,7 @@ class Tag(ModelHelper, Base):
         color = self.color
         return f'<Tag {name=} {color=}>'
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             id=self.id,
             name=self.name,

@@ -53,7 +53,7 @@ class EBookData:
     def __bool__(self):
         return bool(self.cover) or bool(self.author) or bool(self.text) or bool(self.title)
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = {}
         if self.author:
             d['author'] = self.author

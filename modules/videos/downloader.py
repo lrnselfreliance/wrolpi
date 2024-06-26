@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 import json
 import pathlib
-import re
 import traceback
 from abc import ABC
 from typing import Tuple, List, Dict
@@ -23,7 +22,8 @@ from wrolpi.files.lib import glob_shared_stem
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
-from .common import get_no_channel_directory, get_videos_directory, update_view_counts_and_censored, ffmpeg_video_complete
+from .common import get_no_channel_directory, get_videos_directory, update_view_counts_and_censored, \
+    ffmpeg_video_complete
 from .errors import UnknownChannel
 from .lib import get_downloader_config, YDL, ydl_logger
 from .models import Video, Channel
@@ -54,6 +54,9 @@ PREFERRED_POSTER_FORMAT = 'jpg'
 
 def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
     """Get info about a video.  Separated for testing."""
+    if PYTEST:
+        raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
+
     return ydl.extract_info(url, download=False, process=process)
 
 
@@ -111,6 +114,10 @@ class ChannelDownloader(Downloader, ABC):
         destination = download.settings.get('destination') if download.settings else None
         if destination:
             settings['destination'] = destination
+        # A Download may have applied tags, send any to the VideoDownloader.
+        tag_names = download.settings.get('tag_names') if download.settings else None
+        if tag_names:
+            settings['tag_names'] = tag_names
 
         is_a_playlist = self.is_a_playlist(info)
         try:
@@ -119,7 +126,7 @@ class ChannelDownloader(Downloader, ABC):
             else:
                 logger.debug('Not updating channel because this is a playlist')
 
-            downloads = self.get_missing_videos(download, channel)
+            downloads = self.get_missing_videos(download)
             return DownloadResult(
                 success=True,
                 location=location,
@@ -155,15 +162,40 @@ class ChannelDownloader(Downloader, ABC):
                 session.refresh(channel)
 
     @staticmethod
-    def get_missing_videos(download: Download, channel: Channel) -> List[str]:
+    def get_missing_videos(download: Download) -> List[str]:
         """
         Return all URLs of Videos in the `info_json` which need to be downloaded.
         """
         downloads = download.info_json['entries']
-        if channel.match_regex:
-            # Only download Videos that have matching titles.
-            match_regex = re.compile(channel.match_regex)
-            downloads = [i for i in downloads if (title := i.get('title')) and match_regex.match(title)]
+        total_downloads = len(downloads)
+
+        title_match = download.settings.get('title_match') if download.settings else None
+        if title_match:
+            # Only download Videos that have title match words in title.
+            title_match = [i.strip() for i in title_match.split(',')]
+            new_downloads = []
+            for i in downloads:
+                if (title := i.get('title', '')) and any(j for j in title_match if j in title):
+                    logger.debug(f'Video with title {title} matches {title_match}')
+                    new_downloads.append(i)
+            downloads = new_downloads
+
+        title_exclude = download.settings.get('title_exclude') if download.settings else None
+        if title_exclude:
+            # Do not download any videos that contain the exclude words.
+            title_exclude = [i.strip() for i in title_exclude.split(',')]
+            new_downloads = list()
+            for i in downloads:
+                if (title := i.get('title', '')) and any(j for j in title_exclude if j in title):
+                    logger.debug(f'Video with title {title} matches EXCLUDE {title_exclude}')
+                    continue
+                else:
+                    new_downloads.append(i)
+            downloads = new_downloads
+
+        filtered_entries = len(downloads)
+        if filtered_entries != total_downloads:
+            logger.info(f'Downloaded channel.  Total downloaded reduced to {filtered_entries} from {total_downloads}')
 
         # Prefer `webpage_url` before `url` for all entries.
         downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
@@ -296,7 +328,7 @@ class VideoDownloader(Downloader, ABC):
         try:
             video_path, entry = self.prepare_filename(url, out_dir)
 
-            if settings.get('do_not_download'):
+            if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
                 return await self.download_info_json(download, video_path)
 
@@ -349,6 +381,10 @@ class VideoDownloader(Downloader, ABC):
             if not video_path.is_file():
                 error = f'{stdout}\n\n\n{stderr}\n\n' \
                         f'Video file could not be found!  {video_path}'
+                if '!is_live' in stdout:
+                    error = f'{stdout}\n\nVideo was live and did not finish downloading.'
+                if ' live event ' in stdout:
+                    error = f'{stdout}\n\nVideo will be live and did not finish downloading.'
                 return DownloadResult(
                     success=False,
                     error=error,

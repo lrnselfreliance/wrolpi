@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-from wrolpi.errors import InvalidDownload
+from wrolpi.errors import InvalidDownload, ValidationError
 
 
 @dataclass
@@ -55,18 +55,33 @@ class EchoResponse:
 
 
 @dataclass
+class DownloadSettings:
+    depth: Optional[int] = None
+    destination: Optional[str] = None
+    excluded_urls: Optional[str] = None
+    max_pages: Optional[int] = None
+    suffix: Optional[str] = None
+    tag_names: List[str] = field(default_factory=lambda: list())
+    title_exclude: str = None
+    title_include: str = None
+
+    def __post_init__(self):
+        from wrolpi.common import get_media_directory
+        self.tag_names = [i.strip() for i in self.tag_names] if self.tag_names else []
+        self.excluded_urls = [i.strip() for i in self.excluded_urls.split(',')] if self.excluded_urls else None
+        self.destination = str(get_media_directory() / self.destination) if self.destination else None
+        if self.suffix and not self.suffix.startswith('.'):
+            raise ValidationError('suffix must start with .')
+
+
+@dataclass
 class DownloadRequest:
     urls: List[str]
     downloader: str
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
-    excluded_urls: Optional[str] = None
-    destination: Optional[str] = None
-    tag_names: List[str] = field(default_factory=lambda: list())
-    suffix: Optional[str] = None
-    depth: Optional[int] = None
-    max_pages: Optional[int] = None
-    do_not_download: Optional[bool] = False
+    settings: Optional[dict] = field(default_factory=lambda: dict())
+    download_metadata_only: Optional[bool] = False
 
     def __post_init__(self):
         urls = [j for i in self.urls if (j := i.strip())]
@@ -74,6 +89,9 @@ class DownloadRequest:
             raise InvalidDownload(f'urls cannot be empty')
         # Get unique URLs, preserve order.
         self.urls = list(dict.fromkeys(urls))
+
+        # Validate settings contents.  Remove empty values.
+        self.settings = {k: v for k, v in DownloadSettings(**self.settings).__dict__.items() if v not in ([], None)}
 
 
 @dataclass
@@ -121,7 +139,7 @@ class VIN:
     transmission: str = None
     serial: str = None
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = dict(
             country=self.country,
             manufacturer=self.manufacturer,

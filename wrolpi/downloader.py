@@ -98,14 +98,14 @@ class Download(ModelHelper, Base):  # noqa
     """Model that is used to schedule downloads."""
     __tablename__ = 'download'  # noqa
     id = Column(Integer, primary_key=True)
-    url = Column(String, nullable=False)
+    url = Column(String, nullable=False, unique=True)
 
     attempts = Column(Integer, default=0)
     downloader = Column(Text)  # 'videos', 'archive', 'kiwix_zim', etc.
     sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
     error = Column(Text)  # traceback from an error during downloading.
     frequency = Column(Integer)  # seconds between re-downloading.
-    info_json = Column(JSONB)  # information retrieve WHILE downloading (from yt-dlp)
+    info_json = Column(JSONB)  # information retrieved WHILE downloading (from yt-dlp)
     last_successful_download = Column(TZDateTime)
     location = Column(Text)  # Relative App URL where the item is downloaded
     next_download = Column(TZDateTime)
@@ -124,7 +124,7 @@ class Download(ModelHelper, Base):  # noqa
         return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts} ' \
                f'error={bool(self.error)}>'
 
-    def __json__(self):
+    def __json__(self) -> dict:
         d = dict(
             downloader=self.downloader,
             frequency=self.frequency,
@@ -208,14 +208,23 @@ class Download(ModelHelper, Base):  # noqa
     def add_to_skip_list(self):
         download_manager.add_to_skip_list(self.url)
 
-    def delete(self):
+    def delete(self, skip: bool = True):
         # Do not download this automatically again.  This saves the config.
-        self.add_to_skip_list()
+        if skip:
+            self.add_to_skip_list()
 
         session = Session.object_session(self)
+
+        # Delete ChannelDownload, if any exists.
+        from modules.videos.models import ChannelDownload
+        cds = session.query(ChannelDownload).filter(ChannelDownload.download == self).all()
+        for cd in cds:
+            session.delete(cd)
+
         session.delete(self)
+        session.commit()
         # Save download config again because this download is now removed from the download lists.
-        save_downloads_config(session=session)
+        api_app.add_task(save_downloads_config())
 
 
 class Downloader:
@@ -235,7 +244,7 @@ class Downloader:
 
         download_manager.register_downloader(self)
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(name=self.name, pretty_name=self.pretty_name)
 
     def __repr__(self):
@@ -464,7 +473,21 @@ class DownloadManager:
                         f'Refusing to download {url} because it is in the download_manager.yaml skip list')
             download = Download(url=url, status='new')
             session.add(download)
-            session.flush()
+
+        from modules.videos.models import Channel, ChannelDownload
+        channel: Channel = session.query(Channel).filter(Channel.url == url).one_or_none()
+        if channel:
+            # This Download needs to be associated with the Channel.
+            cd = ChannelDownload.get_by_url(url, session)
+            if not cd:
+                cd = ChannelDownload(channel=channel, download=download)
+                session.add(cd)
+            else:
+                cd.download = download
+            if cd not in channel.channel_downloads:
+                channel.channel_downloads.append(cd)
+
+            session.flush([cd, channel])
         return download
 
     @optional_session
@@ -479,12 +502,14 @@ class DownloadManager:
         # Throws an error if no downloader is found.
         self.get_downloader_by_name(downloader_name)
 
+        skipped = list()
         for url in urls:
             if url in get_download_manager_config().skip_urls and reset_attempts:
                 # User manually entered this download, remove it from the skip list.
                 self.remove_from_skip_list(url)
             elif url in get_download_manager_config().skip_urls:
                 self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
+                skipped.append(url)
                 continue
 
             download = self.get_or_create_download(url, session, reset_attempts=reset_attempts)
@@ -494,6 +519,11 @@ class DownloadManager:
             download.sub_downloader = sub_downloader_name
             download.settings = settings if settings is not None else download.settings
             downloads.append(download)
+
+        download_urls = [i.url for i in downloads]
+        logger.debug(f'Creating downloads: {download_urls}')
+        if not downloads:
+            raise RuntimeError(f'Failed to create downloads because they were all in skip list: {skipped}')
 
         try:
             # Start downloading ASAP.
@@ -716,6 +746,7 @@ class DownloadManager:
         """Delete a Download.  Returns True if a Download was deleted, otherwise return False."""
         download = self.get_download(session, id_=download_id)
         if download:
+            # This saves the config twice.
             download.delete()
             return True
         return False
@@ -806,15 +837,19 @@ class DownloadManager:
             stmt = f'''
                 SELECT
                     downloader,
+                    error,
                     frequency,
                     id,
                     last_successful_download,
-                    next_download,
-                    status,
-                    url,
                     location,
-                    error
+                    next_download,
+                    settings,
+                    status,
+                    sub_downloader,
+                    url,
+                    cd.channel_id
                 FROM download
+                LEFT OUTER JOIN channel_download cd on download.url = cd.download_url
                 WHERE frequency IS NOT NULL
                 ORDER BY
                     {self._status_order},

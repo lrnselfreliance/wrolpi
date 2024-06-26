@@ -103,10 +103,7 @@ def json_error_handler(request: Request, exception: Exception):
     if isinstance(exception, SanicException):
         return json_response(body, exception.status_code)
 
-    if PYTEST:
-        logger.error('Unexpected error', exc_info=exception)
-    else:
-        logger.debug('Unexpected error', exc_info=exception)
+    logger.error('Unexpected error', exc_info=exception)
 
     # Some unknown error, use internal error code.
     return json_response(body, HTTPStatus.INTERNAL_SERVER_ERROR)

@@ -15,12 +15,13 @@ from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, get_media_directory, register_refresh_cleanup, limit_concurrent
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.downloader import Download
 from wrolpi.errors import UnknownDirectory
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
     get_video_duration
-from .models import Channel, Video
+from .models import Channel, Video, ChannelDownload
 
 logger = logger.getChild(__name__)
 
@@ -358,6 +359,20 @@ def get_channels_config_from_db(session: Session) -> dict:
 @optional_session()
 def save_channels_config(session: Session = None):
     """Get the Channel information from the DB, save it to the config."""
+    # Create any missing ChannelDownload for any Channel.url that has a Download.
+    results = session.query(Channel, Download, ChannelDownload) \
+        .outerjoin(ChannelDownload, ChannelDownload.download_url == Download.url) \
+        .outerjoin(Channel, Channel.url == Download.url) \
+        .all()
+    need_commit = False
+    for channel, download, cd in results:
+        if channel and download and not cd:
+            # Channel.url matches Download.url but there is no ChannelDownload.
+            channel.get_or_create_download(download.url, session)
+            need_commit = True
+    if need_commit:
+        session.commit()
+
     config = get_channels_config_from_db(session)
     channels_config = get_channels_config()
 
@@ -439,7 +454,6 @@ def import_channels_config():
                                             f' url={channel.url}'
                                             f' source_id={channel.source_id}'
                                             f' directory={channel.directory}'
-                                            f' download_frequency={channel.download_frequency}'
                                             )
 
         with get_db_session(commit=True) as session:
@@ -488,8 +502,9 @@ async def get_statistics():
             COALESCE(MAX(fg.size), 0) AS "max_size",
             -- Videos may or may not have comments.
             COUNT(v.id) FILTER ( WHERE v.have_comments = TRUE ) AS "have_comments",
-            COUNT(v.id) FILTER ( WHERE  v.have_comments = FALSE ) AS "no_comments",
-            COUNT(v.id) FILTER ( WHERE  v.comments_failed = TRUE ) AS "failed_comments"
+            COUNT(v.id) FILTER ( WHERE v.have_comments = FALSE AND v.comments_failed = FALSE
+                and fg.censored = false and fg.url is not null) AS "missing_comments",
+            COUNT(v.id) FILTER ( WHERE v.comments_failed = TRUE ) AS "failed_comments"
         FROM
             video v
             LEFT JOIN file_group fg on v.file_group_id = fg.id

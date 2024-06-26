@@ -173,11 +173,8 @@ async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_m
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
-    # Can't refresh or download
+    # Can't refresh
     _, resp = await test_async_client.post('/api/files/refresh')
-    assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == 'WROL_MODE_ENABLED'
-    _, resp = await test_async_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 

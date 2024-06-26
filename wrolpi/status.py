@@ -34,7 +34,7 @@ class SystemLoad:
     minute_5: Decimal = 0
     minute_15: Decimal = 0
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             minute_1=str(round(self.minute_1, 2)),
             minute_5=str(round(self.minute_5, 2)),
@@ -74,7 +74,7 @@ class CPUInfo:
     high_temperature: Optional[int] = None
     critical_temperature: Optional[int] = None
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             cores=self.cores,
             cur_frequency=self.cur_frequency,
@@ -187,7 +187,7 @@ class MemoryStats:
     free: int = None
     cached: int = None
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             total=self.total,
             used=self.used,
@@ -236,7 +236,7 @@ class DriveInfo:
     size: int = 0
     used: int = 0
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             mount=self.mount,
             percent=self.percent,
@@ -320,7 +320,7 @@ class NICBandwidthInfo:
     name: str = None
     speed: int = None
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             bytes_recv=self.bytes_recv,
             bytes_sent=self.bytes_sent,
@@ -358,7 +358,7 @@ class DiskBandwidthInfo:
     maximum_read_ps: int = None
     maximum_write_ps: int = None
 
-    def __json__(self):
+    def __json__(self) -> dict:
         return dict(
             bytes_read_ps=self.bytes_read_ps,
             bytes_write_ps=self.bytes_write_ps,

@@ -5,13 +5,11 @@ from unittest import mock
 
 import pytest
 
-from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader
-from modules.videos.models import Channel, Video
+from modules.videos.models import Channel, Video, ChannelDownload
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
-from wrolpi.test.common import skip_circleci
 from wrolpi.vars import PROJECT_DIR
 
 example_video_json = {
@@ -124,7 +122,6 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
     assert [i.tag.name for i in video.file_group.tag_files] == [tag1.name, tag2.name]
 
 
-@skip_circleci
 @pytest.mark.asyncio
 async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename,
@@ -134,17 +131,19 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     If a Channel has `match_regex` only those videos with matching titles will be downloaded."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
-    channel_downloader, video_downloader = video_download_manager.instances
-
     mock_video_prepare_filename.return_value = video_file
     mock_video_extract_info.return_value = example_channel_json
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        video_download_manager.create_download(url, channel_downloader.name, sub_downloader_name=video_downloader.name)
+        simple_channel.get_or_create_download(url, test_session)
         # Download channel.
         await video_download_manager.wait_for_all_downloads()
         # Download videos.
         await video_download_manager.wait_for_all_downloads()
+
+    def reset_downloads():
+        [i.delete() for i in test_session.query(ChannelDownload)]
+        [i.delete(skip=False) for i in test_session.query(Download)]
 
     # Let background tasks run.
     await asyncio.sleep(0)
@@ -156,17 +155,35 @@ async def test_download_channel(test_session, simple_channel, video_download_man
            {'https://youtube.com/watch?v=video_2_url', 'https://youtube.com/watch?v=video_1_url'}
     assert all(i.status_code == 'complete' for i in downloads)
 
-    # A channel with `match_regex` only returns matching video URLs.
-    simple_channel.match_regex = '.*(2).*'
-    test_session.query(Download).delete()
+    reset_downloads()
+
+    # A channel with `title_match` only returns matching video URLs.
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        video_download_manager.recurring_download(url, 100, channel_downloader.name,
-                                                  sub_downloader_name=video_downloader.name)
+        cd = simple_channel.get_or_create_download(url, test_session)
+        cd.download.frequency = 100
+        cd.download.settings = {'title_match': '2'}
         await video_download_manager.wait_for_all_downloads()
     downloads = video_download_manager.get_once_downloads(test_session)
-    assert [i.url for i in downloads] == ['https://youtube.com/watch?v=video_2_url']
+    assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_2_url'}
+    assert downloads[0].settings == {
+        'channel_id': 1,
+        'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
+    }
+
+    reset_downloads()
+
+    # A channel with `title_exclude` only returns non-matching video URLs.
+    test_session.commit()
+    with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
+        mock_get_channel.return_value = simple_channel
+        cd = simple_channel.get_or_create_download(url, test_session)
+        cd.download.frequency = 100
+        cd.download.settings = {'title_exclude': '2'}
+        await video_download_manager.wait_for_all_downloads()
+    downloads = video_download_manager.get_once_downloads(test_session)
+    assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_1_url'}
     assert downloads[0].settings == {
         'channel_id': 1,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
@@ -227,19 +244,8 @@ def test_bad_downloader(test_session, video_download_manager):
 
 
 @pytest.mark.asyncio
-async def test_channel_download_no_frequency(test_session, video_download_manager, simple_channel):
-    """
-    A Channel without a download frequency creates a once-download.
-    """
-    # simple_channel has no download record.
-    assert video_download_manager.get_downloads(test_session) == []
-
-    download_channel(simple_channel.id)
-
-
-@pytest.mark.asyncio
-async def test_video_download(test_session, test_directory, simple_channel, video_download_manager,
-                              mock_video_process_runner, image_file):
+async def test_video_download(test_session, test_directory, mock_video_extract_info, simple_channel,
+                              video_download_manager, mock_video_process_runner, image_file):
     """A video download is performed, files are grouped."""
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'
@@ -252,9 +258,8 @@ async def test_video_download(test_session, test_directory, simple_channel, vide
     image_file.rename(poster_path)
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
-    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
-        mock_extract_info.return_value = example_video_json
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
         video_download_manager.create_download(url, video_downloader.name)

@@ -314,7 +314,8 @@ export function AddTagsButton({
                                   selectedTagNames = [],
                                   onToggle = _.noop,
                                   onAdd = _.noop,
-                                  onRemove = _.noop
+                                  onRemove = _.noop,
+                                  limit = null,
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
 
@@ -334,6 +335,9 @@ export function AddTagsButton({
         setLoading(true);
         try {
             const newTags = [...localTags, name];
+            if (limit !== null && newTags.length > limit) {
+                return;
+            }
             setLocalTags(newTags);
             onToggle(newTags);
             onAdd(name);
@@ -375,6 +379,7 @@ export function AddTagsButton({
     const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
     const unusedTags = _.difference(tagNames, localTags);
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
+    const emptySelectedTags = limit === 1 ? 'Add only one tag below' : 'Add one or more tags below';
 
     return <>
         <Button icon={active ? 'tags' : 'tag'} onClick={handleOpen} primary={!!active}/>
@@ -386,7 +391,7 @@ export function AddTagsButton({
                 {loading && <Dimmer active><Loader/></Dimmer>}
                 <Header as='h4'>Applied Tags</Header>
 
-                {localTags && localTags.length > 0 ? selectedTagsGroup : 'Add one or more tags below'}
+                {localTags && localTags.length > 0 ? selectedTagsGroup : emptySelectedTags}
 
                 <Divider/>
 
@@ -418,7 +423,8 @@ export const TagsSelector = ({
                                  selectedTagNames = [],
                                  onToggle = _.noop,
                                  onAdd = _.noop,
-                                 onRemove = _.noop
+                                 onRemove = _.noop,
+                                 limit = null,
                              }) => {
     // Provides a button to add tags to a list.  Displays the tags of that list.
     const {TagsLinkGroup} = React.useContext(TagsContext);
@@ -435,6 +441,7 @@ export const TagsSelector = ({
         onToggle={onToggle}
         onAdd={onAdd}
         onRemove={onRemove}
+        limit={limit}
     />;
 
     if (hideGroup) {

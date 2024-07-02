@@ -61,21 +61,6 @@ async def test_delete_old_once_downloads(test_session, test_download_manager, te
 
 
 @pytest.mark.asyncio
-async def test_create_download(test_session, test_download_manager, test_downloader):
-    assert len(test_download_manager.get_downloads(test_session)) == 0
-
-    test_downloader.set_test_success()
-
-    test_download_manager.create_download('https://example.com', test_downloader.name)
-    download = test_download_manager.get_download(test_session, 'https://example.com')
-    assert download.url == 'https://example.com'
-
-    assert len(test_download_manager.get_downloads(test_session)) == 1
-    assert test_download_manager.get_download(test_session, 'https://example.com') is not None
-    assert test_download_manager.get_download(test_session, 'https://example.com/not downloading') is None
-
-
-@pytest.mark.asyncio
 async def test_create_downloads(test_session, test_download_manager, test_downloader, assert_download_urls):
     """Multiple downloads can be scheduled using DownloadManager.create_downloads."""
     # Both URLs are scheduled.
@@ -326,7 +311,7 @@ async def test_crud_download(test_async_client, test_session, test_download_mana
         urls=['https://example.com', ],
         downloader=test_downloader.name,
         frequency=DownloadFrequency.weekly,
-        excluded_urls='example.org,something',
+        settings=dict(excluded_urls='example.org,something'),
     )
     request, response = await test_async_client.post('/api/download', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT, response.body

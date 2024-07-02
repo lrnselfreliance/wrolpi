@@ -3,7 +3,6 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Union, List
 
-import dateutil.parser
 import pytz
 from sqlalchemy import types
 
@@ -46,25 +45,25 @@ def strftime(dt: datetime) -> str:
 def strpdate(dt: str) -> datetime:
     """
     Attempt to parse a datetime string.  Tries to find a Timezone, if possible.  DB requires timezone.
-
-    TODO replace this in Python 3.11 https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
     """
     try:
         if dt.count('/') == 2:
             # No timezone info.
-            try:
-                a, b, c = dt.split('/')
-                if len(c) == 4:
-                    # Assume m/d/Y
-                    return datetime.strptime(dt, '%m/%d/%Y')
-                if len(a) == 4:
-                    # Y/m/d
-                    return datetime.strptime(dt, '%Y/%m/%d')
-                if len(a) == 2 and len(b) == 2 and len(c) == 13:
-                    # Assume d/m/Y HH:MM:SS
+            a, b, c = dt.split('/')
+            if len(c) == 4:
+                # Assume m/d/Y
+                return datetime.strptime(dt, '%m/%d/%Y')
+            if len(a) == 4:
+                # Y/m/d
+                return datetime.strptime(dt, '%Y/%m/%d')
+            if len(a) in (1, 2) and len(b) in (1, 2):
+                # Day/Month may or may not have 0 prefix.
+                if len(c) == 13:
+                    # d/m/Y HH:MM:SS
                     return datetime.strptime(dt, '%m/%d/%Y %H:%M:%S')
-            except ValueError:
-                pass
+                elif len(c) == 15:
+                    # d/m/Y HH:MM:SS PM
+                    return datetime.strptime(dt, '%m/%d/%Y %H:%M:%S %p')
         elif dt.count('-') == 2 and len(dt) <= 10:
             # No timezone info.
             a, b, c = dt.split('-')
@@ -82,20 +81,13 @@ def strpdate(dt: str) -> datetime:
 
             return datetime.strptime(dt2, "D:%Y%m%d%H%M%S")
 
-        if dt.count('-') == 0 and dt.count('/') == 0 and dt.isdigit() and len(dt) == 8:
-            # Assume %Y%m%d date
-            return datetime.strptime(dt, '%Y%m%d')
-
         if dt.count('.') == 2 and len(dt) <= 9:
             # yyyy.mm.dd or dd.mm.yyyy
-            try:
-                a, b, c = dt.split('.')
-                if len(a) == 4:
-                    return datetime.strptime(dt, '%Y.%m.%d')
-                if len(c) == 4:
-                    return datetime.strptime(dt, '%d.%m.%Y')
-            except ValueError:
-                pass
+            a, b, c = dt.split('.')
+            if len(a) == 4:
+                return datetime.strptime(dt, '%Y.%m.%d')
+            if len(c) == 4:
+                return datetime.strptime(dt, '%d.%m.%Y')
 
         try:
             # Fri Jun 17 2022 19:24:52  (from Singlefile)
@@ -121,7 +113,7 @@ def strpdate(dt: str) -> datetime:
                 pass
 
         # Last, try third-party module to parse ISO 8601 datetime.
-        return dateutil.parser.isoparse(dt)
+        return datetime.fromisoformat(dt)
     except Exception as e:
         raise InvalidDatetime(f'Unable to parse datetime string: {dt}') from e
 

@@ -253,30 +253,44 @@ async def post_download(_: Request, body: schema.DownloadRequest):
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
 
-    excluded_urls = [i.strip() for i in body.excluded_urls.split(',')] if body.excluded_urls else None
-    destination = str(get_media_directory() / body.destination) if body.destination else None
-
-    if body.suffix and not body.suffix.startswith('.'):
-        raise InvalidDownload(f'Suffix must start with a "."')
-
-    # Don't overwrite settings if restarting download.
-    settings = None
-    if excluded_urls or destination or body.tag_names or body.suffix or body.depth or body.do_not_download:
-        settings = dict(excluded_urls=excluded_urls, destination=destination, tag_names=body.tag_names,
-                        suffix=body.suffix, do_not_download=body.do_not_download, depth=body.depth)
-
     if body.frequency:
         download_manager.recurring_download(body.urls[0], body.frequency, downloader_name=body.downloader,
                                             sub_downloader_name=body.sub_downloader, reset_attempts=True,
-                                            settings=settings)
+                                            settings=body.settings)
     else:
         download_manager.create_downloads(body.urls, downloader_name=body.downloader, reset_attempts=True,
-                                          sub_downloader_name=body.sub_downloader, settings=settings)
+                                          sub_downloader_name=body.sub_downloader, settings=body.settings)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
 
     return response.empty()
+
+
+@api_bp.put('/download/<download_id:int>')
+@openapi.description('Update properties of the Download')
+@validate(schema.DownloadRequest)
+@wrol_mode_check
+async def put_download(_: Request, download_id: int, body: schema.DownloadRequest):
+    downloader = download_manager.get_downloader_by_name(body.downloader)
+    if not downloader:
+        raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
+
+    download_manager.create_downloads(body.urls, downloader_name=body.downloader, reset_attempts=True,
+                                      sub_downloader_name=body.sub_downloader, settings=body.settings)
+    if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+        # Downloads are disabled, warn the user.
+        Events.send_downloads_disabled('Download created. But, downloads are disabled.')
+
+    return response.empty()
+
+
+@api_bp.delete('/download/<download_id:int>')
+@openapi.description('Delete a download')
+@wrol_mode_check
+async def delete_download(_: Request, download_id: int):
+    deleted = download_manager.delete_download(download_id)
+    return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
 @api_bp.post('/download/<download_id:int>/restart')
@@ -341,14 +355,6 @@ async def retry_once(_: Request):
 async def delete_once(_: Request):
     download_manager.delete_once()
     return response.empty()
-
-
-@api_bp.delete('/download/<download_id:[0-9,]+>')
-@openapi.description('Delete a download')
-@wrol_mode_check
-async def delete_download(_: Request, download_id: int):
-    deleted = download_manager.delete_download(download_id)
-    return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
 @api_bp.get('/downloaders')

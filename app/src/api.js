@@ -579,7 +579,7 @@ export async function putDownload(
         frequency: frequency || null,
         settings: settings,
     };
-    const response = await apiPut(`${API_URI}/download`, body);
+    const response = await apiPut(`${API_URI}/download/${download_id}`, body);
     return response;
 }
 

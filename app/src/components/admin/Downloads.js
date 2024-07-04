@@ -116,7 +116,7 @@ export function DownloadEditForm({afterSave, closeModal, download}) {
     const [state, setState] = React.useState({
         url: download.url || '',
         frequency: download.frequency,
-        excluded_urls: download.excluded_urls || '',
+        excluded_urls: download.settings ? download.settings.excluded_urls : '',
     })
     const [disabled, setDisabled] = React.useState(useWROLMode());
     const [loading, setLoading] = React.useState(false);
@@ -147,12 +147,12 @@ export function DownloadEditForm({afterSave, closeModal, download}) {
             if (!response.ok) {
                 throw 'Updating download failed';
             }
-        } finally {
-            setLoading(false);
-            setDisabled(false);
             if (afterSave) {
                 afterSave();
             }
+        } finally {
+            setLoading(false);
+            setDisabled(false);
         }
     }
 

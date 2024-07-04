@@ -520,11 +520,6 @@ class DownloadManager:
             download.settings = settings if settings is not None else download.settings
             downloads.append(download)
 
-        download_urls = [i.url for i in downloads]
-        logger.debug(f'Creating downloads: {download_urls}')
-        if not downloads:
-            raise RuntimeError(f'Failed to create downloads because they were all in skip list: {skipped}')
-
         try:
             # Start downloading ASAP.
             api_app.add_task(self.dispatch_downloads())

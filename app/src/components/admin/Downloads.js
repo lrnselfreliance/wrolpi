@@ -117,6 +117,7 @@ export function DownloadEditForm({afterSave, closeModal, download}) {
         url: download.url || '',
         frequency: download.frequency,
         excluded_urls: download.settings ? download.settings.excluded_urls : '',
+        destination: download.settings ? download.settings.destination : '',
     })
     const [disabled, setDisabled] = React.useState(useWROLMode());
     const [loading, setLoading] = React.useState(false);
@@ -217,6 +218,15 @@ export function DownloadEditForm({afterSave, closeModal, download}) {
                         name='excluded_urls'
                         type='text'
                         value={state.excluded_urls}
+                        onChange={handleInputChange}
+                    />
+                </Grid.Column>
+                <Grid.Column>
+                    <FormInput
+                        label='Destination'
+                        name='destination'
+                        type='text'
+                        value={state.destination}
                         onChange={handleInputChange}
                     />
                 </Grid.Column>

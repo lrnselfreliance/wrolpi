@@ -623,6 +623,10 @@ class Channel(ModelHelper, Base):
             raise FileNotFoundError(f'{path} does not exist!')
         return path
 
+    @staticmethod
+    def get_by_path(path: pathlib.Path, session: Session) -> Optional['Channel']:
+        return session.query(Channel).filter_by(directory=path).one_or_none()
+
     def __json__(self) -> dict:
         d = dict(
             channel_downloads=self.channel_downloads,
@@ -731,7 +735,8 @@ class Channel(ModelHelper, Base):
     @optional_session
     def get_or_create_download(self, url: str, session: Session = None, reset_attempts: bool = False) \
             -> ChannelDownload:
-        """Get a ChannelDownload record, if it does not exist, create it."""
+        """Get a ChannelDownload record, if it does not exist, create it.  Create a Download if necessary
+        which goes into this Channel's directory."""
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
         if not url:
@@ -743,10 +748,17 @@ class Channel(ModelHelper, Base):
             # VideoDownloader.
             download = session.query(Download).filter_by(url=url).one_or_none()
             if not download:
-                download_manager.create_download(url, ChannelDownloader.name, session=session,
-                                                 sub_downloader_name=VideoDownloader.name,
-                                                 reset_attempts=reset_attempts,
-                                                 )
+                download = download_manager.create_download(url, ChannelDownloader.name, session=session,
+                                                            sub_downloader_name=VideoDownloader.name,
+                                                            reset_attempts=reset_attempts,
+                                                            )
+            # Download into this Channel's directory by default.
+            destination = (download.settings or dict()).get('destination')
+            if not destination:
+                settings = (download.settings or dict())
+                settings.update(dict(destination=str(self.directory)))
+                download.settings = settings
+            # Link between Channel and Download.
             cd = ChannelDownload.get_by_url(url, session)
             if not cd:
                 cd = ChannelDownload(channel_id=self.id, download_url=url)
@@ -754,3 +766,8 @@ class Channel(ModelHelper, Base):
             logger.debug(f'Created {cd} for {self}')
 
         return cd
+
+    def get_rss_url(self) -> str | None:
+        """Return the RSS Feed URL for this Channel, if any is possible."""
+        if self.url and self.source_id and 'youtube.com' in self.url:
+            return f'https://www.youtube.com/feeds/videos.xml?channel_id={self.source_id}'

@@ -154,7 +154,7 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     import_channels_config()
     assert not channel1.channel_downloads
     assert len(test_session.query(Channel).all()) == 2
-    assert test_session.query(Download).all() == []
+    assert test_session.query(Download).count() == test_session.query(ChannelDownload).count() == 0
 
     # Add a frequency to the Channel.
     channels_config = get_channels_config()
@@ -166,27 +166,31 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     # Download record is created on import.
     import_channels_config()
     assert channel1.channel_downloads
-    assert len(test_session.query(Channel).all()) == 2
+    assert len(test_session.query(Channel).all()) == 2, 'Both Channels should still exist'
+    assert test_session.query(ChannelDownload).count() == 1, 'One Channel has a Download'
     download: Download = test_session.query(Download).one()
     assert download.url == channel1.url
     assert download.frequency
 
+    # Download.next_download was not deleted.
     next_download = str(download.next_download)
     import_channels_config()
     download: Download = test_session.query(Download).one()
     assert next_download == str(download.next_download)
 
-    # Creating Download that matches Channel2's URL creates a ChannelDownload on save.
-    download = Download(url=channel2.url, frequency=DownloadFrequency.weekly)
-    test_session.add(download)
+    # Creating Download that matches Channel2's URL creates a ChannelDownload.  Delete it and it should be re-created.
+    channel2.get_or_create_download(channel2.url, test_session)
+    save_channels_config()
+    test_session.query(ChannelDownload).filter_by(download_url=channel2.url).delete()
     test_session.commit()
 
-    save_channels_config()
+    # Missing ChannelDownload is re-created on import.
+    import_channels_config()
     channel2: Channel = test_session.query(Channel).filter_by(id=channel2.id).one()
     cds = test_session.query(ChannelDownload).all()
     assert len(cds) == 2, cds
-    assert channel2.channel_downloads and len(channel2.channel_downloads) == 1
     assert channel1.channel_downloads and len(channel1.channel_downloads) == 1
+    assert channel2.channel_downloads and len(channel2.channel_downloads) == 1
 
     # Add a Download to Channel2 which does not match Channel.url.
     channel2.get_or_create_download('https://example.org')

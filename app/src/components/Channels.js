@@ -47,7 +47,7 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
-import {TagsSelector, useTags} from "../Tags";
+import {TagsSelector} from "../Tags";
 
 
 function ChannelStatistics({statistics}) {
@@ -416,10 +416,10 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
     const settings = download.settings ? download.settings : {};
     const oldTagNames = download && download.settings && download.settings.tag_names ? download.settings.tag_names : [];
     const [state, setState] = React.useState({
-        url: download ? download.url : '',
         frequency: download.frequency ? download.frequency : 604800,
-        title_match: settings.title_match ? settings.title_match : '',
         title_exclude: settings.title_exclude ? settings.title_exclude : '',
+        title_match: settings.title_match ? settings.title_match : '',
+        url: download ? download.url : '',
     })
     const [disabled, setDisabled] = React.useState(useWROLMode());
     const [loading, setLoading] = React.useState(false);

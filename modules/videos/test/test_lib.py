@@ -5,7 +5,8 @@ import pytest
 
 from modules.videos import lib
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
-from modules.videos.models import Video
+from modules.videos.models import Video, ChannelDownload
+from wrolpi.downloader import Download, RSSDownloader
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
@@ -148,3 +149,21 @@ async def test_orphaned_files(test_session, make_files_structure, test_directory
         vid2_poster_path,
         vid3_poster_path,
     ])
+
+
+def test_link_channel_and_downloads(test_session, channel_factory):
+    channel = channel_factory(
+        url='https://www.youtube.com/c/LearningSelfReliance/videos',
+        source_id='UCng5u6ASda3LNRXJN0JCQJA',
+    )
+    download1 = Download(url=channel.get_rss_url(), downloader=RSSDownloader.name)
+    download2 = Download(url='https://example.com', downloader=RSSDownloader.name,
+                         settings=dict(destination=str(channel.directory)))
+    test_session.add_all([download1, download2])
+    test_session.commit()
+    assert test_session.query(Download).count() == 2
+    assert test_session.query(ChannelDownload).count() == 0
+
+    lib.link_channel_and_downloads(session=test_session)
+    assert test_session.query(Download).count() == 2
+    assert test_session.query(ChannelDownload).count() == 2

@@ -414,12 +414,13 @@ async def test_create_channel_download(test_async_client, test_session, simple_c
     tag = tag_factory()
 
     # Create ChannelDownload (which includes a Download).
-    body = {'url': 'https://example.com/1', 'frequency': 42}
+    body = {'url': 'https://example.com/1', 'frequency': 42, 'settings': {'title_include': ''}}
     request, response = await test_async_client.post(
         f'/api/videos/channels/{simple_channel.id}/download', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.content
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com/1' and not download.settings.get('tag_names')
+    assert download.settings.get('title_include') is None
 
     # Create another ChannelDownload.  Previous ChannelDownload/Download are untouched.
     body = {'url': 'https://example.com/2', 'frequency': 55, 'settings': {'tag_names': [tag.name]}}

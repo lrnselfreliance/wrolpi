@@ -72,6 +72,8 @@ class DownloadSettings:
         self.destination = str(get_media_directory() / self.destination) if self.destination else None
         if self.suffix and not self.suffix.startswith('.'):
             raise ValidationError('suffix must start with .')
+        self.title_exclude = self.title_exclude or None
+        self.title_include = self.title_include or None
 
 
 @dataclass

@@ -359,20 +359,6 @@ def get_channels_config_from_db(session: Session) -> dict:
 @optional_session()
 def save_channels_config(session: Session = None):
     """Get the Channel information from the DB, save it to the config."""
-    # Create any missing ChannelDownload for any Channel.url that has a Download.
-    results = session.query(Channel, Download, ChannelDownload) \
-        .outerjoin(ChannelDownload, ChannelDownload.download_url == Download.url) \
-        .outerjoin(Channel, Channel.url == Download.url) \
-        .all()
-    need_commit = False
-    for channel, download, cd in results:
-        if channel and download and not cd:
-            # Channel.url matches Download.url but there is no ChannelDownload.
-            channel.get_or_create_download(download.url, session)
-            need_commit = True
-    if need_commit:
-        session.commit()
-
     config = get_channels_config_from_db(session)
     channels_config = get_channels_config()
 
@@ -463,6 +449,9 @@ def import_channels_config():
                     logger.warning(f'Deleting {channel} because it is not in the config.')
                     channel.delete_with_videos()
 
+        # Create any missing ChannelDownload.
+        link_channel_and_downloads()
+
         if save_config:
             # Information about the channel was fetched, store it.
             save_channels_config()
@@ -472,6 +461,41 @@ def import_channels_config():
         if PYTEST:
             # Do not interrupt startup, only raise during testing.
             raise
+
+
+@optional_session
+def link_channel_and_downloads(session: Session):
+    """Create any missing ChannelDownload for any Channel.url/Channel.directory that has a Download."""
+    downloads = session.query(Download).all()
+    downloads_by_url = {i.url: i for i in downloads}
+    downloads_by_destination = {i.settings['destination']: i
+                                for i in downloads if 'destination' in (i.settings or dict())}
+    channels = session.query(Channel).all()
+
+    need_commit = False
+    for channel in channels:
+        directory = str(channel.directory)
+        download = downloads_by_destination.get(directory) or downloads_by_url.get(channel.url)
+        if download and not channel.get_download(download_id=download.id):
+            # Create ChannelDownload for the Download that is for this Channel.
+            cd = ChannelDownload(channel=channel, download=download)
+            session.add(cd)
+            channel_import_logger.info(f'Created missing ChannelDownload for {download}')
+            need_commit = True
+
+        # Get any Downloads for a Channel's RSS feed.
+        rss_url = channel.get_rss_url()
+        download = downloads_by_url.get(rss_url) if rss_url else None
+        if rss_url and download:
+            cd = channel.get_download(rss_url)
+            if not cd:
+                # No ChannelDownload for this RSS Download.
+                cd = ChannelDownload(channel=channel, download=download)
+                session.add(cd)
+                channel_import_logger.info(f'Created missing ChannelDownload for {download}')
+
+    if need_commit:
+        session.commit()
 
 
 YDL = YoutubeDL(dict(cachedir=YTDLP_CACHE_DIR))

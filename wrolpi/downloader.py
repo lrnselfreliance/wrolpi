@@ -520,6 +520,16 @@ class DownloadManager:
             download.settings = settings if settings is not None else download.settings
             downloads.append(download)
 
+            # Create ChannelDownload for any download that is being downloaded into a Channel's Directory.
+            from modules.videos.models import Channel, ChannelDownload
+            if download.settings and (destination := download.settings.get('destination')):
+                channel = Channel.get_by_path(destination, session)
+                cd = ChannelDownload.get_by_url(url, session)
+                if channel and not cd:
+                    cd = ChannelDownload(channel=channel, download=download)
+                    session.add(cd)
+
+        session.flush(downloads)
         try:
             # Start downloading ASAP.
             api_app.add_task(self.dispatch_downloads())

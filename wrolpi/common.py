@@ -1766,7 +1766,7 @@ def format_html_file(file: pathlib.Path):
     replace_file(file, pretty)
 
 
-def html_screenshot(html: bytes) -> bytes:
+def html_screenshot(html: bytes | str) -> bytes:
     """Return a PNG screenshot of the provided HTML."""
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
     options = webdriver.ChromeOptions()
@@ -1775,7 +1775,7 @@ def html_screenshot(html: bytes) -> bytes:
     options.add_argument('window-size=1280x720')
 
     with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
-        fh.write(html)
+        fh.write(html.encode() if isinstance(html, str) else html)
         fh.flush()
 
         with webdriver.Chrome(chrome_options=options) as driver:

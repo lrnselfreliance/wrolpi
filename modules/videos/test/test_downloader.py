@@ -157,13 +157,13 @@ async def test_download_channel(test_session, simple_channel, video_download_man
 
     reset_downloads()
 
-    # A channel with `title_match` only returns matching video URLs.
+    # A channel with `title_include` only returns matching video URLs.
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
         cd = simple_channel.get_or_create_download(url, test_session)
         cd.download.frequency = 100
-        cd.download.settings = {'title_match': '2'}
+        cd.download.settings = {'title_include': '2'}
         await video_download_manager.wait_for_all_downloads()
     downloads = video_download_manager.get_once_downloads(test_session)
     assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_2_url'}

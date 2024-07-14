@@ -864,3 +864,8 @@ async def test_log_level(test_async_client, test_config):
         request, response = await test_async_client.patch('/api/settings', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         assert api_app.shared_ctx.log_level.value == 10
+
+
+@skip_circleci
+def test_html_screenshot(singlefile_contents_factory):
+    assert common.html_screenshot(singlefile_contents_factory())

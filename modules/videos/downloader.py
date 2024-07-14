@@ -169,14 +169,14 @@ class ChannelDownloader(Downloader, ABC):
         downloads = download.info_json['entries']
         total_downloads = len(downloads)
 
-        title_match = download.settings.get('title_match') if download.settings else None
-        if title_match:
+        title_include = download.settings.get('title_include') if download.settings else None
+        if title_include:
             # Only download Videos that have title match words in title.
-            title_match = [i.strip() for i in title_match.split(',')]
+            title_include = [i.strip() for i in title_include.split(',')]
             new_downloads = []
             for i in downloads:
-                if (title := i.get('title', '')) and any(j for j in title_match if j in title):
-                    logger.debug(f'Video with title {title} matches {title_match}')
+                if (title := i.get('title', '')) and any(j for j in title_include if j in title):
+                    logger.debug(f'Video with title {title} matches {title_include}')
                     new_downloads.append(i)
             downloads = new_downloads
 
@@ -188,7 +188,6 @@ class ChannelDownloader(Downloader, ABC):
             for i in downloads:
                 if (title := i.get('title', '')) and any(j for j in title_exclude if j in title):
                     logger.debug(f'Video with title {title} matches EXCLUDE {title_exclude}')
-                    continue
                 else:
                     new_downloads.append(i)
             downloads = new_downloads

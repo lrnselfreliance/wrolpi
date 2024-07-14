@@ -2,7 +2,8 @@ from http import HTTPStatus
 from typing import List
 
 from modules.zim import lib
-from wrolpi.common import logger, aiohttp_get, get_download_info, download_file, background_task, get_html_soup
+from wrolpi.common import logger, aiohttp_get, get_download_info, download_file, background_task, get_html_soup, \
+    trim_file_name
 from wrolpi.downloader import Downloader, Download, DownloadResult
 
 __all__ = ['KiwixCatalogDownloader', 'KiwixZimDownloader', 'kiwix_zim_downloader', 'kiwix_catalog_downloader']
@@ -72,7 +73,8 @@ class KiwixZimDownloader(Downloader):
 
         zim_directory = lib.get_zim_directory()
         zim_directory.mkdir(parents=True, exist_ok=True)
-        output_path = zim_directory / f'{download_info.name}'
+        name = trim_file_name(download_info.name)
+        output_path = zim_directory / name
 
         if output_path.is_file():
             output_size = output_path.stat().st_size

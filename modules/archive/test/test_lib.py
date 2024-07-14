@@ -359,7 +359,7 @@ async def test_get_title_from_html(test_directory, test_session, fake_now):
 
 
 @skip_circleci
-def test_get_new_archive_files_length(fake_now):
+def test_get_new_archive_files_length(test_directory, fake_now):
     """Archive titles are truncated to fit file system length limit.  (255-character limit for most file systems)"""
     fake_now(datetime(2001, 1, 1))
     archive_files = get_new_archive_files('https://example.com', 'a' * 500)
@@ -372,7 +372,7 @@ def test_get_new_archive_files_length(fake_now):
 
 @skip_circleci
 def test_get_new_archive_files(fake_now):
-    """Archive files have a specific format so they are sorted by datetime, and are near each other."""
+    """Archive files have a specific format, so they are sorted by datetime, and are near each other."""
     fake_now(datetime(2001, 1, 1))
     archive_files = get_new_archive_files('https://example.com/two', None)
     assert str(archive_files.singlefile).endswith('archive/example.com/2001-01-01-00-00-00_NA.html')

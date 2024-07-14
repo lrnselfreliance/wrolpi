@@ -65,6 +65,7 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
+# File names include domain and datetime.
 MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH = 200
 
 

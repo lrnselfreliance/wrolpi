@@ -4,7 +4,7 @@ from abc import ABC
 from typing import List
 
 from wrolpi.common import get_media_directory, logger, background_task, get_download_info, \
-    download_file
+    download_file, trim_file_name
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -48,7 +48,7 @@ class FileDownloader(Downloader, ABC):
         info = await get_download_info(download.url)
 
         # TODO verify that this output_path is exclusive.
-        output_path = destination / info.name
+        output_path = destination / trim_file_name(info.name)
 
         try:
             await download_file(download.url, output_path, info)

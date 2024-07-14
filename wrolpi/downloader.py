@@ -496,7 +496,7 @@ class DownloadManager:
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not urls or not all(urls):
-            raise ValueError('Download must have a URL')
+            raise ValueError(f'Download must have a URL: {urls=}')
 
         downloads = []
         # Throws an error if no downloader is found.
@@ -1093,9 +1093,9 @@ async def signal_download_download(download_id: int, download_url: str):
             download.error = result.error if result.error else None
             download.next_download = download_manager.calculate_next_download(download, session)
 
-            if result.downloads:
+            urls = download.filter_excluded(result.downloads) if result.downloads else None
+            if urls:
                 worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                urls = download.filter_excluded(result.downloads)
                 download_manager.create_downloads(urls, session, downloader_name=download.sub_downloader,
                                                   settings=result.settings)
 

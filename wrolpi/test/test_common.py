@@ -305,6 +305,17 @@ def test_escape_file_name(name, expected):
         raise AssertionError(f'Escape of {repr(name)}: {repr(result)} != {repr(expected)}')
 
 
+@pytest.mark.parametrize('name,expected', [
+    ('Channel_20240714_aaa.jpg', 'Channel_20240714_aaa.jpg'),
+    # Really long filename.  The suffix is preserved.
+    ('Channel_20240714_' + ('a' * 244) + '.jpg', 'Channel_20240714_' + ('a' * 159) + '.jpg'),
+])
+def test_trim_file_name(name, expected):
+    result = common.trim_file_name(name)
+    assert result == expected, f'Expected length of {len(expected)} but got length of {len(result)}'
+    assert len(result) <= 255, 'File name cannot be longer than 255 characters'
+
+
 def test_truncate_object_bytes():
     """
     Objects can be truncated (lists will be shortened) so they will fit in tsvector columns.

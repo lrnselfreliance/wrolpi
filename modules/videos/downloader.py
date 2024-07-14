@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import json
+import os.path
 import pathlib
 import traceback
 from abc import ABC
@@ -12,7 +13,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    format_json_file
+    format_json_file, trim_file_name
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -62,7 +63,9 @@ def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
 
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
-    return ydl.prepare_filename(entry)
+    dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
+    file_name = trim_file_name(file_name)
+    return f'{dir_name}/{file_name}'
 
 
 class ChannelDownloader(Downloader, ABC):
@@ -332,7 +335,6 @@ class VideoDownloader(Downloader, ABC):
                 return await self.download_info_json(download, video_path)
 
             # Do the real download.
-            file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = (
                 str(YT_DLP_BIN),
                 '-c',  # Continue downloads
@@ -347,7 +349,7 @@ class VideoDownloader(Downloader, ABC):
                 '--write-info-json',
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
                 '--remux-video', PREFERRED_VIDEO_EXTENSION,
-                '-o', file_name_format,
+                '-o', video_path,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
                 # Get top 20 comments, 10 replies per parent.
@@ -496,7 +498,7 @@ class VideoDownloader(Downloader, ABC):
         entry = extract_info(url, ydl=ydl, process=True)
         final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
 
-        logger.debug(f'Downloading {url} to {out_dir}')
+        logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
         return final_filename, entry
 
     @staticmethod

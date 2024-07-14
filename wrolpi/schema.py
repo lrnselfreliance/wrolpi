@@ -68,7 +68,10 @@ class DownloadSettings:
     def __post_init__(self):
         from wrolpi.common import get_media_directory
         self.tag_names = [i.strip() for i in self.tag_names] if self.tag_names else []
-        self.excluded_urls = [i.strip() for i in self.excluded_urls.split(',')] if self.excluded_urls else None
+        if isinstance(self.excluded_urls, str):
+            self.excluded_urls = [i.strip() for i in self.excluded_urls.split(',')] if self.excluded_urls else None
+        else:
+            self.excluded_urls = [i.strip() for i in self.excluded_urls] if self.excluded_urls else None
         self.destination = str(get_media_directory() / self.destination) if self.destination else None
         if self.suffix and not self.suffix.startswith('.'):
             raise ValidationError('suffix must start with .')

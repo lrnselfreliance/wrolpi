@@ -10,7 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
-from wrolpi import before_startup, dates
+from wrolpi import before_startup, dates, flags
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, get_media_directory, register_refresh_cleanup, limit_concurrent
 from wrolpi.dates import Seconds, from_timestamp
@@ -427,14 +427,17 @@ def import_channels_config():
                 full_data.update(data)
                 channel.update(full_data)
 
-                if not channel.source_id and channel.url:
+                if not channel.source_id and channel.url and flags.have_internet.is_set():
                     # If we can download from a channel, we must have its source_id.
-                    channel.source_id = get_channel_source_id(channel.url)
-                    save_config = True
-                    if not channel.source_id:
-                        channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
-                    else:
-                        session.commit()
+                    try:
+                        channel.source_id = get_channel_source_id(channel.url)
+                        save_config = True
+                        if not channel.source_id:
+                            channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
+                        else:
+                            session.commit()
+                    except Exception as e:
+                        logger.error(f'Failed to get Channel source id of {channel}', exc_info=e)
 
                 channel_import_logger.debug(f'Updated {repr(channel.name)}'
                                             f' url={channel.url}'

@@ -626,6 +626,8 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         if send_events:
             Events.send_refresh_completed()
 
+    api_app.shared_ctx.refresh['counted_files'] = 0
+
 
 async def apply_indexers():
     """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""

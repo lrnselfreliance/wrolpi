@@ -223,6 +223,7 @@ __all__ = [
     'slow_logger',
     'split_lines_by_length',
     'timer',
+    'trim_file_name',
     'truncate_generator_bytes',
     'truncate_object_bytes',
     'tsvector',
@@ -992,6 +993,25 @@ def escape_file_name(name: str) -> str:
     name = SPACE_FILE_CHARS.sub(' ', name)
     name = INVALID_FILE_CHARS.sub('', name)
     return name.strip()
+
+
+# Maximum length is probably 255, but we need more length for large suffixes like `.readability.json`, and temporary
+# downloading suffixes.
+MAXIMUM_FILE_LENGTH = 180
+
+
+def trim_file_name(name: str) -> str:
+    """Shorten the file name only if it is longer than the file system supports.  Trim from the end of the name until
+     the name is short enough, excluding suffix."""
+    if len(name) < MAXIMUM_FILE_LENGTH:
+        return name
+
+    # Don't trim the filename to exactly 256 characters.
+    # This is because a FileGroup will have varying filename lengths.
+    from wrolpi.files.lib import split_path_stem_and_suffix
+    stem, suffix = split_path_stem_and_suffix(name)
+    excess = MAXIMUM_FILE_LENGTH - len(suffix)
+    return stem[:excess].strip() + suffix
 
 
 def native_only(func: callable):

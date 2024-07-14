@@ -283,6 +283,9 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
             elif 'not a valid URL' in str(e):
                 logger.error(f'URL is not valid: {url=}', exc_info=e)
                 add_video_to_skip_list(url, censored=True)
+            elif ' Sign in ' in str(e):
+                logger.error(f'Video requires sign-in: {url=}', exc_info=e)
+                add_video_to_skip_list(url, censored=True)
             else:
                 logger.error(f'Got error when attempting to download video comments: {url=}', exc_info=e)
             continue

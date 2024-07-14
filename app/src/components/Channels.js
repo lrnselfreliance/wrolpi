@@ -418,7 +418,7 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
     const [state, setState] = React.useState({
         frequency: download.frequency ? download.frequency : 604800,
         title_exclude: settings.title_exclude ? settings.title_exclude : '',
-        title_match: settings.title_match ? settings.title_match : '',
+        title_include: settings.title_include ? settings.title_include : '',
         url: download ? download.url : '',
     })
     const [disabled, setDisabled] = React.useState(useWROLMode());
@@ -447,7 +447,7 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
                     download.id,
                     state.url,
                     state.frequency,
-                    state.title_match,
+                    state.title_include,
                     state.title_exclude,
                     tagNames,
                 );
@@ -456,7 +456,7 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
                     channel_id,
                     state.url,
                     state.frequency,
-                    state.title_match,
+                    state.title_include,
                     state.title_exclude,
                     tagNames,
                 );
@@ -544,11 +544,11 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
                         popupPosition='bottom center'
                     />
                     <FormInput
-                        name="title_match"
+                        name="title_include"
                         type="text"
                         disabled={disabled}
                         placeholder='Shelter,Solar Power'
-                        value={state.title_match}
+                        value={state.title_include}
                         onChange={handleInputChange}
                     />
                 </Grid.Column>

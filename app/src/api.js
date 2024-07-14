@@ -251,12 +251,12 @@ export async function getVideosStatistics() {
     }
 }
 
-export async function createChannelDownload(channelId, url, frequency, title_match, title_exclude, tag_names) {
+export async function createChannelDownload(channelId, url, frequency, title_include, title_exclude, tag_names) {
     const body = {
         url: url,
         frequency: frequency,
         settings: {
-            title_match: title_match,
+            title_include: title_include,
             title_exclude: title_exclude,
             tag_names: tag_names,
         },
@@ -284,12 +284,12 @@ export async function createChannelDownload(channelId, url, frequency, title_mat
     return response;
 }
 
-export async function updateChannelDownload(channelId, downloadId, url, frequency, title_match, title_exclude, tag_names) {
+export async function updateChannelDownload(channelId, downloadId, url, frequency, title_include, title_exclude, tag_names) {
     const body = {
         url: url,
         frequency: frequency,
         settings: {
-            title_match: title_match,
+            title_include: title_include,
             title_exclude: title_exclude,
             tag_names: tag_names,
         },

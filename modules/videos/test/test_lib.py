@@ -164,6 +164,7 @@ def test_link_channel_and_downloads(test_session, channel_factory):
     assert test_session.query(Download).count() == 2
     assert test_session.query(ChannelDownload).count() == 0
 
+    # `link_channel_and_downloads` creates missing ChannelDownloads.
     lib.link_channel_and_downloads(session=test_session)
     assert test_session.query(Download).count() == 2
     assert test_session.query(ChannelDownload).count() == 2

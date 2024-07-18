@@ -1,5 +1,5 @@
 import contextlib
-import functools
+import dataclasses
 import html
 import pathlib
 import re
@@ -21,6 +21,7 @@ from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
     get_video_duration
+from .errors import UnknownChannel
 from .models import Channel, Video, ChannelDownload
 
 logger = logger.getChild(__name__)
@@ -28,13 +29,15 @@ logger = logger.getChild(__name__)
 DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 
-class VideoInfoJSON(object):
-    channel_source_id = None
-    duration = None
-    title = None
-    url = None
-    view_count = None
-    epoch = None
+@dataclasses.dataclass
+class VideoInfoJSON:
+    channel_source_id: str | None = None
+    channel_url: str | None = None
+    duration: int | None = None
+    title: str | None = None
+    url: str | None = None
+    view_count: int | None = None
+    epoch: int | None = None
 
 
 def process_video_info_json(video: Video) -> VideoInfoJSON:
@@ -46,24 +49,14 @@ def process_video_info_json(video: Video) -> VideoInfoJSON:
         title = info_json.get('fulltitle') or info_json.get('title')
         video_info_json.title = html.unescape(title) if title else None
 
-        video_info_json.duration = info_json.get('duration') or None
-        video_info_json.view_count = info_json.get('view_count') or None
+        video_info_json.duration = int(i) if (i := info_json.get('duration')) else None
+        video_info_json.view_count = int(i) if (i := info_json.get('view_count')) else None
         video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
-        video_info_json.channel_source_id = info_json.get('channel_id') or None
-        video_info_json.epoch = info_json.get('epoch')
-        video_info_json.epoch = int(video_info_json.epoch) if video_info_json.epoch else None
+        video_info_json.channel_source_id = info_json.get('channel_id') or info_json.get('uploader_id') or None
+        video_info_json.channel_url = info_json.get('channel_url') or info_json.get('uploader_url') or None
+        video_info_json.epoch = int(i) if (i := info_json.get('epoch')) else None
 
     return video_info_json
-
-
-@optional_session
-@functools.lru_cache
-def get_channel_id_by_source_id(session: Session, source_id: str) -> Optional[int]:
-    """Return the id of the Channel which matches the provided `source_id`.
-
-    These are cached results."""
-    channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
-    return channel.id if channel else None
 
 
 EXTRACT_SUBTITLES = False
@@ -93,8 +86,18 @@ def validate_video(video: Video, channel_generate_poster: bool):
         # updated.
         video.view_count = video.view_count or video_info_json.view_count
 
-        if video_info_json.channel_source_id:
-            video.channel_id = get_channel_id_by_source_id(source_id=video_info_json.channel_source_id)
+        if video_info_json.channel_source_id or video_info_json.channel_url:
+            from modules.videos.channel.lib import get_channel
+            try:
+                if channel := get_channel(
+                        source_id=video_info_json.channel_source_id,
+                        url=video_info_json.channel_url,
+                        directory=video.video_path.parent,
+                        return_dict=False,
+                ):
+                    video.channel_id = channel.id
+            except UnknownChannel:
+                pass
 
     video_path = video.video_path
     if not video_path:
@@ -508,7 +511,7 @@ YDL.add_default_info_extractors()
 
 def get_channel_source_id(url: str) -> str:
     channel_info = YDL.extract_info(url, download=False, process=False)
-    return channel_info.get('uploader_id') or channel_info['channel_id']
+    return channel_info.get('channel_id') or channel_info['uploader_id']
 
 
 async def get_statistics():

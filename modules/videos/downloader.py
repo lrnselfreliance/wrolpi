@@ -259,14 +259,15 @@ class VideoDownloader(Downloader, ABC):
 
         found_channel = None
 
-        channel_name = download.info_json.get('channel')
-        source_channel_id = download.info_json.get('channel_id')
-        channel_url = download.info_json.get('channel_url')
+        # Look for Channel using channel data first, fallback to uploader data.
+        channel_name = download.info_json.get('channel') or download.info_json.get('uploader')
+        channel_source_id = download.info_json.get('channel_id') or download.info_json.get('uploader_id')
+        channel_url = download.info_json.get('channel_url') or download.info_json.get('uploader_url')
         channel = None
-        if channel_name or source_channel_id:
+        if channel_name or channel_source_id:
             # Try to find the channel via info_json from yt-dlp.
             try:
-                channel = get_or_create_channel(source_id=source_channel_id, url=channel_url, name=channel_name)
+                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name)
                 if channel:
                     found_channel = 'yt_dlp'
                     logger.debug(f'Found a channel with source_id {channel=}')

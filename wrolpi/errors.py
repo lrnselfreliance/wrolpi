@@ -51,6 +51,12 @@ class InvalidDownload(APIError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
+class UnknownDownload(APIError):
+    code = 'UNKNOWN_DOWNLOAD'
+    message = 'The Download cannot be found.'
+    status_code = HTTPStatus.NOT_FOUND
+
+
 class UnrecoverableDownloadError(APIError):
     code = 'UNRECOVERABLE_DOWNLOAD_ERROR'
     message = 'Download experienced an error which cannot be recovered.  Download will be deleted.'

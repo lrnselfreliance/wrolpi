@@ -22,7 +22,7 @@ from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
     get_video_duration
 from .errors import UnknownChannel
-from .models import Channel, Video, ChannelDownload
+from .models import Channel, Video
 
 logger = logger.getChild(__name__)
 
@@ -455,7 +455,7 @@ def import_channels_config():
                     logger.warning(f'Deleting {channel} because it is not in the config.')
                     channel.delete_with_videos()
 
-        # Create any missing ChannelDownload.
+        # Create any missing Downloads.  Associated Downloads with any necessary Channels.
         link_channel_and_downloads()
 
         if save_config:
@@ -471,8 +471,9 @@ def import_channels_config():
 
 @optional_session
 def link_channel_and_downloads(session: Session):
-    """Create any missing ChannelDownload for any Channel.url/Channel.directory that has a Download."""
-    downloads = session.query(Download).all()
+    """Create any missing Downloads for any Channel.url/Channel.directory that has a Download.  Associate any Download
+    related to a Channel."""
+    downloads = list(session.query(Download).all())
     downloads_by_url = {i.url: i for i in downloads}
     downloads_by_destination = {i.settings['destination']: i
                                 for i in downloads if 'destination' in (i.settings or dict())}
@@ -482,23 +483,29 @@ def link_channel_and_downloads(session: Session):
     for channel in channels:
         directory = str(channel.directory)
         download = downloads_by_destination.get(directory) or downloads_by_url.get(channel.url)
-        if download and not channel.get_download(download_id=download.id):
-            # Create ChannelDownload for the Download that is for this Channel.
-            cd = ChannelDownload(channel=channel, download=download)
-            session.add(cd)
-            channel_import_logger.info(f'Created missing ChannelDownload for {download}')
+        if download and not download.channel_id:
+            download.channel_id = channel.id
             need_commit = True
 
         # Get any Downloads for a Channel's RSS feed.
         rss_url = channel.get_rss_url()
         download = downloads_by_url.get(rss_url) if rss_url else None
-        if rss_url and download:
-            cd = channel.get_download(rss_url)
-            if not cd:
-                # No ChannelDownload for this RSS Download.
-                cd = ChannelDownload(channel=channel, download=download)
-                session.add(cd)
-                channel_import_logger.info(f'Created missing ChannelDownload for {download}')
+        if download:
+            download.channel_id = channel.id
+
+    # Associate any Download which shares a Channel's URL.
+    for download in downloads:
+        channel = Channel.get_by_url(download.url)
+        if channel and not download.channel_id:
+            download.channel_id = channel.id
+            need_commit = True
+
+    # Associate any Download which shares a Channel's directory.
+    for destination, download in downloads_by_destination.items():
+        if destination and (channel := Channel.get_by_directory(destination)):
+            if not download.channel_id:
+                download.channel_id = channel.id
+                need_commit = True
 
     if need_commit:
         session.commit()

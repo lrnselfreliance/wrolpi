@@ -1,12 +1,13 @@
 import pathlib
 import subprocess
 import tempfile
+from copy import copy
 from unittest import mock
 
 import pytest
 from PIL import Image
 
-from modules.videos.models import Channel, Video, ChannelDownload
+from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
@@ -149,25 +150,26 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
         conf.channels = old_config['channels']
         conf.save()
 
-    # Config has no channels with a download_frequency.
+    # Two Channels, but neither have Downloads.
     save_channels_config()
     import_channels_config()
-    assert not channel1.channel_downloads
+    assert not channel1.downloads
+    assert not channel2.downloads
     assert len(test_session.query(Channel).all()) == 2
-    assert test_session.query(Download).count() == test_session.query(ChannelDownload).count() == 0
+    assert test_session.query(Download).count() == 0
 
-    # Add a frequency to the Channel.
+    # Add a frequency to `channel1`.
     channels_config = get_channels_config()
     update_channel_config(channels_config, 'foo',
-                          {'channel_downloads': [
+                          {'downloads': [
                               {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly}
                           ]})
 
     # Download record is created on import.
     import_channels_config()
-    assert channel1.channel_downloads
+    assert channel1.downloads
     assert len(test_session.query(Channel).all()) == 2, 'Both Channels should still exist'
-    assert test_session.query(ChannelDownload).count() == 1, 'One Channel has a Download'
+    assert test_session.query(Download).count() == 1, 'One Channel has a Download'
     download: Download = test_session.query(Download).one()
     assert download.url == channel1.url
     assert download.frequency
@@ -178,22 +180,23 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     download: Download = test_session.query(Download).one()
     assert next_download == str(download.next_download)
 
-    # Creating Download that matches Channel2's URL creates a ChannelDownload.  Delete it and it should be re-created.
+    # Creating Download that matches Channel2's URL means they are related.  Delete it and it should be re-created.
     channel2.get_or_create_download(channel2.url, test_session)
     save_channels_config()
-    test_session.query(ChannelDownload).filter_by(download_url=channel2.url).delete()
+    Download.find_by_url(channel2.url).delete(skip=False)
     test_session.commit()
 
-    # Missing ChannelDownload is re-created on import.
+    # Missing Download is re-created on import.
     import_channels_config()
-    channel2: Channel = test_session.query(Channel).filter_by(id=channel2.id).one()
-    cds = test_session.query(ChannelDownload).all()
-    assert len(cds) == 2, cds
-    assert channel1.channel_downloads and len(channel1.channel_downloads) == 1
-    assert channel2.channel_downloads and len(channel2.channel_downloads) == 1
+    channel2 = Channel.get_by_id(channel2.id)
+    downloads = test_session.query(Download).all()
+    assert len(downloads) == 1, downloads
+    assert len(channel1.downloads) == 1
+    assert len(channel2.downloads) == 0
 
     # Add a Download to Channel2 which does not match Channel.url.
-    channel2.get_or_create_download('https://example.org')
+    channel2.get_or_create_download('https://example.org', session=test_session)
+    channel2.get_or_create_download('https://example.com/channel2', session=test_session)
     test_session.commit()
     save_channels_config()
     # Check config is written to match new URLs.
@@ -202,21 +205,23 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     for channel_config in config.channels:
         if channel_config['source_id'] == channel2.source_id:
             assert channel_config['source_id'] == 'bar'
-            assert len(channel_config['channel_downloads']) == 2
-            assert set(channel_config['channel_downloads']) == {'https://example.com/channel2', 'https://example.org'}
+            assert len(channel_config['downloads']) == 2
+            assert set(channel_config['downloads']) == {'https://example.com/channel2', 'https://example.org'}
         else:
             assert channel_config['source_id'] == 'foo'
 
-    # Reset Downloads.  Downloads and ChannelDownloads should be recreated.
+    # Get Channels with their Downloads.
+    channels_backup = copy(get_channels_config().channels)
+    # Reset Downloads.  Downloads should be recreated from the channels config file.
     [i.delete(skip=False) for i in test_session.query(Download).all()]
-    [i.delete() for i in test_session.query(ChannelDownload).all()]
+    # Write config with Channel Downloads now that the delete() has removed them from the config.
+    get_channels_config().channels = channels_backup
     import_channels_config()
     channel1, channel2 = test_session.query(Channel).order_by(Channel.url).all()
     assert channel1.url == 'https://example.com/channel1'
     assert channel2.url == 'https://example.com/channel2'
-    assert {i.download.url for i in channel1.channel_downloads} == {'https://example.com/channel1'}
-    assert {i.download.url for i in channel2.channel_downloads} == {'https://example.com/channel2',
-                                                                    'https://example.org'}
+    assert {i.url for i in channel1.downloads} == {'https://example.com/channel1'}
+    assert {i.url for i in channel2.downloads} == {'https://example.com/channel2', 'https://example.org'}
 
 
 def test_import_channel_delete_missing_channels(test_session, channel_factory, test_channels_config):

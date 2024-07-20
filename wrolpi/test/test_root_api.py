@@ -535,8 +535,8 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(
         dict(search_str='foo'),
         [
-            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'channel_downloads': []},
-            {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'channel_downloads': []},
+            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []},
+            {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'downloads': []},
         ],
         [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
     )
@@ -545,14 +545,14 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(
         dict(search_str='foo l'),
         [
-            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'channel_downloads': []}],
+            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []}],
         [],
     )
 
     await assert_results(
         dict(search_str='bar'),
         [
-            {'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'channel_downloads': []}
+            {'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'downloads': []}
         ],
         [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
     )

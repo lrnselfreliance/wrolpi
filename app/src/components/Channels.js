@@ -240,7 +240,7 @@ function ChannelPage({create, header}) {
         }
     }
 
-    let channelDownloads = channel && channel.channel_downloads ? channel.channel_downloads : null;
+    let downloads = channel && channel.downloads ? channel.downloads : null;
 
     const afterNewDownloadSave = async () => {
         await fetchChannel();
@@ -399,7 +399,7 @@ function ChannelPage({create, header}) {
                 </ModalContent>
             </Modal>
 
-            <RecurringDownloadsTable downloads={channelDownloads} fetchDownloads={fetchChannel}/>
+            <RecurringDownloadsTable downloads={downloads} fetchDownloads={fetchChannel}/>
         </Segment>}
 
         <div style={{marginTop: '2em'}}>

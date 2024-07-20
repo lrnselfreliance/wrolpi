@@ -8,12 +8,13 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger, \
     get_media_directory
 from wrolpi.db import get_db_curs, optional_session, get_db_session
-from wrolpi.errors import UnknownDirectory, APIError, ValidationError, InvalidDownload
+from wrolpi.downloader import save_downloads_config, download_manager
+from wrolpi.errors import UnknownDirectory, APIError, ValidationError
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel
 from ..lib import save_channels_config
-from ..models import Channel, Video, ChannelDownload
+from ..models import Channel, Video
 
 logger = logger.getChild(__name__)
 
@@ -33,8 +34,7 @@ async def get_minimal_channels() -> List[dict]:
                 (
                     select min(d.frequency)
                     from download d
-                        left join channel_download cd on cd.download_url = d.url
-                    where cd.channel_id = c.id
+                    where d.channel_id = c.id
                 ) AS minimum_frequency
             FROM
                 channel AS c
@@ -217,32 +217,33 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
     return channels
 
 
-async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict) -> ChannelDownload:
-    """Create ChannelDownload."""
+async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict):
+    """Create Download for Channel."""
     with get_db_session(commit=True) as session:
-        channel = get_channel(session, channel_id=channel_id, return_dict=False)
-        cd = channel.get_or_create_download(url, session, reset_attempts=True)
-        cd.download.frequency = cd.download.frequency or frequency
-        cd.download.settings = settings
+        channel = Channel.find_by_id(channel_id, session=session)
+        download = channel.get_or_create_download(url, session, reset_attempts=True)
+        download.frequency = download.frequency or frequency
+        download.settings = settings
 
     save_channels_config()
+    await save_downloads_config()
 
-    return cd
+    return download
 
 
-async def update_channel_download(channel_id: int, download_id: int, url: str, frequency: int, settings: dict) \
-        -> ChannelDownload:
-    """Fetch ChannelDownload, update its properties."""
+async def update_channel_download(channel_id: int, download_id: int, url: str, frequency: int, settings: dict):
+    """Fetch Channel's Download, update its properties."""
     with get_db_session(commit=True) as session:
-        channel = get_channel(session, channel_id=channel_id, return_dict=False)
-        cd = channel.get_download(download_id=download_id)
-        if not cd:
-            raise InvalidDownload('No Download with that ID on this Channel')
+        # Ensure that the Channel exists.
+        Channel.find_by_id(channel_id, session=session)
+        download = download_manager.get_download(session, id_=download_id)
+        download.url = url
+        download.frequency = download.frequency or frequency
+        download.settings = settings
 
-        cd.download.url = url
-        cd.download.frequency = cd.download.frequency or frequency
-        cd.download.settings = settings
+    download_manager.remove_from_skip_list(url)
 
     save_channels_config()
+    await save_downloads_config()
 
-    return cd
+    return download

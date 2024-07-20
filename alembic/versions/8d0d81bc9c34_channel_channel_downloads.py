@@ -1,4 +1,4 @@
-"""Channel.channel_downloads
+"""Channel.downloads / Download.channel
 
 Revision ID: 8d0d81bc9c34
 Revises: 00f11f309c53
@@ -10,6 +10,8 @@ import os
 from alembic import op
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
+
+from modules.videos.lib import link_channel_and_downloads
 
 # revision identifiers, used by Alembic.
 revision = '8d0d81bc9c34'
@@ -27,22 +29,12 @@ def upgrade():
     session = Session(bind=bind)
 
     session.execute('ALTER TABLE download ADD CONSTRAINT download_url_unique UNIQUE (url)')
-    session.execute('''
-    CREATE TABLE channel_download (
-        channel_id INTEGER REFERENCES channel (id),
-        download_url TEXT REFERENCES download (url),
-        primary key (channel_id, download_url)
-    )''')
+    session.execute('ALTER TABLE download ADD COLUMN channel_id INTEGER REFERENCES channel(id)')
 
-    # Migration is separated for testing.  See `test_channel_channel_downloads_migration`
-    from wrolpi.migration import migrate_channel_downloads
-    migrate_channel_downloads(session)
+    link_channel_and_downloads(session)
 
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS match_regex')
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS download_frequency')
-
-    if not DOCKERIZED:
-        session.execute('ALTER TABLE public.channel_download OWNER TO wrolpi')
 
 
 def downgrade():
@@ -50,6 +42,8 @@ def downgrade():
     session = Session(bind=bind)
 
     session.execute('DROP TABLE IF EXISTS channel_download')
+    session.execute('ALTER TABLE download DROP COLUMN IF EXISTS channel_id')
+    session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS channel_id')
     session.execute('ALTER TABLE channel ADD COLUMN IF NOT EXISTS match_regex TEXT')
     session.execute('ALTER TABLE channel ADD COLUMN IF NOT EXISTS download_frequency INTEGER')
     session.execute('ALTER TABLE download DROP CONSTRAINT IF EXISTS download_url_unique')

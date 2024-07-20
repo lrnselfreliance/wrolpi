@@ -18,9 +18,9 @@ from urllib.parse import urlparse
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import Delete
 
 from wrolpi import flags
@@ -30,7 +30,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
-from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
+from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
 from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
 logger = logger.getChild(__name__)
@@ -111,7 +111,10 @@ class Download(ModelHelper, Base):  # noqa
     next_download = Column(TZDateTime)
     settings = Column(JSONB)  # information about how the download should happen (destination, etc.)
     status = Column(String, default=DownloadStatus.new)  # `DownloadStatus` enum.
-    _manager: 'DownloadManager' = None
+
+    # A Download may be associated with a Channel (downloads all Channel videos, or a playlist, etc.).
+    channel_id = Column(Integer, ForeignKey('channel.id'))
+    channel = relationship('Channel', primaryjoin='Download.channel_id==Channel.id', back_populates='downloads')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -126,6 +129,7 @@ class Download(ModelHelper, Base):  # noqa
 
     def __json__(self) -> dict:
         d = dict(
+            channel_id=self.channel_id,
             downloader=self.downloader,
             frequency=self.frequency,
             id=self.id,
@@ -215,16 +219,45 @@ class Download(ModelHelper, Base):  # noqa
 
         session = Session.object_session(self)
 
-        # Delete ChannelDownload, if any exists.
-        from modules.videos.models import ChannelDownload
-        cds = session.query(ChannelDownload).filter(ChannelDownload.download == self).all()
-        for cd in cds:
-            session.delete(cd)
-
         session.delete(self)
         session.commit()
+        if self.channel_id:
+            # Save Channels config if this download was associated with a Channel.
+            from modules.videos.lib import save_channels_config
+            save_channels_config()
         # Save download config again because this download is now removed from the download lists.
         api_app.add_task(save_downloads_config())
+
+    @staticmethod
+    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+        download = session.query(Download).filter(Download.id == id_).one_or_none()
+        return download
+
+    @classmethod
+    @optional_session
+    def find_by_id(cls, id_: int, session: Session = None) -> 'Download':
+        if download := cls.get_by_id(id_, session):
+            return download
+        raise UnknownDownload(f'Cannot find Download with id: {id_}')
+
+    @staticmethod
+    @optional_session
+    def get_by_url(url: str, session: Session = None) -> Optional['Download']:
+        download = session.query(Download).filter(Download.url == url).one_or_none()
+        return download
+
+    @classmethod
+    @optional_session
+    def find_by_url(cls, url: str, session: Session = None) -> 'Download':
+        if download := cls.get_by_url(url, session):
+            return download
+        raise UnknownDownload(f'Cannot find Download with URL: {url}')
+
+    @staticmethod
+    @optional_session
+    def get_by_channel_id(channel_id: int, session: Session = None) -> Optional['Download']:
+        download = session.query(Download).filter(Download.channel_id == channel_id).one_or_none()
+        return download
 
 
 class Downloader:
@@ -474,20 +507,6 @@ class DownloadManager:
             download = Download(url=url, status='new')
             session.add(download)
 
-        from modules.videos.models import Channel, ChannelDownload
-        channel: Channel = session.query(Channel).filter(Channel.url == url).one_or_none()
-        if channel:
-            # This Download needs to be associated with the Channel.
-            cd = ChannelDownload.get_by_url(url, session)
-            if not cd:
-                cd = ChannelDownload(channel=channel, download=download)
-                session.add(cd)
-            else:
-                cd.download = download
-            if cd not in channel.channel_downloads:
-                channel.channel_downloads.append(cd)
-
-            session.flush([cd, channel])
         return download
 
     @optional_session
@@ -518,16 +537,15 @@ class DownloadManager:
             download.downloader = downloader_name
             download.sub_downloader = sub_downloader_name
             download.settings = settings if settings is not None else download.settings
-            downloads.append(download)
 
-            # Create ChannelDownload for any download that is being downloaded into a Channel's Directory.
-            from modules.videos.models import Channel, ChannelDownload
-            if download.settings and (destination := download.settings.get('destination')):
-                channel = Channel.get_by_path(destination, session)
-                cd = ChannelDownload.get_by_url(url, session)
-                if channel and not cd:
-                    cd = ChannelDownload(channel=channel, download=download)
-                    session.add(cd)
+            from modules.videos.models import Channel
+            if channel := Channel.get_by_url(url=download.url, session=session):
+                download.channel_id = channel.id
+            if destination := (download.settings or dict()).get('destination'):
+                if channel := Channel.get_by_directory(destination):
+                    download.channel_id = channel.id
+
+            downloads.append(download)
 
         session.flush(downloads)
         try:
@@ -852,9 +870,8 @@ class DownloadManager:
                     status,
                     sub_downloader,
                     url,
-                    cd.channel_id
+                    channel_id
                 FROM download
-                LEFT OUTER JOIN channel_download cd on download.url = cd.download_url
                 WHERE frequency IS NOT NULL
                 ORDER BY
                     {self._status_order},
@@ -1055,7 +1072,7 @@ async def signal_download_download(download_id: int, download_url: str):
 
         with get_db_session(commit=True) as session:
             # Mark the download as started in new session so the change is committed.
-            download = session.query(Download).filter_by(id=download_id).one()
+            download = Download.find_by_id(download_id, session=session)
             download.started()
         download_domain = download.domain
 

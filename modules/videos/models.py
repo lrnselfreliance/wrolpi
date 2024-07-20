@@ -20,7 +20,7 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
-__all__ = ['Video', 'Channel', 'ChannelDownload']
+__all__ = ['Video', 'Channel']
 
 
 class Video(ModelHelper, Base):
@@ -496,43 +496,11 @@ class Video(ModelHelper, Base):
             self.file_group.append_files(info_json_path)
 
 
-class ChannelDownload(Base):
-    """One-to-many join table between Channel and Download.  Expects to link using Download.url."""
-    __tablename__ = 'channel_download'
-    channel_id = Column(Integer, ForeignKey('channel.id'), primary_key=True)
-    channel = relationship('Channel', primaryjoin='ChannelDownload.channel_id==Channel.id',
-                           back_populates='channel_downloads')
-    download_url = Column(String, ForeignKey('download.url'), primary_key=True)
-    download = relationship('Download', primaryjoin='ChannelDownload.download_url==Download.url')
-
-    def __repr__(self):
-        return f'<ChannelDownload url={self.download_url} channel_id={self.channel_id}>'
-
-    def __json__(self) -> dict:
-        d = self.download.__json__()
-        d['channel_id'] = self.channel_id
-        return d
-
-    @staticmethod
-    def get_by_id(id: int, session: Session) -> Optional['ChannelDownload']:
-        return session.query(ChannelDownload).filter(ChannelDownload.channel_id == id).one_or_none()
-
-    @staticmethod
-    def get_by_url(url: str, session: Session) -> Optional['ChannelDownload']:
-        return session.query(ChannelDownload).filter(ChannelDownload.download_url == url).one_or_none()
-
-    def delete(self):
-        session = Session.object_session(self)
-        if self.download:
-            self.download.delete(skip=False)
-        session.delete(self)
-
-
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    url = Column(String, unique=True)  # will only be downloaded if ChannelDownload exists.
+    url = Column(String, unique=True)  # will only be downloaded if related Download exists.
     directory: pathlib.Path = Column(MediaPathType)
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)  # use ffmpeg to extract duration (slower than info json).
@@ -543,8 +511,7 @@ class Channel(ModelHelper, Base):
     info_date = Column(Date)
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
-    channel_downloads: InstrumentedList = \
-        relationship('ChannelDownload', primaryjoin='ChannelDownload.channel_id==Channel.id')
+    downloads: InstrumentedList = relationship('Download', primaryjoin='Download.channel_id==Channel.id')
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
@@ -558,13 +525,13 @@ class Channel(ModelHelper, Base):
         for video in videos:
             video.channel = None
 
-        for cd in self.channel_downloads:
-            cd: ChannelDownload
-            cd.delete()
+        for download in self.downloads:
+            download: Download
+            download.delete()
 
         # Must commit before final deletion.
         # TODO why?
-        session.commit()
+        # session.commit()
         session.delete(self)
 
     def update(self, data: dict):
@@ -577,7 +544,7 @@ class Channel(ModelHelper, Base):
         if 'url' in data:
             data['url'] = data['url'] or None
 
-        channel_downloads = data.pop('channel_downloads', [])
+        downloads = data.pop('downloads', [])
 
         for key, value in data.items():
             setattr(self, key, value)
@@ -590,15 +557,22 @@ class Channel(ModelHelper, Base):
 
         session: Session = Session.object_session(self)
 
-        for cd in channel_downloads:
-            # `cd` may be string from config file.
-            url = cd['url'] if isinstance(cd, dict) else cd
-            cd_ = ChannelDownload.get_by_url(url, session=session)
-            if not cd_:
-                cd_ = self.get_or_create_download(url, session=session)
-            # If `cd` is dict, use that frequency.  Try to keep the currently set frequency, finally 30 days.
-            frequency = cd['frequency'] if isinstance(cd, dict) else cd_.download.frequency or DownloadFrequency.days30
-            cd_.download.frequency = frequency
+        for download in downloads:
+            # `download` may be string from config file.
+            url = None
+            if isinstance(download, str):
+                url = download
+            elif isinstance(download, dict):
+                url = download['url']
+            elif isinstance(download, Download):
+                url = download.url
+            if not url:
+                raise RuntimeError(f'Unknown download type: {download}')
+            download_ = self.get_or_create_download(url, session=session, reset_attempts=True)
+            # If `download` is dict, use that frequency.  Try to keep the currently set frequency, finally 30 days.
+            frequency = download['frequency'] \
+                if isinstance(download, dict) else download_.frequency or DownloadFrequency.days30
+            download_.frequency = frequency
 
         session.flush()
 
@@ -613,7 +587,7 @@ class Channel(ModelHelper, Base):
             name=self.name,
             source_id=self.source_id,
             url=self.url or None,
-            channel_downloads=[i.download_url for i in self.channel_downloads]
+            downloads=[i.url for i in self.downloads]
         )
         return config
 
@@ -629,7 +603,7 @@ class Channel(ModelHelper, Base):
 
     def __json__(self) -> dict:
         d = dict(
-            channel_downloads=self.channel_downloads,
+            downloads=self.downloads,
             directory=self.directory,
             id=self.id,
             name=self.name,
@@ -643,7 +617,7 @@ class Channel(ModelHelper, Base):
         if with_statistics:
             d['statistics'] = self.get_statistics()
         if with_downloads:
-            d['channel_downloads'] = self.channel_downloads
+            d['downloads'] = self.downloads
         return d
 
     def get_statistics(self):
@@ -721,53 +695,41 @@ class Channel(ModelHelper, Base):
             elif len(matching_entries) > 1:
                 raise RuntimeError(f'More than one info_json entry matches {video_source_id}')
 
-    def get_download(self, url: str = None, download_id: int = None) -> Optional[ChannelDownload]:
-        """Attempt to get the ChannelDownload that matches the provided parameters."""
-        if not url and not download_id:
-            raise RuntimeError('Must provide either url or download_id')
-
-        for cd in self.channel_downloads:
-            if download_id and cd.download.id == download_id:
-                return cd
-            if url and cd.download.url == url:
-                return cd
-
     @optional_session
-    def get_or_create_download(self, url: str, session: Session = None, reset_attempts: bool = False) \
-            -> ChannelDownload:
-        """Get a ChannelDownload record, if it does not exist, create it.  Create a Download if necessary
+    def get_or_create_download(self, url: str, session: Session = None, reset_attempts: bool = False) -> Download:
+        """Get a Download record, if it does not exist, create it.  Create a Download if necessary
         which goes into this Channel's directory."""
+        if not isinstance(url, str) or not url:
+            raise RuntimeError(f'Cannot get Download without url')
+
+        download = download_manager.get_or_create_download(url, session=session, reset_attempts=reset_attempts)
+        download.channel_id = self.id
+        download.settings = download.settings or dict(destination=str(self.directory))
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
+        download.downloader = ChannelDownloader.name
+        download.sub_downloader = VideoDownloader.name
 
-        if not url:
-            raise RuntimeError(f'Cannot get ChannelDownload without url')
-
-        cd = ChannelDownload.get_by_url(url, session)
-        if not cd:
-            # A Channel is downloaded using the ChannelDownloader first.  Then, any missing videos are passed to
-            # VideoDownloader.
-            download = session.query(Download).filter_by(url=url).one_or_none()
-            if not download:
-                download = download_manager.create_download(url, ChannelDownloader.name, session=session,
-                                                            sub_downloader_name=VideoDownloader.name,
-                                                            reset_attempts=reset_attempts,
-                                                            )
-            # Download into this Channel's directory by default.
-            destination = (download.settings or dict()).get('destination')
-            if not destination:
-                settings = (download.settings or dict())
-                settings.update(dict(destination=str(self.directory)))
-                download.settings = settings
-            # Link between Channel and Download.
-            cd = ChannelDownload.get_by_url(url, session)
-            if not cd:
-                cd = ChannelDownload(channel_id=self.id, download_url=url)
-                session.add(cd)
-            logger.debug(f'Created {cd} for {self}')
-
-        return cd
+        return download
 
     def get_rss_url(self) -> str | None:
         """Return the RSS Feed URL for this Channel, if any is possible."""
         if self.url and self.source_id and 'youtube.com' in self.url:
             return f'https://www.youtube.com/feeds/videos.xml?channel_id={self.source_id}'
+
+    @staticmethod
+    @optional_session
+    def get_by_url(url: str, session: Session = None) -> Optional['Channel']:
+        if not url:
+            raise RuntimeError('Must provide URL to get Channel')
+        channel = session.query(Channel).filter_by(url=url).one_or_none()
+        return channel
+
+    @staticmethod
+    @optional_session
+    def get_by_directory(directory: pathlib.Path | str, session: Session = None) -> Optional['Channel']:
+        if not directory:
+            raise RuntimeError('Must provide directory to get Channel')
+        directory = pathlib.Path(directory) if isinstance(directory, str) else directory
+        directory = str(directory.absolute()) if directory.is_absolute() else str(get_media_directory() / directory)
+        channel = session.query(Channel).filter_by(directory=directory).one_or_none()
+        return channel

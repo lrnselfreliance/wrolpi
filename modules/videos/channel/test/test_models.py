@@ -4,7 +4,7 @@ from http import HTTPStatus
 import pytest
 
 from modules.videos.downloader import VideoDownloader
-from modules.videos.models import Channel, ChannelDownload
+from modules.videos.models import Channel
 from modules.videos.models import Video
 from wrolpi.downloader import Download, DownloadFrequency, download_manager, RSSDownloader
 
@@ -73,47 +73,40 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
 
 @pytest.mark.asyncio()
 async def test_channel_download_relationships(test_session, download_channel):
-    """Test relationships of ChannelDownload."""
+    """Test relationships of Channel and Download."""
     test_session.flush()
 
     download = test_session.query(Download).one()
-    cd = test_session.query(ChannelDownload).one()
     channel = test_session.query(Channel).one()
-    assert len(channel.channel_downloads) == 1
-    assert channel.channel_downloads[0] == cd
-    assert channel.channel_downloads[0].download == download
+    assert len(channel.downloads) == 1
+    assert channel.downloads
+    assert download in channel.downloads
 
     test_session.commit()
 
-    download = test_session.query(Download).one()
-    cd = test_session.query(ChannelDownload).one()
-    channel = test_session.query(Channel).one()
-    assert len(channel.channel_downloads) == 1
-    assert channel.channel_downloads[0] == cd
-    assert channel.channel_downloads[0].download == download \
-           and channel.channel_downloads[0].download.url == 'https://example.com/channel1'
+    download: Download = test_session.query(Download).one()
+    channel: Channel = test_session.query(Channel).one()
+    assert len(channel.downloads) == 1
+    assert channel.downloads[0] == download and channel.downloads[0].url == 'https://example.com/channel1'
     assert download.frequency == DownloadFrequency.weekly
     assert download.settings['destination'] == str(channel.directory)
 
-    # Deleting Download deletes the ChannelDownload, but not the Channel.
+    # Deleting Download deletes the Download, but not the Channel.
     download.delete()
     assert not test_session.query(Download).all()
-    assert not test_session.query(ChannelDownload).all()
     assert test_session.query(Channel).one(), 'Channel should not have been deleted.'
 
     # Create a Download again.
     download_channel.get_or_create_download('https://example.com/1', test_session, reset_attempts=True)
     assert test_session.query(Download).count() == 1
-    assert test_session.query(ChannelDownload).count() == 1
     # Delete the Channel, and any relationships.
     download_channel.delete_with_videos()
     assert test_session.query(Download).count() == 0
-    assert test_session.query(ChannelDownload).count() == 0
 
 
 @pytest.mark.asyncio()
 async def test_create_channel_download(test_session, simple_channel):
-    """A ChannelDownload is created if a Download is created for a Channel's directory."""
+    """A Download will be related to a Channel if a Download is created in the Channel's directory"""
     test_session.flush()
 
     settings = dict(destination=str(simple_channel.directory))
@@ -121,5 +114,5 @@ async def test_create_channel_download(test_session, simple_channel):
                                      sub_downloader_name=VideoDownloader.name, settings=settings)
     download = test_session.query(Download).one()
     assert download.settings['destination'] == str(simple_channel.directory)
-    cd = test_session.query(ChannelDownload).one()
-    assert cd.channel == simple_channel
+    download = test_session.query(Download).one()
+    assert download.channel == simple_channel

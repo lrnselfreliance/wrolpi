@@ -34,7 +34,7 @@ def simple_channel(test_session, test_directory) -> Channel:
 
 @pytest.fixture
 def channel_factory(test_session, test_directory):
-    """Create a random Channel with a directory, ChannelDownload, and Download."""
+    """Create a random Channel with a directory, and Download."""
 
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
                 directory: pathlib.Path = None):
@@ -52,10 +52,10 @@ def channel_factory(test_session, test_directory):
         test_session.flush([channel])
         assert channel.id and channel.url
         if download_frequency:
-            cd = channel.get_or_create_download(channel.url)
-            cd.download.frequency = download_frequency
-            assert cd and cd.download_url == channel.url
-            assert channel.channel_downloads
+            download = channel.get_or_create_download(channel.url)
+            download.frequency = download_frequency
+            assert download.url == channel.url
+            assert channel.downloads
         test_session.commit()
         return channel
 
@@ -71,9 +71,9 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
     test_session.add(channel)
     test_session.flush([channel, ])
     assert channel and channel.id and channel.url
-    cd = channel.get_or_create_download(channel.url, test_session)
-    assert cd.download_url == channel.url
-    cd.download.frequency = DownloadFrequency.weekly
+    download = channel.get_or_create_download(channel.url, test_session)
+    assert download.url == channel.url
+    download.frequency = DownloadFrequency.weekly
     test_session.commit()
     return channel
 

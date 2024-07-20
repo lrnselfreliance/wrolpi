@@ -4,8 +4,9 @@ import shutil
 import pytest
 
 from modules.videos import lib
+from modules.videos.downloader import ChannelDownloader
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
-from modules.videos.models import Video, ChannelDownload
+from modules.videos.models import Video
 from wrolpi.downloader import Download, RSSDownloader
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -151,7 +152,7 @@ async def test_orphaned_files(test_session, make_files_structure, test_directory
     ])
 
 
-def test_link_channel_and_downloads(test_session, channel_factory):
+def test_link_channel_and_downloads(test_session, channel_factory, test_download_manager):
     channel = channel_factory(
         url='https://www.youtube.com/c/LearningSelfReliance/videos',
         source_id='UCng5u6ASda3LNRXJN0JCQJA',
@@ -162,9 +163,43 @@ def test_link_channel_and_downloads(test_session, channel_factory):
     test_session.add_all([download1, download2])
     test_session.commit()
     assert test_session.query(Download).count() == 2
-    assert test_session.query(ChannelDownload).count() == 0
+    assert not any(i.channel_id for i in test_download_manager.get_downloads(test_session))
 
     # `link_channel_and_downloads` creates missing ChannelDownloads.
     lib.link_channel_and_downloads(session=test_session)
     assert test_session.query(Download).count() == 2
-    assert test_session.query(ChannelDownload).count() == 2
+    assert all(i.channel_id for i in test_download_manager.get_downloads(test_session))
+
+
+@pytest.mark.asyncio
+def test_channel_channel_downloads_migration(test_async_client, test_session, channel_factory, test_download_manager):
+    """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
+    # A simple Channel which has a download for its URL.
+    channel1 = channel_factory(url='https://example.com/channel1')
+    # A Channel which has two Downloads.  One for it's URL, another which is an RSS feed in its directory.
+    channel2 = channel_factory(url='https://example.com/channel2')
+    download1 = Download(url=channel1.url, downloader=ChannelDownloader.name)
+    download2a = Download(url='https://example.com/channel2/rss', downloader=RSSDownloader.name,
+                          settings=dict(destination=str(channel2.directory)))
+    download2b = Download(url='https://example.com/channel2', downloader=ChannelDownloader.name,
+                          settings=dict(destination=str(channel2.directory)))
+    # A Channel which has a URL, but no Downloads.
+    channel3 = channel_factory()
+    test_session.add_all([download1, download2a, download2b])
+    test_session.commit()
+
+    assert not channel1.downloads
+    assert channel2.directory and not channel2.downloads
+    assert not channel3.downloads
+
+    lib.link_channel_and_downloads(test_session)
+
+    assert channel1.downloads
+    assert channel2.downloads
+    assert not channel3.downloads
+
+    assert test_session.query(Download).count() == 3
+    cd1, cd2a, cd2b = test_session.query(Download).order_by(Download.url).all()
+    assert cd1.url == channel1.url
+    assert cd2a.url == 'https://example.com/channel2'
+    assert cd2b.url == 'https://example.com/channel2/rss'

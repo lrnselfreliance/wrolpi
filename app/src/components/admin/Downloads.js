@@ -252,17 +252,6 @@ class RecurringDownloadRow extends React.Component {
         }
     }
 
-    handleDelete = async () => {
-        const {id} = this.props;
-        try {
-            await deleteDownload(id);
-        } finally {
-            if (this.props.fetchDownloads) {
-                this.props.fetchDownloads();
-            }
-        }
-    }
-
     handleRestart = async () => {
         const {id} = this.props;
         try {
@@ -295,7 +284,6 @@ class RecurringDownloadRow extends React.Component {
             next_download,
             error,
             downloader,
-            channel_id
         } = this.props;
         const {errorModalOpen} = this.state;
 
@@ -318,17 +306,6 @@ class RecurringDownloadRow extends React.Component {
                 <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
             </ModalActions>
         </Modal>;
-
-        const deleteButton = <>
-            <APIButton
-                color='red'
-                icon='trash'
-                confirmContent='Are you sure you want to delete this download?'
-                confirmButton='Delete'
-                onClick={this.handleDelete}
-                obeyWROLMode={true}
-            />
-        </>;
 
         const editButton = <>
             <Button icon='edit' onClick={() => this.setState({editModalOpen: true})}/>

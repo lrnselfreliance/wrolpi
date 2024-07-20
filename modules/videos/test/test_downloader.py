@@ -7,7 +7,7 @@ import pytest
 
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader
-from modules.videos.models import Channel, Video, ChannelDownload
+from modules.videos.models import Channel, Video
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
 from wrolpi.vars import PROJECT_DIR
@@ -142,7 +142,6 @@ async def test_download_channel(test_session, simple_channel, video_download_man
         await video_download_manager.wait_for_all_downloads()
 
     def reset_downloads():
-        [i.delete() for i in test_session.query(ChannelDownload)]
         [i.delete(skip=False) for i in test_session.query(Download)]
 
     # Let background tasks run.
@@ -161,9 +160,9 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        cd = simple_channel.get_or_create_download(url, test_session)
-        cd.download.frequency = 100
-        cd.download.settings = {'title_include': '2'}
+        download = simple_channel.get_or_create_download(url, test_session)
+        download.frequency = 100
+        download.settings = {'title_include': '2'}
         await video_download_manager.wait_for_all_downloads()
     downloads = video_download_manager.get_once_downloads(test_session)
     assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_2_url'}
@@ -178,9 +177,9 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        cd = simple_channel.get_or_create_download(url, test_session)
-        cd.download.frequency = 100
-        cd.download.settings = {'title_exclude': '2'}
+        download = simple_channel.get_or_create_download(url, test_session)
+        download.frequency = 100
+        download.settings = {'title_exclude': '2'}
         await video_download_manager.wait_for_all_downloads()
     downloads = video_download_manager.get_once_downloads(test_session)
     assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_1_url'}

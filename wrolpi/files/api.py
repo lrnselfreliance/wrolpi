@@ -13,6 +13,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileC
 from . import lib, schema
 from ..api_utils import json_response, api_app
 from ..schema import JSONErrorResponse
+from ..tags import Tag
 from ..vars import PYTEST
 
 files_bp = Blueprint('Files', '/api/files')
@@ -319,6 +320,15 @@ async def post_upload(request: Request):
     except Exception:
         raise FileUploadFailed('totalChunks integer is required')
 
+    tag_names = request.form.getlist('tagNames')
+    if tag_names:
+        if not isinstance(tag_names, list):
+            raise FileUploadFailed('tag_names must be a list')
+        tag_names = [str(i) for i in tag_names]
+        for tag_name in tag_names:
+            if not Tag.find_by_name(tag_name):
+                raise FileUploadFailed(f'Tag does not exist: {tag_name}')
+
     filename = pathlib.Path(filename.lstrip('/'))
     output = destination / filename
     output_str = str(output)
@@ -372,7 +382,8 @@ async def post_upload(request: Request):
     if chunk_num == total_chunks:
         # File upload is complete.
         del api_app.shared_ctx.uploaded_files[output_str]
-        background_task(lib.refresh_files([output.parent]))
+        # Upsert this new file (and any related files) into the DB.
+        background_task(lib.upsert_file(output, tag_names=tag_names))
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

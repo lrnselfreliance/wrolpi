@@ -30,6 +30,7 @@ import {QueryContext, SettingsContext, StatusContext} from "../contexts/contexts
 import {toast} from "react-semantic-toasts-2";
 import {useSearch} from "../components/Search";
 import _ from "lodash";
+import {TagsSelector} from "../Tags";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -997,6 +998,7 @@ export const useUploadFile = () => {
     const [files, setFiles] = useState([]);
     const [progresses, setProgresses] = useState({});
     const [destination, setDestination] = useState('');
+    const [tagNames, setTagNames] = React.useState([]);
 
     const handleProgress = (name, chunk, totalChunks, status, type) => {
         const percent = Math.round((100 * chunk) / totalChunks);
@@ -1031,8 +1033,11 @@ export const useUploadFile = () => {
         // Send the size that we're actually sending.
         formData.append('chunkSize', chunk.size.toString());
         formData.append('chunk', chunk);
+        for (let i = 0; i < tagNames.length; i++) {
+            formData.append('tagNames', tagNames[i]);
+        }
 
-        console.debug(`file upload: tries=${tries} chunkNum=${chunkNum} totalChunks=${totalChunks} chunkSize=${chunk.size} destination=${destination}`);
+        console.debug(`file upload: tries=${tries} chunkNum=${chunkNum} totalChunks=${totalChunks} chunkSize=${chunk.size} destination=${destination} tagNames=${tagNames}`);
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/files/upload', true);
@@ -1101,7 +1106,27 @@ export const useUploadFile = () => {
         doUpload()
     }, [JSON.stringify(files)]);
 
-    return {files, setFiles: handleFilesChange, progresses, destination, setDestination, doClear, doUpload}
+    const handleAddTag = (tagName) => {
+        setTagNames([...tagNames, tagName]);
+    }
+
+    const handleUntag = (tagName) => {
+        setTagNames(tagNames.filter(i => i !== tagName));
+    }
+
+    const tagsSelector = <TagsSelector selectedTagNames={tagNames} onAdd={handleAddTag} onRemove={handleUntag}/>;
+
+    return {
+        destination,
+        doClear,
+        doUpload,
+        files,
+        progresses,
+        setDestination,
+        setFiles: handleFilesChange,
+        tagNames,
+        tagsSelector,
+    }
 }
 
 export const useSearchZim = (searchStr, zimId, active, activeTags, defaultLimit = 10) => {

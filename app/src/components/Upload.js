@@ -9,8 +9,9 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Form as SForm} from "semantic-ui-react";
 
 export function Upload({disabled}) {
-    const {setFiles, progresses, destination, setDestination, doClear} = useUploadFile();
     const {t} = React.useContext(ThemeContext);
+
+    const {setFiles, progresses, destination, setDestination, doClear, tagsSelector} = useUploadFile();
 
     const onDrop = React.useCallback(async (acceptedFiles) => {
         if (acceptedFiles && acceptedFiles.length > 0) {
@@ -70,6 +71,7 @@ export function Upload({disabled}) {
             <SForm.Field required>
                 <label>Destination</label>
                 <DirectorySearch onSelect={handleDestination} disabled={disabled}/>
+                {tagsSelector}
             </SForm.Field>
         </Form>
 

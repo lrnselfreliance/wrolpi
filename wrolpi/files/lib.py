@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from itertools import zip_longest
 from pathlib import Path
-from typing import List, Tuple, Union, Dict, Generator
+from typing import List, Tuple, Union, Dict, Generator, Iterable
 
 import cachetools.func
 import psycopg2
@@ -319,7 +319,7 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
     return files
 
 
-def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> pathlib.Path:
+def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) -> pathlib.Path:
     """Given a list of files, return the file that we can model or index.
 
     @raise NoPrimaryFile: If not primary file can be found."""
@@ -450,6 +450,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
 
 
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
+    """Return a new list which does not contain any file paths that are in ignored directories."""
     ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
     return files
@@ -1370,3 +1371,25 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
         get_wrolpi_config().ignored_directories = ignored_directories
     else:
         raise UnknownDirectory('Directory is not ignored')
+
+
+@optional_session(commit=True)
+async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None):
+    """Insert/update all files in the provided file's FileGroup."""
+    # Update/Insert all files in the FileGroup.
+    paths = glob_shared_stem(pathlib.Path(file))
+    # Remove any ignored files.
+    paths = remove_files_in_ignored_directories(paths)
+    if paths:
+        file_group = FileGroup.from_paths(session, *paths)
+        # Re-index the contents of the file.
+        session.add(file_group)
+        session.flush([file_group, ])
+        file_group.do_index()
+
+        for tag_name in (tag_names or []):
+            if tag_name not in file_group.tag_names:
+                tag = Tag.find_by_name(tag_name)
+                file_group.add_tag(tag)
+    else:
+        logger.warning('upsert_file called, but all files are in ignored directories!')

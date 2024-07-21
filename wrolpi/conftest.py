@@ -719,6 +719,9 @@ def make_multipart_form():
             name, value, filename = form['name'], form['value'], form.get('filename')
             if filename:
                 new_forms.append(f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\n\n{value}\n')
+            elif isinstance(value, list):
+                for part in value:
+                    new_forms.append(f'Content-Disposition: form-data; name="{name}"\n\n{part}\n')
             else:
                 new_forms.append(f'Content-Disposition: form-data; name="{name}"\n\n{value}\n')
         body = f'\n{boundary}'.join(new_forms)

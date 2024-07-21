@@ -425,9 +425,10 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     assert test_session.query(FileGroup).count() == 1
 
 
-def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form, tag_factory):
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
+    tag1, tag2 = tag_factory(), tag_factory()
 
     forms = [
         dict(name='chunkNumber', value='0'),
@@ -435,7 +436,8 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
         dict(name='totalChunks', value='1'),
         dict(name='destination', value='uploads'),
         dict(name='chunkSize', value='3'),
-        dict(name='chunk', value='foo', filename='chunk')
+        dict(name='chunk', value='foo', filename='chunk'),
+        dict(name='tagNames', value=[tag1.name, tag2.name]),
     ]
     body = make_multipart_form(forms)
     request, response = test_client.post('/api/files/upload', content=body,
@@ -453,7 +455,8 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
         dict(name='totalChunks', value='1'),
         dict(name='destination', value='uploads'),
         dict(name='chunkSize', value='3'),
-        dict(name='chunk', value='bar', filename='chunk')
+        dict(name='chunk', value='bar', filename='chunk'),
+        dict(name='tagNames', value=[tag1.name, tag2.name]),
     ]
     body = make_multipart_form(forms)
     request, response = test_client.post('/api/files/upload', content=body,
@@ -465,7 +468,9 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     assert (test_directory / 'uploads/foo.txt').is_file()
     assert (test_directory / 'uploads/foo.txt').read_text() == 'foobar'
 
-    assert test_session.query(FileGroup).count() == 1
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert set(file_group.tag_names) == {tag1.name, tag2.name}, 'Two tags should be applied.'
+    assert file_group.indexed, 'File should be indexed after upload.'
 
 
 @pytest.mark.asyncio

@@ -489,8 +489,7 @@ def link_channel_and_downloads(session: Session):
 
         # Get any Downloads for a Channel's RSS feed.
         rss_url = channel.get_rss_url()
-        download = downloads_by_url.get(rss_url) if rss_url else None
-        if download:
+        if rss_url and (download := downloads_by_url.get(rss_url)):
             download.channel_id = channel.id
 
     # Associate any Download which shares a Channel's URL.

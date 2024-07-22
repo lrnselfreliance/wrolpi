@@ -389,7 +389,8 @@ async def test_get_status(test_async_client, test_session):
     assert 'flags' in response.json and isinstance(response.json['flags'], dict)
 
 
-def test_download_crud(test_session, test_client, test_download_manager_config, tag_factory):
+@pytest.mark.asyncio
+async def test_download_crud(test_session, test_async_client, test_download_manager_config, tag_factory):
     """Test creating once-downloads and recurring downloads."""
     tag1, tag2 = tag_factory(), tag_factory()
 
@@ -403,7 +404,7 @@ def test_download_crud(test_session, test_client, test_download_manager_config, 
             frequency=1_000,
             downloader='archive',
         )
-        request, response = test_client.post('/api/download', content=json.dumps(content))
+        request, response = await test_async_client.post('/api/download', content=json.dumps(content))
         assert response.status_code == HTTPStatus.NO_CONTENT
 
         assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
@@ -413,7 +414,7 @@ def test_download_crud(test_session, test_client, test_download_manager_config, 
             urls=['https://example.com/2', 'https://example.com/3'],
             downloader='archive',
         )
-        request, response = test_client.post('/api/download', json=content)
+        request, response = await test_async_client.post('/api/download', json=content)
         assert response.status_code == HTTPStatus.NO_CONTENT
 
         assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
@@ -429,7 +430,7 @@ def test_download_crud(test_session, test_client, test_download_manager_config, 
             settings={'tag_names': [tag1.name, tag2.name]},
         )
         expected_download1.update({'url': 'https://example.com/1', 'settings': {'tag_names': [tag1.name, tag2.name]}})
-        request, response = test_client.put(f'/api/download/{download1.id}', json=content)
+        request, response = await test_async_client.put(f'/api/download/{download1.id}', json=content)
         assert response.status_code == HTTPStatus.NO_CONTENT
         test_session.flush([download2])
         download2 = test_session.query(Download).filter_by(id=expected_download1['id']).first()

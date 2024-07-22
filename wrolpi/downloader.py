@@ -192,7 +192,7 @@ class Download(ModelHelper, Base):  # noqa
 
     def get_downloader(self):
         if self.downloader:
-            return download_manager.get_downloader_by_name(self.downloader)
+            return download_manager.find_downloader_by_name(self.downloader)
 
         raise UnrecoverableDownloadError(f'Cannot find downloader for {repr(str(self.url))}')
 
@@ -485,8 +485,8 @@ class DownloadManager:
                 task = loop.create_task(coro)
                 self.workers.append(task)
 
-    def get_downloader_by_name(self, name: str) -> Optional[Downloader]:
-        """Attempt to find a registered Downloader by its name.  Returns None if it cannot be found."""
+    def find_downloader_by_name(self, name: str) -> Optional[Downloader]:
+        """Attempt to find a registered Downloader by its name.  Raises error if it cannot be found."""
         if downloader := self._instances.get(name):
             return downloader
         raise InvalidDownload(f'Cannot find downloader with name {name}')
@@ -516,19 +516,18 @@ class DownloadManager:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not urls or not all(urls):
             raise ValueError(f'Download must have a URL: {urls=}')
+        logger.debug(f'Attempting to create {len(urls)} new downloads')
 
         downloads = []
         # Throws an error if no downloader is found.
-        self.get_downloader_by_name(downloader_name)
+        self.find_downloader_by_name(downloader_name)
 
-        skipped = list()
         for url in urls:
             if url in get_download_manager_config().skip_urls and reset_attempts:
                 # User manually entered this download, remove it from the skip list.
                 self.remove_from_skip_list(url)
             elif url in get_download_manager_config().skip_urls:
                 self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
-                skipped.append(url)
                 continue
 
             download = self.get_or_create_download(url, session, reset_attempts=reset_attempts)
@@ -546,6 +545,8 @@ class DownloadManager:
                     download.channel_id = channel.id
 
             downloads.append(download)
+
+        logger.debug(f'Created {len(downloads)} new downloads')
 
         session.flush(downloads)
         try:
@@ -1323,7 +1324,7 @@ class RSSDownloader(Downloader, ABC):
 
         # Only download URLs that have not yet been downloaded.
         urls = []
-        sub_downloader = download_manager.get_downloader_by_name(download.sub_downloader)
+        sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
         if not sub_downloader:
             raise ValueError(f'Unable to find sub_downloader for {download.url}')
 

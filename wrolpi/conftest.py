@@ -162,7 +162,7 @@ def test_client(test_directory) -> ReusableClient:
 
 
 @pytest.fixture
-def test_async_client(test_directory) -> SanicASGITestClient:
+async def test_async_client(test_directory) -> SanicASGITestClient:
     """Get an Async Sanic Test Client with all default routes attached."""
     attach_shared_contexts(api_app)
 

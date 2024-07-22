@@ -9,7 +9,6 @@ from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
 from wrolpi.errors import APIError
-from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 

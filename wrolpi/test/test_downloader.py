@@ -5,6 +5,7 @@ from datetime import datetime
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytz
@@ -61,11 +62,15 @@ async def test_delete_old_once_downloads(test_session, test_download_manager, te
 
 
 @pytest.mark.asyncio
-async def test_create_downloads(test_session, test_download_manager, test_downloader, assert_download_urls):
+async def test_create_downloads(test_async_client, test_session, test_download_manager, test_downloader,
+                                assert_download_urls):
     """Multiple downloads can be scheduled using DownloadManager.create_downloads."""
+    mock_save_downloads_config = AsyncMock()
     # Both URLs are scheduled.
-    test_download_manager.create_downloads(['https://example.com/1', 'https://example.com/2'], test_downloader.name)
-    assert_download_urls({'https://example.com/1', 'https://example.com/2'})
+    with mock.patch('wrolpi.downloader.save_downloads_config', mock_save_downloads_config):
+        test_download_manager.create_downloads(['https://example.com/1', 'https://example.com/2'], test_downloader.name)
+        assert_download_urls({'https://example.com/1', 'https://example.com/2'})
+        mock_save_downloads_config.assert_called_once()
 
 
 @pytest.mark.asyncio

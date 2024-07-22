@@ -707,12 +707,18 @@ class Channel(ModelHelper, Base):
         if not isinstance(url, str) or not url:
             raise RuntimeError(f'Cannot get Download without url')
 
-        download = download_manager.get_or_create_download(url, session=session, reset_attempts=reset_attempts)
-        download.channel_id = self.id
-        download.settings = download.settings or dict(destination=str(self.directory))
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
-        download.downloader = ChannelDownloader.name
-        download.sub_downloader = VideoDownloader.name
+
+        download = download_manager.get_download(session, url)
+        if not download:
+            download = download_manager.create_download(url, ChannelDownloader.name, session=session,
+                                                        sub_downloader_name=VideoDownloader.name,
+                                                        settings=dict(destination=str(self.directory)),
+                                                        reset_attempts=reset_attempts,
+                                                        )
+        if reset_attempts:
+            download.attempts = 0
+        download.channel_id = self.id
 
         return download
 

@@ -249,7 +249,7 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
-    downloader = download_manager.get_downloader_by_name(body.downloader)
+    downloader = download_manager.find_downloader_by_name(body.downloader)
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
 
@@ -272,7 +272,7 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def put_download(_: Request, download_id: int, body: schema.DownloadRequest):
-    downloader = download_manager.get_downloader_by_name(body.downloader)
+    downloader = download_manager.find_downloader_by_name(body.downloader)
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
 

@@ -4,9 +4,9 @@ import shutil
 import pytest
 
 from modules.videos import lib
-from modules.videos.downloader import ChannelDownloader
+from modules.videos.downloader import ChannelDownloader, VideoDownloader
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
-from modules.videos.models import Video
+from modules.videos.models import Video, Channel
 from wrolpi.downloader import Download, RSSDownloader
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -158,34 +158,39 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
         source_id='UCng5u6ASda3LNRXJN0JCQJA',
     )
     download1 = Download(url=channel.get_rss_url(), downloader=RSSDownloader.name)
-    download2 = Download(url='https://example.com', downloader=RSSDownloader.name,
+    download2 = Download(url='https://example.com/videos', downloader=RSSDownloader.name, frequency=99,
                          settings=dict(destination=str(channel.directory)))
-    test_session.add_all([download1, download2])
+    download3 = Download(url='https://example.com/video/1', downloader=RSSDownloader.name,
+                         settings=dict(destination=str(channel.directory)))
+    test_session.add_all([download1, download2, download3])
     test_session.commit()
-    assert test_session.query(Download).count() == 2
+    assert test_session.query(Download).count() == 3
     assert not any(i.channel_id for i in test_download_manager.get_downloads(test_session))
 
-    # `link_channel_and_downloads` creates missing ChannelDownloads.
+    # `link_channel_and_downloads` creates missing Downloads.
     lib.link_channel_and_downloads(session=test_session)
-    assert test_session.query(Download).count() == 2
-    assert all(i.channel_id for i in test_download_manager.get_downloads(test_session))
+    assert test_session.query(Download).count() == 3
+    assert all(i.channel_id for i in test_download_manager.get_recurring_downloads(test_session))
+    assert not any(i.channel_id for i in test_download_manager.get_once_downloads(test_session))
 
 
 @pytest.mark.asyncio
-def test_channel_channel_downloads_migration(test_async_client, test_session, channel_factory, test_download_manager):
+def test_link_channel_and_downloads_migration(test_async_client, test_session, channel_factory, test_download_manager):
     """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
     # A simple Channel which has a download for its URL.
     channel1 = channel_factory(url='https://example.com/channel1')
     # A Channel which has two Downloads.  One for it's URL, another which is an RSS feed in its directory.
     channel2 = channel_factory(url='https://example.com/channel2')
-    download1 = Download(url=channel1.url, downloader=ChannelDownloader.name)
-    download2a = Download(url='https://example.com/channel2/rss', downloader=RSSDownloader.name,
+    download1 = Download(url='https://example.com/channel1', downloader=ChannelDownloader.name, frequency=1)
+    download2a = Download(url='https://example.com/channel2/rss', downloader=RSSDownloader.name, frequency=1,
                           settings=dict(destination=str(channel2.directory)))
-    download2b = Download(url='https://example.com/channel2', downloader=ChannelDownloader.name,
+    download2b = Download(url='https://example.com/channel2', downloader=ChannelDownloader.name, frequency=1,
                           settings=dict(destination=str(channel2.directory)))
+    # Download does not have a frequency, so it cannot be a channel download.
+    download2c = Download(url='https://example.com/channel2/video/1', downloader=VideoDownloader.name)
     # A Channel which has a URL, but no Downloads.
     channel3 = channel_factory()
-    test_session.add_all([download1, download2a, download2b])
+    test_session.add_all([download1, download2a, download2b, download2c])
     test_session.commit()
 
     assert not channel1.downloads
@@ -198,8 +203,14 @@ def test_channel_channel_downloads_migration(test_async_client, test_session, ch
     assert channel2.downloads
     assert not channel3.downloads
 
-    assert test_session.query(Download).count() == 3
-    cd1, cd2a, cd2b = test_session.query(Download).order_by(Download.url).all()
-    assert cd1.url == channel1.url
-    assert cd2a.url == 'https://example.com/channel2'
-    assert cd2b.url == 'https://example.com/channel2/rss'
+    assert test_session.query(Channel).count() == 3
+    assert test_session.query(Download).count() == 4
+    d1, d2a, d2b, d2c = test_session.query(Download).order_by(Download.url).all()
+    assert d1.url == channel1.url == 'https://example.com/channel1' and d1.frequency == 1
+    assert d1.channel_id
+    assert d2a.url == 'https://example.com/channel2' and d2a.frequency == 1
+    assert d2a.channel_id
+    assert d2b.url == 'https://example.com/channel2/rss' and d2b.frequency == 1
+    assert d2b.channel_id
+    assert d2c.url == 'https://example.com/channel2/video/1' and d2c.frequency is None
+    assert not d2c.channel_id

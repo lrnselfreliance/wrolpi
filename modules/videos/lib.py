@@ -384,7 +384,7 @@ def import_channels_config():
         logger.warning('Skipping import_channels_config for this test')
         return
 
-    channel_import_logger.info('Importing videos config')
+    channel_import_logger.info('Importing channels config')
     try:
         config = get_channels_config()
         channels = config.channels
@@ -473,16 +473,23 @@ def import_channels_config():
 def link_channel_and_downloads(session: Session):
     """Create any missing Downloads for any Channel.url/Channel.directory that has a Download.  Associate any Download
     related to a Channel."""
-    downloads = list(session.query(Download).all())
+    # Only Downloads with a frequency can be a Channel Download.
+    downloads = list(session.query(Download).filter(Download.frequency.isnot(None)).all())
+    # Download.url is unique and cannot be null.
     downloads_by_url = {i.url: i for i in downloads}
-    downloads_by_destination = {i.settings['destination']: i
-                                for i in downloads if 'destination' in (i.settings or dict())}
+    # Many Downloads may share the same destination.
+    downloads_with_destination = [i for i in downloads if (i.settings or dict()).get('destination')]
     channels = session.query(Channel).all()
 
     need_commit = False
     for channel in channels:
         directory = str(channel.directory)
-        download = downloads_by_destination.get(directory) or downloads_by_url.get(channel.url)
+        for download in downloads_with_destination:
+            if download.settings['destination'] == directory and not download.channel_id:
+                download.channel_id = channel.id
+                need_commit = True
+
+        download = downloads_by_url.get(channel.url)
         if download and not download.channel_id:
             download.channel_id = channel.id
             need_commit = True
@@ -491,6 +498,7 @@ def link_channel_and_downloads(session: Session):
         rss_url = channel.get_rss_url()
         if rss_url and (download := downloads_by_url.get(rss_url)):
             download.channel_id = channel.id
+            need_commit = True
 
     # Associate any Download which shares a Channel's URL.
     for download in downloads:
@@ -498,13 +506,6 @@ def link_channel_and_downloads(session: Session):
         if channel and not download.channel_id:
             download.channel_id = channel.id
             need_commit = True
-
-    # Associate any Download which shares a Channel's directory.
-    for destination, download in downloads_by_destination.items():
-        if destination and (channel := Channel.get_by_directory(destination)):
-            if not download.channel_id:
-                download.channel_id = channel.id
-                need_commit = True
 
     if need_commit:
         session.commit()

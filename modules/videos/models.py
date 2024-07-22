@@ -11,7 +11,7 @@ from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session, optional_session
-from wrolpi.downloader import Download, download_manager, DownloadFrequency
+from wrolpi.downloader import Download, download_manager
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -563,15 +563,20 @@ class Channel(ModelHelper, Base):
             if isinstance(download, str):
                 url = download
             elif isinstance(download, dict):
+                if not download.get('frequency'):
+                    logger.error('Refusing to create channel download without frequency')
+                    continue
                 url = download['url']
             elif isinstance(download, Download):
+                if not download.frequency:
+                    logger.error('Refusing to create channel download without frequency')
+                    continue
                 url = download.url
             if not url:
                 raise RuntimeError(f'Unknown download type: {download}')
             download_ = self.get_or_create_download(url, session=session, reset_attempts=True)
-            # If `download` is dict, use that frequency.  Try to keep the currently set frequency, finally 30 days.
-            frequency = download['frequency'] \
-                if isinstance(download, dict) else download_.frequency or DownloadFrequency.days30
+            # If `download` is dict, use that frequency.  Try to keep the currently set frequency.
+            frequency = download['frequency'] if isinstance(download, dict) else download_.frequency
             download_.frequency = frequency
 
         session.flush()

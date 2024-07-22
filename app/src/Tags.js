@@ -310,11 +310,12 @@ function EditTagsModal() {
 
 export function AddTagsButton({
                                   hideEdit,
-                                  active,
+                                  showAny = false,
                                   selectedTagNames = [],
-                                  onToggle = _.noop,
+                                  anyTag = false,
                                   onAdd = _.noop,
                                   onRemove = _.noop,
+                                  onChange = _.noop,  // Expects to send: (tagNames, anyTag)
                                   limit = null,
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
@@ -323,6 +324,8 @@ export function AddTagsButton({
     const [open, setOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
     const [localTags, setLocalTags] = React.useState(selectedTagNames);
+
+    const active = anyTag || (selectedTagNames && selectedTagNames.length > 0);
 
     const handleOpen = (e) => {
         if (e) {
@@ -339,8 +342,8 @@ export function AddTagsButton({
                 return;
             }
             setLocalTags(newTags);
-            onToggle(newTags);
             onAdd(name);
+            onChange(newTags, null);
         } finally {
             setLoading(false);
         }
@@ -350,30 +353,30 @@ export function AddTagsButton({
         setLoading(true);
         try {
             const newTags = localTags.filter(i => i !== name);
-            setLocalTags(newTags);
-            onToggle(newTags);
+            setLocalTags(newTags)
             onRemove(name);
+            onChange(newTags, null);
         } finally {
             setLoading(false);
         }
     }
 
     const clearLocalTags = () => {
-        if (!localTags || (localTags && localTags.length === 0)) {
+        if (!anyTag && (!localTags || (localTags && localTags.length === 0))) {
             console.debug('No tags to clear');
             return
         }
 
-        setLoading(true);
-        try {
-            for (let i = 0; i < localTags.length; i++) {
-                onRemove(localTags[i]);
-            }
-            setLocalTags([]);
-            onToggle([]);
-        } finally {
-            setLoading(false);
-        }
+        console.debug('Clearing selected tags');
+        onChange([], null);
+        setLocalTags([]);
+        setOpen(false);
+    }
+
+    const localOnAnyTag = () => {
+        console.debug('Setting any tag');
+        onChange([], true);
+        setOpen(false);
     }
 
     const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
@@ -382,7 +385,11 @@ export function AddTagsButton({
     const emptySelectedTags = limit === 1 ? 'Add only one tag below' : 'Add one or more tags below';
 
     return <>
-        <Button icon={active ? 'tags' : 'tag'} onClick={handleOpen} primary={!!active}/>
+        <Button
+            icon={active ? 'tags' : 'tag'}
+            color={active ? 'violet' : undefined}
+            onClick={handleOpen}
+        />
         <Modal closeIcon
                open={open}
                onOpen={(e) => handleOpen(e)}
@@ -405,6 +412,7 @@ export function AddTagsButton({
                         </Grid.Column>
                         <Grid.Column width={8}>
                             <Button onClick={() => setOpen(false)} floated='right'>Close</Button>
+                            {showAny && <Button color='violet' onClick={localOnAnyTag} floated='right'>Any</Button>}
                             <Button floated='right' secondary onClick={() => clearLocalTags()}>Clear</Button>
                         </Grid.Column>
                     </Grid.Row>
@@ -418,12 +426,13 @@ export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
 export const TagsSelector = ({
                                  hideEdit = false,
-                                 active,
+                                 showAny = false,
                                  hideGroup = false,
                                  selectedTagNames = [],
-                                 onToggle = _.noop,
+                                 anyTag = false,
                                  onAdd = _.noop,
                                  onRemove = _.noop,
+                                 onChange = _.noop,
                                  limit = null,
                              }) => {
     // Provides a button to add tags to a list.  Displays the tags of that list.
@@ -436,11 +445,12 @@ export const TagsSelector = ({
 
     const button = <AddTagsButton
         hideEdit={hideEdit}
-        active={active}
+        showAny={showAny}
         selectedTagNames={selectedTagNames}
-        onToggle={onToggle}
         onAdd={onAdd}
         onRemove={onRemove}
+        onChange={onChange}
+        anyTag={anyTag}
         limit={limit}
     />;
 

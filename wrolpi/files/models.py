@@ -278,6 +278,7 @@ class FileGroup(ModelHelper, Base):
 
         return file_group
 
+    @staticmethod
     def find_by_id(id_: int, session: Session = None) -> 'FileGroup':
         fg = session.query(FileGroup).filter(FileGroup.id == id_).one_or_none()
         if not fg:

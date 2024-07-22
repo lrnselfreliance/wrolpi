@@ -1067,15 +1067,17 @@ async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]
 
 async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Tuple[bytes, int]:
     """Perform an async aiohttp GET request.  Return the contents."""
+    headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
         async with session.get(url, headers=headers) as response:
             return await response.content.read(), response.status
 
 
-async def aiohttp_head(url: str, timeout: int = None) -> Tuple[ClientResponse, int]:
+async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> Tuple[ClientResponse, int]:
     """Perform an async aiohttp HEAD request.  Return the contents."""
+    headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
-        async with session.head(url) as response:
+        async with session.head(url, headers=headers) as response:
             return response, response.status
 
 

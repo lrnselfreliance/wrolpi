@@ -101,7 +101,7 @@ def search_videos(
         # No search_str provided.  Get id and total only.
         select_columns = 'fg.id, COUNT(*) OVER() AS total'
 
-    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
     if search_str and headline:
         headline = ''',

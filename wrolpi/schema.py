@@ -179,3 +179,8 @@ class SearchFileEstimateRequest:
     months: Optional[List[int]] = None
     from_year: Optional[int] = None
     to_year: Optional[int] = None
+    any_tag: bool = False
+
+    def __post_init__(self):
+        if self.any_tag and self.tag_names:
+            raise ValidationError('Cannot search for any tag, and list of tags.')

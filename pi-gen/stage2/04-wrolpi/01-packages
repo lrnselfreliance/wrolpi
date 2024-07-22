@@ -4,6 +4,7 @@ apache2-doc
 apt-transport-https
 aria2
 autoconf
+bind9-dnsutils
 build-essential
 bzip2
 ca-certificates
@@ -83,9 +84,9 @@ python3-full
 python3-mapnik
 python3-pip
 python3-venv
-smartmontools
 renderd
 rsync
+smartmontools
 software-properties-common
 tar
 tcpdump

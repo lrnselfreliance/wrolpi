@@ -31,6 +31,7 @@ import {
     CardDescription,
     CardHeader,
     Container,
+    Dimmer,
     Image,
     PlaceholderHeader,
     PlaceholderLine,
@@ -74,7 +75,7 @@ function VideosPage() {
         searchOrder = defaultSearchOrder;
     }
 
-    const {searchStr, setSearchStr, videos, activePage, setPage, totalPages, fetchVideos} =
+    const {searchStr, setSearchStr, videos, activePage, setPage, totalPages, fetchVideos, loading} =
         useSearchVideos(null, channelId, searchOrder);
 
     const {channel} = useChannel(channelId);
@@ -165,14 +166,17 @@ function VideosPage() {
     </div>;
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
-        videos,
-        activePage,
-        totalPages,
-        selectElm,
-        selectedVideos,
-        onSelect,
-        setPage,
-        !!searchStr,
+        {
+            files: videos,
+            activePage: activePage,
+            totalPages: totalPages,
+            selectElem: selectElm,
+            selectedKeys: selectedVideos,
+            onSelect: onSelect,
+            setPage: setPage,
+            headlines: !!searchStr,
+            loading: loading,
+        },
     );
 
     const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');

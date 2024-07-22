@@ -324,20 +324,25 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const activeTags = searchParams.getAll('tag');
     const {view} = useSearchView();
     const headline = view === 'headline';
+    const anyTag = searchParams.get('anyTag') === 'true';
 
     const [videos, setVideos] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
+    const [loading, setLoading] = useState(false);
 
     const localSearchVideos = async () => {
         setVideos(null);
+        setLoading(true);
         setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline);
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline, anyTag);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
             console.error(e);
             setVideos(undefined);// Could not get Videos, display error.
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -368,6 +373,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         setOrderBy,
         fetchVideos: localSearchVideos,
         activeTags,
+        loading,
     }
 }
 
@@ -481,7 +487,7 @@ export const useChannels = () => {
 
 export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) => {
     const {
-        activeTags,
+        activeTags, anyTag,
         pages,
         searchStr,
         filter,
@@ -493,6 +499,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
     const {view} = useSearchView();
 
     const [searchFiles, setSearchFiles] = useState(null);
+    const [loading, setLoading] = useState(false);
     const headline = view === 'headline';
 
     const localSearchFiles = async () => {
@@ -507,11 +514,12 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
             fromDate = dateRange[0];
             toDate = dateRange[1];
         }
+        setLoading(true);
         console.log('localSearchFiles', fromDate, toDate, months);
         try {
             let [file_groups, total] = await filesSearch(
                 pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline,
-                months, fromDate, toDate);
+                months, fromDate, toDate, anyTag);
             setSearchFiles(file_groups);
             pages.setTotal(total);
         } catch (e) {
@@ -523,6 +531,8 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
                 description: 'Could not get files',
                 time: 5000,
             });
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -533,6 +543,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 
     useEffect(() => {
         if (searchStr || (activeTags && activeTags.length > 0)) {
+            setLoading(true);
             debouncedLocalSearchFiles();
         }
         // Handle when this is unmounted.
@@ -547,6 +558,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         headline,
         JSON.stringify(months),
         JSON.stringify(dateRange),
+        anyTag,
     ]);
 
     return {
@@ -555,7 +567,8 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         filter,
         setSearchStr,
         pages,
-        activeTags
+        activeTags,
+        loading,
     };
 }
 
@@ -1106,15 +1119,7 @@ export const useUploadFile = () => {
         doUpload()
     }, [JSON.stringify(files)]);
 
-    const handleAddTag = (tagName) => {
-        setTagNames([...tagNames, tagName]);
-    }
-
-    const handleUntag = (tagName) => {
-        setTagNames(tagNames.filter(i => i !== tagName));
-    }
-
-    const tagsSelector = <TagsSelector selectedTagNames={tagNames} onAdd={handleAddTag} onRemove={handleUntag}/>;
+    const tagsSelector = <TagsSelector selectedTagNames={tagNames} onChange={(i,) => setTagNames(i)}/>;
 
     return {
         destination,

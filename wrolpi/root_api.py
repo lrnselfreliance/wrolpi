@@ -583,6 +583,7 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
         body.months,
         body.from_year,
         body.to_year,
+        body.any_tag,
     )
 
     ret = dict(

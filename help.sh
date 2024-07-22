@@ -342,3 +342,17 @@ if curl -k -s https://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
 else
   echo "FAILED: Help service is not running"
 fi
+
+echo
+# Internet
+if ping -c1 1.1.1.1 -W 5 &>/dev/null; then
+  echo "OK: Can ping 1.1.1.1"
+else
+  echo "FAILED: Cannot ping 1.1.1.1.  Is internet working?"
+fi
+
+if ping -c1 wrolpi.org -W 5 &>/dev/null; then
+  echo "OK: Can ping wrolpi.org"
+else
+  echo "FAILED: Cannot ping wrolpi.org  Is internet working?"
+fi

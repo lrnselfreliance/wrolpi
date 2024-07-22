@@ -711,13 +711,16 @@ async def search_directories_by_name(name: str, excluded: List[str] = None, limi
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
-                 from_year: int = None, to_year: int = None) -> \
+                 from_year: int = None, to_year: int = None, any_tag: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
     Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.
 
+    @param any_tag: The file must have some tag.
+    @param to_year: The file must be published on or before this year.
+    @param from_year: The file must be published on or after this year.
     @param search_str: Search the ts_vector of the file.  Returns all files if this is empty.
     @param limit: Return only this many files.
     @param offset: Offset the query.
@@ -739,17 +742,14 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 
-    mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
-    if mimetype_wheres:
-        wheres.append(mimetype_wheres)
-
+    wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
     if model:
         params['model'] = model
         wheres.append('model = %(model)s')
 
-    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
-    wheres, params = months_selector_to_where(months, wheres, params)
-    wheres, params = date_range_to_where(from_year, to_year, wheres, params)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
+    wheres, params = months_selector_to_where(wheres, params, months)
+    wheres, params = date_range_to_where(wheres, params, from_year, to_year)
 
     if search_str and headline:
         headline = ''',
@@ -1094,22 +1094,23 @@ def get_refresh_progress() -> RefreshProgress:
     return progress
 
 
-def mimetypes_to_sql_wheres(mimetypes: List[str], params: dict):
+def mimetypes_to_sql_wheres(wheres: List[str], params: dict, mimetypes: List[str]) -> Tuple[List[str], dict]:
     if mimetypes:
-        wheres = list()
+        local_wheres = list()
         for idx, mimetype in enumerate(mimetypes):
             key = f'mimetype{idx}'
             if len(mimetype.split('/')) == 1:
                 params[key] = f'{mimetype}/%'
             else:
                 params[key] = f'{mimetype}%'
-            wheres.append(f'mimetype LIKE %({key})s')
-        return f'({" OR ".join(wheres)})', params
-    return '', params
+            local_wheres.append(f'mimetype LIKE %({key})s')
+        wheres.append(f'({" OR ".join(local_wheres)})')
+    return wheres, params
 
 
 async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str],
-                                       months: List[int] = None, from_year: int = None, to_year: int = None):
+                                       months: List[int] = None, from_year: int = None, to_year: int = None,
+                                       any_tag: bool = False):
     """
     Return FileGroup count of what will be returned if the search is actually performed.
     """
@@ -1123,13 +1124,10 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
         # Search by textsearch, and by matching url.
         wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
 
-    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
-
-    mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
-    if mimetype_wheres:
-        wheres.append(mimetype_wheres)
-    wheres, params = months_selector_to_where(months, wheres, params)
-    wheres, params = date_range_to_where(from_year, to_year, wheres, params)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
+    wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
+    wheres, params = months_selector_to_where(wheres, params, months)
+    wheres, params = date_range_to_where(wheres, params, from_year, to_year)
 
     joins = "\n".join(joins)
     wheres = 'WHERE ' + "\nAND ".join(wheres) if wheres else ''
@@ -1386,6 +1384,7 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         session.add(file_group)
         session.flush([file_group, ])
         file_group.do_index()
+        file_group.indexed = True
 
         for tag_name in (tag_names or []):
             if tag_name not in file_group.tag_names:

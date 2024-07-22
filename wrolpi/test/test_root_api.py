@@ -560,7 +560,11 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
 
 @pytest.mark.asyncio
 async def test_search_file_estimates(test_session, test_async_client, archive_factory, tag_factory, video_factory):
-    # WARNING results are cached, this test uses unique queries to avoid conflicts.
+    """Can quickly get count of possible files when searching."""
+    body_ = dict(search_str='can search with no files')
+    request_, response_ = await test_async_client.post('/api/search_file_estimates', json=body_)
+    assert response_.status_code == HTTPStatus.OK
+
     tag1, tag2, tag3 = tag_factory(), tag_factory(), tag_factory()
     archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
     archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
@@ -617,6 +621,32 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
     await assert_results(dict(months=[1, ]), 2)
     await assert_results(dict(months=[2, ]), 0)
     await assert_results(dict(from_year=2000, to_year=2000), 2)
+
+
+@pytest.mark.asyncio
+async def test_search_file_estimates_any_tag(test_session, test_async_client, archive_factory, tag_factory,
+                                             video_factory):
+    """File estimates can be filtered by any_tag."""
+    tag1 = tag_factory()
+    archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
+    archive_factory(domain='bar.com', contents='contents of bar bunny')
+    test_session.commit()
+
+    async def assert_results(body: dict, expected_file_groups=None):
+        expected_file_groups = expected_file_groups or 0
+
+        request, response = await test_async_client.post('/api/search_file_estimates', json=body)
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['file_groups'] == expected_file_groups or 0
+
+    await assert_results(dict(search_str='bunny'), 2)
+    await assert_results(dict(search_str='bunny', any_tag=True), 1)
+    await assert_results(dict(search_str='bar'), 1)
+    await assert_results(dict(search_str='bar', any_tag=True), 0)
+
+    body_ = dict(search_str='bunny', tag_names=[tag1.name, ], any_tag=True)
+    request_, response_ = await test_async_client.post('/api/search_file_estimates', json=body_)
+    assert response_.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio

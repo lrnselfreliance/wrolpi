@@ -488,14 +488,6 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
         }
     };
 
-    const handleAddTag = (tagName) => {
-        setTagNames([...tagNames, tagName]);
-    }
-
-    const handleUntag = (tagName) => {
-        setTagNames(tagNames.filter(i => i !== tagName));
-    }
-
     const deleteDownloadButton = <APIButton
         color='red'
         floated='left'
@@ -571,7 +563,7 @@ export function ChannelDownloadForm({channel_id, afterSave, closeModal, download
             </Grid.Row>
             <Grid.Row columns={1}>
                 <Grid.Column>
-                    <TagsSelector selectedTagNames={tagNames} onAdd={handleAddTag} onRemove={handleUntag}/>
+                    <TagsSelector selectedTagNames={tagNames} onChange={(i, j) => setTagNames(i)}/>
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={1}>

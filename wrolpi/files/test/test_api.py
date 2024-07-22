@@ -185,6 +185,48 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     assert_files_search('nothing', [])
 
 
+@pytest.mark.asyncio
+async def test_files_search_any_tag(test_async_client, test_session, make_files_structure, tag_factory):
+    one, two = tag_factory(), tag_factory()
+    files = [
+        'foo.txt',
+        'foo bar.txt',
+        'bar.txt',
+    ]
+    make_files_structure(files)
+    await lib.refresh_files()
+    bar, foobar, foo = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert bar.primary_path.name == 'bar.txt' \
+           and foo.primary_path.name == 'foo.txt' \
+           and foobar.primary_path.name == 'foo bar.txt'
+    foo.add_tag(one)
+    foobar.add_tag(two)
+    test_session.commit()
+
+    # Only `foo` is tagged with `one`
+    body = dict(search_str='foo', tag_names=['one'])
+    request, response = await test_async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert {i['primary_path'] for i in response.json['file_groups']} == {'foo.txt'}
+
+    # Both `foo bar` and `foo` are tagged.
+    body = dict(search_str='foo', any_tag=True)
+    request, response = await test_async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert {i['primary_path'] for i in response.json['file_groups']} == {'foo.txt', 'foo bar.txt'}
+
+    # `bar` is not tagged.
+    body = dict(search_str='bar', any_tag=True)
+    request, response = await test_async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert {i['primary_path'] for i in response.json['file_groups']} == {'foo bar.txt'}
+
+    # Cannot search for any_tag, and tag names.
+    body = dict(search_str='foo', tag_names=['one'], any_tag=True)
+    request, response = await test_async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
 def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
     """The user can request to refresh specific files."""
     make_files_structure({

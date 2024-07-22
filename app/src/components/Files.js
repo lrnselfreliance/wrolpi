@@ -32,7 +32,6 @@ import {
     useTitle
 } from "./Common";
 import {
-    useAllQuery,
     useFilesProgressInterval,
     usePages,
     useSearchFiles,
@@ -66,6 +65,7 @@ import {refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
+import {useSearch} from "./Search";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -311,15 +311,18 @@ export function SearchLimitDropdown({limits = []}) {
 }
 
 export function FilesView(
-    files,
-    activePage,
-    totalPages,
-    selectElem,
-    selectedKeys,
-    onSelect,
-    setPage,
-    headlines = false,
-    limitOptions = [12, 24, 48, 96],
+    {
+        files,
+        activePage,
+        totalPages,
+        selectElem,
+        selectedKeys,
+        onSelect,
+        setPage,
+        headlines = false,
+        limitOptions = [12, 24, 48, 96],
+        showAnyTag = false,
+    },
 ) {
     const {view} = useSearchView();
 
@@ -360,7 +363,7 @@ export function FilesView(
 
     const viewButton = <SearchViewButton headlines={headlines}/>
     const limitDropdown = <SearchLimitDropdown limits={limitOptions}/>;
-    const tagQuerySelector = <TagsQuerySelector/>;
+    const tagQuerySelector = <TagsQuerySelector showAny={showAnyTag}/>;
 
     return {
         body,
@@ -432,22 +435,28 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
     return <></>
 }
 
-export function TagsQuerySelector({onChange}) {
-    // Creates modal that the User can use to manipulate the tag query.
-    const [activeTags, setActiveTags] = useAllQuery('tag');
+export function TagsQuerySelector({onChange, showAny = true}) {
+    // Creates modal that the User can use to manipulate the tag query params.
+    const {activeTags, anyTag, setTags, setAnyTag} = useSearch();
 
-    const localOnChange = (tagNames) => {
-        setActiveTags(tagNames);
+    const localOnChange = (tagNames, newAnyTag) => {
+        if (newAnyTag) {
+            setAnyTag(true);
+        } else {
+            setTags(tagNames);
+        }
         if (onChange) {
-            onChange(tagNames);
+            onChange(tagNames, newAnyTag);
         }
     }
 
     return <TagsSelector hideGroup={true}
                          hideEdit={true}
-                         active={activeTags && activeTags.length > 0}
+                         showAny={showAny}
+                         active={anyTag || activeTags && activeTags.length > 0}
                          selectedTagNames={activeTags}
-                         onToggle={localOnChange}
+                         anyTag={anyTag}
+                         onChange={localOnChange}
                          style={{marginLeft: '0.3em', marginTop: '0.3em'}}
     />
 }
@@ -479,14 +488,17 @@ export function FilesSearchView({
     const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
-        searchFiles,
-        pages.activePage,
-        pages.totalPages,
-        null,
-        null,
-        null,
-        pages.setPage,
-        true,
+        {
+            files: searchFiles,
+            activePage: pages.activePage,
+            totalPages: pages.totalPages,
+            selectElem: null,
+            selectedKeys: null,
+            onSelect: null,
+            setPage: pages.setPage,
+            headlines: true,
+            showAnyTag: true,
+        },
     );
 
     return <>

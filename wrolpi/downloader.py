@@ -1096,6 +1096,10 @@ async def signal_download_download(download_id: int, download_url: str):
             worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
             result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
+        # If download has error, and not Internet is available, tell the user!
+        if result.error and not flags.have_internet.is_set():
+            result.error = f'{result.error}\n\nNo internet available!'
+
         error_len = len(result.error) if result.error else 0
         worker_logger.debug(
             f'Got success={result.success} from {downloader} download_id={download.id} with {error_len=}')

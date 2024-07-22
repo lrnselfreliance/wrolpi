@@ -77,7 +77,7 @@ class Downloader extends React.Component {
         }
     }
 
-    handleSelectedTags = (tagNames) => {
+    handleTagsChange = (tagNames, newAnyTag) => {
         this.setState({tagNames});
     }
 
@@ -119,7 +119,7 @@ class Downloader extends React.Component {
 
         let tagsSelector;
         if (withTags) {
-            tagsSelector = <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>;
+            tagsSelector = <TagsSelector selectedTagNames={tagNames} onChange={this.handleTagsChange}/>;
         }
 
         const advancedAccordion = <Accordion>

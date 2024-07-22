@@ -717,7 +717,7 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     assert_directories({'foo', 'baz'})
 
 
-def test_file_group_merge(test_session, test_directory, make_files_structure, tag_factory, video_bytes, srt_file3):
+def test_file_group_merge(test_async_client, test_session, test_directory, make_files_structure, tag_factory, video_bytes, srt_file3):
     """A FileGroup can be created from multiple existing FileGroups.  Any Tags applied to the existing groups will be
     migrated."""
     vid, srt = make_files_structure({
@@ -736,6 +736,9 @@ def test_file_group_merge(test_session, test_directory, make_files_structure, ta
     srt_file_created_at = srt_tag_file.created_at
     test_session.commit()
 
+    assert vid_group.mimetype == 'video/mp4'
+    assert srt_group.mimetype == 'text/srt'
+
     # Both FileGroups are merged.
     vid = FileGroup.from_paths(test_session, vid, srt)
     test_session.commit()
@@ -749,6 +752,7 @@ def test_file_group_merge(test_session, test_directory, make_files_structure, ta
     assert [i for i in vid.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
     # Size is combined
     assert vid.size > len(video_bytes)
+    assert vid.mimetype == 'video/mp4'
 
 
 @pytest.mark.asyncio

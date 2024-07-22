@@ -627,8 +627,8 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear) {
-    const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag) {
+    const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
     }
@@ -1183,10 +1183,10 @@ export async function searchSuggestions(search_str) {
     }
 }
 
-export async function searchEstimateFiles(search_str, tagNames, mimetypes, months, dateRange) {
+export async function searchEstimateFiles(search_str, tagNames, mimetypes, months, dateRange, anyTag) {
     months = months ? months.map(i => parseInt(i)) : [];
 
-    const body = {search_str, tag_names: tagNames, mimetypes, months};
+    const body = {search_str, tag_names: tagNames, mimetypes, months, any_tag: anyTag};
     if (dateRange) {
         body['from_year'] = dateRange[0];
         body['to_year'] = dateRange[1];
@@ -1198,6 +1198,8 @@ export async function searchEstimateFiles(search_str, tagNames, mimetypes, month
         return {
             fileGroups: content.file_groups,
         }
+    } else {
+        console.error('Failed to get file search estimates!');
     }
 }
 

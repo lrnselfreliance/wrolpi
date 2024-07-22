@@ -77,7 +77,7 @@ async def test_extract_cover(test_session, test_directory, example_epub):
     assert ebook.cover_path and ebook.cover_path.stat().st_size == 297099
 
 
-def test_search(test_session, test_client, example_epub):
+def test_search_ebooks(test_session, test_client, example_epub):
     """Ebooks are handled in File search results."""
     request, response = test_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT

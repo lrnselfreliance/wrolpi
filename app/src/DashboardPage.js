@@ -161,7 +161,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     // The search the user submitted.
-    const {searchStr, setSearchStr, activeTags, isEmpty} = useSearch();
+    const {searchStr, setSearchStr, activeTags, isEmpty, anyTag} = useSearch();
     // The search that the user is typing.
     const [localSearchStr, setLocalSearchStr] = React.useState(searchStr);
     const {
@@ -174,7 +174,7 @@ export function DashboardPage() {
         setSearchStr: setSuggestionSearchStr,
         setSearchTags,
         months, dateRange, setDates, clearDate,
-    } = useSearchSuggestions(searchStr, activeTags);
+    } = useSearchSuggestions(searchStr, activeTags, anyTag);
 
     React.useEffect(() => {
         setSuggestionSearchStr(localSearchStr);

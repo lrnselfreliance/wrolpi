@@ -82,7 +82,7 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     }
 
     const setTags = (tags) => {
-        updateQuery({tag: tags});
+        updateQuery({tag: tags, anyTag: null});
     }
 
     const addTag = (name) => {
@@ -95,24 +95,26 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         setTags(newTags);
     }
 
+    const anyTag = searchParams.get('anyTag') === 'true';
+    const setAnyTag = (value) => {
+        updateQuery({tag: [], anyTag: value ? 'true' : null});
+    }
+
     return {
-        activeTags,
-        addTag,
+        activeTags, addTag, removeTag, anyTag, setAnyTag, setTags,
         filter,
         model: model_,
         pages,
-        removeTag,
         searchParams,
         searchStr,
         setSearchStr,
         clearSearch,
-        setTags,
         months, dateRange, setDateRange, setDates,
         anySearch, isEmpty,
     }
 }
 
-export function useSuggestions(searchStr, tagNames, filter) {
+export function useSuggestions(searchStr, tagNames, filter, anyTag) {
     const defaultSuggestions = {
         fileGroups: [],
         channels: [],
@@ -135,7 +137,7 @@ export function useSuggestions(searchStr, tagNames, filter) {
                 // We can't search Channels/Domains without some string to filter by.
                 sendGeneralReqeust(async () => await searchSuggestions(searchStr));
             }
-            sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange));
+            sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }
     }, [
@@ -146,6 +148,7 @@ export function useSuggestions(searchStr, tagNames, filter) {
         JSON.stringify(months),
         JSON.stringify(dateRange),
         filter,
+        anyTag,
     ]);
 
     React.useEffect(() => {
@@ -180,14 +183,14 @@ export function useSuggestions(searchStr, tagNames, filter) {
 }
 
 
-export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
+export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) {
     const navigate = useNavigate();
     const {filter} = useSearchFilter();
     const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
     const [searchTags, setSearchTags] = React.useState(defaultTagNames);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
     const {dateRange, months, setDates, clearDate} = useSearchDate();
-    const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter);
+    const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter, anyTag);
     const {getLocationStr} = React.useContext(QueryContext);
 
     // The results that will be displayed by <Search>.
@@ -239,6 +242,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                     return {type: 'channel', title: i['name'], id: i['id'], location: `/videos/channel/${i.id}/video`}
                 })
             }
+        } else if (newSuggestions.channels && newSuggestions.channels.length === 0) {
+            results.channels = {name: 'Channels', results: noResults};
         }
         if (newSuggestions.domains && newSuggestions.domains.length > 0) {
             results.domains = {
@@ -339,7 +344,7 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
 
     const links = [
-        {text: filesTabName, to: '/search', key: 'filesSearch', end: true},
+        {text: filesTabName, to: '/search', key: 'filesSearch_', end: true},
         {text: zimsTabName, to: '/search/zim', key: 'zimsSearch'},
     ];
 

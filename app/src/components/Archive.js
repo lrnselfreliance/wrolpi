@@ -263,7 +263,11 @@ function ArchivePage() {
         </Segment>
 
         <Segment>
-            <TagsSelector selectedTagNames={archiveFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
+            <TagsSelector
+                selectedTagNames={archiveFile['tags']}
+                onAdd={localAddTag}
+                onRemove={localRemoveTag}
+            />
         </Segment>
 
         <Tab menu={tabMenu} panes={tabPanes}/>
@@ -497,14 +501,16 @@ function ArchivesPage() {
     </div>;
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
-        archives,
-        activePage,
-        totalPages,
-        selectElm,
-        selectedArchives,
-        onSelect,
-        setPage,
-        !!searchStr,
+        {
+            files: archives,
+            activePage: activePage,
+            totalPages: totalPages,
+            selectElem: selectElm,
+            selectedKeys: selectedArchives,
+            onSelect: onSelect,
+            setPage: setPage,
+            headlines: !!searchStr
+        },
     );
 
 

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from wrolpi.errors import ValidationError
+
 
 @dataclass
 class FilesRequest:
@@ -29,6 +31,11 @@ class FilesSearchRequest:
     months: Optional[List[int]] = None
     from_year: Optional[int] = None
     to_year: Optional[int] = None
+    any_tag: bool = False
+
+    def __post_init__(self):
+        if self.any_tag and self.tag_names:
+            raise ValidationError('Cannot use both tag_names and any_tag.')
 
 
 @dataclass

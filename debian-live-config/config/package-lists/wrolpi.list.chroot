@@ -4,6 +4,7 @@ apache2-doc
 apt-transport-https
 aria2
 autoconf
+bind9-dnsutils
 build-essential
 bzip2
 ca-certificates

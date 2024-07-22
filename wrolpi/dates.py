@@ -189,7 +189,7 @@ class TZDateTime(types.TypeDecorator):
         return value
 
 
-def months_selector_to_where(months: List[int], wheres: list, params: dict):
+def months_selector_to_where(wheres: list, params: dict, months: List[int]):
     """Filter FileGroup results by the month that the file was published.  Returns wheres/params unchanged if months
     is empty.
 
@@ -208,7 +208,7 @@ def months_selector_to_where(months: List[int], wheres: list, params: dict):
     return wheres, params
 
 
-def date_range_to_where(from_year: int, to_year: int, wheres: list, params: dict):
+def date_range_to_where(wheres: list, params: dict, from_year: int, to_year: int):
     """Filter FileGroup results by the year that the file was published.
 
     @param from_year: The earliest year the file was published

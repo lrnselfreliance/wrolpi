@@ -12,7 +12,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
     register_refresh_cleanup, get_relative_to_media_directory
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, ValidationError
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -442,12 +442,20 @@ def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tu
     return sub_select, params
 
 
-def tag_append_sub_select_where(tag_names: List[str], wheres: List[str], params: dict) -> Tuple[List[str], dict]:
-    """Modify provided `wheres` and `params` to filter by `tag_names`, if any."""
-    if not tag_names:
+def tag_append_sub_select_where(wheres: List[str], params: dict, tag_names: List[str], any_tag: bool = False) \
+        -> Tuple[List[str], dict]:
+    """Modify provided `wheres` and `params` to filter by `tag_names`, if any.  If no tag names are provided, but
+    `any_tag` is True, then files will be filtered to only those that have at least one tag."""
+    if any_tag and tag_names:
+        raise RuntimeError('Cannot search for any tag, and list of tags.')
+
+    if not tag_names and not any_tag:
         return wheres, params
 
-    tags_sub_select, params = tag_names_to_file_group_sub_select(tag_names, params)
+    if any_tag:
+        tags_sub_select = 'SELECT file_group_id FROM tag_file'
+    else:
+        tags_sub_select, params = tag_names_to_file_group_sub_select(tag_names, params)
     wheres.append(f'fg.id = ANY({tags_sub_select})')
     return wheres, params
 

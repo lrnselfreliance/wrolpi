@@ -320,7 +320,7 @@ export const ZimSearchView = ({suggestions, loading}) => {
     }
 
     return <>
-        <TagsQuerySelector onChange={setTags}/>
+        <TagsQuerySelector onChange={(i, j) => setTags(i)}/>
         <Accordion>
             {body}
         </Accordion>
@@ -533,7 +533,7 @@ class ManageZim extends React.Component {
     }
 }
 
-function ZimViewer({src = ZIM_VIEWER_URI, style=null}) {
+function ZimViewer({src = ZIM_VIEWER_URI, style = null}) {
     const fallback = <Segment>
         <Header as='h3'>Failed to fetch Zim service.</Header>
         <p>You may need to give permission to access the page: <a href={src}>{src}</a></p>

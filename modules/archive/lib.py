@@ -482,7 +482,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         if order in NO_NULL_ORDERS:
             wheres.append(NO_NULL_ORDERS[order])
 
-    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
+    wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
     if search_str and headline:
         headline = ''',

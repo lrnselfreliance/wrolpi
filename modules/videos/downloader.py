@@ -407,6 +407,9 @@ class VideoDownloader(Downloader, ABC):
                 video.source_id = entry['id']
                 video.channel_id = channel_id
                 video_id, video_info_json_path = video.id, video.info_json_path
+                if video_info_json_path:
+                    if new_info_json := video.clean_info_json():
+                        video.replace_info_json(new_info_json)
                 session.commit()
 
             if video_info_json_path:

@@ -16,7 +16,7 @@ from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, DELETED_VIDEO_KEYS
 
 logger = logger.getChild(__name__)
 
@@ -483,12 +483,21 @@ class Video(ModelHelper, Base):
             return f'/videos/channel/{self.channel_id}/video/{self.id}'
         return f'/videos/video/{self.id}'
 
-    def get_comments(self):
+    def get_comments(self) -> list | None:
         return (self.get_info_json() or dict()).get('comments')
+
+    def clean_info_json(self, info_json_contents: dict = None) -> dict | None:
+        """Remove large and mostly useless data in the info_json."""
+        info_json_contents = info_json_contents or self.get_info_json()
+        if info_json_contents:
+            for key in DELETED_VIDEO_KEYS:
+                info_json_contents.pop(key, None)
+        return info_json_contents
 
     def replace_info_json(self, info_json: dict):
         """Replace the info json file with the new json dict.  Handles adding new info_json file, if necessary."""
         info_json_path = self.info_json_path or self.video_path.with_suffix('.info.json')
+        info_json = self.clean_info_json(info_json)
         info_json = json.dumps(info_json, indent=2)
         replace_file(info_json_path, info_json, missing_ok=True)
 

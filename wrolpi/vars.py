@@ -3,6 +3,7 @@ import os
 import pathlib
 import sys
 from pathlib import Path
+from typing import List
 
 from dotenv import load_dotenv
 
@@ -37,6 +38,10 @@ def truthy_arg(value: str) -> bool:
     """
     v = str(value).lower()
     return v == 'true' or v == 't' or v == '1' or v == 'yes' or v == 'y'
+
+
+def list_var(name: str, default='') -> List[str]:
+    return [i for i in os.environ.get(name, default).split(',')]
 
 
 # Special environment variable set in the docker/api/Dockerfile.
@@ -83,6 +88,7 @@ FILE_MAX_TEXT_SIZE = int(os.environ.get('FILE_MAX_TEXT_SIZE', 100_000))
 
 VIDEO_COMMENTS_FETCH_COUNT = int(os.environ.get('VIDEO_COMMENTS_FETCH_COUNT', 80))
 YTDLP_CACHE_DIR = os.environ.get('YTDLP_CACHE_DIR', '/tmp/ytdlp_cache')
+DELETED_VIDEO_KEYS = list_var('DELETED_VIDEO_KEYS', 'automatic_captions,formats')
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.366'
 

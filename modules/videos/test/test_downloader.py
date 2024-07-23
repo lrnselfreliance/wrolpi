@@ -1,4 +1,5 @@
 import asyncio
+import json
 import shutil
 from copy import copy
 from unittest import mock
@@ -255,6 +256,9 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
     # Create a poster file which was downloaded.
     poster_path = video_path.with_suffix('.png')
     image_file.rename(poster_path)
+    # `formats` should be cleaned from info json.
+    info_json_path = video_path.with_suffix('.info.json')
+    info_json_path.write_text(json.dumps({'duration': 5, 'formats': [1, 2, 3]}))
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
@@ -274,6 +278,10 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
     video: Video = test_session.query(Video).one()
     assert video.video_path.is_absolute() and video.video_path == video_path, 'Video path is not absolute'
     assert video.video_path.is_absolute() and video.poster_path == poster_path, 'Video poster was not discovered'
+    # Some info json data is deleted during download.
+    assert video.get_info_json(), 'Download should keep info json file'
+    assert 'duration' in video.get_info_json(), 'Duration should stay in info json'
+    assert 'formats' not in video.get_info_json(), 'formats should be deleted from info json'
 
 
 @pytest.mark.asyncio

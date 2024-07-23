@@ -351,8 +351,8 @@ else
   echo "FAILED: Cannot ping 1.1.1.1.  Is internet working?"
 fi
 
-if ping -c1 wrolpi.org -W 5 &>/dev/null; then
-  echo "OK: Can ping wrolpi.org"
+if ping -c1 one.one.one.one -W 5 &>/dev/null; then
+  echo "OK: Can ping one.one.one.one"
 else
-  echo "FAILED: Cannot ping wrolpi.org  Is internet working?"
+  echo "FAILED: Cannot ping one.one.one.one  Is internet working?"
 fi

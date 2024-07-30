@@ -304,7 +304,7 @@ async def post_upload(request: Request):
 
     destination = get_media_directory() / destination
     if not destination.is_dir():
-        raise UnknownDirectory('Destination must be a relative directory that is already in the media directory!')
+        raise UnknownDirectory(f'Destination must be a relative directory that is already in the media directory: {destination}')
 
     try:
         filename = str(request.form['filename'][0])
@@ -327,7 +327,7 @@ async def post_upload(request: Request):
             raise FileUploadFailed('tag_names must be a list')
         tag_names = [str(i) for i in tag_names]
         for tag_name in tag_names:
-            if not Tag.find_by_name(tag_name):
+            if not Tag.get_by_name(tag_name):
                 raise FileUploadFailed(f'Tag does not exist: {tag_name}')
 
     filename = pathlib.Path(filename.lstrip('/'))
@@ -382,6 +382,7 @@ async def post_upload(request: Request):
     # Chunks start at 0.
     if chunk_num == total_chunks:
         # File upload is complete.
+        logger.info(f'Got final chunk of uploaded file: {output_str}')
         del api_app.shared_ctx.uploaded_files[output_str]
         # Upsert this new file (and any related files) into the DB.
         background_task(lib.upsert_file(output, tag_names=tag_names))

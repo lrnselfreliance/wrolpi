@@ -68,6 +68,7 @@ systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
+cp /opt/wrolpi/etc/raspberrypios/renderd /etc/init.d/renderd
 # Configure Apache2 to listen on 8084.
 cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
 # Copy Leaflet files to Apache's directory so they can be used offline.

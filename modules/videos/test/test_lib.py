@@ -20,7 +20,7 @@ from wrolpi.vars import PROJECT_DIR
     ('20000101foo.mp4', (None, None, None, '20000101foo')),
     ('something 20000101 foo.mp4', (None, None, None, 'something 20000101 foo')),
     ('something_20000101_foo.mp4', ('something', '20000101', None, 'foo')),
-    ('foo .mp4', (None, None, None, 'foo')),
+    ('foo .mp4', (None, None, None, 'foo')), # Has trailing whitespace.
     ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', (None, '20000303', 'vp91w5', 'Bob&apos;s Pancakes')),
     ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', (None, None, 'vp91w5', 'Bob&apos;s Pancakes')),
     ('Learning Self-Reliance_20170529_p_MzsCFkUPU_Beekeeping 2017 Part 6 - Merging Hives.mp4',
@@ -29,6 +29,8 @@ from wrolpi.vars import PROJECT_DIR
      ('Learning Self-Reliance', '20170529', 'p_Mzs', 'Beekeeping 2017 Part 6 - Merging Hives')),
     ('Learning Self-Reliance_20170529_p_Beekeeping 2017 Part 6 - Merging Hives.mp4',
      ('Learning Self-Reliance', '20170529', None, 'p_Beekeeping 2017 Part 6 - Merging Hives')),
+    ('Learning Self-Reliance_20240722_clyx8ark92qk70860vtl997n5_Long Source Id File with _.mp4',
+     ('Learning Self-Reliance', '20240722', 'clyx8ark92qk70860vtl997n5', 'Long Source Id File with _'))
 ])
 def test_parse_video_file_name(file_name, expected):
     """

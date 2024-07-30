@@ -132,22 +132,27 @@ async def test_delete_nested(test_session, make_files_structure):
 
 
 @pytest.mark.parametrize(
-    'path,expected',
+    'path,full,expected',
     [
-        ('foo', ('foo', '')),
-        ('foo.mp4', ('foo', '.mp4')),
-        ('foo.info.json', ('foo', '.info.json')),
-        ('foo.something.info.json', ('foo.something', '.info.json')),
-        ('foo-something.info.json', ('foo-something', '.info.json')),
-        ('/absolute/foo-something.info.json', ('foo-something', '.info.json')),
-        ('/absolute/foo', ('foo', '')),
-        ('/absolute/foo.bar', ('foo', '.bar')),
-        ('foo.en.srt', ('foo', '.en.srt')),
-        ('foo.pl.srt', ('foo', '.pl.srt')),
+        ('foo', False, ('foo', '')),
+        ('foo.mp4', False, ('foo', '.mp4')),
+        ('foo.info.json', False, ('foo', '.info.json')),
+        ('foo.something.info.json', False, ('foo.something', '.info.json')),
+        ('foo-something.info.json', False, ('foo-something', '.info.json')),
+        ('/absolute/foo-something.info.json', False, ('foo-something', '.info.json')),
+        ('/absolute/foo', False, ('foo', '')),
+        ('/absolute/foo.bar', False, ('foo', '.bar')),
+        ('foo.en.srt', False, ('foo', '.en.srt')),
+        ('foo.pl.srt', False, ('foo', '.pl.srt')),
+        # Absolute path can be returned.
+        ('/absolute//foo.bar', True, ('/absolute/foo', '.bar')),
+        # Case is preserved.
+        ('foo.EN.SRT', False, ('foo', '.EN.SRT')),
+        ('foo.INFO.JSON', False, ('foo', '.INFO.JSON')),
     ]
 )
-def test_split_path_stem_and_suffix(path, expected):
-    assert lib.split_path_stem_and_suffix(Path(path)) == expected
+def test_split_path_stem_and_suffix(path, full, expected):
+    assert lib.split_path_stem_and_suffix(Path(path), full) == expected
 
 
 @pytest.mark.asyncio
@@ -717,7 +722,8 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     assert_directories({'foo', 'baz'})
 
 
-def test_file_group_merge(test_async_client, test_session, test_directory, make_files_structure, tag_factory, video_bytes, srt_file3):
+def test_file_group_merge(test_async_client, test_session, test_directory, make_files_structure, tag_factory,
+                          video_bytes, srt_file3):
     """A FileGroup can be created from multiple existing FileGroups.  Any Tags applied to the existing groups will be
     migrated."""
     vid, srt = make_files_structure({

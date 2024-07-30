@@ -1,7 +1,7 @@
 import contextlib
 import pathlib
 from datetime import datetime
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +12,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
     register_refresh_cleanup, get_relative_to_media_directory
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, ValidationError
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -26,6 +26,11 @@ class TagFile(ModelHelper, Base):
     tag = relationship('Tag', back_populates='tag_files')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')
+
+    @staticmethod
+    @optional_session
+    def get_by_primary_keys(file_group_id: int, tag_id: int, session: Session = None) -> Optional['TagFile']:
+        return session.query(TagFile).filter_by(tag_id=tag_id, file_group_id=file_group_id).one_or_none()
 
 
 class Tag(ModelHelper, Base):
@@ -49,37 +54,32 @@ class Tag(ModelHelper, Base):
             color=self.color,
         )
 
+    @staticmethod
     @optional_session
-    def add_file_group_tag(self, file_group, session: Session = None) -> TagFile:
+    def tag_file_group(file_group_id, tag_id, session: Session = None) -> TagFile:
         """Add a TagFile for the provided FileGroup and this Tag.
 
         @warning: Commits the session to keep the config in sync."""
-        from wrolpi.files.models import FileGroup
-        if not isinstance(file_group, FileGroup):
-            raise ValueError('Cannot apply tag to non-FileGroup')
-
-        tag_file = TagFile(file_group_id=file_group.id, tag_id=self.id)
-        logger.info(f'Tagging {file_group} with {self}')
+        existing = TagFile.get_by_primary_keys(file_group_id, tag_id, session)
+        if existing:
+            raise FileGroupAlreadyTagged('Tag already used')
+        tag_file = TagFile(file_group_id=file_group_id, tag_id=tag_id)
         session.add(tag_file)
         session.flush([tag_file])
         session.commit()
+        logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id}')
 
         # Save changes to config.
         schedule_save(session)
         return tag_file
 
+    @staticmethod
     @optional_session
-    def remove_file_group_tag(self, file_group, session: Session = None):
+    def untag_file_group(file_group_id: int, tag_id: int, session: Session = None):
         """Remove the record of a Tag applied to the FileGroup.
 
         @warning: Commits the session to keep config in sync."""
-        from wrolpi.files.models import FileGroup
-        if not isinstance(file_group, FileGroup):
-            raise ValueError('Cannot remove tag of non-FileGroup')
-
-        tag_file = session.query(TagFile) \
-            .filter(TagFile.file_group_id == file_group.id, TagFile.tag_id == self.id) \
-            .one_or_none()
+        tag_file = TagFile.get_by_primary_keys(file_group_id, tag_id, session)
         if tag_file:
             session.delete(tag_file)
             session.commit()
@@ -87,12 +87,18 @@ class Tag(ModelHelper, Base):
             # Save changes to config.
             schedule_save(session)
         else:
-            logger.warning(f'Could not find tag_file for FileGroup.id={file_group.id}/Tag.id={self.id=}')
+            logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id}')
 
     @staticmethod
     @optional_session
-    def find_by_name(name: str, session: Session) -> 'Tag':
+    def get_by_name(name: str, session: Session) -> Optional['Tag']:
         tag = session.query(Tag).filter_by(name=name).one_or_none()
+        return tag
+
+    @staticmethod
+    @optional_session
+    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+        tag = session.query(Tag).filter_by(id=id_).one_or_none()
         return tag
 
     def has_relations(self) -> bool:
@@ -354,7 +360,7 @@ def import_tags_config(session: Session = None):
                     tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
-                        tag_file = tag.add_file_group_tag(file_group, session)
+                        tag_file = tag.tag_file_group(file_group, session)
                     tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
                     need_commit = True
                 elif not file_group:
@@ -491,11 +497,3 @@ def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tup
             HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
         '''
     return stmt, params
-
-
-if __name__ == '__main__':
-    from wrolpi.db import get_db_session
-
-    if input('Save Tags to config file? (y/n) ').strip().lower() == 'y':
-        with get_db_session() as session:
-            get_tags_config().save_tags(session)

@@ -144,12 +144,15 @@ class FileGroup(ModelHelper, Base):
         self.viewed = now()
 
     @optional_session
-    def add_tag(self, tag: Tag, session: Session = None) -> TagFile:
-        return tag.add_file_group_tag(self, session)
+    def add_tag(self, tag_id: int, session: Session = None) -> TagFile:
+        return Tag.tag_file_group(self.id, tag_id, session)
 
     @optional_session
-    def remove_tag(self, tag: Tag, session: Session = None):
-        tag.remove_file_group_tag(self, session)
+    def untag(self, tag_id: int, session: Session = None):
+        if not isinstance(tag_id, int):
+            raise RuntimeError('tag_id must be an integer')
+
+        Tag.untag_file_group(self.id, tag_id, session)
 
     def append_files(self, *paths: pathlib.Path):
         """Add all `paths` to this FileGroup.files."""
@@ -247,7 +250,11 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype
+        from wrolpi.files.lib import get_primary_file, get_mimetype, split_path_stem_and_suffix
+
+        unique_stems = {split_path_stem_and_suffix(i, full=True)[0] for i in paths}
+        if len(unique_stems) > 1:
+            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
         if len(existing_groups) == 0:

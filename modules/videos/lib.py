@@ -17,6 +17,7 @@ from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download
 from wrolpi.errors import UnknownDirectory
+from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
@@ -593,7 +594,7 @@ async def get_statistics():
     return ret
 
 
-NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{5,15})_)?(.*)\.'
+NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{5,25})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
@@ -618,7 +619,7 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
             return channel, date, source_id, title
 
     # Return the stem as a last resort
-    title = pathlib.Path(video_path).stem.strip()
+    title = split_path_stem_and_suffix(video_path)[0].strip()
     return None, None, None, title
 
 

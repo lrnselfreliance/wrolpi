@@ -339,10 +339,9 @@ class Video(ModelHelper, Base):
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
-    def add_tag(self, tag_or_tag_name: Union[Tag, str], session: Session = None) -> TagFile:
+    def add_tag(self, tag_id: int, session: Session = None) -> TagFile:
         session = session or Session.object_session(self)
-        tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
-        return self.file_group.add_tag(tag, session=session)
+        return self.file_group.add_tag(tag_id, session=session)
 
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.
@@ -420,8 +419,8 @@ class Video(ModelHelper, Base):
         def delete_video(video_: Video):
             """Delete a Video with any of its tags."""
             for tag_name_ in video_.file_group.tag_names:
-                tag_ = Tag.find_by_name(tag_name_)
-                video_.file_group.remove_tag(tag_, session)
+                tag_ = Tag.get_by_name(tag_name_)
+                video_.file_group.untag(tag_, session)
             video_.delete()
 
         changes = False

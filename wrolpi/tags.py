@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
-    register_refresh_cleanup, get_relative_to_media_directory
+    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged
@@ -31,6 +31,13 @@ class TagFile(ModelHelper, Base):
     @optional_session
     def get_by_primary_keys(file_group_id: int, tag_id: int, session: Session = None) -> Optional['TagFile']:
         return session.query(TagFile).filter_by(tag_id=tag_id, file_group_id=file_group_id).one_or_none()
+
+    @staticmethod
+    @optional_session
+    def get_by_tag_name(file_group_id: int, tag_name: str, session: Session = None) -> Optional['TagFile']:
+        return session.query(TagFile).join(Tag) \
+            .filter(TagFile.file_group_id == file_group_id, Tag.name == tag_name) \
+            .one_or_none()
 
 
 class Tag(ModelHelper, Base):
@@ -56,38 +63,50 @@ class Tag(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def tag_file_group(file_group_id, tag_id, session: Session = None) -> TagFile:
+    def get_tag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None) -> Optional[TagFile]:
+        if isinstance(tag_id_or_name, int):
+            return TagFile.get_by_primary_keys(file_group_id, tag_id_or_name, session)
+
+        return TagFile.get_by_tag_name(file_group_id, tag_id_or_name, session)
+
+    @staticmethod
+    @optional_session
+    def tag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None) -> TagFile:
         """Add a TagFile for the provided FileGroup and this Tag.
 
         @warning: Commits the session to keep the config in sync."""
-        existing = TagFile.get_by_primary_keys(file_group_id, tag_id, session)
+        existing = Tag.get_tag_file_group(file_group_id, tag_id_or_name, session)
+
         if existing:
             raise FileGroupAlreadyTagged('Tag already used')
-        tag_file = TagFile(file_group_id=file_group_id, tag_id=tag_id)
+
+        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
+            else Tag.get_by_id(tag_id_or_name, session)
+        tag_file = TagFile(file_group_id=file_group_id, tag_id=tag.id)
         session.add(tag_file)
         session.flush([tag_file])
         session.commit()
-        logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id}')
+        logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id_or_name}')
 
         # Save changes to config.
-        schedule_save(session)
+        save_tags_config(session)
         return tag_file
 
     @staticmethod
     @optional_session
-    def untag_file_group(file_group_id: int, tag_id: int, session: Session = None):
+    def untag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None):
         """Remove the record of a Tag applied to the FileGroup.
 
         @warning: Commits the session to keep config in sync."""
-        tag_file = TagFile.get_by_primary_keys(file_group_id, tag_id, session)
+        tag_file = Tag.get_tag_file_group(file_group_id, tag_id_or_name, session)
         if tag_file:
             session.delete(tag_file)
             session.commit()
 
             # Save changes to config.
-            schedule_save(session)
+            save_tags_config(session)
         else:
-            logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id}')
+            logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id_or_name}')
 
     @staticmethod
     @optional_session
@@ -97,9 +116,25 @@ class Tag(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+    def find_by_name(name: str, session: Session) -> 'Tag':
+        if tag := Tag.get_by_name(name, session):
+            return tag
+
+        raise UnknownTag(f'Unknown Tag with name={name}')
+
+    @staticmethod
+    @optional_session
+    def get_by_id(id_: int, session: Session = None) -> Optional['Tag']:
         tag = session.query(Tag).filter_by(id=id_).one_or_none()
         return tag
+
+    @staticmethod
+    @optional_session
+    def find_by_id(id_: int, session: Session = None) -> 'Tag':
+        if tag := Tag.get_by_id(id_, session):
+            return tag
+
+        raise UnknownTag(f'Unknown Tag with id={id_}')
 
     def has_relations(self) -> bool:
         """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
@@ -215,7 +250,7 @@ def test_tags_config():
 
 
 @optional_session
-def schedule_save(session: Session = None):
+def save_tags_config(session: Session = None):
     """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
     if PYTEST:
         get_tags_config().save_tags(session)
@@ -241,10 +276,12 @@ def get_tags() -> List[dict]:
 
 
 @optional_session
-@run_after(schedule_save)
+@run_after(save_tags_config)
 def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
     if ',' in name:
         raise InvalidTag('Tag name cannot have comma')
+    if not is_valid_hex_color(color):
+        raise InvalidTag('Tag color is invalid')
 
     if tag_id:
         tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
@@ -264,7 +301,7 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
         session.rollback()
         raise InvalidTag(f'Name already taken') from e
 
-    schedule_save()
+    save_tags_config()
 
     return tag
 
@@ -283,7 +320,7 @@ def delete_tag(tag_id: int, session: Session = None):
     session.delete(tag)
     session.commit()
 
-    schedule_save()
+    save_tags_config()
 
 
 @register_refresh_cleanup
@@ -360,7 +397,7 @@ def import_tags_config(session: Session = None):
                     tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
-                        tag_file = tag.tag_file_group(file_group, session)
+                        tag_file = Tag.tag_file_group(file_group.id, tag.id, session)
                     tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
                     need_commit = True
                 elif not file_group:

@@ -850,6 +850,15 @@ async def test_aiohttp(simple_web_server):
     assert status == 200
 
 
+def test_can_connect_to_server(simple_web_server):
+    httpd, server_url = simple_web_server
+    _, host, port = server_url.split(':')
+    host = host[2:]
+    port = int(port[:-1])
+
+    assert common.can_connect_to_server(host, port)
+
+
 @pytest.mark.asyncio
 async def test_log_level(test_async_client, test_config):
     """User can change API log level."""
@@ -880,3 +889,15 @@ async def test_log_level(test_async_client, test_config):
 @skip_circleci
 def test_html_screenshot(singlefile_contents_factory):
     assert common.html_screenshot(singlefile_contents_factory())
+
+
+@pytest.mark.parametrize('color,expected', [
+    ('#ffffff', True),
+    ('#FFFFFF', True),
+    ('#fff', True),
+    ('#FFf', True),
+    ('#asdf', False),
+    ('#ffff', False),
+])
+def test_is_valid_hex_color(color, expected):
+    assert common.is_valid_hex_color(color) == expected

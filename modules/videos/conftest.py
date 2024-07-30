@@ -16,6 +16,7 @@ from modules.videos.models import Channel, Video
 from wrolpi.api_utils import api_app
 from wrolpi.downloader import DownloadFrequency, DownloadManager
 from wrolpi.files.models import FileGroup
+from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
 
 

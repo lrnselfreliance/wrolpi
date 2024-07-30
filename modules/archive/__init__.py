@@ -27,7 +27,7 @@ PRETTY_NAME = 'Archive'
 
 logger = logger.getChild(__name__)
 
-__all__ = ['ArchiveDownloader', 'archive_downloader']
+__all__ = ['ArchiveDownloader', 'archive_downloader', 'model_archive']
 
 
 class ArchiveDownloader(Downloader, ABC):

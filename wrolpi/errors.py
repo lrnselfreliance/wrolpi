@@ -113,7 +113,13 @@ class InvalidTag(APIError):
 
 class FileGroupIsTagged(APIError):
     code = 'FILE_GROUP_IS_TAGGED'
-    message = 'File group is tagged'
+    message = 'FileGroup is tagged'
+    status_code = HTTPStatus.CONFLICT
+
+
+class FileGroupAlreadyTagged(APIError):
+    code = 'FILE_GROUP_ALREADY_TAGGED'
+    message = 'FileGroup is already tagged with this Tag'
     status_code = HTTPStatus.CONFLICT
 
 

@@ -295,6 +295,8 @@ function MapPage() {
         <Header as='h3'>Failed to fetch Map service.</Header>
         <p>You may need to give permission to access the page: <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
 
+        <p>Map startup is delayed on boot, if you have just started your WROLPi try again in a few minutes.</p>
+
         <p>If the above does not work, try starting the service:</p>
         <pre>sudo systemctl start renderd</pre>
         <pre>sudo systemctl start apache2</pre>

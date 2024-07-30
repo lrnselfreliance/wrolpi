@@ -242,6 +242,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     if mimetype == 'application/x-subrip':
         # Fallback to old mimetype.
         return 'text/srt'
+    if mimetype == 'application/zip' and path.suffix == '.docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     return mimetype
 
 
@@ -266,10 +268,10 @@ def get_mimetype(path: Path) -> str:
 # Special suffixes within WROLPi.
 SUFFIXES = {
     '.info.json',
+    '.live_chat.json',
+    '.readability.html',
     '.readability.json',
     '.readability.txt',
-    '.readability.html',
-    '.live_chat.json'
 }
 SUFFIXES |= {f'.{i}.srt' for i in ISO_639_CODES}
 SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
@@ -279,16 +281,28 @@ SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
 def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = False) -> Tuple[str, str]:
     """Get the path's stem and suffix.
 
-    This function handles WROLPi suffixes like .info.json."""
-    if isinstance(path, str):
-        path = pathlib.Path(path)
+    This function handles WROLPi suffixes like .info.json.
 
-    full_ = str(path)  # May or may not be absolute.
+    >>> split_path_stem_and_suffix('/foo/bar.txt')
+    ('bar', '.txt')
+    >>> split_path_stem_and_suffix('/foo/bar.txt', full=True)
+    ('/foo/bar', '.txt')
+    >>> split_path_stem_and_suffix('/foo/bar.info.json', full=True)
+    ('/foo/bar', '.info.json')
+    """
+    path = pathlib.Path(path) if isinstance(path, str) else path
+
+    # May or may not be absolute.  Convert to lowercase so any suffix case can be matched.
+    full_ = str(path).lower()
+    # Get the special matching suffix, if any.  Match against `.en.srt` but could return `.EN.SRT`
     suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), path.suffix)
-    if suffix and full:
-        return f'{path.parent}/{path.name[:-1 * len(suffix)]}', suffix
-    elif suffix:
-        return path.name[:-1 * len(suffix)], suffix
+    # Return the suffix from the path's name in the original case.
+    if suffix:
+        idx = -1 * len(suffix)
+        if full:
+            return f'{path.parent}/{path.name[:idx]}', path.name[idx:]
+        else:
+            return path.name[:idx], path.name[idx:]
 
     # Path has no suffix.
     if full:
@@ -991,7 +1005,7 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
         if not tag:
             raise UnknownTag(f'Cannot find Tag with id {tag_id}')
     elif tag_name:
-        tag: Tag = Tag.find_by_name(tag_name, session)
+        tag: Tag = Tag.get_by_name(tag_name, session)
         if not tag:
             raise UnknownTag(f'Cannot find Tag with name {tag_name}')
     else:
@@ -1012,7 +1026,7 @@ async def add_file_group_tag(file_group_id: int, file_group_primary_path: str, t
 async def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
                                 session: Session = None):
     file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
-    file_group.remove_tag(tag, session)
+    file_group.untag(tag, session)
 
 
 @dataclasses.dataclass
@@ -1371,7 +1385,7 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
         raise UnknownDirectory('Directory is not ignored')
 
 
-@optional_session(commit=True)
+@optional_session
 async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None):
     """Insert/update all files in the provided file's FileGroup."""
     # Update/Insert all files in the FileGroup.
@@ -1380,6 +1394,7 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
     paths = remove_files_in_ignored_directories(paths)
     if paths:
         file_group = FileGroup.from_paths(session, *paths)
+        logger.debug(f'upsert_file: {file_group}')
         # Re-index the contents of the file.
         session.add(file_group)
         session.flush([file_group, ])
@@ -1388,7 +1403,8 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
 
         for tag_name in (tag_names or []):
             if tag_name not in file_group.tag_names:
-                tag = Tag.find_by_name(tag_name)
-                file_group.add_tag(tag)
+                tag = Tag.get_by_name(tag_name)
+                file_group.add_tag(tag.id)
+        session.commit()
     else:
         logger.warning('upsert_file called, but all files are in ignored directories!')

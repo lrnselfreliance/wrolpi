@@ -710,23 +710,38 @@ def assert_directories(test_session, test_directory):
     return _
 
 
+FORM_PART = b'''-----------------------------sanic\r
+Content-Disposition: form-data; name="{name}"\r
+\r
+{value}\r
+\r
+'''
+
+FORM_FILENAME_PART = b'''-----------------------------sanic\r
+Content-Disposition: form-data; name="{name}"; filename="{filename}"\r
+Content-Type: application/octet-stream\r
+\r
+{value}\r
+\r
+'''
+
+
 @pytest.fixture
 def make_multipart_form():
     def _(forms: List[dict]):
-        boundary = '-----sanic\n'
+        boundary = b'-----------------------------sanic\r\n'
         new_forms = []
         for form in forms:
-            name, value, filename = form['name'], form['value'], form.get('filename')
+            name, value, filename = form['name'].encode(), form['value'], form.get('filename', '').encode()
+            value = value if isinstance(value, bytes) else str(value).encode()
+            part = FORM_PART
             if filename:
-                new_forms.append(f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\n\n{value}\n')
-            elif isinstance(value, list):
-                for part in value:
-                    new_forms.append(f'Content-Disposition: form-data; name="{name}"\n\n{part}\n')
-            else:
-                new_forms.append(f'Content-Disposition: form-data; name="{name}"\n\n{value}\n')
-        body = f'\n{boundary}'.join(new_forms)
-        body = f'{boundary}{body}\n{boundary}'
-        body = '\r\n'.join(body.split('\n')).strip()
+                part = FORM_FILENAME_PART
+                part.replace(b'{filename}', filename)
+            part = part.replace(b'{name}', name)
+            part = part.replace(b'{value}', value)
+            new_forms.append(part)
+        body = boundary + boundary.join(new_forms) + boundary
         return body
 
     return _

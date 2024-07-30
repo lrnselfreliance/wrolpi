@@ -189,7 +189,7 @@ class Zim(Base):
     def tag_entry(self, tag_name: str, zim_entry: str) -> 'TagZimEntry':
         """Create a TagZimEntry for this Zim at the provided entry (path) for the provided Tag."""
         session = Session.object_session(self)
-        tag = Tag.find_by_name(tag_name, session=session)
+        tag = Tag.get_by_name(tag_name, session=session)
         tag_zim_entry = TagZimEntry(tag=tag, zim=self, zim_entry=zim_entry)
         session.add(tag_zim_entry)
         tags.schedule_save()
@@ -200,7 +200,7 @@ class Zim(Base):
 
         @raise UnknownZimTagEntry: No entry exists to remove."""
         session = Session.object_session(self)
-        tag = Tag.find_by_name(tag_name, session=session)
+        tag = Tag.get_by_name(tag_name, session=session)
         tag_zim_entry = session.query(TagZimEntry).filter_by(
             tag_id=tag.id,
             zim_id=self.id,

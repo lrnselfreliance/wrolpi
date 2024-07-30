@@ -1,3 +1,4 @@
+import hashlib
 import json
 from http import HTTPStatus
 from unittest import mock
@@ -6,6 +7,7 @@ import pytest
 
 from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
+from wrolpi.files.lib import get_mimetype
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
 from wrolpi.test.common import assert_dict_contains
@@ -467,52 +469,56 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     assert test_session.query(FileGroup).count() == 1
 
 
-def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form, tag_factory):
+def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form, tag_factory,
+                     video_bytes):
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
     tag1, tag2 = tag_factory(), tag_factory()
 
+    part1, part2 = video_bytes[:1_000_000], video_bytes[1_000_000:]
     forms = [
         dict(name='chunkNumber', value='0'),
-        dict(name='filename', value='foo.txt'),
+        dict(name='filename', value='video.mp4'),
         dict(name='totalChunks', value='1'),
         dict(name='destination', value='uploads'),
-        dict(name='chunkSize', value='3'),
-        dict(name='chunk', value='foo', filename='chunk'),
-        dict(name='tagNames', value=[tag1.name, tag2.name]),
+        dict(name='chunkSize', value=1_000_000),
+        dict(name='tagNames', value=tag1.name),
+        dict(name='tagNames', value=tag2.name),
+        dict(name='chunk', value=part1, filename='chunk'),
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', content=body,
-                                         headers={
-                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
-                                                             ' boundary=-----sanic'})
-    assert response.status_code == HTTPStatus.OK
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.OK, response.content.decode()
 
-    assert (test_directory / 'uploads/foo.txt').is_file()
-    assert (test_directory / 'uploads/foo.txt').read_text() == 'foo'
+    output = test_directory / 'uploads/video.mp4'
+    assert output.is_file()
+    assert output.stat().st_size == 1_000_000
 
     forms = [
         dict(name='chunkNumber', value='1'),
-        dict(name='filename', value='foo.txt'),
+        dict(name='filename', value='video.mp4'),
         dict(name='totalChunks', value='1'),
         dict(name='destination', value='uploads'),
-        dict(name='chunkSize', value='3'),
-        dict(name='chunk', value='bar', filename='chunk'),
-        dict(name='tagNames', value=[tag1.name, tag2.name]),
+        dict(name='chunkSize', value=56318),
+        dict(name='tagNames', value=tag1.name),
+        dict(name='tagNames', value=tag2.name),
+        dict(name='chunk', value=part2, filename='chunk'),
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', content=body,
-                                         headers={
-                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
-                                                             ' boundary=-----sanic'})
-    assert response.status_code == HTTPStatus.CREATED
+    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, response.content.decode()
 
-    assert (test_directory / 'uploads/foo.txt').is_file()
-    assert (test_directory / 'uploads/foo.txt').read_text() == 'foobar'
+    assert output.is_file()
+    assert get_mimetype(output) == 'video/mp4'
+    assert output.stat().st_size == len(video_bytes)
+    assert output.read_bytes() == video_bytes
+    assert hashlib.md5(output.read_bytes()).hexdigest() == '2738c53bd7c01b01d408da11a55bfa36'
 
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert set(file_group.tag_names) == {tag1.name, tag2.name}, 'Two tags should be applied.'
     assert file_group.indexed, 'File should be indexed after upload.'
+    assert file_group.model, 'File should be modeled'
 
 
 @pytest.mark.asyncio

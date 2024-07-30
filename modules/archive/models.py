@@ -1,7 +1,7 @@
 import json
 import pathlib
 import re
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional
 
 import pytz
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
@@ -58,6 +58,20 @@ class Archive(Base, ModelHelper):
         if not archive:
             raise UnknownArchive(f'Cannot find Archive with id {id_}')
         return archive
+
+    @staticmethod
+    @optional_session
+    def get_by_path(path: pathlib.Path | str, session: Session = None) -> Optional['Archive']:
+        archive = session.query(Archive).join(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
+        return archive
+
+    @staticmethod
+    @optional_session
+    def find_by_path(path: pathlib.Path | str, session: Session = None) -> Optional['Archive']:
+        archive = Archive.get_by_path(path, session)
+        if archive:
+            return archive
+        raise UnknownArchive(f'Cannot find Archive with path: {path}')
 
     def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
         return self.file_group.my_paths(*mimetypes)
@@ -285,9 +299,8 @@ class Archive(Base, ModelHelper):
         archive = model_archive(file_group, session)
         return archive
 
-    def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
-        tag = Tag.get_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
-        return self.file_group.add_tag(tag)
+    def add_tag(self, tag_id_or_name: int | str) -> TagFile:
+        return self.file_group.add_tag(tag_id_or_name)
 
 
 class Domain(Base, ModelHelper):

@@ -5,7 +5,7 @@ import pytest
 from libzim import Entry
 
 from modules.zim import lib
-from modules.zim.errors import UnknownZim
+from modules.zim.errors import UnknownZim, UnknownZimEntry
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo, get_wrolpi_config
@@ -50,6 +50,13 @@ async def test_zim_get_entry(test_async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
+async def test_zim_bad_entry(test_async_client, test_session, test_zim, tag_factory):
+    tag1 = tag_factory()
+    with pytest.raises(UnknownZimEntry):
+        test_zim.tag_entry(tag1.name, 'path does not exist')
+
+
+@pytest.mark.asyncio
 async def test_zim_get_entries_tags(test_async_client, test_session, test_zim, tag_factory):
     tag1, tag2 = tag_factory('tag1'), tag_factory('tag2')
     test_zim.tag_entry(tag1.name, 'one')
@@ -59,6 +66,37 @@ async def test_zim_get_entries_tags(test_async_client, test_session, test_zim, t
 
     assert lib.get_entries_tags(['one', 'two', 'home'], 1) \
            == dict(one=['tag1', 'tag2'], two=['tag1'], home=[])
+
+
+@pytest.mark.asyncio
+async def test_tag_zim_entry_model(test_async_client, test_session, zim_factory, tag_factory):
+    tze = zim_factory('zim1').tag_entry(tag_factory().name, 'one')
+    # Test TagZimEntry.__repr__
+    assert repr(tze) == "<TagZimEntry tag='one' zim=zim1 zim_entry=one>"
+
+
+@pytest.mark.asyncio
+async def test_zim_entries_with_tags(test_async_client, test_session, zim_factory, tag_factory):
+    """Can fetch Zim Entries that have Tags.  Can filter only those entries that are tagged on a specific Zim."""
+    tag1, tag2 = tag_factory(), tag_factory()
+    zim1, zim2 = zim_factory('zim1'), zim_factory('zim2')
+    # Tag Zim1 with both tags, but Zim2 shares one of the tags and is returned when no Zim is passed.
+    zim1.tag_entry(tag1.name, 'one')
+    zim1.tag_entry(tag2.name, 'two')
+    zim2.tag_entry(tag2.name, 'home')
+    test_session.commit()
+
+    # Get entries from zim1 only.
+    entries = zim1.entries_with_tags([tag1.name, ])
+    assert len(entries) == 1
+    assert entries[0].path == 'one'
+    entries = zim1.entries_with_tags([tag2.name, ])
+    assert len(entries) == 1
+    assert entries[0].path == 'two'
+
+    # Get entries from any Zim.
+    entries = lib.Zim.entries_with_tags([tag2.name, ])
+    assert {i.path for i in entries} == {'two', 'home'}, 'Tag2 was applied to `two` and `home`'
 
 
 def test_get_unique_paths():

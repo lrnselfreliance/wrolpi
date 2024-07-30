@@ -82,7 +82,7 @@ async def test_delete_file_names(test_async_client, test_session, make_files_str
     foo_fg = FileGroup.from_paths(test_session, foo)
     foo1_fg = FileGroup.from_paths(test_session, foo1)
     tag = tag_factory()
-    foo1_fg.add_tag(tag)
+    foo1_fg.add_tag(tag.id)
     test_session.commit()
     assert foo.is_file()
     assert foo1.is_file()
@@ -110,7 +110,7 @@ async def test_delete_tagged(test_session, make_files_structure, tag_factory, vi
     await lib.refresh_files()
     # Both files end up in a group.
     bar = test_session.query(FileGroup).one()
-    bar.add_tag(tag)
+    bar.add_tag(tag.id)
     test_session.commit()
 
     # Neither file can be deleted.
@@ -367,7 +367,7 @@ async def test_file_group_tag(test_session, make_files_structure, test_directory
     one = tag_factory()
 
     foo: FileGroup = test_session.query(FileGroup).one()
-    foo.add_tag(one)
+    foo.add_tag(one.id)
     test_session.commit()
 
     tag_file2: TagFile = test_session.query(TagFile).one()
@@ -735,8 +735,8 @@ def test_file_group_merge(test_async_client, test_session, test_directory, make_
     srt_group = FileGroup.from_paths(test_session, srt)
     test_session.add_all([vid_group, srt_group])
     test_session.flush([vid_group, srt_group])
-    vid_tag_file = vid_group.add_tag(one, test_session)
-    srt_tag_file = srt_group.add_tag(two, test_session)
+    vid_tag_file = vid_group.add_tag(one.name, test_session)
+    srt_tag_file = srt_group.add_tag(two.name, test_session)
     test_session.flush([vid_tag_file, srt_tag_file])
     tag_file_created_at = vid_tag_file.created_at
     srt_file_created_at = srt_tag_file.created_at
@@ -936,7 +936,7 @@ async def test_move_tagged(test_async_client, test_session, test_directory, make
     })
     await lib.refresh_files()
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
-    bar_file_group.add_tag(tag)
+    bar_file_group.add_tag(tag.id)
     test_session.commit()
 
     qux = test_directory / 'qux'

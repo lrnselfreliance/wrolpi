@@ -1844,15 +1844,21 @@ def get_title_from_html(html: str, url: str = None) -> str:
         logger_.debug(f'Unable to extract title {url}')
 
 
-def can_connect_to_server(hostname: str) -> bool:
-    """Return True only if `hostname` responds on port 80."""
+def can_connect_to_server(hostname: str, port: int = 80) -> bool:
+    """Return True only if `hostname` responds."""
     # Thanks https://stackoverflow.com/questions/20913411/test-if-an-internet-connection-is-present-in-python
     try:
         # connect to the host -- tells us if the host is actually
         # reachable
-        conn = socket.create_connection((hostname, 53))
+        conn = socket.create_connection((hostname, port))
         conn.close()
         return True
     except Exception:
         pass  # We ignore any errors, returning False
     return False
+
+
+def is_valid_hex_color(hex_color: str) -> bool:
+    # Regular expression to match valid HTML hex color codes
+    hex_color_regex = re.compile(r'^#([A-F0-9]{6}|[A-F0-9]{3})$', re.IGNORECASE)
+    return bool(hex_color_regex.match(hex_color))

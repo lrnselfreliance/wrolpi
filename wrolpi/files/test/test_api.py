@@ -201,8 +201,8 @@ async def test_files_search_any_tag(test_async_client, test_session, make_files_
     assert bar.primary_path.name == 'bar.txt' \
            and foo.primary_path.name == 'foo.txt' \
            and foobar.primary_path.name == 'foo bar.txt'
-    foo.add_tag(one)
-    foobar.add_tag(two)
+    foo.add_tag(one.id)
+    foobar.add_tag(two.id)
     test_session.commit()
 
     # Only `foo` is tagged with `one`
@@ -457,10 +457,8 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
         dict(name='chunk', value='foo', filename='chunk')
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', content=body,
-                                         headers={
-                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
-                                                             ' boundary=-----sanic'})
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED
 
     assert (test_directory / 'uploads/foo/bar.txt').is_file()
@@ -516,6 +514,7 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     assert hashlib.md5(output.read_bytes()).hexdigest() == '2738c53bd7c01b01d408da11a55bfa36'
 
     file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group.mimetype == 'video/mp4'
     assert set(file_group.tag_names) == {tag1.name, tag2.name}, 'Two tags should be applied.'
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'

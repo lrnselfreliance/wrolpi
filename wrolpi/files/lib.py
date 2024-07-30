@@ -48,7 +48,7 @@ logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
-           'search_file_suggestion_count', 'glob_shared_stem',
+           'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file',
            'move', 'rename', 'delete_directory', 'handle_file_group_search_results']
 
 
@@ -1018,7 +1018,7 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
 async def add_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
                              session: Session = None) -> TagFile:
     file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
-    tag_file = file_group.add_tag(tag, session)
+    tag_file = file_group.add_tag(tag.id, session)
     return tag_file
 
 
@@ -1026,7 +1026,7 @@ async def add_file_group_tag(file_group_id: int, file_group_primary_path: str, t
 async def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
                                 session: Session = None):
     file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
-    file_group.untag(tag, session)
+    file_group.untag(tag.id, session)
 
 
 @dataclasses.dataclass
@@ -1398,13 +1398,19 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         # Re-index the contents of the file.
         session.add(file_group)
         session.flush([file_group, ])
-        file_group.do_index()
-        file_group.indexed = True
+
+        try:
+            file_group.do_model(session)
+        except Exception as e:
+            logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
+            if PYTEST:
+                raise
 
         for tag_name in (tag_names or []):
             if tag_name not in file_group.tag_names:
                 tag = Tag.get_by_name(tag_name)
                 file_group.add_tag(tag.id)
+
         session.commit()
     else:
         logger.warning('upsert_file called, but all files are in ignored directories!')

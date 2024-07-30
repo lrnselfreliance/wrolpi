@@ -45,11 +45,12 @@ def test_delete_video(test_session, video_factory):
     assert test_session.query(FileGroup).count() == 0, 'Video files were not deleted.'
 
 
-def test_delete_video_with_tag(test_session, video_factory, tag_factory):
+@pytest.mark.asyncio
+async def test_delete_video_with_tag(test_async_client, test_session, video_factory, tag_factory):
     """You cannot delete a video with a tag."""
     video = video_factory(with_video_file=True, with_poster_ext='png')
     tag = tag_factory()
-    video.add_tag(tag)
+    video.add_tag(tag.name)
     test_session.commit()
 
     with pytest.raises(FileGroupIsTagged):

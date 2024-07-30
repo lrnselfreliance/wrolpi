@@ -151,7 +151,7 @@ def headline_zim(search_str: str, zim_id: int, tag_names: List[str] = None, offs
         # Remove duplicate entries (disambiguation or redirect).
         results = get_unique_paths(*results, *search_results)
         results = results[:limit]
-        entries = [zim.get_entry(i) for i in results]
+        entries = [zim.find_entry(i) for i in results]
         estimate = zim.estimate(search_str)
     else:
         raise RuntimeError('Must provide search_str or tag_names.')
@@ -238,7 +238,7 @@ def get_zim(zim_id: int, session: Session = None) -> Zim:
 def get_entry(path: str, zim_id: int) -> Entry:
     with get_db_session() as session:
         zim = get_zim(zim_id, session=session)
-        entry = zim.get_entry(path, throw=True)
+        entry = zim.find_entry(path)
     return entry
 
 

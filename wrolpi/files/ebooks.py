@@ -5,7 +5,7 @@ import pathlib
 from typing import List, Optional, Tuple
 
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, or_, and_
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 
 from wrolpi.common import ModelHelper, Base, register_modeler, get_html_soup
 from wrolpi.db import get_db_session
@@ -23,13 +23,16 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    'EBOOK_MIMETYPES',
     'EBook',
     'EBookData',
+    'EPUB_MIMETYPE',
+    'MOBI_MIMETYPE',
+    'ebook_modeler',
     'extract_ebook_cover',
     'extract_ebook_data',
-    'ebook_modeler',
-    'MOBI_MIMETYPE',
-    'EPUB_MIMETYPE'
+    'mimetype_is_ebook',
+    'model_ebook',
 ]
 
 EBOOK_SUFFIXES = ('.epub', '.mobi')
@@ -211,11 +214,14 @@ class EBook(ModelHelper, Base):
                 session.delete(file_group)
 
 
-def _model_ebook(ebook: EBook) -> EBook:
-    """Creates an EBook model based off a File.  Searches for it's cover in the provided `files`."""
-    # Multiple formats may share this cover.
-    epub_file = next(iter(ebook.file_group.my_files('application/epub')), None)
-    mobi_file = next(iter(ebook.file_group.my_files('application/x-mobipocket-ebook')), None)
+def model_ebook(file_group: FileGroup, session: Session) -> EBook:
+    """Creates an EBook model based off a File.  Searches for its cover in the provided `files`."""
+    ebook = EBook(file_group=file_group)
+    session.add(ebook)
+
+    # Multiple formats may be available.
+    epub_file = next(iter(ebook.file_group.my_epub_files()), None)
+    mobi_file = next(iter(ebook.file_group.my_mobi_files()), None)
     # epub is preferred because it can be indexed.
     if epub_file:
         ebook_file = epub_file['path']
@@ -290,11 +296,10 @@ async def ebook_modeler():
             for file_group, ebook in file_groups:
                 processed += 1
                 try:
-                    ebook = ebook or EBook(file_group=file_group)
                     if PYTEST:
                         # Handle caching issue during testing.
                         session.expire(file_group)
-                    _model_ebook(ebook)
+                    ebook = ebook or model_ebook(file_group, session)
                     session.add(ebook)
                     file_group.model = EBook.__tablename__
                     file_group.indexed = True

@@ -1,7 +1,7 @@
 import json
 import pathlib
 from pathlib import Path
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session, deferred
@@ -224,7 +224,7 @@ class Video(ModelHelper, Base):
         try:
             validate_video(self, self.channel.generate_posters if self.channel else False)
         except Exception as e:
-            logger.warning(f'Failed to validate video {self}', exc_info=e)
+            logger.error(f'Failed to validate video {self}', exc_info=e)
             if PYTEST:
                 raise
 
@@ -339,9 +339,10 @@ class Video(ModelHelper, Base):
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
-    def add_tag(self, tag_id: int, session: Session = None) -> TagFile:
+    def add_tag(self, tag_id_or_name: int, session: Session = None) -> TagFile:
         session = session or Session.object_session(self)
-        return self.file_group.add_tag(tag_id, session=session)
+        tag = Tag.find_by_name(tag_id_or_name) if isinstance(tag_id_or_name, str) else Tag.find_by_id(tag_id_or_name)
+        return self.file_group.add_tag(tag.id, session=session)
 
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.

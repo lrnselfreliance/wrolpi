@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from wrolpi import tags
-from wrolpi.errors import FileGroupIsTagged
+from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile, Tag
@@ -25,12 +25,36 @@ async def test_tags_file_group_json(test_async_client, test_session, make_files_
     file_group.add_tag(tag_two.id)
     assert file_group.__json__()['tags'] == ['one', 'two']
 
+    with pytest.raises(FileGroupAlreadyTagged):
+        # Cannot tag a FileGroup with the same Tag twice.
+        file_group.add_tag(tag_two.id)
+
     file_group.untag(tag_one.id)
     assert file_group.__json__()['tags'] == ['two']
 
 
 @pytest.mark.asyncio
-async def test_tags_file_group(test_async_client, test_session, make_files_structure, tag_factory, video_bytes, image_bytes_factory):
+async def test_tags_model(test_async_client, test_session, make_files_structure, tag_factory, example_pdf):
+    """Can get Tag using class methods."""
+    tag1 = tag_factory()
+    assert tag1.__json__()
+
+    assert Tag.find_by_id(tag1.id)
+    assert Tag.find_by_name(tag1.name)
+
+    assert Tag.get_by_id(123) is None, '.get should return None with bad id'
+    assert Tag.get_by_name('bad name') is None, '.get should return None with bad name'
+
+    with pytest.raises(UnknownTag):
+        Tag.find_by_id(123)
+
+    with pytest.raises(UnknownTag):
+        Tag.find_by_name('bad name')
+
+
+@pytest.mark.asyncio
+async def test_tags_file_group(test_async_client, test_session, make_files_structure, tag_factory, video_bytes,
+                               image_bytes_factory):
     """A FileGroup can be tagged with multiple Tags."""
     make_files_structure({
         'video.mp4': video_bytes, 'video.png': image_bytes_factory(),
@@ -64,7 +88,8 @@ async def test_tags_file_group(test_async_client, test_session, make_files_struc
 
 
 @pytest.mark.asyncio
-async def test_tags_config_(test_async_client, test_session, test_directory, tag_factory, example_pdf, video_file, test_tags_config):
+async def test_tags_config_file(test_async_client, test_session, test_directory, tag_factory, example_pdf, video_file,
+                                test_tags_config):
     """Test that the config is updated when a FileGroup is tagged."""
     await files_lib.refresh_files()
     pdf: FileGroup = FileGroup.get_by_path(example_pdf, test_session)
@@ -73,7 +98,7 @@ async def test_tags_config_(test_async_client, test_session, test_directory, tag
     tag2 = tag_factory()
     test_session.commit()
 
-    tags.schedule_save(test_session)
+    tags.save_tags_config(test_session)
     assert tag1.name in test_tags_config.read_text()
     assert tag2.name in test_tags_config.read_text()
 
@@ -134,7 +159,7 @@ async def test_tags_crud(test_async_client, test_session, example_pdf, assert_ta
 
     # Apply the tag to the PDF.
     tag = test_session.query(tags.Tag).one()
-    pdf.add_tag(tag, test_session)
+    pdf.add_tag(tag.name, test_session)
     test_session.commit()
 
     # The tag can be updated.
@@ -156,7 +181,7 @@ async def test_tags_crud(test_async_client, test_session, example_pdf, assert_ta
     request, response = await test_async_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
-    pdf.untag(tag, test_session)
+    pdf.untag(tag.id, test_session)
     test_session.commit()
 
     # Can delete unused Tag.
@@ -174,7 +199,7 @@ async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
     tag = tag_factory()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
-    pdf.add_tag(tag)
+    pdf.add_tag(tag.id)
     test_session.commit()
 
     with pytest.raises(FileGroupIsTagged):
@@ -189,8 +214,9 @@ def test_import_empty_tags_config(test_session, test_tags_config):
     tags.import_tags_config()
 
 
-@pytest.mark.asyncio()
-async def test_import_tags_config(test_session, test_directory, test_tags_config, example_singlefile):
+@pytest.mark.asyncio
+async def test_import_tags_config(test_async_client, test_session, test_directory, test_tags_config,
+                                  example_singlefile):
     with test_tags_config.open('wt') as fh:
         data = dict(
             # Tag names can contain Unicode characters.
@@ -255,10 +281,10 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     foo, = make_files_structure({'foo': 'text'})
     foo = FileGroup.from_paths(test_session, foo)
     test_session.flush([foo, ])
-    foo.add_tag(tag1)
+    foo.add_tag(tag1.id)
     # use tag4 for Zim entry.
     await zim_lib.add_tag(tag4.name, test_zim.id, 'home')
-    tags.schedule_save()
+    tags.save_tags_config()
 
     # All tags were saved.
     assert tag1.name in test_tags_config.read_text()
@@ -287,8 +313,23 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     }
 
     # DB is written to config with only those Tags left.
-    tags.schedule_save()
+    tags.save_tags_config()
     # Tags that are used are restored.
     assert len(config.tag_files) == 1
     assert len(config.tag_zims) == 1
     assert len(config.tags) == 3
+
+
+@pytest.mark.asyncio
+async def test_invalid_tag(test_async_client, test_session, test_directory):
+    with pytest.raises(InvalidTag):
+        tags.upsert_tag('cannot use comma: ,', '#fff')
+
+    with pytest.raises(InvalidTag):
+        tags.upsert_tag('invalid color', 'foo')
+
+    with pytest.raises(UnknownTag):
+        tags.upsert_tag('Tag ID does not exist', '#fff', 1)
+
+    with pytest.raises(UnknownTag):
+        tags.delete_tag(1)

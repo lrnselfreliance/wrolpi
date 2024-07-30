@@ -163,61 +163,54 @@ class Zim(Base):
         results = list(suggestions.getResults(offset, limit))
         return results
 
-    def get_entry(self, path: str, throw: bool = True) -> Optional[Entry]:
+    def get_entry(self, path: str) -> Optional[Entry]:
         """Search this Zim file for the provided Entry at the `path`."""
         zim = self.get_zim()
         try:
             entry = zim.get_entry_by_path(path)
         except KeyError:
-            if throw:
-                raise UnknownZimEntry(f'Cannot find entry at {path=}')
-            else:
-                return None
+            return None
         return entry
 
-    def get_entry_html(self, path: str) -> Optional[str]:
-        """Search this Zim file for the provided Entry at `path`, read its contents and return the HTML."""
-        content = bytes(self.get_entry(path).get_item().content).decode('UTF-8')
-        return content
+    def find_entry(self, path: str) -> Entry:
+        """Search this Zim file for the provided Entry at the `path`.
 
-    def get_entry_text(self, path: str) -> Optional[str]:
-        """Search this Zim file for the provided Entry at `path`, read its contents and return the text in the HTML."""
-        html = self.get_entry_html(path)
-        content = extract_html_text(html)
-        return content
+        @raise UnknownZimEntry: if an entry at path does not exist."""
+        if entry := self.get_entry(path):
+            return entry
 
-    def tag_entry(self, tag_name: str, zim_entry: str) -> 'TagZimEntry':
+        raise UnknownZimEntry(f'Cannot find entry at {path=}')
+
+    def tag_entry(self, tag_id_or_name: int | str, zim_entry: str) -> 'TagZimEntry':
         """Create a TagZimEntry for this Zim at the provided entry (path) for the provided Tag."""
         session = Session.object_session(self)
-        tag = Tag.get_by_name(tag_name, session=session)
+
+        # Ensure the entry exists.
+        self.find_entry(zim_entry)
+
+        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
+            else Tag.get_by_id(tag_id_or_name, session)
         tag_zim_entry = TagZimEntry(tag=tag, zim=self, zim_entry=zim_entry)
         session.add(tag_zim_entry)
-        tags.schedule_save()
+        tags.save_tags_config()
         return tag_zim_entry
 
-    def untag_entry(self, tag_name: str, zim_entry: str):
+    def untag_entry(self, tag_id_or_name: int | str, zim_entry: str):
         """Removes any TagZimEntry of the Zim entry at the provided path for the provided Tag.
 
         @raise UnknownZimTagEntry: No entry exists to remove."""
         session = Session.object_session(self)
-        tag = Tag.get_by_name(tag_name, session=session)
-        tag_zim_entry = session.query(TagZimEntry).filter_by(
-            tag_id=tag.id,
-            zim_id=self.id,
-            zim_entry=zim_entry,
-        ).one_or_none()
+        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
+            else Tag.get_by_id(tag_id_or_name, session)
+        tag_zim_entry = TagZimEntry.get_by_primary_keys(tag.id, self.id, zim_entry, session)
         if tag_zim_entry:
             session.delete(tag_zim_entry)
         else:
             raise UnknownZimTagEntry(f'Could not find at {repr(str(zim_entry))}')
-        tags.schedule_save()
+        tags.save_tags_config()
 
-    @optional_session
-    def entries_with_tags(self, tag_names: List[str], offset: int = 0, limit: int = 10, session: Session = None) \
-            -> List[Entry]:
-        """Return Zim Entries tagged with the provided names."""
-        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=self.id)
-
+    @staticmethod
+    def _entries_with_tags_process(limit: int, offset: int, params: dict, session: Session, tags_sub_select: str):
         with get_db_curs() as curs:
             curs.execute(tags_sub_select, params)
             zim_ids_entries: List[Tuple[int, int]] = list(curs.fetchall())
@@ -231,9 +224,29 @@ class Zim(Base):
 
         entries = list()
         for tag_zim_entry, zim in tag_zim_entries:
-            entry = zim.get_entry(tag_zim_entry.zim_entry)
+            entry = zim.find_entry(tag_zim_entry.zim_entry)
             entries.append(entry)
 
+        return entries
+
+    @optional_session
+    def entries_with_tags(*args, session: Session = None, **kwargs) -> List[Entry]:
+        """Return Zim Entries tagged with the provided names."""
+        limit = int(kwargs.pop('limit', 10))
+        offset = int(kwargs.pop('offset', 0))
+        args = list(args)
+
+        zim: Zim | None = args.pop(0) if isinstance(args[0], Zim) else None
+        zim_id = zim.id if zim else None
+        tag_names: List[str] = args.pop(0)
+
+        if limit < 1:
+            raise RuntimeError('Limit must be greater than zero')
+        if args:
+            raise RuntimeError('Extra unknown arguments')
+
+        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=zim_id)
+        entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
         return entries
 
     @functools.cached_property
@@ -257,11 +270,6 @@ class Zim(Base):
             summary.title = title
             entries.add(summary)
         return entries
-
-    def parse_name(self):
-        from modules.zim import lib
-        name, date = lib.parse_name(self.path)
-        return name, date
 
 
 class Zims:
@@ -317,7 +325,13 @@ class TagZimEntry(Base):
         zim = self.zim_id
         if self.zim:
             zim = get_relative_to_media_directory(self.zim.path)
-        return f'<TagZimEntry {tag=} {zim=} zim_entry={self.zim_entry}>'
+        return f'<TagZimEntry {tag=} zim={str(zim)} zim_entry={self.zim_entry}>'
+
+    @staticmethod
+    def get_by_primary_keys(tag_id: int, zim_id: int, zim_entry: str, session: Session):
+        return session.query(TagZimEntry) \
+            .filter_by(tag_id=tag_id, zim_id=zim_id, zim_entry=zim_entry) \
+            .one_or_none()
 
 
 class ZimSubscription(Base):

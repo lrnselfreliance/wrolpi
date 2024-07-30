@@ -14,7 +14,7 @@ from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, ge
     get_relative_to_media_directory
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
-from wrolpi.errors import FileGroupIsTagged
+from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
@@ -144,15 +144,12 @@ class FileGroup(ModelHelper, Base):
         self.viewed = now()
 
     @optional_session
-    def add_tag(self, tag_id: int, session: Session = None) -> TagFile:
-        return Tag.tag_file_group(self.id, tag_id, session)
+    def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
+        return Tag.tag_file_group(self.id, tag_id_or_name, session)
 
     @optional_session
-    def untag(self, tag_id: int, session: Session = None):
-        if not isinstance(tag_id, int):
-            raise RuntimeError('tag_id must be an integer')
-
-        Tag.untag_file_group(self.id, tag_id, session)
+    def untag(self, tag_id_or_name: int | str, session: Session = None):
+        Tag.untag_file_group(self.id, tag_id_or_name, session)
 
     def append_files(self, *paths: pathlib.Path):
         """Add all `paths` to this FileGroup.files."""
@@ -209,8 +206,11 @@ class FileGroup(ModelHelper, Base):
         subtitle_paths = [i['path'] for i in self.my_subtitle_files()]
         return [i for i in text_files if i['path'] not in subtitle_paths]
 
-    def my_ebook_files(self) -> List[dict]:
-        return self.my_files('application/epub', 'application/x-mobipocket-ebook')
+    def my_epub_files(self) -> List[dict]:
+        return self.my_files('application/epub')
+
+    def my_mobi_files(self) -> List[dict]:
+        return self.my_files('application/x-mobipocket-ebook')
 
     def delete(self):
         """Delete this FileGroup record, and all of its files.
@@ -320,7 +320,7 @@ class FileGroup(ModelHelper, Base):
             for tag_file in file_group.tag_files:
                 if tag_file.tag.name not in self.tag_names:
                     # Preserve the created at.
-                    self.add_tag(tag_file.tag).created_at = tag_file.created_at
+                    self.add_tag(tag_file.tag.id).created_at = tag_file.created_at
             session.delete(file_group)
 
         self.files = collected_files
@@ -359,6 +359,50 @@ class FileGroup(ModelHelper, Base):
         else:
             query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
         return f'/files?{query}'
+
+    def get_model_class(self) -> Optional[Type[Base]]:
+        from modules.videos.models import Video
+        from modules.archive.lib import is_singlefile_file
+        from modules.archive.models import Archive
+        from wrolpi.files.ebooks import EBook
+        from wrolpi.files.ebooks import mimetype_is_ebook
+
+        if self.mimetype.startswith('video/'):
+            return Video
+        elif self.mimetype.startswith('text') and is_singlefile_file(self.primary_path):
+            return Archive
+        elif mimetype_is_ebook(self.mimetype):
+            return EBook
+
+    def get_model(self, session: Session) -> Optional[Base]:
+        if model_class := self.get_model_class():
+            return model_class.get_by_path(self.primary_path, session)
+
+    def do_model(self, session: Session) -> Base:
+        """Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""
+        if model := self.get_model(session):
+            return model
+
+        from modules.archive.lib import is_singlefile_file
+        from modules.archive import model_archive
+        from modules.videos.models import Video
+        from wrolpi.files.ebooks import model_ebook, mimetype_is_ebook
+
+        if self.mimetype.startswith('video/'):
+            video = Video(file_group_id=self.id, file_group=self)
+            video.validate()
+            self.indexed = True
+            return video
+        elif self.mimetype.startswith('text') and is_singlefile_file(self.primary_path):
+            archive = model_archive(self, session)
+            self.indexed = True
+            return archive
+        elif mimetype_is_ebook(self.mimetype):
+            ebook = model_ebook(self, session)
+            self.indexed = True
+            return ebook
+
+        raise UnknownFile(f'Cannot model file with mimetype {self.mimetype}')
 
 
 class Directory(ModelHelper, Base):

@@ -1,14 +1,13 @@
 import pathlib
 import traceback
 from abc import ABC
-from typing import List
 
-from wrolpi.common import get_media_directory, logger, background_task, get_download_info, \
+from wrolpi.common import get_media_directory, logger, get_download_info, \
     download_file, trim_file_name
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.files.models import FileGroup
+from wrolpi.files.lib import upsert_file
 from wrolpi.vars import PYTEST
 
 __all__ = ['FileDownloader', 'file_downloader']
@@ -52,10 +51,9 @@ class FileDownloader(Downloader, ABC):
 
         try:
             await download_file(download.url, output_path, info)
-            background_task(save_and_tag(output_path, download.settings.get('tag_names')))
 
             with get_db_session(commit=True) as session:
-                fg = FileGroup.from_paths(session, output_path)
+                fg = await upsert_file(output_path, session, download.settings.get('tag_names'))
                 location = fg.location
 
             return DownloadResult(
@@ -72,24 +70,6 @@ class FileDownloader(Downloader, ABC):
                 success=False,
                 error=error,
             )
-
-
-async def save_and_tag(file: pathlib.Path, tag_names: List[str] = None):
-    """Stores the file as a FileGroup.  Applies any provided Tags to the FileGroup."""
-    from wrolpi.tags import Tag
-
-    tag_names = tag_names or list()
-
-    with get_db_session(commit=True) as session:
-        file_group = FileGroup.get_by_path(file)
-        if not file_group:
-            file_group = FileGroup.from_paths(session, file)
-            session.commit()
-
-        if tag_names:
-            tags = session.query(Tag).filter(Tag.name.in_(tag_names))
-            for tag in tags:
-                file_group.add_tag(tag)
 
 
 file_downloader = FileDownloader()

@@ -40,7 +40,8 @@ async def test_events_api_feed(test_session, test_async_client, example_pdf):
         assert_dict_contains(event, expected)
 
 
-def test_events_history_limit():
+@pytest.mark.asyncio
+async def test_events_history_limit(test_async_client):
     """EVENTS_HISTORY has a limited size."""
     for i in range(HISTORY_SIZE + 5):
         Events.send_ready()

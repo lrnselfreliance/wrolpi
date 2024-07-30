@@ -225,13 +225,13 @@ def test_search_videos(test_session, video_factory, assert_video_search, simple_
     vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = tag_factory(), tag_factory()
 
-    vid1.add_tag(tag1)
+    vid1.add_tag(tag1.id)
 
     # vid2 has two tags
-    vid2.add_tag(tag1)
-    vid2.add_tag(tag2)
+    vid2.add_tag(tag1.id)
+    vid2.add_tag(tag2.id)
 
-    vid3.add_tag(tag2)
+    vid3.add_tag(tag2.id)
 
     test_session.commit()
     assert test_session.query(Video).count() == 3

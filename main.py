@@ -244,16 +244,24 @@ async def start_single_tasks(app: Sanic):
         download_manager.retry_downloads()
 
     # Hotspot/throttle are not supported in Docker containers.
-    if not DOCKERIZED and get_wrolpi_config().hotspot_on_startup:
-        try:
-            admin.enable_hotspot()
-        except Exception as e:
-            logger.error('Failed to enable hotspot', exc_info=e)
-    if not DOCKERIZED and get_wrolpi_config().throttle_on_startup:
-        try:
-            admin.throttle_cpu_on()
-        except Exception as e:
-            logger.error('Failed to throttle CPU', exc_info=e)
+    if not DOCKERIZED:
+        if get_wrolpi_config().hotspot_on_startup:
+            logger.info('Starting hotspot...')
+            try:
+                admin.enable_hotspot()
+            except Exception as e:
+                logger.error('Failed to enable hotspot', exc_info=e)
+        else:
+            logger.info('Hotspot on startup is disabled.')
+
+        if get_wrolpi_config().throttle_on_startup:
+            logger.info('Throttling CPU...')
+            try:
+                admin.throttle_cpu_on()
+            except Exception as e:
+                logger.error('Failed to throttle CPU', exc_info=e)
+        else:
+            logger.info('CPU throttle on startup is disabled')
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:

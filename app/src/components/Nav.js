@@ -1,7 +1,7 @@
 import React from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu} from "semantic-ui-react";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Media, SettingsContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
 import {ShareButton} from "./Share";
@@ -61,10 +61,12 @@ function NavIconWrapper(props) {
 
 export function NavBar() {
     const wrolModeEnabled = useWROLMode();
+    const {settings} = React.useContext(SettingsContext);
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
     const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = React.useContext(ThemeContext);
+    const navColor = settings && settings.nav_color ? settings.nav_color : 'violet';
 
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}
@@ -83,7 +85,7 @@ export function NavBar() {
 
     return <>
         <Media at='mobile'>
-            <Menu {...i} attached='top' color='violet'>
+            <Menu {...i} attached='top' color={navColor}>
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
@@ -96,7 +98,7 @@ export function NavBar() {
             </Menu>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Menu {...i} attached='top' color='violet'>
+            <Menu {...i} attached='top' color={navColor}>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}
 

@@ -466,6 +466,7 @@ class WROLPiConfig(ConfigFile):
         ignore_outdated_zims=False,
         ignored_directories=['/media/wrolpi/config', ],
         map_directory='map',
+        nav_color='violet',
         throttle_on_startup=False,
         videos_directory='videos',
         wrol_mode=False,
@@ -596,6 +597,14 @@ class WROLPiConfig(ConfigFile):
     @map_directory.setter
     def map_directory(self, value: str):
         self.update({'map_directory': value})
+
+    @property
+    def nav_color(self) -> str:
+        return self._config['nav_color']
+
+    @nav_color.setter
+    def nav_color(self, value: str):
+        self.update({'nav_color': value})
 
     @property
     def zims_directory(self) -> str:

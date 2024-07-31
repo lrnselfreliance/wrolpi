@@ -566,6 +566,8 @@ def import_tags_config(session: Session = None):
         if PYTEST:
             raise
 
+    sync_tags_directory()
+
 
 def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tuple[str, dict]:
     """Create the SQL necessary to filter FileGroup by the provided Tag names."""

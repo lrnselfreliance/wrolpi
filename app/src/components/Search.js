@@ -385,7 +385,7 @@ export function SearchIconButton() {
     }, [open]);
 
     return <React.Fragment>
-        <SButton icon='search' onClick={() => setOpen(!open)} color='blue'/>
+        <SButton icon='search' onClick={() => setOpen(!open)} color='blue' style={{marginTop: '-0.2em'}}/>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
                 <SearchResultsInput clearable

@@ -281,8 +281,13 @@ def _sync_tags_directory_tag_files(tags_directory: pathlib.Path, session: Sessio
         for file, link in file_group.get_tag_directory_paths_map().items():
             link = tags_directory / link
             if not link.is_file():
-                link.parent.mkdir(parents=True, exist_ok=True)
-                link.hardlink_to(file)
+                try:
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.hardlink_to(file)
+                except FileNotFoundError:
+                    logger.error(f'Failed to create link to file because it does not exist: {file}')
+                    if PYTEST:
+                        raise
             links.append(link)
 
     return links
@@ -328,10 +333,12 @@ def create_tags_directory(directory: pathlib.Path):
     directory.mkdir(parents=True, exist_ok=True)
 
     readme = directory / 'README.txt'
-    readme.write_text('''This directory exists to allow a secondary way to access your tagged files.  Files are
-organized in a directory named after all the Tags they have been tagged with.
+    readme.write_text('''This directory exists to allow a secondary way to access your tagged files.
+Files are organized in a directory named after all the Tags they have been
+tagged with.
 
-WARNING: This directory is controlled by WROLPi, any files you put in here will be automatically deleted!
+WARNING: This directory is controlled by WROLPi, any files you put in here will
+be AUTOMATICALLY DELETED!
 ''')
 
 

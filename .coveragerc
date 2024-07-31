@@ -1,0 +1,10 @@
+[run]
+source =
+    modules
+    wrolpi
+
+[report]
+omit =
+    alembic
+    docker
+    scripts

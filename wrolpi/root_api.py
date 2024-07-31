@@ -11,7 +11,7 @@ from sanic_ext.extensions.openapi import openapi
 from vininfo import Vin
 from vininfo.details._base import VinDetails
 
-from modules.archive import archive_bp
+from modules.archive.api import archive_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
 from modules.otp.api import otp_bp
@@ -151,6 +151,7 @@ def get_settings(_: Request):
         'ignored_directories': ignored_directories,
         'log_level': api_app.shared_ctx.log_level.value,
         'map_directory': config.map_directory,
+        'nav_color': config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,

@@ -746,7 +746,14 @@ export function HelpPopup({icon = 'question', size = null, content, position = '
     />
 }
 
-export function HelpHeader({icon, headerSize = 'h2', iconSize, headerContent, popupContent, popupPosition = 'top center'}) {
+export function HelpHeader({
+                               icon,
+                               headerSize = 'h2',
+                               iconSize,
+                               headerContent,
+                               popupContent,
+                               popupPosition = 'top center'
+                           }) {
     return <div className='inline-header'>
         <Header as={headerSize}>{headerContent}</Header>
         <span>
@@ -1272,22 +1279,23 @@ export const BackButton = ({...props}) => {
     return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
 }
 
+export const semanticUIColorMap = {
+    red: '#db2828',
+    orange: '#f2711c',
+    yellow: '#fbbd08',
+    olive: '#b5cc18',
+    green: '#21ba45',
+    teal: '#00b5ad',
+    blue: '#2185d0',
+    violet: '#6435c9',
+    purple: '#a333c8',
+    pink: '#e03997',
+    brown: '#a5673f',
+    grey: '#767676',
+}
+
 export const ColorToSemanticHexColor = (color) => {
-    const colorMap = {
-        red: '#db2828',
-        orange: '#f2711c',
-        yellow: '#fbbd08',
-        olive: '#b5cc18',
-        green: '#21ba45',
-        teal: '#00b5ad',
-        blue: '#2185d0',
-        violet: '#6435c9',
-        purple: '#a333c8',
-        pink: '#e03997',
-        brown: '#a5673f',
-        grey: '#767676',
-    }
-    return colorMap[color] || null;
+    return semanticUIColorMap[color] || null;
 }
 
 export const filterToMimetypes = (filter) => {

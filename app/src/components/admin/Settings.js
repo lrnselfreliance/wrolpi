@@ -14,8 +14,17 @@ import {
     ModalHeader,
     Segment
 } from "../Theme";
-import {Container, Dimmer, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
-import {APIButton, ErrorMessage, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
+import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
+import {
+    APIButton,
+    ErrorMessage,
+    HelpPopup,
+    HotspotToggle,
+    semanticUIColorMap,
+    ThrottleToggle,
+    Toggle,
+    WROLModeMessage
+} from "../Common";
 import QRCode from "react-qr-code";
 import {useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
@@ -182,6 +191,7 @@ export class SettingsPage extends React.Component {
             ignore_outdated_zims: null,
             log_level: null,
             map_directory: null,
+            navColor: null,
             throttle_on_startup: null,
             throttle_status: null,
             videos_directory: null,
@@ -208,6 +218,7 @@ export class SettingsPage extends React.Component {
                 ignore_outdated_zims: settings.ignore_outdated_zims,
                 log_level: fromApiLogLevel(settings.log_level),
                 map_directory: settings.map_directory,
+                navColor: settings.nav_color || 'violet',
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
                 videos_directory: settings.videos_directory,
@@ -219,10 +230,7 @@ export class SettingsPage extends React.Component {
         }
     }
 
-    async handleSubmit(e) {
-        if (e) {
-            e.preventDefault();
-        }
+    async handleSubmit(callback) {
         this.setState({disabled: true, pending: true});
         let settings = {
             archive_directory: this.state.archive_directory,
@@ -234,6 +242,7 @@ export class SettingsPage extends React.Component {
             ignore_outdated_zims: this.state.ignore_outdated_zims,
             log_level: toApiLogLevel(this.state.log_level),
             map_directory: this.state.map_directory,
+            nav_color: this.state.navColor,
             throttle_on_startup: this.state.throttle_on_startup,
             videos_directory: this.state.videos_directory,
             zims_directory: this.state.zims_directory,
@@ -253,6 +262,9 @@ export class SettingsPage extends React.Component {
             throw e;
         } finally {
             this.setState({disabled: false, pending: false});
+            if (callback) {
+                callback();
+            }
         }
     }
 
@@ -303,6 +315,7 @@ export class SettingsPage extends React.Component {
             ignore_outdated_zims,
             log_level,
             map_directory,
+            navColor,
             pending,
             qrCodeValue,
             throttle_on_startup,
@@ -312,7 +325,11 @@ export class SettingsPage extends React.Component {
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
 
-        return <SettingsContext.Consumer>{({settings}) => {
+        const navColorOptions = Object.keys(semanticUIColorMap).map(i => {
+            return {key: i, value: i, text: i.charAt(0).toUpperCase() + i.slice(1)}
+        });
+
+        return <SettingsContext.Consumer>{({settings, fetchSettings}) => {
             const mediaDirectoryLabel = `${settings.media_directory}/`;
             return <Container fluid>
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
@@ -326,7 +343,7 @@ export class SettingsPage extends React.Component {
                     <Header as='h2'>Settings</Header>
                     <p>Any changes will be written to <i>{settings.media_directory}/config/wrolpi.yaml</i>.</p>
 
-                    <Form id="settings" onSubmit={this.handleSubmit}>
+                    <Form id="settings">
                         <div style={{margin: '0.5em'}}>
                             <Toggle
                                 label='Download on Startup'
@@ -425,6 +442,19 @@ export class SettingsPage extends React.Component {
                             <option value='5'>All</option>
                         </datalist>
 
+                        <br/>
+
+                        <ButtonGroup>
+                            <Button color={navColor} onClick={e => e.preventDefault()}>Navbar Color</Button>
+                            <Dropdown
+                                className='button icon'
+                                floating
+                                options={navColorOptions}
+                                onChange={(e, {value}) => this.setState({navColor: value})}
+                                value={navColor}
+                            />
+                        </ButtonGroup>
+
                         <Divider/>
 
                         <Header as='h3'>Special Directories</Header>
@@ -497,7 +527,7 @@ export class SettingsPage extends React.Component {
                         <APIButton
                             color='violet'
                             size='big'
-                            onClick={this.handleSubmit}
+                            onClick={() => this.handleSubmit(fetchSettings)}
                             obeyWROLMode={true}
                             disabled={disabled}
                         >Save</APIButton>

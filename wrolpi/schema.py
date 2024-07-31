@@ -1,3 +1,4 @@
+import enum
 from dataclasses import dataclass, field
 from typing import Optional, List
 
@@ -14,6 +15,21 @@ class SettingsResponse:
     config: SettingsObject
 
 
+class SemanticUIColors(enum.StrEnum):
+    red = enum.auto()
+    orange = enum.auto()
+    yellow = enum.auto()
+    olive = enum.auto()
+    green = enum.auto()
+    teal = enum.auto()
+    blue = enum.auto()
+    violet = enum.auto()
+    purple = enum.auto()
+    pink = enum.auto()
+    brown = enum.auto()
+    grey = enum.auto()
+
+
 @dataclass
 class SettingsRequest:
     archive_directory: Optional[str] = None
@@ -27,12 +43,18 @@ class SettingsRequest:
     ignore_outdated_zims: Optional[bool] = None
     log_level: Optional[int] = None
     map_directory: Optional[str] = None
+    nav_color: Optional[str] = None
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
     videos_directory: Optional[str] = None
     wrol_mode: Optional[bool] = None
     zims_directory: Optional[str] = None
+
+    def __post_init__(self):
+        self.nav_color = self.nav_color.lower() if self.nav_color else None
+        if self.nav_color and self.nav_color not in SemanticUIColors.__members__:
+            raise ValidationError('Nav color is invalid')
 
 
 @dataclass

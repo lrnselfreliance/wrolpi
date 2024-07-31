@@ -44,7 +44,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
-from wrolpi.tags import Tag
+from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -511,10 +511,7 @@ def tag_factory(test_session):
     def factory(name: str = None) -> Tag:
         if not name:
             name = names.pop(0)
-        tag = Tag(name=name, color=f'#{str(count) * 6}')
-        test_session.add(tag)
-        test_session.commit()
-        test_session.flush([tag, ])
+        tag = upsert_tag(name, f'#{str(count) * 6}')
         return tag
 
     return factory

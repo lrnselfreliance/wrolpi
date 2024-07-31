@@ -339,10 +339,13 @@ class Video(ModelHelper, Base):
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
-    def add_tag(self, tag_id_or_name: int, session: Session = None) -> TagFile:
+    def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
         session = session or Session.object_session(self)
-        tag = Tag.find_by_name(tag_id_or_name) if isinstance(tag_id_or_name, str) else Tag.find_by_id(tag_id_or_name)
-        return self.file_group.add_tag(tag.id, session=session)
+        return self.file_group.add_tag(tag_id_or_name, session=session)
+
+    def untag(self, tag_id_or_name: int | str, session: Session = None):
+        session = session or Session.object_session(self)
+        self.file_group.untag(tag_id_or_name, session)
 
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.

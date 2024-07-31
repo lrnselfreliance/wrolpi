@@ -103,7 +103,7 @@ async def test_delete_file_link(test_async_client, test_session, test_directory)
 
 
 @pytest.mark.asyncio
-async def test_delete_tagged(test_session, make_files_structure, tag_factory, video_bytes):
+async def test_delete_tagged(test_async_client, test_session, make_files_structure, tag_factory, video_bytes):
     """Cannot delete a file that has been tagged."""
     tag = tag_factory()
     make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})

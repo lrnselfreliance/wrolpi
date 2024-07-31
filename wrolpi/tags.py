@@ -9,13 +9,17 @@ from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
-    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color
+    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color, walk, escape_file_name
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
+
+
+def get_tags_directory() -> pathlib.Path:
+    return get_media_directory() / 'tags'
 
 
 class TagFile(ModelHelper, Base):
@@ -26,6 +30,9 @@ class TagFile(ModelHelper, Base):
     tag = relationship('Tag', back_populates='tag_files')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')
+
+    def __repr__(self):
+        return f'<TagFile tag={self.tag.name=} file_group={self.file_group.primary_path}>'
 
     @staticmethod
     @optional_session
@@ -90,6 +97,7 @@ class Tag(ModelHelper, Base):
 
         # Save changes to config.
         save_tags_config(session)
+        sync_tags_directory(session)
         return tag_file
 
     @staticmethod
@@ -102,9 +110,11 @@ class Tag(ModelHelper, Base):
         if tag_file:
             session.delete(tag_file)
             session.commit()
+            logger.debug(f'Deleted TagFile: {tag_file}')
 
             # Save changes to config.
             save_tags_config(session)
+            sync_tags_directory(session)
         else:
             logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id_or_name}')
 
@@ -261,6 +271,86 @@ def save_tags_config(session: Session = None):
         background_task(_())
 
 
+def _sync_tags_directory_tag_files(tags_directory: pathlib.Path, session: Session) -> List[pathlib.Path]:
+    """Create all links that should be in the Tags Directory.  Return all links that should exist."""
+    from wrolpi.files.models import FileGroup
+    tag_files: List[Tuple[Tag, TagFile, FileGroup]] = session.query(Tag, TagFile, FileGroup) \
+        .outerjoin(Tag, FileGroup).all()
+    links = list()
+    for tag, tag_file, file_group in tag_files:
+        for file, link in file_group.get_tag_directory_paths_map().items():
+            link = tags_directory / link
+            if not link.is_file():
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.hardlink_to(file)
+            links.append(link)
+
+    return links
+
+
+# Files that should never be deleted from the Tags Directory.
+IGNORED_TAG_DIRECTORY_FILES = {
+    'README.txt',
+}
+
+
+def _delete_extra_tags_directory_paths(directory: pathlib.Path, links: List[pathlib.Path]):
+    # Get all files that should exist.
+    links = set(links)
+    directory_paths = set(walk(directory))
+    tags_directory_files = {i for i in directory_paths if i.is_file()}
+
+    # Get all directories that should exist.
+    link_directories = {i.parent for i in links if i.is_file()}
+    tags_directory_directories = {i for i in directory_paths if i.is_dir()}
+
+    # Delete any files that should not exist.
+    ignored_files = {directory / i for i in IGNORED_TAG_DIRECTORY_FILES}
+    extra_files = tags_directory_files - links - ignored_files
+    for file in extra_files:
+        if file.stat().st_nlink > 1:
+            logger.debug(f'Deleting extra Tags Directory file: {file}')
+            file.unlink()
+        else:
+            logger.warning(f'Refusing to delete Tag Directory file which does not have another link: {file}')
+
+    # Delete any directories that should not exist.
+    extra_directories = tags_directory_directories - link_directories
+    for directory in extra_directories:
+        if next(directory.iterdir(), None):
+            logger.warning(f'Refusing to delete extra Tags Directory directory which contains files: {directory}')
+        else:
+            logger.debug(f'Deleting extra Tags Directory directory: {directory}')
+            directory.rmdir()
+
+
+def create_tags_directory(directory: pathlib.Path):
+    directory.mkdir(parents=True, exist_ok=True)
+
+    readme = directory / 'README.txt'
+    readme.write_text('''This directory exists to allow a secondary way to access your tagged files.  Files are
+organized in a directory named after all the Tags they have been tagged with.
+
+WARNING: This directory is controlled by WROLPi, any files you put in here will be automatically deleted!
+''')
+
+
+@optional_session
+def sync_tags_directory(session: Session = None):
+    """Synchronizes database Tags with the Tags directory (typically /media/wrolpi/tags).  Removes any
+    files that do not belong in the Tags Directory."""
+    try:
+        tags_directory = get_tags_directory()
+        create_tags_directory(tags_directory)
+
+        links = _sync_tags_directory_tag_files(tags_directory, session)
+        logger.debug(f'Tags Directory should contain {len(links)} links')
+        _delete_extra_tags_directory_paths(tags_directory, links)
+    except Exception as e:
+        logger.error('Failed to sync DB with tags directory in media directory!', exc_info=e)
+        raise
+
+
 def get_tags() -> List[dict]:
     with get_db_curs() as curs:
         curs.execute('''
@@ -283,6 +373,9 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
     if not is_valid_hex_color(color):
         raise InvalidTag('Tag color is invalid')
 
+    # Tag names are used in Tags Directory, so they must be valid file names.
+    name = escape_file_name(name)
+
     if tag_id:
         tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
         if not tag:
@@ -302,6 +395,7 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
         raise InvalidTag(f'Name already taken') from e
 
     save_tags_config()
+    sync_tags_directory()
 
     return tag
 
@@ -321,6 +415,7 @@ def delete_tag(tag_id: int, session: Session = None):
     session.commit()
 
     save_tags_config()
+    sync_tags_directory()
 
 
 @register_refresh_cleanup

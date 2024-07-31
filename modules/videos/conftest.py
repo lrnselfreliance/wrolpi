@@ -113,6 +113,8 @@ def video_factory(test_session, test_directory):
             (test_directory / 'videos/NO CHANNEL').mkdir(exist_ok=True, parents=True)
             path = test_directory / f'videos/NO CHANNEL/{title}.mp4'
 
+        assert str(path).startswith(str(test_directory)), 'Video must be in the test directory'
+
         # Create a real video file for mimetype.
         shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
 

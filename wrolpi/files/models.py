@@ -11,13 +11,13 @@ from sqlalchemy.orm import deferred, relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    get_relative_to_media_directory
+    get_relative_to_media_directory, escape_file_name
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
-from wrolpi.tags import Tag, TagFile
+from wrolpi.tags import Tag, TagFile, get_tags_directory
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -403,6 +403,17 @@ class FileGroup(ModelHelper, Base):
             return ebook
 
         raise UnknownFile(f'Cannot model file with mimetype {self.mimetype}')
+
+    def get_tag_directory_paths_map(self) -> dict[pathlib.Path, str]:
+        """Return all links that should exist for this FileGroup in the Tags Directory."""
+        if not self.tag_names:
+            raise RuntimeError(f'Did not get any tag names for {self}')
+
+        tag_names = ', '.join(sorted(self.tag_names))
+        files = dict()
+        for file in self.my_paths():
+            files[file] = f'{tag_names}/{file.name}'
+        return files
 
 
 class Directory(ModelHelper, Base):

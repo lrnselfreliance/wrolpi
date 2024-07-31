@@ -1042,30 +1042,59 @@ export function UnsupportedModal(header, message, icon) {
 }
 
 export function HotspotStatusIcon() {
-    const {on, setHotspot, dockerized} = useHotspot();
-    const {modal, doOpen} = UnsupportedModal('Unsupported', 'You cannot toggle the hotspot on this machine.');
-    const [confirmOpen, setConfirmOpen] = React.useState(false);
+    const {on, inUse, setHotspot, dockerized, hotspotSsid} = useHotspot();
+    const {modal: unsupportedModal, doOpen: openUnsupportedModal} =
+        UnsupportedModal('Unsupported', 'You cannot toggle the hotspot on this machine.');
+    const [disableHotspotOpen, setDisableHotspotOpen] = React.useState(false);
+    const [inUseOpen, setInUseOpen] = React.useState(false);
 
-    const handleConfirm = (e) => {
+    const handleConfirmDisable = (e) => {
         if (e) {
             e.preventDefault()
         }
-        setConfirmOpen(false);
+        setDisableHotspotOpen(false);
         setHotspot(false);
     }
 
-    if (dockerized === false && on === true) {
+    const handleConfirmInUse = (e) => {
+        if (e) {
+            e.preventDefault()
+        }
+        setInUseOpen(false);
+        setHotspot(true);
+    }
+
+    if (inUse === true) {
+        const content = hotspotSsid ? `Wifi device is in use for ${hotspotSsid}.  Disconnect and enable hotspot?`
+            : 'Wifi device is in use.  Disconnect and enable hotspot?'
+        return <>
+            <Confirm open={inUseOpen}
+                     onCancel={() => setInUseOpen(false)}
+                     onClose={() => setInUseOpen(false)}
+                     onConfirm={handleConfirmInUse}
+                     header='Wifi is in-use'
+                     content={content}
+                     confirmButton='Enable Hotspot'
+            />
+            <a href='#' onClick={() => setInUseOpen(true)}>
+                <IconGroup size='large'>
+                    <Icon name='wifi' disabled/>
+                    <Icon corner name='exclamation'/>
+                </IconGroup>
+            </a>
+        </>
+    } else if (dockerized === false && on === true) {
         return <>
             <Confirm
-                open={confirmOpen}
-                onCancel={() => setConfirmOpen(false)}
-                onClose={() => setConfirmOpen(false)}
-                onConfirm={handleConfirm}
+                open={disableHotspotOpen}
+                onCancel={() => setDisableHotspotOpen(false)}
+                onClose={() => setDisableHotspotOpen(false)}
+                onConfirm={handleConfirmDisable}
                 header='Disable the hotspot'
                 content='You will be disconnected when using the hotspot. Are you sure?'
                 confirmButton='Disable'
             />
-            <a href='#' onClick={() => setConfirmOpen(true)}>
+            <a href='#' onClick={() => setDisableHotspotOpen(true)}>
                 <IconGroup size='large'>
                     <Icon name='wifi' disabled={on !== true}/>
                     {on === false && <Icon corner name='x'/>}
@@ -1084,13 +1113,13 @@ export function HotspotStatusIcon() {
 
     // Hotspot is not available, or, status has not yet been fetched.
     return <>
-        <a href='#' onClick={doOpen}>
+        <a href='#' onClick={openUnsupportedModal}>
             <IconGroup size='large'>
                 <Icon name='wifi' disabled/>
                 <Icon corner name='question'/>
             </IconGroup>
         </a>
-        {modal}
+        {unsupportedModal}
     </>
 }
 

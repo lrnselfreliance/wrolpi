@@ -623,17 +623,23 @@ export const useFilesProgressInterval = () => {
 
 export const useHotspot = () => {
     const [on, setOn] = useState(null);
+    const [inUse, setInUse] = useState(false);
     const {status} = useContext(StatusContext);
     // Hotspot is unsupported on Docker.
-    const {dockerized} = status;
+    const {dockerized, hotspot_ssid} = status;
 
     useEffect(() => {
         if (status && status['hotspot_status']) {
             const {hotspot_status} = status;
             if (hotspot_status === 'connected') {
                 setOn(true);
+                setInUse(false);
+            } else if (hotspot_status === 'in_use') {
+                setInUse(true);
+                setOn(false);
             } else if (hotspot_status === 'disconnected' || hotspot_status === 'unavailable') {
                 setOn(false);
+                setInUse(false);
             } else {
                 setOn(null);
             }
@@ -645,7 +651,7 @@ export const useHotspot = () => {
         await setHotspot(on);
     }
 
-    return {on, setOn, setHotspot: localSetHotspot, dockerized};
+    return {on, inUse, hotspotSsid: hotspot_ssid, setOn, setHotspot: localSetHotspot, dockerized};
 }
 
 export const useDownloads = () => {

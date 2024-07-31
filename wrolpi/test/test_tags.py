@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from wrolpi import tags
+from wrolpi.common import is_hardlinked, walk
 from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -333,3 +334,105 @@ async def test_invalid_tag(test_async_client, test_session, test_directory):
 
     with pytest.raises(UnknownTag):
         tags.delete_tag(1)
+
+
+@pytest.mark.asyncio
+async def test_tags_directory(test_async_client, test_session, test_directory, tag_factory, video_factory,
+                              example_pdf):
+    readme = test_directory / 'tags/README.txt'
+
+    # Should be deleted on sync.
+    (test_directory / 'tags/should be deleted').mkdir(parents=True)
+    (test_directory / 'tags/cannot be deleted').mkdir(parents=True)
+    (test_directory / 'tags/cannot be deleted/because of this file').touch()
+
+    tag1, tag2 = tag_factory('First Aid'), tag_factory('Special/name')
+    vid1 = video_factory(with_video_file=test_directory / 'vid1.mp4', with_caption_file=True, with_info_json=True,
+                         with_poster_ext='jpg')
+    vid2 = video_factory(with_video_file=test_directory / 'vid2.mp4', with_info_json=True)
+    pdf = FileGroup.from_paths(test_session, example_pdf)
+    assert 'vid1' in str(vid1.file_group.primary_path)
+    assert 'vid2' in str(vid2.file_group.primary_path)
+    assert 'pdf' in str(pdf.primary_path)
+    assert readme.is_file() and readme.stat().st_size > 0
+
+    def assert_tag_links(paths: list[str]):
+        for path in paths:
+            path = test_directory / f'tags/{path}'
+            if not path.is_file():
+                raise AssertionError(f'Expected {path} to be a file')
+            if not is_hardlinked(path):
+                raise AssertionError(f'Expected {path} to be linked')
+
+        # Readme should always exist.
+        assert readme.is_file() and readme.stat().st_size > 0
+
+    # Video1 tagged with First Aid and Special/name.
+    vid1.add_tag(tag1.id)
+    vid1.add_tag(tag2.id)
+    # Video2 tagged with First Aid.
+    vid2.add_tag(tag1.id)
+    # PDF tagged with Special/name.
+    pdf.add_tag(tag2.id)
+    assert_tag_links([
+        'First Aid, Special⧸name/vid1.en.vtt',
+        'First Aid, Special⧸name/vid1.en.vtt',
+        'First Aid, Special⧸name/vid1.info.json',
+        'First Aid, Special⧸name/vid1.jpg',
+        'First Aid, Special⧸name/vid1.mp4',
+        'First Aid/vid2.info.json',
+        'First Aid/vid2.mp4',
+        'Special⧸name/pdf example.pdf',
+    ])
+
+    # Extra directories and files are deleted, if possible.
+    assert len(list(walk(test_directory / 'tags'))) == 13
+    assert not (test_directory / 'tags/should be deleted').exists()
+    assert (test_directory / 'tags/cannot be deleted/because of this file').is_file()
+    assert test_session.query(TagFile).count() == 4
+
+    # Video1 tagged with First Aid only.
+    vid1.untag(tag2.id)
+    assert_tag_links([
+        'First Aid/vid1.en.vtt',
+        'First Aid/vid1.en.vtt',
+        'First Aid/vid1.info.json',
+        'First Aid/vid1.jpg',
+        'First Aid/vid1.mp4',
+        'First Aid/vid2.info.json',
+        'First Aid/vid2.mp4',
+        'Special⧸name/pdf example.pdf',
+    ])
+    assert len(list(walk(test_directory / 'tags'))) == 12
+    assert not (test_directory / 'tags/First Aid, Special⧸name').exists()
+    assert test_session.query(TagFile).count() == 3
+
+    # PDF no longer tagged.
+    pdf.untag(tag2.id)
+    assert_tag_links([
+        'First Aid/vid1.en.vtt',
+        'First Aid/vid1.en.vtt',
+        'First Aid/vid1.info.json',
+        'First Aid/vid1.jpg',
+        'First Aid/vid1.mp4',
+        'First Aid/vid2.info.json',
+        'First Aid/vid2.mp4',
+    ])
+    assert len(list(walk(test_directory / 'tags'))) == 10
+    assert not (test_directory / 'tags/Special⧸name').exists()
+    assert not (test_directory / 'tags/Special⧸name/pdf example.pdf').exists()
+    assert test_session.query(TagFile).count() == 2
+
+    # No more tagged files.
+    vid1.untag(tag1.id)
+    vid2.untag(tag1.id)
+    assert test_session.query(TagFile).count() == 0
+    # Readme, and un-deletable file and directory exist.
+    assert len(list(walk(test_directory / 'tags'))) == 3
+    assert (test_directory / 'tags').is_dir()
+    assert not (test_directory / 'tags/First Aid').exists(), \
+        f'First Aid lingers and contains: {[i.name for i in (test_directory / "tags/First Aid").iterdir()]}'
+
+    # Only three FileGroups were created.  Tags Directory files are ignored during refresh.
+    await files_lib.refresh_files()
+    assert test_session.query(FileGroup).count() == 3

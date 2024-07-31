@@ -464,7 +464,7 @@ class WROLPiConfig(ConfigFile):
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
         ignore_outdated_zims=False,
-        ignored_directories=['/media/wrolpi/config', ],
+        ignored_directories=['config', 'tags'],
         map_directory='map',
         nav_color='violet',
         throttle_on_startup=False,
@@ -1871,3 +1871,8 @@ def is_valid_hex_color(hex_color: str) -> bool:
     # Regular expression to match valid HTML hex color codes
     hex_color_regex = re.compile(r'^#([A-F0-9]{6}|[A-F0-9]{3})$', re.IGNORECASE)
     return bool(hex_color_regex.match(hex_color))
+
+
+def is_hardlinked(path: pathlib.Path) -> bool:
+    """Returns True only if `path` has more than one link."""
+    return path.stat().st_nlink > 1

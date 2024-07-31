@@ -466,6 +466,10 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
     """Return a new list which does not contain any file paths that are in ignored directories."""
     ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
+    for idx, ignored_directory in enumerate(ignored_directories):
+        ignored_directory = pathlib.Path(ignored_directory)
+        if not ignored_directory.is_absolute():
+            ignored_directories[idx] = str(get_media_directory() / ignored_directory)
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
     return files
 

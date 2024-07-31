@@ -203,6 +203,8 @@ function EditTagsModal() {
     const [tagName, setTagName] = React.useState('');
     const [tagColor, setTagColor] = React.useState(DEFAULT_TAG_COLOR);
     const textColor = contrastingColor(tagColor);
+    const [tagNameError, setTagNameError] = React.useState(null);
+    const disabled = !!!tagName || !!tagNameError;
 
     const localOnClose = () => {
         setOpen(false);
@@ -237,6 +239,13 @@ function EditTagsModal() {
         setTagColor(DEFAULT_TAG_COLOR);
     }
 
+    const handleTagNameChange = (e, {value}) => {
+        setTagName(value);
+        // Tag names cannot contain these characters.
+        const tagNameRegex = /[,<>:|"\\?*%!\n\r]/;
+        setTagNameError(tagNameRegex.test(value) ? {content: 'Invalid Tag Name'} : null);
+    }
+
     const tableHeaders = [
         {key: 'delete', text: 'Delete', sortBy: null, width: 2},
         {key: 'edit', text: 'Edit', sortBy: null, width: 2},
@@ -264,7 +273,8 @@ function EditTagsModal() {
                                label={<b>Tag Name</b>}
                                placeholder='Unique name'
                                value={tagName}
-                               onChange={(e, {value}) => setTagName(value)}
+                               error={tagNameError}
+                               onChange={handleTagNameChange}
                     />
                 </Form>
 
@@ -275,7 +285,7 @@ function EditTagsModal() {
                     size='big'
                     onClick={localSaveTag}
                     style={{marginTop: '2em'}}
-                    disabled={!!!tagName}
+                    disabled={disabled}
                 >Save</APIButton>
 
                 <Divider/>

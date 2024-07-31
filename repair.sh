@@ -56,14 +56,13 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
-/usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
-cp /opt/wrolpi/etc/raspberrypios/renderd /etc/init.d/renderd
+cp /opt/wrolpi/etc/raspberrypios/renderd.service /lib/systemd/system/renderd.service
 # Configure Apache2 to listen on 8084.
 cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
 # Copy Leaflet files to Apache's directory so they can be used offline.
@@ -76,6 +75,7 @@ a2enmod headers
 
 systemctl enable renderd
 systemctl start renderd
+/usr/bin/systemctl daemon-reload
 
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"

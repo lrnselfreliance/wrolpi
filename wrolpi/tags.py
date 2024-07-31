@@ -187,7 +187,7 @@ class TagsConfig(ConfigFile):
     def tags(self, value: dict):
         self.update({'tags': value})
 
-    def save_tags(self, session: Session):
+    def save_tags(self, session: Session, ignore_lock: bool = False):
         media_directory = get_media_directory()
 
         tags = dict()
@@ -235,7 +235,7 @@ class TagsConfig(ConfigFile):
             'tag_files': tag_files,
             'tag_zims': tag_zims,
             'tags': tags,
-        })
+        }, ignore_lock=ignore_lock)
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig()

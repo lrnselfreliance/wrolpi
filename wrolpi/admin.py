@@ -20,11 +20,18 @@ class HotspotStatus(enum.Enum):
     unavailable = enum.auto()  # Radio is off.
     connected = enum.auto()  # Radio is on, Hotspot is on.
     unknown = enum.auto()  # Unknown status.  Hotspot may not be supported on this hardware.
+    in_use = enum.auto()  # WI-FI device is in use, and cannot be used for Hotspot.
 
 
 def hotspot_status() -> HotspotStatus:
     if NMCLI_BIN is None:
         return HotspotStatus.unknown
+
+    device = WROLPI_CONFIG.hotspot_device
+
+    if get_current_ssid(device):
+        # Hotspot device is currently connected to a WI-FI network.
+        return HotspotStatus.in_use
 
     cmd = (NMCLI_BIN,)
     try:
@@ -33,7 +40,6 @@ def hotspot_status() -> HotspotStatus:
         warn_once(e)
         return HotspotStatus.unknown
 
-    device = WROLPI_CONFIG.hotspot_device
     for line in output.splitlines():
         if line.startswith(f'{device}: connected'):
             return HotspotStatus.connected
@@ -45,7 +51,30 @@ def hotspot_status() -> HotspotStatus:
     return HotspotStatus.unknown
 
 
-def enable_hotspot(depth: int = 10):
+def get_current_ssid(interface='wlan0') -> str | None:
+    """Returns the name of the SSID that is currently connected.  Returns None if Hotspot, or no WIFI network is being
+    used."""
+    try:
+        # Run the iwgetid command and capture the output
+        cmd = ('iwgetid', interface, '--raw')
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Check if the command was successful
+        if result.returncode == 0:
+            ssid = result.stdout.strip()
+            return ssid
+        elif result.returncode == 255:
+            # Hotspot is in use.
+            return None
+        else:
+            print(f"Error: {result.stderr}")
+            return None
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        return None
+
+
+def enable_hotspot(depth: int = 10, overwrite: bool = False):
     """Turn the Wi-Fi interface into a hotspot.
 
     If Wi-Fi is already running, replace that with a hotspot.
@@ -56,8 +85,15 @@ def enable_hotspot(depth: int = 10):
     status = hotspot_status()
     logger.info(f'Hotspot status: {status}')
 
+    if overwrite is False and (current_ssid := get_current_ssid(WROLPI_CONFIG.hotspot_device)):
+        raise RuntimeError(f'Refusing to start hotspot because Wi-Fi device is already being used for {current_ssid}.')
+
     if status == HotspotStatus.connected:
         logger.info('Hotspot already connected.  Rebooting hotspot.')
+        disable_hotspot()
+        return enable_hotspot(depth=depth - 1)
+    elif status == HotspotStatus.in_use:
+        logger.info('Wifi already in use.  Rebooting hotspot.')
         disable_hotspot()
         return enable_hotspot(depth=depth - 1)
     elif status == HotspotStatus.disconnected:

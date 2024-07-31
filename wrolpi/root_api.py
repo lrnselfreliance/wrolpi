@@ -371,7 +371,7 @@ async def get_downloaders(_: Request):
 @openapi.description('Turn on the hotspot')
 @native_only
 async def hotspot_on(_: Request):
-    result = admin.enable_hotspot()
+    result = admin.enable_hotspot(overwrite=True)
     if result:
         return response.empty()
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -430,6 +430,7 @@ async def get_status(_: Request):
         drives=s.drives,
         flags=flags.get_flags(),
         hotspot_status=admin.hotspot_status().name,
+        hotspot_ssid=admin.get_current_ssid(get_wrolpi_config().hotspot_device),
         load=s.load,
         memory_stats=s.memory_stats,
         throttle_status=admin.throttle_status().name,

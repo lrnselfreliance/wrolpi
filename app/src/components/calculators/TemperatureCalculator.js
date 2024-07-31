@@ -35,6 +35,12 @@ export function TemperatureCalculator() {
             newCelsius = roundDigits(numValue - 273.15);
             newFahrenheit = roundDigits((newCelsius * 1.8) + 32);
         }
+        if (newFahrenheit < -459.67) {
+            console.warn('Temperature was below absolute zero!');
+            newCelsius = -273.3;
+            newFahrenheit = -459.67;
+            newKelvin = 0;
+        }
         setState({
             celsius: newCelsius,
             fahrenheit: newFahrenheit,

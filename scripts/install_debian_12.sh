@@ -22,7 +22,7 @@ npm install || npm install || npm install || npm install # try install multiple 
 
 # Install python requirements in background job.
 python3 -m venv /opt/wrolpi/venv
-/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+/opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
 
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"

@@ -374,7 +374,7 @@ class ConfigFile:
         path = path.with_name(name)
         return path
 
-    def save(self):
+    def save(self, ignore_lock: bool = False):
         """
         Write this config to its file.
 
@@ -390,8 +390,11 @@ class ConfigFile:
             raise ValueError(f'Refusing to save config file while testing: {config_file}')
 
         # Only one process can write to a config.
-        lock = api_app.shared_ctx.config_save_lock
-        acquired = lock.acquire(block=True, timeout=5.0)
+        acquired = False
+        lock = None
+        if ignore_lock is False:
+            lock = api_app.shared_ctx.config_save_lock
+            acquired = lock.acquire(block=True, timeout=5.0)
 
         try:
             # Config directory may not exist.
@@ -439,11 +442,11 @@ class ConfigFile:
 
         return CONFIG_DIR / self.file_name
 
-    def update(self, config: dict):
+    def update(self, config: dict, ignore_lock: bool = False):
         """Update any values of this config.  Save the config to its file."""
         config = {k: v for k, v in config.items() if k in self._config}
         self._config.update(config)
-        self.save()
+        self.save(ignore_lock=ignore_lock)
 
     def dict(self) -> dict:
         """Get a deepcopy of this config."""

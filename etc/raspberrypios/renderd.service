@@ -1,0 +1,13 @@
+[Unit]
+Description=Daemon that renders map tiles using mapnik
+Documentation=man:renderd
+After=network.target auditd.service
+
+[Service]
+# Delay startup so WROLPi API has time to start.
+ExecStartPre=/bin/sleep 30
+ExecStart=/usr/bin/renderd -f
+User=_renderd
+
+[Install]
+WantedBy=multi-user.target

@@ -268,6 +268,7 @@ def model_ebook(file_group: FileGroup, session: Session) -> EBook:
         ebook.file_group.title = stem
 
     ebook.size = size
+    session.flush([ebook, ])
 
     return ebook
 

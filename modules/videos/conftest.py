@@ -53,7 +53,7 @@ def channel_factory(test_session, test_directory):
         test_session.flush([channel])
         assert channel.id and channel.url
         if download_frequency:
-            download = channel.get_or_create_download(channel.url)
+            download = channel.get_or_create_download(channel.url, 60)
             download.frequency = download_frequency
             assert download.url == channel.url
             assert channel.downloads
@@ -72,7 +72,7 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
     test_session.add(channel)
     test_session.flush([channel, ])
     assert channel and channel.id and channel.url
-    download = channel.get_or_create_download(channel.url, test_session)
+    download = channel.get_or_create_download(channel.url, 60, test_session)
     assert download.url == channel.url
     download.frequency = DownloadFrequency.weekly
     test_session.commit()

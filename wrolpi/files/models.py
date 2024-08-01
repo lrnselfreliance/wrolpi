@@ -11,13 +11,13 @@ from sqlalchemy.orm import deferred, relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    get_relative_to_media_directory, escape_file_name
+    get_relative_to_media_directory
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
-from wrolpi.tags import Tag, TagFile, get_tags_directory
+from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -390,8 +390,10 @@ class FileGroup(ModelHelper, Base):
 
         if self.mimetype.startswith('video/'):
             video = Video(file_group_id=self.id, file_group=self)
+            session.add(video)
             video.validate()
             self.indexed = True
+            session.flush([video, ])
             return video
         elif self.mimetype.startswith('text') and is_singlefile_file(self.primary_path):
             archive = model_archive(self, session)

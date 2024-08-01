@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 
+from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
 from wrolpi.files.lib import get_mimetype
@@ -518,6 +519,11 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     assert set(file_group.tag_names) == {tag1.name, tag2.name}, 'Two tags should be applied.'
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'
+    # Video was modeled, but has no Channel.
+    video: Video = test_session.query(Video).one()
+    assert video.video_path
+    assert not video.info_json_path
+    assert not video.channel and not video.channel_id
 
 
 @pytest.mark.asyncio

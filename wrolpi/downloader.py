@@ -541,7 +541,7 @@ class DownloadManager:
             if channel := Channel.get_by_url(url=download.url, session=session):
                 download.channel_id = channel.id
             if destination := (download.settings or dict()).get('destination'):
-                if channel := Channel.get_by_directory(destination):
+                if channel := Channel.get_by_path(destination, session):
                     download.channel_id = channel.id
 
             downloads.append(download)

@@ -136,7 +136,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     mock_video_extract_info.return_value = example_channel_json
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        simple_channel.get_or_create_download(url, test_session)
+        simple_channel.get_or_create_download(url, 60, test_session)
         # Download channel.
         await video_download_manager.wait_for_all_downloads()
         # Download videos.
@@ -161,7 +161,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        download = simple_channel.get_or_create_download(url, test_session)
+        download = simple_channel.get_or_create_download(url, 60, test_session)
         download.frequency = 100
         download.settings = {'title_include': '2'}
         await video_download_manager.wait_for_all_downloads()
@@ -178,7 +178,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        download = simple_channel.get_or_create_download(url, test_session)
+        download = simple_channel.get_or_create_download(url, 60, test_session)
         download.frequency = 100
         download.settings = {'title_exclude': '2'}
         await video_download_manager.wait_for_all_downloads()

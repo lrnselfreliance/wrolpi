@@ -97,7 +97,7 @@ async def test_channel_download_relationships(test_session, download_channel):
     assert test_session.query(Channel).one(), 'Channel should not have been deleted.'
 
     # Create a Download again.
-    download_channel.get_or_create_download('https://example.com/1', test_session, reset_attempts=True)
+    download_channel.get_or_create_download('https://example.com/1', 60, test_session, reset_attempts=True)
     assert test_session.query(Download).count() == 1
     # Delete the Channel, and any relationships.
     download_channel.delete_with_videos()

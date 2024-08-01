@@ -52,7 +52,7 @@ def hotspot_status() -> HotspotStatus:
 
 
 def get_current_ssid(interface='wlan0') -> str | None:
-    """Returns the name of the SSID that is currently connected.  Returns None if Hotspot, or no WIFI network is being
+    """Returns the name of the SSID that is currently connected.  Returns None if Hotspot, or no WI-FI network is being
     used."""
     try:
         # Run the iwgetid command and capture the output
@@ -67,10 +67,10 @@ def get_current_ssid(interface='wlan0') -> str | None:
             # Hotspot is in use.
             return None
         else:
-            print(f"Error: {result.stderr}")
+            logger.error(f'Failed to get current ssid: {result.stderr}')
             return None
     except Exception as e:
-        print(f"Exception occurred: {e}")
+        logger.error('Failed to get current ssid', exc_info=e)
         return None
 
 

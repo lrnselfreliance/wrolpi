@@ -18,7 +18,7 @@ from ..common import convert_image, update_view_counts_and_censored, get_video_d
 from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
 
 
-def test_get_absolute_media_path():
+def test_get_absolute_media_path(test_directory):
     path = get_absolute_media_path('videos')
     assert str(path).endswith('videos')
 
@@ -134,7 +134,8 @@ def test_generate_video_poster(video_file):
     assert duration == 5
 
 
-def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config):
+@pytest.mark.asyncio
+async def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
     channel2 = channel_factory(source_id='bar', url='https://example.com/channel2')
@@ -173,6 +174,7 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     download: Download = test_session.query(Download).one()
     assert download.url == channel1.url
     assert download.frequency
+    assert download.downloader == 'video_channel'
 
     # Download.next_download was not deleted.
     next_download = str(download.next_download)
@@ -181,7 +183,7 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     assert next_download == str(download.next_download)
 
     # Creating Download that matches Channel2's URL means they are related.  Delete it and it should be re-created.
-    channel2.get_or_create_download(channel2.url, test_session)
+    channel2.get_or_create_download(channel2.url, 60, test_session)
     save_channels_config()
     Download.find_by_url(channel2.url).delete(skip=False)
     test_session.commit()
@@ -193,10 +195,11 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     assert len(downloads) == 1, downloads
     assert len(channel1.downloads) == 1
     assert len(channel2.downloads) == 0
+    assert downloads[0].downloader == 'video_channel'
 
     # Add a Download to Channel2 which does not match Channel.url.
-    channel2.get_or_create_download('https://example.org', session=test_session)
-    channel2.get_or_create_download('https://example.com/channel2', session=test_session)
+    channel2.get_or_create_download('https://example.org', 60, session=test_session)
+    channel2.get_or_create_download('https://example.com/channel2', 60, session=test_session)
     test_session.commit()
     save_channels_config()
     # Check config is written to match new URLs.
@@ -206,7 +209,8 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
         if channel_config['source_id'] == channel2.source_id:
             assert channel_config['source_id'] == 'bar'
             assert len(channel_config['downloads']) == 2
-            assert set(channel_config['downloads']) == {'https://example.com/channel2', 'https://example.org'}
+            assert {i['url'] for i in channel_config['downloads']} \
+                   == {'https://example.com/channel2', 'https://example.org'}
         else:
             assert channel_config['source_id'] == 'foo'
 
@@ -218,6 +222,7 @@ def test_import_channel_downloads(test_async_client, test_session, channel_facto
     get_channels_config().channels = channels_backup
     import_channels_config()
     channel1, channel2 = test_session.query(Channel).order_by(Channel.url).all()
+    assert test_session.query(Download).count() == 3
     assert channel1.url == 'https://example.com/channel1'
     assert channel2.url == 'https://example.com/channel2'
     assert {i.url for i in channel1.downloads} == {'https://example.com/channel1'}

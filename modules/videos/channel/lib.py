@@ -221,8 +221,7 @@ async def create_channel_download(channel_id: int, url: str, frequency: int, set
     """Create Download for Channel."""
     with get_db_session(commit=True) as session:
         channel = Channel.find_by_id(channel_id, session=session)
-        download = channel.get_or_create_download(url, session, reset_attempts=True)
-        download.frequency = download.frequency or frequency
+        download = channel.get_or_create_download(url, frequency, session, reset_attempts=True)
         download.settings = settings
 
     save_channels_config()

@@ -12,7 +12,8 @@ logger = logger.getChild(__name__)
 
 POWER_SAVE_FREQ = 'powersave'  # noqa
 
-warn_once = get_warn_once('Unable to use nmcli', logger)
+nmcli_warn_once = get_warn_once('Unable to use nmcli', logger)
+iwgetid_warn_once = get_warn_once('Unable to use iwgetid', logger)
 
 
 class HotspotStatus(enum.Enum):
@@ -37,7 +38,7 @@ def hotspot_status() -> HotspotStatus:
     try:
         output = subprocess.check_output(cmd, stderr=subprocess.PIPE).decode().strip()
     except Exception as e:
-        warn_once(e)
+        nmcli_warn_once(e)
         return HotspotStatus.unknown
 
     for line in output.splitlines():
@@ -69,6 +70,9 @@ def get_current_ssid(interface='wlan0') -> str | None:
         else:
             logger.error(f'Failed to get current ssid: {result.stderr}')
             return None
+    except FileNotFoundError as e:
+        iwgetid_warn_once(e)
+        return None
     except Exception as e:
         logger.error('Failed to get current ssid', exc_info=e)
         return None

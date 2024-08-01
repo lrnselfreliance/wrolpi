@@ -47,6 +47,9 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
 
+    # Warnings
+    app.shared_ctx.warn_once = manager.dict()
+
     # Locks
     app.shared_ctx.config_save_lock = multiprocessing.Lock()
 

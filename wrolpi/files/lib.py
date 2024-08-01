@@ -1390,7 +1390,7 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
 
 
 @optional_session
-async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None):
+async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None) -> FileGroup:
     """Insert/update all files in the provided file's FileGroup."""
     # Update/Insert all files in the FileGroup.
     paths = glob_shared_stem(pathlib.Path(file))
@@ -1404,7 +1404,8 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         session.flush([file_group, ])
 
         try:
-            file_group.do_model(session)
+            if model := file_group.do_model(session):
+                session.add(model)
         except Exception as e:
             logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
             if PYTEST:
@@ -1416,5 +1417,6 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
                 file_group.add_tag(tag.id)
 
         session.commit()
+        return file_group
     else:
         logger.warning('upsert_file called, but all files are in ignored directories!')

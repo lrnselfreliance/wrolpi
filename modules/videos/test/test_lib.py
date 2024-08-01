@@ -160,7 +160,7 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
         source_id='UCng5u6ASda3LNRXJN0JCQJA',
     )
     download1 = Download(url=channel.get_rss_url(), downloader=RSSDownloader.name)
-    download2 = Download(url='https://example.com/videos', downloader=RSSDownloader.name, frequency=99,
+    download2 = Download(url='https://example.com/videos', downloader=ChannelDownloader.name, frequency=99,
                          settings=dict(destination=str(channel.directory)))
     download3 = Download(url='https://example.com/video/1', downloader=RSSDownloader.name,
                          settings=dict(destination=str(channel.directory)))

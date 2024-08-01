@@ -12,6 +12,7 @@ from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
+from wrolpi.errors import InvalidDownload
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -235,6 +236,11 @@ class Video(ModelHelper, Base):
 
         if (comments := self.get_comments()) and len(comments) >= 5:
             self.have_comments = True
+
+        # If this Video is in a Channel's directory, then it is part of that Channel.
+        session: Session = Session.object_session(self)
+        if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
+            self.channel = channel
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
@@ -542,14 +548,13 @@ class Channel(ModelHelper, Base):
             download.delete()
 
         # Must commit before final deletion.
-        # TODO why?
-        # session.commit()
         session.delete(self)
 
     def update(self, data: dict):
         """
         Update the attributes of this Channel.  Will also update the Channel's Download, if it has one.
         """
+        channel_id = self.id
         data = data.copy()
 
         # URL should not be empty string.
@@ -570,28 +575,28 @@ class Channel(ModelHelper, Base):
         session: Session = Session.object_session(self)
 
         for download in downloads:
-            # `download` may be string from config file.
             url = None
-            if isinstance(download, str):
-                url = download
-            elif isinstance(download, dict):
-                if not download.get('frequency'):
-                    logger.error('Refusing to create channel download without frequency')
-                    continue
+            frequency = None
+            if isinstance(download, dict):
                 url = download['url']
+                # Use download frequency from downloads config before the channels config.
+                if existing_download := download_manager.get_download(session, url):
+                    frequency = existing_download.frequency
+                else:
+                    frequency = download.get('frequency')
             elif isinstance(download, Download):
-                if not download.frequency:
-                    logger.error('Refusing to create channel download without frequency')
-                    continue
                 url = download.url
+                frequency = download.frequency
+
             if not url:
                 raise RuntimeError(f'Unknown download type: {download}')
-            download_ = self.get_or_create_download(url, session=session, reset_attempts=True)
-            # If `download` is dict, use that frequency.  Try to keep the currently set frequency.
-            frequency = download['frequency'] if isinstance(download, dict) else download_.frequency
-            download_.frequency = frequency
+            if not frequency:
+                logger.error(f'Refusing to create Download for Channel without frequency: {url}')
+                continue
 
-        session.flush()
+            download = self.get_or_create_download(url, frequency, session=session, reset_attempts=True)
+            download.channel_id = channel_id
+            session.add(download)
 
     def config_view(self) -> dict:
         """
@@ -604,7 +609,7 @@ class Channel(ModelHelper, Base):
             name=self.name,
             source_id=self.source_id,
             url=self.url or None,
-            downloads=[i.url for i in self.downloads]
+            downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads]
         )
         return config
 
@@ -616,7 +621,12 @@ class Channel(ModelHelper, Base):
 
     @staticmethod
     def get_by_path(path: pathlib.Path, session: Session) -> Optional['Channel']:
-        return session.query(Channel).filter_by(directory=path).one_or_none()
+        if not path:
+            raise RuntimeError('Must provide path to get Channel')
+        path = pathlib.Path(path) if isinstance(path, str) else path
+        path = str(path.absolute()) if path.is_absolute() else str(get_media_directory() / path)
+        channel = session.query(Channel).filter_by(directory=path).one_or_none()
+        return channel
 
     def __json__(self) -> dict:
         d = dict(
@@ -630,7 +640,8 @@ class Channel(ModelHelper, Base):
 
     def dict(self, with_statistics: bool = False, with_downloads: bool = True) -> dict:
         d = super(Channel, self).dict()
-        d['directory'] = self.directory.relative_to(get_media_directory()) if self.directory else None
+        d['directory'] = \
+            self.directory.relative_to(get_media_directory()) if self.directory else None
         if with_statistics:
             d['statistics'] = self.get_statistics()
         if with_downloads:
@@ -713,21 +724,25 @@ class Channel(ModelHelper, Base):
                 raise RuntimeError(f'More than one info_json entry matches {video_source_id}')
 
     @optional_session
-    def get_or_create_download(self, url: str, session: Session = None, reset_attempts: bool = False) -> Download:
+    def get_or_create_download(self, url: str, frequency: int, session: Session = None,
+                               reset_attempts: bool = False) -> Download:
         """Get a Download record, if it does not exist, create it.  Create a Download if necessary
-        which goes into this Channel's directory."""
+        which goes into this Channel's directory.
+        """
         if not isinstance(url, str) or not url:
-            raise RuntimeError(f'Cannot get Download without url')
+            raise InvalidDownload(f'Cannot get Download without url')
+        if not frequency:
+            raise InvalidDownload('Download for Channel must have a frequency')
 
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
         download = download_manager.get_download(session, url)
         if not download:
-            download = download_manager.create_download(url, ChannelDownloader.name, session=session,
-                                                        sub_downloader_name=VideoDownloader.name,
-                                                        settings=dict(destination=str(self.directory)),
-                                                        reset_attempts=reset_attempts,
-                                                        )
+            download = download_manager.recurring_download(url, frequency, ChannelDownloader.name, session=session,
+                                                           sub_downloader_name=VideoDownloader.name,
+                                                           settings=dict(destination=str(self.directory)),
+                                                           reset_attempts=reset_attempts,
+                                                           )
         if reset_attempts:
             download.attempts = 0
         download.channel_id = self.id
@@ -745,14 +760,4 @@ class Channel(ModelHelper, Base):
         if not url:
             raise RuntimeError('Must provide URL to get Channel')
         channel = session.query(Channel).filter_by(url=url).one_or_none()
-        return channel
-
-    @staticmethod
-    @optional_session
-    def get_by_directory(directory: pathlib.Path | str, session: Session = None) -> Optional['Channel']:
-        if not directory:
-            raise RuntimeError('Must provide directory to get Channel')
-        directory = pathlib.Path(directory) if isinstance(directory, str) else directory
-        directory = str(directory.absolute()) if directory.is_absolute() else str(get_media_directory() / directory)
-        channel = session.query(Channel).filter_by(directory=directory).one_or_none()
         return channel

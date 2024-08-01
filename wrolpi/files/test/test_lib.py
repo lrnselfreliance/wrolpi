@@ -13,6 +13,7 @@ import pytest
 from PIL import Image
 
 import wrolpi.common
+from modules.videos import Video
 from wrolpi.common import timer
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
@@ -1083,3 +1084,28 @@ def test_replace_file(test_directory):
 
     # Non-existent file can be created.
     wrolpi.common.replace_file(test_directory / 'will now exist', 'foo', missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_upsert_file_video_with_channel(test_async_client, test_session, test_directory, video_bytes,
+                                              channel_factory, video_factory):
+    """A video file that is uploaded should be assigned to a Channel if it is in the Channel's directory."""
+    channel = channel_factory()
+    # Put the video file in the Channel's directory.
+    video_file = channel.directory / 'video.mp4'
+    video_file.write_bytes(video_bytes)
+    # Put an info json file next to the video file.
+    info_json_file = video_file.with_suffix('.info.json')
+    info_json_file.write_text(json.dumps({'duration': 5}))
+
+    # Upsert the file, it should be modeled.
+    fg: FileGroup = await lib.upsert_file(video_file, test_session)
+    assert fg.model == 'video', 'Upserted file should have been modeled.'
+    assert fg.my_video_files(), 'Video file was upserted.'
+    assert fg.my_json_files(), 'Info json file should have been found near video file.'
+
+    # The video is in the correct Channel and has its files.
+    video: Video = test_session.query(Video).one()
+    assert video.channel_id == channel.id, "Videos should be assigned to the Channel their files are in"
+    assert video.video_path, 'Video file was upserted'
+    assert video.info_json_path, 'Info json file not found near video file.'

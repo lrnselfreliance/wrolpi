@@ -181,9 +181,9 @@ def test_link_channel_and_downloads_migration(test_async_client, test_session, c
     """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
     # A simple Channel which has a download for its URL.
     channel1 = channel_factory(url='https://example.com/channel1')
+    download1 = Download(url='https://example.com/channel1', downloader=ChannelDownloader.name, frequency=1)
     # A Channel which has two Downloads.  One for it's URL, another which is an RSS feed in its directory.
     channel2 = channel_factory(url='https://example.com/channel2')
-    download1 = Download(url='https://example.com/channel1', downloader=ChannelDownloader.name, frequency=1)
     download2a = Download(url='https://example.com/channel2/rss', downloader=RSSDownloader.name, frequency=1,
                           settings=dict(destination=str(channel2.directory)))
     download2b = Download(url='https://example.com/channel2', downloader=ChannelDownloader.name, frequency=1,

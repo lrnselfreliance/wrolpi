@@ -253,12 +253,6 @@ class Download(ModelHelper, Base):  # noqa
             return download
         raise UnknownDownload(f'Cannot find Download with URL: {url}')
 
-    @staticmethod
-    @optional_session
-    def get_by_channel_id(channel_id: int, session: Session = None) -> Optional['Download']:
-        download = session.query(Download).filter(Download.channel_id == channel_id).one_or_none()
-        return download
-
 
 class Downloader:
     name: str = None
@@ -537,13 +531,6 @@ class DownloadManager:
             download.sub_downloader = sub_downloader_name
             download.settings = settings if settings is not None else download.settings
 
-            from modules.videos.models import Channel
-            if channel := Channel.get_by_url(url=download.url, session=session):
-                download.channel_id = channel.id
-            if destination := (download.settings or dict()).get('destination'):
-                if channel := Channel.get_by_path(destination, session):
-                    download.channel_id = channel.id
-
             downloads.append(download)
 
         logger.debug(f'Created {len(downloads)} new downloads')
@@ -582,6 +569,15 @@ class DownloadManager:
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
                                           settings=settings)
         download.frequency = frequency
+
+        # Only recurring Downloads can be Channel Downloads.
+        from modules.videos.models import Channel
+        if channel := Channel.get_by_url(url=download.url, session=session):
+            download.channel_id = channel.id
+        if destination := (download.settings or dict()).get('destination'):
+            if channel := Channel.get_by_path(destination, session):
+                download.channel_id = channel.id
+
         session.commit()
 
         return download

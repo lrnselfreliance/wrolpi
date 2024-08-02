@@ -1404,8 +1404,7 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         session.flush([file_group, ])
 
         try:
-            if model := file_group.do_model(session):
-                session.add(model)
+            file_group.do_model(session)
         except Exception as e:
             logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
             if PYTEST:

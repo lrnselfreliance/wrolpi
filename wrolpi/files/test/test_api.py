@@ -526,6 +526,31 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     assert not video.channel and not video.channel_id
 
 
+def test_post_upload_text(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+    """A file that cannot be modeled can still be uploaded, and is indexed."""
+    make_files_structure(['uploads/'])
+
+    contents = 'hello'
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='the title.txt'),
+        dict(name='totalChunks', value='0'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=5),
+        dict(name='chunk', value=contents, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, response.content.decode()
+
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group.indexed is True
+    assert file_group.size == 5
+    assert file_group.a_text == 'the title txt'
+    assert file_group.d_text == 'hello'
+
+
 @pytest.mark.asyncio
 async def test_directory_crud(test_session, test_async_client, test_directory, assert_directories, assert_files):
     """A directory can be created in a subdirectory.  Errors are returned if there are conflicts."""

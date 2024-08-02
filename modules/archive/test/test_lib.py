@@ -47,7 +47,7 @@ async def test_no_screenshot(test_directory, test_session):
 
 
 @pytest.mark.asyncio
-async def test_no_readability(test_session):
+async def test_no_readability(test_directory, test_session):
     singlefile, readability, screenshot = make_fake_archive_result(readability=False)
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
     assert isinstance(archive.singlefile_path, pathlib.Path)

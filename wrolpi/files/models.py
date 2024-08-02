@@ -3,12 +3,11 @@ import pathlib
 import shutil
 import urllib.parse
 from datetime import datetime
-from typing import List, Type, Optional
+from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, Computed, BigInteger, Boolean
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
-from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory
@@ -86,7 +85,7 @@ class FileGroup(ModelHelper, Base):
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
 
-    tag_files: InstrumentedList = relationship('TagFile', cascade='all')
+    tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
     a_text = deferred(Column(String))
     b_text = deferred(Column(String))
@@ -176,10 +175,12 @@ class FileGroup(ModelHelper, Base):
             files[i]['path'] = pathlib.Path(files[i]['path'])
 
         if mimetypes:
-            files = list(filter(lambda i: any(i['mimetype'].startswith(m) for m in mimetypes), files))
+            files = list(filter(lambda j: any(j['mimetype'].startswith(m) for m in mimetypes), files))
 
-        # Sort files to avoid random order.
-        return sorted(files, key=lambda i: i['path'])
+        if PYTEST:
+            # Sort files to avoid random order during testing.
+            return sorted(files, key=lambda j: j['path'])
+        return files
 
     def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
         return [i['path'] for i in self.my_files(*mimetypes)]
@@ -212,7 +213,7 @@ class FileGroup(ModelHelper, Base):
     def my_mobi_files(self) -> List[dict]:
         return self.my_files('application/x-mobipocket-ebook')
 
-    def delete(self):
+    def delete(self, add_to_skip_list: bool = True):
         """Delete this FileGroup record, and all of its files.
 
         @raise FileGroupIsTagged: If any tags are related to me."""
@@ -223,6 +224,9 @@ class FileGroup(ModelHelper, Base):
             path.unlink(missing_ok=True)
 
         if session := Session.object_session(self):
+            from wrolpi.downloader import download_manager
+            if self.url and add_to_skip_list is True:
+                download_manager.add_to_skip_list(self.url)
             session.delete(self)
 
     @property
@@ -289,7 +293,7 @@ class FileGroup(ModelHelper, Base):
     def find_by_id(id_: int, session: Session = None) -> 'FileGroup':
         fg = session.query(FileGroup).filter(FileGroup.id == id_).one_or_none()
         if not fg:
-            raise RuntimeError(f'Unable to find FileGroup with id {id_}')
+            raise UnknownFile(f'Unable to find FileGroup with id {id_}')
         return fg
 
     @staticmethod
@@ -360,51 +364,31 @@ class FileGroup(ModelHelper, Base):
             query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
         return f'/files?{query}'
 
-    def get_model_class(self) -> Optional[Type[Base]]:
+    def get_model_class(self) -> Optional[Type[ModelHelper]]:
+        """Return the class that is suitable for this FileGroup (usually based on mimetype), if any."""
         from modules.videos.models import Video
-        from modules.archive.lib import is_singlefile_file
         from modules.archive.models import Archive
         from wrolpi.files.ebooks import EBook
-        from wrolpi.files.ebooks import mimetype_is_ebook
 
-        if self.mimetype.startswith('video/'):
+        if Video.can_model(self):
             return Video
-        elif self.mimetype.startswith('text') and is_singlefile_file(self.primary_path):
-            return Archive
-        elif mimetype_is_ebook(self.mimetype):
+        elif EBook.can_model(self):
             return EBook
+        elif Archive.can_model(self):
+            return Archive
 
-    def get_model(self, session: Session) -> Optional[Base]:
+    def do_model(self, session: Session) -> Optional[ModelHelper]:
+        """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""
         if model_class := self.get_model_class():
-            return model_class.get_by_path(self.primary_path, session)
+            if model := model_class.get_by_path(self.primary_path, session):
+                # Already modeled.
+                return model
+            # Create new model (Video/Archive/Ebook).
+            return model_class.do_model(self, session)
 
-    def do_model(self, session: Session) -> Base:
-        """Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""
-        if model := self.get_model(session):
-            return model
-
-        from modules.archive.lib import is_singlefile_file
-        from modules.archive import model_archive
-        from modules.videos.models import Video
-        from wrolpi.files.ebooks import model_ebook, mimetype_is_ebook
-
-        if self.mimetype.startswith('video/'):
-            video = Video(file_group_id=self.id, file_group=self)
-            session.add(video)
-            video.validate()
-            self.indexed = True
-            session.flush([video, ])
-            return video
-        elif self.mimetype.startswith('text') and is_singlefile_file(self.primary_path):
-            archive = model_archive(self, session)
-            self.indexed = True
-            return archive
-        elif mimetype_is_ebook(self.mimetype):
-            ebook = model_ebook(self, session)
-            self.indexed = True
-            return ebook
-
-        raise UnknownFile(f'Cannot model file with mimetype {self.mimetype}')
+        # Index the file if no models are available.
+        self.do_index()
+        self.indexed = True
 
     def get_tag_directory_paths_map(self) -> dict[pathlib.Path, str]:
         """Return all links that should exist for this FileGroup in the Tags Directory."""

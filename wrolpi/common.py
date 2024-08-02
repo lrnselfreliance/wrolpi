@@ -266,6 +266,14 @@ class ModelHelper:
         """Get a model instance by its id, raise an error if no instance is found."""
         raise NotImplementedError('This model has not defined this method.')
 
+    @staticmethod
+    def can_model(file_group) -> bool:
+        raise NotImplementedError('This model has not defined this method.')
+
+    @staticmethod
+    def do_model(file_group, session: Session):
+        raise NotImplementedError('This model has not defined this method.')
+
     def flush(self):
         """A convenience function which flushes this record using its DB Session."""
         Session.object_session(self).flush([self])

@@ -110,8 +110,8 @@ async def test_create_channel_download(test_session, simple_channel):
     test_session.flush()
 
     settings = dict(destination=str(simple_channel.directory))
-    download_manager.create_download('https://example.com/2', RSSDownloader.name, test_session,
-                                     sub_downloader_name=VideoDownloader.name, settings=settings)
+    download_manager.recurring_download('https://example.com/2', 1, RSSDownloader.name, test_session,
+                                        sub_downloader_name=VideoDownloader.name, settings=settings)
     download = test_session.query(Download).one()
     assert download.settings['destination'] == str(simple_channel.directory)
     download = test_session.query(Download).one()

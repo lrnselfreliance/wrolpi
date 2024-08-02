@@ -350,6 +350,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </Container>
 
         <video controls
+               class='video-player'
                autoPlay={props.autoplay !== undefined ? props.autoplay : true}
                poster={posterUrl}
                id="player"

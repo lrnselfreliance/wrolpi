@@ -94,19 +94,22 @@ class Video(ModelHelper, Base):
     def delete(self, add_to_skip_list: bool = True):
         """Remove all files and File records related to this video.  Delete this Video record.
         Add it to it's Channel's skip list."""
-        self.file_group.delete()
-
-        if add_to_skip_list:
-            self.add_to_skip_list()
+        self.file_group.delete(add_to_skip_list=add_to_skip_list)
         session = Session.object_session(self)
         session.delete(self)
 
-    def add_to_skip_list(self):
-        """Add this video to the DownloadManager's skip list."""
-        if self.file_group.url:
-            download_manager.add_to_skip_list(self.file_group.url)
-        else:
-            logger.warning(f'{self} cannot be added to skip list because it does not have a URL')
+    @staticmethod
+    def can_model(file_group: FileGroup) -> bool:
+        return file_group.mimetype.startswith('video/')
+
+    @staticmethod
+    def do_model(file_group: FileGroup, session: Session) -> 'Video':
+        video = Video(file_group_id=file_group.id, file_group=file_group)
+        session.add(video)
+        video.validate()
+        file_group.indexed = True
+        video.flush()
+        return video
 
     def get_info_json(self) -> Optional[Dict]:
         """If this Video has an info_json file, return its contents.  Otherwise, return None."""
@@ -612,12 +615,6 @@ class Channel(ModelHelper, Base):
             downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads]
         )
         return config
-
-    def get_relative_path(self, path: Path, exists: bool = True):
-        path = self.directory / path
-        if exists and not path.exists():
-            raise FileNotFoundError(f'{path} does not exist!')
-        return path
 
     @staticmethod
     def get_by_path(path: pathlib.Path, session: Session) -> Optional['Channel']:

@@ -143,7 +143,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
         await video_download_manager.wait_for_all_downloads()
 
     def reset_downloads():
-        [i.delete(skip=False) for i in test_session.query(Download)]
+        [i.delete(add_to_skip_list=False) for i in test_session.query(Download)]
 
     # Let background tasks run.
     await asyncio.sleep(0)

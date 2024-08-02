@@ -14,7 +14,7 @@ from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
-from wrolpi.tags import Tag, TagFile
+from wrolpi.tags import TagFile
 from wrolpi.vars import PYTEST
 from .errors import InvalidArchive
 
@@ -72,6 +72,21 @@ class Archive(Base, ModelHelper):
         if archive:
             return archive
         raise UnknownArchive(f'Cannot find Archive with path: {path}')
+
+    @staticmethod
+    def can_model(file_group: FileGroup) -> bool:
+        from modules.archive.lib import is_singlefile_file
+        if file_group.mimetype.startswith('text') and is_singlefile_file(file_group.primary_path):
+            return True
+        return False
+
+    @staticmethod
+    def do_model(file_group: FileGroup, session: Session) -> 'Archive':
+        from modules.archive import model_archive
+        archive = model_archive(file_group, session)
+        archive.validate()
+        file_group.indexed = True
+        return archive
 
     def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
         return self.file_group.my_paths(*mimetypes)

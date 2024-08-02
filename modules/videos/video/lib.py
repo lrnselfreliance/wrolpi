@@ -165,7 +165,7 @@ def delete_videos(*video_ids: int, session: Session = None):
 
     logger.warning(f'Deleting {len(videos)} videos')
     for video in videos:
-        video.delete()
+        video.delete(add_to_skip_list=True)
     session.commit()
 
 

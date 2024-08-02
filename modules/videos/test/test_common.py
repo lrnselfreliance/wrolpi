@@ -185,7 +185,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     # Creating Download that matches Channel2's URL means they are related.  Delete it and it should be re-created.
     channel2.get_or_create_download(channel2.url, 60, test_session)
     save_channels_config()
-    Download.find_by_url(channel2.url).delete(skip=False)
+    Download.find_by_url(channel2.url).delete(add_to_skip_list=False)
     test_session.commit()
 
     # Missing Download is re-created on import.
@@ -217,7 +217,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     # Get Channels with their Downloads.
     channels_backup = copy(get_channels_config().channels)
     # Reset Downloads.  Downloads should be recreated from the channels config file.
-    [i.delete(skip=False) for i in test_session.query(Download).all()]
+    [i.delete(add_to_skip_list=False) for i in test_session.query(Download).all()]
     # Write config with Channel Downloads now that the delete() has removed them from the config.
     get_channels_config().channels = channels_backup
     import_channels_config()

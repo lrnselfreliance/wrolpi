@@ -3,7 +3,7 @@ import json
 import pathlib
 import tempfile
 from abc import ABC
-from typing import List, Tuple
+from typing import List, Tuple, Iterable
 
 from selenium import webdriver
 from sqlalchemy import not_
@@ -242,7 +242,7 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         archive = Archive(file_group_id=file_group_id, file_group=file_group)
         session.add(archive)
         archive.validate()
-        session.flush([archive])
+        archive.flush()
 
         file_group.title = file_group.a_text = title
         file_group.d_text = contents
@@ -278,10 +278,10 @@ async def archive_modeler():
             ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \
                 .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
                 .limit(20)
+            results: Iterable[Tuple[FileGroup, Archive]]
 
             processed = 0
-            for file_group, archive in results:
-                processed += 1
+            for processed, (file_group, archive) in enumerate(results):
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True
@@ -289,7 +289,6 @@ async def archive_modeler():
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
                                  logger__=logger):
                     if archive:
-                        archive: Archive
                         try:
                             archive_id = archive.id
                             archive.validate()

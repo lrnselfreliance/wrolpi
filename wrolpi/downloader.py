@@ -212,9 +212,9 @@ class Download(ModelHelper, Base):  # noqa
     def add_to_skip_list(self):
         download_manager.add_to_skip_list(self.url)
 
-    def delete(self, skip: bool = True):
+    def delete(self, add_to_skip_list: bool = True):
         # Do not download this automatically again.  This saves the config.
-        if skip:
+        if add_to_skip_list:
             self.add_to_skip_list()
 
         session = Session.object_session(self)

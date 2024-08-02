@@ -73,8 +73,8 @@ def extract_text(html: str) -> str:
     return text
 
 
-def mimetype_is_ebook(mimetype: str) -> List[str]:
-    return [i for i in EBOOK_MIMETYPES if mimetype.startswith(i)]
+def mimetype_is_ebook(mimetype: str) -> bool:
+    return any(i for i in EBOOK_MIMETYPES if mimetype.startswith(i))
 
 
 def extract_ebook_data(path: pathlib.Path, mimetype: str) -> Optional[EBookData]:
@@ -166,6 +166,18 @@ class EBook(ModelHelper, Base):
         d['data']['ebook_path'] = pathlib.Path(d['data']['ebook_path'])
         d['data']['cover_path'] = pathlib.Path(d['data']['cover_path']) if 'cover_path' in d['data'] else None
         return d
+
+    @staticmethod
+    def can_model(file_group: FileGroup) -> bool:
+        if mimetype_is_ebook(file_group.mimetype):
+            return True
+        return False
+
+    @staticmethod
+    def do_model(file_group: FileGroup, session: Session) -> 'EBook':
+        ebook = model_ebook(file_group, session)
+        file_group.indexed = True
+        return ebook
 
     def generate_cover(self) -> Optional[pathlib.Path]:
         """Discover this ebook's cover, if found, store it next to the ebook file."""
@@ -268,7 +280,7 @@ def model_ebook(file_group: FileGroup, session: Session) -> EBook:
         ebook.file_group.title = stem
 
     ebook.size = size
-    session.flush([ebook, ])
+    ebook.flush()
 
     return ebook
 

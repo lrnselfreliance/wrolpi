@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
-    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color, walk, escape_file_name
+    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged
@@ -380,8 +380,9 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
     if not is_valid_hex_color(color):
         raise InvalidTag('Tag color is invalid')
 
-    # Tag names are used in Tags Directory, so they must be valid file names.
-    name = escape_file_name(name)
+    # Replace forward-slash (linux directories) with unicode Big Solidus (U+29F8)
+    name = name.replace('/', '⧸')
+    name = INVALID_FILE_CHARS.sub('', name)
 
     if tag_id:
         tag = session.query(Tag).filter_by(id=tag_id).one_or_none()

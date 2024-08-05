@@ -3,6 +3,7 @@
 
 docker volume create --name=openstreetmap-data
 docker volume create --name=openstreetmap-rendered-tiles
+git submodule update --init
 docker-compose pull
 docker-compose build --parallel
 docker-compose up -d db

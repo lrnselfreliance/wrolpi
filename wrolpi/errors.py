@@ -169,3 +169,9 @@ class InvalidDirectory(APIError):
     code = 'INVALID_DIRECTORY'
     message = 'Directory is not valid or impossible'
     status_code = HTTPStatus.BAD_REQUEST
+
+
+class RefreshConflict(APIError):
+    code = 'REFRESH_CONFLICT'
+    message = 'Not possible during file refresh'
+    status_code = HTTPStatus.CONFLICT

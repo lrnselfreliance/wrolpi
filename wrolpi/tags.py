@@ -7,12 +7,12 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
-from wrolpi import dates
+from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
-    register_refresh_cleanup, get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
+    get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -149,6 +149,26 @@ class Tag(ModelHelper, Base):
     def has_relations(self) -> bool:
         """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
         return bool(self.tag_files or self.tag_zim_entries)
+
+    def update_tag(self, name: str, color: str, session: Session):
+        """Change name/color of tag.  Ensures safeness of new values, checks for conflicts."""
+        if ',' in name:
+            raise InvalidTag('Tag name cannot have comma')
+        if not is_valid_hex_color(color):
+            raise InvalidTag('Tag color is invalid')
+
+        # Replace forward-slash (linux directories) with unicode Big Solidus (U+29F8)
+        name = name.replace('/', '⧸')
+        name = INVALID_FILE_CHARS.sub('', name)
+
+        if Tag.get_by_name(name, session):
+            raise InvalidTag('Tag name already taken')
+
+        if flags.refreshing.is_set():
+            raise RefreshConflict('Refusing to rename tag while file refresh is in progress')
+
+        self.name = name
+        self.color = color
 
 
 class TagsConfig(ConfigFile):
@@ -375,27 +395,16 @@ def get_tags() -> List[dict]:
 @optional_session
 @run_after(save_tags_config)
 def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
-    if ',' in name:
-        raise InvalidTag('Tag name cannot have comma')
-    if not is_valid_hex_color(color):
-        raise InvalidTag('Tag color is invalid')
-
-    # Replace forward-slash (linux directories) with unicode Big Solidus (U+29F8)
-    name = name.replace('/', '⧸')
-    name = INVALID_FILE_CHARS.sub('', name)
-
     if tag_id:
-        tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
-        if not tag:
-            raise UnknownTag(f'Cannot find tag with id={tag_id}')
-        tag.name = name
-        tag.color = color
+        tag = Tag.find_by_id(tag_id, session)
+        tag.update_tag(name, color, session)
+        tag.flush()
     else:
-        tag = Tag(name=name, color=color)
+        tag = Tag()
+        tag.update_tag(name, color, session)
         session.add(tag)
 
     try:
-        session.flush([tag])
         session.commit()
     except IntegrityError as e:
         # Conflicting name
@@ -410,14 +419,10 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
 
 @optional_session
 def delete_tag(tag_id: int, session: Session = None):
-    tag: Tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
+    tag = Tag.find_by_id(tag_id, session)
 
-    if not tag:
-        raise UnknownTag(f'Cannot find tag {tag_id}')
-
-    if tag.tag_files:
-        count = len(tag.tag_files)
-        raise UsedTag(f'Cannot delete {tag.name} it is used by {count} files!')
+    if tag.has_relations():
+        raise UsedTag(f'Cannot delete {tag.name} it is used')
 
     session.delete(tag)
     session.commit()

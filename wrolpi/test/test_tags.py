@@ -339,6 +339,7 @@ async def test_invalid_tag(test_async_client, test_session, test_directory):
 @pytest.mark.asyncio
 async def test_tags_directory(test_async_client, test_session, test_directory, tag_factory, video_factory,
                               example_pdf):
+    """Test that Tag Directory is synchronized with database."""
     readme = test_directory / 'tags/README.txt'
 
     # Should be deleted on sync.
@@ -436,3 +437,26 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
     # Only three FileGroups were created.  Tags Directory files are ignored during refresh.
     await files_lib.refresh_files()
     assert test_session.query(FileGroup).count() == 3
+
+
+@pytest.mark.asyncio
+async def test_update_tag(test_async_client, test_session, test_directory, video_factory, tag_factory):
+    """Linked files in the Tag Directory are moved when the tag is renamed."""
+    # Create tagged Video.
+    tag = tag_factory()
+    video_factory(title='video', tag_names=[tag.name])
+    test_session.commit()
+
+    # Video file is linked in tag directory.
+    assert (test_directory / 'tags').is_dir()
+    assert (test_directory / 'videos/NO CHANNEL/video.mp4').is_file()
+    assert (test_directory / 'tags/one/video.mp4').is_file()
+
+    # Invalid characters are replaced during rename.
+    tags.upsert_tag('new/name%', tag.color, tag.id)
+
+    # Video file was moved.
+    assert (test_directory / 'tags').is_dir()
+    assert (test_directory / 'videos/NO CHANNEL/video.mp4').is_file()
+    assert not (test_directory / 'tags/one/video.mp4').exists()
+    assert (test_directory / 'tags/new⧸name/video.mp4').is_file()

@@ -5,11 +5,12 @@ from typing import List, Dict, Union
 from sqlalchemy import or_, func, desc, asc
 from sqlalchemy.orm import Session
 
+from wrolpi import flags
 from wrolpi.common import run_after, logger, \
     get_media_directory, wrol_mode_check
 from wrolpi.db import get_db_curs, optional_session, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager
-from wrolpi.errors import UnknownDirectory, APIError, ValidationError
+from wrolpi.errors import UnknownDirectory, APIError, ValidationError, RefreshConflict
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel, ChannelDirectoryConflict
@@ -256,6 +257,9 @@ async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id:
 
     Move the Channel to the new directory, if provided."""
     from wrolpi.tags import Tag
+
+    if directory and flags.refreshing.is_set():
+        raise RefreshConflict('Refusing to move channel while file refresh is in progress')
 
     channel = Channel.find_by_id(channel_id, session=session)
 

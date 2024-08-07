@@ -757,7 +757,7 @@ export function ChannelsPage() {
 
     const headers = [
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'tag', text: 'Tag', sortBy: 'tag', width: 2},
+        {key: 'tag', text: 'Tag', sortBy: 'tag_name', width: 2},
         {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
         {key: 'download_frequency', text: 'Download Frequency', sortBy: 'minimum_frequency', width: 2},
         {key: 'size', text: 'Size', sortBy: 'size', width: 2},

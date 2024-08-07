@@ -1276,11 +1276,11 @@ async def move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[
 
     # Files were moved, migrate any Tags.
     plan_map = {old: new for old, new in plan}
+    old_file_paths = list(plan_map.keys())
     with get_db_session(commit=True) as session:
-        old_file_paths = list(plan_map.keys())
         old_files: List[Tuple[FileGroup, TagFile]] = session.query(FileGroup, TagFile) \
             .filter(FileGroup.primary_path.in_(old_file_paths)) \
-            .join(TagFile, TagFile.file_group_id == FileGroup.id).all()
+            .outerjoin(TagFile).all()
         logger.info(f'Moving {len(old_files)} tagged files')
         for old_file, _ in old_files:
             try:
@@ -1290,6 +1290,8 @@ async def move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[
             except KeyError as e:
                 # Got a duplicate?
                 logger.error('Error during tag migration', exc_info=e)
+                if PYTEST:
+                    raise
         session.commit()
 
     if PYTEST:

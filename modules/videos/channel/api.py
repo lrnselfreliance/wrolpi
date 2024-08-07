@@ -17,7 +17,7 @@ from wrolpi.vars import PYTEST
 from . import lib
 from .. import schema
 from ..errors import UnknownChannel
-from ..lib import save_channels_config
+from ..lib import save_channels_config, format_videos_destination
 from ..models import Channel
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')
@@ -136,3 +136,41 @@ async def channel_download(_: Request, channel_id: int, body: schema.ChannelDown
         # Warn the user that downloads are disabled.
         Events.send_downloads_disabled('Channel download created. But downloads are disabled.')
     return response.empty()
+
+
+@channel_bp.post('/<channel_id:int>/tag_info')
+@openapi.definition(
+    description='Get Channel Tag Info',
+    body=schema.ChannelTagInfoRequest,
+)
+@validate(schema.ChannelTagInfoRequest)
+@run_after(save_channels_config)
+@wrol_mode_check
+async def channel_tag_info(_: Request, channel_id: int, body: schema.ChannelTagInfoRequest):
+    from wrolpi.tags import Tag
+    channel_name = Channel.find_by_id(channel_id).name
+    tag_name = Tag.find_by_name(body.tag_name).name if body.tag_name else None
+    videos_destination = format_videos_destination(channel_name, tag_name)
+    ret = dict(videos_destination=videos_destination)
+    return json_response(ret)
+
+
+@channel_bp.post('/<channel_id:int>/tag')
+@openapi.definition(
+    description='Tag Channel',
+    body=schema.ChannelTagRequest,
+)
+@openapi.response(HTTPStatus.NO_CONTENT)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@validate(schema.ChannelTagRequest)
+@run_after(save_channels_config)
+@wrol_mode_check
+async def channel_tag(_: Request, channel_id: int, body: schema.ChannelTagRequest):
+    directory = None
+    if body.directory:
+        directory = pathlib.Path(body.directory)
+        directory = get_media_directory() / directory
+
+    await lib.tag_channel(body.tag_name, directory, channel_id)
+
+    return response.raw('', HTTPStatus.NO_CONTENT)

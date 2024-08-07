@@ -32,7 +32,7 @@ class SemanticUIColors(enum.StrEnum):
 
 @dataclass
 class SettingsRequest:
-    archive_directory: Optional[str] = None
+    archive_destination: Optional[str] = None
     download_on_startup: Optional[bool] = None
     download_timeout: Optional[int] = None
     hotspot_device: Optional[str] = None
@@ -42,14 +42,14 @@ class SettingsRequest:
     hotspot_status: Optional[bool] = None
     ignore_outdated_zims: Optional[bool] = None
     log_level: Optional[int] = None
-    map_directory: Optional[str] = None
+    map_destination: Optional[str] = None
     nav_color: Optional[str] = None
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
-    videos_directory: Optional[str] = None
+    videos_destination: Optional[str] = None
     wrol_mode: Optional[bool] = None
-    zims_directory: Optional[str] = None
+    zims_destination: Optional[str] = None
 
     def __post_init__(self):
         self.nav_color = self.nav_color.lower() if self.nav_color else None

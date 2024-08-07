@@ -38,6 +38,21 @@ class ChannelPutRequest:
 
 
 @dataclass
+class ChannelTagRequest:
+    tag_name: Optional[str] = None
+    directory: Optional[str] = None
+
+    def __post_init__(self):
+        if self.directory and self.directory.startswith('/'):
+            raise ValidationError('Directory must be relative to media directory')
+
+
+@dataclass
+class ChannelTagInfoRequest:
+    tag_name: Optional[str] = None
+
+
+@dataclass
 class ChannelDownloadRequest:
     url: str
     frequency: int

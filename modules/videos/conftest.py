@@ -11,12 +11,11 @@ import pytest
 from PIL import Image
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
-from modules.videos.lib import set_test_channels_config, set_test_downloader_config
+from modules.videos.lib import set_test_channels_config, set_test_downloader_config, format_videos_destination
 from modules.videos.models import Channel, Video
 from wrolpi.api_utils import api_app
 from wrolpi.downloader import DownloadFrequency, DownloadManager
 from wrolpi.files.models import FileGroup
-from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -36,25 +35,25 @@ def simple_channel(test_session, test_directory) -> Channel:
 @pytest.fixture
 def channel_factory(test_session, test_directory):
     """Create a random Channel with a directory, and Download."""
+    from wrolpi.tags import Tag
 
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
-                directory: pathlib.Path = None):
+                directory: pathlib.Path = None, tag_name: str = None):
         name = name or str(uuid4())
-        directory = directory or test_directory / name
-        if not directory.is_dir():
-            directory.mkdir()
+        tag = Tag.get_by_name(tag_name) if tag_name else None
         channel = Channel(
-            directory=directory,  # noqa
             name=name,
             url=url or f'https://example.com/{name}',
             source_id=source_id,
+            tag=tag,
         )
+        channel.directory = directory or format_videos_destination(name, tag, channel.url)
+        channel.directory.mkdir(exist_ok=True, parents=True)
         test_session.add(channel)
         test_session.flush([channel])
         assert channel.id and channel.url
         if download_frequency:
-            download = channel.get_or_create_download(channel.url, 60)
-            download.frequency = download_frequency
+            download = channel.get_or_create_download(channel.url, download_frequency)
             assert download.url == channel.url
             assert channel.downloads
         test_session.commit()
@@ -106,8 +105,9 @@ def video_factory(test_session, test_directory):
             path = pathlib.Path(with_video_file) if not isinstance(with_video_file, pathlib.Path) else with_video_file
         elif channel_id:
             # Put the video in its Channel's directory.
-            channel = test_session.query(Channel).filter_by(id=channel_id).one()
+            channel = Channel.find_by_id(channel_id)
             path = (channel.directory or test_directory) / f'{title}.mp4'
+            path.parent.mkdir(exist_ok=True, parents=True)
         else:
             # Put any video not in a Channel and without a specified file in the NO CHANNEL directory.
             (test_directory / 'videos/NO CHANNEL').mkdir(exist_ok=True, parents=True)

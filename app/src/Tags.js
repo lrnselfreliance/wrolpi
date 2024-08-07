@@ -131,8 +131,8 @@ export function useTags() {
         </Label.Group>
     }
 
-    const SingleTag = ({name}) => {
-        return <Label.Group tag><NameToTagLabel name={name}/></Label.Group>
+    const SingleTag = ({name, ...props}) => {
+        return <Label.Group tag {...props}><NameToTagLabel name={name}/></Label.Group>
     }
 
     useEffect(() => {

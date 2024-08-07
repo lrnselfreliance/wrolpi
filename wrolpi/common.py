@@ -276,7 +276,10 @@ class ModelHelper:
 
     def flush(self):
         """A convenience function which flushes this record using its DB Session."""
-        Session.object_session(self).flush([self])
+        if session := Session.object_session(self):
+            session.flush([self])
+        else:
+            raise RuntimeError(f'{self} is not in a session!')
 
 
 class tsvector(types.TypeDecorator):
@@ -370,7 +373,8 @@ class ConfigFile:
         if config_file.is_file():
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:
-                self._config.update(yaml.load(fh, Loader=yaml.Loader))
+                config_data = yaml.load(fh, Loader=yaml.Loader)
+                self._config.update(config_data)
         return self
 
     def _get_backup_filename(self):
@@ -467,7 +471,7 @@ class ConfigFile:
 class WROLPiConfig(ConfigFile):
     file_name = 'wrolpi.yaml'
     default_config = dict(
-        archive_directory='archive',
+        archive_destination='archive/%(domain)s',
         download_on_startup=True,
         download_timeout=0,
         hotspot_device='wlan0',
@@ -476,12 +480,12 @@ class WROLPiConfig(ConfigFile):
         hotspot_ssid='WROLPi',
         ignore_outdated_zims=False,
         ignored_directories=['config', 'tags'],
-        map_directory='map',
+        map_destination='map',
         nav_color='violet',
         throttle_on_startup=False,
-        videos_directory='videos',
+        videos_destination='videos/%(channel_tag)s/%(channel_name)s',
         wrol_mode=False,
-        zims_directory='zims',
+        zims_destination='zims',
     )
 
     def get_file(self) -> Path:
@@ -586,28 +590,36 @@ class WROLPiConfig(ConfigFile):
         self.update({'ignored_directories': value})
 
     @property
-    def videos_directory(self) -> str:
-        return self._config['videos_directory']
+    def videos_destination(self) -> str:
+        return self._config['videos_destination']
 
-    @videos_directory.setter
-    def videos_directory(self, value: str):
-        self.update({'videos_directory': value})
-
-    @property
-    def archive_directory(self) -> str:
-        return self._config['archive_directory']
-
-    @archive_directory.setter
-    def archive_directory(self, value: str):
-        self.update({'archive_directory': value})
+    @videos_destination.setter
+    def videos_destination(self, value: str):
+        self.update({'videos_destination': value})
 
     @property
-    def map_directory(self) -> str:
-        return self._config['map_directory']
+    def archive_destination(self) -> str:
+        return self._config['archive_destination']
 
-    @map_directory.setter
-    def map_directory(self, value: str):
-        self.update({'map_directory': value})
+    @archive_destination.setter
+    def archive_destination(self, value: str):
+        self.update({'archive_destination': value})
+
+    @property
+    def map_destination(self) -> str:
+        return self._config['map_destination']
+
+    @map_destination.setter
+    def map_destination(self, value: str):
+        self.update({'map_destination': value})
+
+    @property
+    def zims_destination(self) -> str:
+        return self._config['zims_destination']
+
+    @zims_destination.setter
+    def zims_destination(self, value: str):
+        self.update({'zims_destination': value})
 
     @property
     def nav_color(self) -> str:
@@ -616,14 +628,6 @@ class WROLPiConfig(ConfigFile):
     @nav_color.setter
     def nav_color(self, value: str):
         self.update({'nav_color': value})
-
-    @property
-    def zims_directory(self) -> str:
-        return self._config['zims_directory']
-
-    @zims_directory.setter
-    def zims_directory(self, value: str):
-        self.update({'zims_directory': value})
 
 
 WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()

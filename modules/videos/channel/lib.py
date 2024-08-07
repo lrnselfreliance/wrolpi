@@ -1,9 +1,9 @@
+import pathlib
 from pathlib import Path
 from typing import List, Dict, Union
 
 from sqlalchemy import or_, func, desc, asc
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger, \
     get_media_directory
@@ -12,7 +12,7 @@ from wrolpi.downloader import save_downloads_config, download_manager
 from wrolpi.errors import UnknownDirectory, APIError, ValidationError
 from .. import schema
 from ..common import check_for_channel_conflicts
-from ..errors import UnknownChannel
+from ..errors import UnknownChannel, ChannelDirectoryConflict
 from ..lib import save_channels_config
 from ..models import Channel, Video
 
@@ -28,7 +28,7 @@ async def get_minimal_channels() -> List[dict]:
         # one that will consume the most resources.
         stmt = '''
             SELECT
-                c.id, name, directory, c.url,
+                c.id, c.name AS "name", directory, c.url, t.name AS "tag_name",
                 COUNT(v.id) as video_count,
                 SUM(fg.size)::BIGINT AS size,
                 (
@@ -40,7 +40,8 @@ async def get_minimal_channels() -> List[dict]:
                 channel AS c
                 LEFT JOIN video v on c.id = v.channel_id
                 LEFT JOIN file_group fg on fg.id = v.file_group_id
-            GROUP BY 1, 2, 3, 4
+                LEFT JOIN tag t ON t.id = c.tag_id
+            GROUP BY 1, 2, 3, 4, 5
         '''
         curs.execute(stmt)
         channels = sorted([dict(i) for i in curs.fetchall()], key=lambda i: i['name'].lower())
@@ -115,10 +116,7 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
 @optional_session
 def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
-    try:
-        channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
-    except NoResultFound:
-        raise UnknownChannel()
+    channel = Channel.find_by_id(channel_id, session)
 
     # Only update directory if it was empty
     if data.directory and not channel.directory:
@@ -237,8 +235,9 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
         Channel.find_by_id(channel_id, session=session)
         download = download_manager.get_download(session, id_=download_id)
         download.url = url
-        download.frequency = download.frequency or frequency
+        download.frequency = frequency
         download.settings = settings
+        session.commit()
 
     download_manager.remove_from_skip_list(url)
 
@@ -246,3 +245,38 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     await save_downloads_config()
 
     return download
+
+
+@optional_session
+async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id: int, session: Session = None):
+    """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
+
+    Move the Channel to the new directory, if provided."""
+    from wrolpi.tags import Tag
+
+    channel = Channel.find_by_id(channel_id, session=session)
+
+    if tag_name:
+        tag = Tag.find_by_name(tag_name, session=session)
+        channel.tag_id = tag.id
+        channel.tag = tag
+    else:
+        channel.tag = channel.tag_id = None
+
+    session.flush([channel, ])
+
+    # Do not move Channel files into a directory with files.
+    if directory and directory.is_dir() and next(directory.iterdir(), None):
+        raise ChannelDirectoryConflict('Channel directory already exists and is not empty')
+
+    # Only move Channel when requested.
+    if directory:
+        # Move to newly defined directory only if necessary.
+        logger.info(f'Tagging {channel} with {tag_name} moving to {directory} from {channel.directory}')
+        directory.mkdir(parents=True, exist_ok=True)
+        if channel.directory != directory:
+            await channel.move(directory, session)
+    else:
+        logger.info(f'Tagging {channel} with {tag_name}')
+
+    session.commit()

@@ -8,8 +8,11 @@ from http import HTTPStatus
 import mock
 import pytest
 
+from modules.videos.common import get_videos_directory
 from modules.videos.downloader import ChannelDownloader
-from modules.videos.models import Channel
+from modules.videos.lib import save_channels_config, get_channels_config
+from modules.videos.models import Channel, Video
+from wrolpi.common import get_relative_to_media_directory, walk
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager, Download, DownloadResult
@@ -412,7 +415,7 @@ def test_get_channel_videos_pagination(test_session, simple_channel, video_facto
 
 
 @pytest.mark.asyncio
-async def test_create_channel_download(test_async_client, test_session, simple_channel, tag_factory):
+async def test_create_channel_download_api(test_async_client, test_session, simple_channel, tag_factory):
     tag = tag_factory()
 
     # Create Download.
@@ -452,3 +455,93 @@ async def test_create_channel_download(test_async_client, test_session, simple_c
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(Download).count() == 1
     assert test_session.query(Channel).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_tag_channel(test_async_client, test_session, test_directory, channel_factory, tag_factory, video_factory,
+                           test_channels_config, test_download_manager, test_downloader):
+    """A single Tag can be applied to a Channel."""
+    # Create channel directory in the usual videos directory.
+    videos_directory = get_videos_directory()
+    channel = channel_factory(name='Channel Name', download_frequency=120)
+    channel_directory = channel.directory
+    tag = tag_factory('Tag Name')
+    v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
+    # Create recurring download which uses the Channel's directory.
+    download = download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
+                                                   settings={
+                                                       'destination': str(test_directory / 'videos/Channel Name')})
+    test_session.commit()
+    save_channels_config()
+    assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Channel Name')
+    # Channel download downloads into the Channel's directory.
+    assert channel.downloads[0].settings['destination'] == str(test_directory / 'videos/Channel Name')
+    # Make extra file in the Channel's directory, it should be moved.
+    (channel_directory / 'extra file.txt').write_text('extra file contents')
+    # Channel directory is in the Videos directory.
+    assert channel.directory == channel_directory
+    # Videos are in the Channel's Directory.
+    assert str(get_relative_to_media_directory(v1.video_path)) == 'videos/Channel Name/video1.mp4'
+    assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
+    video_files = [i for i in walk(videos_directory) if i.is_file()]
+    assert len(video_files) == 3
+
+    body = dict(tag_name=tag.name, directory='videos/Tag Name/Channel Name')
+    request, response = await test_async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    channel = test_session.query(Channel).one()
+    assert channel.tag_name == tag.name
+    # Channel was moved to Tag's directory, old directory was removed
+    new_channel_directory = test_directory / 'videos/Tag Name/Channel Name'
+    assert channel.directory == new_channel_directory, 'Channel directory should have been changed.'
+    assert new_channel_directory.is_dir(), 'Channel should have been moved.'
+    assert next(new_channel_directory.iterdir(), None), 'Channel videos should have been moved.'
+    assert not channel_directory.exists(), 'Old Channel directory should have been deleted.'
+    # Channel download goes into the Channel's directory.
+    d1, d2 = test_session.query(Download).all()
+    assert d1.settings['destination'] == str(test_directory / 'videos/Tag Name/Channel Name'), \
+        f'{d1} was not moved'
+    assert d2.settings['destination'] == str(test_directory / 'videos/Tag Name/Channel Name'), \
+        f'{d2} was not moved'
+
+    # Videos were moved
+    v1, v2 = test_session.query(Video).order_by(Video.id).all()
+    assert str(get_relative_to_media_directory(v1.video_path)) == 'videos/Tag Name/Channel Name/video1.mp4'
+    assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Tag Name/Channel Name/video2.mp4'
+    # Extra file was also moved.
+    assert (new_channel_directory / 'extra file.txt').read_text() == 'extra file contents'
+    # No new files were created.
+    assert len([i for i in walk(videos_directory) if i.is_file()]) == 3
+
+    assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Tag Name/Channel Name')
+
+    # Remove tag, Channel/Videos should be moved back.
+    body = dict(tag_name=None, directory='videos/Channel Name')
+    request, response = await test_async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
+    channel = test_session.query(Channel).one()
+    assert channel.tag_name is None
+    assert str(channel.directory) == str(test_directory / 'videos/Channel Name')
+    v1, v2 = test_session.query(Video).order_by(Video.id).all()
+    assert str(get_relative_to_media_directory(v1.video_path)) == 'videos/Channel Name/video1.mp4'
+    assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
+    assert not (test_directory / 'videos/Tag Name/Channel Name').exists()
+    # Downloads are moved back.
+    d1, d2 = test_session.query(Download).all()
+    assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
+    assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+
+    # Channel can be Tagged, but not move directories.
+    body = dict(tag_name=tag.name)
+    request, response = await test_async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
+    channel = test_session.query(Channel).one()
+    assert channel.tag_name == 'Tag Name'
+    assert str(channel.directory) == str(test_directory / 'videos/Channel Name')
+    assert str(get_relative_to_media_directory(v1.video_path)) == 'videos/Channel Name/video1.mp4'
+    assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
+    # Downloads were not changed.
+    d1, d2 = test_session.query(Download).all()
+    assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
+    assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'

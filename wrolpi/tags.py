@@ -426,7 +426,6 @@ def delete_tag(tag_id: int, session: Session = None):
     sync_tags_directory()
 
 
-@register_refresh_cleanup
 @optional_session
 def import_tags_config(session: Session = None):
     """Reads the Tags and TagFiles from the config file, upserts them in the DB."""

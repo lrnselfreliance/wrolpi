@@ -107,7 +107,7 @@ def test_get_custom_map_directory(test_directory, test_config):
     # Default location.
     assert lib.get_map_directory() == (test_directory / 'map')
 
-    get_wrolpi_config().map_directory = 'custom/deep/map/directory'
+    get_wrolpi_config().map_destination = 'custom/deep/map/directory'
 
     assert lib.get_map_directory() == (test_directory / 'custom/deep/map/directory')
     assert (test_directory / 'custom/deep/map/directory').is_dir()

@@ -734,6 +734,10 @@ export const useDirectories = (defaultDirectory) => {
         fetchDirectories();
     }, [directory, defaultDirectory]);
 
+    useEffect(() => {
+        setDirectory(defaultDirectory);
+    }, [defaultDirectory])
+
     return {directory, directories, setDirectory, exists, isDir, isFile};
 }
 

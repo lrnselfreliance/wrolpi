@@ -1,6 +1,5 @@
 import json
 import pathlib
-from pathlib import Path
 from typing import Optional, Dict, List
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger
@@ -11,12 +10,12 @@ from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session, optional_session
-from wrolpi.downloader import Download, download_manager
+from wrolpi.downloader import Download, download_manager, save_downloads_config
 from wrolpi.errors import InvalidDownload
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
+from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, move
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
-from wrolpi.tags import Tag, TagFile
+from wrolpi.tags import Tag, TagFile, save_tags_config
 from wrolpi.vars import PYTEST, DELETED_VIDEO_KEYS
 
 logger = logger.getChild(__name__)
@@ -533,9 +532,15 @@ class Channel(ModelHelper, Base):
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     downloads: InstrumentedList = relationship('Download', primaryjoin='Download.channel_id==Channel.id')
+    tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'))
+    tag = relationship('Tag')
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
+
+    @property
+    def tag_name(self) -> str | None:
+        return self.tag.name if self.tag else None
 
     def delete_with_videos(self):
         """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
@@ -560,11 +565,19 @@ class Channel(ModelHelper, Base):
         channel_id = self.id
         data = data.copy()
 
+        # Remove unused values.
+        data.pop('move_to_tag_directory', None)
+
         # URL should not be empty string.
         if 'url' in data:
             data['url'] = data['url'] or None
 
+        session: Session = Session.object_session(self)
+
         downloads = data.pop('downloads', [])
+
+        if tag_name := data.pop('tag_name', None):
+            self.tag = Tag.find_by_name(tag_name, session)
 
         for key, value in data.items():
             setattr(self, key, value)
@@ -574,8 +587,6 @@ class Channel(ModelHelper, Base):
             self.directory = get_media_directory() / self.directory
         elif isinstance(self.directory, str) and not pathlib.Path(self.directory).is_absolute():
             self.directory = get_media_directory() / self.directory
-
-        session: Session = Session.object_session(self)
 
         for download in downloads:
             url = None
@@ -608,11 +619,12 @@ class Channel(ModelHelper, Base):
         config = dict(
             calculate_duration=self.calculate_duration,
             directory=str(self.directory),
+            downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads],
             generate_posters=self.generate_posters,
             name=self.name,
             source_id=self.source_id,
+            tag_name=self.tag_name,
             url=self.url or None,
-            downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads]
         )
         return config
 
@@ -627,16 +639,18 @@ class Channel(ModelHelper, Base):
 
     def __json__(self) -> dict:
         d = dict(
-            downloads=self.downloads,
             directory=self.directory,
+            downloads=self.downloads,
             id=self.id,
             name=self.name,
+            tag_name=self.tag_name,
             url=self.url,
         )
         return d
 
     def dict(self, with_statistics: bool = False, with_downloads: bool = True) -> dict:
         d = super(Channel, self).dict()
+        d['tag_name'] = self.tag_name
         d['directory'] = \
             self.directory.relative_to(get_media_directory()) if self.directory else None
         if with_statistics:
@@ -706,10 +720,9 @@ class Channel(ModelHelper, Base):
         """Find a Channel with the provided id, raises an exception when no Channel is found.
 
         @raise UnknownChannel: if the channel can not be found"""
-        channel = Channel.get_by_id(id_, session=session)
-        if not channel:
-            raise UnknownChannel(f'Cannot find channel with id {id_}')
-        return channel
+        if channel := Channel.get_by_id(id_, session=session):
+            return channel
+        raise UnknownChannel(f'Cannot find channel with id {id_}')
 
     def get_video_entry_by_id(self, video_source_id: str) -> Optional[Dict]:
         """Search my info_json for the entry with the provided id."""
@@ -758,3 +771,40 @@ class Channel(ModelHelper, Base):
             raise RuntimeError('Must provide URL to get Channel')
         channel = session.query(Channel).filter_by(url=url).one_or_none()
         return channel
+
+    async def move(self, directory: pathlib.Path, session: Session):
+        """Move the files of this Channel into a new directory."""
+        if not directory.is_dir():
+            raise FileNotFoundError(f'Destination directory does not exist: {directory}')
+        if self.directory and not next(self.directory.iterdir(), None):
+            raise FileExistsError(f'Refusing to move Channel when it has no files.')
+
+        old_directory = self.directory
+        self.directory = directory
+        session.flush([self, ])
+
+        # Change destination of all Downloads of this Channel, or any Downloads which download into this Channel's
+        # directory.
+        downloads = list(self.downloads)
+        downloads.extend(list(
+            session.query(Download).filter(Download.settings.contains({'destination': str(old_directory)}))
+        ))
+        for download in downloads:
+            # Get new copy of `settings` to avoid bug where it wouldn't update.
+            settings = download.settings.copy() if download.settings else dict()
+            if settings.get('destination'):
+                download.settings = {**settings, 'destination': str(directory)}
+
+        session.commit()
+
+        # Save configs before move, this is because move imports configs.
+        from modules.videos.lib import save_channels_config
+        await save_downloads_config(session)
+        save_channels_config(session)
+        save_tags_config(session)
+
+        # Move the contents of the Channel directory into the destination directory.
+        await move(directory, *list(old_directory.iterdir()))
+
+        if old_directory.exists() and not next(old_directory.iterdir(), None):
+            old_directory.rmdir()

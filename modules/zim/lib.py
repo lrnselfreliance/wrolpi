@@ -464,7 +464,7 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
 
 
 def get_zim_directory() -> pathlib.Path:
-    zim_directory = get_media_directory() / get_wrolpi_config().zims_directory
+    zim_directory = get_media_directory() / get_wrolpi_config().zims_destination
     return zim_directory
 
 

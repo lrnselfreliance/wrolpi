@@ -332,7 +332,7 @@ def test_get_videos_directory(test_directory):
 def test_get_custom_videos_directory(test_directory, test_config):
     """Custom directory can be used for videos directory."""
     config = get_wrolpi_config()
-    config.videos_directory = 'custom/directory/videos'
+    config.videos_destination = 'custom/directory/videos'
 
     assert common.get_videos_directory() == (test_directory / 'custom/directory/videos')
     assert (test_directory / 'custom/directory/videos').is_dir()

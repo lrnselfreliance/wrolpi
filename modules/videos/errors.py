@@ -15,6 +15,12 @@ class UnknownChannel(APIError):
     status_code = HTTPStatus.NOT_FOUND
 
 
+class InvalidChannel(APIError):
+    code = 'INVALID_CHANNEL'
+    message = 'The channel is not supported'
+    status_code = HTTPStatus.BAD_REQUEST
+
+
 class ChannelNameConflict(APIError):
     code = 'CHANNEL_NAME_CONFLICT'
     message = 'The channel name is already taken.'

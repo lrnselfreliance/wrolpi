@@ -322,9 +322,9 @@ async def perpetual_have_internet_worker():
                     # Check hourly once we have internet.
                     await asyncio.sleep(float(Seconds.hour))
                 else:
-                    # Check every minute until the internet is back.
+                    # Check more often until the internet is back.
                     flags.have_internet.clear()
-                    await asyncio.sleep(float(Seconds.minute))
+                    await asyncio.sleep(10)
             except Exception as e:
                 logger.error('Failed to check if internet is up', exc_info=e)
 

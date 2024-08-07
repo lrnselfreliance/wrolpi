@@ -820,12 +820,13 @@ def test_get_url_from_singlefile():
     assert lib.get_url_from_singlefile(SINGLEFILE_EXAMPLE_1) == 'https://www.example.com'
 
 
-def test_get_custom_archive_directory(test_directory, test_config):
+@pytest.mark.asyncio
+async def test_get_custom_archive_directory(test_async_client, test_directory, test_config):
     """Custom directory can be used for archive directory."""
     # Default location.
     assert lib.get_archive_directory() == (test_directory / 'archive')
 
-    get_wrolpi_config().archive_directory = 'custom/archives'
+    get_wrolpi_config().archive_destination = 'custom/archives'
 
     assert lib.get_archive_directory() == (test_directory / 'custom/archives')
     assert lib.get_domain_directory('https://example.com') == (test_directory / 'custom/archives/example.com')

@@ -264,7 +264,7 @@ class VideoDownloader(Downloader, ABC):
         channel_source_id = download.info_json.get('channel_id') or download.info_json.get('uploader_id')
         channel_url = download.info_json.get('channel_url') or download.info_json.get('uploader_url')
         channel = None
-        if channel_name or channel_source_id:
+        if channel_name or channel_source_id or channel_url:
             # Try to find the channel via info_json from yt-dlp.
             try:
                 channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name)
@@ -278,7 +278,7 @@ class VideoDownloader(Downloader, ABC):
         settings = download.settings or dict()
         destination = settings.get('destination')
         if not channel and destination:
-            # Destination may override the real Channel.
+            # Destination may find Channel if not already found.
             try:
                 channel = get_channel(directory=destination, return_dict=False)
                 found_channel = 'download_settings_directory'
@@ -290,7 +290,7 @@ class VideoDownloader(Downloader, ABC):
         local_channel_id = settings.get('channel_id')
         channel_url = settings.get('channel_url')
         if not channel and (local_channel_id or channel_url):
-            # Could not find channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
+            # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
             logger.info(f'Using download.settings to find channel')
             try:
                 channel = get_channel(channel_id=local_channel_id, url=channel_url, return_dict=False)
@@ -320,11 +320,12 @@ class VideoDownloader(Downloader, ABC):
             logger.debug(f'Downloading {url} to destination from settings')
         elif channel:
             out_dir = channel_directory
-            logger.debug(f'Downloading {url} to channel directory')
+            logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
         else:
             # Download to the default directory if this video has no channel.
             out_dir = get_no_channel_directory()
             logger.debug(f'Downloading {url} to default directory')
+
         out_dir.mkdir(exist_ok=True, parents=True)
 
         logs = None  # noqa

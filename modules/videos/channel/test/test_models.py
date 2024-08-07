@@ -3,10 +3,9 @@ from http import HTTPStatus
 
 import pytest
 
-from modules.videos.downloader import VideoDownloader
 from modules.videos.models import Channel
 from modules.videos.models import Video
-from wrolpi.downloader import Download, DownloadFrequency, download_manager, RSSDownloader
+from wrolpi.downloader import Download, DownloadFrequency
 
 
 def test_delete_channel_no_url(test_session, test_client, channel_factory):
@@ -102,17 +101,3 @@ async def test_channel_download_relationships(test_session, download_channel):
     # Delete the Channel, and any relationships.
     download_channel.delete_with_videos()
     assert test_session.query(Download).count() == 0
-
-
-@pytest.mark.asyncio()
-async def test_create_channel_download(test_session, simple_channel):
-    """A Download will be related to a Channel if a Download is created in the Channel's directory"""
-    test_session.flush()
-
-    settings = dict(destination=str(simple_channel.directory))
-    download_manager.recurring_download('https://example.com/2', 1, RSSDownloader.name, test_session,
-                                        sub_downloader_name=VideoDownloader.name, settings=settings)
-    download = test_session.query(Download).one()
-    assert download.settings['destination'] == str(simple_channel.directory)
-    download = test_session.query(Download).one()
-    assert download.channel == simple_channel

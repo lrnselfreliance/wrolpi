@@ -9,7 +9,8 @@ from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import dates
-from wrolpi.common import ModelHelper, Base, logger, get_title_from_html
+from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory
+from wrolpi.dates import now
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
@@ -342,3 +343,21 @@ class Domain(Base, ModelHelper):
         if len(value.split('.')) < 2:
             raise ValueError(f'Domain must contain at least one "." domain={repr(value)}')
         return value
+
+    @property
+    def download_directory(self) -> pathlib.Path:
+        archive_destination = get_wrolpi_config().archive_destination
+
+        now_ = now()
+        variables = dict(
+            domain=self.domain,
+            year=now_.year,
+            month=now_.month,
+            day=now_.day,
+        )
+        archive_destination = archive_destination % variables
+        archive_destination = pathlib.Path(archive_destination.lstrip('/'))
+        if not archive_destination.is_absolute():
+            archive_destination = get_media_directory() / archive_destination
+
+        return archive_destination

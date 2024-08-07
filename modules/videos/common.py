@@ -35,8 +35,9 @@ class ConfigError(Exception):
 
 def get_videos_directory() -> pathlib.Path:
     """Get the "videos" directory in the media directory.  Make it if it does not exist."""
-    config = get_wrolpi_config()
-    directory = get_media_directory() / config.videos_directory
+    from modules.videos.lib import format_videos_destination
+    videos_destination = format_videos_destination()
+    directory = get_media_directory() / videos_destination
     if not directory.is_dir():
         directory.mkdir(parents=True)
     return directory

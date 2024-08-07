@@ -937,6 +937,7 @@ async def test_move_tagged(test_async_client, test_session, test_directory, make
     })
     await lib.refresh_files()
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
+    foo_file_group.title = 'custom title' # Should not be overwritten.
     bar_file_group.add_tag(tag.id)
     test_session.commit()
 
@@ -962,6 +963,7 @@ async def test_move_tagged(test_async_client, test_session, test_directory, make
     assert not foo_file_group.tag_files
     assert foo_file_group.primary_path.is_file()
     assert foo_file_group.primary_path == new_foo == foo_file_group.files[0]['path']
+    assert foo_file_group.title == 'custom title', 'Custom title should not have been overwritten.'
 
     # Rename "bar.txt" to "baz.txt"
     await lib.rename(new_bar, 'baz.txt')

@@ -275,7 +275,7 @@ class ModelHelper:
         raise NotImplementedError('This model has not defined this method.')
 
     def flush(self):
-        """A convenience function which flushes this record using its DB Session."""
+        """A convenience method which flushes this record using its DB Session."""
         if session := Session.object_session(self):
             session.flush([self])
         else:

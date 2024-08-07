@@ -582,7 +582,8 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             refresh_logger.warning('Refreshing all files')
             refreshing_all_files = True
         else:
-            refresh_logger.warning(f'Refreshing {", ".join(list(map(str, paths)))}')
+            refresh_msg = ", ".join(list(map(str, paths)))
+            refresh_logger.warning(f'Refreshing {refresh_msg[:1000]}')
         if send_events:
             Events.send_global_refresh_started()
 

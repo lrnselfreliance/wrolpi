@@ -6,7 +6,7 @@ from sqlalchemy import or_, func, desc, asc
 from sqlalchemy.orm import Session
 
 from wrolpi.common import run_after, logger, \
-    get_media_directory
+    get_media_directory, wrol_mode_check
 from wrolpi.db import get_db_curs, optional_session, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager
 from wrolpi.errors import UnknownDirectory, APIError, ValidationError
@@ -215,6 +215,7 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
     return channels
 
 
+@wrol_mode_check
 async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict):
     """Create Download for Channel."""
     with get_db_session(commit=True) as session:
@@ -228,6 +229,7 @@ async def create_channel_download(channel_id: int, url: str, frequency: int, set
     return download
 
 
+@wrol_mode_check
 async def update_channel_download(channel_id: int, download_id: int, url: str, frequency: int, settings: dict):
     """Fetch Channel's Download, update its properties."""
     with get_db_session(commit=True) as session:
@@ -247,6 +249,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     return download
 
 
+@wrol_mode_check
 @optional_session
 async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id: int, session: Session = None):
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.

@@ -36,6 +36,7 @@ import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode
+from wrolpi.common import logger
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
@@ -46,6 +47,8 @@ from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
+
+logger = logger.getChild(__name__)
 
 
 def get_test_db_engine():

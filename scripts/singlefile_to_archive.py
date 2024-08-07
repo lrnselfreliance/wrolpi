@@ -10,7 +10,7 @@ import tempfile
 
 from modules.archive import lib as archive_lib
 from wrolpi.cmd import READABILITY_BIN
-from wrolpi.common import html_screenshot, format_html_string, logger
+from wrolpi.common import html_screenshot, format_html_string, logger, format_html_file
 
 logger = logger.getChild('singlefile_to_archive')
 
@@ -30,6 +30,8 @@ def do_readability(html: bytes, url: str) -> dict:
 def singlefile_to_archive_files(singlefile: pathlib.Path):
     """Extract Readability files and Screenshot file next to the provided Singlefile."""
     contents = singlefile.read_bytes()
+
+    format_html_file(singlefile)
 
     readability_html_path = singlefile.with_suffix('.readability.html')
     readability_json_path = singlefile.with_suffix('.readability.json')

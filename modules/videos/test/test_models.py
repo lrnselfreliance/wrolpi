@@ -1,4 +1,9 @@
+import pathlib
+
 import pytest
+
+from modules.videos.models import Video, Channel
+from wrolpi.common import get_relative_to_media_directory, get_wrolpi_config
 
 
 @pytest.mark.asyncio()
@@ -13,3 +18,24 @@ async def test_ffprobe_stream_methods(simple_video):
     assert simple_video.get_streams_by_codec_name('h264')
     assert simple_video.get_streams_by_codec_name('aac')
     assert simple_video.get_streams_by_codec_name('mov_text')
+
+
+@pytest.mark.asyncio
+async def test_channel_move(test_async_client, test_session, test_directory, channel_factory, video_factory):
+    """A Channel can be moved to another directory, any files in the Channel's directory are moved."""
+    channel = channel_factory(name='Channel Name')
+    video = video_factory(title='Vid', channel_id=channel.id)
+    test_session.commit()
+    assert video.channel_id == channel.id
+    assert str(get_relative_to_media_directory(video.video_path)) == 'videos/Channel Name/Vid.mp4'
+
+    foo = test_directory / 'foo/New Channel Directory'
+    foo.mkdir(parents=True)
+    await channel.move(foo, test_session)
+    assert channel.directory == foo
+    assert channel.directory != (test_directory / 'New Channel Directory')
+    video = test_session.query(Video).one()
+    assert str(get_relative_to_media_directory(video.video_path)) == 'foo/New Channel Directory/Vid.mp4'
+    assert str(video.video_path).startswith(str(channel.directory))
+    # Old directory is deleted.
+    assert not (test_directory / 'Channel Name').exists()

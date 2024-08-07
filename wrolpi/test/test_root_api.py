@@ -530,14 +530,15 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
         request, response = await test_async_client.post('/api/search_suggestions', json=body)
         assert response.status_code == HTTPStatus.OK
         if expected_channels:
-            assert response.json['channels'] == expected_channels
+            for channel, expected_channel in zip_longest(response.json['channels'], expected_channels):
+                assert_dict_contains(channel, expected_channel)
         assert response.json['domains'] == expected_domains
 
     await assert_results(
         dict(search_str='foo'),
         [
-            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []},
-            {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'downloads': []},
+            {'directory': 'videos/Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []},
+            {'directory': 'videos/Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'downloads': []},
         ],
         [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
     )
@@ -546,14 +547,14 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(
         dict(search_str='foo l'),
         [
-            {'directory': 'Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []}],
+            {'directory': 'videos/Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []}],
         [],
     )
 
     await assert_results(
         dict(search_str='bar'),
         [
-            {'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'downloads': []}
+            {'directory': 'videos/Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'downloads': []}
         ],
         [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
     )
@@ -705,29 +706,28 @@ def test_recursive_errors():
 @pytest.mark.asyncio
 async def test_settings_special_directories(test_async_client, test_config):
     """Maintainer can change special directories."""
-    assert get_wrolpi_config().archive_directory == 'archive'
 
-    data = {'archive_directory': 'archives'}
+    data = {'archive_destination': 'archives'}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert get_wrolpi_config().archive_directory == 'archives'
+    assert get_wrolpi_config().archive_destination == 'archives'
 
-    data = {'archive_directory': '/absolute/not/allowed'}
+    data = {'archive_destination': '/absolute/not/allowed'}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    data = {'videos_directory': '/absolute/not/allowed'}
+    data = {'videos_destination': '/absolute/not/allowed'}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    data = {'map_directory': '/absolute/not/allowed'}
+    data = {'map_destination': '/absolute/not/allowed'}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    data = {'zims_directory': '/absolute/not/allowed'}
+    data = {'zims_destination': '/absolute/not/allowed'}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     # Empty directory restores default.
-    data = {'archive_directory': ''}
+    data = {'archive_destination': ''}
     request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert get_wrolpi_config().archive_directory == 'archive'
+    assert get_wrolpi_config().archive_destination == 'archive/%(domain)s'

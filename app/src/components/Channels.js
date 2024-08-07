@@ -1,11 +1,13 @@
 import React, {useState} from "react";
-import {Dimmer, Dropdown, Grid, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
+import {Dimmer, Dropdown, Grid, Label, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
 import {
     createChannel,
     createChannelDownload,
     deleteChannel,
     deleteDownload,
     refreshChannel,
+    tagChannel,
+    tagChannelInfo,
     updateChannel,
     updateChannelDownload
 } from "../api";
@@ -39,7 +41,9 @@ import {
     Header,
     Loader,
     Modal,
+    ModalActions,
     ModalContent,
+    ModalHeader,
     Segment,
     Statistic
 } from "./Theme";
@@ -47,7 +51,7 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
-import {TagsSelector} from "../Tags";
+import {TagsContext, TagsSelector} from "../Tags";
 
 
 function ChannelStatistics({statistics}) {
@@ -85,21 +89,30 @@ function ChannelPage({create, header}) {
     const [messageHeader, setMessageHeader] = useState();
     const [messageContent, setMessageContent] = useState();
     const [downloadModalOpen, setDownloadModalOpen] = useState(false);
-    const [rssDownloadOpen, setRssDownloadOpen] = useState(false);
 
     const navigate = useNavigate();
     const {channelId} = useParams();
     const {channel, changeValue, fetchChannel} = useChannel(channelId);
+    const {SingleTag} = React.useContext(TagsContext);
 
-    let title;
-    if (channel && channel.name) {
-        title = channel.name;
-    }
-    useTitle(title);
+    const [tagModalOpen, setTagModalOpen] = useState(false);
+    const [newTagName, setNewTagName] = useState(channel ? channel.tag_name : null);
+    const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
+    const [newTagDirectory, setNewTagDirectory] = useState('');
 
-    if (!channel) {
+    useTitle(_.isEmpty(channel) ? null : `${channel.name} Channel`);
+
+    React.useEffect(() => {
+        console.debug(channel);
+        if (!_.isEmpty(channel)) {
+            setNewTagName(channel.tag_name);
+        }
+    }, [JSON.stringify(channel)]);
+
+    if (_.isEmpty(channel)) {
         return <Loader active/>;
     }
+
 
     const handleCheckbox = (e, {name, checked}) => {
         if (e) {
@@ -247,6 +260,64 @@ function ChannelPage({create, header}) {
         setDownloadModalOpen(false);
     }
 
+    const handleTagModalOpen = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setTagModalOpen(true);
+    }
+
+    const handleTagChannel = async () => {
+        try {
+            await tagChannel(channelId, newTagName, moveToTagDirectory ? newTagDirectory : null);
+            setTagModalOpen(false);
+        } catch (e) {
+            console.error('Failed to tag channel', e);
+        } finally {
+            await fetchChannel();
+        }
+    }
+
+    const handleTagSelect = async (newTagName_) => {
+        setNewTagName(newTagName_);
+        try {
+            const videosDestination = await tagChannelInfo(channelId, newTagName_);
+            setNewTagDirectory(videosDestination);
+        } catch (e) {
+            console.error('Failed to tag channel', e);
+        }
+    }
+
+    const tagModal = <Modal
+        open={tagModalOpen}
+        onClose={() => setTagModalOpen(false)}
+        closeIcon
+    >
+        <ModalHeader>{channel.tag_name ? 'Modify Tag' : 'Add Tag'}</ModalHeader>
+        <ModalContent>
+            <TagsSelector
+                limit={1}
+                selectedTagNames={newTagName ? [newTagName] : []}
+                onAdd={handleTagSelect}
+                onRemove={() => handleTagSelect(null)}
+            />
+            <br/>
+            <Toggle
+                label='Move to directory: '
+                checked={moveToTagDirectory}
+                onChange={setMoveToTagDirectory}
+            />
+            {newTagDirectory && <Label size='large'>{newTagDirectory}</Label>}
+        </ModalContent>
+        <ModalActions>
+            <Button onClick={() => setTagModalOpen(false)}>Cancel</Button>
+            <Button
+                color='violet'
+                onClick={handleTagChannel}
+            >Save</Button>
+        </ModalActions>
+    </Modal>;
+
     return <>
         <BackButton/>
         {!create &&
@@ -324,6 +395,8 @@ function ChannelPage({create, header}) {
                     </FormField>
                 </FormGroup>
 
+                {channel.tag_name && <SingleTag name={channel.tag_name}/>}
+
                 <Message error
                          header={messageHeader}
                          content={messageContent}
@@ -356,6 +429,12 @@ function ChannelPage({create, header}) {
                                     >Refresh</APIButton>
                                 </>
                             }
+                            <Button
+                                size='small'
+                                onClick={handleTagModalOpen}
+                                color='green'
+                            >Tag</Button>
+                            {tagModal}
                         </Grid.Column>
                         <Grid.Column>
                             <APIButton
@@ -587,6 +666,8 @@ export function ChannelNewPage(props) {
 }
 
 function ChannelRow({channel}) {
+    const {SingleTag} = React.useContext(TagsContext);
+
     const videosTo = `/videos/channel/${channel.id}/video`;
 
     const {inverted} = React.useContext(ThemeContext);
@@ -596,6 +677,9 @@ function ChannelRow({channel}) {
     return <TableRow>
         <TableCell>
             <Link to={videosTo}>{channel.name}</Link>
+        </TableCell>
+        <TableCell>
+            {channel.tag_name ? <SingleTag name={channel.tag_name}/> : null}
         </TableCell>
         <TableCell>
             {channel.video_count}
@@ -613,6 +697,8 @@ function ChannelRow({channel}) {
 }
 
 function MobileChannelRow({channel}) {
+    const {SingleTag} = React.useContext(TagsContext);
+
     const editTo = `/videos/channel/${channel.id}/edit`;
     const videosTo = `/videos/channel/${channel.id}/video`;
     return <TableRow verticalAlign='top'>
@@ -621,6 +707,7 @@ function MobileChannelRow({channel}) {
                 <h3>
                     {channel.name}
                 </h3>
+                {channel.tag_name ? <SingleTag name={channel.tag_name}/> : null}
             </Link>
             <p>
                 Videos: {channel.video_count}
@@ -669,6 +756,7 @@ export function ChannelsPage() {
 
     const headers = [
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
+        {key: 'tag', text: 'Tag', sortBy: 'tag', width: 2},
         {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
         {key: 'download_frequency', text: 'Download Frequency', sortBy: 'minimum_frequency', width: 2},
         {key: 'size', text: 'Size', sortBy: 'size', width: 2},

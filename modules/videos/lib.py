@@ -3,27 +3,30 @@ import dataclasses
 import html
 import pathlib
 import re
-from typing import Tuple, Optional, Generator
+from typing import Generator
+from typing import Tuple, Optional
 
 import pytz
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
+from modules.videos.models import Video
 from wrolpi import before_startup, dates, flags
 from wrolpi.captions import extract_captions
-from wrolpi.common import ConfigFile, get_media_directory, register_refresh_cleanup, limit_concurrent
+from wrolpi.common import ConfigFile, limit_concurrent, get_wrolpi_config, extract_domain, \
+    escape_file_name, get_media_directory
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download
 from wrolpi.errors import UnknownDirectory
 from wrolpi.files.lib import split_path_stem_and_suffix
-from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
+from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
     get_video_duration
 from .errors import UnknownChannel
-from .models import Channel, Video
+from .models import Channel
 
 logger = logger.getChild(__name__)
 
@@ -377,7 +380,6 @@ channel_import_logger = logger.getChild('channel_import')
 
 
 @before_startup
-@register_refresh_cleanup
 @limit_concurrent(1)
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
@@ -645,3 +647,41 @@ def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path
         ''')
         results = (pathlib.Path(j['path']) for i in curs.fetchall() for j in i[0])
         yield from results
+
+
+def format_videos_destination(channel_name: str = None, channel_tag: str = None, channel_url: str = None) \
+        -> pathlib.Path:
+    """Return the directory where Videos should be downloaded according to the WROLPi Config.
+
+    @warning: Directory may or may not exist."""
+    videos_destination = get_wrolpi_config().videos_destination
+
+    channel_domain = ''
+    if channel_url:
+        try:
+            channel_domain = extract_domain(channel_url)
+        except Exception as e:
+            logger.error(f'Failed to extract domain from Channel URL: {channel_url}', exc_info=e)
+            if PYTEST:
+                raise
+
+    if channel_name and not isinstance(channel_name, str):
+        raise RuntimeError('channel name must be string')
+    if channel_tag and not isinstance(channel_tag, str):
+        raise RuntimeError('channel tag must be string')
+
+    name = escape_file_name(channel_name) if channel_name else ''
+    variables = dict(
+        channel_name=name,
+        channel_tag=channel_tag or '',
+        channel_domain=channel_domain,
+    )
+
+    try:
+        videos_destination = videos_destination % variables
+    except KeyError as e:
+        raise FileNotFoundError(f'Cannot download to the defined "videos_destination"') from e
+
+    videos_destination = get_media_directory() / videos_destination.lstrip('/')
+
+    return videos_destination

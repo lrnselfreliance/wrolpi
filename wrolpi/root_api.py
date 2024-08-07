@@ -137,7 +137,7 @@ def get_settings(_: Request):
     ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
 
     settings = {
-        'archive_directory': config.archive_directory,
+        'archive_directory': config.archive_destination,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
         'download_on_startup': config.download_on_startup,
@@ -150,15 +150,15 @@ def get_settings(_: Request):
         'ignore_outdated_zims': config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
         'log_level': api_app.shared_ctx.log_level.value,
-        'map_directory': config.map_directory,
+        'map_directory': config.map_destination,
         'nav_color': config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
         'version': __version__,
-        'videos_directory': config.videos_directory,
+        'videos_directory': config.videos_destination,
         'wrol_mode': config.wrol_mode,
-        'zims_directory': config.zims_directory,
+        'zims_directory': config.zims_destination,
     }
     return json_response(settings)
 
@@ -190,25 +190,25 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
     if not config:
         raise InvalidConfig()
 
-    if body.archive_directory and pathlib.Path(body.archive_directory).is_absolute():
+    if body.archive_destination and pathlib.Path(body.archive_destination).is_absolute():
         raise InvalidConfig('Archive directory must be relative to media directory')
-    elif not body.archive_directory:
-        config['archive_directory'] = wrolpi_config.default_config['archive_directory']
+    elif not body.archive_destination:
+        config['archive_destination'] = wrolpi_config.default_config['archive_destination']
 
-    if body.videos_directory and pathlib.Path(body.videos_directory).is_absolute():
+    if body.videos_destination and pathlib.Path(body.videos_destination).is_absolute():
         raise InvalidConfig('Videos directory must be relative to media directory')
-    elif not body.videos_directory:
-        config['videos_directory'] = wrolpi_config.default_config['videos_directory']
+    elif not body.videos_destination:
+        config['videos_destination'] = wrolpi_config.default_config['videos_destination']
 
-    if body.map_directory and pathlib.Path(body.map_directory).is_absolute():
+    if body.map_destination and pathlib.Path(body.map_destination).is_absolute():
         raise InvalidConfig('Map directory must be relative to media directory')
-    elif not body.map_directory:
-        config['map_directory'] = wrolpi_config.default_config['map_directory']
+    elif not body.map_destination:
+        config['map_destination'] = wrolpi_config.default_config['map_destination']
 
-    if body.zims_directory and pathlib.Path(body.zims_directory).is_absolute():
+    if body.zims_destination and pathlib.Path(body.zims_destination).is_absolute():
         raise InvalidConfig('Zims directory must be relative to media directory')
-    elif not body.zims_directory:
-        config['zims_directory'] = wrolpi_config.default_config['zims_directory']
+    elif not body.zims_destination:
+        config['zims_destination'] = wrolpi_config.default_config['zims_destination']
 
     log_level = config.pop('log_level', None)
     if isinstance(log_level, int):

@@ -5,8 +5,9 @@ import pytest
 
 from modules.videos import lib
 from modules.videos.downloader import ChannelDownloader, VideoDownloader
-from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
+from modules.videos.lib import parse_video_file_name, validate_video, get_statistics, format_videos_destination
 from modules.videos.models import Video, Channel
+from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, RSSDownloader
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -20,7 +21,7 @@ from wrolpi.vars import PROJECT_DIR
     ('20000101foo.mp4', (None, None, None, '20000101foo')),
     ('something 20000101 foo.mp4', (None, None, None, 'something 20000101 foo')),
     ('something_20000101_foo.mp4', ('something', '20000101', None, 'foo')),
-    ('foo .mp4', (None, None, None, 'foo')), # Has trailing whitespace.
+    ('foo .mp4', (None, None, None, 'foo')),  # Has trailing whitespace.
     ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', (None, '20000303', 'vp91w5', 'Bob&apos;s Pancakes')),
     ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', (None, None, 'vp91w5', 'Bob&apos;s Pancakes')),
     ('Learning Self-Reliance_20170529_p_MzsCFkUPU_Beekeeping 2017 Part 6 - Merging Hives.mp4',
@@ -216,3 +217,33 @@ def test_link_channel_and_downloads_migration(test_async_client, test_session, c
     assert d2b.channel_id
     assert d2c.url == 'https://example.com/channel2/video/1' and d2c.frequency is None
     assert not d2c.channel_id
+
+
+@pytest.mark.asyncio
+async def test_format_videos_destination(test_async_client, test_directory):
+    """Videos destination is formatted according to the WROLPiConfig."""
+    wrolpi_config = get_wrolpi_config()
+
+    # Channel directory without a tag.
+    wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_name)s'
+    assert format_videos_destination('Simple Channel', None, None) \
+           == test_directory / 'videos/Simple Channel'
+
+    # One tag can be applied to a Channel.
+    assert format_videos_destination('Simple Channel', 'one', None) \
+           == test_directory / 'videos/one/Simple Channel'
+
+    # Channel Domain is also supported.
+    wrolpi_config.videos_destination = 'videos/%(channel_tag)s/%(channel_domain)s/%(channel_name)s'
+    assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
+           == test_directory / 'videos/one/example.com/Simple Channel'
+
+    # Channel name is not required.
+    wrolpi_config.videos_destination = '%(channel_tag)s/%(channel_domain)s'
+    assert format_videos_destination('Simple Channel', 'one', 'https://example.com') \
+           == test_directory / 'one/example.com'
+
+    # Invalid `videos_destination` raises an error.
+    wrolpi_config.videos_destination = '%(channel_tag)s/%(channel)s'
+    with pytest.raises(FileNotFoundError):
+        assert format_videos_destination()

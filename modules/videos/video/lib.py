@@ -85,7 +85,7 @@ def search_videos(
     joins = list()
     join_video = False
 
-    params = dict(search_str=search_str, offset=offset)
+    params = dict(search_str=search_str, offset=offset or 0)
     if channel_id:
         wheres.append('v.channel_id = %(channel_id)s')
         joins.append('LEFT JOIN channel c ON c.id = v.channel_id')

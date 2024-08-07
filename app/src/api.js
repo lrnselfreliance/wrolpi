@@ -112,6 +112,32 @@ export async function getChannel(id) {
     return (await response.json())['channel'];
 }
 
+export async function tagChannel(channelId, tagName, directory) {
+    const body = {
+        tag_name: tagName,
+    }
+    if (directory) {
+        body['directory'] = directory;
+    }
+    const response = await apiPost(`${VIDEOS_API}/channels/${channelId}/tag`, body);
+    if (!response.ok) {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Failed to tag channel.  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
+export async function tagChannelInfo(channelId, tagName) {
+    const body = {tag_name: tagName}
+    const response = await apiPost(`${VIDEOS_API}/channels/${channelId}/tag_info`, body);
+    if (response.ok) {
+        return (await response.json()).videos_destination;
+    }
+}
+
 export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);

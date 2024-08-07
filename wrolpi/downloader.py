@@ -27,7 +27,7 @@ from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import pid_is_running
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    limit_concurrent, wrol_mode_enabled
+    limit_concurrent, wrol_mode_enabled, background_task
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
@@ -226,7 +226,7 @@ class Download(ModelHelper, Base):  # noqa
             from modules.videos.lib import save_channels_config
             save_channels_config()
         # Save download config again because this download is now removed from the download lists.
-        api_app.add_task(save_downloads_config())
+        background_task(save_downloads_config())
 
     @staticmethod
     def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
@@ -538,9 +538,9 @@ class DownloadManager:
         session.flush(downloads)
         try:
             # Start downloading ASAP.
-            api_app.add_task(self.dispatch_downloads())
+            background_task(self.dispatch_downloads())
             # Save the config now that new Downloads exist.
-            api_app.add_task(save_downloads_config())
+            background_task(save_downloads_config())
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -574,9 +574,6 @@ class DownloadManager:
         from modules.videos.models import Channel
         if channel := Channel.get_by_url(url=download.url, session=session):
             download.channel_id = channel.id
-        if destination := (download.settings or dict()).get('destination'):
-            if channel := Channel.get_by_path(destination, session):
-                download.channel_id = channel.id
 
         session.commit()
 
@@ -668,7 +665,7 @@ class DownloadManager:
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
-        api_app.add_task(save_downloads_config())
+        background_task(save_downloads_config())
 
     DOWNLOAD_SORT = (
         DownloadStatus.pending,
@@ -742,7 +739,7 @@ class DownloadManager:
             session.commit()
 
             # Save the config now that some Downloads renewed.
-            api_app.add_task(save_downloads_config())
+            background_task(save_downloads_config())
 
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:
@@ -1025,7 +1022,7 @@ class DownloadManager:
         stmt = self._delete_downloads_q(once=True)
         deleted_ids = [i for i, in session.execute(stmt).fetchall()]
         session.commit()
-        api_app.add_task(save_downloads_config())
+        background_task(save_downloads_config())
         return deleted_ids
 
     @staticmethod
@@ -1130,7 +1127,7 @@ async def signal_download_download(download_id: int, download_url: str):
         # Allow the download to resume.
         download_manager.unkill_download(download_id)
         # Save the config now that the Download has finished.
-        api_app.add_task(save_downloads_config())
+        background_task(save_downloads_config())
     except asyncio.CancelledError as e:
         worker_logger.warning('Canceled!', exc_info=e)
         return

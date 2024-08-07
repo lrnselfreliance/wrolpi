@@ -385,6 +385,6 @@ def test_get_custom_zims_directory(test_directory, test_config):
     """Custom directory can be used for zims directory."""
     assert lib.get_zim_directory() == (test_directory / 'zims')
 
-    get_wrolpi_config().zims_directory = 'custom/zims'
+    get_wrolpi_config().zims_destination = 'custom/zims'
 
     assert lib.get_zim_directory() == (test_directory / 'custom/zims')

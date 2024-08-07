@@ -19,7 +19,7 @@ logger = logger.getChild(__name__)
 
 
 def get_map_directory() -> Path:
-    map_directory = get_media_directory() / get_wrolpi_config().map_directory
+    map_directory = get_media_directory() / get_wrolpi_config().map_destination
     if not map_directory.is_dir():
         map_directory.mkdir(parents=True)
     return map_directory

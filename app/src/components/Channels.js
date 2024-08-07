@@ -311,10 +311,11 @@ function ChannelPage({create, header}) {
         </ModalContent>
         <ModalActions>
             <Button onClick={() => setTagModalOpen(false)}>Cancel</Button>
-            <Button
+            <APIButton
                 color='violet'
                 onClick={handleTagChannel}
-            >Save</Button>
+                obeyWROLMode={true}
+            >Save</APIButton>
         </ModalActions>
     </Modal>;
 

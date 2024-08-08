@@ -231,15 +231,7 @@ function ChannelPage({create, header}) {
         if (e) {
             e.preventDefault();
         }
-        const response = await refreshChannel(channelId);
-        if (response.status !== 204) {
-            toast({
-                type: 'error',
-                title: 'Failed to refresh',
-                description: "Failed to refresh this channel's directory",
-                time: 5000,
-            })
-        }
+        await refreshChannel(channelId);
     }
 
     const handleDelete = async () => {
@@ -757,15 +749,15 @@ export function ChannelsPage() {
 
     const headers = [
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'tag', text: 'Tag', sortBy: 'tag_name', width: 2},
-        {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
-        {key: 'download_frequency', text: 'Download Frequency', sortBy: 'minimum_frequency', width: 2},
-        {key: 'size', text: 'Size', sortBy: 'size', width: 2},
+        {key: 'tag', text: 'Tag', sortBy: ['tag_name', 'name'], width: 2},
+        {key: 'video_count', text: 'Videos', sortBy: ['video_count', 'name'], width: 2},
+        {key: 'download_frequency', text: 'Download Frequency', sortBy: ['minimum_frequency', 'name'], width: 2},
+        {key: 'size', text: 'Size', sortBy: ['size', 'name'], width: 2},
         {key: 'manage', text: 'Manage', width: 2},
     ];
     const mobileHeaders = [
         {key: 'name', text: 'Name', sortBy: 'name'},
-        {key: 'video_count', text: 'Videos', sortBy: 'video_count'},
+        {key: 'video_count', text: 'Videos', sortBy: ['video_count', 'name']},
         {key: 'manage', text: 'Manage'},
     ];
 

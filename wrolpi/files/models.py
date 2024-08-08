@@ -329,28 +329,35 @@ class FileGroup(ModelHelper, Base):
 
         self.files = collected_files
 
-    def move(self, new_primary_path: pathlib.Path, move_files: bool = True):
+    def move(self, new_primary_path: pathlib.Path):
         """Move all files in this group to a new location."""
         from wrolpi.files.lib import split_path_stem_and_suffix
-        if move_files and new_primary_path.exists():
+        if new_primary_path.exists():
             raise FileExistsError(f'Cannot move {self} to {new_primary_path} because it already exists.')
 
         new_name, _ = split_path_stem_and_suffix(new_primary_path, full=True)
         # Need a deepcopy because changes to self.files are ignored otherwise.
         new_files = copy.deepcopy(self.files)
+        for file in new_files:
+            _, suffix = split_path_stem_and_suffix(file['path'])
+            new_path = pathlib.Path(f'{new_name}{suffix}')
+            if new_path.exists():
+                raise FileExistsError(f'Cannot move {self} to {new_path} because it already exists.')
+
         for idx, file in enumerate(new_files):
             _, suffix = split_path_stem_and_suffix(file['path'])
             new_path = pathlib.Path(f'{new_name}{suffix}')
-            if move_files:
-                shutil.move(file['path'], new_path)
+            shutil.move(file['path'], new_path)
             new_files[idx]['path'] = new_path
+
+        logger.debug(f'Moved FileGroup: {self.primary_path} -> {new_primary_path}')
         self.files = new_files
         if self.title == self.primary_path.name:
             # Do not overwrite title from modeler.
             self.title = new_primary_path.name
         self.primary_path = new_primary_path
         # Need to re-index for self.data.
-        self.indexed = False
+        self.indexed = False if self.data else self.indexed
         # Flush the changes to the FileGroup.
         self.flush()
 

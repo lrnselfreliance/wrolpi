@@ -229,7 +229,9 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     assert {i.url for i in channel2.downloads} == {'https://example.com/channel2', 'https://example.org'}
 
 
-def test_import_channel_delete_missing_channels(test_session, channel_factory, test_channels_config):
+@pytest.mark.asyncio
+async def test_import_channel_delete_missing_channels(
+        test_async_client, test_session, channel_factory, test_channels_config):
     """The Channel import function deletes any Channels that are not in the config."""
     # Create a DB and config with two Channels.
     channel1 = channel_factory(source_id='foo')

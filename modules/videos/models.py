@@ -533,7 +533,7 @@ class Channel(ModelHelper, Base):
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     downloads: InstrumentedList = relationship('Download', primaryjoin='Download.channel_id==Channel.id')
     tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'))
-    tag = relationship('Tag')
+    tag = relationship('Tag', primaryjoin='Channel.tag_id==Tag.id')
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
@@ -565,12 +565,9 @@ class Channel(ModelHelper, Base):
         channel_id = self.id
         data = data.copy()
 
-        # Remove unused values.
-        data.pop('move_to_tag_directory', None)
-
         # URL should not be empty string.
-        if 'url' in data:
-            data['url'] = data['url'] or None
+        url = data.pop('url')
+        self.url = url or None
 
         session: Session = Session.object_session(self)
 
@@ -772,11 +769,15 @@ class Channel(ModelHelper, Base):
         channel = session.query(Channel).filter_by(url=url).one_or_none()
         return channel
 
-    async def move(self, directory: pathlib.Path, session: Session):
+    def format_directory(self, tag_name: str) -> pathlib.Path:
+        from modules.videos.lib import format_videos_destination
+        return format_videos_destination(self.name, tag_name, self.url)
+
+    async def move_channel(self, directory: pathlib.Path, session: Session):
         """Move the files of this Channel into a new directory."""
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
-        if self.directory and not next(self.directory.iterdir(), None):
+        if self.directory and self.directory != directory and not next(self.directory.iterdir(), None):
             raise FileExistsError(f'Refusing to move Channel when it has no files.')
 
         old_directory = self.directory
@@ -793,6 +794,7 @@ class Channel(ModelHelper, Base):
             # Get new copy of `settings` to avoid bug where it wouldn't update.
             settings = download.settings.copy() if download.settings else dict()
             if settings.get('destination'):
+                logger.debug(f'Updating destination of {download}')
                 download.settings = {**settings, 'destination': str(directory)}
 
         session.commit()
@@ -804,7 +806,5 @@ class Channel(ModelHelper, Base):
         save_tags_config(session)
 
         # Move the contents of the Channel directory into the destination directory.
+        logger.info(f'Moving {self} from {repr(str(old_directory))}')
         await move(directory, *list(old_directory.iterdir()))
-
-        if old_directory.exists() and not next(old_directory.iterdir(), None):
-            old_directory.rmdir()

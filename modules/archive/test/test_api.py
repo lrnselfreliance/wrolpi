@@ -84,7 +84,7 @@ def test_archives_search(test_session, archive_directory, archive_factory, test_
 @pytest.mark.asyncio
 async def test_search_archive_tags(test_session, test_async_client, archive_factory, tag_factory):
     """Tagged Archives can be searched."""
-    tag = tag_factory()
+    tag = await tag_factory()
     archive_factory(domain='example.com', tag_names=[tag.name, ])
     test_session.commit()
 

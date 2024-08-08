@@ -73,6 +73,16 @@ let apiPatch = async (url, body) => {
     return await apiCall(url, 'PATCH', body)
 };
 
+async function getErrorMessage(response, defaultMessage) {
+    try {
+        const json = await response.clone().json();
+        return json.error || json.message || defaultMessage;
+    } catch (error) {
+        // Server did not response with JSON.  Return default message.
+        return defaultMessage;
+    }
+}
+
 export async function updateChannel(id, channel) {
     channel = emptyToNull(channel);
     return await apiPut(`${VIDEOS_API}/channels/${id}`, channel);
@@ -86,9 +96,13 @@ export async function createChannel(channel) {
 export async function deleteChannel(channelId) {
     const response = await apiDelete(`${VIDEOS_API}/channels/${channelId}`);
     if (response.status !== 204) {
-        const content = await response.json();
-        console.error(content);
-        throw Error(content);
+        const message = getErrorMessage(response, 'Failed to delete channel.');
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: message,
+            time: 5000,
+        });
     }
     return response;
 }
@@ -98,10 +112,11 @@ export async function getChannels() {
     if (response.status === 200) {
         return (await response.json())['channels'];
     } else {
+        const message = getErrorMessage(response, 'Failed to get channels.');
         toast({
             type: 'error',
             title: 'Unexpected server response',
-            description: 'Failed to get channels.  See server logs.',
+            description: message,
             time: 5000,
         });
     }
@@ -121,10 +136,11 @@ export async function tagChannel(channelId, tagName, directory) {
     }
     const response = await apiPost(`${VIDEOS_API}/channels/${channelId}/tag`, body);
     if (!response.ok) {
+        const message = await getErrorMessage(response, 'Failed to tag channel.  See server logs.');
         toast({
             type: 'error',
-            title: 'Unexpected server response',
-            description: 'Failed to tag channel.  See server logs.',
+            title: 'Tagging Channel Failed',
+            description: message,
             time: 5000,
         });
     }
@@ -136,6 +152,13 @@ export async function tagChannelInfo(channelId, tagName) {
     if (response.ok) {
         return (await response.json()).videos_destination;
     }
+    const message = getErrorMessage(response, 'Failed to get channel tag info.');
+    toast({
+        type: 'error',
+        title: 'Getting Channel Tag Info Failed',
+        description: message,
+        time: 5000,
+    });
 }
 
 export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline) {
@@ -164,10 +187,11 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
         let data = await response.json();
         return [data['file_groups'], data['totals']['file_groups']];
     } else {
+        const message = getErrorMessage(response, 'Failed to search videos.');
         toast({
             type: 'error',
-            title: 'Unexpected server response',
-            description: 'Failed to search videos.  See server logs.',
+            title: 'Searching Videos failed',
+            description: message,
             time: 5000,
         });
         return [[], 0];
@@ -193,14 +217,18 @@ export async function deleteVideos(videoIds) {
     const i = videoIds.join(',');
     let response = await apiDelete(`${VIDEOS_API}/video/${i}`);
     if (response.status !== 204) {
-        const content = response.json();
-        console.error(content);
-        throw Error(content);
+        const message = getErrorMessage(response, 'Failed to delete videos.');
+        toast({
+            type: 'error',
+            title: 'Deleting Videos failed',
+            description: message,
+            time: 5000,
+        });
     }
 }
 
 export async function downloadVideoMetadata(videoUrl, destination) {
-    return await postDownload(
+    const response = await postDownload(
         [videoUrl],
         'video',
         null,
@@ -213,12 +241,22 @@ export async function downloadVideoMetadata(videoUrl, destination) {
         null,
         true,
     );
+    if (!response.ok) {
+        const message = getErrorMessage(response, 'Failed to download video metadata.');
+        toast({
+            type: 'error',
+            title: 'Downloading Video Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
 }
 
 export async function getDirectories(search_str) {
     let form_data = {'search_str': search_str || null};
     let response = await apiPost(`${API_URI}/files/directories`, form_data);
-    if (response.status === 200) {
+    if (response.ok) {
         return await response.json();
     }
     return [];
@@ -229,41 +267,68 @@ export async function getStatus() {
     if (response.status === 200) {
         return await response.json();
     } else {
+        const message = getErrorMessage(response, 'Could not get server status.');
         toast({
-            type: 'error', title: 'Unexpected server response', description: 'Could not get server status', time: 5000,
+            type: 'error',
+            title: 'Fetching Status Failed',
+            description: message,
+            time: 5000,
         });
     }
 }
 
 export async function getSettings() {
     let response = await apiGet(`${API_URI}/settings`);
-    if (response.status === 200) {
+    if (response.ok) {
         return await response.json();
     } else {
+        const message = getErrorMessage(response, 'Could not get settings.');
         toast({
-            type: 'error', title: 'Unexpected server response', description: 'Could not get settings', time: 5000,
+            type: 'error',
+            title: 'Fetching Settings Failed',
+            description: message,
+            time: 5000,
         });
     }
 }
 
 export async function saveSettings(settings) {
-    return await apiPatch(`${API_URI}/settings`, settings);
+    const response = await apiPatch(`${API_URI}/settings`, settings);
+    if (!response.ok) {
+        const message = getErrorMessage(response, 'Could not save settings.');
+        toast({
+            type: 'error',
+            title: 'Saving Settings Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
 }
 
 export async function getDownloads() {
     let response = await apiGet(`${API_URI}/download`);
-    if (response.status === 200) {
+    if (response.ok) {
         return await response.json();
     } else {
+        const message = getErrorMessage(response, 'Could not get downloads.');
         toast({
-            type: 'error', title: 'Unexpected server response', description: 'Could not get downloads', time: 5000,
+            type: 'error',
+            title: 'Getting Downloads Failed',
+            description: message,
+            time: 5000,
         });
     }
+    return response
 }
 
 export async function validateRegex(regex) {
     let response = await apiPost(`${API_URI}/valid_regex`, {regex});
-    return (await response.json())['valid'];
+    try {
+        return (await response.json())['valid'];
+    } catch (e) {
+        return false;
+    }
 }
 
 export async function getVideosStatistics() {
@@ -271,10 +336,15 @@ export async function getVideosStatistics() {
     if (response.status === 200) {
         return (await response.json())['statistics'];
     } else {
+        const message = getErrorMessage(response, 'Could not get statistics.');
         toast({
-            type: 'error', title: 'Unexpected server response', description: 'Could not get statistics', time: 5000,
+            type: 'error',
+            title: 'Getting Statistics Failed',
+            description: message,
+            time: 5000,
         });
     }
+    return response
 }
 
 export async function createChannelDownload(channelId, url, frequency, title_include, title_exclude, tag_names) {
@@ -299,10 +369,11 @@ export async function createChannelDownload(channelId, url, frequency, title_inc
                 time: 5000,
             });
         } else {
+            const message = getErrorMessage(response, 'Could not create Channel download.');
             toast({
                 type: 'error',
-                title: 'Failed to Download!',
-                description: 'Failed to create download.  See server logs.',
+                title: 'Creating Channel Download Failed',
+                description: message,
                 time: 5000,
             });
         }
@@ -332,10 +403,11 @@ export async function updateChannelDownload(channelId, downloadId, url, frequenc
                 time: 5000,
             });
         } else {
+            const message = getErrorMessage(response, 'Could not update Channel download.');
             toast({
                 type: 'error',
-                title: 'Failed to Download!',
-                description: 'Failed to update download.  See server logs.',
+                title: 'Updating Channel Download Failed',
+                description: message,
                 time: 5000,
             });
         }
@@ -345,7 +417,17 @@ export async function updateChannelDownload(channelId, downloadId, url, frequenc
 
 export async function refreshChannel(channelId) {
     let url = `${VIDEOS_API}/channels/refresh/${channelId}`;
-    return await fetch(url, {method: 'POST'});
+    const response = await apiPost(url);
+    if (response.status !== 204) {
+        const message = getErrorMessage(response, "Failed to refresh this channel's directory");
+        toast({
+            type: 'error',
+            title: 'Failed to refresh',
+            description: message,
+            time: 5000,
+        })
+    }
+    return response;
 }
 
 export async function encryptOTP(otp, plaintext) {
@@ -354,9 +436,13 @@ export async function encryptOTP(otp, plaintext) {
     if (response.status === 200) {
         return await response.json();
     } else {
+        const message = getErrorMessage(response, 'Failed to encrypt OTP.  See server logs.');
         toast({
-            type: 'error', title: 'Error!', description: 'Failed to encrypt OTP', time: 5000,
-        });
+            type: 'error',
+            title: 'Failed to encrypt OTP',
+            description: message,
+            time: 5000,
+        })
     }
 }
 
@@ -366,9 +452,13 @@ export async function decryptOTP(otp, ciphertext) {
     if (response.status === 200) {
         return await response.json();
     } else {
+        const message = getErrorMessage(response, 'Failed to decrypt OTP.  See server logs.');
         toast({
-            type: 'error', title: 'Error!', description: 'Failed to decrypt OTP', time: 5000,
-        });
+            type: 'error',
+            title: 'Failed to decrypt OTP',
+            description: message,
+            time: 5000,
+        })
     }
 }
 

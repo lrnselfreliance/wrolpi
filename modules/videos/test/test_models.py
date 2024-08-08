@@ -34,7 +34,7 @@ async def test_channel_move(test_async_client, test_session, test_directory, cha
     foo.mkdir(parents=True)
 
     # Move the Channel.
-    await channel.move(foo, test_session)
+    await channel.move_channel(foo, test_session)
 
     assert channel.directory == foo
     assert channel.directory != (test_directory / 'New Channel Directory')

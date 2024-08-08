@@ -40,14 +40,16 @@ def channel_factory(test_session, test_directory):
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
                 directory: pathlib.Path = None, tag_name: str = None):
         name = name or str(uuid4())
-        tag = Tag.get_by_name(tag_name) if tag_name else None
+        tag = Tag.find_by_name(tag_name) if tag_name else None
         channel = Channel(
             name=name,
             url=url or f'https://example.com/{name}',
             source_id=source_id,
             tag=tag,
+            tag_id=tag.id if tag else None,
         )
-        channel.directory = directory or format_videos_destination(name, tag, channel.url)
+        tag_name = tag.name if tag else None
+        channel.directory = directory or format_videos_destination(name, tag_name, channel.url)
         channel.directory.mkdir(exist_ok=True, parents=True)
         test_session.add(channel)
         test_session.flush([channel])
@@ -242,12 +244,12 @@ def video_with_search_factory(test_session, test_directory, video_file_factory):
 
 
 @pytest.fixture
-def assert_video_search(test_client):
+def assert_video_search(test_async_client):
     """A fixture which performs a video search request against the API.
 
     If assert_* params are passed, the response is checked."""
 
-    def _search_videos(
+    async def _search_videos(
             assert_total: int = None,
             assert_ids: List[int] = None,
             assert_paths: List[str] = None,
@@ -272,7 +274,7 @@ def assert_video_search(test_client):
         if channel_id is not None:
             content['channel_id'] = channel_id
 
-        request, response = test_client.post('/api/videos/search', content=json.dumps(content))
+        request, response = await test_async_client.post('/api/videos/search', content=json.dumps(content))
 
         assert response.json
         assert response.status_code == HTTPStatus.OK

@@ -137,7 +137,7 @@ async def test_discover_calibre_cover(test_session, test_directory, example_epub
 @pytest.mark.asyncio
 async def test_move_ebook(test_async_client, test_session, test_directory, example_epub, image_file, tag_factory):
     """An ebook is re-indexed when moved."""
-    tag = tag_factory()
+    tag = await tag_factory()
     shutil.move(image_file, example_epub.with_suffix('.jpg'))
     await refresh_files()
 

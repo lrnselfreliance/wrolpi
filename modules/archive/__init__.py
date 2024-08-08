@@ -57,7 +57,11 @@ class ArchiveDownloader(Downloader, ABC):
             if session := Session.object_session(archive):
                 session.commit()
 
-        logger.info(f'Successfully downloaded Archive {download.url} {archive}')
+        try:
+            logger.info(f'Successfully downloaded Archive {download.url} {archive}')
+        except Exception as e:
+            # Failed to log, probably lost the session.
+            logger.error('Failed to log archive success.  Lost the session?', exc_info=e)
 
         return DownloadResult(success=True, location=f'/archive/{archive.id}')
 

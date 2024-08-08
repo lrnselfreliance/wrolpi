@@ -20,7 +20,9 @@ import {
     ErrorMessage,
     ExternalCardLink,
     FileIcon,
+    FILES_MEDIA_URI,
     findPosterPath,
+    HandPointMessage,
     humanFileSize,
     isoDatetimeToString,
     mimetypeColor,
@@ -583,6 +585,10 @@ function FilesPage() {
     return <>
         <FilesRefreshProgress/>
         <FileBrowser/>
+
+        <HandPointMessage>
+            <p>You can also view your media directory at <a href={FILES_MEDIA_URI}>{FILES_MEDIA_URI}</a></p>
+        </HandPointMessage>
     </>;
 }
 

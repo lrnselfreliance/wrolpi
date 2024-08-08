@@ -511,10 +511,10 @@ def tag_factory(test_session):
     names = ['one', 'two', 'three', 'four', 'five', 'six']
     count = 1
 
-    def factory(name: str = None) -> Tag:
+    async def factory(name: str = None) -> Tag:
         if not name:
             name = names.pop(0)
-        tag = upsert_tag(name, f'#{str(count) * 6}')
+        tag = await upsert_tag(name, f'#{str(count) * 6}', session=test_session)
         return tag
 
     return factory

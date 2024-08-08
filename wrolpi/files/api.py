@@ -297,14 +297,15 @@ async def post_upload(request: Request):
     Will not overwrite an existing file, unless a previous upload did not complete."""
 
     try:
-        destination = request.form['destination'][0]
+        destination_str = request.form['destination'][0]
     except Exception as e:
         logger.error(f'Failed to get upload destination', exc_info=e)
         raise UnknownDirectory('Must provide destination') from e
 
-    destination = get_media_directory() / destination
-    if not destination.is_dir():
-        raise UnknownDirectory(f'Destination must be a relative directory that is already in the media directory: {destination}')
+    destination = get_media_directory() / destination_str
+    if destination_str.startswith('/') or destination_str.startswith('.') or not destination.is_dir():
+        msg = f'Destination must be a relative directory that is already in the media directory: {destination}'
+        raise UnknownDirectory(msg)
 
     try:
         filename = str(request.form['filename'][0])
@@ -385,7 +386,11 @@ async def post_upload(request: Request):
         logger.info(f'Got final chunk of uploaded file: {output_str}')
         del api_app.shared_ctx.uploaded_files[output_str]
         # Upsert this new file (and any related files) into the DB.
-        background_task(lib.upsert_file(output, tag_names=tag_names))
+        coro = lib.upsert_file(output, tag_names=tag_names)
+        if PYTEST:
+            await coro
+        else:
+            background_task(coro)
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

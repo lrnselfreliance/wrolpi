@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
-from wrolpi.common import logger, get_media_directory, get_wrolpi_config
+from wrolpi.common import logger, get_media_directory
 from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS

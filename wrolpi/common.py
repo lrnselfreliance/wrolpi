@@ -253,10 +253,6 @@ class ModelHelper:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def find_by_paths(paths, session) -> List:
-        raise NotImplementedError('This model has not defined this method.')
-
-    @staticmethod
     def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
         """Attempts to get a model instance by its id.  Returns None if no instance can be found."""
         raise NotImplementedError('This model has not defined this method.')

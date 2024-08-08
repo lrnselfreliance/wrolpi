@@ -31,6 +31,7 @@ from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
+from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
 from wrolpi.version import __version__
@@ -118,10 +119,16 @@ async def index(_):
 @openapi.description('Echo whatever is sent to this.')
 @openapi.response(HTTPStatus.OK, schema.EchoResponse)
 async def echo(request: Request):
+    try:
+        request_json = request.json
+    except Exception as e:
+        logger.error('Failed to parse request JSON', exc_info=e)
+        request_json = None
+    request_headers = dict(request.headers)
     ret = dict(
         form=request.form,
-        headers=dict(request.headers),
-        json=request.json,
+        headers=request_headers,
+        json=request_json,
         method=request.method,
         args=request.args,
     )
@@ -482,7 +489,7 @@ async def get_tags_request(_: Request):
     summary='Create or update a Tag',
 )
 async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
-    tags.upsert_tag(body.name, body.color, tag_id)
+    await tags.upsert_tag(body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)
     else:
@@ -491,7 +498,7 @@ async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
 
 @api_bp.delete('/tag/<tag_id:int>')
 async def delete_tag_request(_: Request, tag_id: int):
-    tags.delete_tag(tag_id)
+    Tag.find_by_id(tag_id).delete()
     return response.empty()
 
 

@@ -64,6 +64,7 @@ def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
     dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
+    file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
     return f'{dir_name}/{file_name}'
 

@@ -190,7 +190,7 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
 
 @pytest.mark.asyncio
 async def test_files_search_any_tag(test_async_client, test_session, make_files_structure, tag_factory):
-    one, two = tag_factory(), tag_factory()
+    one, two = await tag_factory(), await tag_factory()
     files = [
         'foo.txt',
         'foo bar.txt',
@@ -299,34 +299,35 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
     }
 
 
-def test_file_group_tag_by_primary_path(test_session, test_client, test_directory, example_singlefile, tag_factory,
-                                        insert_file_group):
+@pytest.mark.asyncio
+async def test_file_group_tag_by_primary_path(test_session, test_async_client, test_directory, example_singlefile,
+                                              tag_factory, insert_file_group):
     singlefile = FileGroup.from_paths(test_session, example_singlefile)
-    tag1 = tag_factory()
-    tag2 = tag_factory()
+    tag1 = await tag_factory()
+    tag2 = await tag_factory()
     test_session.commit()
 
     # FileGroup can be tagged with its primary_path.
     content = dict(file_group_primary_path=str(singlefile.primary_path.relative_to(test_directory)), tag_name=tag1.name)
-    request, response = test_client.post('/api/files/tag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/files/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(TagFile).count() == 1
 
     # FileGroup can be tagged with its id.
     content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
-    request, response = test_client.post('/api/files/tag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/files/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(TagFile).count() == 2
 
     # FileGroup can be untagged with its primary_path.
     content = dict(file_group_id=singlefile.id, tag_id=tag1.id)
-    request, response = test_client.post('/api/files/untag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/files/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(TagFile).count() == 1
 
     # FileGroup can be untagged with its id.
     content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
-    request, response = test_client.post('/api/files/untag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/files/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(TagFile).count() == 0
 
@@ -468,11 +469,13 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     assert test_session.query(FileGroup).count() == 1
 
 
-def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form, tag_factory,
-                     video_bytes):
+@pytest.mark.asyncio
+async def test_post_upload(test_session, test_async_client, test_directory, make_files_structure, make_multipart_form,
+                           tag_factory,
+                           video_bytes):
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
 
     part1, part2 = video_bytes[:1_000_000], video_bytes[1_000_000:]
     forms = [
@@ -487,7 +490,7 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await test_async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
 
     output = test_directory / 'uploads/video.mp4'
@@ -505,7 +508,7 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
         dict(name='chunk', value=part2, filename='chunk'),
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await test_async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, response.content.decode()
 
     assert output.is_file()

@@ -9,6 +9,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+from collections import OrderedDict
 from itertools import zip_longest
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Generator, Iterable
@@ -24,7 +25,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     partition, cancelable_wrapper, \
     get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
     get_wrolpi_config, \
-    timer
+    timer, chunks
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
@@ -32,7 +33,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
-from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where
+from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config
 from wrolpi.vars import PYTEST
 
 try:
@@ -578,6 +579,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
     refreshing_all_files = False
 
     with flags.refreshing, timer('refresh_files', 'info'):
+        api_app.shared_ctx.refresh['counted_files'] = 0
         if not paths:
             refresh_logger.warning('Refreshing all files')
             refreshing_all_files = True
@@ -603,8 +605,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
                         continue
                     directories.extend(dirs)
                     found_directories |= set(dirs)
-                    api_app.shared_ctx.refresh['counted_files'] = api_app.shared_ctx.refresh.get('counted_files',
-                                                                                                 0) + len(files)
+                    add_files_to_refresh_count(len(files))
                     # Sleep to catch cancel.
                     await asyncio.sleep(0)
                 refresh_logger.info(f'Counted {api_app.shared_ctx.refresh["counted_files"]} files')
@@ -633,7 +634,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             with get_db_session() as session:
                 parent_directories = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(paths))}
                 parent_directories |= set(filter(lambda i: i.is_dir(), paths))
-            await upsert_directories(parent_directories, found_directories)
+            upsert_directories(parent_directories, found_directories)
 
             if send_events:
                 Events.send_global_after_refresh_completed()
@@ -684,7 +685,7 @@ async def apply_indexers():
                 break
 
 
-async def upsert_directories(parent_directories, directories):
+def upsert_directories(parent_directories, directories):
     """
     Insert/update/delete directories provided.  Deletes all children of `parent_directories` which are not in
     `directories`.
@@ -1168,7 +1169,17 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
         return 0
 
 
-def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathlib.Path, pathlib.Path]]:
+MOVE_CHUNK_SIZE = 100
+
+
+def add_files_to_refresh_count(count: int):
+    from wrolpi.api_utils import api_app
+    count = api_app.shared_ctx.refresh.get('counted_files', 0) + count
+    api_app.shared_ctx.refresh['counted_files'] = count
+
+
+async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Session) \
+        -> OrderedDict[pathlib.Path, pathlib.Path]:
     media_directory = get_media_directory()
     for source in sources:
         if not str(source).startswith(str(media_directory)):
@@ -1177,70 +1188,156 @@ def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathl
         raise FileNotFoundError(f'{destination} is not within the media directory')
 
     destination_existed = destination.is_dir()
+    destination.mkdir(parents=True, exist_ok=True)
 
-    # [ (pathlib.Path('source'), pathlib.Path('destination')), ... ]
-    plan = list()
-    unique_paths = set()
-    # Get all files that need to be moved.  Check for destination conflicts.
-    for source in sources:
-        if source.is_dir():
-            # Recursively move the directory's files.
-            for path in walk(source):
-                # Preserve the directory structure that contains this file.
-                new_file = destination / source.name / path.relative_to(source)
-                if new_file.exists():
-                    raise FileConflict(f'Cannot move {path} to {new_file} because it already exists')
-                if path not in unique_paths:
-                    plan.append((path, new_file))
-                    unique_paths.add(path)
-        elif source.is_file():
-            # Move all files associated with the source file.
-            for file in glob_shared_stem(source):
-                new_file = destination / file.name
-                if new_file.exists():
-                    raise FileConflict(f'Cannot move {file} to {new_file} because it already exists')
-                if file not in unique_paths:
-                    plan.append((file, new_file))
-                    unique_paths.add(file)
+    # The files that will be moved.  [ (old_file, new_file), ... ]
+    plan: Dict[pathlib.Path, pathlib.Path] = dict()
 
-    logger.info(f'Executing move plan with {len(plan)} steps.')
+    def add_file_group_to_plan(file_group_: FileGroup):
+        primary_path_ = file_group_.primary_path
+        if primary_path_ not in plan:
+            new_primary_path_ = destination / primary_path_.name
+            if new_primary_path_.exists():
+                raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path_}')
+            plan[primary_path_] = new_primary_path_
 
-    # Track the steps performed so they can be reversed.
-    revert_plan = list()
+    def add_source_file_group_to_plan(file_group_: FileGroup, source_: pathlib.Path):
+        primary_path_ = file_group_.primary_path
+        if primary_path_ not in plan:
+            new_primary_path_ = destination / source_.name / primary_path_.relative_to(source)
+            if new_primary_path_.exists():
+                raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path_}')
+            plan[primary_path_] = new_primary_path_
 
-    def do_plan(plan_):
-        # Move deepest files first.
-        plan_ = sorted(plan_, key=lambda i: (len(i[0].parents), i[0].name), reverse=True)
-        for old_file, new_file in plan_:  # noqa
-            new_file.parent.mkdir(parents=True, exist_ok=True)
-            logger.debug(f'Moving {old_file} to {new_file}')
-            # if not new_file.exists():
-            shutil.move(str(old_file), str(new_file))
-            logger.debug(f'Moved {old_file} to {new_file}')
-            revert_plan.append((new_file, old_file))
-        # Move is complete.
-        return plan_
+    # Sources may be a list of files, we don't want to issue queries for every file in a file group.
+    file_sources, other_sources = partition(lambda i: i.is_file(), sources)
+    file_stems = {split_path_stem_and_suffix(i): i for i in file_sources}
+    sources = list(other_sources) + list(file_stems.values())
 
-    try:
-        plan = do_plan(plan)
+    with flags.refresh_counting:
         for source in sources:
-            if source.is_dir():
-                delete_directory(source)
-        logger.info(f'Move execution completed')
-        return plan
-    except Exception as e:
-        logger.error(f'Move failed', exc_info=e)
-        # Move files back.
-        do_plan(revert_plan)
-        # Delete the directories that were created.
-        directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
-        for path in directories:
-            if path.is_dir():
-                delete_directory(path)
-        # Remove destination only if it did not exist at the start.
-        if destination.is_dir() and destination_existed is False:
-            delete_directory(destination)
-        raise
+            if source.is_file():
+                # Get any FileGroups that share the source's stem.
+                files = glob_shared_stem(source)
+                file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(files)).all()
+                if not file_groups:
+                    # No FileGroups for this source file, create one.
+                    try:
+                        fg = FileGroup.from_paths(session, *files)
+                        file_groups = [fg, ]
+                    except NoPrimaryFile:
+                        for file in files:
+                            fg = FileGroup.from_paths(session, file)
+                            add_file_group_to_plan(fg)
+                add_files_to_refresh_count(len(file_groups))
+                for fg in file_groups:
+                    add_file_group_to_plan(fg)
+                # Sleep to catch cancel.
+                await asyncio.sleep(0)
+            elif source.is_dir():
+                stmt = 'SELECT primary_path FROM file_group WHERE primary_path LIKE :like'
+                for (primary_path,) in session.execute(stmt, dict(like=f'{source}%')):
+                    primary_path = pathlib.Path(primary_path)
+                    if primary_path not in plan:
+                        new_primary_path = destination / source.name / primary_path.relative_to(source)
+                        if new_primary_path.exists():
+                            raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path}')
+                        plan[primary_path] = new_primary_path
+                        add_files_to_refresh_count(1)
+
+                    # Sleep to catch cancel.
+                    await asyncio.sleep(0)
+
+                # Move directories of this source.
+                for directory in (i for i in walk(source) if i.is_dir()):
+                    new_directory = destination / source.name / directory.relative_to(source)
+                    plan[directory] = new_directory
+
+                # Find any files in this directory that are not yet in the DB and add them to the plan.
+                files = {i for i in walk(source) if i.is_file()}
+                if missing_files := files - set(plan.keys()):
+                    for paths in group_files_by_stem(missing_files):
+                        try:
+                            # Only create the FileGroup if a primary_path can be found.
+                            get_primary_file(paths)
+                            file_group = FileGroup.from_paths(session, *paths)
+                            add_files_to_refresh_count(1)
+                            add_source_file_group_to_plan(file_group, source)
+                        except NoPrimaryFile:
+                            # No primary path for these paths, create FileGroups for each.
+                            add_files_to_refresh_count(1)
+                            for file in paths:
+                                fg = FileGroup.from_paths(session, file)
+                                add_source_file_group_to_plan(fg, source)
+
+                        # Sleep to catch cancel.
+                        await asyncio.sleep(0)
+            else:
+                raise UnknownFile(f'Unknown path type, cannot move: {source}')
+
+    # Sort plan by the deepest files first.
+    plan: OrderedDict = OrderedDict(sorted(plan.items(), key=lambda i: (len(i[0].parents), i[0].name), reverse=True))
+
+    # Revert plan is built out as files are moved.
+    revert_plan = OrderedDict()
+    new_directories = set()
+
+    def do_plan(plan_: OrderedDict[pathlib.Path, pathlib.Path]):
+        """Apply the move plan to all the FileGroups.
+
+        @warning: Cannot be cancelled!"""
+        # Move FileGroups in groups.
+        for chunk in chunks(plan_.items(), MOVE_CHUNK_SIZE):
+            old_paths = [i for i, j in chunk]
+            old_files, old_directories = partition(lambda i: i.is_file(), old_paths)
+            file_groups_ = session.query(FileGroup).filter(FileGroup.primary_path.in_(old_files)).all()
+            if len(file_groups_) != len(old_files):
+                # We ensured there are FileGroups while building the plan, maybe user deleted a file?
+                raise RuntimeError('Could not get all FileGroups for move')
+
+            for file_group_ in file_groups_:
+                old_file = file_group_.primary_path
+                new_primary_path_ = plan_[old_file]
+                parent = new_primary_path_.parent
+                parent.mkdir(parents=True, exist_ok=True)
+                if parent not in new_directories:
+                    new_directories.add(parent)
+                file_group_.move(new_primary_path_)
+                revert_plan[new_primary_path_] = old_file
+            for directory_ in old_directories:
+                delete_directory(directory_)
+
+            existing_directories = {i[0] for i in session.query(Directory.path)}
+            missing_directories = new_directories - existing_directories
+            for directory_ in missing_directories:
+                session.add(Directory(path=directory_, name=directory_.name))
+
+            # Don't forget what has moved.
+            session.flush(file_groups_)
+
+    with flags.refresh_discovery:
+        try:
+            do_plan(plan)
+            for source in sources:
+                if source.is_dir():
+                    delete_directory(source)
+            logger.info(f'Move execution completed')
+        except Exception as e:
+            logger.error(f'Move failed', exc_info=e)
+            new_directories = set()
+            # Move files back.
+            do_plan(revert_plan)
+            # Delete the directories that were created.
+            directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
+            for path in directories:
+                if path.is_dir():
+                    delete_directory(path)
+            # Remove destination only if it did not exist at the start.
+            if destination.is_dir() and destination_existed is False:
+                delete_directory(destination)
+            raise
+
+    return plan
 
 
 def delete_directory(directory: pathlib.Path, recursive: bool = False):
@@ -1263,41 +1360,37 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False):
         curs.execute(stmt, (str(directory),))
 
 
-async def move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathlib.Path, pathlib.Path]]:
+@optional_session
+async def move(destination: pathlib.Path, *sources: pathlib.Path, session: Session = None) \
+        -> OrderedDict[pathlib.Path, pathlib.Path]:
     """Moves a file or directory (recursively), preserving applied Tags.
 
     If the move fails at any point, the files will be returned to their previous locations.
 
-    Returns a list of tuples, the first Path in the tuple is the file's old location, the second Path is where the file
-    was moved.
+    Returns an OrderedDict, the key is the file's old location, the value is where the file was moved.
     """
-    # Move the files first, if this fails it will revert itself and raise an error.
-    plan = _move(destination, *sources)
+    if not session:
+        raise RuntimeError('`session` is required')
 
-    # Files were moved, migrate any Tags.
-    plan_map = {old: new for old, new in plan}
-    old_file_paths = list(plan_map.keys())
-    with get_db_session(commit=True) as session:
-        old_files: List[Tuple[FileGroup, TagFile]] = session.query(FileGroup, TagFile) \
-            .filter(FileGroup.primary_path.in_(old_file_paths)) \
-            .outerjoin(TagFile).all()
-        logger.info(f'Moving {len(old_files)} tagged files')
-        for old_file, _ in old_files:
-            try:
-                new_file_path = plan_map[old_file.primary_path]
-                logger.info(f'Moving tagged file {old_file.primary_path} to {new_file_path}')
-                old_file.move(new_file_path, move_files=False)
-            except KeyError as e:
-                # Got a duplicate?
-                logger.error('Error during tag migration', exc_info=e)
-                if PYTEST:
-                    raise
-        session.commit()
+    with flags.refreshing:
+        from wrolpi.api_utils import api_app
+        api_app.shared_ctx.refresh['counted_files'] = 0
 
-    if PYTEST:
-        await refresh_files([destination, *sources])
-    else:
-        background_task(refresh_files([destination, *sources]))
+        # Move the files, if this fails it will revert itself and raise an error.
+        with timer('moving files', 'info'):
+            plan = await _move(destination, *sources, session=session)
+            session.commit()
+
+        with flags.refresh_indexing:
+            await apply_indexers()
+
+        with flags.refresh_modeling:
+            await apply_modelers()
+
+        with flags.refresh_cleanup:
+            await apply_refresh_cleanup()
+            # Save tags now that files have been moved.
+            save_tags_config()
 
     return plan
 
@@ -1320,25 +1413,32 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
     return new_path
 
 
-async def rename_directory(directory: pathlib.Path, new_name: str) -> pathlib.Path:
+async def rename_directory(directory: pathlib.Path, new_name: str, session: Session = None) -> pathlib.Path:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory."""
+    if not session:
+        raise RuntimeError('`session` is required')
+
     new_directory = directory.with_name(new_name)
     if new_directory.exists():
         raise FileConflict(f'Cannot rename {directory} to {new_directory} because it already exists.')
 
     # Move all paths into the new directory.
     paths = list(directory.iterdir())
-    await move(new_directory, *paths)
+    await move(new_directory, *paths, session=session)
     # Remove the old directory.
     delete_directory(directory)
 
     return new_directory
 
 
-async def rename(path: pathlib.Path, new_name: str) -> pathlib.Path:
+@optional_session
+async def rename(path: pathlib.Path, new_name: str, session: Session = None) -> pathlib.Path:
     """Rename a directory or file.  Preserve any tags."""
+    if not session:
+        raise RuntimeError('`session` is required')
+
     if path.is_dir():
-        return await rename_directory(path, new_name)
+        return await rename_directory(path, new_name, session=session)
 
     return await rename_file(path, new_name)
 

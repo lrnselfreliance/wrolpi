@@ -252,7 +252,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
 
 @wrol_mode_check
 @optional_session
-async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id: int, session: Session = None):
+async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, channel_id: int, session: Session = None):
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
@@ -279,10 +279,9 @@ async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id:
     # Only move Channel when requested.
     if directory:
         # Move to newly defined directory only if necessary.
-        logger.info(f'Tagging {channel} with {tag_name} moving to {directory} from {channel.directory}')
         directory.mkdir(parents=True, exist_ok=True)
         if channel.directory != directory:
-            await channel.move(directory, session)
+            await channel.move_channel(directory, session)
     else:
         logger.info(f'Tagging {channel} with {tag_name}')
 

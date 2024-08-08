@@ -392,7 +392,7 @@ async def test_get_status(test_async_client, test_session):
 @pytest.mark.asyncio
 async def test_download_crud(test_session, test_async_client, test_download_manager_config, tag_factory):
     """Test creating once-downloads and recurring downloads."""
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
 
     async def dispatch_downloads(*a, **kw):
         pass
@@ -567,7 +567,7 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
     request_, response_ = await test_async_client.post('/api/search_file_estimates', json=body_)
     assert response_.status_code == HTTPStatus.OK
 
-    tag1, tag2, tag3 = tag_factory(), tag_factory(), tag_factory()
+    tag1, tag2, tag3 = await tag_factory(), await tag_factory(), await tag_factory()
     archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
     archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
     video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
@@ -629,7 +629,7 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
 async def test_search_file_estimates_any_tag(test_session, test_async_client, archive_factory, tag_factory,
                                              video_factory):
     """File estimates can be filtered by any_tag."""
-    tag1 = tag_factory()
+    tag1 = await tag_factory()
     archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
     archive_factory(domain='bar.com', contents='contents of bar bunny')
     test_session.commit()

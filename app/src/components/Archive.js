@@ -118,13 +118,6 @@ function ArchivePage() {
                 description: 'Archive update has been scheduled.',
                 time: 2000,
             });
-        } else {
-            toast({
-                type: 'error',
-                title: 'Archive Downloading',
-                description: 'Archive update failed.',
-                time: 2000,
-            });
         }
     }
 

@@ -164,8 +164,11 @@ def delete_videos(*video_ids: int, session: Session = None):
         raise UnknownVideo('Could not find videos to delete')
 
     logger.warning(f'Deleting {len(videos)} videos')
+    # Get all URLs, skip them once (so config isn't saved multiple times).
+    urls = list(filter(None, [i.file_group.url for i in videos]))
+    download_manager.add_to_skip_list(*urls)
     for video in videos:
-        video.delete(add_to_skip_list=True)
+        video.delete()
     session.commit()
 
 

@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Dimmer, Dropdown, Grid, Label, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
+import {Dimmer, Dropdown, Grid, Input, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
 import {
     createChannel,
     createChannelDownload,
@@ -19,6 +19,7 @@ import {
     frequencyOptions,
     HelpHeader,
     humanFileSize,
+    humanNumber,
     RequiredAsterisk,
     SearchInput,
     secondsToFrequency,
@@ -76,6 +77,10 @@ function ChannelStatistics({statistics}) {
         <Statistic>
             <StatisticValue>{secondsToFullDuration(statistics.length)}</StatisticValue>
             <StatisticLabel>Total Duration</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanNumber(statistics.video_tags)}</StatisticValue>
+            <StatisticLabel>Video Tags</StatisticLabel>
         </Statistic>
     </Segment>
 }
@@ -231,15 +236,7 @@ function ChannelPage({create, header}) {
         if (e) {
             e.preventDefault();
         }
-        const response = await refreshChannel(channelId);
-        if (response.status !== 204) {
-            toast({
-                type: 'error',
-                title: 'Failed to refresh',
-                description: "Failed to refresh this channel's directory",
-                time: 5000,
-            })
-        }
+        await refreshChannel(channelId);
     }
 
     const handleDelete = async () => {
@@ -295,19 +292,36 @@ function ChannelPage({create, header}) {
     >
         <ModalHeader>{channel.tag_name ? 'Modify Tag' : 'Add Tag'}</ModalHeader>
         <ModalContent>
-            <TagsSelector
-                limit={1}
-                selectedTagNames={newTagName ? [newTagName] : []}
-                onAdd={handleTagSelect}
-                onRemove={() => handleTagSelect(null)}
-            />
-            <br/>
-            <Toggle
-                label='Move to directory: '
-                checked={moveToTagDirectory}
-                onChange={setMoveToTagDirectory}
-            />
-            {newTagDirectory && <Label size='large'>{newTagDirectory}</Label>}
+            <Grid columns={1}>
+                <Grid.Row>
+                    <Grid.Column>
+                        <TagsSelector
+                            limit={1}
+                            selectedTagNames={newTagName ? [newTagName] : []}
+                            onAdd={handleTagSelect}
+                            onRemove={() => handleTagSelect(null)}
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <Toggle
+                            label='Move to directory: '
+                            checked={moveToTagDirectory}
+                            onChange={setMoveToTagDirectory}
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <Input fluid
+                               value={newTagDirectory}
+                               onChange={(e, {value}) => setNewTagDirectory(value)}
+                               disabled={!moveToTagDirectory}
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
         </ModalContent>
         <ModalActions>
             <Button onClick={() => setTagModalOpen(false)}>Cancel</Button>
@@ -354,7 +368,6 @@ function ChannelPage({create, header}) {
                             Directory <RequiredAsterisk/>
                         </label>
                         <DirectoryInput required
-                                        disabled={create === undefined}
                                         value={channel.directory}
                                         setInput={value => changeValue('directory', value)}
                                         placeholder='videos/channel directory'
@@ -756,16 +769,21 @@ export function ChannelsPage() {
     </div>;
 
     const headers = [
-        {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'tag', text: 'Tag', sortBy: 'tag_name', width: 2},
-        {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
-        {key: 'download_frequency', text: 'Download Frequency', sortBy: 'minimum_frequency', width: 2},
-        {key: 'size', text: 'Size', sortBy: 'size', width: 2},
+        {key: 'name', text: 'Name', sortBy: [i => i['name'].toLowerCase()], width: 8},
+        {key: 'tag', text: 'Tag', sortBy: [i => i['tag_name'], i => i['name'].toLowerCase()], width: 2},
+        {key: 'video_count', text: 'Videos', sortBy: [i => i['video_count'], i => i['name'].toLowerCase()], width: 2},
+        {
+            key: 'download_frequency',
+            text: 'Download Frequency',
+            sortBy: [i => i['minimum_frequency'], i => i['name'].toLowerCase()],
+            width: 2
+        },
+        {key: 'size', text: 'Size', sortBy: [i => i['size'], i => i['name'].toLowerCase()], width: 2},
         {key: 'manage', text: 'Manage', width: 2},
     ];
     const mobileHeaders = [
-        {key: 'name', text: 'Name', sortBy: 'name'},
-        {key: 'video_count', text: 'Videos', sortBy: 'video_count'},
+        {key: 'name', text: 'Name', sortBy: [i => i['name'].toLowerCase()]},
+        {key: 'video_count', text: 'Videos', sortBy: [i => i['video_count'], i => i['name'].toLowerCase()]},
         {key: 'manage', text: 'Manage'},
     ];
 

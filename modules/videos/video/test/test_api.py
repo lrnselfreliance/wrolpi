@@ -9,7 +9,7 @@ from modules.videos.models import Video
 from wrolpi.dates import now
 
 
-def test_get_video_prev_next(test_session, channel_factory, video_factory):
+def test_get_video_prev_next(test_async_client, test_session, channel_factory, video_factory):
     """
     Test that the previous and next videos will be retrieved when fetching a video.
     """
@@ -69,7 +69,7 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
             raise AssertionError(f'Assert failed for {id_=} {prev_title=} {next_title=}') from e
 
 
-def test_get_video_prev_next_no_upload_date(test_session, video_factory, channel_factory):
+def test_get_video_prev_next_no_upload_date(test_async_client, test_session, video_factory, channel_factory):
     """
     Previous and Next Videos should be those next to a Video file when videos do not have upload dates.
     """
@@ -153,7 +153,7 @@ async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_m
                          test_download_manager, tag_factory):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
-    tag = tag_factory()
+    tag = await tag_factory()
 
     await wrol_mode_fixture(True)
 

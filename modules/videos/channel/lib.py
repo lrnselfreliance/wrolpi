@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 
 from wrolpi import flags
 from wrolpi.common import run_after, logger, \
-    get_media_directory, wrol_mode_check
+    get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_curs, optional_session, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager
-from wrolpi.errors import UnknownDirectory, APIError, ValidationError, RefreshConflict
+from wrolpi.errors import APIError, ValidationError, RefreshConflict
+from wrolpi.vars import PYTEST
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel, ChannelDirectoryConflict
@@ -115,21 +116,9 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
 
 @run_after(save_channels_config)
 @optional_session
-def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
+async def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
     channel = Channel.find_by_id(channel_id, session)
-
-    # Only update directory if it was empty
-    if data.directory and not channel.directory:
-        data.directory = get_media_directory() / data.directory
-        if not data.directory.is_dir():
-            if data.mkdir:
-                data.directory.mkdir()
-            else:
-                raise UnknownDirectory()
-    elif data.directory:
-        # Keep the old directory because the user can't change a Channel's directory.
-        data.directory = channel.directory
 
     # Verify that the URL/Name/directory aren't taken
     check_for_channel_conflicts(
@@ -140,10 +129,26 @@ def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_
         directory=data.directory,
     )
 
+    data = data.__dict__
+    old_directory = pathlib.Path(channel.directory)
+    new_directory = get_media_directory() / data.pop('directory')
+
     # Apply the changes now that we've OK'd them
-    channel.update(data.__dict__)
+    channel.update(data)
 
     session.commit()
+
+    async def _():
+        await channel.move_channel(new_directory, session, send_events=True)
+
+    if new_directory != old_directory:
+        if not new_directory.is_dir():
+            new_directory.mkdir(parents=True)
+
+        if PYTEST:
+            await _()
+        else:
+            background_task(_())
 
     return channel
 
@@ -252,7 +257,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
 
 @wrol_mode_check
 @optional_session
-async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id: int, session: Session = None):
+async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, channel_id: int, session: Session = None):
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
@@ -261,29 +266,39 @@ async def tag_channel(tag_name: str, directory: pathlib.Path | None, channel_id:
     if directory and flags.refreshing.is_set():
         raise RefreshConflict('Refusing to move channel while file refresh is in progress')
 
-    channel = Channel.find_by_id(channel_id, session=session)
+    channel = Channel.find_by_id(channel_id, session)
 
     if tag_name:
-        tag = Tag.find_by_name(tag_name, session=session)
+        tag = Tag.find_by_name(tag_name, session)
         channel.tag_id = tag.id
         channel.tag = tag
     else:
         channel.tag = channel.tag_id = None
 
-    session.flush([channel, ])
+    channel.flush()
+    session.commit()
 
     # Do not move Channel files into a directory with files.
-    if directory and directory.is_dir() and next(directory.iterdir(), None):
+    if directory and directory != channel.directory and directory.is_dir() and next(directory.iterdir(), None):
         raise ChannelDirectoryConflict('Channel directory already exists and is not empty')
 
     # Only move Channel when requested.
     if directory:
         # Move to newly defined directory only if necessary.
-        logger.info(f'Tagging {channel} with {tag_name} moving to {directory} from {channel.directory}')
         directory.mkdir(parents=True, exist_ok=True)
         if channel.directory != directory:
-            await channel.move(directory, session)
+            coro = channel.move_channel(directory, session, send_events=True)
+            if PYTEST:
+                await coro
+            else:
+                background_task(coro)
     else:
         logger.info(f'Tagging {channel} with {tag_name}')
 
-    session.commit()
+
+@optional_session
+async def search_channels(tag_names: List[str], session: Session) -> List[Channel]:
+    """Search Tagged Channels."""
+    from wrolpi.tags import Tag
+    channels = session.query(Channel).join(Tag).filter(Tag.name.in_(tag_names)).all()
+    return channels

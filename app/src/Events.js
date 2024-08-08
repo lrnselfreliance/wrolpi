@@ -75,6 +75,14 @@ function handleEvents(events) {
             eventToast('Successful tag', message, 'success');
         }
 
+        if (event === 'file_move_completed') {
+            eventToast('Successful Move', message, 'success');
+        }
+
+        if (event === 'file_move_failed') {
+            eventToast('Move Failed', message, 'error');
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

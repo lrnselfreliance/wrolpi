@@ -49,6 +49,7 @@ class ChannelTagRequest:
 
 @dataclass
 class ChannelTagInfoRequest:
+    channel_id: Optional[int] = None
     tag_name: Optional[str] = None
 
 
@@ -205,6 +206,7 @@ class VideoStatistics:
 @dataclass
 class ChannelStatistics:
     channels: int
+    tagged_channels: int
 
 
 @dataclass
@@ -222,3 +224,8 @@ class CensoredVideoRequest:
 @dataclass
 class CensoredVideoResponse:
     videos: List[VideoWithChannel]
+
+
+@dataclass
+class ChannelSearchRequest:
+    tag_names: List[str] = field(default_factory=list)

@@ -253,6 +253,15 @@ class Download(ModelHelper, Base):  # noqa
             return download
         raise UnknownDownload(f'Cannot find Download with URL: {url}')
 
+    @classmethod
+    @optional_session
+    def get_all_by_destination(cls, destination: str | pathlib.Path, session: Session = None) -> List['Download']:
+        destination = str(destination)
+        downloads = session.query(Download) \
+            .filter(Download.settings.contains({'destination': destination})) \
+            .all()
+        return downloads
+
 
 class Downloader:
     name: str = None
@@ -1330,7 +1339,7 @@ class RSSDownloader(Downloader, ABC):
         # Only download new URLs.
         urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(*urls)]]
 
-        logger.info(f'Successfully got {len(urls)} urls from rss {download.url}')
+        logger.info(f'Successfully got {len(urls)} new URLs from RSS {download.url}')
 
         return DownloadResult(success=True, downloads=urls)
 

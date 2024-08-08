@@ -10,7 +10,7 @@ from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    get_relative_to_media_directory
+    get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
@@ -154,9 +154,8 @@ class FileGroup(ModelHelper, Base):
         """Add all `paths` to this FileGroup.files."""
         from wrolpi.files.lib import get_mimetype
         new_files = list(self.files) if self.files else list()
-        for file in paths:
-            new_files.append(dict(path=file, mimetype=get_mimetype(file)))
-        self.files = new_files
+        new_files.extend([dict(path=path, mimetype=get_mimetype(path)) for path in paths])
+        self.files = unique_by_predicate(new_files, lambda i: i['path'])
 
     def my_files(self, *mimetypes: str) -> List[dict]:
         """Return all files related to this group that match any of the provided mimetypes.
@@ -225,7 +224,9 @@ class FileGroup(ModelHelper, Base):
 
         if session := Session.object_session(self):
             from wrolpi.downloader import download_manager
-            if self.url and add_to_skip_list is True:
+            if self.url and (download := download_manager.get_download(session, self.url)):
+                download.delete(add_to_skip_list)
+            elif self.url and add_to_skip_list is True:
                 download_manager.add_to_skip_list(self.url)
             session.delete(self)
 
@@ -254,25 +255,26 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype, split_path_stem_and_suffix
+        from wrolpi.files.lib import get_primary_file, get_mimetype, get_unique_files_by_stem
 
-        unique_stems = {split_path_stem_and_suffix(i, full=True)[0] for i in paths}
+        unique_stems = get_unique_files_by_stem(paths)
         if len(unique_stems) > 1:
             raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
+        logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
             primary_path = get_primary_file(paths)
             file_group.primary_path = primary_path
             file_group.append_files(*paths)
-            file_group.mimetype = get_mimetype(file_group.primary_path)
             session.add(file_group)
         elif len(existing_groups) == 1:
             # Found one FileGroup with these paths, no need to create a new FileGroup.
             file_group = existing_groups[0]
-            primary_path = file_group.primary_path
+            file_group.append_files(*paths)
+            primary_path = get_primary_file(file_group.my_paths())
         else:
             # Multiple FileGroups contain these paths as primary.
             primary_path = get_primary_file(paths)
@@ -284,8 +286,11 @@ class FileGroup(ModelHelper, Base):
         if not isinstance(primary_path, pathlib.Path):
             raise ValueError('Cannot create FileGroup without a primary path.')
 
+        file_group.primary_path = primary_path
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
+        file_group.mimetype = get_mimetype(file_group.primary_path)
+        logger.debug(f'FileGroup.from_paths: {file_group}')
 
         return file_group
 
@@ -329,28 +334,44 @@ class FileGroup(ModelHelper, Base):
 
         self.files = collected_files
 
-    def move(self, new_primary_path: pathlib.Path, move_files: bool = True):
+    def move(self, new_primary_path: pathlib.Path):
         """Move all files in this group to a new location."""
-        from wrolpi.files.lib import split_path_stem_and_suffix
-        if move_files and new_primary_path.exists():
+        from wrolpi.files.lib import split_path_stem_and_suffix, glob_shared_stem
+
+        if new_primary_path.exists():
             raise FileExistsError(f'Cannot move {self} to {new_primary_path} because it already exists.')
+
+        # Adopt any new files when a FileGroup has multiple files.
+        if len(self.my_files()) > 1:
+            self.append_files(*glob_shared_stem(self.primary_path))
 
         new_name, _ = split_path_stem_and_suffix(new_primary_path, full=True)
         # Need a deepcopy because changes to self.files are ignored otherwise.
         new_files = copy.deepcopy(self.files)
+        # Ensure that all destination files do not yet exist before move.
+        for file in new_files:
+            _, suffix = split_path_stem_and_suffix(file['path'])
+            new_path = pathlib.Path(f'{new_name}{suffix}')
+            if new_path.exists():
+                raise FileExistsError(f'Cannot move {self} to {new_path} because it already exists.')
+
+        # Collect all files that exist and move them.
+        existing_files = list()
         for idx, file in enumerate(new_files):
             _, suffix = split_path_stem_and_suffix(file['path'])
             new_path = pathlib.Path(f'{new_name}{suffix}')
-            if move_files:
+            if pathlib.Path(file['path']).is_file():
                 shutil.move(file['path'], new_path)
-            new_files[idx]['path'] = new_path
-        self.files = new_files
+                existing_files.append({'path': new_path, 'mimetype': file['mimetype']})
+
+        logger.debug(f'Moved FileGroup: {self.primary_path} -> {new_primary_path}')
+        self.files = existing_files
         if self.title == self.primary_path.name:
             # Do not overwrite title from modeler.
             self.title = new_primary_path.name
         self.primary_path = new_primary_path
         # Need to re-index for self.data.
-        self.indexed = False
+        self.indexed = False if self.data else self.indexed
         # Flush the changes to the FileGroup.
         self.flush()
 
@@ -384,11 +405,15 @@ class FileGroup(ModelHelper, Base):
         if model_class := self.get_model_class():
             if model := model_class.get_by_path(self.primary_path, session):
                 # Already modeled.
+                logger.debug(f'already modeled: {self} {model}')
                 return model
             # Create new model (Video/Archive/Ebook).
-            return model_class.do_model(self, session)
+            model = model_class.do_model(self, session)
+            logger.debug(f'new model: {self} {model}')
+            return model
 
         # Index the file if no models are available.
+        logger.debug(f'no model class: {self}')
         self.do_index()
         self.indexed = True
 

@@ -52,6 +52,7 @@ def attach_shared_contexts(app: Sanic):
 
     # Locks
     app.shared_ctx.config_save_lock = multiprocessing.Lock()
+    app.shared_ctx.events_lock = multiprocessing.Lock()
 
     reset_shared_contexts(app)
 

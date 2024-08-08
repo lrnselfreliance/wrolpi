@@ -17,7 +17,7 @@ import {
     getStatus,
     getVideo,
     getVideosStatistics,
-    searchArchives,
+    searchArchives, searchChannels,
     searchDirectories,
     searchVideos,
     searchZim,
@@ -1230,4 +1230,31 @@ export const useDockerized = () => {
 export const useCalcQuery = () => {
     const [calc, setCalc] = useOneQuery('calc');
     return {calc, setCalc}
+}
+
+export const useSearchChannels = (defaultTagNames) => {
+    const [tagNames, setTagNames] = useState(defaultTagNames || []);
+    const [channels, setChannels] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    const localSearchChannels = async () => {
+        setLoading(true);
+        try {
+            const {channels: newChannels} = await searchChannels(tagNames);
+            setChannels(newChannels);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        localSearchChannels();
+    }, [tagNames]);
+
+    return {
+        tagNames,
+        setTagNames,
+        channels,
+        loading,
+    }
 }

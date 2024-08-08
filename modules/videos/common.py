@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
-from wrolpi.common import logger, get_media_directory, get_wrolpi_config
+from wrolpi.common import logger, get_media_directory
 from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
@@ -204,7 +204,7 @@ def is_valid_poster(poster_path: Path) -> bool:
 async def ffprobe_json(video_path: Union[Path, str]) -> dict:
     """Extract video file metadata using ffprobe.
 
-    >>> ffprobe_json('video')
+    >>> ffprobe_json('video.mp4')
     {
         'chapters': [],
         'format': {},
@@ -268,39 +268,6 @@ def get_video_duration(video_path: Path) -> Optional[int]:
         return None
     duration = int(Decimal(stdout))
     return duration
-
-
-def check_for_video_corruption(video_path: Path) -> bool:
-    """Uses ffprobe to check for specific ways a video file can be corrupt.
-
-    Also attempts to screenshot the video near the end of it's duration, this check if the video is corrupted somewhere
-    in the middle."""
-    video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
-
-    if not video_path.is_file():
-        raise FileNotFoundError(f'{video_path} does not exist!')
-    if not FFPROBE_BIN:
-        raise SystemError('ffprobe is not installed!')
-
-    # Just read the video using FFMPEG, this prints out useful information about the video.
-    cmd = (FFPROBE_BIN, str(video_path))
-    try:
-        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        logger.warning(f'FFPROBE failed to check for corruption with stderr: {e.stderr.decode()}')
-        return True  # video is corrupt.
-
-    messages = (
-        b'Invalid NAL unit size',
-        b'Error splitting the input into NAL units',
-        b'Invalid data found when processing input',
-    )
-    corrupt = False
-    for error in messages:
-        if error in proc.stderr:
-            logger.warning(f'Possible video corruption ({error.decode()}): {video_path}')
-            corrupt = True
-    return corrupt
 
 
 async def update_view_counts_and_censored(channel_id: int):

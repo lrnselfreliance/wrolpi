@@ -23,7 +23,7 @@ from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_response, json_error_handler, api_app
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
@@ -31,6 +31,7 @@ from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
+from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
 from wrolpi.version import __version__
@@ -118,10 +119,16 @@ async def index(_):
 @openapi.description('Echo whatever is sent to this.')
 @openapi.response(HTTPStatus.OK, schema.EchoResponse)
 async def echo(request: Request):
+    try:
+        request_json = request.json
+    except Exception as e:
+        logger.error('Failed to parse request JSON', exc_info=e)
+        request_json = None
+    request_headers = dict(request.headers)
     ret = dict(
         form=request.form,
-        headers=dict(request.headers),
-        json=request.json,
+        headers=request_headers,
+        json=request_json,
         method=request.method,
         args=request.args,
     )
@@ -137,7 +144,7 @@ def get_settings(_: Request):
     ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
 
     settings = {
-        'archive_directory': config.archive_destination,
+        'archive_destination': config.archive_destination,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
         'download_on_startup': config.download_on_startup,
@@ -150,15 +157,15 @@ def get_settings(_: Request):
         'ignore_outdated_zims': config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
         'log_level': api_app.shared_ctx.log_level.value,
-        'map_directory': config.map_destination,
+        'map_destination': config.map_destination,
         'nav_color': config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
         'version': __version__,
-        'videos_directory': config.videos_destination,
+        'videos_destination': config.videos_destination,
         'wrol_mode': config.wrol_mode,
-        'zims_directory': config.zims_destination,
+        'zims_destination': config.zims_destination,
     }
     return json_response(settings)
 
@@ -482,7 +489,7 @@ async def get_tags_request(_: Request):
     summary='Create or update a Tag',
 )
 async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
-    tags.upsert_tag(body.name, body.color, tag_id)
+    await tags.upsert_tag(body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)
     else:
@@ -491,7 +498,7 @@ async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
 
 @api_bp.delete('/tag/<tag_id:int>')
 async def delete_tag_request(_: Request, tag_id: int):
-    tags.delete_tag(tag_id)
+    Tag.find_by_id(tag_id).delete()
     return response.empty()
 
 
@@ -591,6 +598,15 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
     ret = dict(
         file_groups=file_groups,
     )
+    return json_response(ret)
+
+
+@api_bp.post('/search_other_estimates')
+@validate(json=schema.SearchOtherEstimateRequest)
+async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstimateRequest):
+    """Used by the Global search to suggest FileGroup count to the user."""
+    others = await search_other_estimates(body.tag_names)
+    ret = dict(others=others)
     return json_response(ret)
 
 

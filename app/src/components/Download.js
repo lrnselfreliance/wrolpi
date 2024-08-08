@@ -43,10 +43,8 @@ class Downloader extends React.Component {
             this.setState({pending: true, submitted: false});
             try {
                 let response = await postDownload(urls, downloader, null, null, null, destination, tagNames);
-                if (response.status === 204) {
+                if (response.ok) {
                     this.setState({urls: '', pending: false, submitted: true});
-                } else {
-                    toast({type: 'error', title: 'Error', description: 'Failed to create download!'});
                 }
             } finally {
                 this.setState({pending: false});
@@ -216,8 +214,7 @@ class ChannelDownload extends React.Component {
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
         } else {
-            const content = await response.json();
-            let error = content.message || null;
+            let error = (await response.json()).message || null;
             this.setState({pending: false, disabled: false, success: false, error});
         }
     }
@@ -355,8 +352,7 @@ class RSSDownload extends ChannelDownload {
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
         } else {
-            const content = await response.json();
-            let error = content.message || null;
+            let error = (await response.json()).message || null;
             this.setState({pending: false, disabled: false, success: false, error});
         }
     }
@@ -487,15 +483,8 @@ class ScrapeDownloader extends Downloader {
                     suffix,
                     max_pages,
                 );
-                if (response.status === 204) {
+                if (response.ok) {
                     this.setState({urls: '', pending: false, submitted: true});
-                } else {
-                    const content = await response.json();
-                    let error = 'Failed to create download!';
-                    if (content && content['error']) {
-                        error = content['error'];
-                    }
-                    toast({type: 'error', title: 'Error', description: error});
                 }
             } finally {
                 this.setState({pending: false});

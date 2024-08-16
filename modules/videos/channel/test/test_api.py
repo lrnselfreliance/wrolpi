@@ -17,6 +17,7 @@ from wrolpi.common import get_relative_to_media_directory, walk
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager, Download, DownloadResult
+from wrolpi.files.models import Directory
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -489,6 +490,8 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
     video_files = [i for i in walk(videos_directory) if i.is_file()]
     assert len(video_files) == 3
+    # Channel's directory is indexed.
+    assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
     body = dict(tag_name=tag.name, directory='videos/Tag Name/Channel Name')
     request, response = await test_async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
@@ -508,6 +511,8 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
         f'{d1} was not moved'
     assert d2.settings['destination'] == str(test_directory / 'videos/Tag Name/Channel Name'), \
         f'{d2} was not moved'
+    # Directory record was replaced.
+    assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
     # Videos were moved
     v1, v2 = test_session.query(Video).order_by(Video.id).all()
@@ -535,6 +540,7 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     d1, d2 = test_session.query(Download).all()
     assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
     assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+    assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
     # Channel can be Tagged, without moving directories.
     body = dict(tag_name=tag.name)
@@ -549,6 +555,7 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     d1, d2 = test_session.query(Download).all()
     assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
     assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+    assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
 
 @pytest.mark.asyncio
@@ -574,6 +581,7 @@ async def test_move_channel(test_async_client, test_session, test_directory, cha
     assert str(channel.directory) == str(test_directory / 'videos/New Directory')
     assert str(vid1.video_path).startswith(str(test_directory / 'videos/New Directory/'))
     assert str(vid2.video_path).startswith(str(test_directory / 'videos/New Directory/'))
+    assert [i.path for i in test_session.query(Directory)] == [test_directory / 'videos/New Directory', ]
 
 
 @pytest.mark.asyncio
@@ -605,7 +613,7 @@ async def test_move_channel_after_terminal_move(test_async_client, test_session,
 
 @pytest.mark.asyncio
 async def test_search_tagged_channels(test_async_client, test_session, channel_factory, tag_factory,
-                                     video_factory):
+                                      video_factory):
     """Tagged Channels can be searched."""
     tag = await tag_factory()
     test_session.commit()

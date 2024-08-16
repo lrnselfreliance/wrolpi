@@ -17,7 +17,7 @@ from modules.map.api import map_bp
 from modules.otp.api import otp_bp
 from modules.videos.api import videos_bp
 from modules.zim.api import zim_bp
-from wrolpi import admin, status, flags, schema, dates
+from wrolpi import admin, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_response, json_error_handler, api_app
@@ -417,7 +417,6 @@ async def throttle_off(_: Request):
 @api_bp.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
-    s = await status.get_status()
     downloads = dict()
     if flags.db_up.is_set():
         try:
@@ -426,23 +425,19 @@ async def get_status(_: Request):
             logger.debug('Unable to get download status', exc_info=e)
 
     ret = dict(
-        bandwidth=s.bandwidth,
-        cpu_info=s.cpu_info,
-        disk_bandwidth=s.disk_bandwidth,
         dockerized=DOCKERIZED,
         is_rpi=IS_RPI,
         is_rpi4=IS_RPI4,
         is_rpi5=IS_RPI5,
         downloads=downloads,
-        drives=s.drives,
         flags=flags.get_flags(),
         hotspot_status=admin.hotspot_status().name,
         hotspot_ssid=admin.get_current_ssid(get_wrolpi_config().hotspot_device),
-        load=s.load,
-        memory_stats=s.memory_stats,
         throttle_status=admin.throttle_status().name,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),
+        # Include all stats from status worker.
+        **api_app.shared_ctx.status,
     )
     return json_response(ret)
 

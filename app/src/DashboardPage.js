@@ -307,10 +307,10 @@ function DashboardStatus() {
     let load = {};
     let cores = 0;
     let pending_downloads = '?';
-    if (status && status['cpu_info']) {
-        percent = status['cpu_info']['percent'];
-        load = status['load'];
-        cores = status['cpu_info']['cores'];
+    if (status && status['cpu_stats']) {
+        percent = status['cpu_stats']['percent'];
+        load = status['load_stats'];
+        cores = status['cpu_stats']['cores'];
     }
 
     const {downloads} = status;
@@ -319,8 +319,9 @@ function DashboardStatus() {
     }
 
     let bandwidths = <ProgressPlaceholder/>;
-    if (status && status['bandwidth']) {
-        bandwidths = status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']} bandwidth={i}/>);
+    if (status && status['nic_bandwidth_stats']) {
+        bandwidths = Object.entries(status['nic_bandwidth_stats'])
+            .map(([name, bandwidth]) => <BandwidthProgressCombined key={name} bandwidth={bandwidth}/>);
     }
 
     return <Segment>

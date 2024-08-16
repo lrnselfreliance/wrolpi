@@ -443,3 +443,6 @@ class Directory(ModelHelper, Base):
             name=self.name,
         )
         return d
+
+    def __repr__(self):
+        return f'<Directory path={repr(str(self.path))}>'

@@ -1644,7 +1644,7 @@ export function HandPointMessage({children, size = null}) {
     </Message>
 }
 
-export function WarningMessage({children, size = null, icon='exclamation'}) {
+export function WarningMessage({children, size = null, icon = 'exclamation'}) {
     // Use color='yellow' because "warning" does not work.
     return <Message color='yellow' icon size={size}>
         <SIcon name={icon}/>
@@ -1654,7 +1654,7 @@ export function WarningMessage({children, size = null, icon='exclamation'}) {
     </Message>
 }
 
-export function ErrorMessage({children, size = null, icon='exclamation'}) {
+export function ErrorMessage({children, size = null, icon = 'exclamation'}) {
     return <Message error icon size={size}>
         <SIcon name={icon}/>
         <Message.Content>{children}</Message.Content>

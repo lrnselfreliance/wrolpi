@@ -1930,15 +1930,11 @@ def is_hardlinked(path: pathlib.Path) -> bool:
     return path.stat().st_nlink > 1
 
 
-def _default_predicate(i):
-    return i
-
-
 def unique_by_predicate(
-        iterable: list | tuple | set,
+        iterable: list | tuple | set | Generator,
         predicate: callable = None,
 ) -> list | tuple | set:
-    """Finds only unique items in the provided iterable based on the predicate function.  Order is preserved.
+    """Finds the first unique items in the provided iterable based on the predicate function.  Order is preserved.
 
     `predicate` defaults to the items themselves.
 
@@ -1949,8 +1945,11 @@ def unique_by_predicate(
     >>> unique_by_predicate([1, 1, 2, 3, 3, 3, 3, 4], None)
     # [ 1, 2, 3, 4 ]
     """
-    predicate = predicate or _default_predicate  # Return an iterable based off the object itself by default.
+    predicate = predicate or (lambda i: i)  # Return an iterable based off the object itself by default.
     seen = set()
     unique_items = [i for i in iterable if not ((key := predicate(i)) in seen or seen.add(key))]
-    # Return the same type as the input iterable
-    return iterable.__class__(unique_items)  # For other iterable types
+    if isinstance(iterable, Generator):
+        # Return a list when provided iterable is a Generator.
+        return unique_items
+    # Return the same type as the provided iterable
+    return iterable.__class__(unique_items)

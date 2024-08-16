@@ -1,12 +1,12 @@
 import React from "react";
-import {NavLink} from "react-router-dom";
-import {Dropdown, Menu} from "semantic-ui-react";
-import {Media, SettingsContext, ThemeContext} from "../contexts/contexts";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
+import {Link, NavLink} from "react-router-dom";
+import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
+import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
+import {Icon} from "./Theme";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -61,10 +61,11 @@ function NavIconWrapper(props) {
 
 export function NavBar() {
     const wrolModeEnabled = useWROLMode();
+    const {status} = React.useContext(StatusContext);
     const {settings} = React.useContext(SettingsContext);
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
-    const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
+    const topNavText = wrolModeEnabled ? <>{name}&nbsp; <SIcon name='lock'/></> : name;
     const {i} = React.useContext(ThemeContext);
     const navColor = settings && settings.nav_color ? settings.nav_color : 'violet';
 
@@ -73,9 +74,14 @@ export function NavBar() {
     </NavLink>;
 
     // Display the temperature icon first because it can cause the system to throttle.
-    const warningIcon = <CPUTemperatureIcon fallback={<SystemLoadIcon/>}/>
+    const warningIcon = <CPUTemperatureIcon fallback={<SystemLoadIcon/>}/>;
+
+    const refreshingIcon = status.flags && status.flags.refreshing ?
+        <Link to='/files'><Icon loading name='circle notch' size='large'/></Link>
+        : null;
 
     const icons = <React.Fragment>
+        <NavIconWrapper>{refreshingIcon}</NavIconWrapper>
         <NavIconWrapper>{warningIcon}</NavIconWrapper>
         <NavIconWrapper><ShareButton/></NavIconWrapper>
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>

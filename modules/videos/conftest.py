@@ -9,13 +9,14 @@ from uuid import uuid4
 import mock
 import pytest
 from PIL import Image
+from requests import session
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config, format_videos_destination
 from modules.videos.models import Channel, Video
 from wrolpi.api_utils import api_app
 from wrolpi.downloader import DownloadFrequency, DownloadManager
-from wrolpi.files.models import FileGroup
+from wrolpi.files.models import FileGroup, Directory
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -53,6 +54,7 @@ def channel_factory(test_session, test_directory):
         channel.directory.mkdir(exist_ok=True, parents=True)
         test_session.add(channel)
         test_session.flush([channel])
+        test_session.add(Directory(path=channel.directory, name=channel.directory.name))
         assert channel.id and channel.url
         if download_frequency:
             download = channel.get_or_create_download(channel.url, download_frequency)

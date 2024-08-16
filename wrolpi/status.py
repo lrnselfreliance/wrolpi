@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import json
 import multiprocessing
 import pathlib
 import re
@@ -10,9 +11,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import jc
+
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import which
-from wrolpi.common import logger, get_warn_once
+from wrolpi.common import logger, get_warn_once, unique_by_predicate
 from wrolpi.dates import now
 
 try:
@@ -26,6 +29,8 @@ logger = logger.getChild(__name__)
 UPTIME_BIN = which('uptime', '/usr/bin/uptime')
 
 warn_once = get_warn_once('Unable to use psutil', logger)
+warn_cpu_once = get_warn_once('Cannot read CPU stats', logger)
+status_worker_warn_once = get_warn_once('Status worker encountered error', logger)
 
 
 @dataclass
@@ -43,17 +48,10 @@ class SystemLoad:
 
 
 LOAD_REGEX = re.compile(r'.+?load average: (.+?), (.+?), (.*)')
-
-
-def get_load_psutil() -> SystemLoad:
-    load = SystemLoad(*list(map(Decimal, psutil.getloadavg())))
-    return load
-
-
 LOAD_AVG_FILE = pathlib.Path('/proc/loadavg')
 
 
-async def get_load() -> SystemLoad:
+async def get_load_stats() -> SystemLoad:
     """Read loadavg file and return the 1, 5, and 15 minute system loads."""
     # Read load information from proc file.
     # Example:  0.99 1.06 1.02 1/2305 43879
@@ -64,6 +62,22 @@ async def get_load() -> SystemLoad:
 
 
 @dataclass
+class ProcessInfo:
+    pid: int = None
+    percent_cpu: int = None
+    percent_mem: int = None
+    command: str = None
+
+    def __json__(self) -> dict:
+        return dict(
+            pid=self.pid,
+            percent_cpu=self.percent_cpu,
+            percent_mem=self.percent_mem,
+            command=self.command,
+        )
+
+
+@dataclass
 class CPUInfo:
     cores: int = None
     cur_frequency: int = None
@@ -71,8 +85,8 @@ class CPUInfo:
     min_frequency: int = None
     percent: int = None
     temperature: Optional[int] = None
-    high_temperature: Optional[int] = None
-    critical_temperature: Optional[int] = None
+    high_temperature: Optional[float] = None
+    critical_temperature: Optional[float] = None
 
     def __json__(self) -> dict:
         return dict(
@@ -94,85 +108,81 @@ TEMPERATURE_PATH = Path('/sys/class/thermal/thermal_zone0/temp')
 TOP_REGEX = re.compile(r'^%Cpu\(s\):\s+(\d+\.\d+)', re.MULTILINE)
 
 
-def get_cpu_info_psutil() -> CPUInfo:
-    cpu_freq = psutil.cpu_freq()
-    percent = psutil.cpu_percent(interval=0.1)
+async def get_cpu_stats() -> CPUInfo:
+    """Get core count, max freq, min freq, current freq, cpu temperature."""
+    percent = int(psutil.cpu_percent())
 
-    # Prefer "coretemp", fallback to the first temperature.
+    # Get temperature from system file.
+    temperature = cur_frequency = max_frequency = min_frequency = None
+    if TEMPERATURE_PATH.is_file():
+        try:
+            temperature = int(TEMPERATURE_PATH.read_text()) // 1000
+            min_frequency = int(MIN_FREQUENCY_PATH.read_text())
+            max_frequency = int(MAX_FREQUENCY_PATH.read_text())
+            cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
+        except Exception as e:
+            warn_cpu_once(e)
+
+    # Get temperature using psutil.
     temp = psutil.sensors_temperatures()
     name = 'coretemp' if 'coretemp' in temp else list(temp.keys())[0]
     # Temperatures may be None.  Get average temperatures from CPU because one core may be hot.
     temperatures = temp.get(name)
-    temperature = statistics.median([i.current or 0 for i in temperatures])
+    temperature = temperature or statistics.median([i.current or 0 for i in temperatures])
     high_temperature = statistics.median([i.high or 0 for i in temperatures])
     critical_temperature = statistics.median([i.critical or 0 for i in temperatures])
 
-    # Temperatures my not exist.
-    if not high_temperature:
-        high_temperature = 60
-    if not critical_temperature:
-        critical_temperature = 95
+    # Temperatures may not exist.
+    high_temperature = high_temperature or 60
+    critical_temperature = critical_temperature or 95
 
     if high_temperature and high_temperature == critical_temperature:
         # Display yellow warning before red warning.
         high_temperature = critical_temperature - 25
 
     info = CPUInfo(
-        cores=psutil.cpu_count(logical=True),
-        cur_frequency=int(cpu_freq.current),
-        min_frequency=int(cpu_freq.min),
-        max_frequency=int(cpu_freq.max),
-        percent=int(percent),
-        temperature=int(temperature),
-        high_temperature=int(high_temperature),
-        critical_temperature=int(critical_temperature),
-    )
-    return info
-
-
-async def get_cpu_info() -> CPUInfo:
-    """Get core count, max freq, min freq, current freq, cpu temperature."""
-    try:
-        return get_cpu_info_psutil()
-    except Exception as e:
-        warn_once(e)
-
-    # Fallback to using `top` to fetch CPU information.
-    proc = await asyncio.create_subprocess_shell(
-        'top -bn1',
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    match = TOP_REGEX.search(stdout.decode())
-    if proc.returncode != 0 or not match:
-        logger.warning(f'Unable to get CPU top with exit {proc.returncode}')
-        percent = None
-    else:
-        percent = int(Decimal(match.groups()[0]))
-
-    if not TEMPERATURE_PATH.is_file():
-        warn_once(f'CPU temperature file does not exist!')
-        return CPUInfo(percent=percent)
-
-    try:
-        temperature = int(TEMPERATURE_PATH.read_text()) // 1000
-        min_frequency = int(MIN_FREQUENCY_PATH.read_text())
-        max_frequency = int(MAX_FREQUENCY_PATH.read_text())
-        cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
-    except Exception as e:
-        logger.warning(f'Unable to get CPU info', exc_info=e)
-        return CPUInfo(percent=percent)
-
-    info = CPUInfo(
         cores=multiprocessing.cpu_count(),
-        cur_frequency=cur_frequency - min_frequency,  # Current frequency is between minimum and maximum.
+        critical_temperature=int(critical_temperature) if critical_temperature else None,
+        # Current frequency is between minimum and maximum.
+        cur_frequency=cur_frequency - min_frequency if cur_frequency else None,
+        high_temperature=int(high_temperature) if high_temperature else None,
         max_frequency=max_frequency,
         min_frequency=min_frequency,
         percent=percent,
-        temperature=temperature,
+        temperature=int(temperature) if temperature else None,
     )
     return info
+
+
+PS_CMD = 'ps aux --sort=-%cpu --cols=512'
+IGNORED_PROCESS_COMMANDS = {PS_CMD, '<defunct>'}
+
+
+async def get_processes_stats() -> List[ProcessInfo]:
+    proc = await asyncio.create_subprocess_shell(
+        PS_CMD,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    # Do not include `ps` in the top processes.
+    ps_pid = proc.pid
+    stdout, stderr = await proc.communicate()
+
+    ps_info = jc.parse('ps', stdout.decode(), quiet=True)
+    processes = sorted(ps_info, key=lambda i: i['cpu_percent'], reverse=True)
+    processes = [i for i in processes if i['pid'] != ps_pid
+                 and i['cpu_percent'] > 1
+                 and not any(j in i['command'] for j in IGNORED_PROCESS_COMMANDS)]
+    processes = unique_by_predicate(processes, lambda i: i['command'][:30])
+    processes = processes[:10]
+    processes_info = [ProcessInfo(
+        pid=int(i['pid']),
+        percent_cpu=int(i['cpu_percent']),
+        percent_mem=int(i['mem_percent']),
+        command=i['command'],
+    ) for i in processes]
+
+    return processes_info
 
 
 MEMORY_TOTAL = re.compile(r'^MemTotal:\s+(\d+)\s+kB$', re.MULTILINE)
@@ -279,7 +289,7 @@ def get_drives_info_psutil() -> List[DriveInfo]:
     return info
 
 
-async def get_drives_info() -> List[DriveInfo]:
+async def get_drives_stats() -> List[DriveInfo]:
     try:
         return get_drives_info_psutil()
     except Exception as e:
@@ -319,6 +329,7 @@ class NICBandwidthInfo:
     elapsed: int = None
     name: str = None
     speed: int = None
+    now: float = None
 
     def __json__(self) -> dict:
         return dict(
@@ -339,33 +350,29 @@ IGNORED_NIC_NAMES = {
 }
 
 
-def get_nic_names() -> List[str]:
-    """Finds all non-virtual and non-docker network interface names."""
-    names = []
-    for name, nic in psutil.net_if_stats().items():
-        if any(name.startswith(i) for i in IGNORED_NIC_NAMES):
-            continue
-        names.append(name)
-    return names
-
-
 @dataclass
 class DiskBandwidthInfo:
+    bytes_recv: int = None
+    bytes_sent: int = None
     bytes_read_ps: int = None
     bytes_write_ps: int = None
     elapsed: int = None
     name: str = None
-    maximum_read_ps: int = None
-    maximum_write_ps: int = None
+    now: float = None
+    max_read_ps: int = None
+    max_write_ps: int = None
 
     def __json__(self) -> dict:
         return dict(
+            bytes_recv=self.bytes_recv,
+            bytes_sent=self.bytes_sent,
             bytes_read_ps=self.bytes_read_ps,
             bytes_write_ps=self.bytes_write_ps,
             elapsed=self.elapsed,
             name=self.name,
-            maximum_read_ps=self.maximum_read_ps,
-            maximum_write_ps=self.maximum_write_ps,
+            now=self.now,
+            max_read_ps=self.max_read_ps,
+            max_write_ps=self.max_write_ps,
         )
 
 
@@ -375,212 +382,159 @@ IGNORED_DISK_NAMES = (
 )
 
 
-async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwidthInfo]]:
-    """Get all bandwidth information for all NICs and Disks."""
-    from wrolpi.api_utils import api_app
-    nics_info = []
-    disks_info = []
-
-    try:
-        for name in sorted(api_app.shared_ctx.bandwidth.keys()):
-            nic = api_app.shared_ctx.bandwidth[name]
-            if 'bytes_recv_ps' not in nic:
-                # Not stats collected yet.
-                continue
-            nics_info.append(NICBandwidthInfo(
-                bytes_recv=nic['bytes_recv_ps'],
-                bytes_sent=nic['bytes_sent_ps'],
-                elapsed=nic['elapsed'],
-                name=name,
-                speed=nic['speed'],
-            ))
-        used_disks = []
-        for name in sorted(api_app.shared_ctx.disks_bandwidth.keys()):
-            disk = api_app.shared_ctx.disks_bandwidth[name]
-            if 'bytes_read_ps' not in disk:
-                # No status collected yet
-                continue
-            if any(name.startswith(i) for i in used_disks):
-                # Report only the first disk.  Do not report it's partitions.  Disks are sorted to make this work!
-                # i.e. report "sda" but not "sda1" or "sda2".
-                continue
-            if any(name.startswith(i) for i in IGNORED_DISK_NAMES):
-                continue
-            used_disks.append(name)
-
-            try:
-                maximum_read_ps = max(disk['bytes_read_ps'],
-                                      api_app.shared_ctx.max_disks_bandwidth[name]['maximum_read_ps'])
-                maximum_write_ps = max(disk['bytes_write_ps'],
-                                       api_app.shared_ctx.max_disks_bandwidth[name]['maximum_write_ps'])
-            except KeyError:
-                # Use a low first value.  Hopefully all drives are capable of this speed.
-                maximum_read_ps = 500_000
-                maximum_write_ps = 500_000
-            # Always write the new maximums.
-            value = {name: {'maximum_read_ps': maximum_read_ps, 'maximum_write_ps': maximum_write_ps}}
-            api_app.shared_ctx.max_disks_bandwidth.update(value)
-
-            disks_info.append(DiskBandwidthInfo(
-                bytes_read_ps=disk['bytes_read_ps'],
-                bytes_write_ps=disk['bytes_write_ps'],
-                elapsed=disk['elapsed'],
-                name=name,
-                maximum_read_ps=maximum_read_ps,
-                maximum_write_ps=maximum_write_ps,
-            ))
-    except Exception as e:
-        warn_once(e)
-
-    return nics_info, disks_info
-
-
-def _get_nic_tick(name_):
+def _get_nic_counters() -> dict:
     """
     Get the instant network statistics for the provided NIC.
     """
-    try:
-        counter = psutil.net_io_counters(pernic=True, nowrap=True)[name_]
-        stats = psutil.net_if_stats()[name_]
-        return now().timestamp(), counter.bytes_recv, counter.bytes_sent, int(stats.speed)
-    except Exception as e:
-        warn_once(e)
-        return 0, 0, 0, 0
+    timestamp = now().timestamp()
+    counters = dict()
+    if_stats = psutil.net_if_stats()
+    for name, counter in psutil.net_io_counters(pernic=True, nowrap=True).items():
+        if name in IGNORED_NIC_NAMES:
+            continue
+        stats = if_stats[name]
+        counters[name] = {
+            'name': name,
+            'now': timestamp,
+            'bytes_recv': counter.bytes_recv,
+            'bytes_sent': counter.bytes_sent,
+            'speed': int(stats.speed),
+        }
+    return counters
 
 
-def _calculate_bytes_per_second(history: List[Tuple]) -> Tuple[int, int, int]:
+def _get_disk_counters() -> dict:
+    """
+    Get the instant disk statistics for the provided NIC.
+    """
+    timestamp = now().timestamp()
+    counters = dict()
+
+    for name, counter in sorted(psutil.disk_io_counters(perdisk=True).items(), key=lambda i: i[0]):
+        if any(name.startswith(i) for i in counters):
+            # Report only the first disk.  Do not report its partitions.  Disks are sorted to make this work!
+            # i.e. report "sda" but not "sda1" or "sda2".
+            continue
+        if any(name.startswith(i) for i in IGNORED_DISK_NAMES):
+            continue
+        counters[name] = {
+            'name': name,
+            'now': timestamp,
+            'bytes_recv': counter.read_bytes,
+            'bytes_sent': counter.write_bytes,
+        }
+
+    return counters
+
+
+def _calculate_bytes_per_second(old_stats: dict, new_stats: dict) -> Tuple[int, int, int]:
     """Calculate the bytes-per-second between the oldest and newest tick."""
-    (oldest_now, oldest_recv, oldest_sent, *_), (newest_now, newest_recv, newest_sent, *_) = \
-        history[0], history[-1]
-    elapsed = int(newest_now - oldest_now)
+    old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_recv'], old_stats['bytes_sent']
+    new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_recv'], new_stats['bytes_sent']
+    elapsed = int(new_now - old_now)
     if elapsed == 0:
         return 0, 0, 0
-    bytes_recv_ps = int((newest_recv - oldest_recv) // elapsed)
-    bytes_sent_ps = int((newest_sent - oldest_sent) // elapsed)
+    bytes_recv_ps = int((new_recv - old_recv) // elapsed)
+    bytes_sent_ps = int((new_sent - old_sent) // elapsed)
     return bytes_recv_ps, bytes_sent_ps, elapsed
 
 
-@api_app.signal('wrolpi.periodic.bandwidth')
-async def bandwidth_worker(count: int = None):
-    """A background process which will gather historical data about all NIC bandwidth statistics."""
-    from wrolpi.api_utils import api_app
+@api_app.signal('wrolpi.periodic.status')
+async def status_worker(count: int = None, sleep_time: int = 5):
+    """A background process which will gather historical data about system statistics."""
+    shared_status = api_app.shared_ctx.status
 
-    if not psutil:
-        return
+    if count is not None and count <= 0:
+        logger.debug('Status worker ran out of count')
+        return dict(**shared_status)
 
-    logger.info('Bandwidth worker started')
+    load_stats = None
+    try:
+        # Update global `status` dict with stats that are gathered instantly.
+        cpu_stats, load_stats, drives_stats, memory_stats, processes_stats = await asyncio.gather(
+            get_cpu_stats(),
+            get_load_stats(),
+            get_drives_stats(),
+            get_memory_stats(),
+            get_processes_stats(),
+        )
+        shared_status.update({
+            'cpu_stats': cpu_stats.__json__(),
+            'load_stats': load_stats.__json__(),
+            'drives_stats': [i.__json__() for i in drives_stats],
+            'processes_stats': [i.__json__() for i in processes_stats],
+            'memory_stats': memory_stats.__json__(),
+        })
 
-    nic_names = get_nic_names()
-
-    def append_all_stats():
-        for name_ in nic_names:
-            nic = api_app.shared_ctx.bandwidth.get(name_)
-            if not nic:
-                # Initialize history for this NIC.
-                api_app.shared_ctx.bandwidth.update({
-                    name_: dict(historical=[_get_nic_tick(name_), ]),
-                })
-            else:
-                # Append to history for this NIC.
-                nic['historical'] = (nic['historical'] + [_get_nic_tick(name_), ])[-21:]
-                api_app.shared_ctx.bandwidth.update({name_: nic})
-
-        timestamp = now().timestamp()
-        for name_, disk in psutil.disk_io_counters(perdisk=True).items():
-            tic = timestamp, disk.read_bytes, disk.write_bytes
-            if bw := api_app.shared_ctx.disks_bandwidth.get(name_):
-                bw['historical'] = (bw['historical'] + [tic, ])[-21:]
-                api_app.shared_ctx.disks_bandwidth.update({name_: bw})
-            else:
-                api_app.shared_ctx.disks_bandwidth.update({
-                    name_: dict(historical=[tic, ]),
-                })
-
-    # Initialize the stats.
-    append_all_stats()
-
-    while count is None or count > 0:
-        try:
-            await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            # Server is restarting.
-            break
-
-        if count is not None:
-            count -= 1
-
-        append_all_stats()
-
-        # Calculate the difference between the first and last bandwidth ticks for all NICs.
-        for name, nic in api_app.shared_ctx.bandwidth.items():
-            historical = nic['historical']
-            bytes_recv_ps, bytes_sent_ps, elapsed = _calculate_bytes_per_second(historical)
-            api_app.shared_ctx.bandwidth.update({
-                name: dict(
-                    historical=historical,
-                    bytes_recv_ps=bytes_recv_ps,
-                    bytes_sent_ps=bytes_sent_ps,
-                    elapsed=elapsed,
-                    speed=historical[-1][-1],  # Use the most recent speed.
-                )
+        if 'disk_bandwidth_stats' not in shared_status:
+            # Worker has just been started, fill it with some starting bandwidth data.
+            disk_info = _get_disk_counters()
+            for name in disk_info.keys():
+                disk_info[name].update({'max_read_ps': 500_000, 'max_write_ps': 500_000})
+            shared_status.update({
+                'nic_bandwidth_stats': _get_nic_counters(),
+                'disk_bandwidth_stats': disk_info,
             })
-        for name, stats in api_app.shared_ctx.disks_bandwidth.items():
-            if 'historical' not in stats:
-                continue
+            # Break out and call the `finally` code below.
+            return
 
-            historical = stats['historical']
-            bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(historical)
-            api_app.shared_ctx.disks_bandwidth.update({
-                name: dict(
-                    historical=historical,
-                    bytes_read_ps=bytes_read_ps,
-                    bytes_write_ps=bytes_write_ps,
-                    elapsed=elapsed,
-                )
-            })
+        # Calculate the difference between the previous status worker's bandwidth count and now.
+        new_nic_stats = _get_nic_counters()
+        old_nic_stats = shared_status['nic_bandwidth_stats']
+        nic_bandwidth_stats = dict()
+        for name, old_stats in old_nic_stats.items():
+            new_stats = new_nic_stats[name]
+            bytes_recv_ps, bytes_sent_ps, elapsed = _calculate_bytes_per_second(old_stats, new_stats)
+            new_stats.update(dict(
+                bytes_recv_ps=bytes_recv_ps,
+                bytes_sent_ps=bytes_sent_ps,
+                elapsed=elapsed,
+            ))
+            nic_bandwidth_stats[name] = new_stats
 
+        # Calculate the difference between the previous status worker's disk bandwidth count and now.
+        new_disk_stats = _get_disk_counters()
+        old_disk_stats = shared_status['disk_bandwidth_stats']
+        disk_bandwidth_stats = dict()
+        for name, old_stats in old_disk_stats.items():
+            new_stats = new_disk_stats[name]
+            bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(old_stats, new_stats)
+            new_stats.update(dict(
+                bytes_read_ps=bytes_read_ps,
+                bytes_write_ps=bytes_write_ps,
+                elapsed=elapsed,
+                max_read_ps=max(bytes_read_ps, old_stats['max_read_ps']),
+                max_write_ps=max(bytes_write_ps, old_stats['max_write_ps']),
+            ))
+            disk_bandwidth_stats[name] = new_stats
 
-@dataclass
-class Status:
-    cpu_info: CPUInfo
-    load: SystemLoad
-    drives: List[DriveInfo]
-    bandwidth: NICBandwidthInfo
-    disk_bandwidth: DiskBandwidthInfo
-    memory_stats: MemoryStats
+        shared_status.update({
+            'nic_bandwidth_stats': nic_bandwidth_stats,
+            'disk_bandwidth_stats': disk_bandwidth_stats,
+        })
+    except Exception as e:
+        status_worker_warn_once(e)
+        raise
+    finally:
+        if load_stats and load_stats.minute_1 and load_stats.minute_1 > multiprocessing.cpu_count():
+            # System is stressed, slow down status updates.
+            await asyncio.sleep(sleep_time)
 
-
-async def get_status() -> Status:
-    cpu_info, load, drives, memory_stats, (nic_bandwidth, disk_bandwidth) = await asyncio.gather(
-        get_cpu_info(),
-        get_load(),
-        get_drives_info(),
-        get_memory_stats(),
-        get_bandwidth_info(),
-    )
-    return Status(
-        cpu_info=cpu_info,
-        load=load,
-        drives=drives,
-        bandwidth=nic_bandwidth,
-        disk_bandwidth=disk_bandwidth,
-        memory_stats=memory_stats,
-    )
+        # Always sleep so this does not become a busy loop with errors.
+        await asyncio.sleep(sleep_time)
+        if count:
+            # Running in testing, or __main__.
+            return await status_worker(count - 1, sleep_time)
+        else:
+            await api_app.dispatch('wrolpi.periodic.status', context={'sleep_time': sleep_time})
 
 
 if __name__ == '__main__':
-    from pprint import pprint
+    from wrolpi.contexts import attach_shared_contexts
 
     loop = asyncio.get_event_loop()
 
-    loop.run_until_complete(bandwidth_worker(2))
-
-    task = asyncio.gather(
-        get_cpu_info(),
-        get_memory_stats(),
-        get_load(),
-        get_drives_info(),
-        get_bandwidth_info(),
-    )
-    info_ = loop.run_until_complete(task)
-    pprint(info_)
+    SKIP_DISPATCH = True
+    attach_shared_contexts(api_app)
+    loop.run_until_complete(status_worker(2, sleep_time=2))
+    print(json.dumps(dict(api_app.shared_ctx.status), indent=2))

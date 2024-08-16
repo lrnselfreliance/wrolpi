@@ -28,9 +28,7 @@ def attach_shared_contexts(app: Sanic):
     # Shared dicts.
     app.shared_ctx.refresh = manager.dict()
     app.shared_ctx.uploaded_files = manager.dict()
-    app.shared_ctx.bandwidth = manager.dict()
-    app.shared_ctx.disks_bandwidth = manager.dict()
-    app.shared_ctx.max_disks_bandwidth = manager.dict()
+    app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
     # Shared lists.
     app.shared_ctx.events_history = manager.list()
@@ -71,9 +69,14 @@ def reset_shared_contexts(app: Sanic):
     # Shared dicts.
     app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
-    app.shared_ctx.bandwidth.clear()
-    app.shared_ctx.disks_bandwidth.clear()
-    app.shared_ctx.max_disks_bandwidth.clear()
+    app.shared_ctx.status.clear()
+    app.shared_ctx.status.update(dict(
+        cpu_stats=dict(),
+        load_stats=dict(),
+        drives_stats=list(),
+        processes_stats=list(),
+        memory_stats=dict(),
+    ))
     app.shared_ctx.map_importing.clear()
     # Shared ints
     app.shared_ctx.log_level.value = default_log_level

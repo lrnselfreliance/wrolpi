@@ -261,26 +261,20 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
-    from wrolpi.tags import Tag
 
     if directory and flags.refreshing.is_set():
         raise RefreshConflict('Refusing to move channel while file refresh is in progress')
 
     channel = Channel.find_by_id(channel_id, session)
 
-    if tag_name:
-        tag = Tag.find_by_name(tag_name, session)
-        channel.tag_id = tag.id
-        channel.tag = tag
-    else:
-        channel.tag = channel.tag_id = None
-
-    channel.flush()
-    session.commit()
-
     # Do not move Channel files into a directory with files.
     if directory and directory != channel.directory and directory.is_dir() and next(directory.iterdir(), None):
         raise ChannelDirectoryConflict('Channel directory already exists and is not empty')
+
+    # May also clear the tag if `tag_name` is None.
+    channel.set_tag(tag_name)
+    channel.flush()
+    session.commit()
 
     # Only move Channel when requested.
     if directory:

@@ -2,6 +2,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import sys
 
 from sanic import Sanic
@@ -224,7 +225,7 @@ async def start_single_tasks(app: Sanic):
     app.add_task(perpetual_have_internet_worker())  # noqa
 
     await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
-    await app.dispatch('wrolpi.periodic.bandwidth')
+    await app.dispatch('wrolpi.periodic.status')
 
     try:
         flag_outdated_zim_files()

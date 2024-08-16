@@ -1199,6 +1199,8 @@ async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Sess
 
     # The files that will be moved.  [ (old_file, new_file), ... ]
     plan: Dict[pathlib.Path, pathlib.Path] = dict()
+    # Directories that will need to be cleaned up.
+    old_directories = unique_by_predicate(i if i.is_dir() else i.parent for i in sources)
 
     def add_file_group_to_plan(file_group_: FileGroup):
         primary_path_ = file_group_.primary_path
@@ -1342,6 +1344,14 @@ async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Sess
             if destination.is_dir() and destination_existed is False:
                 delete_directory(destination)
             raise
+
+        # Clean up any old Directory records.
+        for old_directory in old_directories:
+            # Delete directories that do no exist, or are empty.
+            if not old_directory.is_dir() or next(old_directory.iterdir(), None) is None:
+                directories = session.query(Directory).filter(Directory.path.like(str(old_directory)))
+                for directory in directories:
+                    session.delete(directory)
 
     return plan
 

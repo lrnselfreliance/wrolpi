@@ -378,15 +378,15 @@ async def test_get_status(test_async_client, test_session):
     """Get the server status information."""
     request, response = await test_async_client.get('/api/status')
     assert response.status_code == HTTPStatus.OK
-    assert 'cpu_info' in response.json and isinstance(response.json['cpu_info'], dict)
-    assert 'load' in response.json and isinstance(response.json['load'], dict)
-    assert 'drives' in response.json and isinstance(response.json['drives'], list)
-    assert 'downloads' in response.json and isinstance(response.json['downloads'], dict)
-    assert 'hotspot_status' in response.json and isinstance(response.json['hotspot_status'], str)
-    assert 'throttle_status' in response.json and isinstance(response.json['throttle_status'], str)
-    assert 'version' in response.json and isinstance(response.json['version'], str)
-    assert 'memory_stats' in response.json and isinstance(response.json['memory_stats'], dict)
-    assert 'flags' in response.json and isinstance(response.json['flags'], dict)
+    assert isinstance(response.json.get('cpu_stats'), dict), 'cpu_stats should be a dict'
+    assert isinstance(response.json.get('load_stats'), dict), 'load_stats should be a dict'
+    assert isinstance(response.json.get('drives_stats'), list), 'drive_stats should be a dict'
+    assert isinstance(response.json.get('downloads'), dict), 'downloads should be a dict'
+    assert isinstance(response.json.get('hotspot_status'), str), 'hotspot_status should be a str'
+    assert isinstance(response.json.get('throttle_status'), str), 'throttle_status should be a str'
+    assert isinstance(response.json.get('version'), str), 'version should be a str'
+    assert isinstance(response.json.get('memory_stats'), dict), 'memory_stats should be a dict'
+    assert isinstance(response.json.get('flags'), dict), 'flags should be a dict'
 
 
 @pytest.mark.asyncio

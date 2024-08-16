@@ -76,6 +76,31 @@ jobs:
           command: './venv/bin/pytest -svv --junitxml=test-results.xml'
       - store_test_results:
           path: test-results.xml
+  api-alembic-migrations:
+    docker:
+      - image: cimg/python:3.11
+      - image: cimg/postgres:15.6
+        environment:
+          POSTGRES_USER: wrolpi
+          POSTGRES_DB: wrolpi
+          POSTGRES_PASSWORD: "wrolpi"
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+      - run:
+          name: Install Requirements
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - save_cache:
+          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          paths:
+            - "venv"
+      - run:
+          command: ./venv/bin/python ./main.py db upgrade
   api-tests-3-12:
     docker:
       - image: cimg/python:3.12
@@ -172,6 +197,7 @@ workflows:
     jobs:
       - sanic-api-start
       - api-tests-3-11
+      - api-alembic-migrations
   #      - api-tests-3-12 Sanic does not yet support 3.12.
   wrolpi-app-test:
     jobs:

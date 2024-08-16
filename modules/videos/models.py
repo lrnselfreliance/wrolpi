@@ -1,5 +1,4 @@
 import json
-import json
 import pathlib
 from typing import Optional, Dict, List
 
@@ -681,6 +680,20 @@ class Channel(ModelHelper, Base):
             '''
             curs.execute(stmt, dict(id=self.id))
             return dict(curs.fetchone())
+
+    def set_tag(self, tag_id_or_name: int | str | None) -> Tag | None:
+        """Change the Tag relationship of this Channel.  Will clear the Tag if provided with None."""
+        session = Session.object_session(self)
+        if tag_id_or_name is None:
+            # Clear tag.
+            self.tag = None
+        elif isinstance(tag_id_or_name, int):
+            self.tag = Tag.find_by_id(tag_id_or_name, session)
+        elif isinstance(tag_id_or_name, str):
+            self.tag = Tag.find_by_name(tag_id_or_name, session)
+        # Copy the id in case some code needs the id before flush.
+        self.tag_id = self.tag.id if self.tag else None
+        return self.tag
 
     async def refresh_files(self, send_events: bool = True):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""

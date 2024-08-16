@@ -17,7 +17,7 @@ from wrolpi.vars import PYTEST
 from . import lib
 from .. import schema
 from ..errors import UnknownChannel
-from ..lib import save_channels_config, format_videos_destination
+from ..lib import save_channels_config
 from ..models import Channel
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')
@@ -78,9 +78,9 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
 @validate(schema.ChannelPutRequest)
 @run_after(save_channels_config)
 @wrol_mode_check
-def channel_update(_: Request, channel_id: int, body: schema.ChannelPutRequest):
+async def channel_update(_: Request, channel_id: int, body: schema.ChannelPutRequest):
     body.directory = pathlib.Path(body.directory) if body.directory else None
-    channel = lib.update_channel(data=body, channel_id=channel_id)
+    channel = await lib.update_channel(data=body, channel_id=channel_id)
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.id}'})
 
@@ -138,32 +138,14 @@ async def channel_download(_: Request, channel_id: int, body: schema.ChannelDown
     return response.empty()
 
 
-@channel_bp.post('/<channel_id:int>/tag_info')
-@openapi.definition(
-    description='Get Channel Tag Info',
-    body=schema.ChannelTagInfoRequest,
-)
-@validate(schema.ChannelTagInfoRequest)
-@run_after(save_channels_config)
-@wrol_mode_check
-async def channel_tag_info(_: Request, channel_id: int, body: schema.ChannelTagInfoRequest):
-    from wrolpi.tags import Tag
-    channel_name = Channel.find_by_id(channel_id).name
-    tag_name = Tag.find_by_name(body.tag_name).name if body.tag_name else None
-    videos_destination = format_videos_destination(channel_name, tag_name)
-    ret = dict(videos_destination=videos_destination)
-    return json_response(ret)
-
-
 @channel_bp.post('/<channel_id:int>/tag')
 @openapi.definition(
-    description='Tag Channel',
+    description='Tag/untag a Channel with a single tag',
     body=schema.ChannelTagRequest,
 )
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(schema.ChannelTagRequest)
-@run_after(save_channels_config)
 @wrol_mode_check
 async def channel_tag(_: Request, channel_id: int, body: schema.ChannelTagRequest):
     directory = None
@@ -174,3 +156,17 @@ async def channel_tag(_: Request, channel_id: int, body: schema.ChannelTagReques
     await lib.tag_channel(body.tag_name, directory, channel_id)
 
     return response.raw('', HTTPStatus.NO_CONTENT)
+
+
+@channel_bp.post('/search')
+@openapi.definition(
+    description='Search Channels',
+    body=schema.ChannelSearchRequest,
+)
+@validate(schema.ChannelSearchRequest)
+async def channel_search(_: Request, body: schema.ChannelSearchRequest):
+    channels = await lib.search_channels(body.tag_names)
+    ret = dict(
+        channels=channels,
+    )
+    return json_response(ret)

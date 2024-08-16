@@ -16,7 +16,7 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence, Union, Coroutine
+from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock, AsyncMock
@@ -175,7 +175,7 @@ async def test_async_client(test_directory) -> SanicASGITestClient:
 
 
 @pytest.fixture
-def test_download_manager_config(test_async_client, test_directory):
+def test_download_manager_config(test_async_client, test_directory) -> pathlib.Path:
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
@@ -187,7 +187,7 @@ async def test_download_manager(
         test_async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
-):
+) -> DownloadManager:
     # Needed to use signals in test app?
     api_app.signalize()
 
@@ -200,7 +200,7 @@ async def test_download_manager(
 
 
 @pytest.fixture
-def fake_now():
+def fake_now() -> Callable:
     try:
         set_test_now(datetime(2000, 1, 1))
         yield set_test_now
@@ -210,17 +210,17 @@ def fake_now():
 
 
 @pytest.fixture
-def successful_download():
+def successful_download() -> DownloadResult:
     return DownloadResult(success=True)
 
 
 @pytest.fixture
-def failed_download():
-    return DownloadResult(error='pytest.fixture failed_download error', success=False)
+def failed_download() -> DownloadResult:
+    return DownloadResult(error='wrolpi.conftest failed_download error', success=False)
 
 
 @pytest.fixture
-def assert_download_urls(test_session):
+def assert_download_urls(test_session) -> Callable[[Set[str]], None]:
     def asserter(expected_urls: Set[str]):
         downloads = test_session.query(Download).all()
         urls = {i.url for i in downloads}
@@ -231,7 +231,7 @@ def assert_download_urls(test_session):
 
 
 @pytest.fixture
-def assert_downloads(test_session):
+def assert_downloads(test_session) -> Callable[[List[Dict]], None]:
     from wrolpi.test.common import assert_dict_contains
 
     def asserter(expected: List[Dict]):
@@ -245,7 +245,7 @@ def assert_downloads(test_session):
 
 
 @pytest.fixture
-def test_downloader(test_download_manager):
+def test_downloader(test_download_manager) -> Downloader:
     class TestDownloader(Downloader, ABC):
         """A testing Downloader"""
         name = 'test_downloader'
@@ -314,7 +314,7 @@ def corrupted_video_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def video_file_factory(test_directory):
+def video_file_factory(test_directory) -> Callable[[pathlib.Path], pathlib.Path]:
     """Return a copy of the example Big Buck Bunny video in the `test_directory`."""
 
     def _(path: pathlib.Path = None) -> pathlib.Path:
@@ -327,7 +327,7 @@ def video_file_factory(test_directory):
 
 
 @pytest.fixture
-def video_bytes():
+def video_bytes() -> bytes:
     return (PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes()
 
 
@@ -467,7 +467,7 @@ def wrol_mode_fixture(test_config, test_download_manager) -> Callable[[bool], Co
 
 
 @pytest.fixture
-def mock_create_subprocess_shell():
+def mock_create_subprocess_shell() -> Callable:
     def mocker(communicate_return=None, return_code=None, communicate_side_effect=None):
         async def communicate(*a, **kw):
             if communicate_side_effect:
@@ -507,14 +507,14 @@ def flags_lock():
 
 
 @pytest.fixture()
-def tag_factory(test_session):
+def tag_factory(test_session) -> Callable[[Optional[str]], Awaitable[Tag]]:
     names = ['one', 'two', 'three', 'four', 'five', 'six']
     count = 1
 
-    def factory(name: str = None) -> Tag:
+    async def factory(name: str = None) -> Tag:
         if not name:
             name = names.pop(0)
-        tag = upsert_tag(name, f'#{str(count) * 6}')
+        tag = await upsert_tag(name, f'#{str(count) * 6}', session=test_session)
         return tag
 
     return factory

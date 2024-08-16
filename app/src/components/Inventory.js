@@ -504,35 +504,19 @@ class EditInventory extends React.Component {
 
     handleSubmit = async (inventory, closeCallback) => {
         let inventoryId = inventory.id;
-        delete inventory['id'];
         let response = await updateInventory(inventoryId, inventory);
-
-        if (response.status === 204) {
+        if (response.ok) {
             await this.props.success();
             closeCallback();
-        } else {
-            toast({
-                type: 'error',
-                header: 'Failed to save inventory!',
-                description: 'Server responded with an error.',
-                time: 5000,
-            })
         }
     }
 
     handleDelete = async (inventory, closeCallback) => {
         let response = await deleteInventory(inventory.id);
 
-        if (response.status === 204) {
+        if (response.ok) {
             await this.props.success();
             closeCallback();
-        } else {
-            toast({
-                type: 'error',
-                header: 'Failed to delete inventory!',
-                description: 'Server responded with an error.',
-                time: 5000,
-            })
         }
     }
 
@@ -554,16 +538,9 @@ class NewInventory extends React.Component {
         delete inventory.id;
         let response = await saveInventory(inventory);
 
-        if (response.status === 201) {
+        if (response.ok) {
             await this.props.success();
             closeCallback();
-        } else {
-            toast({
-                type: 'error',
-                header: 'Failed to save inventory!',
-                description: 'Server responded with an error.',
-                time: 5000,
-            })
         }
     }
 
@@ -953,18 +930,11 @@ class InventoryAddList extends React.Component {
             expiration_date: this.state.expiration_date,
         };
         let response = await saveItem(this.state.inventory.id, item);
-        if (response.status === 204) {
+        if (response.ok) {
             await this.clearInputs();
             await this.fetchItems();
             await this.fetchCategories();
             await this.fetchBrands();
-        } else {
-            toast({
-                type: 'error',
-                header: 'Failed to save item!',
-                description: 'Server responded with an error.',
-                time: 5000,
-            })
         }
     }
 

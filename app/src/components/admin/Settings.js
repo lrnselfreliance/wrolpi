@@ -181,7 +181,7 @@ export class SettingsPage extends React.Component {
             qrOpen: false,
             ready: false,
 
-            archive_directory: null,
+            archive_destination: null,
             download_on_startup: null,
             download_timeout: null,
             hotspot_device: null,
@@ -190,12 +190,12 @@ export class SettingsPage extends React.Component {
             hotspot_status: null,
             ignore_outdated_zims: null,
             log_level: null,
-            map_directory: null,
+            map_destination: null,
             navColor: null,
             throttle_on_startup: null,
             throttle_status: null,
-            videos_directory: null,
-            zims_directory: null,
+            videos_destination: null,
+            zims_destination: null,
         }
 
         this.handleSubmit = this.handleSubmit.bind(this);
@@ -207,7 +207,7 @@ export class SettingsPage extends React.Component {
             const settings = await getSettings();
             this.setState({
                 ready: true,
-                archive_directory: settings.archive_directory,
+                archive_destination: settings.archive_destination,
                 disabled: settings.wrol_mode,
                 download_on_startup: settings.download_on_startup,
                 download_timeout: settings.download_timeout || '',
@@ -217,12 +217,12 @@ export class SettingsPage extends React.Component {
                 hotspot_status: settings.hotspot_status,
                 ignore_outdated_zims: settings.ignore_outdated_zims,
                 log_level: fromApiLogLevel(settings.log_level),
-                map_directory: settings.map_directory,
+                map_destination: settings.map_destination,
                 navColor: settings.nav_color || 'violet',
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
-                videos_directory: settings.videos_directory,
-                zims_directory: settings.zims_directory,
+                videos_destination: settings.videos_destination,
+                zims_destination: settings.zims_destination,
             }, this.handleHotspotChange);
         } catch (e) {
             console.error(e);
@@ -233,7 +233,7 @@ export class SettingsPage extends React.Component {
     async handleSubmit(callback) {
         this.setState({disabled: true, pending: true});
         let settings = {
-            archive_directory: this.state.archive_directory,
+            archive_destination: this.state.archive_destination,
             download_on_startup: this.state.download_on_startup,
             download_timeout: this.state.download_timeout ? parseInt(this.state.download_timeout) : 0,
             hotspot_device: this.state.hotspot_device,
@@ -241,11 +241,11 @@ export class SettingsPage extends React.Component {
             hotspot_ssid: this.state.hotspot_ssid,
             ignore_outdated_zims: this.state.ignore_outdated_zims,
             log_level: toApiLogLevel(this.state.log_level),
-            map_directory: this.state.map_directory,
+            map_destination: this.state.map_destination,
             nav_color: this.state.navColor,
             throttle_on_startup: this.state.throttle_on_startup,
-            videos_directory: this.state.videos_directory,
-            zims_directory: this.state.zims_directory,
+            videos_destination: this.state.videos_destination,
+            zims_destination: this.state.zims_destination,
         }
         try {
             const response = await saveSettings(settings);
@@ -304,7 +304,7 @@ export class SettingsPage extends React.Component {
         }
 
         const {
-            archive_directory,
+            archive_destination,
             disabled,
             download_on_startup,
             download_timeout,
@@ -314,13 +314,13 @@ export class SettingsPage extends React.Component {
             hotspot_ssid,
             ignore_outdated_zims,
             log_level,
-            map_directory,
+            map_destination,
             navColor,
             pending,
             qrCodeValue,
             throttle_on_startup,
-            videos_directory,
-            zims_directory,
+            videos_destination,
+            zims_destination,
         } = this.state;
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
@@ -468,9 +468,9 @@ export class SettingsPage extends React.Component {
                                         <label>Archive Directory</label>
                                         <Input
                                             label={mediaDirectoryLabel}
-                                            value={archive_directory}
+                                            value={archive_destination}
                                             disabled={!edit_special_directories}
-                                            onChange={(e, d) => this.handleInputChange(e, 'archive_directory', d.value)}
+                                            onChange={(e, d) => this.handleInputChange(e, 'archive_destination', d.value)}
                                         />
                                     </FormField>
                                 </GridColumn>
@@ -479,9 +479,9 @@ export class SettingsPage extends React.Component {
                                         <label>Videos Directory</label>
                                         <Input
                                             label={mediaDirectoryLabel}
-                                            value={videos_directory}
+                                            value={videos_destination}
                                             disabled={!edit_special_directories}
-                                            onChange={(e, d) => this.handleInputChange(e, 'videos_directory', d.value)}
+                                            onChange={(e, d) => this.handleInputChange(e, 'videos_destination', d.value)}
                                         />
                                     </FormField>
                                 </GridColumn>
@@ -492,9 +492,9 @@ export class SettingsPage extends React.Component {
                                         <label>Map Directory</label>
                                         <Input
                                             label={mediaDirectoryLabel}
-                                            value={map_directory}
+                                            value={map_destination}
                                             disabled={!edit_special_directories}
-                                            onChange={(e, d) => this.handleInputChange(e, 'map_directory', d.value)}
+                                            onChange={(e, d) => this.handleInputChange(e, 'map_destination', d.value)}
                                         />
                                     </FormField>
                                 </GridColumn>
@@ -503,9 +503,9 @@ export class SettingsPage extends React.Component {
                                         <label>Zims Directory</label>
                                         <Input
                                             label={mediaDirectoryLabel}
-                                            value={zims_directory}
+                                            value={zims_destination}
                                             disabled={!edit_special_directories}
-                                            onChange={(e, d) => this.handleInputChange(e, 'zims_directory', d.value)}
+                                            onChange={(e, d) => this.handleInputChange(e, 'zims_destination', d.value)}
                                         />
                                     </FormField>
                                 </GridColumn>

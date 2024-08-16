@@ -14,6 +14,7 @@ import socket
 import string
 import sys
 import tempfile
+import traceback
 from asyncio import Task
 from copy import deepcopy
 from dataclasses import dataclass
@@ -160,6 +161,7 @@ __all__ = [
     'ConfigFile',
     'DownloadFileInfo',
     'DownloadFileInfoLink',
+    'LOGGING_CONFIG',
     'ModelHelper',
     'WROLPI_CONFIG',
     'aiohttp_get',
@@ -180,7 +182,6 @@ __all__ = [
     'compile_tsvector',
     'cum_timer',
     'date_range',
-    'LOGGING_CONFIG',
     'disable_wrol_mode',
     'download_file',
     'enable_wrol_mode',
@@ -227,6 +228,7 @@ __all__ = [
     'truncate_generator_bytes',
     'truncate_object_bytes',
     'tsvector',
+    'unique_by_predicate',
     'url_strip_host',
     'walk',
     'wrol_mode_check',
@@ -253,10 +255,6 @@ class ModelHelper:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def find_by_paths(paths, session) -> List:
-        raise NotImplementedError('This model has not defined this method.')
-
-    @staticmethod
     def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
         """Attempts to get a model instance by its id.  Returns None if no instance can be found."""
         raise NotImplementedError('This model has not defined this method.')
@@ -274,9 +272,10 @@ class ModelHelper:
     def do_model(file_group, session: Session):
         raise NotImplementedError('This model has not defined this method.')
 
-    def flush(self):
+    def flush(self, session: Session = None):
         """A convenience method which flushes this record using its DB Session."""
-        if session := Session.object_session(self):
+        session = session or Session.object_session(self)
+        if session:
             session.flush([self])
         else:
             raise RuntimeError(f'{self} is not in a session!')
@@ -746,6 +745,9 @@ def run_after(after: callable, *args, **kwargs) -> callable:
         synchronous_after = after
 
         async def after(*a, **kw):
+            if logger.isEnabledFor(logging.DEBUG):
+                traceback.print_stack()
+                logger.debug(f'run_after synchronous_after called for {after}')
             return synchronous_after(*a, **kw)
 
     def wrapper(func: callable):
@@ -756,6 +758,9 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             @wraps(func)
             async def wrapped(*a, **kw):
                 results = await func(*a, **kw)
+                if logger.isEnabledFor(logging.DEBUG):
+                    traceback.print_stack()
+                    logger.debug(f'run_after async called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)
                 return results
@@ -763,6 +768,9 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             @wraps(func)
             def wrapped(*a, **kw):
                 results = func(*a, **kw)
+                if logger.isEnabledFor(logging.DEBUG):
+                    traceback.print_stack()
+                    logger.debug(f'run_after sync called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)
                 return results
@@ -1741,6 +1749,35 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
     return headlines
 
 
+async def search_other_estimates(tag_names: List[str]) -> dict:
+    """Estimate other things that are Tagged."""
+    from wrolpi.db import get_db_curs
+
+    if not tag_names:
+        return dict(
+            channel_count=0,
+        )
+
+    with get_db_curs() as curs:
+        stmt = '''
+            SELECT
+                COUNT(c.id)
+            FROM channel c
+            LEFT OUTER JOIN public.tag t on t.id = c.tag_id
+            WHERE t.name = %(tag_name)s
+        '''
+        # TODO handle multiple tags
+        params = dict(tag_name=tag_names[0])
+        curs.execute(stmt, params)
+
+        channel_count = curs.fetchone()[0]
+
+    others = dict(
+        channel_count=channel_count,
+    )
+    return others
+
+
 def replace_file(file: pathlib.Path | str, contents: str | bytes, missing_ok: bool = False):
     """Rename `file` to a temporary path, write contents to `file`, then, delete temporary file only if successful.
     The original file will be restored if any of these steps fail."""
@@ -1891,3 +1928,29 @@ def is_valid_hex_color(hex_color: str) -> bool:
 def is_hardlinked(path: pathlib.Path) -> bool:
     """Returns True only if `path` has more than one link."""
     return path.stat().st_nlink > 1
+
+
+def _default_predicate(i):
+    return i
+
+
+def unique_by_predicate(
+        iterable: list | tuple | set,
+        predicate: callable = None,
+) -> list | tuple | set:
+    """Finds only unique items in the provided iterable based on the predicate function.  Order is preserved.
+
+    `predicate` defaults to the items themselves.
+
+    >>> unique_by_predicate([['apple', 'banana', 'pear', 'kiwi', 'plum', 'peach']], lambda i: len(i))
+    # [ 'apple', 'banana', 'pear' ]
+    >>> unique_by_predicate([Path('foo.txt'), Path('foo.mp4'), Path('bar.txt')], lambda i: i.stem)
+    # [ Path('foo.txt'), Path('bar.txt') ]
+    >>> unique_by_predicate([1, 1, 2, 3, 3, 3, 3, 4], None)
+    # [ 1, 2, 3, 4 ]
+    """
+    predicate = predicate or _default_predicate  # Return an iterable based off the object itself by default.
+    seen = set()
+    unique_items = [i for i in iterable if not ((key := predicate(i)) in seen or seen.add(key))]
+    # Return the same type as the input iterable
+    return iterable.__class__(unique_items)  # For other iterable types

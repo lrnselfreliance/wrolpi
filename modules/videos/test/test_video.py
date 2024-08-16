@@ -29,27 +29,11 @@ def test_delete_video_no_channel(test_session, simple_video):
     assert test_session.query(Video).count() == 0
 
 
-def test_delete_video(test_session, video_factory):
-    """When a Video record is deleted, all referenced file records should be deleted."""
-    video = video_factory(with_video_file=True, with_poster_ext='png')
-    test_session.commit()
-
-    assert video.video_path.is_file(), 'Video file was not created.'
-    assert video.poster_path.is_file(), 'Video poster was not created.'
-    assert test_session.query(Video).count() == 1, 'Video was not created.'
-    assert test_session.query(FileGroup).count() == 1, 'Video file and poster file were not created.'
-
-    video.delete()
-    test_session.commit()
-    assert test_session.query(Video).count() == 0, 'Video was not deleted.'
-    assert test_session.query(FileGroup).count() == 0, 'Video files were not deleted.'
-
-
 @pytest.mark.asyncio
 async def test_delete_video_with_tag(test_async_client, test_session, video_factory, tag_factory):
     """You cannot delete a video with a tag."""
     video = video_factory(with_video_file=True, with_poster_ext='png')
-    tag = tag_factory()
+    tag = await tag_factory()
     video.add_tag(tag.name)
     test_session.commit()
 
@@ -63,7 +47,7 @@ async def test_delete_video_with_tag(test_async_client, test_session, video_fact
 
 
 @pytest.mark.asyncio
-async def test_video_channel_refresh(test_session, test_directory, channel_factory, video_factory):
+async def test_video_channel_refresh(test_async_client, test_session, test_directory, channel_factory, video_factory):
     """A Video will be associated with a Channel when it's files are in that Channel's directory."""
     # Create a video file in this channel's directory.
     channel = channel_factory()
@@ -101,7 +85,7 @@ async def test_delete_duplicate_video(test_session, channel_factory, video_facto
     channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
     entry = channel.info_json['entries'][0]
 
-    tag = tag_factory()
+    tag = await tag_factory()
     vid1 = video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title',
@@ -150,7 +134,7 @@ async def test_delete_duplicate_video(test_session, channel_factory, video_facto
 
 
 @pytest.mark.asyncio
-async def test_delete_renamed_video(test_session, channel_factory, video_factory, tag_factory):
+async def test_delete_renamed_video(test_async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, delete all the videos that do not have the new title."""
     channel = channel_factory(name='Channel Name')
     video_path = channel.directory / f'{channel.name}_20000101_ABC123456_Some new title.mp4'
@@ -158,7 +142,7 @@ async def test_delete_renamed_video(test_session, channel_factory, video_factory
     channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'Some new title'}]}
     entry = channel.info_json['entries'][0]
 
-    tag = tag_factory()
+    tag = await tag_factory()
     vid1 = video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title',

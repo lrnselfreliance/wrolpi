@@ -76,7 +76,7 @@ async def test_create_downloads(test_async_client, test_session, test_download_m
 @pytest.mark.asyncio
 async def test_recreate_download(test_session, test_download_manager, test_downloader, tag_factory):
     """Settings are preserved when a Download is restarted."""
-    tag = tag_factory()
+    tag = await tag_factory()
     settings = {'tag_names': [tag.name, ]}
 
     # Create download with settings initially.

@@ -1,4 +1,5 @@
 import json
+import json
 import pathlib
 from typing import Optional, Dict, List
 
@@ -7,11 +8,14 @@ from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
+from wrolpi import flags
 from wrolpi.captions import read_captions
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file, \
+    unique_by_predicate
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager, save_downloads_config
 from wrolpi.errors import InvalidDownload
+from wrolpi.events import Events
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, move
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -223,6 +227,7 @@ class Video(ModelHelper, Base):
             # Can't validate if there is no video file.
             logger.error(f'Unable to validate video {self.id} without primary file!')
 
+        logger.debug(f'Validating {self}')
         from .lib import validate_video
         try:
             validate_video(self, self.channel.generate_posters if self.channel else False)
@@ -237,12 +242,14 @@ class Video(ModelHelper, Base):
         # self.file_group.d_text is handled in `validate_video`.
 
         if (comments := self.get_comments()) and len(comments) >= 5:
+            logger.debug(f'{self} has comments')
             self.have_comments = True
 
         # If this Video is in a Channel's directory, then it is part of that Channel.
         session: Session = Session.object_session(self)
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
             self.channel = channel
+            logger.debug(f'{self} has Channel {channel}')
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
@@ -533,7 +540,7 @@ class Channel(ModelHelper, Base):
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
     downloads: InstrumentedList = relationship('Download', primaryjoin='Download.channel_id==Channel.id')
     tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'))
-    tag = relationship('Tag')
+    tag = relationship('Tag', primaryjoin='Channel.tag_id==Tag.id')
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
@@ -565,12 +572,9 @@ class Channel(ModelHelper, Base):
         channel_id = self.id
         data = data.copy()
 
-        # Remove unused values.
-        data.pop('move_to_tag_directory', None)
-
         # URL should not be empty string.
-        if 'url' in data:
-            data['url'] = data['url'] or None
+        url = data.pop('url')
+        self.url = url or None
 
         session: Session = Session.object_session(self)
 
@@ -664,23 +668,19 @@ class Channel(ModelHelper, Base):
         with get_db_curs() as curs:
             stmt = '''
                 SELECT
-                    SUM(size),
-                    MAX(size),
-                    COUNT(video.id),
-                    SUM(fg.length)
+                    SUM(size) AS "size",
+                    MAX(size) AS "largest_video",
+                    COUNT(video.id) AS "video_count",
+                    SUM(fg.length) AS "length",
+                    -- Videos may use multiple tags.
+                    COUNT(video.id) FILTER ( WHERE tf.file_group_id IS NOT NULL ) AS "video_tags"
                 FROM video
                 LEFT JOIN file_group fg on fg.id = video.file_group_id
+                LEFT JOIN public.tag_file tf on fg.id = tf.file_group_id
                 WHERE channel_id = %(id)s
             '''
             curs.execute(stmt, dict(id=self.id))
-            size, largest_video, video_count, length = curs.fetchone()
-        statistics = dict(
-            video_count=video_count,
-            size=size,
-            largest_video=largest_video,
-            length=length,
-        )
-        return statistics
+            return dict(curs.fetchone())
 
     async def refresh_files(self, send_events: bool = True):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
@@ -772,39 +772,72 @@ class Channel(ModelHelper, Base):
         channel = session.query(Channel).filter_by(url=url).one_or_none()
         return channel
 
-    async def move(self, directory: pathlib.Path, session: Session):
+    def format_directory(self, tag_name: str) -> pathlib.Path:
+        from modules.videos.lib import format_videos_destination
+        return format_videos_destination(self.name, tag_name, self.url)
+
+    async def move_channel(self, directory: pathlib.Path, session: Session, send_events: bool = False):
         """Move the files of this Channel into a new directory."""
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
-        if self.directory and not next(self.directory.iterdir(), None):
-            raise FileExistsError(f'Refusing to move Channel when it has no files.')
 
         old_directory = self.directory
         self.directory = directory
-        session.flush([self, ])
 
-        # Change destination of all Downloads of this Channel, or any Downloads which download into this Channel's
-        # directory.
-        downloads = list(self.downloads)
-        downloads.extend(list(
-            session.query(Download).filter(Download.settings.contains({'destination': str(old_directory)}))
-        ))
-        for download in downloads:
-            # Get new copy of `settings` to avoid bug where it wouldn't update.
-            settings = download.settings.copy() if download.settings else dict()
-            if settings.get('destination'):
-                download.settings = {**settings, 'destination': str(directory)}
+        def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path):
+            downloads = list(self.downloads)
+            downloads.extend(Download.get_all_by_destination(from_directory))
+            downloads = unique_by_predicate(downloads, lambda i: i.id)
+            for download in downloads:
+                # Get new copy of `settings` to avoid bug where it wouldn't update.
+                settings = download.settings.copy() if download.settings else dict()
+                if settings.get('destination'):
+                    logger.debug(f'Updating destination of {download}')
+                    download.settings = {**settings, 'destination': str(to_directory)}
+            session.flush(downloads)
 
-        session.commit()
+        # Only one tag can be moved at a time.
+        with flags.refreshing:
+            # Change destination of all Downloads of this Channel, or any Downloads which download into this Channel's
+            # directory.
+            change_download_destinations(old_directory, directory)
 
-        # Save configs before move, this is because move imports configs.
-        from modules.videos.lib import save_channels_config
-        await save_downloads_config(session)
-        save_channels_config(session)
-        save_tags_config(session)
+            session.commit()
 
-        # Move the contents of the Channel directory into the destination directory.
-        await move(directory, *list(old_directory.iterdir()))
+            # Save configs before move, this is because move imports configs.
+            from modules.videos.lib import save_channels_config
+            await save_downloads_config(session)
+            save_channels_config(session)
+            save_tags_config(session)
 
-        if old_directory.exists() and not next(old_directory.iterdir(), None):
-            old_directory.rmdir()
+            # Move the contents of the Channel directory into the destination directory.
+            logger.info(f'Moving {self} from {repr(str(old_directory))}')
+
+        try:
+            if not old_directory.exists():
+                # Old directory does not exist, maintainer must have moved the Channel manually.
+                if PYTEST:
+                    await refresh_files([old_directory, directory])
+                else:
+                    background_task(refresh_files([old_directory, directory]))
+                if send_events:
+                    Events.send_file_move_completed(f'Channel {repr(self.name)} was moved, but Tags were lost')
+            else:
+                # `move` also uses `flags.refreshing`
+                await move(directory, *list(old_directory.iterdir()))
+                if send_events:
+                    Events.send_file_move_completed(f'Channel {repr(self.name)} was moved')
+        except Exception as e:
+            logger.error(f'Channel move failed!  Reverting changes...', exc_info=e)
+            # Downloads must be moved back to the old directory.
+            change_download_destinations(directory, old_directory)
+            self.directory = old_directory
+            self.flush(session)
+            if send_events:
+                Events.send_file_move_failed(f'Moving Channel {self.name} has failed')
+            raise
+        finally:
+            session.commit()
+            if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
+                # Old directory is empty, delete it.
+                old_directory.rmdir()

@@ -107,7 +107,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
                                    mock_video_extract_info, mock_video_process_runner, tag_factory):
     """A Video is tagged when Download record requires it."""
     video_path = video_file_factory()
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     mock_video_extract_info.return_value = copy(example_video_json)

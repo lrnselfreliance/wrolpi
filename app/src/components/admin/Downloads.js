@@ -255,18 +255,7 @@ class RecurringDownloadRow extends React.Component {
     handleRestart = async () => {
         const {id} = this.props;
         try {
-            const response = await restartDownload(id);
-            if (response.status !== 204) {
-                throw Error('Unable to restart download');
-            }
-        } catch (e) {
-            toast({
-                type: 'error',
-                title: 'Error',
-                description: 'Unable to restart download',
-                time: 5000,
-            })
-            throw e;
+            await restartDownload(id);
         } finally {
             if (this.props.fetchDownloads) {
                 this.props.fetchDownloads();

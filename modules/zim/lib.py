@@ -16,7 +16,7 @@ from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task, get_wrolpi_config
+    register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate
 from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import refresh_files, split_file_name_words
@@ -124,14 +124,11 @@ def get_entries_tags(paths: List[str], zim_id: int):
 
 def get_unique_paths(*paths: str) -> List[str]:
     """Return a new list which contains unique Zim paths."""
-    new_paths = list()
-    simple_paths = list()
-    for path in paths:
-        simple_path = path.replace('-', '').replace('_', '').replace('/', '').lower()
-        if simple_path not in simple_paths:
-            new_paths.append(path)
-            simple_paths.append(simple_path)
-    return new_paths
+    unique_paths = unique_by_predicate(
+        paths,
+        lambda i: i.replace('-', '').replace('_', '').replace('/', '').lower()
+    )
+    return list(unique_paths)
 
 
 @optional_session

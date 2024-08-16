@@ -206,3 +206,8 @@ class SearchFileEstimateRequest:
     def __post_init__(self):
         if self.any_tag and self.tag_names:
             raise ValidationError('Cannot search for any tag, and list of tags.')
+
+
+@dataclass
+class SearchOtherEstimateRequest:
+    tag_names: List[str] = field(default_factory=lambda: list())

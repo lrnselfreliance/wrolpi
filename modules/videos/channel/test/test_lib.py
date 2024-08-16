@@ -1,6 +1,7 @@
 from typing import List
 
 import pytest
+import yaml
 
 from modules.videos import schema
 from modules.videos.channel import lib
@@ -124,3 +125,23 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
 
     await assert_search('foo', ['foo', 'foo bar', 'foobar'])
     await assert_search('bar', ['foobar', 'foo bar', 'bar'], True)
+
+
+@pytest.mark.asyncio
+async def test_tag_channel_existing(test_async_client, test_session, test_directory, channel_factory, tag_factory,
+                                    video_factory, test_channels_config):
+    """A Channel can already exist in a Tag's directory and still be tagged."""
+    channel_directory = test_directory / 'videos/one/Channel Name'
+    channel = channel_factory(name='Channel Name', download_frequency=120, directory=channel_directory)
+    video_factory(channel_id=channel.id)
+    test_session.commit()
+    assert str(channel.directory).startswith(f'{test_directory}/videos/one/')
+
+    tag = await tag_factory()
+    await lib.tag_channel(tag.name, channel_directory, channel.id, test_session)
+
+    # Channel's tag is saved to the config.
+    save_channels_config(test_session)
+    with test_channels_config.open() as fh:
+        config = yaml.load(fh, Loader=yaml.Loader)
+    assert config['channels'][0]['tag_name'] == tag.name

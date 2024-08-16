@@ -1,4 +1,4 @@
-import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
+import {ErrorMessage, LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
 import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
@@ -40,8 +40,9 @@ function FlagsMessages() {
 
     let refreshing;
     let refreshRequired;
-    let dbDown;
     let kiwixRestart;
+    let dbDown;
+    let internetDown;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
     if (flags['refreshing']) {
@@ -69,13 +70,17 @@ function FlagsMessages() {
     }
 
     if (!flags['db_up']) {
-        dbDown = <Message icon error>
-            <Icon name='exclamation'/>
-            <Message.Content>
-                <Message.Header>Database is down</Message.Header>
-                API is unable to connect to the database. Check the server logs.
-            </Message.Content>
-        </Message>
+        dbDown = <ErrorMessage>
+            <Message.Header>Database is down</Message.Header>
+            API is unable to connect to the database. Check the server logs.
+        </ErrorMessage>
+    }
+
+    if (!flags.have_internet) {
+        internetDown = <ErrorMessage icon='globe'>
+            <Message.Header>No Internet</Message.Header>
+            WROLPi has no Internet. Downloads will not start.
+        </ErrorMessage>;
     }
 
     return <>
@@ -84,6 +89,7 @@ function FlagsMessages() {
         {settings && settings['ignore_outdated_zims'] === false && flags['outdated_zims'] ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
         {kiwixRestart}
+        {status.wrol_mode || internetDown}
     </>
 }
 

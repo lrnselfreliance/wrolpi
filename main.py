@@ -327,8 +327,6 @@ async def perpetual_have_internet_worker():
                     await asyncio.sleep(10)
             except Exception as e:
                 logger.error('Failed to check if internet is up', exc_info=e)
-
-            await asyncio.sleep(10)
     except asyncio.CancelledError:
         logger.info('perpetual_check_have_internet_worker was cancelled...')
 

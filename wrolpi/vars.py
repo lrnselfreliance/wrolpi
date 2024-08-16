@@ -50,7 +50,7 @@ DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))
 PYTEST = 'pytest' in sys.modules
 
 # Used to test if the Internet is up.
-INTERNET_SERVER = "one.one.one.one"
+INTERNET_SERVER = os.environ.get('INTERNET_SERVER', 'one.one.one.one')
 
 # running on circlci
 CIRCLECI = truthy_arg(os.environ.get('CIRCLECI', ''))

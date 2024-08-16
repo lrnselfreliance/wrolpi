@@ -4,7 +4,7 @@ import html
 import pathlib
 import re
 import traceback
-from typing import Generator
+from typing import Generator, Type
 from typing import Tuple, Optional
 
 import pytz
@@ -16,7 +16,7 @@ from modules.videos.models import Video
 from wrolpi import before_startup, dates, flags
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, limit_concurrent, get_wrolpi_config, extract_domain, \
-    escape_file_name, get_media_directory, background_task
+    escape_file_name, get_media_directory, background_task, Base
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download
@@ -472,7 +472,8 @@ def import_channels_config():
                     channel.delete_with_videos()
 
         # Create any missing Downloads.  Associated Downloads with any necessary Channels.
-        link_channel_and_downloads()
+        with get_db_session() as session:
+            link_channel_and_downloads(session)
 
     except Exception as e:
         channel_import_logger.warning('Failed to load channels config!', exc_info=e)
@@ -481,8 +482,7 @@ def import_channels_config():
             raise
 
 
-@optional_session
-def link_channel_and_downloads(session: Session):
+def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel):
     """Create any missing Downloads for any Channel.url/Channel.directory that has a Download.  Associate any Download
     related to a Channel."""
     # Only Downloads with a frequency can be a Channel Download.
@@ -491,7 +491,7 @@ def link_channel_and_downloads(session: Session):
     downloads_by_url = {i.url: i for i in downloads}
     # Many Downloads may share the same destination.
     downloads_with_destination = [i for i in downloads if (i.settings or dict()).get('destination')]
-    channels = session.query(Channel).all()
+    channels = session.query(channel_).all()
 
     need_commit = False
     for channel in channels:
@@ -514,7 +514,7 @@ def link_channel_and_downloads(session: Session):
 
     # Associate any Download which shares a Channel's URL.
     for download in downloads:
-        channel = Channel.get_by_url(download.url)
+        channel = channel_.get_by_url(download.url, session)
         if channel and not download.channel_id:
             download.channel_id = channel.id
             need_commit = True

@@ -7,9 +7,9 @@ from wrolpi import status
 
 
 @pytest.mark.asyncio
-async def test_get_load():
+async def test_get_load(test_async_client):
     """Test reading load information from /proc/loadavg."""
-    load = await status.get_load()
+    load = await status.get_load_stats()
     assert isinstance(load, status.SystemLoad)
 
     assert isinstance(load.minute_1, Decimal) and load.minute_1 >= 0
@@ -18,63 +18,40 @@ async def test_get_load():
 
 
 @pytest.mark.asyncio
-async def test_get_cpu_info():
+async def test_get_cpu_stats(test_async_client):
     """Minimum CPU info testing because this will fail in docker, etc."""
-    info = await status.get_cpu_info()
+    info = await status.get_cpu_stats()
     assert isinstance(info, status.CPUInfo)
     assert isinstance(info.percent, int)
     assert isinstance(info.temperature, int)
-    assert isinstance(info.high_temperature, int)
-    assert isinstance(info.critical_temperature, int)
-
-    with mock.patch('wrolpi.status.get_cpu_info_psutil') as mock_get_cpu_info_psutil:
-        # Fallback to subprocess when psutil is not available.
-        mock_get_cpu_info_psutil.side_effect = Exception('testing no psutil')
-        info = await status.get_cpu_info()
-        assert isinstance(info, status.CPUInfo)
-        assert isinstance(info.percent, int)
 
 
 @pytest.mark.asyncio
-async def test_get_drives_info():
+async def test_get_drives_stats(test_async_client):
     """Minimum drives info testing because this will fail in docker, etc."""
-    info = await status.get_drives_info()
+    info = await status.get_drives_stats()
     assert isinstance(info, list)
     assert len(info) >= 1
     assert isinstance(info[0], status.DriveInfo)
 
-    with mock.patch('wrolpi.status.get_drives_info_psutil') as mock_get_drives_info_psutil:
+    with mock.patch('wrolpi.status.get_drives_info_psutil') as mock_get_drives_stats_psutil:
         # Fallback to subprocess when psutil is not available.
-        mock_get_drives_info_psutil.side_effect = Exception('testing no psutil')
-        info = await status.get_drives_info()
+        mock_get_drives_stats_psutil.side_effect = Exception('testing no psutil')
+        info = await status.get_drives_stats()
         assert isinstance(info, list)
         assert len(info) >= 1
         assert isinstance(info[0], status.DriveInfo)
 
 
 @pytest.mark.asyncio
-async def test_get_bandwidth_info():
-    """Bandwidth requires psutil"""
-    nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
-    assert nic_bandwidths == []
-    assert disk_bandwidths == []
+async def test_status_worker(test_async_client):
+    """Status worker calls itself perpetually, but can be limited during testing."""
+    from wrolpi.api_utils import api_app
+    assert test_async_client.sanic_app.shared_ctx.status['cpu_stats'] == dict()
 
-    await status.bandwidth_worker(2)
-    nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
-    assert isinstance(nic_bandwidths, list)
-    assert len(nic_bandwidths) > 0
-    assert isinstance(nic_bandwidths[0], status.NICBandwidthInfo)
-    assert isinstance(disk_bandwidths, list)
-    assert len(disk_bandwidths) > 0
-    assert isinstance(disk_bandwidths[0], status.DiskBandwidthInfo)
-
-    with mock.patch('wrolpi.status.psutil.net_io_counters') as mock_net_io_counters:
-        # NO FALLBACK!
-        mock_net_io_counters.side_effect = Exception('testing no psutil')
-        await status.bandwidth_worker(1)
-        nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
-        assert isinstance(nic_bandwidths[0].bytes_recv, int)
-        assert isinstance(nic_bandwidths[0].bytes_sent, int)
-        assert isinstance(nic_bandwidths[0].elapsed, int)
-        assert isinstance(nic_bandwidths[0].speed, int)
-        assert isinstance(nic_bandwidths[0].name, str)
+    # Status worker fills out stats as it goes along.
+    await status.status_worker(count=2)
+    assert api_app.shared_ctx.status['nic_bandwidth_stats']
+    assert 'bytes_recv' in list(api_app.shared_ctx.status['nic_bandwidth_stats'].values())[0]
+    assert api_app.shared_ctx.status['disk_bandwidth_stats']
+    assert 'bytes_recv' in list(api_app.shared_ctx.status['disk_bandwidth_stats'].values())[0]

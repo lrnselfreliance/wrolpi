@@ -271,7 +271,10 @@ function ChannelPage({create, header}) {
         } catch (e) {
             console.error('Failed to tag channel', e);
         } finally {
-            await fetchChannel();
+            setTimeout(async () => {
+                // Delay fetch because config needs to be written.
+                await fetchChannel();
+            }, 500);
         }
     }
 

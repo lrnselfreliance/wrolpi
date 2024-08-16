@@ -155,16 +155,13 @@ export const OutdatedZimsMessage = ({onClick}) => {
 }
 
 export const KiwixRestartMessage = () => {
-    return <Message icon warning>
-        <SIcon name='exclamation'/>
-        <Message.Content>
-            <Message.Header>Kiwix must be restarted</Message.Header>
-            <p>New Zim files have been downloaded; you must restart your containers.</p>
+    return <WarningMessage>
+        <Message.Header>Kiwix must be restarted</Message.Header>
+        <p>New Zim files have been downloaded; you must restart your containers.</p>
 
-            <p>Run the following to restart your containers:</p>
-            <pre>  docker-compose restart</pre>
-        </Message.Content>
-    </Message>
+        <p>Run the following to restart your containers:</p>
+        <pre>  docker-compose restart</pre>
+    </WarningMessage>
 }
 
 const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {

@@ -1914,8 +1914,8 @@ def can_connect_to_server(hostname: str, port: int = 80) -> bool:
         conn = socket.create_connection((hostname, port))
         conn.close()
         return True
-    except Exception:
-        pass  # We ignore any errors, returning False
+    except Exception as e:
+        logger_.debug('can_connect_to_server encountered error', exc_info=e)
     return False
 
 

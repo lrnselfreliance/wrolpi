@@ -205,7 +205,8 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
         archive.file_group.download_datetime = now()
         archive.url = url
         archive.domain = get_or_create_domain(session, url)
-        session.flush()
+        archive.flush()
+        archive.domain.flush()
 
     return archive
 

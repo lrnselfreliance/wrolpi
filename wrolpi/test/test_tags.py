@@ -6,7 +6,7 @@ import yaml
 
 from wrolpi import tags
 from wrolpi.common import is_hardlinked, walk
-from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged
+from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged, UsedTag
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile, Tag
@@ -15,8 +15,8 @@ from wrolpi.tags import TagFile, Tag
 @pytest.mark.asyncio
 async def test_tags_file_group_json(test_async_client, test_session, make_files_structure, tag_factory, example_pdf):
     """The tags of a file are returned in its JSON."""
-    tag_one = tag_factory()
-    tag_two = tag_factory()
+    tag_one = await tag_factory()
+    tag_two = await tag_factory()
     await files_lib.refresh_files()
     file_group: FileGroup = test_session.query(FileGroup).one()
 
@@ -37,7 +37,7 @@ async def test_tags_file_group_json(test_async_client, test_session, make_files_
 @pytest.mark.asyncio
 async def test_tags_model(test_async_client, test_session, make_files_structure, tag_factory, example_pdf):
     """Can get Tag using class methods."""
-    tag1 = tag_factory()
+    tag1 = await tag_factory()
     assert tag1.__json__()
 
     assert Tag.find_by_id(tag1.id)
@@ -63,7 +63,7 @@ async def test_tags_file_group(test_async_client, test_session, make_files_struc
     await files_lib.refresh_files()
     video_group: FileGroup = test_session.query(FileGroup).one()
 
-    tag_one = tag_factory()
+    tag_one = await tag_factory()
     assert len(tag_one.tag_files) == 0
 
     Tag.tag_file_group(video_group.id, tag_one.id)
@@ -71,7 +71,7 @@ async def test_tags_file_group(test_async_client, test_session, make_files_struc
     assert len(tag_one.tag_files) == 1
     assert sorted([i.tag.name for i in video_group.tag_files]) == ['one', ]
 
-    tag_two = tag_factory()
+    tag_two = await tag_factory()
     Tag.tag_file_group(video_group.id, tag_two.id)
     test_session.commit()
     assert len(tag_one.tag_files) == 1
@@ -95,8 +95,8 @@ async def test_tags_config_file(test_async_client, test_session, test_directory,
     await files_lib.refresh_files()
     pdf: FileGroup = FileGroup.get_by_path(example_pdf, test_session)
     video: FileGroup = FileGroup.get_by_path(video_file, test_session)
-    tag1 = tag_factory()
-    tag2 = tag_factory()
+    tag1 = await tag_factory()
+    tag2 = await tag_factory()
     test_session.commit()
 
     tags.save_tags_config(test_session)
@@ -172,11 +172,17 @@ async def test_tags_crud(test_async_client, test_session, example_pdf, assert_ta
         dict(name='ガーデン', color='#000000', id=1, file_group_count=1, zim_entry_count=0)]
     assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
+    # Tag color can be changed
+    content = dict(name='ガーデン', color='#ffffff')
+    request, response = await test_async_client.post('/api/tag/1', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert Tag.find_by_name('ガーデン').color == '#ffffff'
+
     # Conflicting names return an error.
     content = dict(name='ガーデン', color='#111111')
     request, response = await test_async_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
+    assert_tags_config(tags={'ガーデン': {'color': '#ffffff'}})
 
     # Cannot delete Tag that is used.
     request, response = await test_async_client.delete('/api/tag/1')
@@ -197,7 +203,7 @@ async def test_tags_crud(test_async_client, test_session, example_pdf, assert_ta
 async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
     """You cannot delete a FileGroup if it is tagged."""
     await files_lib.refresh_files()
-    tag = tag_factory()
+    tag = await tag_factory()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
     pdf.add_tag(tag.id)
@@ -277,7 +283,7 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     from modules.zim import lib as zim_lib
 
     # Create some tags, use tag1.
-    tag1, tag2, tag3, tag4 = tag_factory(), tag_factory(), tag_factory(), tag_factory()
+    tag1, tag2, tag3, tag4 = await tag_factory(), await tag_factory(), await tag_factory(), await tag_factory()
     # use tag1 for FileGroup.
     foo, = make_files_structure({'foo': 'text'})
     foo = FileGroup.from_paths(test_session, foo)
@@ -324,16 +330,13 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
 @pytest.mark.asyncio
 async def test_invalid_tag(test_async_client, test_session, test_directory):
     with pytest.raises(InvalidTag):
-        tags.upsert_tag('cannot use comma: ,', '#fff')
+        await tags.upsert_tag('cannot use comma: ,', '#fff')
 
     with pytest.raises(InvalidTag):
-        tags.upsert_tag('invalid color', 'foo')
+        await tags.upsert_tag('invalid color', 'foo')
 
     with pytest.raises(UnknownTag):
-        tags.upsert_tag('Tag ID does not exist', '#fff', 1)
-
-    with pytest.raises(UnknownTag):
-        tags.delete_tag(1)
+        await tags.upsert_tag('Tag ID does not exist', '#fff', 1)
 
 
 @pytest.mark.asyncio
@@ -347,7 +350,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
     (test_directory / 'tags/cannot be deleted').mkdir(parents=True)
     (test_directory / 'tags/cannot be deleted/because of this file').touch()
 
-    tag1, tag2 = tag_factory('First Aid'), tag_factory('Special/name')
+    tag1, tag2 = await tag_factory('First Aid'), await tag_factory('Special/name')
     vid1 = video_factory(with_video_file=test_directory / 'vid1.mp4', with_caption_file=True, with_info_json=True,
                          with_poster_ext='jpg')
     vid2 = video_factory(with_video_file=test_directory / 'vid2.mp4', with_info_json=True)
@@ -443,7 +446,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
 async def test_update_tag(test_async_client, test_session, test_directory, video_factory, tag_factory):
     """Linked files in the Tag Directory are moved when the tag is renamed."""
     # Create tagged Video.
-    tag = tag_factory()
+    tag = await tag_factory()
     video_factory(title='video', tag_names=[tag.name])
     test_session.commit()
 
@@ -453,10 +456,33 @@ async def test_update_tag(test_async_client, test_session, test_directory, video
     assert (test_directory / 'tags/one/video.mp4').is_file()
 
     # Invalid characters are replaced during rename.
-    tags.upsert_tag('new/name%', tag.color, tag.id)
+    await tags.upsert_tag('new/name%', tag.color, tag.id)
 
     # Video file was moved.
     assert (test_directory / 'tags').is_dir()
     assert (test_directory / 'videos/NO CHANNEL/video.mp4').is_file()
     assert not (test_directory / 'tags/one/video.mp4').exists()
     assert (test_directory / 'tags/new⧸name/video.mp4').is_file()
+
+
+@pytest.mark.asyncio
+async def test_tag_rename_with_channel(test_async_client, test_session, test_directory, video_factory, tag_factory,
+                                       channel_factory):
+    tag = await tag_factory()
+    channel = channel_factory(name='Channel Name', tag_name=tag.name)
+    video_factory(title='video', channel_id=channel.id)
+    test_session.commit()
+
+    assert (test_directory / 'tags').is_dir()
+    assert (test_directory / 'videos/one/Channel Name').is_dir()
+    assert (test_directory / 'videos/one/Channel Name/video.mp4').is_file()
+
+    await tag.update_tag('New Tag Name', None, session=test_session)
+
+    assert (test_directory / 'tags').is_dir()
+    assert (test_directory / 'videos/New Tag Name/Channel Name').is_dir()
+    assert (test_directory / 'videos/New Tag Name/Channel Name/video.mp4').is_file()
+
+    # Cannot delete Tag when used by Channel.  This prevents the need to move Channel directories when Tags are deleted.
+    with pytest.raises(UsedTag):
+        tag.delete()

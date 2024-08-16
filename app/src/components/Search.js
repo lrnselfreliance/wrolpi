@@ -1,15 +1,24 @@
 import React, {useState} from "react";
-import {Route, Routes, useNavigate} from "react-router-dom";
+import {Link, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useSearchDate, useSearchFilter} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimateFiles, searchEstimateZims, searchSuggestions} from "../api";
+import {searchEstimateFiles, searchEstimateOthers, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
-import {Button as SButton, Header as SHeader, Label} from "semantic-ui-react";
-import {Modal, ModalContent} from "./Theme";
-import {QueryContext} from "../contexts/contexts";
+import {
+    AccordionContent,
+    AccordionTitle,
+    Button as SButton,
+    Grid,
+    GridColumn,
+    GridRow,
+    Header as SHeader,
+    Label
+} from "semantic-ui-react";
+import {Accordion, Header, Icon, Loader, Modal, ModalContent, Segment} from "./Theme";
+import {QueryContext, ThemeContext} from "../contexts/contexts";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -128,6 +137,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
     const {data: filesData, sendRequest: sendFilesRequest, loading: filesLoading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
     const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
+    const {data: otherData, sendRequest: sendOtherRequest, loading: otherLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
         if (searchStr || (tagNames && tagNames.length > 0)) {
@@ -139,6 +149,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             }
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
+            sendOtherRequest(async () => await searchEstimateOthers(tagNames));
         }
     }, [
         searchStr,
@@ -178,6 +189,14 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             });
         }
     }, [setSuggestions, zimData]);
+
+    React.useEffect(() => {
+        if (!_.isEmpty(otherData)) {
+            setSuggestions((prevState) => {
+                return {...prevState, otherEstimates: otherData.others}
+            });
+        }
+    }, [setSuggestions, otherData]);
 
     return {suggestions, loading: generalLoading || zimLoading || filesLoading}
 }
@@ -269,6 +288,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             }
         }
 
+        const otherSum = suggestions.otherEstimates ? _.sum(Object.values(suggestions.otherEstimates)) : 0;
+
         const matchingApps = SUGGESTED_APPS.filter(i =>
             i.title.toLowerCase().includes(lowerSearchStr)
             || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr)
@@ -283,6 +304,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
         setSuggestionsSums({
             fileGroups: newSuggestions.fileGroups,
             zims: zimSum,
+            otherSum: otherSum,
             channels: newSuggestions.channels.length,
             domains: newSuggestions.domains.length,
             tags: matchingTags?.length,
@@ -342,10 +364,12 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
 
     const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
+    const othersTabName = <span>Other <Label>{normalizeEstimate(suggestionsSums?.otherSum)}</Label></span>;
 
     const links = [
         {text: filesTabName, to: '/search', key: 'filesSearch_', end: true},
         {text: zimsTabName, to: '/search/zim', key: 'zimsSearch'},
+        {text: othersTabName, to: '/search/other', key: 'othersSearch'},
     ];
 
     return <React.Fragment>
@@ -353,6 +377,7 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
         <Routes>
             <Route path='/*' element={<FilesSearchView/>}/>
             <Route path='/zim' exact element={<ZimSearchView suggestions={suggestions} loading={loading}/>}/>
+            <Route path='/other' exact element={<OtherSearchView loading={loading}/>}/>
         </Routes>
     </React.Fragment>
 }
@@ -402,4 +427,59 @@ export function SearchIconButton() {
             </ModalContent>
         </Modal>
     </React.Fragment>
+}
+
+function SearchChannelPreview({channel}) {
+    const {t} = React.useContext(ThemeContext);
+
+    return <GridRow {...t}>
+        <GridColumn>
+            <Link to={`/videos/channel/${channel.id}/video`}>
+                {channel.name}
+            </Link>
+        </GridColumn>
+    </GridRow>
+}
+
+function OtherSearchView({loading}) {
+    const {searchParams} = React.useContext(QueryContext);
+    const [activeIndex, setActiveIndex] = React.useState(0);
+    const activeTags = searchParams.getAll('tag');
+    const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
+
+    const handleClick = (newIndex) => {
+        console.log('newIndex', newIndex, 'activeIndex', activeIndex);
+        setActiveIndex(activeIndex === newIndex ? null : newIndex);
+    }
+
+    if (loading || channelsLoading) {
+        return <Accordion>
+            <Segment><Loader active/></Segment>
+        </Accordion>
+    }
+
+    const channelsAccordion = <React.Fragment>
+        <AccordionTitle
+            index={0}
+            active={activeIndex === 0}
+            onClick={() => handleClick(0)}
+        >
+            <Header as='h3'>
+                <Icon name='dropdown'/>
+                Channels
+                <Label>{normalizeEstimate(channels.length)}</Label>
+            </Header>
+        </AccordionTitle>
+        <AccordionContent active={activeIndex === 0}>
+            <Grid>
+                {!_.isEmpty(channels) ?
+                    channels.map(i => <SearchChannelPreview channel={i}/>)
+                    : 'No Channels'}
+            </Grid>
+        </AccordionContent>
+    </React.Fragment>;
+
+    return <Accordion>
+        {channelsAccordion}
+    </Accordion>
 }

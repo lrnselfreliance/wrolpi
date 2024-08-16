@@ -901,3 +901,18 @@ def test_html_screenshot(singlefile_contents_factory):
 ])
 def test_is_valid_hex_color(color, expected):
     assert common.is_valid_hex_color(color) == expected
+
+
+@pytest.mark.parametrize('iterable,predicate,expected', [
+    ((1, 2, 2, 3, 4), lambda i: i, (1, 2, 3, 4)),
+    ([1, 1, 2, 3, 3, 3, 3, 4], None, [1, 2, 3, 4]),
+    ([1, 1, 2, 2, 3, 4, 5, 6, 7, 8], lambda i: i % 2, [1, 2]),
+    (['apple', 'banana', 'pear', 'kiwi', 'plum', 'peach'], lambda i: len(i), ['apple', 'banana', 'pear']),
+    (
+            [pathlib.Path('foo.txt'), pathlib.Path('foo.mp4'), pathlib.Path('bar.txt')],
+            lambda i: i.stem,
+            [pathlib.Path('foo.txt'), pathlib.Path('bar.txt')]
+    ),
+])
+def test_unique_by_predicate(iterable, predicate, expected):
+    assert common.unique_by_predicate(iterable, predicate) == expected

@@ -54,7 +54,9 @@ class Tag(ModelHelper, Base):
     color = Column(String)
 
     tag_files: List[TagFile] = relationship('TagFile', back_populates='tag', cascade='all')
-    tag_zim_entries: List[TagFile] = relationship('TagZimEntry', back_populates='tag', cascade='all')
+    tag_zim_entries: List = relationship('TagZimEntry', back_populates='tag', cascade='all')
+    channels: List = relationship('Channel', primaryjoin='Tag.id==Channel.tag_id', back_populates='tag',
+                                  cascade='all')
 
     def __repr__(self):
         name = self.name
@@ -148,27 +150,71 @@ class Tag(ModelHelper, Base):
 
     def has_relations(self) -> bool:
         """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
-        return bool(self.tag_files or self.tag_zim_entries)
+        return bool(any(self.tag_files) or any(self.tag_zim_entries) or any(self.channels))
 
-    def update_tag(self, name: str, color: str, session: Session):
+    async def update_tag(self, name: str, color: str | None, session: Session):
         """Change name/color of tag.  Ensures safeness of new values, checks for conflicts."""
         if ',' in name:
             raise InvalidTag('Tag name cannot have comma')
-        if not is_valid_hex_color(color):
+        if color and not is_valid_hex_color(color):
             raise InvalidTag('Tag color is invalid')
 
-        # Replace forward-slash (linux directories) with unicode Big Solidus (U+29F8)
+        # Replace forward-slash (linux directories) with Unicode Big Solidus (U+29F8)
         name = name.replace('/', '⧸')
         name = INVALID_FILE_CHARS.sub('', name)
 
-        if Tag.get_by_name(name, session):
+        if (other := self.get_by_name(name, session)) and other.id != self.id:
             raise InvalidTag('Tag name already taken')
 
         if flags.refreshing.is_set():
             raise RefreshConflict('Refusing to rename tag while file refresh is in progress')
 
+        old_name = self.name
         self.name = name
-        self.color = color
+        self.color = color or self.color
+        if Session.object_session(self):
+            self.flush()
+
+        from modules.videos.models import Channel
+        from modules.videos.errors import ChannelDirectoryConflict
+
+        async def _():
+            for channel in self.channels:
+                channel: Channel
+                possible_directory = channel.format_directory(old_name)
+                if channel.directory == possible_directory:
+                    # Channel is in this Tag's old directory, move the Channel to the new directory.
+                    new_directory = channel.format_directory(name)
+                    try:
+                        new_directory.mkdir(parents=True)
+                    except FileExistsError:
+                        raise ChannelDirectoryConflict(f'Channel directory already exists: {new_directory}')
+
+                    # Move the files of the Channel.
+                    await channel.move_channel(new_directory, session)
+                else:
+                    msg = f"Not moving Channel because it is not in this Tag's old directory:" \
+                          f" {channel} {possible_directory} {self}"
+                    logger.warning(msg)
+
+        if PYTEST:
+            await _()
+        else:
+            background_task(_())
+
+    def delete(self):
+        """Deletes this Tag, if it is unused.
+
+        @warning: Commits and saves configs"""
+        if self.has_relations():
+            raise UsedTag(f'Cannot delete {self.name} it is used')
+
+        session = Session.object_session(self)
+        session.delete(self)
+        session.commit()
+
+        save_tags_config(session)
+        sync_tags_directory(session)
 
 
 class TagsConfig(ConfigFile):
@@ -394,15 +440,16 @@ def get_tags() -> List[dict]:
 
 @optional_session
 @run_after(save_tags_config)
-def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
+async def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
     if tag_id:
         tag = Tag.find_by_id(tag_id, session)
-        tag.update_tag(name, color, session)
-        tag.flush()
+        await tag.update_tag(name, color, session)
     else:
         tag = Tag()
-        tag.update_tag(name, color, session)
+        await tag.update_tag(name, color, session)
         session.add(tag)
+
+    tag.flush()
 
     try:
         session.commit()
@@ -411,24 +458,10 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
         session.rollback()
         raise InvalidTag(f'Name already taken') from e
 
-    save_tags_config()
-    sync_tags_directory()
+    save_tags_config(session)
+    sync_tags_directory(session)
 
     return tag
-
-
-@optional_session
-def delete_tag(tag_id: int, session: Session = None):
-    tag = Tag.find_by_id(tag_id, session)
-
-    if tag.has_relations():
-        raise UsedTag(f'Cannot delete {tag.name} it is used')
-
-    session.delete(tag)
-    session.commit()
-
-    save_tags_config()
-    sync_tags_directory()
 
 
 @optional_session

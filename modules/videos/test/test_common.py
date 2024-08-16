@@ -135,10 +135,12 @@ def test_generate_video_poster(video_file):
 
 
 @pytest.mark.asyncio
-async def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config):
+async def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config,
+                                        tag_factory):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
     channel2 = channel_factory(source_id='bar', url='https://example.com/channel2')
+    tag = await tag_factory()
     assert len(test_session.query(Channel).all()) == 2
     test_session.commit()
 
@@ -228,8 +230,19 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     assert {i.url for i in channel1.downloads} == {'https://example.com/channel1'}
     assert {i.url for i in channel2.downloads} == {'https://example.com/channel2', 'https://example.org'}
 
+    # A Channel with a `tag_name` is tagged.
+    update_channel_config(get_channels_config(),
+                          channel1.source_id,
+                          {'tag_name': tag.name})
+    import_channels_config()
+    channel1, channel2 = test_session.query(Channel).order_by(Channel.url).all()
+    assert channel1.tag == tag and channel1.tag_id == tag.id
+    assert channel2.tag is None and channel2.tag_id is None
 
-def test_import_channel_delete_missing_channels(test_session, channel_factory, test_channels_config):
+
+@pytest.mark.asyncio
+async def test_import_channel_delete_missing_channels(
+        test_async_client, test_session, channel_factory, test_channels_config):
     """The Channel import function deletes any Channels that are not in the config."""
     # Create a DB and config with two Channels.
     channel1 = channel_factory(source_id='foo')
@@ -266,32 +279,6 @@ def test_import_channel_delete_missing_channels(test_session, channel_factory, t
     import_channels_config()
     assert str(channel1.directory) in test_channels_config.read_text()
     assert str(channel2.directory) not in test_channels_config.read_text()
-
-
-def test_check_for_video_corruption(video_file, test_directory):
-    # The test video is not corrupt.
-    assert common.check_for_video_corruption(video_file) is False
-
-    # An empty file is corrupt.
-    empty_file = test_directory / 'empty file.mp4'
-    empty_file.touch()
-    assert common.check_for_video_corruption(empty_file) is True
-
-    # A video file must be complete.
-    truncated_video = test_directory / 'truncated_video.mp4'
-    with truncated_video.open('wb') as fh:
-        fh.write(video_file.read_bytes()[:10000])
-    assert common.check_for_video_corruption(truncated_video) is True
-
-    # Check for specific ffprobe errors.
-    with mock.patch('modules.videos.common.subprocess') as mock_subprocess:
-        # `video_file` is ignored for these calls.
-        mock_subprocess.run().stderr = b'Something\nInvalid NAL unit size'
-        assert common.check_for_video_corruption(video_file) is True
-        mock_subprocess.run().stderr = b'Something\nError splitting the input into NAL units'
-        assert common.check_for_video_corruption(video_file) is True
-        mock_subprocess.run().stderr = b'Some stderr is fine'
-        assert common.check_for_video_corruption(video_file) is False
 
 
 @pytest.mark.asyncio

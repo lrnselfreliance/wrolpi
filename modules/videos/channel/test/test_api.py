@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pathlib
+import shutil
 import tempfile
 from datetime import timedelta
 from http import HTTPStatus
@@ -96,7 +97,8 @@ def test_video_file_name(test_session, simple_video, test_client):
     assert resp.json['file_group']['video'].get('stem') == 'simple_video'
 
 
-def test_channel_conflicts(test_client, test_session, test_directory):
+@pytest.mark.asyncio
+async def test_channel_conflicts(test_async_client, test_session, test_directory):
     channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory).mkdir()
     new_channel = dict(
@@ -105,11 +107,11 @@ def test_channel_conflicts(test_client, test_session, test_directory):
         url='https://example.com/channel1',
     )
 
-    def _post_channel(channel):
-        return test_client.post('/api/videos/channels', content=json.dumps(channel))
+    async def _post_channel(channel):
+        return await test_async_client.post('/api/videos/channels', content=json.dumps(channel))
 
     # Create it
-    request, response = _post_channel(new_channel)
+    request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.CREATED
 
     # Name is an exact match
@@ -119,7 +121,7 @@ def test_channel_conflicts(test_client, test_session, test_directory):
         directory=channel_directory2,
         name='Example Channel 1',
     )
-    request, response = _post_channel(new_channel)
+    request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_NAME_CONFLICT',
                                        'error': 'The channel name is already taken.',
@@ -133,7 +135,7 @@ def test_channel_conflicts(test_client, test_session, test_directory):
         directory=channel_directory,
         name='name is fine',
     )
-    request, response = _post_channel(new_channel)
+    request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_DIRECTORY_CONFLICT',
                                        'error': 'The directory is already used by another channel.',
@@ -150,7 +152,7 @@ def test_channel_conflicts(test_client, test_session, test_directory):
         name='name is fine',
         url='https://example.com/channel1',
     )
-    request, response = _post_channel(new_channel)
+    request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_URL_CONFLICT',
                                        'error': 'The URL is already used by another channel.',
@@ -384,7 +386,8 @@ def test_search_videos_channel(test_client, test_session, video_factory):
                          dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
-def test_get_channel_videos_pagination(test_session, simple_channel, video_factory, assert_video_search):
+@pytest.mark.asyncio
+async def test_get_channel_videos_pagination(test_session, simple_channel, video_factory, assert_video_search):
     for i in range(50):
         video_factory(channel_id=simple_channel.id)
 
@@ -406,8 +409,9 @@ def test_get_channel_videos_pagination(test_session, simple_channel, video_facto
     ]
     last_ids = []
     for offset, video_count in tests:
-        _, response = assert_video_search(channel_id=simple_channel.id, order_by='published_datetime', offset=offset,
-                                          limit=20)
+        _, response = await assert_video_search(channel_id=simple_channel.id, order_by='published_datetime',
+                                                offset=offset,
+                                                limit=20)
         assert len(response.json['file_groups']) == video_count, 'Returned videos does not match'
         current_ids = [i['id'] for i in response.json['file_groups']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
@@ -416,7 +420,7 @@ def test_get_channel_videos_pagination(test_session, simple_channel, video_facto
 
 @pytest.mark.asyncio
 async def test_create_channel_download_api(test_async_client, test_session, simple_channel, tag_factory):
-    tag = tag_factory()
+    tag = await tag_factory()
 
     # Create Download.
     body = {'url': 'https://example.com/1', 'frequency': 42, 'settings': {'title_include': ''}}
@@ -465,7 +469,7 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     videos_directory = get_videos_directory()
     channel = channel_factory(name='Channel Name', download_frequency=120)
     channel_directory = channel.directory
-    tag = tag_factory('Tag Name')
+    tag = await tag_factory('Tag Name')
     v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
     # Create recurring download which uses the Channel's directory.
     download = download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
@@ -532,7 +536,7 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
     assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
 
-    # Channel can be Tagged, but not move directories.
+    # Channel can be Tagged, without moving directories.
     body = dict(tag_name=tag.name)
     request, response = await test_async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
@@ -545,3 +549,79 @@ async def test_tag_channel(test_async_client, test_session, test_directory, chan
     d1, d2 = test_session.query(Download).all()
     assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
     assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+
+
+@pytest.mark.asyncio
+async def test_move_channel(test_async_client, test_session, test_directory, channel_factory, tag_factory,
+                            video_factory, test_channels_config, test_download_manager, test_downloader):
+    """A Channel can be moved."""
+    channel = channel_factory(name='Channel Name')
+    vid1 = video_factory(channel_id=channel.id)
+    vid2 = video_factory(channel_id=channel.id)
+    test_session.commit()
+
+    assert str(channel.directory) == str(test_directory / 'videos/Channel Name')
+    assert str(vid1.video_path).startswith(str(test_directory / 'videos/Channel Name/'))
+    assert str(vid2.video_path).startswith(str(test_directory / 'videos/Channel Name/'))
+
+    body = dict(
+        name=channel.name,
+        directory=str(test_directory / 'videos/New Directory'),
+    )
+    request, response = await test_async_client.put(f'/api/videos/channels/{channel.id}', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
+    channel = Channel.find_by_id(channel.id)
+    assert str(channel.directory) == str(test_directory / 'videos/New Directory')
+    assert str(vid1.video_path).startswith(str(test_directory / 'videos/New Directory/'))
+    assert str(vid2.video_path).startswith(str(test_directory / 'videos/New Directory/'))
+
+
+@pytest.mark.asyncio
+async def test_move_channel_after_terminal_move(test_async_client, test_session, test_directory, channel_factory,
+                                                tag_factory, video_factory, test_channels_config, test_download_manager,
+                                                test_downloader):
+    """A Channel can be moved in the UI after being moved in the Terminal."""
+    channel = channel_factory(name='Channel Name')
+    vid1 = video_factory(channel_id=channel.id)
+    test_session.commit()
+
+    assert str(channel.directory) == str(test_directory / 'videos/Channel Name')
+    assert str(vid1.video_path).startswith(str(test_directory / 'videos/Channel Name/'))
+
+    # mv 'videos/Channel Name' 'videos/New Directory'
+    shutil.move(channel.directory, test_directory / 'videos/New Directory')
+
+    body = dict(
+        name=channel.name,
+        directory=str(test_directory / 'videos/New Directory'),
+    )
+    request, response = await test_async_client.put(f'/api/videos/channels/{channel.id}', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
+    channel = Channel.find_by_id(channel.id)
+    vid1 = test_session.query(Video).one()
+    assert str(channel.directory) == str(test_directory / 'videos/New Directory')
+    assert str(vid1.video_path).startswith(str(test_directory / 'videos/New Directory/'))
+
+
+@pytest.mark.asyncio
+async def test_search_tagged_channels(test_async_client, test_session, channel_factory, tag_factory,
+                                     video_factory):
+    """Tagged Channels can be searched."""
+    tag = await tag_factory()
+    test_session.commit()
+
+    # Can search when empty.
+    body = dict(tag_names=[tag.name])
+    request, response = await test_async_client.post('/api/videos/channels/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['channels']) == 0, 'No Channels should be tagged'
+
+    channel1 = channel_factory(tag_name=tag.name)
+    channel2 = channel_factory()
+    test_session.commit()
+
+    body = dict(tag_names=[tag.name])
+    request, response = await test_async_client.post('/api/videos/channels/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['channels']) == 1, 'Only one Channel is tagged'
+    assert response.json['channels'][0]['id'] == channel1.id

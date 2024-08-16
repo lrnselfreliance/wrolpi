@@ -8,16 +8,17 @@ from modules.zim.models import Zim
 from wrolpi.downloader import Download
 
 
-def test_zim_search(test_client, test_session, test_zim, tag_factory, assert_zim_search):
+@pytest.mark.asyncio
+async def test_zim_search(test_async_client, test_session, test_zim, tag_factory, assert_zim_search):
     """Entries can be tagged and retrieved using their containing Zim."""
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
     test_zim.tag_entry(tag1.name, 'one')
     test_zim.tag_entry(tag2.name, 'one')
     test_zim.tag_entry(tag1.name, 'two')
     test_session.commit()
 
     # Test searching with only `search_str`.
-    assert_zim_search('one', 1, {
+    await assert_zim_search('one', 1, {
         'path': test_zim.path,
         'search': [
             # Entry "One" contains a 'one' in the title, and the text.
@@ -27,13 +28,13 @@ def test_zim_search(test_client, test_session, test_zim, tag_factory, assert_zim
         ],
         'estimate': 2,
     })
-    assert_zim_search('two', 1, {
+    await assert_zim_search('two', 1, {
         'path': test_zim.path,
         'search': [{'path': 'two', 'headline': 'This is the second item', 'rank': 0.06079271},
                    {'path': 'home', 'headline': 'testing.\nOne\n<b>Two</b>', 'rank': 0.06079271}],
         'estimate': 2,
     })
-    assert_zim_search('item', 1, {
+    await assert_zim_search('item', 1, {
         'path': test_zim.path,
         'search': [{'path': 'one', 'headline': 'first <b>item</b>', 'rank': 0.06079271},
                    {'path': 'two', 'headline': 'second <b>item</b>', 'rank': 0.06079271}],
@@ -41,35 +42,35 @@ def test_zim_search(test_client, test_session, test_zim, tag_factory, assert_zim
     })
 
     # Test searching with `search_str` and `tag_names`.
-    assert_zim_search('one', 1, tag_names=[tag2.name, ], expected={
+    await assert_zim_search('one', 1, tag_names=[tag2.name, ], expected={
         'search': [
             # Only entry "One" is tagged with Tag 2.
             {'path': 'one', 'headline': 'This is the first item', 'rank': 0.06079271},
         ],
         'estimate': 1,
     })
-    assert_zim_search('one', 1, tag_names=[tag1.name, tag2.name], expected={
+    await assert_zim_search('one', 1, tag_names=[tag1.name, tag2.name], expected={
         'search': [
             # Only "One" is tagged with Tag 1 and contains "one".
             {'path': 'one', 'headline': 'This is the first item', 'rank': 0.06079271},
         ],
         'estimate': 1,
     })
-    assert_zim_search('two', 1, tag_names=[tag1.name, ], expected={
+    await assert_zim_search('two', 1, tag_names=[tag1.name, ], expected={
         'search': [
             # Only "Two" was tagged with Tag 1 and contains "two".
             {'path': 'two', 'headline': 'This is the second item', 'rank': 0.06079271},
         ],
         'estimate': 1,
     })
-    assert_zim_search('two', 1, tag_names=[tag2.name, ], expected={
+    await assert_zim_search('two', 1, tag_names=[tag2.name, ], expected={
         # Two was not tagged with Tag 1.
         'search': [],
         'estimate': 0,
     })
 
     # Test search with only `tag_names`.
-    assert_zim_search('', 1, tag_names=[tag1.name, tag2.name], expected={
+    await assert_zim_search('', 1, tag_names=[tag1.name, tag2.name], expected={
         'search': [
             # Return all entries that are tagged with the Tags.
             {'path': 'one', 'headline': 'This is the first item', 'rank': 0.0, 'tag_names': ['one', 'two']},
@@ -78,9 +79,10 @@ def test_zim_search(test_client, test_session, test_zim, tag_factory, assert_zim
     })
 
 
-def test_entries_by_tag(test_client, test_session, test_zim, tag_factory):
+@pytest.mark.asyncio
+async def test_entries_by_tag(test_async_client, test_session, test_zim, tag_factory):
     """Entries can be tagged and retrieved using their containing Zim."""
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
     test_zim.tag_entry(tag1.name, 'one')
     test_zim.tag_entry(tag2.name, 'one')
     test_zim.tag_entry(tag1.name, 'two')
@@ -96,36 +98,38 @@ def test_entries_by_tag(test_client, test_session, test_zim, tag_factory):
     assert [(i.path, i.title) for i in result] == [('one', 'One'), ]
 
 
-def test_zim_crud(test_client, test_session, test_directory, test_zim):
-    request, response = test_client.get('/api/zim')
+@pytest.mark.asyncio
+async def test_zim_crud(test_async_client, test_session, test_directory, test_zim):
+    request, response = await test_async_client.get('/api/zim')
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['zims']) == 1
     assert response.json['zims'][0]['path'] == test_zim.path.name
 
-    request, response = test_client.delete('/api/zim/1')
+    request, response = await test_async_client.delete('/api/zim/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not test_zim.path.exists()
     assert test_session.query(Zim).count() == 0
 
 
-def test_zim_tag_and_untag(test_client, test_session, test_zim, tag_factory):
+@pytest.mark.asyncio
+async def test_zim_tag_and_untag(test_async_client, test_session, test_zim, tag_factory):
     """Zim entries can be Tagged and Untagged."""
-    tag1, tag2 = tag_factory(), tag_factory()
+    tag1, tag2 = await tag_factory(), await tag_factory()
     test_session.commit()
 
     # Entries can be tagged in the API.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = test_client.post('/api/zim/tag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/zim/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     # Entries can be untagged in the API.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = test_client.post('/api/zim/untag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/zim/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Cannot untag twice.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = test_client.post('/api/zim/untag', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/zim/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 

@@ -4,7 +4,7 @@ import os.path
 import pathlib
 import traceback
 from abc import ABC
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
@@ -64,6 +64,7 @@ def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
     dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
+    file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
     return f'{dir_name}/{file_name}'
 
@@ -241,8 +242,8 @@ class VideoDownloader(Downloader, ABC):
 
         # Video may have been downloaded previously, get its location for error reporting.
         with get_db_session() as session:
-            videos = session.query(Video).join(FileGroup).filter_by(url=url).all()
-            location = videos[0].location if videos else None
+            video_ = Video.get_by_url(url, session)
+            location = video_.location if video_ else None
 
         try:
             download.info_json = download.info_json or extract_info(url)
@@ -257,62 +258,7 @@ class VideoDownloader(Downloader, ABC):
         if not download.info_json:
             raise ValueError(f'Cannot download video with no info_json.')
 
-        found_channel = None
-
-        # Look for Channel using channel data first, fallback to uploader data.
-        channel_name = download.info_json.get('channel') or download.info_json.get('uploader')
-        channel_source_id = download.info_json.get('channel_id') or download.info_json.get('uploader_id')
-        channel_url = download.info_json.get('channel_url') or download.info_json.get('uploader_url')
-        channel = None
-        if channel_name or channel_source_id or channel_url:
-            # Try to find the channel via info_json from yt-dlp.
-            try:
-                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name)
-                if channel:
-                    found_channel = 'yt_dlp'
-                    logger.debug(f'Found a channel with source_id {channel=}')
-            except UnknownChannel:
-                # Can't find a channel, use the no channel directory.
-                pass
-
-        settings = download.settings or dict()
-        destination = settings.get('destination')
-        if not channel and destination:
-            # Destination may find Channel if not already found.
-            try:
-                channel = get_channel(directory=destination, return_dict=False)
-                found_channel = 'download_settings_directory'
-                logger.debug(f'Found a channel that shares the destination directory {channel=}')
-            except UnknownChannel:
-                # Destination must not be a channel.
-                pass
-
-        local_channel_id = settings.get('channel_id')
-        channel_url = settings.get('channel_url')
-        if not channel and (local_channel_id or channel_url):
-            # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
-            logger.info(f'Using download.settings to find channel')
-            try:
-                channel = get_channel(channel_id=local_channel_id, url=channel_url, return_dict=False)
-                logger.debug(f'Found channel with channel url {channel=}')
-            except UnknownChannel:
-                # We do not need a Channel if we have a destination directory.
-                if not destination:
-                    raise
-            if channel:
-                found_channel = 'download_settings'
-
-        channel_id = channel.id if channel else None
-        channel_directory = channel.directory if channel else None
-
-        if found_channel == 'yt_dlp':
-            logger.debug(f'Found {channel} using yt_dlp')
-        elif found_channel == 'download_settings':
-            logger.info(f'Found {channel} using Download.settings')
-        elif found_channel == 'download_settings_directory':
-            logger.info(f'Found {channel} using Download.settings directory')
-        else:
-            logger.warning('Could not find channel')
+        channel, channel_directory, channel_id, destination, settings = await self._get_channel(download)
 
         if destination:
             # Download to the directory specified in the settings.
@@ -479,6 +425,63 @@ class VideoDownloader(Downloader, ABC):
             location=location,
         )
         return result
+
+    @staticmethod
+    async def _get_channel(download: Download) \
+            -> Tuple[Optional[Channel], Optional[pathlib.Path], Optional[int], Optional[pathlib.Path], dict]:
+        found_channel = None
+        # Look for Channel using channel data first, fallback to uploader data.
+        channel_name = download.info_json.get('channel') or download.info_json.get('uploader')
+        channel_source_id = download.info_json.get('channel_id') or download.info_json.get('uploader_id')
+        channel_url = download.info_json.get('channel_url') or download.info_json.get('uploader_url')
+        channel = None
+        if channel_name or channel_source_id or channel_url:
+            # Try to find the channel via info_json from yt-dlp.
+            try:
+                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name)
+                if channel:
+                    found_channel = 'yt_dlp'
+                    logger.debug(f'Found a channel with source_id {channel=}')
+            except UnknownChannel:
+                # Can't find a channel, use the no channel directory.
+                pass
+        settings = download.settings or dict()
+        destination = settings.get('destination')
+        if not channel and destination:
+            # Destination may find Channel if not already found.
+            try:
+                channel = get_channel(directory=destination, return_dict=False)
+                found_channel = 'download_settings_directory'
+                logger.debug(f'Found a channel that shares the destination directory {channel=}')
+            except UnknownChannel:
+                # Destination must not be a channel.
+                pass
+        channel_id = settings.get('channel_id')
+        channel_url = settings.get('channel_url')
+        if not channel and (channel_id or channel_url):
+            # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
+            logger.info(f'Using download.settings to find channel')
+            try:
+                channel = get_channel(channel_id=channel_id, url=channel_url, return_dict=False)
+                logger.debug(f'Found channel with channel url {channel=}')
+            except UnknownChannel:
+                # We do not need a Channel if we have a destination directory.
+                if not destination:
+                    raise
+            if channel:
+                found_channel = 'download_settings'
+        channel_id = channel.id if channel else None
+        channel_directory = channel.directory if channel else None
+        if found_channel == 'yt_dlp':
+            logger.debug(f'Found {channel} using yt_dlp')
+        elif found_channel == 'download_settings':
+            logger.info(f'Found {channel} using Download.settings')
+        elif found_channel == 'download_settings_directory':
+            logger.info(f'Found {channel} using Download.settings directory')
+        else:
+            logger.warning('Could not find channel')
+
+        return channel, channel_directory, channel_id, destination, settings
 
     @staticmethod
     def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:

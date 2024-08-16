@@ -243,6 +243,7 @@ function VideosStatistics() {
         {key: 'month', label: 'Downloads Past Month'},
         {key: 'year', label: 'Downloads Past Year'},
         {key: 'sum_duration', label: 'Total Duration'},
+        {key: 'censored_videos', label: 'Censored Videos'},
     ];
     const commentsNames = [
         {key: 'have_comments', label: 'Have Comments'},
@@ -255,6 +256,7 @@ function VideosStatistics() {
     ];
     const channelNames = [
         {key: 'channels', label: 'Channels'},
+        {key: 'tagged_channels', label: 'Tagged Channels'},
     ];
 
     const buildSegment = (title, names, stats) => {

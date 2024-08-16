@@ -10,7 +10,6 @@ from wrolpi.dates import now
 logger = logger.getChild(__name__)
 
 HISTORY_SIZE = 100
-EVENTS_LOCK = multiprocessing.Lock()
 
 
 class Events:
@@ -79,6 +78,14 @@ class Events:
     def send_shutdown_failed(message: str = None):
         send_event('shutdown_failed', message, subject='shutdown')
 
+    @staticmethod
+    def send_file_move_completed(message: str = None):
+        send_event('file_move_completed', message, subject='refresh')
+
+    @staticmethod
+    def send_file_move_failed(message: str = None):
+        send_event('file_move_failed', message, subject='refresh')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'
@@ -93,7 +100,7 @@ def log_event(event: str, message: str = None, action: str = None, subject: str 
 
 def send_event(event: str, message: str = None, action: str = None, subject: str = None, url: str = None):
     from wrolpi.api_utils import api_app
-    EVENTS_LOCK.acquire()
+    api_app.shared_ctx.events_lock.acquire()
     try:
         # All events will be in time order, they should never be at the exact same time.
         dt = now()
@@ -112,7 +119,7 @@ def send_event(event: str, message: str = None, action: str = None, subject: str
         while len(api_app.shared_ctx.events_history) > HISTORY_SIZE:
             api_app.shared_ctx.events_history.pop(0)
     finally:
-        EVENTS_LOCK.release()
+        api_app.shared_ctx.events_lock.release()
 
     log_event(event, message, action, subject)
 

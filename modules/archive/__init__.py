@@ -49,17 +49,20 @@ class ArchiveDownloader(Downloader, ABC):
             singlefile, readability, screenshot = await self.do_archive(download)
 
         archive: Archive = await lib.model_archive_result(download.url, singlefile, readability, screenshot)
+        archive_id = archive.id
 
-        if download.settings and (tag_names := download.settings.get('tag_names')):
-            for name in tag_names:
-                archive.add_tag(name)
+        with get_db_session() as session:
+            archive = Archive.find_by_id(archive_id, session)
+            if download.settings and (tag_names := download.settings.get('tag_names')):
+                for name in tag_names:
+                    archive.add_tag(name, session)
 
-            if session := Session.object_session(archive):
-                session.commit()
+                if session := Session.object_session(archive):
+                    session.commit()
 
-        logger.info(f'Successfully downloaded Archive {download.url} {archive}')
+            logger.info(f'Successfully downloaded Archive {download.url} {archive}')
 
-        return DownloadResult(success=True, location=f'/archive/{archive.id}')
+            return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
     @optional_session
     def already_downloaded(self, *urls: List[str], session: Session = None) -> List:

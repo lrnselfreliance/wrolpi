@@ -53,7 +53,7 @@ class FileDownloader(Downloader, ABC):
             await download_file(download.url, output_path, info)
 
             with get_db_session(commit=True) as session:
-                fg = await upsert_file(output_path, session, download.settings.get('tag_names'))
+                fg = await upsert_file(output_path, session=session, tag_names=download.settings.get('tag_names'))
                 location = fg.location
 
             return DownloadResult(

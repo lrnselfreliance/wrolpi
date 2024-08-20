@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Dict
 
 import jc
 
@@ -382,6 +382,18 @@ IGNORED_DISK_NAMES = (
 )
 
 
+def _calculate_bytes_per_second(old_stats: dict, new_stats: dict) -> Dict[str, int]:
+    """Calculate the bytes-per-second between the oldest and newest tick."""
+    old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_recv'], old_stats['bytes_sent']
+    new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_recv'], new_stats['bytes_sent']
+    elapsed = int(new_now - old_now)
+    if elapsed == 0:
+        return dict(bytes_recv_ps=0, bytes_sent_ps=0, elapsed=0)
+    bytes_recv_ps = int((new_recv - old_recv) // elapsed)
+    bytes_sent_ps = int((new_sent - old_sent) // elapsed)
+    return dict(bytes_recv_ps=bytes_recv_ps, bytes_sent_ps=bytes_sent_ps, elapsed=elapsed)
+
+
 def _get_nic_counters() -> dict:
     """
     Get the instant network statistics for the provided NIC.
@@ -389,7 +401,7 @@ def _get_nic_counters() -> dict:
     timestamp = now().timestamp()
     counters = dict()
     if_stats = psutil.net_if_stats()
-    for name, counter in psutil.net_io_counters(pernic=True, nowrap=True).items():
+    for name, counter in sorted(psutil.net_io_counters(pernic=True, nowrap=True).items(), key=lambda i: i[0]):
         if name in IGNORED_NIC_NAMES:
             continue
         stats = if_stats[name]
@@ -403,9 +415,20 @@ def _get_nic_counters() -> dict:
     return counters
 
 
+async def get_nic_counters(shared_status):
+    new_nic_stats = _get_nic_counters()
+    old_nic_stats = shared_status['nic_bandwidth_stats']
+    nic_bandwidth_stats = dict()
+    for name, old_stats in old_nic_stats.items():
+        new_stats = new_nic_stats[name]
+        new_stats.update(_calculate_bytes_per_second(old_stats, new_stats))
+        nic_bandwidth_stats[name] = new_stats
+    return nic_bandwidth_stats
+
+
 def _get_disk_counters() -> dict:
     """
-    Get the instant disk statistics for the provided NIC.
+    Get the instant disk statistics for the all disks.
     """
     timestamp = now().timestamp()
     counters = dict()
@@ -427,16 +450,21 @@ def _get_disk_counters() -> dict:
     return counters
 
 
-def _calculate_bytes_per_second(old_stats: dict, new_stats: dict) -> Tuple[int, int, int]:
-    """Calculate the bytes-per-second between the oldest and newest tick."""
-    old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_recv'], old_stats['bytes_sent']
-    new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_recv'], new_stats['bytes_sent']
-    elapsed = int(new_now - old_now)
-    if elapsed == 0:
-        return 0, 0, 0
-    bytes_recv_ps = int((new_recv - old_recv) // elapsed)
-    bytes_sent_ps = int((new_sent - old_sent) // elapsed)
-    return bytes_recv_ps, bytes_sent_ps, elapsed
+async def get_disk_counters(shared_status):
+    """Get stats about bandwidth per disk."""
+    new_disk_stats = _get_disk_counters()
+    old_disk_stats = shared_status['disk_bandwidth_stats']
+    disk_bandwidth_stats = dict()
+    for name, old_stats in old_disk_stats.items():
+        new_stats = new_disk_stats[name]
+        bps = _calculate_bytes_per_second(old_stats, new_stats)
+        new_stats.update(dict(
+            **bps,
+            max_read_ps=max(bps['bytes_recv_ps'], old_stats['max_read_ps']),
+            max_write_ps=max(bps['bytes_sent_ps'], old_stats['max_write_ps']),
+        ))
+        disk_bandwidth_stats[name] = new_stats
+    return disk_bandwidth_stats
 
 
 @api_app.signal('wrolpi.periodic.status')
@@ -464,6 +492,7 @@ async def status_worker(count: int = None, sleep_time: int = 5):
             'drives_stats': [i.__json__() for i in drives_stats],
             'processes_stats': [i.__json__() for i in processes_stats],
             'memory_stats': memory_stats.__json__(),
+            'last_status': now().isoformat(),
         })
 
         if 'disk_bandwidth_stats' not in shared_status:
@@ -479,49 +508,21 @@ async def status_worker(count: int = None, sleep_time: int = 5):
             return
 
         # Calculate the difference between the previous status worker's bandwidth count and now.
-        new_nic_stats = _get_nic_counters()
-        old_nic_stats = shared_status['nic_bandwidth_stats']
-        nic_bandwidth_stats = dict()
-        for name, old_stats in old_nic_stats.items():
-            new_stats = new_nic_stats[name]
-            bytes_recv_ps, bytes_sent_ps, elapsed = _calculate_bytes_per_second(old_stats, new_stats)
-            new_stats.update(dict(
-                bytes_recv_ps=bytes_recv_ps,
-                bytes_sent_ps=bytes_sent_ps,
-                elapsed=elapsed,
-            ))
-            nic_bandwidth_stats[name] = new_stats
-
-        # Calculate the difference between the previous status worker's disk bandwidth count and now.
-        new_disk_stats = _get_disk_counters()
-        old_disk_stats = shared_status['disk_bandwidth_stats']
-        disk_bandwidth_stats = dict()
-        for name, old_stats in old_disk_stats.items():
-            new_stats = new_disk_stats[name]
-            bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(old_stats, new_stats)
-            new_stats.update(dict(
-                bytes_read_ps=bytes_read_ps,
-                bytes_write_ps=bytes_write_ps,
-                elapsed=elapsed,
-                max_read_ps=max(bytes_read_ps, old_stats['max_read_ps']),
-                max_write_ps=max(bytes_write_ps, old_stats['max_write_ps']),
-            ))
-            disk_bandwidth_stats[name] = new_stats
-
         shared_status.update({
-            'nic_bandwidth_stats': nic_bandwidth_stats,
-            'disk_bandwidth_stats': disk_bandwidth_stats,
+            'nic_bandwidth_stats': await get_nic_counters(shared_status),
+            'disk_bandwidth_stats': await get_disk_counters(shared_status),
         })
     except Exception as e:
         status_worker_warn_once(e)
         raise
     finally:
+        # Always sleep so this does not become a busy loop with errors.
         if load_stats and load_stats.minute_1 and load_stats.minute_1 > multiprocessing.cpu_count():
             # System is stressed, slow down status updates.
+            await asyncio.sleep((sleep_time * load_stats.minute_1) / multiprocessing.cpu_count())
+        else:
             await asyncio.sleep(sleep_time)
 
-        # Always sleep so this does not become a busy loop with errors.
-        await asyncio.sleep(sleep_time)
         if count:
             # Running in testing, or __main__.
             return await status_worker(count - 1, sleep_time)
@@ -534,7 +535,6 @@ if __name__ == '__main__':
 
     loop = asyncio.get_event_loop()
 
-    SKIP_DISPATCH = True
     attach_shared_contexts(api_app)
     loop.run_until_complete(status_worker(2, sleep_time=2))
     print(json.dumps(dict(api_app.shared_ctx.status), indent=2))

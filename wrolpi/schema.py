@@ -80,6 +80,7 @@ class EchoResponse:
 class DownloadSettings:
     depth: Optional[int] = None
     destination: Optional[str] = None
+    download_metadata_only: bool = False
     excluded_urls: Optional[str] = None
     max_pages: Optional[int] = None
     suffix: Optional[str] = None

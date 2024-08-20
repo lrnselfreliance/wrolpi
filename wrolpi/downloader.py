@@ -297,9 +297,8 @@ class Downloader:
     def manager(self):
         return download_manager
 
-    async def process_runner(self, download_id: int, url: str, cmd: Tuple[str, ...], cwd: pathlib.Path,
-                             timeout: int = None,
-                             **kwargs) -> Tuple[int, dict, bytes]:
+    async def process_runner(self, download_id: int, url: str, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
+                             timeout: int = None, **kwargs) -> Tuple[int, dict, bytes]:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 

@@ -26,6 +26,7 @@ import {
     findPosterPath,
     HelpHeader,
     humanFileSize,
+    isoDatetimeToAgoPopup,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -44,7 +45,7 @@ import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Segment, Tab, TabPane} from "./Theme";
+import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, Segment, Tab, TabPane} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
@@ -291,6 +292,9 @@ export function ArchiveCard({file}) {
     const domain = data ? data.domain : null;
     const domainUrl = `/archive?domain=${domain}`;
 
+    const title = file.title || data.url;
+    const header = <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
+    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
     return <Card color={mimetypeColor(file.mimetype)}>
         <div>
             <ExternalCardLink to={singlefileUrl}>
@@ -300,9 +304,9 @@ export function ArchiveCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>
-                        {file.title || data.url}
-                    </ExternalCardLink>
+                    <Popup on='hover'
+                           trigger={header}
+                           content={title}/>
                 </Container>
             </CardHeader>
             {domain &&
@@ -310,9 +314,7 @@ export function ArchiveCard({file}) {
                     <span {...s}>{domain}</span>
                 </CardLink>}
             <CardMeta {...s}>
-                <p>
-                    {isoDatetimeToString(file.published_datetime)}
-                </p>
+                {isoDatetimeToAgoPopup(dt, false)}
             </CardMeta>
             <CardDescription>
                 <Link to={`/archive/${data.id}`}>

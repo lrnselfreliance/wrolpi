@@ -24,6 +24,7 @@ import {
     findPosterPath,
     HandPointMessage,
     humanFileSize,
+    isoDatetimeToAgoPopup,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -57,6 +58,7 @@ import {
     ModalContent,
     ModalHeader,
     Placeholder,
+    Popup,
     Progress,
     Segment
 } from "./Theme";
@@ -77,14 +79,18 @@ function EbookCard({file}) {
     const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
 
     const color = mimetypeColor(file.mimetype);
+    const title = file.title || file.stem || file.name;
+    const header = <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>
+        {title}
+    </ExternalCardLink>;
     return <Card color={color}>
         <CardPoster file={file} preview={true}/>
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>
-                        {file.title || file.stem || file.name}
-                    </ExternalCardLink>
+                    <Popup on='hover'
+                           trigger={header}
+                           content={title}/>
                 </Container>
             </CardHeader>
             <CardMeta>
@@ -100,18 +106,23 @@ function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
     const url = `/media/${encodeMediaPath(file.primary_path)}`;
 
+    const title = file.title || file.stem || file.primary_path;
+    const header = <ExternalCardLink to={url} className='no-link-underscore card-link'>
+        <p>{textEllipsis(title)}</p>
+    </ExternalCardLink>;
+    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
     return <Card color={mimetypeColor(file.mimetype)}>
         <PreviewLink file={file}>
             <CardPoster file={file}/>
         </PreviewLink>
         <CardContent {...s}>
             <CardHeader>
-                <ExternalCardLink to={url} className='no-link-underscore card-link'>
-                    <p>{textEllipsis(file.title || file.stem || file.primary_path)}</p>
-                </ExternalCardLink>
+                <Popup on='hover'
+                       trigger={header}
+                       content={title}/>
             </CardHeader>
             <CardMeta {...s}>
-                <p>{isoDatetimeToString(file.modified / 1000)}</p>
+                <p>{isoDatetimeToAgoPopup(dt, false)}</p>
             </CardMeta>
             <CardDescription {...s}>
                 <p>{humanFileSize(file.size)}</p>
@@ -142,16 +153,21 @@ function FileCard({file}) {
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
+    const title = file.title || file.name || file.primary_path;
+    const header = <ExternalCardLink to={downloadUrl} className='card-title-ellipsis'>
+        {title}
+    </ExternalCardLink>;
+    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
     return <Card color={color}>
         <CardPoster to={downloadUrl} file={file}/>
         <CardContent {...s}>
             <CardHeader>
-                <ExternalCardLink to={downloadUrl} className='card-title-ellipsis'>
-                    {file.title || file.name || file.primary_path}
-                </ExternalCardLink>
+                <Popup on='hover'
+                       trigger={header}
+                       content={title}/>
             </CardHeader>
             {author && <b {...s}>{author}</b>}
-            <p>{isoDatetimeToString(file.published_datetime) || isoDatetimeToString(file.modified)}</p>
+            <p>{isoDatetimeToAgoPopup(dt, false)}</p>
             <p>{size}</p>
         </CardContent>
     </Card>

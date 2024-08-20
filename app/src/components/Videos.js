@@ -12,7 +12,7 @@ import {
     FileIcon,
     findPosterPath,
     humanFileSize,
-    humanNumber,
+    humanNumber, isoDatetimeToAgoPopup,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -31,7 +31,6 @@ import {
     CardDescription,
     CardHeader,
     Container,
-    Dimmer,
     Image,
     PlaceholderHeader,
     PlaceholderLine,
@@ -44,7 +43,7 @@ import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistic
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
@@ -309,7 +308,6 @@ export function VideoCard({file}) {
     // Default to video FilePreview for lone video files.
     let video_url;
 
-    const published_datetime = isoDatetimeToString(file.published_datetime);
     // A video may not have a channel.
     const channel = video.channel ? video.channel : null;
     let channel_url = null;
@@ -324,8 +322,8 @@ export function VideoCard({file}) {
 
     let poster = <CardPoster to={video_url} file={file}/>;
 
-    let header = <span {...s}
-                       className='card-title-ellipsis'>{file.title || file.name || video.stem || video.name}</span>;
+    const title = file.title || file.name || video.stem || video.name;
+    let header = <span {...s} className='card-title-ellipsis'>{title}</span>;
     if (video_url) {
         // Link to Channel-Video page or Video page.
         header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;
@@ -343,7 +341,9 @@ export function VideoCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    {header}
+                    <Popup on='hover'
+                           trigger={header}
+                           content={title}/>
                 </Container>
             </CardHeader>
             <CardDescription>
@@ -351,7 +351,7 @@ export function VideoCard({file}) {
                     {channel && <Link to={channel_url} className="no-link-underscore card-link">
                         <b {...s}>{channel.name}</b>
                     </Link>}
-                    <p {...s}>{published_datetime}</p>
+                    <p {...s}>{isoDatetimeToAgoPopup(file.published_datetime, false)}</p>
                 </Container>
             </CardDescription>
         </CardContent>

@@ -106,7 +106,7 @@ export function divmod(x, y) {
     return [Math.floor(x / y), x % y];
 }
 
-export function secondsElapsed(seconds) {
+export function secondsElapsed(seconds, short = true) {
     // Convert the provided seconds into a human-readable string of the time elapsed between the provided timestamp
     // and now.
     if (!seconds || seconds < 0) {
@@ -114,32 +114,47 @@ export function secondsElapsed(seconds) {
     }
 
     // Get seconds elapsed between now and `seconds` which is a UTC epoch.
-    const localNow = (new Date()).getTime();
+    const localNow = (new Date()).getTime() / 1000;
 
     let years;
     let days;
     let hours;
     let minutes;
 
-    seconds = Math.abs((localNow / 1000) - seconds);
+    seconds = Math.abs(localNow - seconds);
     [years, seconds] = divmod(seconds, secondsToYears);
     [days, seconds] = divmod(seconds, secondsToDays);
     [hours, seconds] = divmod(seconds, secondsToHours);
     [minutes, seconds] = divmod(seconds, secondsToMinutes);
     seconds = Math.floor(seconds);
 
-    if (years > 0 && days > 30) {
-        return `${years}y${days}d`;
-    } else if (years > 0) {
-        return `${years}y`;
-    } else if (days > 0) {
-        return `${days}d`;
-    } else if (hours > 0) {
-        return `${hours}h`;
-    } else if (minutes > 0) {
-        return `${minutes}m`;
+    if (short) {
+        if (years > 0 && days > 30) {
+            return `${years}y${days}d`;
+        } else if (years > 0) {
+            return `${years}y`;
+        } else if (days > 0) {
+            return `${days}d`;
+        } else if (hours > 0) {
+            return `${hours}h`;
+        } else if (minutes > 0) {
+            return `${minutes}m`;
+        }
+        return `${seconds}s`
+    } else {
+        if (years > 0 && days > 30) {
+            return `${years} years ${days} days`;
+        } else if (years > 0) {
+            return `${years} years`;
+        } else if (days > 0) {
+            return `${days} days`;
+        } else if (hours > 0) {
+            return `${hours} hours`;
+        } else if (minutes > 0) {
+            return `${minutes} minutes`;
+        }
+        return `${seconds} seconds`
     }
-    return `${seconds}s`
 }
 
 export function secondsToElapsedPopup(seconds) {
@@ -158,6 +173,21 @@ export function secondsToElapsedPopup(seconds) {
 export function isoDatetimeToElapsedPopup(dt) {
     let d = new Date(dt);
     return secondsToElapsedPopup(d.getTime() / 1000);
+}
+
+export function isoDatetimeToAgoPopup(dt, short = true) {
+    const seconds = (new Date(dt)).getTime() / 1000;
+    // Return a Popup which allows the user see a more detailed timestamp when hovering.
+    const elapsed = secondsElapsed(seconds, short);
+    if (seconds === 0 || !elapsed) {
+        return <></>;
+    }
+    const trigger = <span>{isoDatetimeToString(dt)}</span>;
+    return <Popup
+        content={<span>{elapsed} ago</span>}
+        on='hover'
+        trigger={trigger}
+    />
 }
 
 export function secondsToHMS(totalSeconds) {

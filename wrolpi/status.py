@@ -383,9 +383,15 @@ IGNORED_DISK_NAMES = (
 
 
 def _calculate_bytes_per_second(old_stats: dict, new_stats: dict) -> Dict[str, int]:
-    """Calculate the bytes-per-second between the oldest and newest tick."""
-    old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_recv'], old_stats['bytes_sent']
-    new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_recv'], new_stats['bytes_sent']
+    """Calculate the bytes-per-second between the oldest and newest counter."""
+    try:
+        # NICs
+        old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_recv'], old_stats['bytes_sent']
+        new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_recv'], new_stats['bytes_sent']
+    except KeyError:
+        # Disks
+        old_now, old_recv, old_sent = old_stats['now'], old_stats['bytes_read'], old_stats['bytes_write']
+        new_now, new_recv, new_sent = new_stats['now'], new_stats['bytes_read'], new_stats['bytes_write']
     elapsed = int(new_now - old_now)
     if elapsed == 0:
         return dict(bytes_recv_ps=0, bytes_sent_ps=0, elapsed=0)
@@ -443,8 +449,8 @@ def _get_disk_counters() -> dict:
         counters[name] = {
             'name': name,
             'now': timestamp,
-            'bytes_recv': counter.read_bytes,
-            'bytes_sent': counter.write_bytes,
+            'bytes_read': counter.read_bytes,
+            'bytes_write': counter.write_bytes,
         }
 
     return counters
@@ -459,7 +465,9 @@ async def get_disk_counters(shared_status):
         new_stats = new_disk_stats[name]
         bps = _calculate_bytes_per_second(old_stats, new_stats)
         new_stats.update(dict(
-            **bps,
+            elapsed=bps['elapsed'],
+            bytes_read_ps = bps['bytes_recv_ps'],
+            bytes_write_ps = bps['bytes_sent_ps'],
             max_read_ps=max(bps['bytes_recv_ps'], old_stats['max_read_ps']),
             max_write_ps=max(bps['bytes_sent_ps'], old_stats['max_write_ps']),
         ))

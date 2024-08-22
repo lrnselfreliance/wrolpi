@@ -145,6 +145,9 @@ async def test_delete_nested(test_session, make_files_structure):
         ('/absolute/foo.bar', False, ('foo', '.bar')),
         ('foo.en.srt', False, ('foo', '.en.srt')),
         ('foo.pl.srt', False, ('foo', '.pl.srt')),
+        ('foo.en-US.srt', False, ('foo', '.en-US.srt')),
+        ('foo.en-US.vtt', False, ('foo', '.en-US.vtt')),
+        ('foo.en-us.vtt', False, ('foo', '.en-us.vtt')),
         # Absolute path can be returned.
         ('/absolute//foo.bar', True, ('/absolute/foo', '.bar')),
         # Case is preserved.

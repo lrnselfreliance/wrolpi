@@ -54,4 +54,4 @@ async def test_status_worker(test_async_client):
     assert api_app.shared_ctx.status['nic_bandwidth_stats']
     assert 'bytes_recv' in list(api_app.shared_ctx.status['nic_bandwidth_stats'].values())[0]
     assert api_app.shared_ctx.status['disk_bandwidth_stats']
-    assert 'bytes_recv' in list(api_app.shared_ctx.status['disk_bandwidth_stats'].values())[0]
+    assert 'bytes_read' in list(api_app.shared_ctx.status['disk_bandwidth_stats'].values())[0]

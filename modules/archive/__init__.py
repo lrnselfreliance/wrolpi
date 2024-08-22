@@ -71,7 +71,8 @@ class ArchiveDownloader(Downloader, ABC):
 
     async def do_singlefile(self, download: Download) -> Tuple[bytes, dict]:
         """Create a Singlefile from the archive's URL."""
-        cmd = (str(SINGLE_FILE_BIN),
+        cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
+               str(SINGLE_FILE_BIN),
                download.url,
                '--browser-executable-path', CHROMIUM,
                '--browser-args', '["--no-sandbox"]',

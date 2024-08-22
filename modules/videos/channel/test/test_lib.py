@@ -101,9 +101,9 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
     Channels can be searched by their name.
     """
     # Create four channels with varying associated videos.
-    c1 = channel_factory(name='foo')
+    c1 = channel_factory(name='Foo')
     c2 = channel_factory(name='bar')
-    c3 = channel_factory(name='foo bar')
+    c3 = channel_factory(name='Foo Bar')
     c4 = channel_factory(name='foobar')
     video_factory(channel_id=c1.id)
     for _ in range(2):
@@ -123,8 +123,8 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
         if channel_names:
             raise AssertionError('More channels than expected.')
 
-    await assert_search('foo', ['foo', 'foo bar', 'foobar'])
-    await assert_search('bar', ['foobar', 'foo bar', 'bar'], True)
+    await assert_search('foo', ['Foo', 'foobar', 'Foo Bar'])
+    await assert_search('bar', ['foobar', 'Foo Bar', 'bar'], True)
 
 
 @pytest.mark.asyncio

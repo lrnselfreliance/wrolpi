@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import functools
 import json
 import multiprocessing
 import pathlib
@@ -466,8 +467,8 @@ async def get_disk_counters(shared_status):
         bps = _calculate_bytes_per_second(old_stats, new_stats)
         new_stats.update(dict(
             elapsed=bps['elapsed'],
-            bytes_read_ps = bps['bytes_recv_ps'],
-            bytes_write_ps = bps['bytes_sent_ps'],
+            bytes_read_ps=bps['bytes_recv_ps'],
+            bytes_write_ps=bps['bytes_sent_ps'],
             max_read_ps=max(bps['bytes_recv_ps'], old_stats['max_read_ps']),
             max_write_ps=max(bps['bytes_sent_ps'], old_stats['max_write_ps']),
         ))

@@ -249,15 +249,6 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     assert response.status_code == HTTPStatus.CREATED
     directory = test_session.query(Channel).filter_by(id=1).one().directory
     assert (test_directory / 'foo') == directory
-    assert not directory.is_dir()
-    assert directory.is_absolute()
-
-    # Channel can be created and have its directory be created.
-    data = dict(name='bar', directory='bar', mkdir=True)
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
-    assert response.status_code == HTTPStatus.CREATED
-    directory = test_session.query(Channel).filter_by(id=2).one().directory
-    assert (test_directory / 'bar') == directory
     assert directory.is_dir()
     assert directory.is_absolute()
 

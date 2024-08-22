@@ -53,8 +53,6 @@ def channel_get(_: Request, channel_id: int = None):
 @wrol_mode_check
 def channel_post(_: Request, body: schema.ChannelPostRequest):
     body.directory = get_media_directory() / body.directory
-    if not body.directory.is_dir() and body.mkdir:
-        make_media_directory(body.directory)
 
     channel = lib.create_channel(data=body, return_dict=False)
 

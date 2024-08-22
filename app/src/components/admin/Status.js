@@ -207,7 +207,7 @@ export function StatusPage() {
     if (status && status['cpu_stats']) {
         const {cpu_stats, load_stats, memory_stats, processes_stats} = status;
         percent = cpu_stats['percent'];
-        cores = cpu_stats['cores'];
+        cores = cpu_stats['cores'] || '?';
         temperature = cpu_stats['temperature'];
         high_temperature = cpu_stats['high_temperature'];
         critical_temperature = cpu_stats['critical_temperature'];

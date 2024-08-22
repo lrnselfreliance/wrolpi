@@ -33,7 +33,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
     NoPrimaryFile, InvalidDirectory
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
-from wrolpi.lang import ISO_639_CODES
+from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config
 from wrolpi.vars import PYTEST
 
@@ -277,6 +277,10 @@ SUFFIXES = {
 }
 SUFFIXES |= {f'.{i}.srt' for i in ISO_639_CODES}
 SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
+EXTRA_SUFFIXES = set()
+for six_ in ISO_639_CODES.keys():
+    EXTRA_SUFFIXES |= {f'.{six_}-{i}.srt' for i in ISO_3166_CODES}
+    EXTRA_SUFFIXES |= {f'.{six_}-{i}.vtt' for i in ISO_3166_CODES}
 
 
 @functools.lru_cache(maxsize=10_000)
@@ -297,7 +301,12 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
     # May or may not be absolute.  Convert to lowercase so any suffix case can be matched.
     full_ = str(path).lower()
     # Get the special matching suffix, if any.  Match against `.en.srt` but could return `.EN.SRT`
-    suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), path.suffix)
+    suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), None)
+    if not suffix and (full_.endswith('.srt') or full_.endswith('.vtt')):
+        # Special handling for numerous language/region codes.
+        suffix = next(filter(lambda i: full_.endswith(i), EXTRA_SUFFIXES), path.suffix)
+    # Fallback to pathlib's suffix.
+    suffix = suffix or path.suffix
     # Return the suffix from the path's name in the original case.
     if suffix:
         idx = -1 * len(suffix)

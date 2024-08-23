@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import asyncio
-import functools
 import json
 import multiprocessing
 import pathlib

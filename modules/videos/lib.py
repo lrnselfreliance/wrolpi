@@ -475,6 +475,7 @@ def import_channels_config():
         with get_db_session() as session:
             link_channel_and_downloads(session)
 
+        channel_import_logger.info('Importing channels config complete')
     except Exception as e:
         channel_import_logger.warning('Failed to load channels config!', exc_info=e)
         if PYTEST:

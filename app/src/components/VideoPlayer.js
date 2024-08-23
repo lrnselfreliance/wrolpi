@@ -112,7 +112,7 @@ const VideoComment = ({comment, children}) => {
 
     const dateElm = <div {...t}>{isoDatetimeToString(timestamp * 1000)}</div>;
     const likesElm = like_count && <div {...t}>
-        <Icon name='thumbs up'/>{comment['like_count']}
+        <Icon name='thumbs up'/>{humanNumber(comment['like_count'])}
     </div>;
 
     return <Comment>

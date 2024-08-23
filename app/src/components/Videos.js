@@ -12,7 +12,8 @@ import {
     FileIcon,
     findPosterPath,
     humanFileSize,
-    humanNumber, isoDatetimeToAgoPopup,
+    humanNumber,
+    isoDatetimeToAgoPopup,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -297,6 +298,7 @@ export function VideosRoute(props) {
             <Route path='channel/new' exact element={<ChannelNewPage/>}/>
             <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
             <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
+            <Route path='/video/:videoSlug' exact element={<VideosPage/>}/>
         </Routes>
     </PageContainer>
 }
@@ -317,7 +319,10 @@ export function VideoCard({file}) {
         video_url = `/videos/channel/${channel.id}/video/${video.id}`;
     } else if (file.files.length > 1) {
         // No Channel, but the video has multiple files (subtitles, etc.).  Use the full VideoPage.
-        video_url = `/videos/video/${video.id}`
+        video_url = `/videos/video/${video.id}`;
+    }
+    if (file.slug) {
+        video_url = `/videos/video/${file.slug}`;
     }
 
     let poster = <CardPoster to={video_url} file={file}/>;

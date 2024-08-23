@@ -12,7 +12,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict, NoPrimaryFile
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -529,15 +529,22 @@ def import_tags_config(session: Session = None):
                 if not file_group and absolute_path.is_file():
                     # File exists, but is not yet in DB.
                     files = glob_shared_stem(absolute_path)
-                    file_group = FileGroup.from_paths(session, *files)
-                    session.add(file_group)
-                    session.flush([file_group, ])
+                    try:
+                        file_group = FileGroup.from_paths(session, *files)
+                        session.add(file_group)
+                        session.flush([file_group, ])
+                    except NoPrimaryFile:
+                        logger.error(f'Failed to tag {absolute_path}')
+                        continue
 
                 if tag and file_group:
                     tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
-                        tag_file = Tag.tag_file_group(file_group.id, tag.id, session)
+                        tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag, file_group=file_group)
+                        session.add(tag_file)
+                        logger.info(f'Created TagFile: {tag_file}')
+                        tag_file.flush()
                     tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
                     need_commit = True
                 elif not file_group:
@@ -580,6 +587,7 @@ def import_tags_config(session: Session = None):
                         session.add(tag_zim_entry)
                         # Track this new TagZimEntry because migration may cause duplicates.
                         tag_zim_entries[(zim_path, zim_entry)] = tag_zim_entry
+                        logger.info(f'Created TagZimEntry: {tag_zim_entry}')
                     tag_zim_entry.created_at = datetime.fromisoformat(created_at) if created_at else dates.now()
                     need_commit = True
                 elif not tag:
@@ -596,6 +604,8 @@ def import_tags_config(session: Session = None):
                         logger.warning(f'Deleting {tag} because it is not in the config.')
                         session.delete(tag)
                         need_commit = True
+
+        logger.info('Importing tags config complete')
 
         if need_commit:
             session.commit()

@@ -244,6 +244,9 @@ class Video(ModelHelper, Base):
             logger.debug(f'{self} has comments')
             self.have_comments = True
 
+        # Generate slug after validation.
+        _ = self.file_group.slug
+
         # If this Video is in a Channel's directory, then it is part of that Channel.
         session: Session = Session.object_session(self)
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
@@ -520,6 +523,20 @@ class Video(ModelHelper, Base):
 
         if not self.info_json_path:
             self.file_group.append_files(info_json_path)
+
+    @property
+    def slug(self) -> str:
+        return self.file_group.slug
+
+    @staticmethod
+    def get_by_slug(session: Session, slug: str):
+        return session.query(Video).join(FileGroup).filter(FileGroup.slug == slug).one_or_none()
+
+    @staticmethod
+    def find_by_slug(session: Session, slug: str):
+        if video := Video.get_by_slug(session, slug):
+            return video
+        raise UnknownVideo(f'Cannot find Video with slug {slug}')
 
 
 class Channel(ModelHelper, Base):

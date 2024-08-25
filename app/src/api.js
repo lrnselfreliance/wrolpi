@@ -244,15 +244,6 @@ export async function downloadVideoMetadata(videoUrl, destination) {
     );
 }
 
-export async function getDirectories(search_str) {
-    let form_data = {'search_str': search_str || null};
-    const response = await apiPost(`${API_URI}/files/directories`, form_data);
-    if (response.ok) {
-        return await response.json();
-    }
-    return [];
-}
-
 export async function getStatus() {
     const response = await apiGet(`${API_URI}/status`);
     if (response.status === 200) {
@@ -1208,8 +1199,8 @@ export async function sendNotification(message, url) {
     }
 }
 
-export async function searchDirectories(name) {
-    const body = {name: name || ''};
+export async function searchDirectories(path) {
+    const body = {path: path || ''};
     const response = await apiPost(`${API_URI}/files/search_directories`, body);
     if (response.status === 204) {
         return [];

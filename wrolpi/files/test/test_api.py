@@ -342,32 +342,54 @@ def test_file_group_tag(test_client):
     assert 'tag_id' in response.json['error']
 
 
-def test_search_directories(test_client, test_session, make_files_structure, assert_directories):
+@pytest.mark.asyncio
+async def test_search_directories(test_async_client, test_session, test_directory, make_files_structure,
+                                  assert_directories):
     """Directories can be searched by name."""
     make_files_structure(['foo/one.txt', 'foo/two.txt', 'bar/one.txt'])
-    request, response = test_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    await lib.refresh_files()
     assert_directories({'foo', 'bar'})
+    # Create directory that was not refreshed.
+    (test_directory / 'baz').mkdir()
 
     # More than one character required.
-    content = dict(name='f')
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    content = dict(path='f')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK, response.content
+    assert response.json['directories'] == []
+    assert response.json['is_dir'] is False
 
-    content = dict(name='fo')
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    # Can search using partial directory name.
+    content = dict(path='fo')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['foo', ]
+    assert response.json['is_dir'] is False
+
+    # Searching directory exactly.
+    content = dict(path='foo')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == ['foo', ]
+    assert response.json['is_dir'] is True
 
     # Case is ignored.
-    content = dict(name='BAR')
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    content = dict(path='BAR')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['bar', ]
+    assert response.json['is_dir'] is False
+
+    # Can search directories not yet in DB.
+    content = dict(path='ba')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == ['bar', 'baz']
+    assert response.json['is_dir'] is False
 
     # Searching for something that does not exist.
-    content = dict(name='does not exist')
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    content = dict(path='does not exist')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == []
 
@@ -395,9 +417,9 @@ def test_search_directories(test_client, test_session, make_files_structure, ass
         'foooooooooooooooooooooo/',
         'fooooooooooooooooooooooo/',
     ])
-    test_client.post('/api/files/refresh')
-    content = dict(name='fo')
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    await test_async_client.post('/api/files/refresh')
+    content = dict(path='fo')
+    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == [f'f{"o" * i}' for i in range(2, 22)]
 
@@ -420,7 +442,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     test_session.add_all([channel, domain])
     test_session.commit()
 
-    content = {'name': 'di'}
+    content = {'path': 'di'}
     request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     # All directories contain "di".  The names of the Channel and Directory do not match.
@@ -429,7 +451,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     assert response.json['channel_directories'] == []
     assert response.json['domain_directories'] == []
 
-    content = {'name': 'Chan'}
+    content = {'path': 'Chan'}
     request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     # Channel name matches.
@@ -437,7 +459,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     assert response.json['channel_directories'] == [{'name': 'Channel Name', 'path': 'dir1'}]
     assert response.json['domain_directories'] == []
 
-    content = {'name': 'exam'}
+    content = {'path': 'exam'}
     request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     # Domain name matches.

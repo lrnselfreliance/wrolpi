@@ -1,11 +1,9 @@
 import React, {useContext, useState} from "react";
 import {
     CardContent,
-    CardDescription,
     CardHeader,
     CardMeta,
     Checkbox,
-    Container,
     Dropdown,
     Form,
     Image,
@@ -15,6 +13,7 @@ import {
 } from "semantic-ui-react";
 import {
     CardGroupCentered,
+    CardLink,
     CardPoster,
     encodeMediaPath,
     ErrorMessage,
@@ -25,7 +24,6 @@ import {
     HandPointMessage,
     humanFileSize,
     isoDatetimeToAgoPopup,
-    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     Paginator,
@@ -43,15 +41,16 @@ import {
     useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
-import {Route, Routes} from "react-router-dom";
+import {Link, Route, Routes} from "react-router-dom";
 import {CardPlaceholder} from "./Placeholder";
-import {ArchiveCard, ArchiveRowCells} from "./Archive";
+import {ArchiveRowCells, getArchiveCardProps} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,
     CardIcon,
+    Header,
     Icon,
     Modal,
     ModalActions,
@@ -63,7 +62,7 @@ import {
     Segment
 } from "./Theme";
 import {SelectableTable} from "./Tables";
-import {VideoCard, VideoRowCells} from "./Videos";
+import {getVideoCardProps, VideoRowCells} from "./Videos";
 import {FileBrowser} from "./FileBrowser";
 import {refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
@@ -71,104 +70,122 @@ import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
 import {useSearch} from "./Search";
 
-function EbookCard({file}) {
-    const {s} = useContext(ThemeContext);
+function getImageCardProps(file) {
+    return {
+        previewTo: `/media/${encodeMediaPath(file.primary_path)}`,
+        headerTo: `/media/${encodeMediaPath(file.primary_path)}`,
+    }
+}
 
-    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
+function getEbookCardProps(file) {
     const isEpub = file['mimetype'].startsWith('application/epub');
-    const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
-
-    const color = mimetypeColor(file.mimetype);
-    const title = file.title || file.stem || file.name;
-    const header = <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>
-        {title}
-    </ExternalCardLink>;
-    return <Card color={color}>
-        <CardPoster file={file} preview={true}/>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            <CardMeta>
-                {file.author ? <b {...s}>{file.author}</b> : null}
-                {file.size && <p {...s}>{humanFileSize(file.size)}</p>}
-            </CardMeta>
-        </CardContent>
-    </Card>
-
+    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
+    const viewerUrl = `/epub/epub.html?url=${downloadUrl}`;
+    return {
+        // Only epub can be viewed, mobi will be downloaded.
+        headerTo: isEpub ? viewerUrl : downloadUrl,
+        title: file.title || file.stem || file.name,
+        authorTitle: file.author,
+        size: file.size,
+        datetime: file.published_datetime,
+    }
 }
 
-function ImageCard({file}) {
-    const {s} = useContext(ThemeContext);
-    const url = `/media/${encodeMediaPath(file.primary_path)}`;
-
-    const title = file.title || file.stem || file.primary_path;
-    const header = <ExternalCardLink to={url} className='no-link-underscore card-link'>
-        <p>{textEllipsis(title)}</p>
-    </ExternalCardLink>;
-    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
-    return <Card color={mimetypeColor(file.mimetype)}>
-        <PreviewLink file={file}>
-            <CardPoster file={file}/>
-        </PreviewLink>
-        <CardContent {...s}>
-            <CardHeader>
-                <Popup on='hover'
-                       trigger={header}
-                       content={title}/>
-            </CardHeader>
-            <CardMeta {...s}>
-                <p>{isoDatetimeToAgoPopup(dt, false)}</p>
-            </CardMeta>
-            <CardDescription {...s}>
-                <p>{humanFileSize(file.size)}</p>
-            </CardDescription>
-        </CardContent>
-    </Card>
-}
-
-function FileCard({file}) {
+export function FileCard({file}) {
     const {s} = useContext(ThemeContext);
 
     const isEbookType = file.mimetype && (
         file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
     );
 
-    if (file.model === 'video' && 'video' in file) {
-        return <VideoCard key={file['primary_path']} file={file}/>;
-    } else if (file.model === 'archive') {
-        return <ArchiveCard key={file['primary_path']} file={file}/>;
-    } else if (file.mimetype && file.mimetype.startsWith('image/')) {
-        return <ImageCard key={file['primary_path']} file={file}/>;
-    } else if (isEbookType) {
-        return <EbookCard key={file['primary_path']} file={file}/>;
+    // Most files will be able to use these props.
+    const defaultExternalTo = `/media/${encodeMediaPath(file.primary_path)}`;
+    let cardProps = {
+        // Most files will not be preview-able, use external link by default.
+        authorTitle: file.author,
+        datetime: file.published_datetime || file.published_modified_datetime || file.modified,
+        color: mimetypeColor(file.mimetype),
+        title: file.title,
+    };
+    // Only display size if no published datetime will take up card space.
+    cardProps.size = cardProps.datetime ? null : file.size;
+    // Display title if possible, full filename if it is short, fallback to file stem.
+    if (!file.title && file.stem && file.name && file.name.length > 40) {
+        cardProps.title = file.stem;
+    } else if (!file.title) {
+        cardProps.title = file.name;
     }
 
-    const author = file.author;
-    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
-    const color = mimetypeColor(file.mimetype);
-    const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
+    // Get props for specific models, these may overwrite the values above.
+    if (file.model === 'video' && 'video' in file) {
+        cardProps = {...cardProps, ...getVideoCardProps(file)};
+    } else if (file.model === 'archive') {
+        cardProps = {...cardProps, ...getArchiveCardProps(file)};
+    } else if (file.mimetype.startsWith('image/')) {
+        cardProps = {...cardProps, ...getImageCardProps(file)};
+    } else if (isEbookType) {
+        cardProps = {...cardProps, ...getEbookCardProps(file)};
+    } else if (file.mimetype.startsWith('application/pdf')) {
+        // PDFs can be previewed.
+        cardProps.previewTo = defaultExternalTo;
+        cardProps.headerTo = defaultExternalTo;
+    }
 
-    const title = file.title || file.name || file.primary_path;
-    const header = <ExternalCardLink to={downloadUrl} className='card-title-ellipsis'>
-        {title}
-    </ExternalCardLink>;
-    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
+    if (!cardProps.posterTo && !cardProps.headerTo && !cardProps.previewTo) {
+        // No "to" provided, fallback to default external link.
+        cardProps.externalTo = defaultExternalTo;
+    }
+
+    const {
+        authorTitle,
+        authorTo,
+        color,
+        datetime,
+        externalTo,
+        headerTo,
+        posterTo,
+        previewTo,
+        size,
+        title,
+    } = cardProps;
+
+    // A file may not have a full page (pdf, etc.) and may offer a preview.
+    let poster = <CardPoster to={posterTo || headerTo} file={file}/>;
+    if (externalTo) {
+        poster = <CardPoster externalTo={externalTo} file={file}/>;
+    } else if (previewTo) {
+        poster = <PreviewLink file={file}><CardPoster file={file}/></PreviewLink>;
+    }
+
+    let header = <CardLink to={headerTo || posterTo || externalTo}><Header as='h3'>{title}</Header></CardLink>;
+    if (externalTo) {
+        // Link outside app.
+        header = <ExternalCardLink to={externalTo} className='card-title-ellipsis'>
+            {title}
+        </ExternalCardLink>;
+    }
+
+    // Link to author page if provided.
+    let author = authorTo ?
+        <Link to={authorTo}><Header as='h4'>{authorTitle}</Header></Link>
+        : <b {...s}>{authorTitle}</b>;
+
     return <Card color={color}>
-        <CardPoster to={downloadUrl} file={file}/>
+        {poster}
         <CardContent {...s}>
             <CardHeader>
-                <Popup on='hover'
-                       trigger={header}
-                       content={title}/>
+                {previewTo ?
+                    header :
+                    <Popup on='hover' trigger={header} content={title}/>
+                }
             </CardHeader>
-            {author && <b {...s}>{author}</b>}
-            <p>{isoDatetimeToAgoPopup(dt, false)}</p>
-            <p>{size}</p>
+            <CardMeta>
+                {author}
+            </CardMeta>
+            <CardContent>
+                {datetime && <p {...s}>{isoDatetimeToAgoPopup(datetime, false)}</p>}
+                {size && <p {...s}>{humanFileSize(file.size)}</p>}
+            </CardContent>
         </CardContent>
     </Card>
 }

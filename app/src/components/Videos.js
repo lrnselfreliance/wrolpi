@@ -12,7 +12,8 @@ import {
     FileIcon,
     findPosterPath,
     humanFileSize,
-    humanNumber, isoDatetimeToAgoPopup,
+    humanNumber,
+    isoDatetimeToAgoPopup,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -301,6 +302,43 @@ export function VideosRoute(props) {
     </PageContainer>
 }
 
+export function getVideoCardProps(file) {
+    if (file.model !== 'video' || !'video' in file) {
+        throw Error(`useVideoCard cannot be used with ${file}`);
+    }
+
+    const {video} = file;
+    const {channel} = video;
+
+    // Every Video must have an id.
+    let headerTo = `/videos/video/${video.id}`;
+    const channelUrl = channel ? `/videos/channel/${channel.id}/video` : null;
+    if (file.slug) {
+        // Slug is preferred.
+        headerTo = `/videos/video/${file.slug}`;
+    } else if (channel) {
+        // Use Channel if slug is not possible.
+        headerTo = `/videos/channel/${channel.id}/video/${video.id}`;
+    }
+
+    const title = file.title || file.name || video.stem || video.name;
+    const color = mimetypeColor(file.mimetype);
+    const authorTo = channelUrl;
+    const authorTitle = channel ? channel.name : null;
+    const datetime = file.published_datetime;
+    const size = file.published_datetime ? null : file.size;
+
+    return {
+        headerTo,
+        title,
+        color,
+        authorTo,
+        authorTitle,
+        datetime,
+        size,
+    }
+}
+
 export function VideoCard({file}) {
     const {video} = file;
     const {s} = useContext(ThemeContext);
@@ -318,6 +356,9 @@ export function VideoCard({file}) {
     } else if (file.files.length > 1) {
         // No Channel, but the video has multiple files (subtitles, etc.).  Use the full VideoPage.
         video_url = `/videos/video/${video.id}`
+    }
+    if (file.slug) {
+        video_url = `/videos/video/${file.slug}`;
     }
 
     let poster = <CardPoster to={video_url} file={file}/>;

@@ -18,12 +18,13 @@ video_bp = Blueprint('Video', '/api/videos')
 logger = logger.getChild(__name__)
 
 
-@video_bp.get('/video/<video_id:int>')
+@video_bp.get('/video/<video_id:int>', name='video_get_id')
+@video_bp.get('/video/<video_slug:str>', name='video_get_slug')
 @openapi.description('Get Video information')
 @openapi.response(HTTPStatus.OK, schema.VideoResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get(_: Request, video_id: int):
-    video, previous_video, next_video = lib.get_video_for_app(video_id)
+def video_get(_: Request, video_id: int = None, video_slug: str = None):
+    video, previous_video, next_video = lib.get_video_for_app(video_id or video_slug)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 

@@ -22,12 +22,15 @@ from ..lib import save_channels_config
 logger.getChild(__name__)
 
 
-def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
+def get_video_for_app(video_id_or_slug: int | str) -> Tuple[dict, Optional[dict], Optional[dict]]:
     """
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session(commit=True) as session:
-        video = Video.find_by_id(video_id, session=session)
+        if isinstance(video_id_or_slug, int):
+            video = Video.find_by_id(video_id_or_slug, session=session)
+        else:
+            video = Video.find_by_slug(session, video_id_or_slug)
         video.file_group.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 

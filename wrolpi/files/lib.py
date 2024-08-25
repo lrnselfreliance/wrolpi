@@ -16,6 +16,7 @@ from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
 import psycopg2
+from slugify import slugify
 from sqlalchemy import asc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -1565,3 +1566,61 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
 
     session.commit()
     return file_group
+
+
+slugify = functools.partial(slugify, max_length=200, allow_unicode=True)
+
+
+@optional_session
+def create_file_slug(file_group: FileGroup, session: Session = None) -> str:
+    """Create a unique human-readable string which can be used to link to this FileGroup."""
+    title = file_group.title
+    year = file_group.published_datetime.year if file_group.published_datetime else None
+    month = file_group.published_datetime.month if file_group.published_datetime else None
+
+    possible_slugs = []
+    if title:
+        # Title is the preferred slug.
+        possible_slugs.append(slugify(title, max_length=20, lowercase=True))
+        possible_slugs.append(slugify(title, lowercase=True))
+        possible_slugs.append(slugify(title))
+        # Include published datetime after title if necessary.
+        if year:
+            possible_slugs.append(slugify(f'{title} {year}', lowercase=True))
+            possible_slugs.append(slugify(f'{title} {year}'))
+            if month:
+                possible_slugs.append(slugify(f'{title} {year} {month}', lowercase=True))
+                possible_slugs.append(slugify(f'{title} {year} {month}'))
+
+    # File stem is less preferred than title.
+    stem, _ = split_path_stem_and_suffix(file_group.primary_path)
+    possible_slugs.append(slugify(stem))
+    if year:
+        possible_slugs.append(slugify(f'{stem} {year}', lowercase=True))
+        possible_slugs.append(slugify(f'{stem} {year}'))
+        if month:
+            possible_slugs.append(slugify(f'{stem} {month}', lowercase=True))
+            possible_slugs.append(slugify(f'{stem} {month}'))
+
+    # Return the first slug that does not yet exist.
+    existing_slugs = [i[0] for i in session.query(FileGroup.slug).filter(FileGroup.slug.in_(possible_slugs)).all()]
+    for slug in possible_slugs:
+        if slug not in existing_slugs:
+            return slug
+
+    # Many possible slugs already exist, try again.
+    possible_slugs = []
+    if title:
+        possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {title}', lowercase=True))
+        possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {title}'))
+        possible_slugs.extend([slugify(f'{title} {i}') for i in range(10)])
+    possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {stem}'))
+    possible_slugs.extend([slugify(f'{stem} {i}') for i in range(10)])
+
+    # Return the first slug that does not yet exist.
+    existing_slugs = [i[0] for i in session.query(FileGroup.slug).filter(FileGroup.slug.in_(possible_slugs)).all()]
+    for slug in possible_slugs:
+        if slug not in existing_slugs:
+            return slug
+
+    raise RuntimeError(f'Failed to create unique slug: {file_group}')

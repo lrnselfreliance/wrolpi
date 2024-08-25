@@ -65,6 +65,8 @@ async def zim_modeler():
                     file_group.title = file_group.primary_path.name
                     file_group.a_text = split_file_name_words(file_group.primary_path.name)
                     file_group.indexed = True
+                    # Generate slug
+                    _ = file_group.slug
                 except Exception as e:
                     if PYTEST:
                         raise

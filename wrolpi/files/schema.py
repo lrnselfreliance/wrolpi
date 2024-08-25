@@ -50,7 +50,7 @@ class DirectoriesRequest:
 
 @dataclass
 class DirectoriesSearchRequest:
-    name: str
+    path: str
 
 
 @dataclass

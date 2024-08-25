@@ -21,9 +21,9 @@ import {VideoPlaceholder} from "./Placeholder";
 import {useChannel} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
-import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {Comment, CommentGroup, Label} from "semantic-ui-react";
+import {FileCard} from "./Files";
 
 const MEDIA_PATH = '/media';
 
@@ -327,10 +327,10 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <Grid columns={2} stackable>
                 <Grid.Row>
                     <Grid.Column textAlign='left'>
-                        {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
+                        {prevFile && <><Header as='h3'>Older</Header><FileCard file={prevFile}/></>}
                     </Grid.Column>
                     <Grid.Column textAlign='left'>
-                        {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
+                        {nextFile && <><Header as='h3'>Newer</Header><FileCard file={nextFile}/></>}
                     </Grid.Column>
                 </Grid.Row>
             </Grid>

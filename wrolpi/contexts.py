@@ -14,7 +14,6 @@ def attach_shared_contexts(app: Sanic):
 
     # Many things wait for flags.db_up, initialize before starting.
     from wrolpi import flags
-
     app.shared_ctx.flags = manager.dict({i: False for i in flags.FLAG_NAMES})
 
     # ConfigFile multiprocessing_dict's.
@@ -30,8 +29,10 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
+    app.shared_ctx.switches = manager.dict()
     # Shared lists.
     app.shared_ctx.events_history = manager.list()
+    app.shared_ctx.perpetual_workers = manager.list()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
 
@@ -44,6 +45,7 @@ def attach_shared_contexts(app: Sanic):
     # Events.
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
+    app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()
 
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
@@ -78,6 +80,7 @@ def reset_shared_contexts(app: Sanic):
         memory_stats=dict(),
     ))
     app.shared_ctx.map_importing.clear()
+    app.shared_ctx.switches.clear()
     # Shared ints
     app.shared_ctx.log_level.value = default_log_level
 
@@ -93,6 +96,11 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_disabled.clear()
     app.shared_ctx.download_manager_stopped.clear()
     app.shared_ctx.flags_initialized.clear()
+    app.shared_ctx.perpetual_tasks_started.clear()
+
+    # Lists
+    del app.shared_ctx.events_history[:]
+    del app.shared_ctx.perpetual_workers[:]
 
 
 def initialize_configs_contexts(app: Sanic):

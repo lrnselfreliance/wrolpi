@@ -316,6 +316,8 @@ async def ebook_modeler():
                     session.add(ebook)
                     file_group.model = EBook.__tablename__
                     file_group.indexed = True
+                    # Generate slug
+                    _ = file_group.slug
                 except Exception as e:
                     logger.error(f'Failed to index ebook {file_group}', exc_info=e)
                     if PYTEST:

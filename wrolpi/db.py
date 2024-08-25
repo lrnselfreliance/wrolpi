@@ -47,8 +47,8 @@ postgres_engine = sqlalchemy.create_engine(
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
 connect_args = dict(application_name='wrolpi_api', connect_timeout=1)
-uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
-engine = sqlalchemy.create_engine(uri, poolclass=NullPool, connect_args=connect_args)
+uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}?options=-c statement_timeout=30000'.format(**db_args)
+engine = sqlalchemy.create_engine(uri, connect_args=connect_args)
 session_maker = sessionmaker(bind=engine)
 
 LOGGED_ARGS = False

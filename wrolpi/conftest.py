@@ -171,7 +171,20 @@ async def test_async_client(test_directory) -> SanicASGITestClient:
 
     initialize_configs_contexts(api_app)
 
-    return SanicASGITestClient(api_app)
+    # # Clean up test tasks
+    # @api_app.after_server_stop
+    # async def cleanup(app: Sanic):
+    #     logger.warning('Cancelling test tasks...')
+    #     for task in asyncio.all_tasks():
+    #         if task is not asyncio.current_task():
+    #             await task
+
+    client = SanicASGITestClient(api_app)
+
+    # Call API so server actually starts.
+    await client.get('/api/echo')
+
+    return client
 
 
 @pytest.fixture
@@ -374,6 +387,11 @@ def bad_vtt_file(test_directory) -> pathlib.Path:
     destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/bad_caption.en.vtt', destination)
     yield destination
+
+
+@pytest.fixture
+def example_pdf_bytes(test_directory) -> bytes:
+    return (PROJECT_DIR / 'test/pdf example.pdf').read_bytes()
 
 
 @pytest.fixture

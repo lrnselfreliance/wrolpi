@@ -303,64 +303,43 @@ export function VideosRoute(props) {
     </PageContainer>
 }
 
-export function VideoCard({file}) {
+export function getVideoCardProps(file) {
+    if (file.model !== 'video' || !'video' in file) {
+        throw Error(`useVideoCard cannot be used with ${file}`);
+    }
+
     const {video} = file;
-    const {s} = useContext(ThemeContext);
+    const {channel} = video;
 
-    // Default to video FilePreview for lone video files.
-    let video_url;
-
-    // A video may not have a channel.
-    const channel = video.channel ? video.channel : null;
-    let channel_url = null;
-    if (channel) {
-        // Link to Video in the Channel if possible.
-        channel_url = `/videos/channel/${channel.id}/video`;
-        video_url = `/videos/channel/${channel.id}/video/${video.id}`;
-    } else if (file.files.length > 1) {
-        // No Channel, but the video has multiple files (subtitles, etc.).  Use the full VideoPage.
-        video_url = `/videos/video/${video.id}`;
-    }
+    // Every Video must have an id.
+    let headerTo = `/videos/video/${video.id}`;
+    const channelUrl = channel ? `/videos/channel/${channel.id}/video` : null;
     if (file.slug) {
-        video_url = `/videos/video/${file.slug}`;
+        // Slug is preferred.
+        headerTo = `/videos/video/${file.slug}`;
+    } else if (channel) {
+        // Use Channel if slug is not possible.
+        headerTo = `/videos/channel/${channel.id}/video/${video.id}`;
     }
 
-    let poster = <CardPoster to={video_url} file={file}/>;
-
-    const title = file.title || file.name || video.stem || video.name;
-    let header = <span {...s} className='card-title-ellipsis'>{title}</span>;
-    if (video_url) {
-        // Link to Channel-Video page or Video page.
-        header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;
-    } else {
-        // Video is just a lone video file.
-        header = <PreviewLink file={file}>
-            {header}
-        </PreviewLink>;
-    }
-
+    const authorTitle = channel ? channel.name : null;
+    const authorTo = channelUrl;
     const color = mimetypeColor(file.mimetype);
-    return <Card color={color}>
-        {poster}
-        <Duration totalSeconds={file.length}/>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            <CardDescription>
-                <Container textAlign='left'>
-                    {channel && <Link to={channel_url} className="no-link-underscore card-link">
-                        <b {...s}>{channel.name}</b>
-                    </Link>}
-                    <p {...s}>{isoDatetimeToAgoPopup(file.published_datetime, false)}</p>
-                </Container>
-            </CardDescription>
-        </CardContent>
-    </Card>
+    const datetime = file.published_datetime;
+    const duration = <Duration totalSeconds={file.length}/>;
+    const size = file.published_datetime ? null : file.size;
+    const title = file.title || file.name || video.stem || video.name;
+
+    return {
+        authorTitle,
+        authorTo,
+        color,
+        datetime,
+        cardTopExtra: duration,
+        headerTo,
+        size,
+        title,
+    }
 }
 
 export function VideoRowCells({file}) {

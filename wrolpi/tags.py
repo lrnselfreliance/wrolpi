@@ -6,6 +6,7 @@ from typing import List, Dict, Tuple, Optional
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
+from yt_dlp.extractor.atresplayer import AtresPlayerIE
 
 from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
@@ -32,7 +33,11 @@ class TagFile(ModelHelper, Base):
     file_group = relationship('FileGroup', back_populates='tag_files')
 
     def __repr__(self):
-        return f'<TagFile tag={self.tag.name=} file_group={self.file_group.primary_path}>'
+        try:
+            return f'<TagFile tag={self.tag.name=} file_group={self.file_group.primary_path}>'
+        except AttributeError:
+            # Missing session or something...
+            return f'<TagFile tag_id={self.tag_id} file_group_id={self.file_group_id}>'
 
     @staticmethod
     @optional_session
@@ -84,22 +89,29 @@ class Tag(ModelHelper, Base):
         """Add a TagFile for the provided FileGroup and this Tag.
 
         @warning: Commits the session to keep the config in sync."""
+        print(f'tag_file_group')
         existing = Tag.get_tag_file_group(file_group_id, tag_id_or_name, session)
+        print(f'tag_file_group {existing=}')
 
         if existing:
             raise FileGroupAlreadyTagged('Tag already used')
 
         tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
             else Tag.get_by_id(tag_id_or_name, session)
+        print(f'tag_file_group {tag=}')
         tag_file = TagFile(file_group_id=file_group_id, tag_id=tag.id)
+        print(f'tag_file_group {tag_file=}')
         session.add(tag_file)
         session.flush([tag_file])
         session.commit()
         logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id_or_name}')
 
+        print(f'tag_file_group saving tags...')
         # Save changes to config.
         save_tags_config(session)
+        print(f'tag_file_group syncing tags...')
         sync_tags_directory(session)
+        print(f'tag_file_group done...')
         return tag_file
 
     @staticmethod

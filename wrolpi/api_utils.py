@@ -1,4 +1,6 @@
+import asyncio
 import json
+from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
@@ -106,3 +108,45 @@ def json_error_handler(request: Request, exception: Exception):
 
     # Some unknown error, use internal error code.
     return json_response(body, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+PERPETUAL_WORKERS = list()
+
+
+@api_app.listener('after_server_start')
+async def start_perpetual_tasks(app: Sanic):
+    # Only one set of perpetual tasks needs to be started.
+    if app.shared_ctx.perpetual_tasks_started.is_set():
+        return
+    app.shared_ctx.perpetual_tasks_started.set()
+
+    for event_ in PERPETUAL_WORKERS:
+        await app.dispatch(event_)
+
+
+def perpetual_signal(event: str = None, sleep: int | float = 1):
+    """Use Sanic signals to continually call the wrapped function.  The wrapped function will continually be called,
+    even if it has errors.  If the function is long-running, it will only be called again after it has finished."""
+
+    def wrapper(func: callable):
+        # Create a Sanic "signal" for the provided function.
+        event_ = event or f'wrolpi.perpetual.{func.__name__}'
+
+        # Wrap the function in a worker that will call it perpetually.
+        @api_app.signal(event_)
+        async def worker(*args, **kwargs):
+            await asyncio.sleep(sleep)
+            try:
+                return await func(*args, **kwargs)
+            except CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f'Perpetual worker had error', exc_info=e)
+            finally:
+                await api_app.dispatch(event_)
+
+        # Add this new signal to the global list so that a task will be started after server startup.
+        PERPETUAL_WORKERS.append(event_)
+        return func
+
+    return wrapper

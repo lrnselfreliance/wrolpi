@@ -16,6 +16,7 @@ from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
 import psycopg2
+from slugify import slugify
 from sqlalchemy import asc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -1526,8 +1527,11 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
 
 
 @optional_session
-async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None) -> FileGroup:
+async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None):
     """Insert/update all files in the provided file's FileGroup."""
+    from wrolpi.api_utils import api_app
+    upserting_files: list = api_app.shared_ctx.upserting_files
+
     # Update/Insert all files in the FileGroup.
     paths = glob_shared_stem(pathlib.Path(file))
     # Remove any ignored files.
@@ -1536,32 +1540,110 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         logger.warning('upsert_file called, but all files are in ignored directories!')
         return
 
-    for i in range(2):
-        file_group = FileGroup.from_paths(session, *paths)
-        # Re-index the contents of the file.
-        try:
-            session.flush([file_group, ])
-            break
-        except IntegrityError:
-            # Another process inserted this FileGroup.
-            logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
-            session.rollback()
-            continue
-    else:
-        raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
+    stem, suffix = split_path_stem_and_suffix(file, full=True)
+    if stem in upserting_files:
+        # This FileGroup is already being processed, try again later.
+        await asyncio.sleep(1)
+        logger.debug(f'Waiting to upsert: {file}')
+        background_task(upsert_file(file, tag_names=tag_names))
+        return
 
-    logger.debug(f'upsert_file: {file_group}')
+    upserting_files.append(stem)
+
     try:
-        file_group.do_model(session)
-    except Exception as e:
-        logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
-        if PYTEST:
-            raise
+        for _ in range(2):
+            logger.warning('before from_paths')
+            file_group = FileGroup.from_paths(session, *paths)
+            logger.warning('after from_paths')
+            # Re-index the contents of the file.
+            try:
+                logger.warning('before flush')
+                session.flush([file_group, ])
+                logger.warning('after flush')
+                break
+            except IntegrityError:
+                # Another process inserted this FileGroup.
+                logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
+                session.rollback()
+                continue
+        else:
+            raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
-    for tag_name in (tag_names or []):
-        if tag_name not in file_group.tag_names:
-            tag = Tag.get_by_name(tag_name)
-            file_group.add_tag(tag.id)
+        logger.debug(f'upsert_file: {file_group}')
+        try:
+            file_group.do_model(session)
+        except Exception as e:
+            logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
+            if PYTEST:
+                raise
 
-    session.commit()
-    return file_group
+        logger.info(f'Tagging uploaded file {file_group} with: {tag_names}')
+        for tag_name in (tag_names or []):
+            if tag_name not in file_group.tag_names:
+                tag = Tag.get_by_name(tag_name)
+                file_group.add_tag(tag.id)
+
+        session.commit()
+        logger.debug(f'upsert_file complete: {file_group}')
+        return file_group
+    finally:
+        # Allow next process to attempt to upsert any files form this FileGroup.
+        upserting_files.remove(stem)
+
+
+slugify = functools.partial(slugify, max_length=200, allow_unicode=True)
+
+
+@optional_session
+def create_file_slug(file_group: FileGroup, session: Session = None) -> str:
+    """Create a unique human-readable string which can be used to link to this FileGroup."""
+    title = file_group.title
+    year = file_group.published_datetime.year if file_group.published_datetime else None
+    month = file_group.published_datetime.month if file_group.published_datetime else None
+
+    possible_slugs = []
+    if title:
+        # Title is the preferred slug.
+        possible_slugs.append(slugify(title, max_length=20, lowercase=True))
+        possible_slugs.append(slugify(title, lowercase=True))
+        possible_slugs.append(slugify(title))
+        # Include published datetime after title if necessary.
+        if year:
+            possible_slugs.append(slugify(f'{title} {year}', lowercase=True))
+            possible_slugs.append(slugify(f'{title} {year}'))
+            if month:
+                possible_slugs.append(slugify(f'{title} {year} {month}', lowercase=True))
+                possible_slugs.append(slugify(f'{title} {year} {month}'))
+
+    # File stem is less preferred than title.
+    stem, _ = split_path_stem_and_suffix(file_group.primary_path)
+    possible_slugs.append(slugify(stem))
+    if year:
+        possible_slugs.append(slugify(f'{stem} {year}', lowercase=True))
+        possible_slugs.append(slugify(f'{stem} {year}'))
+        if month:
+            possible_slugs.append(slugify(f'{stem} {month}', lowercase=True))
+            possible_slugs.append(slugify(f'{stem} {month}'))
+
+    # Return the first slug that does not yet exist.
+    existing_slugs = [i[0] for i in session.query(FileGroup.slug).filter(FileGroup.slug.in_(possible_slugs)).all()]
+    for slug in possible_slugs:
+        if slug not in existing_slugs:
+            return slug
+
+    # Many possible slugs already exist, try again.
+    possible_slugs = []
+    if title:
+        possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {title}', lowercase=True))
+        possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {title}'))
+        possible_slugs.extend([slugify(f'{title} {i}') for i in range(10)])
+    possible_slugs.append(slugify(f'{file_group.primary_path.parent.name} {stem}'))
+    possible_slugs.extend([slugify(f'{stem} {i}') for i in range(10)])
+
+    # Return the first slug that does not yet exist.
+    existing_slugs = [i[0] for i in session.query(FileGroup.slug).filter(FileGroup.slug.in_(possible_slugs)).all()]
+    for slug in possible_slugs:
+        if slug not in existing_slugs:
+            return slug
+
+    raise RuntimeError(f'Failed to create unique slug: {file_group}')

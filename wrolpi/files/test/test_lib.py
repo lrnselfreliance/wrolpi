@@ -1,8 +1,9 @@
 import asyncio
 import json
+import pathlib
 import shutil
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
@@ -16,6 +17,7 @@ import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer
 from wrolpi.dates import now
+from wrolpi.db import get_db_curs
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
@@ -1144,3 +1146,31 @@ async def test_move_many_files(test_async_client, test_session, test_directory, 
     assert bar.is_dir()
     assert (bar / 'foo').is_dir()
     assert (bar / 'foo/0.txt').is_file()
+
+
+@pytest.mark.asyncio
+async def test_file_slug(test_async_client, test_session, test_directory, make_files_structure, video_factory,
+                         video_bytes, example_pdf_bytes, singlefile_contents_factory):
+    make_files_structure({
+        'foo title.mp4': video_bytes,
+        'foo title 2.mp4': video_bytes,
+        'some archive.html': singlefile_contents_factory(title='html title'),
+        'シ.pdf': example_pdf_bytes,
+    })
+    test_session.commit()
+    await lib.refresh_files()
+    bar, foo, foo2, grin = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    foo2.published_datetime = datetime(2000, 1, 1, 1, 1, 1, tzinfo=timezone.utc)
+    assert test_session.query(FileGroup).count() == 4
+
+    # All FileGroups have their respective slugs.
+    with get_db_curs() as curs:
+        curs.execute('SELECT primary_path, slug FROM file_group WHERE slug IS NOT NULL ')
+        results = {i[0]: i[1] for i in curs.fetchall()}
+        results = {pathlib.Path(k).relative_to(test_directory).name: v for k, v in results.items()}
+    assert results == {
+        'foo title.mp4': 'foo-title',
+        'foo title 2.mp4': 'foo-title-2',
+        'some archive.html': 'html-title',
+        'シ.pdf': 'wrolpi-test-pdf',
+    }

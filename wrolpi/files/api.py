@@ -1,19 +1,24 @@
+import asyncio
 import pathlib
 from http import HTTPStatus
-from typing import List
 
+import sanic.request
+import sanic.request
+import sanic.request
 import sanic.request
 from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
+from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     background_task, walk, timer
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
+from .lib import get_mimetype
+from .models import FileGroup
 from ..api_utils import json_response, api_app
+from ..db import get_db_session
 from ..events import Events
-from ..schema import JSONErrorResponse
 from ..tags import Tag
 from ..vars import PYTEST
 
@@ -107,51 +112,53 @@ async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 
-@files_bp.post('/directories')
-@openapi.definition(
-    summary='Get all directories that match the search_str, prefixed by the media directory.',
-    body=schema.DirectoriesRequest,
-)
-@openapi.response(HTTPStatus.OK, schema.DirectoriesResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@validate(schema.DirectoriesRequest)
-def post_directories(_, body: schema.DirectoriesRequest):
-    path = get_media_directory() / (body.search_str or '')
-    search_str = str(path)
-    dirs = lib.get_matching_directories(search_str)
-    dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
-
-    body = {'directories': dirs, 'exists': path.exists(), 'is_dir': path.is_dir(), 'is_file': path.is_file()}
-    return response.json(body)
-
-
 @files_bp.post('/search_directories')
 @openapi.definition(
-    summary='Get all directories whose name matches the provided name.',
+    summary='Get all directories whose name matches the provided name or path.',
     body=schema.DirectoriesSearchRequest,
 )
 @validate(schema.DirectoriesSearchRequest)
 async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
-    if len(body.name) <= 1:
-        return response.empty()
+    if len(body.path) <= 1:
+        # Need more data before searching.
+        return json_response({
+            'is_dir': False,
+            'directories': [],
+            'channel_directories': [],
+            'domain_directories': [],
+        })
 
-    from modules.videos.channel import lib as channels_lib
-    channels = await channels_lib.search_channels_by_name(name=body.name)
+    path = get_media_directory() / body.path
+
+    try:
+        matching_directories = lib.get_matching_directories(str(path))
+        matching_directories = list(map(pathlib.Path, matching_directories))
+    except FileNotFoundError:
+        matching_directories = []
+
+    # Search Channels by name.
+    from modules.videos.channel.lib import search_channels_by_name
+    channels = await search_channels_by_name(name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
 
-    from modules.archive import lib as archives_lib
-    domains = await archives_lib.search_domains_by_name(name=body.name)
+    # Search Domains by name.
+    from modules.archive.lib import search_domains_by_name
+    domains = await search_domains_by_name(name=body.path)
     domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
 
-    # Get all directories that match but do not contain the above directories.
-    from wrolpi.files.models import Directory
-    directories: List[Directory] = await lib.search_directories_by_name(
-        name=body.name,
-        excluded=list(map(str, channel_paths + domain_paths)))
+    # Get all Directory that match but do not contain the above directories.
+    excluded = [str(i) for i in channel_paths + domain_paths + matching_directories]
+    directories = await lib.search_directories_by_name(name=body.path, excluded=excluded)
+
+    # Return only the top 20 directories.
+    directories = [i.__json__() for i in directories]
+    directories.extend([{'path': i, 'name': i.name} for i in matching_directories])
+    directories = list(sorted(directories, key=lambda i: i['path']))[:20]
 
     body = {
+        'is_dir': path.is_dir(),
         'directories': directories,
         'channel_directories': channel_directories,
         'domain_directories': domain_directories
@@ -286,11 +293,6 @@ async def post_untag_file_group(_, body: schema.TagFileGroupPost):
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
-# {
-#   '/media/directory/sub-dir/the-file-name.suffix': 2,  # The chunk number we will receive next.
-# }
-
-
 @files_bp.post('/upload')
 async def post_upload(request: Request):
     """Accepts a multipart/form-data request to upload a single file.
@@ -338,8 +340,10 @@ async def post_upload(request: Request):
     output = destination / filename
     output_str = str(output)
 
+    uploaded_files = api_app.shared_ctx.uploaded_files
+
     # Chunks start at 0.
-    expected_chunk_num = api_app.shared_ctx.uploaded_files.get(output_str, 0)
+    expected_chunk_num = uploaded_files.get(output_str, 0)
     logger.debug(f'last_chunk_num is {expected_chunk_num} for {repr(output_str)} received {chunk_num=}')
 
     chunk_size = int(request.form['chunkSize'][0])
@@ -348,7 +352,7 @@ async def post_upload(request: Request):
     if (body_size := len(chunk.body)) != chunk_size:
         raise FileUploadFailed(f'Chunk size does not match the size of the chunk! {chunk_size} != {body_size=}')
 
-    if chunk_num == 0 and output.is_file() and output_str in api_app.shared_ctx.uploaded_files:
+    if chunk_num == 0 and output.is_file() and output_str in uploaded_files:
         # User attempted to upload this same file, but it did not finish.  User has started over again.
         logger.info(f'Restarting upload of {repr(output_str)}')
         output.unlink()
@@ -381,19 +385,14 @@ async def post_upload(request: Request):
 
     # Store what we expect to receive next.
     expected_chunk_num += 1
-    api_app.shared_ctx.uploaded_files[output_str] = expected_chunk_num
+    uploaded_files[output_str] = expected_chunk_num
 
     # Chunks start at 0.
     if chunk_num == total_chunks:
         # File upload is complete.
         logger.info(f'Got final chunk of uploaded file: {output_str}')
-        del api_app.shared_ctx.uploaded_files[output_str]
-        # Upsert this new file (and any related files) into the DB.
-        coro = lib.upsert_file(output, tag_names=tag_names)
-        if PYTEST:
-            await coro
-        else:
-            background_task(coro)
+        del uploaded_files[output_str]
+        # TODO call upsert
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

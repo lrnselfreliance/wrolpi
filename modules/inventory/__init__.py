@@ -31,3 +31,5 @@ def init(force=False):
                 session.add(inv)
 
     INVENTORY_INITIALIZED = True
+
+    logger.info('Initializing inventory complete')

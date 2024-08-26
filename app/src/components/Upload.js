@@ -70,7 +70,7 @@ export function Upload({disabled}) {
         <Form>
             <SForm.Field required>
                 <label>Destination</label>
-                <DirectorySearch onSelect={handleDestination} disabled={disabled}/>
+                <DirectorySearch onSelect={handleDestination} disabled={disabled} style={{marginBottom: '0.5em'}}/>
                 {tagsSelector}
             </SForm.Field>
         </Form>

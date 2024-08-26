@@ -171,7 +171,10 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
     except APIError as e:
         raise ValidationError() from e
 
-    pathlib.Path(data.directory).mkdir(parents=True, exist_ok=True)
+    channel_directory = pathlib.Path(data.directory)
+    if not channel_directory.is_absolute():
+        channel_directory = get_media_directory() / channel_directory
+    channel_directory.mkdir(parents=True, exist_ok=True)
     channel = Channel()
     session.add(channel)
     session.flush([channel])

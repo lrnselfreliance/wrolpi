@@ -7,6 +7,7 @@ from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, Computed, BigInteger, Boolean
 from sqlalchemy import types
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
@@ -84,6 +85,7 @@ class FileGroup(ModelHelper, Base):
     title = Column(String)  # user-displayable title
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
+    _slug = Column('slug', String, nullable=True, unique=True)
 
     tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
@@ -101,11 +103,12 @@ class FileGroup(ModelHelper, Base):
 
     def __repr__(self):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
-        return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
+        t = f' title={self.title}' if self.title else ''
+        return f'<FileGroup id={self.id}{t} {m} primary_path={repr(str(self.primary_path))}>'
 
     def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
-        _, suffix = split_path_stem_and_suffix(self.primary_path)
+        stem, suffix = split_path_stem_and_suffix(self.primary_path)
         tags = sorted([i.tag.name for i in self.tag_files])
         d = dict(
             author=self.author,
@@ -125,6 +128,8 @@ class FileGroup(ModelHelper, Base):
             published_datetime=self.published_datetime,
             published_modified_datetime=self.published_modified_datetime,
             size=self.size,
+            slug=self._slug,  # Don't generate slugs when sending to UI.
+            stem=stem,
             suffix=suffix,
             tags=tags,
             title=self.title,
@@ -156,6 +161,7 @@ class FileGroup(ModelHelper, Base):
         new_files = list(self.files) if self.files else list()
         new_files.extend([dict(path=path, mimetype=get_mimetype(path)) for path in paths])
         self.files = unique_by_predicate(new_files, lambda i: i['path'])
+        self.clean_my_files()
 
     def my_files(self, *mimetypes: str) -> List[dict]:
         """Return all files related to this group that match any of the provided mimetypes.
@@ -212,6 +218,15 @@ class FileGroup(ModelHelper, Base):
     def my_mobi_files(self) -> List[dict]:
         return self.my_files('application/x-mobipocket-ebook')
 
+    def clean_my_files(self):
+        """Ensures that files in files list still exist.  Returns new `primary_path`"""
+        from wrolpi.files.lib import get_primary_file
+        new_files = [i for i in self.my_files() if pathlib.Path(i['path']).is_file()]
+        if not new_files:
+            raise FileNotFoundError(f'No files exist for {self}')
+        self.primary_path = get_primary_file([i['path'] for i in new_files])
+        self.files = new_files
+
     def delete(self, add_to_skip_list: bool = True):
         """Delete this FileGroup record, and all of its files.
 
@@ -252,6 +267,14 @@ class FileGroup(ModelHelper, Base):
             if PYTEST:
                 raise
 
+        try:
+            # Generate slug property.
+            self.slug = self.slug
+        except Exception as e:
+            logger.error(f'Failed to slugify {self}', exc_info=e)
+            if PYTEST:
+                raise
+
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
@@ -262,18 +285,18 @@ class FileGroup(ModelHelper, Base):
             raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
-        logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
-            primary_path = get_primary_file(paths)
-            file_group.primary_path = primary_path
             file_group.append_files(*paths)
+            # `append_files` sets `primary_path`
+            primary_path = file_group.primary_path
             session.add(file_group)
         elif len(existing_groups) == 1:
             # Found one FileGroup with these paths, no need to create a new FileGroup.
             file_group = existing_groups[0]
             file_group.append_files(*paths)
+            file_group.clean_my_files()
             primary_path = get_primary_file(file_group.my_paths())
         else:
             # Multiple FileGroups contain these paths as primary.
@@ -282,6 +305,7 @@ class FileGroup(ModelHelper, Base):
             if not file_group:
                 file_group = FileGroup.from_paths(session, primary_path)
             file_group.merge(existing_groups)
+            file_group.clean_my_files()
 
         if not isinstance(primary_path, pathlib.Path):
             raise ValueError('Cannot create FileGroup without a primary path.')
@@ -427,6 +451,20 @@ class FileGroup(ModelHelper, Base):
         for file in self.my_paths():
             files[file] = f'{tag_names}/{file.name}'
         return files
+
+    @hybrid_property
+    def slug(self, session: Session = None) -> str | None:
+        """Returns a unique human-readable string identifier for this FileGroup, based of title and such."""
+        if not self._slug:
+            from wrolpi.files import lib
+            session = session or Session.object_session(self)
+            self.slug = lib.create_file_slug(self, session)
+            self.flush(session)
+        return self._slug
+
+    @slug.setter
+    def slug(self, value: str):
+        self._slug = value
 
 
 class Directory(ModelHelper, Base):

@@ -305,6 +305,15 @@ class Archive(Base, ModelHelper):
             if PYTEST:
                 raise
 
+        try:
+            # Generate slug after validation.
+            _ = self.file_group.slug
+        except Exception as e:
+            logger.error(f'Failed to generate slug: {self}', exc_info=e)
+            if PYTEST:
+                raise
+
+
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Archive':
         """Create a new Archive and FileGroup from the provided paths.

@@ -150,6 +150,8 @@ async def pdf_modeler():
                         file_group.published_datetime = metadata.published_datetime
                         file_group.published_modified_datetime = metadata.modification_datetime
                         file_group.model = 'pdf'
+                        # Generate slug.
+                        _ = file_group.slug
                 except Exception as e:
                     logger.error(f'Failed to index PDF {pdf_file}', exc_info=e)
                     if PYTEST:

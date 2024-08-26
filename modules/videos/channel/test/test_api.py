@@ -56,6 +56,14 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     assert_dict_contains(response.json['next'], {'title': 'vid2'})
 
 
+@pytest.mark.asyncio
+async def test_get_video_slug(test_async_client, test_session, video_factory):
+    """Can fetch a Video by its slug."""
+    video = video_factory()
+    request, response = await test_async_client.get(f'/api/videos/video/{video.slug}')
+    assert response.status_code == HTTPStatus.OK
+
+
 def test_channel_no_download_frequency(test_client, test_session, test_directory, simple_channel):
     """A channel does not require a download frequency."""
     # No downloads are scheduled.

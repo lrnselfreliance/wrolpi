@@ -9,7 +9,6 @@ from uuid import uuid4
 import mock
 import pytest
 from PIL import Image
-from requests import session
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config, format_videos_destination
@@ -146,6 +145,8 @@ def video_factory(test_session, test_directory):
         video.channel_id = channel_id
         video.source_id = source_id or title
         video.file_group.published_datetime = upload_date
+        video.file_group.title = title
+        test_session.flush([video.file_group, ])
         video.validate()
 
         for tag_name in tag_names:

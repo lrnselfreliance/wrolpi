@@ -1,10 +1,5 @@
 import React, {useContext, useState} from "react";
 import {
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardMeta,
-    Container,
     Dropdown,
     GridColumn,
     GridRow,
@@ -26,9 +21,7 @@ import {
     findPosterPath,
     HelpHeader,
     humanFileSize,
-    isoDatetimeToAgoPopup,
     isoDatetimeToString,
-    mimetypeColor,
     PageContainer,
     PreviewPath,
     SearchInput,
@@ -45,9 +38,9 @@ import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, Segment, Tab, TabPane} from "./Theme";
+import {Button, darkTheme, Header, Loader, Placeholder, Segment, Tab, TabPane} from "./Theme";
 import {SortableTable} from "./SortableTable";
-import {taggedImageLabel, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 
 function archiveFileLink(path, directory = false) {
@@ -276,55 +269,17 @@ function ArchivePage() {
     </>
 }
 
-export function ArchiveCard({file}) {
-    const {s} = useContext(ThemeContext);
+export function getArchiveCardProps(file) {
     const {data} = file;
+    const posterTo = `/archive/${data.id}`;
 
-    const imageSrc = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
-    const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
-
-    let screenshot = <CardIcon><FileIcon file={file}/></CardIcon>;
-    const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;
-    if (imageSrc) {
-        screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}} label={imageLabel}/>;
+    return {
+        posterTo,
+        authorTitle: data ? data.domain : null,
+        authorTo: data ? `/archive?domain=${data.domain}` : null,
+        title: file.title || file.stem || data.url,
+        datetime: file.published_datetime || file.published_modified_datetime || file.modified,
     }
-
-    const domain = data ? data.domain : null;
-    const domainUrl = `/archive?domain=${domain}`;
-
-    const title = file.title || data.url;
-    const header = <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
-    const dt = file.published_datetime || file.published_modified_datetime || file.modified;
-    return <Card color={mimetypeColor(file.mimetype)}>
-        <div>
-            <ExternalCardLink to={singlefileUrl}>
-                {screenshot}
-            </ExternalCardLink>
-        </div>
-        <CardContent {...s}>
-            <CardHeader>
-                <Container textAlign='left'>
-                    <Popup on='hover'
-                           trigger={header}
-                           content={title}/>
-                </Container>
-            </CardHeader>
-            {domain &&
-                <CardLink to={domainUrl}>
-                    <span {...s}>{domain}</span>
-                </CardLink>}
-            <CardMeta {...s}>
-                {isoDatetimeToAgoPopup(dt, false)}
-            </CardMeta>
-            <CardDescription>
-                <Link to={`/archive/${data.id}`}>
-                    <Button icon='file alternate' content='Details'
-                            labelPosition='left'/>
-                </Link>
-                <Button icon='external' href={file.url} target='_blank' rel='noopener noreferrer'/>
-            </CardDescription>
-        </CardContent>
-    </Card>
 }
 
 export function DomainsPage() {

@@ -19,6 +19,7 @@ pytest==7.3.1
 python-docx==1.1.0
 python-dotenv==1.0.0
 python-magic~=0.4.27
+python-slugify==8.0.4
 pytz==2023.3
 sanic-ext==23.6.0
 sanic-testing==22.6.0  # 23.6.0 has error with "expandtabs"

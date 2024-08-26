@@ -377,6 +377,11 @@ def bad_vtt_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
+def example_pdf_bytes(test_directory) -> bytes:
+    return (PROJECT_DIR / 'test/pdf example.pdf').read_bytes()
+
+
+@pytest.fixture
 def example_pdf(test_directory) -> pathlib.Path:
     destination = test_directory / 'pdf example.pdf'
     shutil.copy(PROJECT_DIR / 'test/pdf example.pdf', destination)

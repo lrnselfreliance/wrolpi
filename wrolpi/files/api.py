@@ -7,13 +7,12 @@ from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
+from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     background_task, walk, timer
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
 from ..api_utils import json_response, api_app
 from ..events import Events
-from ..schema import JSONErrorResponse
 from ..tags import Tag
 from ..vars import PYTEST
 
@@ -107,51 +106,56 @@ async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 
-@files_bp.post('/directories')
-@openapi.definition(
-    summary='Get all directories that match the search_str, prefixed by the media directory.',
-    body=schema.DirectoriesRequest,
-)
-@openapi.response(HTTPStatus.OK, schema.DirectoriesResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@validate(schema.DirectoriesRequest)
-def post_directories(_, body: schema.DirectoriesRequest):
-    path = get_media_directory() / (body.search_str or '')
-    search_str = str(path)
-    dirs = lib.get_matching_directories(search_str)
-    dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
-
-    body = {'directories': dirs, 'exists': path.exists(), 'is_dir': path.is_dir(), 'is_file': path.is_file()}
-    return response.json(body)
-
-
 @files_bp.post('/search_directories')
 @openapi.definition(
-    summary='Get all directories whose name matches the provided name.',
+    summary='Get all directories whose name matches the provided name or path.',
     body=schema.DirectoriesSearchRequest,
 )
 @validate(schema.DirectoriesSearchRequest)
 async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
-    if len(body.name) <= 1:
-        return response.empty()
+    if len(body.path) <= 1:
+        return json_response({
+            'is_dir': False,
+            'directories': [],
+            'channel_directories': [],
+            'domain_directories': [],
+        })
 
+    path = get_media_directory() / body.path
+
+    try:
+        matching_directories = lib.get_matching_directories(str(path))
+        matching_directories = list(map(pathlib.Path, matching_directories))
+    except FileNotFoundError:
+        matching_directories = []
+
+    # Search Channels by name.
     from modules.videos.channel import lib as channels_lib
-    channels = await channels_lib.search_channels_by_name(name=body.name)
+    channels = await channels_lib.search_channels_by_name(name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
 
+    # Search Domains by name.
     from modules.archive import lib as archives_lib
-    domains = await archives_lib.search_domains_by_name(name=body.name)
+    domains = await archives_lib.search_domains_by_name(name=body.path)
     domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
 
     # Get all directories that match but do not contain the above directories.
+    excluded = list(map(str, channel_paths + domain_paths)) + matching_directories
     from wrolpi.files.models import Directory
-    directories: List[Directory] = await lib.search_directories_by_name(
-        name=body.name,
-        excluded=list(map(str, channel_paths + domain_paths)))
+    directories = await lib.search_directories_by_name(
+        name=body.path,
+        excluded=excluded,
+    )
+
+    # Return only the top 20 directories.
+    directories = [i.__json__() for i in directories]
+    directories.extend([{'path': i, 'name': i.name} for i in matching_directories])
+    directories = list(sorted(directories, key=lambda i: i['path']))[:20]
 
     body = {
+        'is_dir': path.is_dir(),
         'directories': directories,
         'channel_directories': channel_directories,
         'domain_directories': domain_directories

@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import asyncio
 import json
 import os.path
 import pathlib
@@ -327,6 +328,8 @@ class VideoDownloader(Downloader, ABC):
                 video_path = preferred_path
                 logger.info(f'Using preferred video file which exists: {preferred_path}')
 
+            logger.debug(f'Video downloaded to: {video_path}')
+
             if not video_path.is_file():
                 error = f'{stdout}\n\n\n{stderr}\n\n' \
                         f'Video file could not be found!  {video_path}'
@@ -350,6 +353,7 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 # Find any files downloaded with the video (poster, caption, etc.).
                 video_paths = glob_shared_stem(video_path)
+                logger.debug(f'yt-dlp created files: {video_paths}')
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
                 video.channel_id = channel_id
@@ -577,8 +581,6 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
 
     # Channel does not exist.  Create one in the video directory.
     channel_directory = get_videos_directory() / escape_file_name(name)
-    if not channel_directory.is_dir():
-        channel_directory.mkdir(parents=True)
     data = ChannelPostRequest(
         source_id=source_id,
         name=name,
@@ -586,8 +588,6 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         directory=str(channel_directory.relative_to(get_media_directory())),
     )
     channel = create_channel(data=data, return_dict=False)
-    # Create the directory now that the channel is approved.
-    channel_directory.mkdir(exist_ok=True)
     # Get all properties while we have the session.
     channel.dict()
 

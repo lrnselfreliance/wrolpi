@@ -47,7 +47,7 @@ async def test_video_factory(test_session, video_factory, channel_factory):
     The `video_factory` pytest fixture is used in many video tests.  Test all it's functionality.
     """
     channel = channel_factory()
-    video = video_factory(
+    video = await video_factory(
         channel_id=channel.id,
         with_video_file=True,
         with_info_json={'description': 'hello'},
@@ -69,10 +69,11 @@ async def test_video_factory(test_session, video_factory, channel_factory):
     assert video.source_id == 'some id'
 
 
-def test_validate_video(test_directory, video_factory, image_bytes_factory, video_file):
+@pytest.mark.asyncio
+async def test_validate_video(test_directory, video_factory, image_bytes_factory, video_file):
     """A video poster will be generated only if the channel permits."""
     video_file = video_file.rename(test_directory / 'Channel Name_20050607_1234567890_The Title.mp4')
-    vid1 = video_factory(with_video_file=video_file, with_info_json=True)
+    vid1 = await video_factory(with_video_file=video_file, with_info_json=True)
     # Clear source_id so source_id in the file will be extracted.
     vid1.source_id = None
     assert not vid1.poster_path
@@ -90,7 +91,7 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     assert vid1.file_group.title == 'The Title'
 
     # A PNG is replaced.
-    vid2 = video_factory(with_video_file=True, with_poster_ext='.png')
+    vid2 = await video_factory(with_video_file=True, with_poster_ext='.png')
     vid2.poster_path.with_suffix('.jpg').write_bytes(image_bytes_factory())  # New poster exists, replace it.
     assert vid2.poster_path and vid2.poster_path.is_file() and vid2.poster_path.suffix == '.png', \
         'Poster was not initialized'
@@ -106,10 +107,10 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
 
     channel1 = channel_factory()
     channel2 = channel_factory()
-    video_factory(channel_id=channel1.id)
-    video_factory(channel_id=channel1.id)
-    video_factory(channel_id=channel2.id)
-    video_factory()
+    await video_factory(channel_id=channel1.id)
+    await video_factory(channel_id=channel1.id)
+    await video_factory(channel_id=channel2.id)
+    await video_factory()
 
     result = await get_statistics()
     assert 'statistics' in result
@@ -121,11 +122,11 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
 @pytest.mark.asyncio
 async def test_orphaned_files(test_session, make_files_structure, test_directory, video_factory):
     # A Video without associated files is not orphaned.
-    vid1 = video_factory(title='vid1', with_video_file=True)
+    vid1 = await video_factory(title='vid1', with_video_file=True)
     # The video files will be removed...
-    vid2 = video_factory(title='vid2', with_video_file=True, with_caption_file=True, with_poster_ext='jpeg',
+    vid2 = await video_factory(title='vid2', with_video_file=True, with_caption_file=True, with_poster_ext='jpeg',
                          with_info_json=True)
-    vid3 = video_factory(title='vid3', with_video_file=True, with_poster_ext='jpg')
+    vid3 = await video_factory(title='vid3', with_video_file=True, with_poster_ext='jpg')
     # This will be ignored because it is not in the "videos" subdirectory.
     shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', test_directory / 'vid4.en.vtt')
     test_session.commit()
@@ -178,7 +179,7 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
 
 
 @pytest.mark.asyncio
-def test_link_channel_and_downloads_migration(test_async_client, test_session, channel_factory, test_download_manager):
+def test_link_channel_and_downloads_migration(async_client, test_session, channel_factory, test_download_manager):
     """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
     # A simple Channel which has a download for its URL.
     channel1 = channel_factory(url='https://example.com/channel1')
@@ -220,7 +221,7 @@ def test_link_channel_and_downloads_migration(test_async_client, test_session, c
 
 
 @pytest.mark.asyncio
-async def test_format_videos_destination(test_async_client, test_directory):
+async def test_format_videos_destination(async_client, test_directory):
     """Videos destination is formatted according to the WROLPiConfig."""
     wrolpi_config = get_wrolpi_config()
 

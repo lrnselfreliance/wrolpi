@@ -273,7 +273,7 @@ def test_no_inventories(test_session, test_directory):
         pass
 
 
-def test_inventories_version(test_async_client, test_session, test_directory, init_test_inventory):
+def test_inventories_version(async_client, test_session, test_directory, init_test_inventory):
     """You can't save over a newer version of an inventory."""
     config = get_inventories_config()
 
@@ -299,7 +299,7 @@ def test_inventories_version(test_async_client, test_session, test_directory, in
 
 
 @pytest.mark.asyncio
-async def test_inventories_config(test_async_client, test_session, test_directory, init_test_inventory):
+async def test_inventories_config(async_client, test_session, test_directory, init_test_inventory):
     for item in TEST_ITEMS:
         item = Item(**item)
         test_session.add(item)

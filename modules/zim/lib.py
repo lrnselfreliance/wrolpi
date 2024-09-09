@@ -14,7 +14,7 @@ from modules.zim import kiwix
 from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
-from wrolpi import flags
+from wrolpi import flags, after_startup
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
     register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate
 from wrolpi.db import get_db_session, optional_session, get_db_curs

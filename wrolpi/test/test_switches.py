@@ -3,6 +3,7 @@ import multiprocessing
 
 import pytest
 
+from wrolpi import switches
 from wrolpi.switches import register_switch_handler
 
 count1 = multiprocessing.Value('i', 0)
@@ -19,28 +20,25 @@ async def switch_handler_test1(**context):
 
 
 @pytest.mark.asyncio
-async def test_switches(test_async_client):
+async def test_switches(async_client):
     global expected_context
-
-    # Call API so server actually starts.
-    await test_async_client.get('/api/echo')
 
     # Dispatch "test" switch, the switch handler should call the handler above, once.
     expected_context = {'foo': 'bar'}
-    await test_async_client.sanic_app.dispatch('wrolpi.switch.test1', context=expected_context)
-    await asyncio.sleep(1)
+    switches.activate_switch('test1', expected_context)
+    await switches.await_switches()
     assert count1.value == 1
 
     # Dispatching many times only causes switch handler to be called once because it is already pending.
     expected_context = {'foo': 'bar6'}
     # These contexts are overwritten.
-    await switch_handler_test1.dispatch(context={'foo': 'bar1'})
-    await switch_handler_test1.dispatch(context={'foo': 'bar2'})
-    await switch_handler_test1.dispatch(context={'foo': 'bar3'})
-    await switch_handler_test1.dispatch(context={'foo': 'bar4'})
-    await switch_handler_test1.dispatch(context={'foo': 'bar5'})
-    await switch_handler_test1.dispatch(context=expected_context)
-    await asyncio.sleep(1)
+    switch_handler_test1.activate_switch(context={'foo': 'bar1'})
+    switch_handler_test1.activate_switch(context={'foo': 'bar2'})
+    switch_handler_test1.activate_switch(context={'foo': 'bar3'})
+    switch_handler_test1.activate_switch(context={'foo': 'bar4'})
+    switch_handler_test1.activate_switch(context={'foo': 'bar5'})
+    switch_handler_test1.activate_switch(context=expected_context)
+    await switches.await_switches()
     assert count1.value == 2
 
 
@@ -52,19 +50,28 @@ async def switch_handler_test2(**context):
 
 
 @pytest.mark.asyncio
-async def test_perpetual_signal(test_async_client):
+async def test_perpetual_signal(async_client):
     """Test that perpetual_signal survives errors."""
     # Signal event is dispatched again.
-    await switch_handler_test2.dispatch()
+    switch_handler_test2.activate_switch()
     await asyncio.sleep(1)
     assert count2.value == 1
 
     # Error is logged.
-    await switch_handler_test2.dispatch()
+    switch_handler_test2.activate_switch()
     await asyncio.sleep(1)
     assert count2.value == 2
 
     # Switch is dispatched again.
-    await switch_handler_test2.dispatch()
+    switch_handler_test2.activate_switch()
     await asyncio.sleep(1)
     assert count2.value == 3
+
+
+@pytest.mark.asyncio
+async def test_invalid_activate_switch(async_client):
+    with pytest.raises(RuntimeError):
+        switches.activate_switch('does not exist')
+
+    with pytest.raises(RuntimeError):
+        switches.activate_switch('test1', 'bad context')

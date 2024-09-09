@@ -80,7 +80,7 @@ async def test_relationships(test_session, example_singlefile):
 
 
 @pytest.mark.asyncio
-async def test_archive_title(test_async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory):
     """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
     # Create some test files, delete all records for a fresh refresh.
     archive_factory(
@@ -119,7 +119,8 @@ async def test_archive_title(test_async_client, test_session, archive_factory, s
     assert archive1.file_group.title is None
 
 
-def test_archive_refresh_deleted_archive(test_client, test_session, archive_directory, archive_factory):
+@pytest.mark.asyncio
+async def test_archive_refresh_deleted_archive(async_client, test_session, archive_directory, archive_factory):
     """Archives/Domains should be deleted when archive files are deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
@@ -137,25 +138,25 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
 
     # All 5 archives are already in the DB.
     check_counts(archive_count=5, domain_count=2)
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=5, domain_count=1)
 
     # Delete archive2's files, it's the latest for 'https://example.com/1'
     for path in archive2.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=4, domain_count=1)
 
     # Delete archive1's files, now the URL is empty.
     for path in archive1.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=3, domain_count=0)
 
     # Delete archive3, now there is now example.com domain
     for path in archive3.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=2, domain_count=0)
 
     # Delete all the rest of the archives
@@ -163,7 +164,7 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
         path.unlink()
     for path in archive5.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=0, domain_count=0)
 
 
@@ -459,7 +460,7 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives(test_session, test_directory, test_async_client, make_files_structure):
+async def test_refresh_archives(test_session, test_directory, async_client, make_files_structure):
     """Archives can be found and put in the database.  A single Archive will have multiple files."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
@@ -484,7 +485,7 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
     })
 
     # The single archive is found.
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Cause a re-index of the archive.
@@ -493,7 +494,7 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
     test_session.commit()
 
     # Running the refresh does not result in a new archive.
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Archives file format was changed, lets check the new formats are found.
@@ -501,13 +502,13 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
         'archive/example.com/2021-10-05-16-20-11_The Title.html': '<html></html>',
         'archive/example.com/2021-10-05-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     # The old formatted archive above is renamed.
     assert (test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html').is_file()
     assert test_session.query(Archive).count() == 2
 
     content = json.dumps({'search_str': 'text', 'model': 'archive'})
-    request, response = await test_async_client.post('/api/files/search', content=content)
+    request, response = await async_client.post('/api/files/search', content=content)
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups'], 'No files matched "text"'
     assert response.json['file_groups'][0]['model'] == 'archive', 'Returned file was not an archive'
@@ -821,7 +822,7 @@ def test_get_url_from_singlefile():
 
 
 @pytest.mark.asyncio
-async def test_get_custom_archive_directory(test_async_client, test_directory, test_config):
+async def test_get_custom_archive_directory(async_client, test_directory, test_config):
     """Custom directory can be used for archive directory."""
     # Default location.
     assert lib.get_archive_directory() == (test_directory / 'archive')

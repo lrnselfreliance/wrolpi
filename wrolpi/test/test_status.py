@@ -7,7 +7,7 @@ from wrolpi import status
 
 
 @pytest.mark.asyncio
-async def test_get_load(test_async_client):
+async def test_get_load(async_client):
     """Test reading load information from /proc/loadavg."""
     load = await status.get_load_stats()
     assert isinstance(load, status.SystemLoad)
@@ -18,7 +18,7 @@ async def test_get_load(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_get_cpu_stats(test_async_client):
+async def test_get_cpu_stats(async_client):
     """Minimum CPU info testing because this will fail in docker, etc."""
     info = await status.get_cpu_stats()
     assert isinstance(info, status.CPUInfo)
@@ -27,7 +27,7 @@ async def test_get_cpu_stats(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_get_drives_stats(test_async_client):
+async def test_get_drives_stats(async_client):
     """Minimum drives info testing because this will fail in docker, etc."""
     info = await status.get_drives_stats()
     assert isinstance(info, list)
@@ -44,10 +44,10 @@ async def test_get_drives_stats(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_status_worker(test_async_client):
+async def test_status_worker(async_client):
     """Status worker calls itself perpetually, but can be limited during testing."""
     from wrolpi.api_utils import api_app
-    assert test_async_client.sanic_app.shared_ctx.status['cpu_stats'] == dict()
+    assert async_client.sanic_app.shared_ctx.status['cpu_stats'] == dict()
 
     # Status worker fills out stats as it goes along.
     await status.status_worker(count=2)

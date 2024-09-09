@@ -18,13 +18,13 @@ def assert_events(expected: List[Dict], after=None):
 
 
 @pytest.mark.asyncio
-async def test_events_api_feed(test_session, test_async_client, example_pdf):
+async def test_events_api_feed(test_session, async_client, example_pdf):
     """Events can be gotten from the API."""
     # refresh_files() creates a few events.
-    request, response = await test_async_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    request, response = await test_async_client.get('/api/events/feed')
+    request, response = await async_client.get('/api/events/feed')
     assert response.status_code == HTTPStatus.OK
     assert (result := response.json.get('events'))
 
@@ -41,7 +41,7 @@ async def test_events_api_feed(test_session, test_async_client, example_pdf):
 
 
 @pytest.mark.asyncio
-async def test_events_history_limit(test_async_client):
+async def test_events_history_limit(async_client):
     """EVENTS_HISTORY has a limited size."""
     for i in range(HISTORY_SIZE + 5):
         Events.send_ready()
@@ -50,7 +50,7 @@ async def test_events_history_limit(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_get_events(test_async_client):
+async def test_get_events(async_client):
     after = now()
 
     Events.send_global_refresh_started()

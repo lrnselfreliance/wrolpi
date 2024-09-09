@@ -11,7 +11,7 @@ from mock import mock
 
 from modules.zim.downloader import KiwixCatalogDownloader, KiwixZimDownloader
 from modules.zim.models import Zim
-from wrolpi.common import DownloadFileInfo
+from wrolpi.common import DownloadFileInfo, timer
 from wrolpi.downloader import DownloadManager
 from wrolpi.vars import PROJECT_DIR
 
@@ -86,8 +86,9 @@ def zim_path_factory(test_zim_bytes, test_directory):
 
 @pytest.fixture
 def test_zim(test_session, zim_path_factory) -> Zim:
-    zim = Zim.from_paths(test_session, zim_path_factory())
-    return zim
+    with timer('test_zim'):
+        zim = Zim.from_paths(test_session, zim_path_factory())
+        return zim
 
 
 @pytest.fixture
@@ -100,14 +101,14 @@ def zim_factory(test_session, zim_path_factory, test_directory):
 
 
 @pytest.fixture
-def assert_zim_search(test_async_client, test_directory):
+def assert_zim_search(async_client, test_directory):
     from http import HTTPStatus
 
     async def _(search_str: str, zim_id: int, expected: Dict, tag_names: List[str] = [],
                 expected_status_code: int = HTTPStatus.OK):
         content = dict(search_str=search_str, tag_names=tag_names)
         assert isinstance(zim_id, int), 'This fixture only supports Zim ids of type integer'
-        request, response = await test_async_client.post(f'api/zim/search/{zim_id}', content=json.dumps(content))
+        request, response = await async_client.post(f'api/zim/search/{zim_id}', content=json.dumps(content))
         assert response.status_code == expected_status_code
 
         result = response.json['zim']

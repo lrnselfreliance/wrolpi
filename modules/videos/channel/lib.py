@@ -139,7 +139,7 @@ async def update_channel(session: Session, *, data: schema.ChannelPutRequest, ch
     session.commit()
 
     async def _():
-        await channel.move_channel(new_directory, session, send_events=True)
+        await channel.move_channel(new_directory, send_events=True)
 
     if new_directory != old_directory:
         if not new_directory.is_dir():
@@ -234,7 +234,7 @@ async def create_channel_download(channel_id: int, url: str, frequency: int, set
         download.settings = settings
 
     save_channels_config()
-    await save_downloads_config()
+    save_downloads_config()
 
     return download
 
@@ -254,7 +254,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     download_manager.remove_from_skip_list(url)
 
     save_channels_config()
-    await save_downloads_config()
+    save_downloads_config()
 
     return download
 
@@ -285,13 +285,15 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
         # Move to newly defined directory only if necessary.
         directory.mkdir(parents=True, exist_ok=True)
         if channel.directory != directory:
-            coro = channel.move_channel(directory, session, send_events=True)
+            coro = channel.move_channel(directory, send_events=True)
             if PYTEST:
                 await coro
             else:
                 background_task(coro)
     else:
         logger.info(f'Tagging {channel} with {tag_name}')
+
+    save_channels_config()
 
 
 @optional_session

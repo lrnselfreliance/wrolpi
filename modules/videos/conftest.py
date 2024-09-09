@@ -94,10 +94,10 @@ def simple_video(test_session, test_directory, simple_channel, video_file) -> Vi
 
 
 @pytest.fixture
-def video_factory(test_session, test_directory):
+def video_factory(async_client, test_session, test_directory, await_tasks):
     """Creates Videos for testing."""
 
-    def factory(channel_id: int = None, title: str = None, upload_date=None, with_video_file=None,
+    async def factory(channel_id: int = None, title: str = None, upload_date=None, with_video_file=None,
                 with_info_json: dict = None, with_poster_ext: str = None, with_caption_file: bool = False,
                 source_id: str = None, tag_names: List[str] = None) -> Video:
         title = title or str(uuid4())
@@ -151,6 +151,9 @@ def video_factory(test_session, test_directory):
 
         for tag_name in tag_names:
             video.add_tag(tag_name)
+
+        # Save configs.
+        await await_tasks()
 
         return video
 
@@ -247,7 +250,7 @@ def video_with_search_factory(test_session, test_directory, video_file_factory):
 
 
 @pytest.fixture
-def assert_video_search(test_async_client):
+def assert_video_search(async_client):
     """A fixture which performs a video search request against the API.
 
     If assert_* params are passed, the response is checked."""
@@ -277,7 +280,7 @@ def assert_video_search(test_async_client):
         if channel_id is not None:
             content['channel_id'] = channel_id
 
-        request, response = await test_async_client.post('/api/videos/search', content=json.dumps(content))
+        request, response = await async_client.post('/api/videos/search', content=json.dumps(content))
 
         assert response.json
         assert response.status_code == HTTPStatus.OK

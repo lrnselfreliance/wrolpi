@@ -66,7 +66,7 @@ def test_get_channel(test_session, test_directory, channel_factory):
 
 
 @pytest.mark.asyncio
-async def test_channels_no_url(test_async_client, test_session, test_directory, test_channels_config):
+async def test_channels_no_url(async_client, test_session, test_directory, test_channels_config):
     """Test that a Channel's URL is coerced to None if it is empty."""
     channel1_directory = test_directory / 'channel1'
     channel1_directory.mkdir()
@@ -96,7 +96,7 @@ async def test_channels_no_url(test_async_client, test_session, test_directory, 
 
 
 @pytest.mark.asyncio
-async def test_search_channels_by_name(test_session, channel_factory, video_factory):
+async def test_search_channels_by_name(async_client, test_session, channel_factory, video_factory):
     """
     Channels can be searched by their name.
     """
@@ -105,13 +105,13 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
     c2 = channel_factory(name='bar')
     c3 = channel_factory(name='Foo Bar')
     c4 = channel_factory(name='foobar')
-    video_factory(channel_id=c1.id)
+    await video_factory(channel_id=c1.id)
     for _ in range(2):
-        video_factory(channel_id=c2.id)
+        await video_factory(channel_id=c2.id)
     for _ in range(3):
-        video_factory(channel_id=c3.id)
+        await video_factory(channel_id=c3.id)
     for _ in range(4):
-        video_factory(channel_id=c4.id)
+        await video_factory(channel_id=c4.id)
     test_session.commit()
 
     async def assert_search(name: str, channel_names: List[str], order_by_video_count=False):
@@ -128,20 +128,20 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
 
 
 @pytest.mark.asyncio
-async def test_tag_channel_existing(test_async_client, test_session, test_directory, channel_factory, tag_factory,
-                                    video_factory, test_channels_config):
+async def test_tag_channel_existing(async_client, test_session, test_directory, channel_factory, tag_factory,
+                                    video_factory, test_channels_config, await_tasks):
     """A Channel can already exist in a Tag's directory and still be tagged."""
     channel_directory = test_directory / 'videos/one/Channel Name'
     channel = channel_factory(name='Channel Name', download_frequency=120, directory=channel_directory)
-    video_factory(channel_id=channel.id)
+    await video_factory(channel_id=channel.id)
     test_session.commit()
     assert str(channel.directory).startswith(f'{test_directory}/videos/one/')
 
     tag = await tag_factory()
     await lib.tag_channel(tag.name, channel_directory, channel.id, test_session)
+    await await_tasks()
 
     # Channel's tag is saved to the config.
-    save_channels_config(test_session)
     with test_channels_config.open() as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
     assert config['channels'][0]['tag_name'] == tag.name

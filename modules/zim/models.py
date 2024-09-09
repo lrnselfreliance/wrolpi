@@ -193,6 +193,7 @@ class Zim(Base):
         tag_zim_entry = TagZimEntry(tag=tag, zim=self, zim_entry=zim_entry)
         session.add(tag_zim_entry)
         tags.save_tags_config()
+        logger.debug(f'Tagged: {zim_entry}')
         return tag_zim_entry
 
     def untag_entry(self, tag_id_or_name: int | str, zim_entry: str):
@@ -208,6 +209,7 @@ class Zim(Base):
         else:
             raise UnknownZimTagEntry(f'Could not find at {repr(str(zim_entry))}')
         tags.save_tags_config()
+        logger.debug(f'Untagged: {tag_zim_entry}')
 
     @staticmethod
     def _entries_with_tags_process(limit: int, offset: int, params: dict, session: Session, tags_sub_select: str):

@@ -9,7 +9,7 @@ from wrolpi.downloader import Download
 
 
 @pytest.mark.asyncio
-async def test_zim_search(test_async_client, test_session, test_zim, tag_factory, assert_zim_search):
+async def test_zim_search(async_client, test_session, test_zim, tag_factory, assert_zim_search):
     """Entries can be tagged and retrieved using their containing Zim."""
     tag1, tag2 = await tag_factory(), await tag_factory()
     test_zim.tag_entry(tag1.name, 'one')
@@ -80,7 +80,7 @@ async def test_zim_search(test_async_client, test_session, test_zim, tag_factory
 
 
 @pytest.mark.asyncio
-async def test_entries_by_tag(test_async_client, test_session, test_zim, tag_factory):
+async def test_entries_by_tag(async_client, test_session, test_zim, tag_factory):
     """Entries can be tagged and retrieved using their containing Zim."""
     tag1, tag2 = await tag_factory(), await tag_factory()
     test_zim.tag_entry(tag1.name, 'one')
@@ -99,52 +99,53 @@ async def test_entries_by_tag(test_async_client, test_session, test_zim, tag_fac
 
 
 @pytest.mark.asyncio
-async def test_zim_crud(test_async_client, test_session, test_directory, test_zim):
-    request, response = await test_async_client.get('/api/zim')
+async def test_zim_crud(async_client, test_session, test_directory, test_zim):
+    request, response = await async_client.get('/api/zim')
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['zims']) == 1
     assert response.json['zims'][0]['path'] == test_zim.path.name
 
-    request, response = await test_async_client.delete('/api/zim/1')
+    request, response = await async_client.delete('/api/zim/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not test_zim.path.exists()
     assert test_session.query(Zim).count() == 0
 
 
 @pytest.mark.asyncio
-async def test_zim_tag_and_untag(test_async_client, test_session, test_zim, tag_factory):
+async def test_zim_tag_and_untag(async_client, test_session, test_zim, tag_factory):
     """Zim entries can be Tagged and Untagged."""
     tag1, tag2 = await tag_factory(), await tag_factory()
     test_session.commit()
 
     # Entries can be tagged in the API.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = await test_async_client.post('/api/zim/tag', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     # Entries can be untagged in the API.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = await test_async_client.post('/api/zim/untag', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Cannot untag twice.
     content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = await test_async_client.post('/api/zim/untag', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-def test_zim_subscribe(test_session, test_client):
+@pytest.mark.asyncio
+async def test_zim_subscribe(test_session, async_client):
     """A Kiwix subscription can be scheduled in the API.  The language can be changed."""
     # Subscribe to English.
     content = dict(name='Wikipedia (mini)', language='en')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_mini_'
     assert download.info_json == {'language': 'en', 'name': 'Wikipedia (mini)'}
     assert download.frequency
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {
         'Wikipedia (mini)': {'download_id': 1,
@@ -155,7 +156,7 @@ def test_zim_subscribe(test_session, test_client):
 
     # Change subscription to French.
     content = dict(name='Wikipedia (mini)', language='fr')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(Download).count() == 1
 
@@ -163,7 +164,7 @@ def test_zim_subscribe(test_session, test_client):
     assert download.url == 'https://download.kiwix.org/zim/wikipedia/wikipedia_fr_all_mini_'
     assert download.info_json == {'language': 'fr', 'name': 'Wikipedia (mini)'}
     assert download.frequency
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {
         'Wikipedia (mini)': {'download_id': 1,
@@ -173,9 +174,9 @@ def test_zim_subscribe(test_session, test_client):
                              'name': 'Wikipedia (mini)'}}
 
     # Delete subscription.
-    request, response = test_client.delete('/api/zim/subscribe/1')
+    request, response = await async_client.delete('/api/zim/subscribe/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {}
     # No subscriptions or downloads.
@@ -184,22 +185,23 @@ def test_zim_subscribe(test_session, test_client):
 
     # English Stack Exchange is special.
     content = dict(name='Stackoverflow (Stack Exchange)', language='en')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://download.kiwix.org/zim/stack_exchange/stackoverflow.com_en_all_'
 
 
-def test_get_zim_entry(test_session, test_client, test_zim):
-    request, response = test_client.get('/api/zim/1/entry/home')
+@pytest.mark.asyncio
+async def test_get_zim_entry(test_session, async_client, test_zim):
+    request, response = await async_client.get('/api/zim/1/entry/home')
     assert response.status_code == HTTPStatus.OK
 
-    request, response = test_client.get('/api/zim/1/entry/does not exist')
+    request, response = await async_client.get('/api/zim/1/entry/does not exist')
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
-async def test_find_outdated_zim_files(test_session, test_directory, test_zim_bytes, test_async_client):
+async def test_find_outdated_zim_files(test_session, test_directory, test_zim_bytes, async_client):
     """Outdated Zim files are found and reported.  They can automatically be deleted."""
     # Can search empty directory.
     outdated, current = lib.find_outdated_zim_files()
@@ -217,11 +219,11 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
     asdf.write_bytes(test_zim_bytes)
     empty = test_directory / 'zims/wikipedia_en_all_maxi_2023-03.zim'  # empty files should be ignored.
     empty.touch()
-    request, response = await test_async_client.get('/api/zim/outdated')
+    request, response = await async_client.get('/api/zim/outdated')
     assert response.status_code == HTTPStatus.OK
     assert response.json['outdated'] == [str(wikipedia_one.relative_to(test_directory)), ]
 
-    request, response = await test_async_client.delete('/api/zim/outdated')
+    request, response = await async_client.delete('/api/zim/outdated')
     assert response.status_code == HTTPStatus.NO_CONTENT
     # Only the outdated was deleted.
     assert wikibooks_one.is_file()
@@ -232,12 +234,12 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
 
 
 @pytest.mark.asyncio
-async def test_search_estimates(test_session, test_async_client, zim_factory):
+async def test_search_estimates(test_session, async_client, zim_factory):
     zim_factory('test zim')
     test_session.commit()
 
     body = dict(search_str='one')
-    request, response = await test_async_client.post('/api/zim/search_estimates', json=body)
+    request, response = await async_client.post('/api/zim/search_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['zims_estimates']) == 1
     assert response.json['zims_estimates'][0]['estimate'] == 2

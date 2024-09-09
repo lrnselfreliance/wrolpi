@@ -4,6 +4,7 @@ import datetime
 import functools
 import glob
 import json
+import logging
 import os
 import pathlib
 import re
@@ -1526,12 +1527,8 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
         raise UnknownDirectory('Directory is not ignored')
 
 
-@optional_session
-async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None):
+async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None):
     """Insert/update all files in the provided file's FileGroup."""
-    from wrolpi.api_utils import api_app
-    upserting_files: list = api_app.shared_ctx.upserting_files
-
     # Update/Insert all files in the FileGroup.
     paths = glob_shared_stem(pathlib.Path(file))
     # Remove any ignored files.
@@ -1540,55 +1537,44 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         logger.warning('upsert_file called, but all files are in ignored directories!')
         return
 
-    stem, suffix = split_path_stem_and_suffix(file, full=True)
-    if stem in upserting_files:
-        # This FileGroup is already being processed, try again later.
-        await asyncio.sleep(1)
-        logger.debug(f'Waiting to upsert: {file}')
-        background_task(upsert_file(file, tag_names=tag_names))
-        return
-
-    upserting_files.append(stem)
-
-    try:
-        for _ in range(2):
-            logger.warning('before from_paths')
+    file_group_id = None
+    for _ in range(2):
+        with get_db_session(commit=True) as session:
             file_group = FileGroup.from_paths(session, *paths)
-            logger.warning('after from_paths')
             # Re-index the contents of the file.
             try:
-                logger.warning('before flush')
                 session.flush([file_group, ])
-                logger.warning('after flush')
+                session.commit()
+                file_group_id = file_group.id
                 break
             except IntegrityError:
                 # Another process inserted this FileGroup.
                 logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
                 session.rollback()
                 continue
-        else:
-            raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
+    else:
+        raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
-        logger.debug(f'upsert_file: {file_group}')
+    logger.debug(f'upsert_file: {file_group}')
+    with get_db_session(commit=True) as session:
         try:
-            file_group.do_model(session)
+            FileGroup.find_by_id(file_group_id, session).do_model(session)
         except Exception as e:
             logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
             if PYTEST:
                 raise
 
+    # TODO set these all at once and handle conflict
+    with get_db_session(commit=True) as session:
+        file_group = FileGroup.find_by_id(file_group_id, session)
         logger.info(f'Tagging uploaded file {file_group} with: {tag_names}')
         for tag_name in (tag_names or []):
             if tag_name not in file_group.tag_names:
-                tag = Tag.get_by_name(tag_name)
+                tag = Tag.get_by_name(tag_name, session)
                 file_group.add_tag(tag.id)
 
-        session.commit()
-        logger.debug(f'upsert_file complete: {file_group}')
-        return file_group
-    finally:
-        # Allow next process to attempt to upsert any files form this FileGroup.
-        upserting_files.remove(stem)
+    logger.debug(f'upsert_file complete: {file_group}')
+    return file_group
 
 
 slugify = functools.partial(slugify, max_length=200, allow_unicode=True)

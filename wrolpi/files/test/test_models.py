@@ -2,9 +2,9 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_file_group_move(test_async_client, test_session, test_directory, video_factory):
+async def test_file_group_move(async_client, test_session, test_directory, video_factory):
     """Any new or renamed files are adopted during FileGroup.move."""
-    video = video_factory(title='video', with_poster_ext='.webp')
+    video = await video_factory(title='video', with_poster_ext='.webp')
     test_session.commit()
 
     # Move one of the FileGroup's files.  It should be moved as well.
@@ -22,9 +22,9 @@ async def test_file_group_move(test_async_client, test_session, test_directory, 
 
 
 @pytest.mark.asyncio
-async def test_file_group_clean_my_files(test_async_client, test_session, test_directory, video_factory):
+async def test_file_group_clean_my_files(async_client, test_session, test_directory, video_factory):
     """Any missing files can be cleaned from FileGroup.files using FileGroup.clean_my_files()"""
-    video = video_factory(
+    video = await video_factory(
         with_video_file=True,
         with_info_json=True,
         with_poster_ext='.jpg',

@@ -15,81 +15,81 @@ from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
 @pytest.mark.asyncio
-async def test_index(test_session, test_async_client):
+async def test_index(test_session, async_client):
     """
     Index should have some details in an HTML response
     """
-    request, response = await test_async_client.get('/')
+    request, response = await async_client.get('/')
     assert response.status_code == HTTPStatus.OK
     assert b'html' in response.body
 
-    request, response = await test_async_client.get('/api')
+    request, response = await async_client.get('/api')
     assert response.status_code == HTTPStatus.OK
     assert b'html' in response.body
 
 
 @pytest.mark.asyncio
-async def test_valid_regex(test_session, test_async_client):
+async def test_valid_regex(test_session, async_client):
     """
     The endpoint should only return valid if the regex is valid.
     """
     data = {'regex': 'foo'}
-    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    request, response = await async_client.post('/api/valid_regex', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert json.loads(response.body) == {'valid': True, 'regex': 'foo'}
 
     data = {'regex': '.*(title match).*'}
-    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    request, response = await async_client.post('/api/valid_regex', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert json.loads(response.body) == {'valid': True, 'regex': '.*(title match).*'}
 
     data = {'regex': '.*(missing parenthesis.*'}
-    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    request, response = await async_client.post('/api/valid_regex', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 
 
 @pytest.mark.asyncio
-async def test_get_settings(test_session, test_async_client):
+async def test_get_settings(test_session, async_client):
     get_wrolpi_config().ignored_directories = list()
 
     with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
             mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
-        request, response = await test_async_client.get('/api/settings')
+        request, response = await async_client.get('/api/settings')
         assert response.status_code == HTTPStatus.OK
 
 
 @pytest.mark.asyncio
-async def test_log_level(test_async_client):
+async def test_log_level(async_client):
     """Log level must be between 0 and 40."""
     data = {'log_level': 0}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     data = {'log_level': -1}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     data = {'log_level': 40}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     data = {'log_level': 41}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     data = {'log_level': None}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     data = {}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio
-async def test_get_downloads(test_session, test_async_client):
-    request, response = await test_async_client.get('/api/download')
+async def test_get_downloads(test_session, async_client):
+    request, response = await async_client.get('/api/download')
     assert_dict_contains(response.json, {'once_downloads': [], 'recurring_downloads': []})
 
     d1 = Download(url='https://example.com/1', status='complete')
@@ -102,7 +102,7 @@ async def test_get_downloads(test_session, test_async_client):
     test_session.add_all([d1, d2, d3, d4, d5, d6, d7])
     test_session.commit()
 
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     expected = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'new'},
@@ -121,7 +121,7 @@ async def test_get_downloads(test_session, test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_downloads_sorter_recurring(test_async_client, test_session):
+async def test_downloads_sorter_recurring(async_client, test_session):
     downloads = [
         dict(status='complete', frequency=1),
         dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
@@ -144,14 +144,14 @@ async def test_downloads_sorter_recurring(test_async_client, test_session):
         dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
         dict(status='complete', frequency=1),
     ]
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     recurring_downloads = response.json['recurring_downloads']
     for d1, d2 in zip_longest(expected, recurring_downloads):
         assert_dict_contains(d2, d1)
 
 
 @pytest.mark.asyncio
-async def test_downloads_sorter(test_async_client, test_session):
+async def test_downloads_sorter(async_client, test_session):
     downloads = [
         dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
         dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
@@ -178,18 +178,18 @@ async def test_downloads_sorter(test_async_client, test_session):
         dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
         dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
     ]
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     once_downloads = response.json['once_downloads']
     for d1, d2 in zip_longest(expected, once_downloads):
         assert_dict_contains(d2, d1)
 
 
 @pytest.mark.asyncio
-async def test_echo(test_async_client):
+async def test_echo(async_client):
     """
     Echo should send back a JSON object with our request details.
     """
-    request, response = await test_async_client.get('/api/echo?hello=world')
+    request, response = await async_client.get('/api/echo?hello=world')
     assert response.status_code == HTTPStatus.OK
     assert_dict_contains(response.json['form'], {})
     assert response.json['method'] == 'GET', 'Method was not GET'
@@ -197,7 +197,7 @@ async def test_echo(test_async_client):
     assert response.json['args'] == {'hello': ['world']}
 
     data = {'foo': 'bar'}
-    request, response = await test_async_client.post('/api/echo', content=json.dumps(data))
+    request, response = await async_client.post('/api/echo', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert_dict_contains(response.json['form'], {})
     assert response.json['method'] == 'POST', 'Method was not POST'
@@ -205,7 +205,8 @@ async def test_echo(test_async_client):
     assert response.json['args'] == {}
 
 
-def test_hotspot_settings(test_session, test_client, test_config):
+@pytest.mark.asyncio
+async def test_hotspot_settings(test_session, async_client, test_config):
     """
     The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
     """
@@ -215,28 +216,28 @@ def test_hotspot_settings(test_session, test_client, test_config):
     with mock.patch('wrolpi.root_api.admin') as mock_admin:
         # Turning on the hotspot succeeds.
         mock_admin.enable_hotspot.return_value = True
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         mock_admin.enable_hotspot.assert_called_once()
         mock_admin.reset_mock()
 
         # Turning on the hotspot fails.
         mock_admin.enable_hotspot.return_value = False
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
         assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.enable_hotspot.assert_called_once()
 
         # Turning off the hotspot succeeds.
         mock_admin.disable_hotspot.return_value = True
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         mock_admin.disable_hotspot.assert_called_once()
         mock_admin.reset_mock()
 
         # Turning off the hotspot succeeds.
         mock_admin.disable_hotspot.return_value = False
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
         assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.disable_hotspot.assert_called_once()
@@ -248,7 +249,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         # Hotspot password can be changed.
         mock_admin.disable_hotspot.return_value = True
         content = {'hotspot_password': 'new password', 'hotspot_ssid': 'new ssid'}
-        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.NO_CONTENT
         assert config.hotspot_password == 'new password'
         assert config.hotspot_ssid == 'new ssid'
@@ -258,7 +259,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         # Hotspot password must be at least 8 characters.
         mock_admin.disable_hotspot.return_value = True
         content = {'hotspot_password': '1234567', 'hotspot_ssid': 'new ssid'}
-        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
                                  'error': 'Hotspot password must be at least 8 characters',
@@ -267,7 +268,8 @@ def test_hotspot_settings(test_session, test_client, test_config):
 
 
 @skip_circleci
-def test_throttle_toggle(test_session, test_client, test_config):
+@pytest.mark.asyncio
+async def test_throttle_toggle(test_session, async_client, test_config):
     get_wrolpi_config().ignored_directories = list()
 
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
@@ -276,7 +278,7 @@ def test_throttle_toggle(test_session, test_client, test_config):
             b'wlan0: unavailable',
             b'The governor "ondemand" may decide ',
         ]
-        request, response = test_client.get('/api/settings')
+        request, response = await async_client.get('/api/settings')
 
     # Throttle is off by default.
     assert response.status_code == HTTPStatus.OK
@@ -285,7 +287,7 @@ def test_throttle_toggle(test_session, test_client, test_config):
 
 
 @pytest.mark.asyncio
-async def test_clear_downloads(test_session, test_async_client, test_config, test_download_manager_config):
+async def test_clear_downloads(test_session, async_client, test_config, test_download_manager_config):
     d1 = Download(url='https://example.com/1', status='complete')
     d2 = Download(url='https://example.com/2', status='pending')
     d3 = Download(url='https://example.com/3', status='deferred')
@@ -312,7 +314,7 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
             assert download['status'] == recurring_download['status']
 
     # All created downloads are present.
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
@@ -327,9 +329,9 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Once "complete" download is removed.
-    request, response = await test_async_client.post('/api/download/clear_completed')
+    request, response = await async_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
@@ -339,9 +341,9 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed "once" download is removed, recurring failed is not removed.
-    request, response = await test_async_client.post('/api/download/clear_failed')
+    request, response = await async_client.post('/api/download/clear_failed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/4', 'status': 'new'},
@@ -353,9 +355,9 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
     # Downloads can be retried.
-    request, response = await test_async_client.post('/api/download/retry_once')
+    request, response = await async_client.post('/api/download/retry_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'new'},
         {'url': 'https://example.com/3', 'status': 'new'},
@@ -364,9 +366,9 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # "Delete All" button deletes all once-downloads.
-    request, response = await test_async_client.post('/api/download/delete_once')
+    request, response = await async_client.post('/api/download/delete_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     check_downloads(response, [], recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed once-downloads will not be downloaded again.
@@ -374,9 +376,9 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
 
 
 @pytest.mark.asyncio
-async def test_get_status(test_async_client, test_session):
+async def test_get_status(async_client, test_session):
     """Get the server status information."""
-    request, response = await test_async_client.get('/api/status')
+    request, response = await async_client.get('/api/status')
     assert response.status_code == HTTPStatus.OK
     assert isinstance(response.json.get('cpu_stats'), dict), 'cpu_stats should be a dict'
     assert isinstance(response.json.get('load_stats'), dict), 'load_stats should be a dict'
@@ -390,7 +392,7 @@ async def test_get_status(test_async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_download_crud(test_session, test_async_client, test_download_manager_config, tag_factory):
+async def test_download_crud(test_session, async_client, test_download_manager_config, tag_factory):
     """Test creating once-downloads and recurring downloads."""
     tag1, tag2 = await tag_factory(), await tag_factory()
 
@@ -404,7 +406,7 @@ async def test_download_crud(test_session, test_async_client, test_download_mana
             frequency=1_000,
             downloader='archive',
         )
-        request, response = await test_async_client.post('/api/download', content=json.dumps(content))
+        request, response = await async_client.post('/api/download', content=json.dumps(content))
         assert response.status_code == HTTPStatus.NO_CONTENT
 
         assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
@@ -414,7 +416,7 @@ async def test_download_crud(test_session, test_async_client, test_download_mana
             urls=['https://example.com/2', 'https://example.com/3'],
             downloader='archive',
         )
-        request, response = await test_async_client.post('/api/download', json=content)
+        request, response = await async_client.post('/api/download', json=content)
         assert response.status_code == HTTPStatus.NO_CONTENT
 
         assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
@@ -430,16 +432,17 @@ async def test_download_crud(test_session, test_async_client, test_download_mana
             settings={'tag_names': [tag1.name, tag2.name]},
         )
         expected_download1.update({'url': 'https://example.com/1', 'settings': {'tag_names': [tag1.name, tag2.name]}})
-        request, response = await test_async_client.put(f'/api/download/{download1.id}', json=content)
+        request, response = await async_client.put(f'/api/download/{download1.id}', json=content)
         assert response.status_code == HTTPStatus.NO_CONTENT
         test_session.flush([download2])
         download2 = test_session.query(Download).filter_by(id=expected_download1['id']).first()
         assert download2.__json__() == expected_download1
 
 
-def test_get_downloaders(test_client):
+@pytest.mark.asyncio
+async def test_get_downloaders(async_client):
     """A list of Downloaders the user can use can be gotten."""
-    request, response = test_client.get('/api/downloaders')
+    request, response = await async_client.get('/api/downloaders')
     assert response.status_code == HTTPStatus.OK
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
@@ -447,21 +450,23 @@ def test_get_downloaders(test_client):
 
 
 @pytest.mark.asyncio
-async def test_empty_post_download(test_async_client):
+async def test_empty_post_download(async_client):
     """Cannot have empty download URLs"""
     content = dict(
         urls=[''],  # Cannot have empty URLs
         frequency=1_000,
         downloader='archive',
     )
-    request, response = await test_async_client.post('/api/download', content=json.dumps(content))
+    request, response = await async_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['code'] == 'INVALID_DOWNLOAD'
 
 
 @pytest.mark.asyncio
-async def test_restart_download(test_session, test_async_client, test_download_manager, test_downloader):
+async def test_restart_download(test_session, async_client, test_download_manager, test_downloader):
     """A Download can be restarted."""
+    test_download_manager.disable()
+
     # Create a download, fail it, it should be restarted.
     download = test_download_manager.create_download('https://example.com', test_downloader.name)
     download.fail()
@@ -471,34 +476,37 @@ async def test_restart_download(test_session, test_async_client, test_download_m
     test_downloader.set_test_failure()
 
     # Download is now "new" again.
-    request, response = await test_async_client.post(f'/api/download/{download.id}/restart')
+    request, response = await async_client.post(f'/api/download/{download.id}/restart')
     assert response.status_code == HTTPStatus.NO_CONTENT
     download = test_session.query(Download).one()
-    assert download.is_new, download.status_code
+    assert download.is_new, download.status
+
+    await test_download_manager.enable()
 
     # Wait for the background download to fail.  It should be deferred.
     await test_download_manager.wait_for_all_downloads()
     download = test_session.query(Download).one()
-    assert download.is_deferred, download.status_code
+    assert download.is_deferred, download.status
 
 
-def test_get_global_statistics(test_session, test_client):
-    request, response = test_client.get('/api/statistics')
+@pytest.mark.asyncio
+async def test_get_global_statistics(test_session, async_client):
+    request, response = await async_client.get('/api/statistics')
     assert response.json['global_statistics']['db_size'] > 1
 
 
 @pytest.mark.asyncio
-async def test_post_vin_number_decoder(test_async_client):
+async def test_post_vin_number_decoder(async_client):
     """A VIN number can be decoded."""
     # Invalid VIN number.
     content = dict(vin_number='5N1NJ01CXST00000')
-    request, response = await test_async_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    request, response = await async_client.post('/api/vin_number_decoder', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == dict()
 
     # Test VIN from vininfo.
     content = dict(vin_number='5N1NJ01CXST000001')
-    request, response = await test_async_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    request, response = await async_client.post('/api/vin_number_decoder', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['vin'] == {'body': 'Sedan, 4-Door, Standard Body Truck',
                                     'country': 'United States',
@@ -513,21 +521,21 @@ async def test_post_vin_number_decoder(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, video_factory):
+async def test_search_suggestions(test_session, async_client, channel_factory, archive_factory, video_factory):
     # WARNING results are cached, this test uses unique queries to avoid conflicts.
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
     archive_factory(domain='foo.com')
     archive_factory(domain='bar.com')
-    video_factory(channel_id=2)  # Channel "Fool" will be first in results because it has the most videos.
+    await video_factory(channel_id=2)  # Channel "Fool" will be first in results because it has the most videos.
     test_session.commit()
 
     async def assert_results(body: dict, expected_channels=None, expected_domains=None):
         expected_channels = expected_channels or []
         expected_domains = expected_domains or []
 
-        request, response = await test_async_client.post('/api/search_suggestions', json=body)
+        request, response = await async_client.post('/api/search_suggestions', json=body)
         assert response.status_code == HTTPStatus.OK
         if expected_channels:
             for channel, expected_channel in zip_longest(response.json['channels'], expected_channels):
@@ -561,22 +569,22 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
 
 
 @pytest.mark.asyncio
-async def test_search_file_estimates(test_session, test_async_client, archive_factory, tag_factory, video_factory):
+async def test_search_file_estimates(test_session, async_client, archive_factory, tag_factory, video_factory):
     """Can quickly get count of possible files when searching."""
     body_ = dict(search_str='can search with no files')
-    request_, response_ = await test_async_client.post('/api/search_file_estimates', json=body_)
+    request_, response_ = await async_client.post('/api/search_file_estimates', json=body_)
     assert response_.status_code == HTTPStatus.OK
 
     tag1, tag2, tag3 = await tag_factory(), await tag_factory(), await tag_factory()
     archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
     archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
-    video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
+    await video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
     test_session.commit()
 
     async def assert_results(body: dict, expected_file_groups=None):
         expected_file_groups = expected_file_groups or 0
 
-        request, response = await test_async_client.post('/api/search_file_estimates', json=body)
+        request, response = await async_client.post('/api/search_file_estimates', json=body)
         assert response.status_code == HTTPStatus.OK
         assert response.json['file_groups'] == expected_file_groups or 0
 
@@ -626,7 +634,7 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
 
 
 @pytest.mark.asyncio
-async def test_search_file_estimates_any_tag(test_session, test_async_client, archive_factory, tag_factory,
+async def test_search_file_estimates_any_tag(test_session, async_client, archive_factory, tag_factory,
                                              video_factory):
     """File estimates can be filtered by any_tag."""
     tag1 = await tag_factory()
@@ -637,7 +645,7 @@ async def test_search_file_estimates_any_tag(test_session, test_async_client, ar
     async def assert_results(body: dict, expected_file_groups=None):
         expected_file_groups = expected_file_groups or 0
 
-        request, response = await test_async_client.post('/api/search_file_estimates', json=body)
+        request, response = await async_client.post('/api/search_file_estimates', json=body)
         assert response.status_code == HTTPStatus.OK
         assert response.json['file_groups'] == expected_file_groups or 0
 
@@ -647,19 +655,19 @@ async def test_search_file_estimates_any_tag(test_session, test_async_client, ar
     await assert_results(dict(search_str='bar', any_tag=True), 0)
 
     body_ = dict(search_str='bunny', tag_names=[tag1.name, ], any_tag=True)
-    request_, response_ = await test_async_client.post('/api/search_file_estimates', json=body_)
+    request_, response_ = await async_client.post('/api/search_file_estimates', json=body_)
     assert response_.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio
-async def test_external_error(test_async_client):
+async def test_external_error(async_client):
     """A non-SanicException error is handled as an Internal Server Error."""
 
-    @test_async_client.sanic_app.get('/error')
+    @async_client.sanic_app.get('/error')
     async def error(_: Request):
         raise RuntimeError('Oh no!')
 
-    request, response = await test_async_client.get('/error')
+    request, response = await async_client.get('/error')
     assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
     assert response.json == {'code': 'RuntimeError', 'error': 'Oh no!', 'message': None}
 
@@ -704,9 +712,9 @@ def test_recursive_errors():
 
 
 @pytest.mark.asyncio
-async def test_settings_special_directories(test_async_client, test_config):
+async def test_settings_special_directories(async_client, test_config):
     """Maintainer can change special directories."""
-    request, response = await test_async_client.get('/api/settings')
+    request, response = await async_client.get('/api/settings')
     assert response.status_code == HTTPStatus.OK
     assert response.json['archive_destination'] == 'archive/%(domain)s'
     assert response.json['map_destination'] == 'map'
@@ -714,36 +722,36 @@ async def test_settings_special_directories(test_async_client, test_config):
     assert response.json['zims_destination'] == 'zims'
 
     data = {'archive_destination': 'archives'}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert get_wrolpi_config().archive_destination == 'archives'
 
     data = {'archive_destination': '/absolute/not/allowed'}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     data = {'videos_destination': '/absolute/not/allowed'}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     data = {'map_destination': '/absolute/not/allowed'}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     data = {'zims_destination': '/absolute/not/allowed'}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     # Empty directory restores default.
     data = {'archive_destination': ''}
-    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert get_wrolpi_config().archive_destination == 'archive/%(domain)s'
 
 
 @pytest.mark.asyncio
-async def test_search_other_estimates(test_async_client, test_session, channel_factory, tag_factory):
+async def test_search_other_estimates(async_client, test_session, channel_factory, tag_factory):
     # Can search without Tags or Channels.
     body = dict(tag_names=[])
-    request, response = await test_async_client.post('/api/search_other_estimates', json=body)
+    request, response = await async_client.post('/api/search_other_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['others']['channel_count'] == 0, 'Only one Channel is tagged.'
 
@@ -754,6 +762,6 @@ async def test_search_other_estimates(test_async_client, test_session, channel_f
 
     # One Channel is tagged.
     body = dict(tag_names=[tag.name, ])
-    request, response = await test_async_client.post('/api/search_other_estimates', json=body)
+    request, response = await async_client.post('/api/search_other_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['others']['channel_count'] == 1, 'Only one Channel is tagged.'

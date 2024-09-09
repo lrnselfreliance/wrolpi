@@ -462,14 +462,17 @@ class FileGroup(ModelHelper, Base):
             files[file] = f'{tag_names}/{file.name}'
         return files
 
+    def generate_slug(self, session: Session = None):
+        from wrolpi.files import lib
+        session = session or Session.object_session(self)
+        self.slug = lib.create_file_slug(self, session)
+        self.flush(session)
+
     @hybrid_property
     def slug(self, session: Session = None) -> str | None:
         """Returns a unique human-readable string identifier for this FileGroup, based of title and such."""
         if not self._slug:
-            from wrolpi.files import lib
-            session = session or Session.object_session(self)
-            self.slug = lib.create_file_slug(self, session)
-            self.flush(session)
+            self.generate_slug(session)
         return self._slug
 
     @slug.setter

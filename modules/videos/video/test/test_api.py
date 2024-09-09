@@ -9,7 +9,8 @@ from modules.videos.models import Video
 from wrolpi.dates import now
 
 
-def test_get_video_prev_next(test_async_client, test_session, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_get_video_prev_next(async_client, test_session, channel_factory, video_factory):
     """
     Test that the previous and next videos will be retrieved when fetching a video.
     """
@@ -19,18 +20,18 @@ def test_get_video_prev_next(test_async_client, test_session, channel_factory, v
     second = timedelta(seconds=1)
 
     # The upload_date decides the order of the prev/next videos.
-    video_factory(title='vid1', channel_id=channel1.id, upload_date=now_)
-    video_factory(title='vid2', channel_id=channel1.id, upload_date=now_ + second)
-    video_factory(title='vid3', channel_id=channel2.id, upload_date=now_ + (second * 4))
-    video_factory(title='vid4', channel_id=channel1.id, upload_date=now_ + (second * 3))
-    video_factory(title='vid5', channel_id=channel2.id, upload_date=now_ + (second * 2))
-    video_factory(title='vid6', channel_id=channel2.id, upload_date=now_ + (second * 5))
-    video_factory(title='vid7', channel_id=channel1.id)
-    video_factory(title='vid8', channel_id=channel2.id, upload_date=now_ + (second * 7))
-    video_factory(title='vid9', channel_id=channel3.id, upload_date=now_ + (second * 8))
+    await video_factory(title='vid1', channel_id=channel1.id, upload_date=now_)
+    await video_factory(title='vid2', channel_id=channel1.id, upload_date=now_ + second)
+    await video_factory(title='vid3', channel_id=channel2.id, upload_date=now_ + (second * 4))
+    await video_factory(title='vid4', channel_id=channel1.id, upload_date=now_ + (second * 3))
+    await video_factory(title='vid5', channel_id=channel2.id, upload_date=now_ + (second * 2))
+    await video_factory(title='vid6', channel_id=channel2.id, upload_date=now_ + (second * 5))
+    await video_factory(title='vid7', channel_id=channel1.id)
+    await video_factory(title='vid8', channel_id=channel2.id, upload_date=now_ + (second * 7))
+    await video_factory(title='vid9', channel_id=channel3.id, upload_date=now_ + (second * 8))
     # Videos without an upload date can't be placed.
-    video_factory(title='vid10', channel_id=channel4.id)
-    video_factory(title='vid11', channel_id=channel4.id)
+    await video_factory(title='vid10', channel_id=channel4.id)
+    await video_factory(title='vid11', channel_id=channel4.id)
 
     test_session.commit()
 
@@ -69,17 +70,18 @@ def test_get_video_prev_next(test_async_client, test_session, channel_factory, v
             raise AssertionError(f'Assert failed for {id_=} {prev_title=} {next_title=}') from e
 
 
-def test_get_video_prev_next_no_upload_date(test_async_client, test_session, video_factory, channel_factory):
+@pytest.mark.asyncio
+async def test_get_video_prev_next_no_upload_date(async_client, test_session, video_factory, channel_factory):
     """
     Previous and Next Videos should be those next to a Video file when videos do not have upload dates.
     """
     channel1, channel2 = channel_factory(), channel_factory()
-    vid0, vid1, vid2, vid3, vid4, vid5 = video_factory(channel2.id, title='vid0'), \
-        video_factory(channel1.id, title='vid1'), \
-        video_factory(channel1.id, title='vid2'), \
-        video_factory(channel1.id, title='vid3'), \
-        video_factory(title='vid4'), \
-        video_factory(title='vid5')
+    vid0, vid1, vid2, vid3, vid4, vid5 = await video_factory(channel2.id, title='vid0'), \
+        await video_factory(channel1.id, title='vid1'), \
+        await video_factory(channel1.id, title='vid2'), \
+        await video_factory(channel1.id, title='vid3'), \
+        await video_factory(title='vid4'), \
+        await video_factory(title='vid5')
     test_session.commit()
 
     # Channel 2 has only 1 video.
@@ -108,12 +110,12 @@ def test_get_video_prev_next_no_upload_date(test_async_client, test_session, vid
 
 
 @pytest.mark.asyncio
-async def test_video_delete(test_async_client, test_session, channel_factory, video_factory, test_download_manager):
+async def test_video_delete(async_client, test_session, channel_factory, video_factory, test_download_manager):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
-    vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True,
+    vid1 = await video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True,
                          with_info_json={'url': '1'})
-    vid2 = video_factory(channel_id=channel2.id, with_video_file=True, with_info_json={'url': '2'})
+    vid2 = await video_factory(channel_id=channel2.id, with_video_file=True, with_info_json={'url': '2'})
     test_session.commit()
 
     assert test_session.query(Video).count() == 2
@@ -125,7 +127,7 @@ async def test_video_delete(test_async_client, test_session, channel_factory, vi
     assert vid1_video_path.is_file() and vid1_caption_path.is_file()
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await test_async_client.delete(f'/api/videos/video/{vid1.id}')
+    request, response = await async_client.delete(f'/api/videos/video/{vid1.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
@@ -135,7 +137,7 @@ async def test_video_delete(test_async_client, test_session, channel_factory, vi
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await test_async_client.delete(f'/api/videos/video/{vid2.id}')
+    request, response = await async_client.delete(f'/api/videos/video/{vid2.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_download_manager.is_skipped(vid1.file_group.url, vid2.file_group.url)
@@ -144,12 +146,12 @@ async def test_video_delete(test_async_client, test_session, channel_factory, vi
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 
     # 3 does not exist.
-    request, response = await test_async_client.delete(f'/api/videos/video/3')
+    request, response = await async_client.delete(f'/api/videos/video/3')
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.asyncio
-async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_mode_fixture,
+async def test_wrol_mode(async_client, simple_channel, simple_video, wrol_mode_fixture,
                          test_download_manager, tag_factory):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
@@ -158,29 +160,29 @@ async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_m
     await wrol_mode_fixture(True)
 
     # Can't create, update, or delete a channel.
-    _, resp = await test_async_client.post('/api/videos/channels', content=channel)
+    _, resp = await async_client.post('/api/videos/channels', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
-    _, resp = await test_async_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
+    _, resp = await async_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
-    _, resp = await test_async_client.delete(f'/api/videos/channels/{simple_channel.id}')
+    _, resp = await async_client.delete(f'/api/videos/channels/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't delete a video
-    _, resp = await test_async_client.delete(f'/api/videos/video/{simple_video.id}')
+    _, resp = await async_client.delete(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't refresh
-    _, resp = await test_async_client.post('/api/files/refresh')
+    _, resp = await async_client.post('/api/files/refresh')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # THE REST OF THESE METHODS ARE ALLOWED
     content = dict(file_group_id=simple_video.file_group_id, tag_name=tag.name)
-    _, resp = await test_async_client.post('/api/files/tag', content=json.dumps(content))
+    _, resp = await async_client.post('/api/files/tag', content=json.dumps(content))
     assert resp.status_code == HTTPStatus.CREATED
 
     assert test_download_manager.stopped.is_set()

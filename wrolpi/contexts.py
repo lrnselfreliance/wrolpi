@@ -1,9 +1,12 @@
 import ctypes
+import logging
 import multiprocessing
 
 from sanic import Sanic
 
-default_log_level = 20
+from wrolpi.vars import LOG_LEVEL
+
+default_log_level = getattr(logging, LOG_LEVEL.upper(), 20)
 
 
 def attach_shared_contexts(app: Sanic):
@@ -29,10 +32,10 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
-    app.shared_ctx.switches = manager.dict()
     # Shared lists.
     app.shared_ctx.events_history = manager.list()
     app.shared_ctx.perpetual_workers = manager.list()
+    app.shared_ctx.task_queue = manager.list()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
 
@@ -43,7 +46,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_stopped = multiprocessing.Event()
 
     # Events.
-    app.shared_ctx.single_tasks_started = multiprocessing.Event()
+    app.shared_ctx.once_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
     app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()
 
@@ -80,7 +83,6 @@ def reset_shared_contexts(app: Sanic):
         memory_stats=dict(),
     ))
     app.shared_ctx.map_importing.clear()
-    app.shared_ctx.switches.clear()
     # Shared ints
     app.shared_ctx.log_level.value = default_log_level
 
@@ -92,7 +94,7 @@ def reset_shared_contexts(app: Sanic):
     ))
 
     # Events.
-    app.shared_ctx.single_tasks_started.clear()
+    app.shared_ctx.once_tasks_started.clear()
     app.shared_ctx.download_manager_disabled.clear()
     app.shared_ctx.download_manager_stopped.clear()
     app.shared_ctx.flags_initialized.clear()
@@ -101,6 +103,7 @@ def reset_shared_contexts(app: Sanic):
     # Lists
     del app.shared_ctx.events_history[:]
     del app.shared_ctx.perpetual_workers[:]
+    del app.shared_ctx.task_queue[:]
 
 
 def initialize_configs_contexts(app: Sanic):

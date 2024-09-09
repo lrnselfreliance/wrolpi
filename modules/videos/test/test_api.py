@@ -14,9 +14,9 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_refresh_videos_index(test_async_client, test_session, test_directory, video_factory):
+async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory):
     """The video modeler indexes video data into the Video's FileGroup."""
-    video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
+    await video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()
 
     test_session.query(FileGroup).delete()
@@ -43,19 +43,20 @@ async def test_refresh_videos_index(test_async_client, test_session, test_direct
     assert not video.file_group.d_text, 'Video captions were not removed'
 
 
-def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory, video_file_factory,
+@pytest.mark.asyncio
+async def test_refresh_videos(async_client, test_session, test_directory, simple_channel, video_factory, video_file_factory,
                         image_bytes_factory):
     subdir = test_directory / 'subdir'
     subdir.mkdir()
 
     # video1 is in a subdirectory, move its files into the subdirectory.
-    video1 = video_factory(channel_id=simple_channel.id, with_video_file=subdir / 'video1.mp4',
+    video1 = await video_factory(channel_id=simple_channel.id, with_video_file=subdir / 'video1.mp4',
                            with_info_json=True, with_poster_ext='jpg')
     test_session.commit()
     video1.file_group.size = video1.file_group.data = None
     video1.file_group.paths = list()
     # video2 is in the test directory.
-    video2 = video_factory(channel_id=simple_channel.id, with_video_file=True, with_info_json=True,
+    video2 = await video_factory(channel_id=simple_channel.id, with_video_file=True, with_info_json=True,
                            with_poster_ext='jpg')
     video2.file_group.data = None
     video2.file_group.paths = []
@@ -81,7 +82,7 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
     test_session.expire_all()
 
@@ -104,17 +105,18 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
     # Remove video1's poster, video1 should be updated.
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     video1 = Video.get_by_path(video1_video_path, test_session)
     assert not video1.poster_path
 
 
-def test_channels_with_videos(test_session, test_client, test_directory, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_channels_with_videos(test_session, async_client, test_directory, channel_factory, video_factory):
     channel1 = channel_factory('channel1', name='channel1')
     channel2 = channel_factory('channel2', name='channel2')
-    vid1 = video_factory(channel_id=channel1.id, with_video_file=True)
-    vid2 = video_factory(channel_id=channel2.id, with_video_file=True)
-    vid3 = video_factory(with_video_file=True)
+    vid1 = await video_factory(channel_id=channel1.id, with_video_file=True)
+    vid2 = await video_factory(channel_id=channel2.id, with_video_file=True)
+    vid3 = await video_factory(with_video_file=True)
     test_session.commit()
 
     vid1_path = vid1.video_path
@@ -132,7 +134,7 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
     assert vid2_path.is_file(), 'Video file was deleted'
     assert vid3_path.is_file(), 'Video file was deleted'
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
     assert test_session.query(Video).count() == 3, 'Did not find correct amount of video files.'
     assert {i[0] for i in test_session.query(Channel.name)} == {'channel1', 'channel2'}, 'Channels were changed.'
@@ -146,11 +148,12 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
     assert vid3.channel is None
 
 
-def test_api_download(test_session, test_client, test_directory):
+@pytest.mark.asyncio
+async def test_api_download(test_session, async_client, test_directory):
     """A video can be downloaded."""
     content = dict(urls=['https://example.com/video1', ], downloader='video',
                    settings=dict(excluded_urls='example.com', destination='dest'))
-    request, response = test_client.post('/api/download', content=json.dumps(content))
+    request, response = await async_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     download = test_session.query(Download).one()
@@ -162,14 +165,14 @@ def test_api_download(test_session, test_client, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_api_download_video_tags(test_session, test_async_client, tag_factory):
+async def test_api_download_video_tags(test_session, async_client, tag_factory):
     """A user can request Tags for a video being downloaded."""
     tag1 = await tag_factory()
     tag2 = await tag_factory()
 
     content = dict(urls=['https://example.com/video1', ], downloader='video',
                    settings={'tag_names': [tag1.name, tag2.name]})
-    request, response = await test_async_client.post('/api/download', content=json.dumps(content))
+    request, response = await async_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     download = test_session.query(Download).one()
@@ -179,7 +182,7 @@ async def test_api_download_video_tags(test_session, test_async_client, tag_fact
 
 
 @pytest.mark.asyncio
-async def test_search_videos_file(test_client, test_session, test_directory, video_with_search_factory,
+async def test_search_videos_file(async_client, test_session, test_directory, video_with_search_factory,
                                   assert_video_search):
     """Test that videos can be searched and that their order is by their textsearch rank."""
     # These captions have repeated letters, so they will be higher in the ranking.
@@ -224,10 +227,10 @@ async def test_search_videos_file(test_client, test_session, test_directory, vid
 @pytest.mark.asyncio
 async def test_search_videos(test_session, video_factory, assert_video_search, simple_channel, tag_factory):
     """Search the Video table.  This does not need to use a join with the File table."""
-    vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
-    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2',
+    vid1: Video = await video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
+    vid2: Video = await video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2',
                                 channel_id=simple_channel.id)
-    vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
+    vid3: Video = await video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = await tag_factory(), await tag_factory()
 
     vid1.add_tag(tag1.id)
@@ -264,15 +267,15 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
 
 
 @pytest.mark.asyncio
-async def test_delete_video(test_async_client, test_session, video_factory, test_download_manager):
+async def test_delete_video(async_client, test_session, video_factory, test_download_manager):
     """When a Video record is deleted, the FileGroup should be deleted.  The URL is added to the
     global skip list so the video is not downloaded again."""
-    video = video_factory(with_video_file=True, with_poster_ext='png')
+    video = await video_factory(with_video_file=True, with_poster_ext='png')
     video.file_group.url = 'https://example.com/video/1'
     files = video.file_group.my_paths()
     test_session.commit()
 
-    request, response = await test_async_client.delete(f'/api/videos/video/{video.id}')
+    request, response = await async_client.delete(f'/api/videos/video/{video.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(Video).count() == 0, 'Video was not deleted.'
@@ -282,28 +285,28 @@ async def test_delete_video(test_async_client, test_session, video_factory, test
 
 
 @pytest.mark.asyncio
-async def test_format_videos_description(test_async_client, test_session, test_directory, channel_factory, tag_factory):
+async def test_format_videos_description(async_client, test_session, test_directory, channel_factory, tag_factory):
     channel = channel_factory(name='Channel Name')
     tag = await tag_factory()
     test_session.commit()
 
     body = dict()
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos'
 
     body = dict(channel_id=channel.id)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/Channel Name'
 
     body = dict(channel_id=channel.id, tag_name=tag.name)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/one/Channel Name'
 
     get_wrolpi_config().videos_destination = 'videos/%(channel_tag)s/%(channel_domain)s/%(channel_name)s'
     body = dict(channel_id=channel.id, tag_name=tag.name)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/one/example.com/Channel Name'

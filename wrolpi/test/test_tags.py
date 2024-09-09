@@ -13,7 +13,7 @@ from wrolpi.tags import TagFile, Tag
 
 
 @pytest.mark.asyncio
-async def test_tags_file_group_json(test_async_client, test_session, make_files_structure, tag_factory, example_pdf):
+async def test_tags_file_group_json(async_client, test_session, make_files_structure, tag_factory, example_pdf):
     """The tags of a file are returned in its JSON."""
     tag_one = await tag_factory()
     tag_two = await tag_factory()
@@ -35,7 +35,7 @@ async def test_tags_file_group_json(test_async_client, test_session, make_files_
 
 
 @pytest.mark.asyncio
-async def test_tags_model(test_async_client, test_session, make_files_structure, tag_factory, example_pdf):
+async def test_tags_model(async_client, test_session, make_files_structure, tag_factory, example_pdf):
     """Can get Tag using class methods."""
     tag1 = await tag_factory()
     assert tag1.__json__()
@@ -54,7 +54,7 @@ async def test_tags_model(test_async_client, test_session, make_files_structure,
 
 
 @pytest.mark.asyncio
-async def test_tags_file_group(test_async_client, test_session, make_files_structure, tag_factory, video_bytes,
+async def test_tags_file_group(async_client, test_session, make_files_structure, tag_factory, video_bytes,
                                image_bytes_factory):
     """A FileGroup can be tagged with multiple Tags."""
     make_files_structure({
@@ -89,8 +89,8 @@ async def test_tags_file_group(test_async_client, test_session, make_files_struc
 
 
 @pytest.mark.asyncio
-async def test_tags_config_file(test_async_client, test_session, test_directory, tag_factory, example_pdf, video_file,
-                                test_tags_config):
+async def test_tags_config_file(async_client, test_session, test_directory, tag_factory, example_pdf, video_file,
+                                test_tags_config, await_tasks):
     """Test that the config is updated when a FileGroup is tagged."""
     await files_lib.refresh_files()
     pdf: FileGroup = FileGroup.get_by_path(example_pdf, test_session)
@@ -99,31 +99,37 @@ async def test_tags_config_file(test_async_client, test_session, test_directory,
     tag2 = await tag_factory()
     test_session.commit()
 
-    tags.save_tags_config(test_session)
+    tags.save_tags_config()
+    await await_tasks()
     assert tag1.name in test_tags_config.read_text()
     assert tag2.name in test_tags_config.read_text()
 
     video.add_tag(tag1.id)
+    await await_tasks()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
     # Tag PDF twice.
     pdf.add_tag(tag1.id)
     pdf.add_tag(tag2.id)
+    await await_tasks()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) in test_tags_config.read_text()
 
     # One TagFile still exists.
     pdf.untag(tag1.id)
+    await await_tasks()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) in test_tags_config.read_text()
 
     # PDF is no longer tagged.
     pdf.untag(tag2.id)
+    await await_tasks()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
     video.untag(tag1.id)
+    await await_tasks()
     assert str(video_file.relative_to(test_directory)) not in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
@@ -133,28 +139,29 @@ async def test_tags_config_file(test_async_client, test_session, test_directory,
 
     # Removing non-existent tag does not error.
     video.untag(tag1.id)
+    await await_tasks()
 
 
 @pytest.mark.asyncio
-async def test_tags_crud(test_async_client, test_session, example_pdf, assert_tags_config):
+async def test_tags_crud(async_client, test_session, example_pdf, assert_tags_config):
     """Test API Create/Retrieve/Update/Delete of Tags."""
     pdf = FileGroup.from_paths(test_session, example_pdf)
     test_session.add(pdf)
     test_session.commit()
 
     # Can get empty tags.
-    request, response = await test_async_client.get('/api/tag')
+    request, response = await async_client.get('/api/tag')
     assert response.status_code == HTTPStatus.OK
     assert response.json['tags'] == list()
 
     # Tags can be created.
     content = dict(name='jardín', color='#123456')
-    request, response = await test_async_client.post('/api/tag', content=json.dumps(content))
+    request, response = await async_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert_tags_config(tags={'jardín': {'color': '#123456'}})
 
     # The tag can be retrieved.
-    request, response = await test_async_client.get('/api/tag')
+    request, response = await async_client.get('/api/tag')
     assert response.status_code == HTTPStatus.OK
     assert response.json['tags'] == [dict(name='jardín', color='#123456', id=1, file_group_count=0, zim_entry_count=0)]
 
@@ -165,34 +172,34 @@ async def test_tags_crud(test_async_client, test_session, example_pdf, assert_ta
 
     # The tag can be updated.
     content = dict(name='ガーデン', color='#000000')
-    request, response = await test_async_client.post('/api/tag/1', content=json.dumps(content))
+    request, response = await async_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
-    request, response = await test_async_client.get('/api/tag')
+    request, response = await async_client.get('/api/tag')
     assert response.json['tags'] == [
         dict(name='ガーデン', color='#000000', id=1, file_group_count=1, zim_entry_count=0)]
     assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
     # Tag color can be changed
     content = dict(name='ガーデン', color='#ffffff')
-    request, response = await test_async_client.post('/api/tag/1', content=json.dumps(content))
+    request, response = await async_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert Tag.find_by_name('ガーデン').color == '#ffffff'
 
     # Conflicting names return an error.
     content = dict(name='ガーデン', color='#111111')
-    request, response = await test_async_client.post('/api/tag', content=json.dumps(content))
+    request, response = await async_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert_tags_config(tags={'ガーデン': {'color': '#ffffff'}})
 
     # Cannot delete Tag that is used.
-    request, response = await test_async_client.delete('/api/tag/1')
+    request, response = await async_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
     pdf.untag(tag.id, test_session)
     test_session.commit()
 
     # Can delete unused Tag.
-    request, response = await test_async_client.delete('/api/tag/1')
+    request, response = await async_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Config is empty.
@@ -222,7 +229,7 @@ def test_import_empty_tags_config(test_session, test_tags_config):
 
 
 @pytest.mark.asyncio
-async def test_import_tags_config(test_async_client, test_session, test_directory, test_tags_config,
+async def test_import_tags_config(async_client, test_session, test_directory, test_tags_config,
                                   example_singlefile):
     with test_tags_config.open('wt') as fh:
         data = dict(
@@ -278,7 +285,7 @@ async def test_import_tags_config_missing_file(test_session, test_directory, tes
 
 @pytest.mark.asyncio
 async def test_import_tags_delete_missing(test_session, test_directory, test_tags_config, make_files_structure,
-                                          tag_factory, test_zim):
+                                          tag_factory, test_zim, await_tasks):
     """Tags not in the config are deleted on import.  Tags that are used will not be deleted."""
     from modules.zim import lib as zim_lib
 
@@ -292,6 +299,7 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     # use tag4 for Zim entry.
     await zim_lib.add_tag(tag4.name, test_zim.id, 'home')
     tags.save_tags_config()
+    await await_tasks()
 
     # All tags were saved.
     assert tag1.name in test_tags_config.read_text()
@@ -321,6 +329,7 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
 
     # DB is written to config with only those Tags left.
     tags.save_tags_config()
+    await await_tasks()
     # Tags that are used are restored.
     assert len(config.tag_files) == 1
     assert len(config.tag_zims) == 1
@@ -328,7 +337,7 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
 
 
 @pytest.mark.asyncio
-async def test_invalid_tag(test_async_client, test_session, test_directory):
+async def test_invalid_tag(async_client, test_session, test_directory):
     with pytest.raises(InvalidTag):
         await tags.upsert_tag('cannot use comma: ,', '#fff')
 
@@ -340,8 +349,8 @@ async def test_invalid_tag(test_async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_tags_directory(test_async_client, test_session, test_directory, tag_factory, video_factory,
-                              example_pdf):
+async def test_tags_directory(async_client, test_session, test_directory, tag_factory, video_factory,
+                              example_pdf, await_tasks):
     """Test that Tag Directory is synchronized with database."""
     readme = test_directory / 'tags/README.txt'
 
@@ -351,9 +360,9 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
     (test_directory / 'tags/cannot be deleted/because of this file').touch()
 
     tag1, tag2 = await tag_factory('First Aid'), await tag_factory('Special/name')
-    vid1 = video_factory(with_video_file=test_directory / 'vid1.mp4', with_caption_file=True, with_info_json=True,
-                         with_poster_ext='jpg')
-    vid2 = video_factory(with_video_file=test_directory / 'vid2.mp4', with_info_json=True)
+    vid1 = await video_factory(with_video_file=test_directory / 'vid1.mp4', with_caption_file=True, with_info_json=True,
+                               with_poster_ext='jpg')
+    vid2 = await video_factory(with_video_file=test_directory / 'vid2.mp4', with_info_json=True)
     pdf = FileGroup.from_paths(test_session, example_pdf)
     assert 'vid1' in str(vid1.file_group.primary_path)
     assert 'vid2' in str(vid2.file_group.primary_path)
@@ -378,6 +387,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
     vid2.add_tag(tag1.id)
     # PDF tagged with Special/name.
     pdf.add_tag(tag2.id)
+    await await_tasks()
     assert_tag_links([
         'First Aid, Special⧸name/vid1.en.vtt',
         'First Aid, Special⧸name/vid1.en.vtt',
@@ -397,6 +407,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
 
     # Video1 tagged with First Aid only.
     vid1.untag(tag2.id)
+    await await_tasks()
     assert_tag_links([
         'First Aid/vid1.en.vtt',
         'First Aid/vid1.en.vtt',
@@ -413,6 +424,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
 
     # PDF no longer tagged.
     pdf.untag(tag2.id)
+    await await_tasks()
     assert_tag_links([
         'First Aid/vid1.en.vtt',
         'First Aid/vid1.en.vtt',
@@ -430,6 +442,7 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
     # No more tagged files.
     vid1.untag(tag1.id)
     vid2.untag(tag1.id)
+    await await_tasks()
     assert test_session.query(TagFile).count() == 0
     # Readme, and un-deletable file and directory exist.
     assert len(list(walk(test_directory / 'tags'))) == 3
@@ -443,11 +456,11 @@ async def test_tags_directory(test_async_client, test_session, test_directory, t
 
 
 @pytest.mark.asyncio
-async def test_update_tag(test_async_client, test_session, test_directory, video_factory, tag_factory):
+async def test_update_tag(async_client, test_session, test_directory, video_factory, tag_factory, await_tasks):
     """Linked files in the Tag Directory are moved when the tag is renamed."""
     # Create tagged Video.
     tag = await tag_factory()
-    video_factory(title='video', tag_names=[tag.name])
+    await video_factory(title='video', tag_names=[tag.name])
     test_session.commit()
 
     # Video file is linked in tag directory.
@@ -457,6 +470,7 @@ async def test_update_tag(test_async_client, test_session, test_directory, video
 
     # Invalid characters are replaced during rename.
     await tags.upsert_tag('new/name%', tag.color, tag.id)
+    await await_tasks()
 
     # Video file was moved.
     assert (test_directory / 'tags').is_dir()
@@ -466,11 +480,12 @@ async def test_update_tag(test_async_client, test_session, test_directory, video
 
 
 @pytest.mark.asyncio
-async def test_tag_rename_with_channel(test_async_client, test_session, test_directory, video_factory, tag_factory,
+async def test_tag_rename_with_channel(async_client, test_session, test_directory, video_factory, tag_factory,
                                        channel_factory):
+    """Channels that have been tagged are moved when the Tag is renamed."""
     tag = await tag_factory()
     channel = channel_factory(name='Channel Name', tag_name=tag.name)
-    video_factory(title='video', channel_id=channel.id)
+    await video_factory(title='video', channel_id=channel.id)
     test_session.commit()
 
     assert (test_directory / 'tags').is_dir()

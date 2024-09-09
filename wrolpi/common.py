@@ -16,6 +16,7 @@ import sys
 import tempfile
 import traceback
 from asyncio import Task
+from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, date
@@ -28,6 +29,7 @@ from pathlib import Path
 from types import GeneratorType
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set, Coroutine
 from urllib.parse import urlparse, urlunsplit
+from uuid import uuid4
 
 import aiohttp
 import bs4
@@ -42,8 +44,9 @@ from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
-from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
 
+# Based off Sanic's default logging config.  Changes to this cause unpredictable results in logging.
 LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -53,7 +56,7 @@ LOGGING_CONFIG = {
             'handlers': ['console'],
         },
         'sanic.error': {
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'handlers': ['error_console'],
             'qualname': 'sanic.error',
         },
@@ -63,7 +66,7 @@ LOGGING_CONFIG = {
             'qualname': 'sanic.access',
         },
         'sanic.server': {
-            'level': 'INFO',
+            'level': LOG_LEVEL,
             'handlers': ['console'],
             'qualname': 'sanic.server',
         },
@@ -98,7 +101,7 @@ LOGGING_CONFIG = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO'
+        'level': LOG_LEVEL,
     }
 }
 
@@ -277,7 +280,7 @@ class ModelHelper:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def do_model(file_group, session: Session) -> 'ModelHelper':
+    def do_model(session: Session) -> 'ModelHelper':
         raise NotImplementedError('This model has not defined this method.')
 
     def flush(self, session: Session = None):
@@ -1553,28 +1556,26 @@ def truncate_generator_bytes(gen: Generator, maximum_bytes: int) -> Generator:
             return
 
 
-BACKGROUND_TASKS = set()
+BACKGROUND_TASKS = OrderedDict()
 
 
-def add_background_task(task: Task):
-    BACKGROUND_TASKS.add(task)
-    task.add_done_callback(BACKGROUND_TASKS.discard)
-
-
-def background_task(coro: Coroutine) -> Task:
+def background_task(coro: Coroutine, task_name: str = None) -> Task:
     """Convenience function which creates an asyncio task for the provided coroutine.
 
     The task is stored in a global set of background tasks so the task will not be discarded by the garbage collector.
     """
+    task_name = task_name or uuid4().hex
 
     async def error_logger():
         try:
             await coro
         except Exception as e:
             logger_.error('Background task had error:', exc_info=e)
+        finally:
+            del BACKGROUND_TASKS[task_name]
 
     task = asyncio.create_task(error_logger())
-    add_background_task(task)
+    BACKGROUND_TASKS[task_name] = task
     return task
 
 
@@ -1582,9 +1583,13 @@ async def cancel_background_tasks():
     """Cancels any background async tasks, if any."""
     if BACKGROUND_TASKS:
         logger_.warning(f'Canceling {len(BACKGROUND_TASKS)} background tasks')
-        for task in BACKGROUND_TASKS:
+        for task in BACKGROUND_TASKS.values():
             task.cancel()
-            await asyncio.gather(*BACKGROUND_TASKS)
+        await asyncio.gather(*BACKGROUND_TASKS.values())
+
+
+async def await_background_tasks():
+    await asyncio.gather(*BACKGROUND_TASKS.values())
 
 
 def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):

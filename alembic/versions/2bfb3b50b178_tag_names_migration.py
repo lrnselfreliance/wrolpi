@@ -6,13 +6,12 @@ Create Date: 2024-07-31 14:58:29.583029
 
 """
 import os
-import sys
 
 from alembic import op
 from sqlalchemy.orm import Session
 
 from wrolpi.common import escape_file_name
-from wrolpi.tags import Tag, get_tags_config
+from wrolpi.tags import Tag
 
 # revision identifiers, used by Alembic.
 revision = '2bfb3b50b178'
@@ -38,13 +37,6 @@ def upgrade():
 
     if need_commit:
         session.commit()
-
-    try:
-        config = get_tags_config()
-        config.initialize()
-        config.save_tags(session, ignore_lock=True)
-    except FileNotFoundError:
-        print(f'Failed to save tags config probably because media directory does not exist', file=sys.stderr)
 
 
 def downgrade():

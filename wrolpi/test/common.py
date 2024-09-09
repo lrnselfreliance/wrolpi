@@ -9,7 +9,7 @@ import mock
 import pytest
 
 from wrolpi.common import get_media_directory
-from wrolpi.conftest import test_db, test_client  # noqa
+from wrolpi.conftest import test_db, async_client  # noqa
 from wrolpi.db import postgres_engine
 from wrolpi.vars import CIRCLECI
 

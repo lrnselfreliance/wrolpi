@@ -12,11 +12,12 @@ import shutil
 import socketserver
 import tempfile
 import threading
+import tracemalloc
 import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
+from typing import List, Callable, Dict, Sequence, Union, Coroutine
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock, AsyncMock
@@ -26,7 +27,7 @@ import pytest
 import sqlalchemy
 import yaml
 from PIL import Image
-from sanic_testing.reusable import ReusableClient
+from sanic import Sanic
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -35,7 +36,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
-from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode
+from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, BACKGROUND_TASKS, timer
 from wrolpi.common import logger
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
@@ -139,56 +140,33 @@ def skip_config_backups():
 ROUTES_ATTACHED = False
 
 
-@pytest.fixture()
-def test_client(test_directory) -> ReusableClient:
-    """Get a Reusable Sanic Test Client with all default routes attached.
-
-    (A non-reusable client would turn on for each request)
-    """
-    attach_shared_contexts(api_app)
-
-    initialize_configs_contexts(api_app)
-
-    for _ in range(5):
-        # Sometimes the Sanic client tries to use a port already in use, try again...
-        try:
-            client = ReusableClient(api_app)
-            with client:
-                yield client
-            break
-        except OSError as e:
-            # Ignore errors where the port was already in use.
-            if 'address already in use' not in str(e):
-                raise
-    else:
-        raise RuntimeError('Test never got unused port')
+# Wait for all background tasks to finish before returning API response while testing.
+@api_app.on_response
+async def background_task_listener(request, response):
+    await _await_tasks()
 
 
 @pytest.fixture
-async def test_async_client(test_directory) -> SanicASGITestClient:
+async def async_client(test_directory) -> SanicASGITestClient:
     """Get an Async Sanic Test Client with all default routes attached."""
     attach_shared_contexts(api_app)
-
     initialize_configs_contexts(api_app)
-
-    # # Clean up test tasks
-    # @api_app.after_server_stop
-    # async def cleanup(app: Sanic):
-    #     logger.warning('Cancelling test tasks...')
-    #     for task in asyncio.all_tasks():
-    #         if task is not asyncio.current_task():
-    #             await task
 
     client = SanicASGITestClient(api_app)
 
     # Call API so server actually starts.
     await client.get('/api/echo')
 
-    return client
+    try:
+        yield client
+        # Do not remove, or tests will be significantly slower.
+        await _await_tasks(timeout=1)
+    finally:
+        logger.debug('Destroying async_client')
 
 
 @pytest.fixture
-def test_download_manager_config(test_async_client, test_directory) -> pathlib.Path:
+def test_download_manager_config(async_client, test_directory) -> pathlib.Path:
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
@@ -197,7 +175,7 @@ def test_download_manager_config(test_async_client, test_directory) -> pathlib.P
 
 @pytest.fixture
 async def test_download_manager(
-        test_async_client,
+        async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
 ) -> DownloadManager:
@@ -504,7 +482,7 @@ def mock_create_subprocess_shell() -> Callable:
 
 
 @pytest.fixture
-def events_history(test_async_client):
+def events_history(async_client):
     """Give each test its own Events history."""
     yield api_app.shared_ctx.events_history
 
@@ -525,7 +503,7 @@ def flags_lock():
 
 
 @pytest.fixture()
-def tag_factory(test_session) -> Callable[[Optional[str]], Awaitable[Tag]]:
+def tag_factory(async_client, test_session, await_tasks):
     names = ['one', 'two', 'three', 'four', 'five', 'six']
     count = 1
 
@@ -533,6 +511,7 @@ def tag_factory(test_session) -> Callable[[Optional[str]], Awaitable[Tag]]:
         if not name:
             name = names.pop(0)
         tag = await upsert_tag(name, f'#{str(count) * 6}', session=test_session)
+        await await_tasks()
         return tag
 
     return factory
@@ -594,12 +573,12 @@ def assert_file_groups(test_session, test_directory):
 
 
 @pytest.fixture
-def assert_files_search(test_client):
+def assert_files_search(async_client):
     from wrolpi.test.common import assert_dict_contains
 
-    def _(search_str: str, expected: List[dict]):
+    async def _(search_str: str, expected: List[dict]):
         content = json.dumps({'search_str': search_str})
-        request, response = test_client.post('/api/files/search', content=content)
+        request, response = await async_client.post('/api/files/search', content=content)
         for file_group, exp in zip_longest(response.json['file_groups'], expected):
             assert_dict_contains(file_group, exp)
 
@@ -789,3 +768,27 @@ def simple_web_server():
             # Stop the server after the test
             httpd.shutdown()
             server_thread.join()
+
+
+async def _await_tasks(timeout: int = 10):
+    from wrolpi.tasks import TASK_HANDLER_STARTED
+    if not TASK_HANDLER_STARTED:
+        raise RuntimeError('task_handler was not started')
+
+    count = 0
+    while (
+            len(api_app.shared_ctx.task_queue)  # Calls to a `register_task_handler` are waiting
+            or any(i for i in api_app.tasks if not i.done())  # A background task is started, but not finished.
+            or any(i for i in BACKGROUND_TASKS.values() if not i.done())
+    ):
+        # Convert timeout to 1/10th of a second.
+        if count > timeout * 10:
+            raise RuntimeError('Background tasks never finished')
+
+        await asyncio.sleep(0.1)
+        count += 1
+
+
+@pytest.fixture
+def await_tasks(async_client):
+    return _await_tasks

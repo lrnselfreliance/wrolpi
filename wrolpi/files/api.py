@@ -1,4 +1,6 @@
-import asyncio
+import pathlib
+from http import HTTPStatus
+
 import pathlib
 from http import HTTPStatus
 
@@ -14,10 +16,8 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     background_task, walk, timer
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
-from .lib import get_mimetype
-from .models import FileGroup
+from .lib import upsert_file
 from ..api_utils import json_response, api_app
-from ..db import get_db_session
 from ..events import Events
 from ..tags import Tag
 from ..vars import PYTEST
@@ -392,7 +392,7 @@ async def post_upload(request: Request):
         # File upload is complete.
         logger.info(f'Got final chunk of uploaded file: {output_str}')
         del uploaded_files[output_str]
-        # TODO call upsert
+        background_task(upsert_file(output, tag_names=tag_names))
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

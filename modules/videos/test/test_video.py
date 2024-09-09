@@ -30,9 +30,9 @@ def test_delete_video_no_channel(test_session, simple_video):
 
 
 @pytest.mark.asyncio
-async def test_delete_video_with_tag(test_async_client, test_session, video_factory, tag_factory):
+async def test_delete_video_with_tag(async_client, test_session, video_factory, tag_factory):
     """You cannot delete a video with a tag."""
-    video = video_factory(with_video_file=True, with_poster_ext='png')
+    video = await video_factory(with_video_file=True, with_poster_ext='png')
     tag = await tag_factory()
     video.add_tag(tag.name)
     test_session.commit()
@@ -47,15 +47,15 @@ async def test_delete_video_with_tag(test_async_client, test_session, video_fact
 
 
 @pytest.mark.asyncio
-async def test_video_channel_refresh(test_async_client, test_session, test_directory, channel_factory, video_factory):
+async def test_video_channel_refresh(async_client, test_session, test_directory, channel_factory, video_factory):
     """A Video will be associated with a Channel when it's files are in that Channel's directory."""
     # Create a video file in this channel's directory.
     channel = channel_factory()
     video1_path = channel.directory / 'video1.mp4'
-    video_factory(channel_id=channel.id, with_video_file=video1_path, with_poster_ext='jpg')
+    await video_factory(channel_id=channel.id, with_video_file=video1_path, with_poster_ext='jpg')
     # Create another video outside the channel's directory.  It should not have a channel.
     video2_path = test_directory / 'video2.mp4'
-    video_factory(with_video_file=video2_path)
+    await video_factory(with_video_file=video2_path)
     # Delete all FileGroups so the channel will be associated again.
     test_session.query(FileGroup).delete()
     test_session.commit()
@@ -77,7 +77,7 @@ async def test_video_channel_refresh(test_async_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
-async def test_delete_duplicate_video(test_async_client, test_session, channel_factory, video_factory, tag_factory):
+async def test_delete_duplicate_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, and everything about the files matches, delete a random one."""
     channel = channel_factory(name='Channel Name')
     video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
@@ -86,7 +86,7 @@ async def test_delete_duplicate_video(test_async_client, test_session, channel_f
     entry = channel.info_json['entries'][0]
 
     tag = await tag_factory()
-    vid1 = video_factory(
+    vid1 = await video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title',
         upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
@@ -96,7 +96,7 @@ async def test_delete_duplicate_video(test_async_client, test_session, channel_f
         with_caption_file=True,
         tag_names=[tag.name, ]
     )
-    vid2 = video_factory(
+    vid2 = await video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title ',  # Video was renamed, trailing space was removed.
         upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
@@ -134,7 +134,7 @@ async def test_delete_duplicate_video(test_async_client, test_session, channel_f
 
 
 @pytest.mark.asyncio
-async def test_delete_renamed_video(test_async_client, test_session, channel_factory, video_factory, tag_factory):
+async def test_delete_renamed_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, delete all the videos that do not have the new title."""
     channel = channel_factory(name='Channel Name')
     video_path = channel.directory / f'{channel.name}_20000101_ABC123456_Some new title.mp4'
@@ -143,7 +143,7 @@ async def test_delete_renamed_video(test_async_client, test_session, channel_fac
     entry = channel.info_json['entries'][0]
 
     tag = await tag_factory()
-    vid1 = video_factory(
+    vid1 = await video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title',
         upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
@@ -153,7 +153,7 @@ async def test_delete_renamed_video(test_async_client, test_session, channel_fac
         with_caption_file=True,
         tag_names=[tag.name, ]
     )
-    vid2 = video_factory(
+    vid2 = await video_factory(
         channel_id=channel.id,
         title=f'{channel.name}_20000101_ABC123456_The video title ',  # Video was renamed, trailing space was removed.
         upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),

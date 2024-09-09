@@ -10,13 +10,12 @@ from sanic.signals import Event
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi import root_api  # noqa
 from wrolpi import tags
-from wrolpi.api_utils import api_app
+from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
-from wrolpi.downloader import import_downloads_config, download_manager, \
-    perpetual_download_worker
+from wrolpi.downloader import import_downloads_config, download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -201,39 +200,29 @@ async def handle_server_shutdown_reset(app: Sanic, loop):
     reset_shared_contexts(app)
 
 
-# Start periodic tasks after configs are ready.
 @api_app.listener('after_server_start')
-async def start_single_tasks(app: Sanic):
-    """Recurring/Single tasks that are started in only one Sanic process."""
+async def start_once_tasks(app: Sanic):
+    """Tasks that need to be run once, and started in only one Sanic process."""
     # Only allow one child process to perform periodic tasks.  See `handle_server_shutdown`
-    if app.shared_ctx.single_tasks_started.is_set():
+    if app.shared_ctx.once_tasks_started.is_set():
         return
-    app.shared_ctx.single_tasks_started.set()
+    app.shared_ctx.once_tasks_started.set()
+    logger.info(f'start_once_tasks started')
 
-    from modules.zim.lib import flag_outdated_zim_files
-
-    logger.debug(f'start_single_tasks started')
     if get_wrolpi_config().download_on_startup:
         download_manager.enable()
     else:
         download_manager.disable()
 
-    # Start perpetual tasks.  DO NOT AWAIT!
-    app.add_task(perpetual_check_db_is_up_worker())  # noqa
-    app.add_task(perpetual_download_worker())  # noqa
-    app.add_task(perpetual_have_internet_worker())  # noqa
-
-    await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
-    await app.dispatch('wrolpi.periodic.status')
-
+    from modules.zim.lib import flag_outdated_zim_files
     try:
         flag_outdated_zim_files()
     except Exception as e:
         logger.error('Failed to flag outdated Zims', exc_info=e)
 
-    logger.debug('start_single_tasks waiting for db...')
+    logger.debug('start_once_tasks waiting for db...')
     async with flags.db_up.wait_for():
-        logger.debug('start_single_tasks db is up')
+        logger.debug('start_once_tasks db is up')
 
     tags.import_tags_config()
 
@@ -271,7 +260,7 @@ async def start_single_tasks(app: Sanic):
         except Exception as e:
             logger.warning(f'Startup {func} failed!', exc_info=e)
 
-    logger.debug(f'start_single_tasks done')
+    logger.debug(f'start_once_tasks done')
 
 
 @api_app.listener('after_server_start')
@@ -297,49 +286,36 @@ async def periodic_check_log_level():
         pass
 
 
+@perpetual_signal(sleep=10)
 async def perpetual_check_db_is_up_worker():
     try:
-        while True:
-            try:
-                flags.check_db_is_up()
-                flags.init_flags()
-            except Exception as e:
-                logger.error('Failed to check if db is up', exc_info=e)
-
-            await asyncio.sleep(10)
-    except asyncio.CancelledError:
-        logger.info('periodic_check_db_is_up was cancelled...')
+        flags.check_db_is_up()
+        flags.init_flags()
     except Exception as e:
-        logger.error('Failed to check db status', exc_info=e)
+        logger.error('Failed to check if db is up', exc_info=e)
 
 
+@perpetual_signal(sleep=10)
 async def perpetual_have_internet_worker():
-    try:
-        while True:
-            try:
-                if can_connect_to_server(INTERNET_SERVER):
-                    flags.have_internet.set()
-                    # Check hourly once we have internet.
-                    await asyncio.sleep(float(Seconds.hour))
-                else:
-                    # Check more often until the internet is back.
-                    flags.have_internet.clear()
-                    await asyncio.sleep(10)
-            except Exception as e:
-                logger.error('Failed to check if internet is up', exc_info=e)
-    except asyncio.CancelledError:
-        logger.info('perpetual_check_have_internet_worker was cancelled...')
+    if can_connect_to_server(INTERNET_SERVER):
+        flags.have_internet.set()
+        # Check every 10 minutes once we have internet.
+        await asyncio.sleep(float(Seconds.minute * 10))
+    else:
+        # Check more often until the internet is back.
+        flags.have_internet.clear()
+        await asyncio.sleep(10)
 
 
-@api_app.signal('wrolpi.periodic.start_video_missing_comments_download')
-async def periodic_start_video_missing_comments_download():
+@perpetual_signal(sleep=10)
+async def perpetual_start_video_missing_comments_download():
     from modules.videos.video.lib import get_missing_videos_comments
 
     async with flags.refresh_complete.wait_for():
         # We can't search for Videos missing comments until the refresh has completed.
         pass
 
-    # Wait for download manager to startup.
+    # Wait for download manager to start.
     await asyncio.sleep(5)
 
     # Fetch comments for videos every hour.
@@ -356,8 +332,6 @@ async def periodic_start_video_missing_comments_download():
             logger.error('Failed to get missing video comments', exc_info=e)
 
         await asyncio.sleep(int(Seconds.hour))
-
-    await api_app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
 
 
 if __name__ == '__main__':

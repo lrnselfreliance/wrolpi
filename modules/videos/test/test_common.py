@@ -91,10 +91,10 @@ async def test_update_view_count(test_session, channel_factory, video_factory):
             assert video.view_count == view_count
 
     channel1, channel2, channel3 = channel_factory(), channel_factory(), channel_factory()
-    video_factory(channel_id=channel1.id, with_poster_ext='jpg', title='vid1')
-    video_factory(channel_id=channel2.id, title='vid2')
-    video_factory(channel_id=channel3.id, with_poster_ext='jpg', title='vid3')
-    video_factory(channel_id=channel3.id, title='vid4')
+    await video_factory(channel_id=channel1.id, with_poster_ext='jpg', title='vid1')
+    await video_factory(channel_id=channel2.id, title='vid2')
+    await video_factory(channel_id=channel3.id, with_poster_ext='jpg', title='vid3')
+    await video_factory(channel_id=channel3.id, title='vid4')
     channel1.info_json = {'entries': [{'id': 'vid1', 'view_count': 10}]}
     channel2.info_json = {'entries': [{'id': 'vid2', 'view_count': 11}, {'id': 'bad_id', 'view_count': 12}]}
     channel3.info_json = {'entries': [{'id': 'vid3', 'view_count': 13}, {'id': 'vid4', 'view_count': 14}]}
@@ -135,8 +135,8 @@ def test_generate_video_poster(video_file):
 
 
 @pytest.mark.asyncio
-async def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config,
-                                        tag_factory):
+async def test_import_channel_downloads(async_client, test_session, channel_factory, test_channels_config,
+                                        tag_factory, await_tasks):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
     channel2 = channel_factory(source_id='bar', url='https://example.com/channel2')
@@ -155,6 +155,8 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
 
     # Two Channels, but neither have Downloads.
     save_channels_config()
+    await await_tasks()
+    # Import after config is saved.
     import_channels_config()
     assert not channel1.downloads
     assert not channel2.downloads
@@ -167,6 +169,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
                           {'downloads': [
                               {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly}
                           ]})
+    await await_tasks()
 
     # Download record is created on import.
     import_channels_config()
@@ -189,6 +192,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     save_channels_config()
     Download.find_by_url(channel2.url).delete(add_to_skip_list=False)
     test_session.commit()
+    await await_tasks()
 
     # Missing Download is re-created on import.
     import_channels_config()
@@ -204,6 +208,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     channel2.get_or_create_download('https://example.com/channel2', 60, session=test_session)
     test_session.commit()
     save_channels_config()
+    await await_tasks()
     # Check config is written to match new URLs.
     config = get_channels_config()
     assert len(config.channels) == 2
@@ -242,7 +247,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
 
 @pytest.mark.asyncio
 async def test_import_channel_delete_missing_channels(
-        test_async_client, test_session, channel_factory, test_channels_config):
+        async_client, test_session, channel_factory, test_channels_config, await_tasks):
     """The Channel import function deletes any Channels that are not in the config."""
     # Create a DB and config with two Channels.
     channel1 = channel_factory(source_id='foo')
@@ -250,6 +255,7 @@ async def test_import_channel_delete_missing_channels(
     test_session.commit()
     # Write Channels to the config file.
     save_channels_config()
+    await await_tasks()
     test_session.delete(channel1)
     test_session.delete(channel2)
     test_session.commit()
@@ -276,13 +282,14 @@ async def test_import_channel_delete_missing_channels(
 
     # Saving and importing does not change anything.
     save_channels_config()
+    await await_tasks()
     import_channels_config()
     assert str(channel1.directory) in test_channels_config.read_text()
     assert str(channel2.directory) not in test_channels_config.read_text()
 
 
 @pytest.mark.asyncio
-async def test_ffprobe_json(test_async_client, video_file, corrupted_video_file):
+async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
     content = await common.ffprobe_json(video_file)
     assert not content['chapters']
     assert content['format']['duration'] == '5.312000'

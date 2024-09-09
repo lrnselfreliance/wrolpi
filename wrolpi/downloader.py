@@ -24,44 +24,32 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import Delete
 
 from wrolpi import flags
-from wrolpi.api_utils import api_app
+from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import pid_is_running
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
     limit_concurrent, wrol_mode_enabled, background_task
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
+from wrolpi.tasks import auto_background_task
 from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
 logger = logger.getChild(__name__)
 
 
+@perpetual_signal(sleep=0.1 if PYTEST else 1)
 async def perpetual_download_worker():
-    logger.debug('perpetual_download waiting for db...')
+    """Renews deferred Downloads when they are ready, starts downloads worker."""
     async with flags.db_up.wait_for():
         pass
 
-    logger.debug('perpetual_download starting...')
+    async with flags.have_internet.wait_for():
+        pass
 
-    while True:
-        try:
-            await asyncio.sleep(1)
+    if download_manager.is_stopped:
+        return
 
-            async with flags.have_internet.wait_for(timeout=5):
-                pass
-
-            if download_manager.is_stopped:
-                logger.warning('DownloadManager stopped, quitting...')
-                return
-
-            await download_manager.do_downloads()
-        except asyncio.CancelledError:
-            logger.info('perpetual_download cancelled...')
-            return
-        except TimeoutError:
-            logger.debug('DownloadManager waiting for internet...')
-        except Exception as e:
-            logger.error('perpetual_download failed from unexpected error', exc_info=e)
+    await download_manager.do_downloads()
 
 
 class DownloadFrequency(int, Enum):
@@ -226,7 +214,7 @@ class Download(ModelHelper, Base):  # noqa
             from modules.videos.lib import save_channels_config
             save_channels_config()
         # Save download config again because this download is now removed from the download lists.
-        background_task(save_downloads_config())
+        save_downloads_config()
 
     @staticmethod
     def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
@@ -471,22 +459,6 @@ class DownloadManager:
     def log_warning(self, message: str):
         return self.log(message, logging.WARNING)
 
-    @wrol_mode_check
-    def start_workers(self, loop=None):
-        """Start all download worker tasks.  Does nothing if they are already running."""
-        if not self.workers:
-            if not loop:
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    # Loop isn't running, start one.  Probably testing.
-                    loop = asyncio.get_event_loop()
-
-            for i in range(self.worker_count):
-                coro = self.download_worker(i)
-                task = loop.create_task(coro)
-                self.workers.append(task)
-
     def find_downloader_by_name(self, name: str) -> Optional[Downloader]:
         """Attempt to find a registered Downloader by its name.  Raises error if it cannot be found."""
         if downloader := self._instances.get(name):
@@ -548,7 +520,7 @@ class DownloadManager:
             # Start downloading ASAP.
             background_task(self.dispatch_downloads())
             # Save the config now that new Downloads exist.
-            background_task(save_downloads_config())
+            save_downloads_config()
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -673,7 +645,7 @@ class DownloadManager:
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
-        background_task(save_downloads_config())
+        save_downloads_config()
 
     DOWNLOAD_SORT = (
         DownloadStatus.pending,
@@ -747,7 +719,7 @@ class DownloadManager:
             session.commit()
 
             # Save the config now that some Downloads renewed.
-            background_task(save_downloads_config())
+            save_downloads_config()
 
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:
@@ -1030,7 +1002,7 @@ class DownloadManager:
         stmt = self._delete_downloads_q(once=True)
         deleted_ids = [i for i, in session.execute(stmt).fetchall()]
         session.commit()
-        background_task(save_downloads_config())
+        save_downloads_config()
         return deleted_ids
 
     @staticmethod
@@ -1135,7 +1107,7 @@ async def signal_download_download(download_id: int, download_url: str):
         # Allow the download to resume.
         download_manager.unkill_download(download_id)
         # Save the config now that the Download has finished.
-        background_task(save_downloads_config())
+        save_downloads_config()
     except asyncio.CancelledError as e:
         worker_logger.warning('Canceled!', exc_info=e)
         return
@@ -1193,28 +1165,30 @@ def get_download_manager_config() -> DownloadManagerConfig:
     return DOWNLOAD_MANAGER_CONFIG
 
 
-@optional_session(commit=False)
-async def save_downloads_config(session: Session):
+@auto_background_task
+async def save_downloads_config():
     """Fetch all Downloads from the DB, save them to the Download Manager Config."""
-    downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
-    config = []
-    for download in downloads:
-        if download.last_successful_download and not download.frequency:
-            # This once-download has completed, do not save it.
-            continue
-        config.append(dict(
-            downloader=download.downloader,
-            frequency=download.frequency,
-            last_successful_download=download.last_successful_download,
-            next_download=download.next_download,
-            settings=download.settings,
-            status=download.status,
-            sub_downloader=download.sub_downloader,
-            url=download.url,
-        ))
-    if config != get_download_manager_config().downloads:
-        # Only save if there are changes.
-        get_download_manager_config().downloads = config
+    with get_db_session() as session:
+        downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
+        config = []
+        for download in downloads:
+            if download.last_successful_download and not download.frequency:
+                # This once-download has completed, do not save it.
+                continue
+            config.append(dict(
+                downloader=download.downloader,
+                frequency=download.frequency,
+                last_successful_download=download.last_successful_download,
+                next_download=download.next_download,
+                settings=download.settings,
+                status=download.status,
+                sub_downloader=download.sub_downloader,
+                url=download.url,
+            ))
+        if config != get_download_manager_config().downloads:
+            # Only save if there are changes.
+            get_download_manager_config().downloads = config
+    logger.info('save_downloads_config completed')
 
 
 @optional_session

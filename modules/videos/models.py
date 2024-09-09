@@ -220,7 +220,7 @@ class Video(ModelHelper, Base):
 
         return previous_video, next_video
 
-    def validate(self):
+    def validate(self, session: Session = None):
         """Perform a validation of this video and it's files."""
         if not self.file_group.primary_path:
             # Can't validate if there is no video file.
@@ -248,7 +248,7 @@ class Video(ModelHelper, Base):
         _ = self.file_group.slug
 
         # If this Video is in a Channel's directory, then it is part of that Channel.
-        session: Session = Session.object_session(self)
+        session: Session = session or Session.object_session(self)
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
@@ -264,7 +264,7 @@ class Video(ModelHelper, Base):
         session.add(video)
         session.flush([video, file_group])
 
-        video.validate()
+        video.validate(session)
         session.flush([video, ])
         return video
 
@@ -374,7 +374,6 @@ class Video(ModelHelper, Base):
         if not self.ffprobe_json:
             from modules.videos.common import ffprobe_json
             self.ffprobe_json = await ffprobe_json(self.video_path)
-            self.flush()
 
         return self.ffprobe_json
 
@@ -806,16 +805,19 @@ class Channel(ModelHelper, Base):
         from modules.videos.lib import format_videos_destination
         return format_videos_destination(self.name, tag_name, self.url)
 
-    async def move_channel(self, directory: pathlib.Path, session: Session, send_events: bool = False):
+    async def move_channel(self, directory: pathlib.Path, send_events: bool = False):
         """Move the files of this Channel into a new directory."""
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
 
+        channel_id = self.id
+
         old_directory = self.directory
         self.directory = directory
 
-        def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path):
-            downloads = list(self.downloads)
+        def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path, session_):
+            channel_ = Channel.find_by_id(channel_id, session_)
+            downloads = list(channel_.downloads)
             downloads.extend(Download.get_all_by_destination(from_directory))
             downloads = unique_by_predicate(downloads, lambda i: i.id)
             for download in downloads:
@@ -824,24 +826,23 @@ class Channel(ModelHelper, Base):
                 if settings.get('destination'):
                     logger.debug(f'Updating destination of {download}')
                     download.settings = {**settings, 'destination': str(to_directory)}
-            session.flush(downloads)
+            session_.flush(downloads)
 
         # Only one tag can be moved at a time.
         with flags.refreshing:
             # Change destination of all Downloads of this Channel, or any Downloads which download into this Channel's
             # directory.
-            change_download_destinations(old_directory, directory)
-
-            session.commit()
-
-            # Save configs before move, this is because move imports configs.
-            from modules.videos.lib import save_channels_config
-            await save_downloads_config(session)
-            save_channels_config(session)
-            save_tags_config(session)
+            with get_db_session(commit=True) as session:
+                change_download_destinations(old_directory, directory, session)
 
             # Move the contents of the Channel directory into the destination directory.
             logger.info(f'Moving {self} from {repr(str(old_directory))}')
+
+            # Save configs before move, this is because move imports configs.
+            from modules.videos.lib import save_channels_config
+            await save_downloads_config()() # Bypass `auto_background_task` wrapper.
+            await save_channels_config()()
+            await save_tags_config()()
 
         try:
             if not old_directory.exists():
@@ -858,16 +859,18 @@ class Channel(ModelHelper, Base):
                 if send_events:
                     Events.send_file_move_completed(f'Channel {repr(self.name)} was moved')
         except Exception as e:
+            # TODO undo config changes
             logger.error(f'Channel move failed!  Reverting changes...', exc_info=e)
             # Downloads must be moved back to the old directory.
-            change_download_destinations(directory, old_directory)
-            self.directory = old_directory
-            self.flush(session)
+            with get_db_session(commit=True) as session:
+                change_download_destinations(directory, old_directory, session)
+                channel = Channel.find_by_id(channel_id, session=session)
+                channel.directory = old_directory
+                channel.flush(session)
             if send_events:
                 Events.send_file_move_failed(f'Moving Channel {self.name} has failed')
             raise
         finally:
-            session.commit()
             if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
                 # Old directory is empty, delete it.
                 old_directory.rmdir()

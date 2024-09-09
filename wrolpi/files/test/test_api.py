@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import json
 from http import HTTPStatus
@@ -9,7 +8,6 @@ import pytest
 from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
-from wrolpi.files.api import handle_files_upsert
 from wrolpi.files.lib import get_mimetype
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -17,7 +15,8 @@ from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_list_files_api(test_session, test_client, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_list_files_api(test_session, async_client, make_files_structure, test_directory):
     files = [
         'archives/bar.txt',
         'archives/baz/bar.txt',
@@ -31,8 +30,8 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
     files = make_files_structure(files)
     files[0].write_text('bar contents')
 
-    def check_get_files(directories, expected_files):
-        request, response = test_client.post('/api/files', content=json.dumps({'directories': directories}))
+    async def check_get_files(directories, expected_files):
+        request, response = await async_client.post('/api/files', content=json.dumps({'directories': directories}))
         assert response.status_code == HTTPStatus.OK
         assert not response.json.get('errors')
         # The first dict is the media directory.
@@ -45,14 +44,14 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files([], expected)
+    await check_get_files([], expected)
     # empty directory is empty
     expected = {
         'archives/': {'path': 'archives/', 'is_empty': False},
         'empty directory/': {'path': 'empty directory/', 'children': {}, 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files(['empty directory'], expected)
+    await check_get_files(['empty directory'], expected)
 
     expected = {
         'archives/': {
@@ -67,7 +66,7 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files(['archives'], expected)
+    await check_get_files(['archives'], expected)
 
     # Sub-directories are supported.
     expected = {
@@ -90,9 +89,9 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False},
     }
-    check_get_files(['archives', 'archives/baz'], expected)
+    await check_get_files(['archives', 'archives/baz'], expected)
     # Requesting only a subdirectory also returns `archives` contents.
-    check_get_files(['archives/baz'], expected)
+    await check_get_files(['archives/baz'], expected)
 
     expected = {
         'archives/': {
@@ -113,58 +112,61 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
             'is_empty': False
         }
     }
-    check_get_files(['archives', 'videos'], expected)
+    await check_get_files(['archives', 'videos'], expected)
     # Order does not matter.
-    check_get_files(['videos', 'archives'], expected)
+    await check_get_files(['videos', 'archives'], expected)
 
 
-def test_delete_file(test_session, test_client, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_delete_file(test_session, async_client, make_files_structure, test_directory):
     files = ['bar.txt', 'baz/', 'foo']
     make_files_structure(files)
 
     # Delete a file.
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bar.txt']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['bar.txt']}))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
     assert (test_directory / 'baz').is_dir()
 
     # Delete a directory.
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['baz']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['baz']}))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
     assert not (test_directory / 'baz').is_dir()
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'paths', [
         [],
         ['', ],
     ]
 )
-def test_delete_invalid_file(test_client, paths):
+async def test_delete_invalid_file(async_client, paths):
     """Some paths must be passed."""
     with mock.patch('wrolpi.files.api.lib.delete') as mock_delete_file:
-        request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': paths}))
+        request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': paths}))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         mock_delete_file.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_delete_wrol_mode(test_async_client, wrol_mode_fixture):
+async def test_delete_wrol_mode(async_client, wrol_mode_fixture):
     """Can't delete a file when WROL Mode is enabled."""
     await wrol_mode_fixture(True)
 
-    request, response = await test_async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert response.json['code'] == 'WROL_MODE_ENABLED'
 
 
-def test_files_search(test_session, test_client, make_files_structure, assert_files_search):
+@pytest.mark.asyncio
+async def test_files_search(test_session, async_client, make_files_structure, assert_files_search):
     # You can search an empty directory.
-    assert_files_search('nothing', [])
+    await assert_files_search('nothing', [])
 
     # Create files in the temporary directory.  Add some contents so the mimetype can be tested.
     files = [
@@ -180,18 +182,18 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     baz2.write_bytes((PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes())
 
     # Refresh so files can be searched.
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
-    assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
-    assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
-    assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
-    assert_files_search('nothing', [])
+    await assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
+    await assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
+    await assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
+    await assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
+    await assert_files_search('nothing', [])
 
 
 @pytest.mark.asyncio
-async def test_files_search_any_tag(test_async_client, test_session, make_files_structure, tag_factory):
+async def test_files_search_any_tag(async_client, test_session, make_files_structure, tag_factory):
     one, two = await tag_factory(), await tag_factory()
     files = [
         'foo.txt',
@@ -210,29 +212,30 @@ async def test_files_search_any_tag(test_async_client, test_session, make_files_
 
     # Only `foo` is tagged with `one`
     body = dict(search_str='foo', tag_names=['one'])
-    request, response = await test_async_client.post('/api/files/search', json=body)
+    request, response = await async_client.post('/api/files/search', json=body)
     assert response.status_code == HTTPStatus.OK
     assert {i['primary_path'] for i in response.json['file_groups']} == {'foo.txt'}
 
     # Both `foo bar` and `foo` are tagged.
     body = dict(search_str='foo', any_tag=True)
-    request, response = await test_async_client.post('/api/files/search', json=body)
+    request, response = await async_client.post('/api/files/search', json=body)
     assert response.status_code == HTTPStatus.OK
     assert {i['primary_path'] for i in response.json['file_groups']} == {'foo.txt', 'foo bar.txt'}
 
     # `bar` is not tagged.
     body = dict(search_str='bar', any_tag=True)
-    request, response = await test_async_client.post('/api/files/search', json=body)
+    request, response = await async_client.post('/api/files/search', json=body)
     assert response.status_code == HTTPStatus.OK
     assert {i['primary_path'] for i in response.json['file_groups']} == {'foo bar.txt'}
 
     # Cannot search for any_tag, and tag names.
     body = dict(search_str='foo', tag_names=['one'], any_tag=True)
-    request, response = await test_async_client.post('/api/files/search', json=body)
+    request, response = await async_client.post('/api/files/search', json=body)
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
+@pytest.mark.asyncio
+async def test_refresh_files_list(test_session, async_client, make_files_structure, test_directory, video_bytes):
     """The user can request to refresh specific files."""
     make_files_structure({
         'bar.txt': 'hello',
@@ -241,19 +244,20 @@ def test_refresh_files_list(test_session, test_client, make_files_structure, tes
 
     # Only the single file that was refreshed is discovered.
     content = json.dumps({'paths': ['bar.txt']})
-    request, response = test_client.post('/api/files/refresh', content=content)
+    request, response = await async_client.post('/api/files/refresh', content=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(FileGroup).count() == 1
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 1
 
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 2
 
 
-def test_file_statistics(test_session, test_client, test_directory, example_pdf, example_mobi, example_epub,
+@pytest.mark.asyncio
+async def test_file_statistics(test_session, async_client, test_directory, example_pdf, example_mobi, example_epub,
                          video_file):
     """A summary of File statistics can be fetched."""
     # Give each file a unique stem.
@@ -263,7 +267,7 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
     example_epub.rename(test_directory / 'epub.epub')
 
     # Statistics can be fetched while empty.
-    request, response = test_client.get('/api/statistics')
+    request, response = await async_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_statistics'] == {
         'archive_count': 0,
@@ -280,9 +284,9 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'zip_count': 0,
     }
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
-    request, response = test_client.get('/api/statistics')
+    request, response = await async_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
     stats = response.json['file_statistics']
     stats.pop('total_size')
@@ -302,7 +306,7 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
 
 
 @pytest.mark.asyncio
-async def test_file_group_tag_by_primary_path(test_session, test_async_client, test_directory, example_singlefile,
+async def test_file_group_tag_by_primary_path(test_session, async_client, test_directory, example_singlefile,
                                               tag_factory, insert_file_group):
     singlefile = FileGroup.from_paths(test_session, example_singlefile)
     tag1 = await tag_factory()
@@ -311,41 +315,42 @@ async def test_file_group_tag_by_primary_path(test_session, test_async_client, t
 
     # FileGroup can be tagged with its primary_path.
     content = dict(file_group_primary_path=str(singlefile.primary_path.relative_to(test_directory)), tag_name=tag1.name)
-    request, response = await test_async_client.post('/api/files/tag', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(TagFile).count() == 1
 
     # FileGroup can be tagged with its id.
     content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
-    request, response = await test_async_client.post('/api/files/tag', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(TagFile).count() == 2
 
     # FileGroup can be untagged with its primary_path.
     content = dict(file_group_id=singlefile.id, tag_id=tag1.id)
-    request, response = await test_async_client.post('/api/files/untag', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(TagFile).count() == 1
 
     # FileGroup can be untagged with its id.
     content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
-    request, response = await test_async_client.post('/api/files/untag', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/untag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(TagFile).count() == 0
 
 
-def test_file_group_tag(test_client):
-    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(tag_id=1)))
+@pytest.mark.asyncio
+async def test_file_group_tag(async_client):
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(dict(tag_id=1)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'file_group_id' in response.json['error']
 
-    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'tag_id' in response.json['error']
 
 
 @pytest.mark.asyncio
-async def test_search_directories(test_async_client, test_session, test_directory, make_files_structure,
+async def test_search_directories(async_client, test_session, test_directory, make_files_structure,
                                   assert_directories):
     """Directories can be searched by name."""
     make_files_structure(['foo/one.txt', 'foo/two.txt', 'bar/one.txt'])
@@ -356,42 +361,42 @@ async def test_search_directories(test_async_client, test_session, test_director
 
     # More than one character required.
     content = dict(path='f')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK, response.content
     assert response.json['directories'] == []
     assert response.json['is_dir'] is False
 
     # Can search using partial directory name.
     content = dict(path='fo')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['foo', ]
     assert response.json['is_dir'] is False
 
     # Searching directory exactly.
     content = dict(path='foo')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['foo', ]
     assert response.json['is_dir'] is True
 
     # Case is ignored.
     content = dict(path='BAR')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['bar', ]
     assert response.json['is_dir'] is False
 
     # Can search directories not yet in DB.
     content = dict(path='ba')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == ['bar', 'baz']
     assert response.json['is_dir'] is False
 
     # Searching for something that does not exist.
     content = dict(path='does not exist')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == []
 
@@ -419,14 +424,15 @@ async def test_search_directories(test_async_client, test_session, test_director
         'foooooooooooooooooooooo/',
         'fooooooooooooooooooooooo/',
     ])
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     content = dict(path='fo')
-    request, response = await test_async_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert [i['path'] for i in response.json['directories']] == [f'f{"o" * i}' for i in range(2, 22)]
 
 
-def test_post_search_directories(test_session, test_client, make_files_structure):
+@pytest.mark.asyncio
+async def test_post_search_directories(test_session, async_client, make_files_structure):
     """Directory names can be searched.  This endpoint also returns Channel and Domain directories."""
     channel1_dir, channel2_dir, domain_dir, _ = make_files_structure([
         'dir1/',
@@ -434,7 +440,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
         'dir3/',
         'dir4/',
     ])
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     from modules.videos.models import Channel
@@ -447,7 +453,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
 
     # All directories contain "di".  The names of the Channel and Directory do not match.
     content = {'path': 'di'}
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['directories'] == [{'name': 'dir1', 'path': 'dir1'}, {'name': 'dir2', 'path': 'dir2'},
                                             {'name': 'dir3', 'path': 'dir3'}, {'name': 'dir4', 'path': 'dir4'}]
@@ -456,7 +462,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
 
     # Channel name matches.
     content = {'path': 'Chan'}
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['directories'] == []
     assert response.json['channel_directories'] == [
@@ -467,7 +473,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
 
     # "OtherChannel" matches even though the case is wrong, and it has a space.
     content = {'path': 'other channel'}
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     # Channel name matches.
     assert response.json['directories'] == []
@@ -475,7 +481,7 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     assert response.json['domain_directories'] == []
 
     content = {'path': 'exam'}
-    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     # Domain name matches.
     assert response.json['directories'] == []
@@ -483,7 +489,10 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     assert response.json['domain_directories'] == [{'domain': 'example.com', 'path': 'dir3'}]
 
 
-def test_post_upload_directory(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+@pytest.mark.asyncio
+async def test_post_upload_directory(test_session, async_client, test_directory, make_files_structure,
+                                     make_multipart_form,
+                                     await_tasks):
     """A file can be uploaded in a directory in the destination."""
     make_files_structure(['uploads/'])
 
@@ -497,22 +506,22 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED
 
     assert (test_directory / 'uploads/foo/bar.txt').is_file()
     assert (test_directory / 'uploads/foo/bar.txt').read_text() == 'foo'
 
+    await await_tasks()
     assert test_session.query(FileGroup).count() == 1
 
 
 @pytest.mark.asyncio
-async def test_post_upload(test_session, test_async_client, test_directory, make_files_structure, make_multipart_form,
+async def test_post_upload(test_session, async_client, test_directory, make_files_structure, make_multipart_form,
                            tag_factory, video_bytes):
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
     tag1, tag2 = await tag_factory(), await tag_factory()
-    test_async_client.sanic_app.add_task(handle_files_upsert())
 
     part1, part2 = video_bytes[:1_000_000], video_bytes[1_000_000:]
     forms = [
@@ -527,7 +536,7 @@ async def test_post_upload(test_session, test_async_client, test_directory, make
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = await test_async_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
 
     output = test_directory / 'uploads/video.mp4'
@@ -545,7 +554,7 @@ async def test_post_upload(test_session, test_async_client, test_directory, make
         dict(name='chunk', value=part2, filename='chunk'),
     ]
     body = make_multipart_form(forms)
-    request, response = await test_async_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, response.content.decode()
 
     assert output.is_file()
@@ -553,8 +562,6 @@ async def test_post_upload(test_session, test_async_client, test_directory, make
     assert output.stat().st_size == len(video_bytes)
     assert output.read_bytes() == video_bytes
     assert hashlib.md5(output.read_bytes()).hexdigest() == '2738c53bd7c01b01d408da11a55bfa36'
-
-    await asyncio.sleep(1)
 
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.mimetype == 'video/mp4'
@@ -568,7 +575,8 @@ async def test_post_upload(test_session, test_async_client, test_directory, make
     assert not video.channel and not video.channel_id
 
 
-def test_post_upload_text(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+@pytest.mark.asyncio
+async def test_post_upload_text(test_session, async_client, test_directory, make_files_structure, make_multipart_form):
     """A file that cannot be modeled can still be uploaded, and is indexed."""
     make_files_structure(['uploads/'])
 
@@ -583,7 +591,7 @@ def test_post_upload_text(test_session, test_client, test_directory, make_files_
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, response.content.decode()
 
     file_group: FileGroup = test_session.query(FileGroup).one()
@@ -594,7 +602,7 @@ def test_post_upload_text(test_session, test_client, test_directory, make_files_
 
 
 @pytest.mark.asyncio
-async def test_directory_crud(test_session, test_async_client, test_directory, assert_directories, assert_files):
+async def test_directory_crud(test_session, async_client, test_directory, assert_directories, assert_files):
     """A directory can be created in a subdirectory.  Errors are returned if there are conflicts."""
     foo = test_directory / 'foo'
     foo.mkdir()
@@ -603,14 +611,14 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
     # Create a subdirectory.
     content = dict(path='foo/bar')
-    request, response = await test_async_client.post('/api/files/directory', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/directory', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert (test_directory / 'foo/bar').is_dir()
     assert_directories({'foo', 'foo/bar'})
 
     # Cannot create twice.
     content = dict(path='foo/bar')
-    request, response = await test_async_client.post('/api/files/directory', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/directory', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CONFLICT
     assert (test_directory / 'foo/bar').is_dir()
     assert_directories({'foo', 'foo/bar'})
@@ -619,7 +627,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
     (test_directory / 'foo/bar/asdf.txt').write_text('asdf')
 
     # Can get information about a directory.
-    request, response = await test_async_client.post('/api/files/get_directory', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/get_directory', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['path'] == 'foo/bar'
     assert response.json['size'] == 4
@@ -627,7 +635,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
     # Can rename the directory.
     content = dict(path='foo/bar', new_name='baz')
-    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/baz').exists()
@@ -636,7 +644,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
     # Deletion is recursive.
     assert (test_directory / 'foo/baz/asdf.txt').is_file()
     content = dict(paths=['foo/baz', ])
-    request, response = await test_async_client.post('/api/files/delete', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'foo/baz').exists()
     assert not (test_directory / 'foo/baz/asdf.txt').exists()
@@ -645,7 +653,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
 
 @pytest.mark.asyncio
-async def test_move(test_session, test_directory, make_files_structure, test_async_client):
+async def test_move(test_session, test_directory, make_files_structure, async_client):
     """Files can be moved up and down the media directory.  Destination directories should already exist."""
     baz, bar = make_files_structure({
         'foo/bar.txt': 'bar',
@@ -654,7 +662,7 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
 
     # qux directory does not exist
     content = dict(paths=['foo', 'baz.txt'], destination='qux')
-    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/move', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NOT_FOUND
 
     (test_directory / 'qux').mkdir()
@@ -662,14 +670,14 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
 
     # mv foo baz.txt qux
     content = dict(paths=['foo', 'baz.txt'], destination='qux')
-    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/move', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not bar.exists()
     assert (test_directory / 'qux/foo/bar.txt').is_file()
 
     # mv foo/bar.txt qux
     content = dict(paths=['qux/foo/bar.txt', ], destination='qux')
-    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/move', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not bar.exists()
     assert (test_directory / 'qux/bar.txt').is_file()
@@ -677,19 +685,19 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
 
     # mv qux/bar.txt ./
     content = dict(paths=['qux/bar.txt', ], destination='')
-    request, response = await test_async_client.post('/api/files/move', json=content)
+    request, response = await async_client.post('/api/files/move', json=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert (test_directory / 'bar.txt').is_file()
 
     # mv bar.txt quux/quuz/bar.txt
     content = dict(paths=['bar.txt', ], destination='quux/quuz')
-    request, response = await test_async_client.post('/api/files/move', json=content)
+    request, response = await async_client.post('/api/files/move', json=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert (test_directory / 'quux/quuz/bar.txt').is_file()
 
     # mv quux/quuz/bar.txt quux/bar.txt
     content = dict(paths=['quux/quuz/bar.txt', ], destination='quux')
-    request, response = await test_async_client.post('/api/files/move', json=content)
+    request, response = await async_client.post('/api/files/move', json=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert (test_directory / 'quux/bar.txt').is_file()
     assert (test_directory / 'qux/foo').is_dir()
@@ -697,14 +705,14 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
 
 
 @pytest.mark.asyncio
-async def test_rename_file(test_session, test_directory, make_files_structure, test_async_client):
+async def test_rename_file(test_session, test_directory, make_files_structure, async_client):
     foo, = make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
 
     # mv foo/bar/baz.txt foo/bar/qux.txt
     content = dict(path='foo/bar/baz.txt', new_name='qux.txt')
-    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not foo.exists()
     assert (test_directory / 'foo/bar/qux.txt').is_file()
@@ -712,14 +720,14 @@ async def test_rename_file(test_session, test_directory, make_files_structure, t
 
 
 @pytest.mark.asyncio
-async def test_rename_directory(test_session, test_directory, make_files_structure, test_async_client):
+async def test_rename_directory(test_session, test_directory, make_files_structure, async_client):
     make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
 
     # mv foo/bar/baz.txt foo/bar/qux.txt
     content = dict(path='foo/bar', new_name='qux')
-    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/qux/baz.txt').is_file()
@@ -727,14 +735,14 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
-async def test_delete_directory_recursive(test_session, test_directory, make_files_structure, test_async_client,
+async def test_delete_directory_recursive(test_session, test_directory, make_files_structure, async_client,
                                           assert_files):
     make_files_structure(['dir/foo', 'dir/bar', 'empty'])
     await lib.refresh_files()
     assert test_session.query(FileGroup).count() == 3
 
     content = {'paths': ['dir/', ]}
-    request, response = await test_async_client.post('/api/files/delete', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(FileGroup).count() == 1
 
@@ -743,20 +751,20 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, test_async_client, test_directory, make_files_structure):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()
 
     content = dict(file='foo/bar.txt')
-    request, response = await test_async_client.post('/api/files/file', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/file', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']
     assert response.json['file']['path'] == 'foo/bar.txt'
 
 
 @pytest.mark.asyncio
-async def test_ignore_directory(test_session, test_async_client, test_directory, make_files_structure, test_config,
+async def test_ignore_directory(test_session, async_client, test_directory, make_files_structure, test_config,
                                 skip_config_backups):
     """A maintainer can ignore/un-ignore directories.  The files in the directory should not be refreshed."""
     # Remove any default ignored directories.
@@ -767,7 +775,7 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
 
     # Ignore baz/
     content = dict(path=str(baz.parent))
-    request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
+    request, response = await async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.OK
     assert len(get_wrolpi_config().ignored_directories) == 1
 
@@ -777,7 +785,7 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
     assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'wrolpi.yaml'}
 
     # Un-ignore baz/
-    request, response = await test_async_client.post('/api/files/unignore_directory', json=content)
+    request, response = await async_client.post('/api/files/unignore_directory', json=content)
     assert response.status_code == HTTPStatus.OK
     assert len(get_wrolpi_config().ignored_directories) == 0
 
@@ -790,6 +798,6 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
 
     # Cannot ignore special directories.
     content = dict(path=str(test_directory / 'videos'))
-    request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
+    request, response = await async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert len(get_wrolpi_config().ignored_directories) == 0

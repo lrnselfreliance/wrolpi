@@ -1118,7 +1118,7 @@ async def test_upsert_file_video_with_channel(test_async_client, test_session, t
     info_json_file.write_text(json.dumps({'duration': 5}))
 
     # Upsert the file, it should be modeled.
-    fg: FileGroup = await lib.upsert_file(video_file, test_session)
+    fg: FileGroup = await lib.upsert_file(video_file)
     assert fg.model == 'video', 'Upserted file should have been modeled.'
     assert fg.my_video_files(), 'Video file was upserted.'
     assert fg.my_json_files(), 'Info json file should have been found near video file.'

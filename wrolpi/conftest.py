@@ -45,6 +45,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
+from wrolpi.switches import await_switches
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
 
@@ -164,6 +165,11 @@ def test_client(test_directory) -> ReusableClient:
         raise RuntimeError('Test never got unused port')
 
 
+@api_app.on_response
+async def async_client_await_switches(request, response):
+    await await_switches()
+
+
 @pytest.fixture
 async def test_async_client(test_directory) -> SanicASGITestClient:
     """Get an Async Sanic Test Client with all default routes attached."""
@@ -184,7 +190,9 @@ async def test_async_client(test_directory) -> SanicASGITestClient:
     # Call API so server actually starts.
     await client.get('/api/echo')
 
-    return client
+    yield client
+
+    await await_switches()
 
 
 @pytest.fixture

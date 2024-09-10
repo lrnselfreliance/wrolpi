@@ -134,16 +134,20 @@ def perpetual_signal(event: str = None, sleep: int | float = 1):
 
         # Wrap the function in a worker that will call it perpetually.
         @api_app.signal(event_)
-        async def worker(*args, **kwargs):
+        async def perpetual_signal_worker(*args, **kwargs):
             await asyncio.sleep(sleep)
+            cancelled = False
             try:
                 return await func(*args, **kwargs)
             except CancelledError:
-                raise
+                cancelled = True
+            except GeneratorExit:
+                cancelled = True
             except Exception as e:
                 logger.error(f'Perpetual worker had error', exc_info=e)
             finally:
-                await api_app.dispatch(event_)
+                if not cancelled:
+                    await api_app.dispatch(event_)
 
         # Add this new signal to the global list so that a task will be started after server startup.
         PERPETUAL_WORKERS.append(event_)

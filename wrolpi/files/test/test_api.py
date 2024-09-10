@@ -9,7 +9,6 @@ import pytest
 from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
-from wrolpi.files.api import handle_files_upsert
 from wrolpi.files.lib import get_mimetype
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -512,7 +511,6 @@ async def test_post_upload(test_session, test_async_client, test_directory, make
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
     tag1, tag2 = await tag_factory(), await tag_factory()
-    test_async_client.sanic_app.add_task(handle_files_upsert())
 
     part1, part2 = video_bytes[:1_000_000], video_bytes[1_000_000:]
     forms = [

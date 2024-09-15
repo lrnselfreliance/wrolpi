@@ -8,11 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates, flags
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
-from wrolpi.db import optional_session, get_db_curs
+from wrolpi.db import optional_session, get_db_curs, get_db_session
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict, NoPrimaryFile
+from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -98,8 +99,8 @@ class Tag(ModelHelper, Base):
         logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id_or_name}')
 
         # Save changes to config.
-        save_tags_config(session)
-        sync_tags_directory(session)
+        save_tags_config.activate_switch()
+        sync_tags_directory.activate_switch()
         return tag_file
 
     @staticmethod
@@ -115,8 +116,8 @@ class Tag(ModelHelper, Base):
             logger.debug(f'Deleted TagFile: {tag_file}')
 
             # Save changes to config.
-            save_tags_config(session)
-            sync_tags_directory(session)
+            save_tags_config.activate_switch()
+            sync_tags_directory.activate_switch()
         else:
             logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id_or_name}')
 
@@ -213,8 +214,8 @@ class Tag(ModelHelper, Base):
         session.delete(self)
         session.commit()
 
-        save_tags_config(session)
-        sync_tags_directory(session)
+        save_tags_config.activate_switch()
+        sync_tags_directory.activate_switch()
 
 
 class TagsConfig(ConfigFile):
@@ -253,7 +254,7 @@ class TagsConfig(ConfigFile):
     def tags(self, value: dict):
         self.update({'tags': value})
 
-    def save_tags(self, session: Session, ignore_lock: bool = False):
+    def save_tags(self, session: Session):
         media_directory = get_media_directory()
 
         tags = dict()
@@ -301,7 +302,7 @@ class TagsConfig(ConfigFile):
             'tag_files': tag_files,
             'tag_zims': tag_zims,
             'tags': tags,
-        }, ignore_lock=ignore_lock)
+        })
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig()
@@ -325,16 +326,15 @@ def test_tags_config():
     TEST_TAGS_CONFIG = None
 
 
-@optional_session
-def save_tags_config(session: Session = None):
+@register_switch_handler('save_tags_config')
+def save_tags_config():
     """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
-    if PYTEST:
+    with get_db_session() as session:
         get_tags_config().save_tags(session)
-    else:
-        async def _():
-            get_tags_config().save_tags(session)
+    logger.info('save_tags_config complete')
 
-        background_task(_())
+
+save_tags_config: ActivateSwitchMethod
 
 
 def _sync_tags_directory_tag_files(tags_directory: pathlib.Path, session: Session) -> List[pathlib.Path]:
@@ -408,20 +408,21 @@ be AUTOMATICALLY DELETED!
 ''')
 
 
-@optional_session
-def sync_tags_directory(session: Session = None):
+@register_switch_handler('sync_tags_directory')
+def sync_tags_directory():
     """Synchronizes database Tags with the Tags directory (typically /media/wrolpi/tags).  Removes any
     files that do not belong in the Tags Directory."""
-    try:
-        tags_directory = get_tags_directory()
-        create_tags_directory(tags_directory)
+    with get_db_session() as session:
+        try:
+            tags_directory = get_tags_directory()
+            create_tags_directory(tags_directory)
 
-        links = _sync_tags_directory_tag_files(tags_directory, session)
-        logger.debug(f'Tags Directory should contain {len(links)} links')
-        _delete_extra_tags_directory_paths(tags_directory, links)
-    except Exception as e:
-        logger.error('Failed to sync DB with tags directory in media directory!', exc_info=e)
-        raise
+            links = _sync_tags_directory_tag_files(tags_directory, session)
+            logger.debug(f'Tags Directory should contain {len(links)} links')
+            _delete_extra_tags_directory_paths(tags_directory, links)
+        except Exception as e:
+            logger.error('Failed to sync DB with tags directory in media directory!', exc_info=e)
+            raise
 
 
 def get_tags() -> List[dict]:
@@ -439,7 +440,6 @@ def get_tags() -> List[dict]:
 
 
 @optional_session
-@run_after(save_tags_config)
 async def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
     if tag_id:
         tag = Tag.find_by_id(tag_id, session)
@@ -458,8 +458,8 @@ async def upsert_tag(name: str, color: str, tag_id: int = None, session: Session
         session.rollback()
         raise InvalidTag(f'Name already taken') from e
 
-    save_tags_config(session)
-    sync_tags_directory(session)
+    save_tags_config.activate_switch()
+    sync_tags_directory.activate_switch()
 
     return tag
 
@@ -614,7 +614,7 @@ def import_tags_config(session: Session = None):
         if PYTEST:
             raise
 
-    sync_tags_directory()
+    sync_tags_directory.activate_switch()
 
 
 def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tuple[str, dict]:

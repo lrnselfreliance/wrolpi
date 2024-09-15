@@ -1415,7 +1415,7 @@ async def move(destination: pathlib.Path, *sources: pathlib.Path, session: Sessi
         with flags.refresh_cleanup:
             await apply_refresh_cleanup()
             # Save tags now that files have been moved.
-            save_tags_config()
+            save_tags_config.activate_switch()
 
     return plan
 
@@ -1525,8 +1525,7 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
         raise UnknownDirectory('Directory is not ignored')
 
 
-@optional_session
-async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_names: List[str] = None) -> FileGroup:
+async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> FileGroup:
     """Insert/update all files in the provided file's FileGroup."""
     # Update/Insert all files in the FileGroup.
     paths = glob_shared_stem(pathlib.Path(file))
@@ -1537,31 +1536,38 @@ async def upsert_file(file: pathlib.Path | str, session: Session = None, tag_nam
         return
 
     for i in range(2):
-        file_group = FileGroup.from_paths(session, *paths)
-        # Re-index the contents of the file.
-        try:
-            session.flush([file_group, ])
-            break
-        except IntegrityError:
-            # Another process inserted this FileGroup.
-            logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
-            session.rollback()
-            continue
+        with get_db_session() as session:
+            file_group = FileGroup.from_paths(session, *paths)
+            # Re-index the contents of the file.
+            try:
+                session.flush([file_group, ])
+                file_group_id = file_group.id
+                session.commit()
+                break
+            except IntegrityError:
+                # Another process inserted this FileGroup.
+                logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
+                continue
     else:
         raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
     logger.debug(f'upsert_file: {file_group}')
     try:
-        file_group.do_model(session)
+        with get_db_session(commit=True) as session:
+            file_group = FileGroup.find_by_id(file_group_id, session)
+            file_group.do_model(session)
     except Exception as e:
         logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
         if PYTEST:
             raise
 
-    for tag_name in (tag_names or []):
-        if tag_name not in file_group.tag_names:
-            tag = Tag.get_by_name(tag_name)
-            file_group.add_tag(tag.id)
+    if tag_names:
+        with get_db_session(commit=True) as session:
+            file_group = FileGroup.find_by_id(file_group_id, session)
+            for tag_name in tag_names:
+                if tag_name not in file_group.tag_names:
+                    tag = Tag.get_by_name(tag_name)
+                    file_group.add_tag(tag.id)
 
     session.commit()
     return file_group

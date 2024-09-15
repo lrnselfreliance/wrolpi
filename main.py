@@ -11,13 +11,12 @@ from sanic.signals import Event
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi import root_api  # noqa
 from wrolpi import tags
-from wrolpi.api_utils import api_app
+from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
-from wrolpi.downloader import import_downloads_config, download_manager, \
-    perpetual_download_worker
+from wrolpi.downloader import import_downloads_config, download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -145,7 +144,7 @@ def main():
     return 1
 
 
-@api_app.main_process_start
+@api_app.main_process_ready
 async def startup(app: Sanic):
     """
     Initializes multiprocessing tools, flags, etc.
@@ -167,7 +166,7 @@ async def startup(app: Sanic):
     logger.debug('startup done')
 
 
-@api_app.listener('before_server_start')  # FileConfigs need to be initialized first.
+@api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
 async def initialize_configs(app: Sanic):
     """Each Sanic process runs this once."""
     # Each process will have their own FileConfig object, but share the `app.shared_ctx.*config`
@@ -177,12 +176,10 @@ async def initialize_configs(app: Sanic):
         initialize_configs_contexts(app)
         await asyncio.sleep(0.5)
         wrol_mode_enabled()
-        logger.info('initialize_configs succeeded')
+        logger.info(f'initialize_configs succeeded pid={os.getpid()}')
     except Exception as e:
         logger.error('initialize_configs failed with', exc_info=e)
         raise
-
-    logger.debug('initialize_configs done')
 
 
 @api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
@@ -203,7 +200,7 @@ async def handle_server_shutdown_reset(app: Sanic, loop):
 
 
 # Start periodic tasks after configs are ready.
-@api_app.listener('after_server_start')
+@api_app.after_server_start
 async def start_single_tasks(app: Sanic):
     """Recurring/Single tasks that are started in only one Sanic process."""
     # Only allow one child process to perform periodic tasks.  See `handle_server_shutdown`
@@ -218,14 +215,6 @@ async def start_single_tasks(app: Sanic):
         download_manager.enable()
     else:
         download_manager.disable()
-
-    # Start perpetual tasks.  DO NOT AWAIT!
-    app.add_task(perpetual_check_db_is_up_worker())  # noqa
-    app.add_task(perpetual_download_worker())  # noqa
-    app.add_task(perpetual_have_internet_worker())  # noqa
-
-    await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
-    await app.dispatch('wrolpi.periodic.status')
 
     try:
         flag_outdated_zim_files()
@@ -275,14 +264,7 @@ async def start_single_tasks(app: Sanic):
     logger.debug(f'start_single_tasks done')
 
 
-@api_app.listener('after_server_start')
-async def start_sanic_worker(app: Sanic):
-    logger.debug(f'start_sanic_worker')
-
-    await app.dispatch('wrolpi.periodic.check_log_level')
-
-
-@api_app.signal('wrolpi.periodic.check_log_level')
+@perpetual_signal(sleep=1)
 async def periodic_check_log_level():
     """Copies global log level into this Sanic worker's logger."""
     log_level = api_app.shared_ctx.log_level.value
@@ -290,49 +272,31 @@ async def periodic_check_log_level():
         logger.info(f'changing log level from {logger.getEffectiveLevel()} to {log_level}')
         set_log_level(log_level, warn_level=False)
 
-    try:
-        await asyncio.sleep(1)
-        await api_app.dispatch('wrolpi.periodic.check_log_level')
-    except asyncio.CancelledError:
-        # Server is shutting down.
-        pass
 
-
+@perpetual_signal(sleep=10)
 async def perpetual_check_db_is_up_worker():
     try:
-        while True:
-            try:
-                flags.check_db_is_up()
-                flags.init_flags()
-            except Exception as e:
-                logger.error('Failed to check if db is up', exc_info=e)
-
-            await asyncio.sleep(10)
-    except asyncio.CancelledError:
-        logger.info('periodic_check_db_is_up was cancelled...')
+        flags.check_db_is_up()
+        flags.init_flags()
     except Exception as e:
         logger.error('Failed to check db status', exc_info=e)
 
 
+@perpetual_signal(sleep=10)
 async def perpetual_have_internet_worker():
     try:
-        while True:
-            try:
-                if can_connect_to_server(INTERNET_SERVER):
-                    flags.have_internet.set()
-                    # Check hourly once we have internet.
-                    await asyncio.sleep(float(Seconds.hour))
-                else:
-                    # Check more often until the internet is back.
-                    flags.have_internet.clear()
-                    await asyncio.sleep(10)
-            except Exception as e:
-                logger.error('Failed to check if internet is up', exc_info=e)
-    except asyncio.CancelledError:
-        logger.info('perpetual_check_have_internet_worker was cancelled...')
+        if can_connect_to_server(INTERNET_SERVER):
+            flags.have_internet.set()
+            # Check hourly once we have internet.
+            await asyncio.sleep(float(Seconds.hour))
+        else:
+            # Check more often until the internet is back.
+            flags.have_internet.clear()
+    except Exception as e:
+        logger.error('Failed to check if internet is up', exc_info=e)
 
 
-@api_app.signal('wrolpi.periodic.start_video_missing_comments_download')
+@perpetual_signal(sleep=30)
 async def periodic_start_video_missing_comments_download():
     from modules.videos.video.lib import get_missing_videos_comments
 
@@ -357,8 +321,6 @@ async def periodic_start_video_missing_comments_download():
             logger.error('Failed to get missing video comments', exc_info=e)
 
         await asyncio.sleep(int(Seconds.hour))
-
-    await api_app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
 
 
 if __name__ == '__main__':

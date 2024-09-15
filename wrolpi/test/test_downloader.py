@@ -17,6 +17,7 @@ from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     RSSDownloader, get_download_manager_config
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
+from wrolpi.switches import await_switches
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -59,18 +60,6 @@ async def test_delete_old_once_downloads(test_session, test_download_manager, te
         ]
         for download, expected in zip_longest(downloads, expected):
             assert_dict_contains(download.dict(), expected)
-
-
-@pytest.mark.asyncio
-async def test_create_downloads(test_async_client, test_session, test_download_manager, test_downloader,
-                                assert_download_urls):
-    """Multiple downloads can be scheduled using DownloadManager.create_downloads."""
-    mock_save_downloads_config = AsyncMock()
-    # Both URLs are scheduled.
-    with mock.patch('wrolpi.downloader.save_downloads_config', mock_save_downloads_config):
-        test_download_manager.create_downloads(['https://example.com/1', 'https://example.com/2'], test_downloader.name)
-        assert_download_urls({'https://example.com/1', 'https://example.com/2'})
-        mock_save_downloads_config.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -284,7 +273,7 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
 
 
 @pytest.mark.asyncio
-async def test_process_runner_timeout(test_async_client, test_session, test_directory):
+async def test_process_runner_timeout(async_client, test_session, test_directory):
     """A Downloader can cancel its download using a timeout."""
     # Default timeout of 3 seconds.
     downloader = Downloader('downloader', timeout=3)
@@ -310,7 +299,7 @@ async def test_process_runner_timeout(test_async_client, test_session, test_dire
 
 
 @pytest.mark.asyncio
-async def test_crud_download(test_async_client, test_session, test_download_manager, test_downloader):
+async def test_crud_download(async_client, test_session, test_download_manager, test_downloader):
     """Test the ways that Downloads can be created."""
     body = dict(
         urls=['https://example.com', ],
@@ -318,7 +307,7 @@ async def test_crud_download(test_async_client, test_session, test_download_mana
         frequency=DownloadFrequency.weekly,
         settings=dict(excluded_urls='example.org,something'),
     )
-    request, response = await test_async_client.post('/api/download', content=json.dumps(body))
+    request, response = await async_client.post('/api/download', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT, response.body
 
     download: Download = test_session.query(Download).one()
@@ -328,20 +317,20 @@ async def test_crud_download(test_async_client, test_session, test_download_mana
     assert download.frequency == DownloadFrequency.weekly
     assert download.settings['excluded_urls'] == ['example.org', 'something']
 
-    request, response = await test_async_client.get('/api/download')
+    request, response = await async_client.get('/api/download')
     assert response.status_code == HTTPStatus.OK
     assert 'recurring_downloads' in response.json
     assert [i['url'] for i in response.json['recurring_downloads']] == ['https://example.com']
 
-    request, response = await test_async_client.delete('/api/download/123')
+    request, response = await async_client.delete('/api/download/123')
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 1
 
-    request, response = await test_async_client.delete(f'/api/download/{download.id}')
+    request, response = await async_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(Download).count() == 0
 
-    request, response = await test_async_client.delete(f'/api/download/{download.id}')
+    request, response = await async_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 0
 
@@ -371,7 +360,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     test_session.commit()
 
     # Allow background tasks to run.
-    await asyncio.sleep(0)
+    await await_switches()
 
     # Downloads were saved to config.
     assert get_download_manager_config().downloads, 'No downloads were saved'

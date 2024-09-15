@@ -178,7 +178,7 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
 
 
 @pytest.mark.asyncio
-def test_link_channel_and_downloads_migration(test_async_client, test_session, channel_factory, test_download_manager):
+def test_link_channel_and_downloads_migration(async_client, test_session, channel_factory, test_download_manager):
     """Test the 8d0d81bc9c34_channel_channel_downloads.py migration."""
     # A simple Channel which has a download for its URL.
     channel1 = channel_factory(url='https://example.com/channel1')
@@ -220,7 +220,7 @@ def test_link_channel_and_downloads_migration(test_async_client, test_session, c
 
 
 @pytest.mark.asyncio
-async def test_format_videos_destination(test_async_client, test_directory):
+async def test_format_videos_destination(async_client, test_directory):
     """Videos destination is formatted according to the WROLPiConfig."""
     wrolpi_config = get_wrolpi_config()
 

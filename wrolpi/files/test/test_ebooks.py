@@ -11,7 +11,7 @@ from wrolpi.test.common import assert_dict_contains
 
 
 @pytest.mark.asyncio
-async def test_index(test_async_client, test_session, test_directory, example_epub, example_mobi):
+async def test_index(async_client, test_session, test_directory, example_epub, example_mobi):
     """Ebooks can be indexed.
 
     Covers can be discovered."""
@@ -135,7 +135,7 @@ async def test_discover_calibre_cover(test_session, test_directory, example_epub
 
 
 @pytest.mark.asyncio
-async def test_move_ebook(test_async_client, test_session, test_directory, example_epub, image_file, tag_factory):
+async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory):
     """An ebook is re-indexed when moved."""
     tag = await tag_factory()
     shutil.move(image_file, example_epub.with_suffix('.jpg'))

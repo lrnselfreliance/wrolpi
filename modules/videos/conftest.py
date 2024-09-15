@@ -246,7 +246,7 @@ def video_with_search_factory(test_session, test_directory, video_file_factory):
 
 
 @pytest.fixture
-def assert_video_search(test_async_client):
+def assert_video_search(async_client):
     """A fixture which performs a video search request against the API.
 
     If assert_* params are passed, the response is checked."""
@@ -276,7 +276,7 @@ def assert_video_search(test_async_client):
         if channel_id is not None:
             content['channel_id'] = channel_id
 
-        request, response = await test_async_client.post('/api/videos/search', content=json.dumps(content))
+        request, response = await async_client.post('/api/videos/search', content=json.dumps(content))
 
         assert response.json
         assert response.status_code == HTTPStatus.OK

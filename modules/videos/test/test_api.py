@@ -14,7 +14,7 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_refresh_videos_index(test_async_client, test_session, test_directory, video_factory):
+async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory):
     """The video modeler indexes video data into the Video's FileGroup."""
     video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()
@@ -162,14 +162,14 @@ def test_api_download(test_session, test_client, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_api_download_video_tags(test_session, test_async_client, tag_factory):
+async def test_api_download_video_tags(test_session, async_client, tag_factory):
     """A user can request Tags for a video being downloaded."""
     tag1 = await tag_factory()
     tag2 = await tag_factory()
 
     content = dict(urls=['https://example.com/video1', ], downloader='video',
                    settings={'tag_names': [tag1.name, tag2.name]})
-    request, response = await test_async_client.post('/api/download', content=json.dumps(content))
+    request, response = await async_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     download = test_session.query(Download).one()
@@ -264,7 +264,7 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
 
 
 @pytest.mark.asyncio
-async def test_delete_video(test_async_client, test_session, video_factory, test_download_manager):
+async def test_delete_video(async_client, test_session, video_factory, test_download_manager):
     """When a Video record is deleted, the FileGroup should be deleted.  The URL is added to the
     global skip list so the video is not downloaded again."""
     video = video_factory(with_video_file=True, with_poster_ext='png')
@@ -272,7 +272,7 @@ async def test_delete_video(test_async_client, test_session, video_factory, test
     files = video.file_group.my_paths()
     test_session.commit()
 
-    request, response = await test_async_client.delete(f'/api/videos/video/{video.id}')
+    request, response = await async_client.delete(f'/api/videos/video/{video.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(Video).count() == 0, 'Video was not deleted.'
@@ -282,28 +282,28 @@ async def test_delete_video(test_async_client, test_session, video_factory, test
 
 
 @pytest.mark.asyncio
-async def test_format_videos_description(test_async_client, test_session, test_directory, channel_factory, tag_factory):
+async def test_format_videos_description(async_client, test_session, test_directory, channel_factory, tag_factory):
     channel = channel_factory(name='Channel Name')
     tag = await tag_factory()
     test_session.commit()
 
     body = dict()
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos'
 
     body = dict(channel_id=channel.id)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/Channel Name'
 
     body = dict(channel_id=channel.id, tag_name=tag.name)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/one/Channel Name'
 
     get_wrolpi_config().videos_destination = 'videos/%(channel_tag)s/%(channel_domain)s/%(channel_name)s'
     body = dict(channel_id=channel.id, tag_name=tag.name)
-    request, response = await test_async_client.post('/api/videos/tag_info', json=body)
+    request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/one/example.com/Channel Name'

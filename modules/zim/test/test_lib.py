@@ -12,10 +12,11 @@ from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
+from wrolpi.switches import await_switches
 
 
 @pytest.mark.asyncio
-async def test_get_zim(test_async_client, test_session, zim_path_factory):
+async def test_get_zim(async_client, test_session, zim_path_factory):
     zim_path_factory()
     await files_lib.refresh_files()
 
@@ -26,7 +27,7 @@ async def test_get_zim(test_async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entry(test_async_client, test_session, zim_path_factory):
+async def test_zim_get_entry(async_client, test_session, zim_path_factory):
     zim_path_factory()
     await files_lib.refresh_files()
 
@@ -50,14 +51,14 @@ async def test_zim_get_entry(test_async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_bad_entry(test_async_client, test_session, test_zim, tag_factory):
+async def test_zim_bad_entry(async_client, test_session, test_zim, tag_factory):
     tag1 = await tag_factory()
     with pytest.raises(UnknownZimEntry):
         test_zim.tag_entry(tag1.name, 'path does not exist')
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entries_tags(test_async_client, test_session, test_zim, tag_factory):
+async def test_zim_get_entries_tags(async_client, test_session, test_zim, tag_factory):
     tag1, tag2 = await tag_factory('tag1'), await tag_factory('tag2')
     test_zim.tag_entry(tag1.name, 'one')
     test_zim.tag_entry(tag2.name, 'one')
@@ -69,7 +70,7 @@ async def test_zim_get_entries_tags(test_async_client, test_session, test_zim, t
 
 
 @pytest.mark.asyncio
-async def test_tag_zim_entry_model(test_async_client, test_session, zim_factory, tag_factory):
+async def test_tag_zim_entry_model(async_client, test_session, zim_factory, tag_factory):
     tag = await tag_factory()
     tze = zim_factory('zim1').tag_entry(tag.name, 'one')
     # Test TagZimEntry.__repr__
@@ -77,7 +78,7 @@ async def test_tag_zim_entry_model(test_async_client, test_session, zim_factory,
 
 
 @pytest.mark.asyncio
-async def test_zim_entries_with_tags(test_async_client, test_session, zim_factory, tag_factory):
+async def test_zim_entries_with_tags(async_client, test_session, zim_factory, tag_factory):
     """Can fetch Zim Entries that have Tags.  Can filter only those entries that are tagged on a specific Zim."""
     tag1, tag2 = await tag_factory(), await tag_factory()
     zim1, zim2 = zim_factory('zim1'), zim_factory('zim2')
@@ -126,7 +127,8 @@ def test_get_unique_paths():
 
 
 @pytest.mark.asyncio
-async def test_zim_tags_config(test_session, test_directory, test_zim, tag_factory, test_tags_config, fake_now):
+async def test_zim_tags_config(async_client, test_session, test_directory, test_zim, tag_factory, test_tags_config,
+                               fake_now):
     fake_now(datetime.datetime(2000, 1, 1, 0, 0, 0, 1))
     config = tags.get_tags_config()
     assert not config.tag_zims
@@ -137,6 +139,7 @@ async def test_zim_tags_config(test_session, test_directory, test_zim, tag_facto
     test_zim.tag_entry(tag2.name, 'one')
     test_zim.tag_entry(tag1.name, 'two')
     test_session.commit()
+    await await_switches()
     # Tags are created in empty database.
     assert {i[0] for i in test_session.query(tags.Tag.id)} == {1, 2}
 
@@ -150,6 +153,7 @@ async def test_zim_tags_config(test_session, test_directory, test_zim, tag_facto
     # Remove a tag, the config should change.
     test_zim.untag_entry(tag1.name, 'one')
     test_session.commit()
+    await await_switches()
 
     config = tags.get_tags_config()
     assert config.tag_zims == [
@@ -246,7 +250,7 @@ async def test_zim_download(test_session, kiwix_download_zim, test_directory, te
 
 
 @pytest.mark.asyncio
-async def test_zim_tag_migration(test_session, test_directory, zim_factory, tag_factory, test_tags_config):
+async def test_zim_tag_migration(async_client, test_session, test_directory, zim_factory, tag_factory, test_tags_config):
     """When an outdated Zim file is deleted, the Tags should be moved to the latest Zim."""
     zim1 = zim_factory('wikipedia_en_all_maxi_2020-01.zim')  # The outdated Zim.
     zim2 = zim_factory('wikipedia_en_all_maxi_2020-02.zim')
@@ -261,6 +265,7 @@ async def test_zim_tag_migration(test_session, test_directory, zim_factory, tag_
     zim3.tag_entry(tag2.name, 'one')
     test_session.commit()
     assert test_session.query(TagZimEntry).count() == 4
+    await await_switches()
 
     # All Zims have been tagged.
     tags_config = tags.get_tags_config()
@@ -352,7 +357,7 @@ async def test_zim_subscription_download_import(test_session, test_downloader_co
     assert download.url == 'https://download.kiwix.org/zim/wikisource/wikisource_en_all_maxi_'
 
     # Save config file, delete all entries.
-    await save_downloads_config()
+    save_downloads_config()
     test_session.query(Download).delete()
     test_session.query(ZimSubscription).delete()
     test_session.commit()

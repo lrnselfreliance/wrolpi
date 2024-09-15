@@ -3,12 +3,10 @@ import dataclasses
 import html
 import pathlib
 import re
-import traceback
 from typing import Generator, Type
 from typing import Tuple, Optional
 
 import pytz
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
@@ -18,10 +16,11 @@ from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, limit_concurrent, get_wrolpi_config, extract_domain, \
     escape_file_name, get_media_directory, background_task, Base
 from wrolpi.dates import Seconds, from_timestamp
-from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
 from wrolpi.errors import UnknownDirectory
 from wrolpi.files.lib import split_path_stem_and_suffix
+from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
@@ -364,18 +363,22 @@ def get_channels_config_from_db(session: Session) -> dict:
     return dict(channels=channels)
 
 
-@optional_session()
-def save_channels_config(session: Session = None):
+@register_switch_handler('save_channels_config')
+def save_channels_config():
     """Get the Channel information from the DB, save it to the config."""
-    config = get_channels_config_from_db(session)
-    channels_config = get_channels_config()
+    with get_db_session() as session:
+        config = get_channels_config_from_db(session)
+        channels_config = get_channels_config()
 
     if PYTEST and not channels_config:
         logger.warning('Refusing to save channels config because test did not initialize a test config!')
         return
 
     channels_config.update(config)
+    logger.info('save_channels_config completed')
 
+
+save_channels_config: ActivateSwitchMethod
 
 channel_import_logger = logger.getChild('channel_import')
 
@@ -391,7 +394,7 @@ async def fetch_channel_source_id(channel_id: int):
                 channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
             else:
                 session.commit()
-                save_channels_config(session)
+                save_channels_config.activate_switch()
     except Exception as e:
         logger.error(f'Failed to get Channel source id of id={channel_id}', exc_info=e)
 

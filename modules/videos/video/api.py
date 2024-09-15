@@ -12,6 +12,7 @@ from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
+from ..lib import save_channels_config
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -59,7 +60,6 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-@run_after(lib.save_channels_config)
 async def video_delete(_: Request, video_ids: str):
     try:
         video_ids = [int(i) for i in str(video_ids).split(',')]
@@ -68,5 +68,6 @@ async def video_delete(_: Request, video_ids: str):
 
     lib.delete_videos(*video_ids)
 
+    save_channels_config.activate_switch()
     Events.send_deleted(f'Deleted {len(video_ids)} videos')
     return response.empty()

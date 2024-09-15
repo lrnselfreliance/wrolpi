@@ -1,6 +1,6 @@
 import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
-import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
+import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Input, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {APIButton, contrastingColor, ErrorMessage, fuzzyMatch, scrollToTopOfElement} from "./components/Common";
 import {
     Button,

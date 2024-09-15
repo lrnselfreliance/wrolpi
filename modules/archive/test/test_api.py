@@ -82,20 +82,20 @@ def test_archives_search(test_session, archive_directory, archive_factory, test_
 
 
 @pytest.mark.asyncio
-async def test_search_archive_tags(test_session, test_async_client, archive_factory, tag_factory):
+async def test_search_archive_tags(test_session, async_client, archive_factory, tag_factory):
     """Tagged Archives can be searched."""
     tag = await tag_factory()
     archive_factory(domain='example.com', tag_names=[tag.name, ])
     test_session.commit()
 
     content = {'search_str': '', 'domain': 'example.com', 'tag_names': [tag.name, ]}
-    request, response = await test_async_client.post('/api/archive/search', content=json.dumps(content))
+    request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups']
     assert response.json['totals']['file_groups'] == 1
 
     content = {'search_str': '', 'domain': 'example.com', 'tag_names': ['does not exist', ]}
-    request, response = await test_async_client.post('/api/archive/search', content=json.dumps(content))
+    request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups'] == []
     assert response.json['totals']['file_groups'] == 0

@@ -13,7 +13,7 @@ from typing import List, Optional, Dict
 
 import jc
 
-from wrolpi.api_utils import api_app
+from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which
 from wrolpi.common import logger, get_warn_once, unique_by_predicate
 from wrolpi.dates import now
@@ -475,7 +475,7 @@ async def get_disk_counters(shared_status):
     return disk_bandwidth_stats
 
 
-@api_app.signal('wrolpi.periodic.status')
+@perpetual_signal(sleep=5)
 async def status_worker(count: int = None, sleep_time: int = 5):
     """A background process which will gather historical data about system statistics."""
     shared_status = api_app.shared_ctx.status
@@ -528,14 +528,10 @@ async def status_worker(count: int = None, sleep_time: int = 5):
         if load_stats and load_stats.minute_1 and load_stats.minute_1 > multiprocessing.cpu_count():
             # System is stressed, slow down status updates.
             await asyncio.sleep((sleep_time * load_stats.minute_1) / multiprocessing.cpu_count())
-        else:
-            await asyncio.sleep(sleep_time)
 
         if count:
             # Running in testing, or __main__.
             return await status_worker(count - 1, sleep_time)
-        else:
-            await api_app.dispatch('wrolpi.periodic.status', context={'sleep_time': sleep_time})
 
 
 if __name__ == '__main__':

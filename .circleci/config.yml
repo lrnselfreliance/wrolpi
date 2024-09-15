@@ -61,7 +61,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          key: deps-3.11-{{ checksum "requirements.txt" }}-4
       - run:
           name: Install Requirements
           command: |
@@ -69,7 +69,7 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          key: deps-3.11-{{ checksum "requirements.txt" }}-4
           paths:
             - "venv"
       - run:
@@ -88,7 +88,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          key: deps-3.11-{{ checksum "requirements.txt" }}-4
       - run:
           name: Install Requirements
           command: |
@@ -96,7 +96,7 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          key: deps-3.11-{{ checksum "requirements.txt" }}-4
           paths:
             - "venv"
       - run:
@@ -115,7 +115,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
-          key: deps-3.12-{{ checksum "requirements.txt" }}-2
+          key: deps-3.12-{{ checksum "requirements.txt" }}-4
       - run:
           name: Install Requirements
           command: |
@@ -123,7 +123,7 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.12-{{ checksum "requirements.txt" }}-2
+          key: deps-3.12-{{ checksum "requirements.txt" }}-4
           paths:
             - "venv"
       - run:
@@ -134,7 +134,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+          key: deps-3.11-{{ checksum "requirements.txt" }}-4
       - run:
           name: Install dependencies
           command: |

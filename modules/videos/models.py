@@ -220,7 +220,7 @@ class Video(ModelHelper, Base):
 
         return previous_video, next_video
 
-    def validate(self):
+    def validate(self, session: Session = None):
         """Perform a validation of this video and it's files."""
         if not self.file_group.primary_path:
             # Can't validate if there is no video file.
@@ -245,7 +245,7 @@ class Video(ModelHelper, Base):
             self.have_comments = True
 
         # If this Video is in a Channel's directory, then it is part of that Channel.
-        session: Session = Session.object_session(self)
+        session: Session = session or Session.object_session(self)
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
@@ -371,7 +371,6 @@ class Video(ModelHelper, Base):
         if not self.ffprobe_json:
             from modules.videos.common import ffprobe_json
             self.ffprobe_json = await ffprobe_json(self.video_path)
-            self.flush()
 
         return self.ffprobe_json
 
@@ -819,9 +818,9 @@ class Channel(ModelHelper, Base):
 
             # Save configs before move, this is because move imports configs.
             from modules.videos.lib import save_channels_config
-            await save_downloads_config(session)
-            save_channels_config(session)
-            save_tags_config(session)
+            save_downloads_config.activate_switch()
+            save_channels_config.activate_switch()
+            save_tags_config.activate_switch()
 
             # Move the contents of the Channel directory into the destination directory.
             logger.info(f'Moving {self} from {repr(str(old_directory))}')

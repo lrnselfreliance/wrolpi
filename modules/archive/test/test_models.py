@@ -7,7 +7,7 @@ from wrolpi.common import get_wrolpi_config
 
 
 @pytest.mark.asyncio
-async def test_archive_download_destination(test_async_client, test_session, test_directory, archive_factory, fake_now):
+async def test_archive_download_destination(async_client, test_session, test_directory, archive_factory, fake_now):
     fake_now(datetime(2000, 1, 2))
 
     wrolpi_config = get_wrolpi_config()

@@ -9,6 +9,7 @@ from pint import Quantity
 
 from wrolpi.common import Base
 from wrolpi.db import get_db_session
+from wrolpi.switches import await_switches
 from wrolpi.test.common import PytestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
@@ -273,7 +274,8 @@ def test_no_inventories(test_session, test_directory):
         pass
 
 
-def test_inventories_version(test_async_client, test_session, test_directory, init_test_inventory):
+@pytest.mark.asyncio
+async def test_inventories_version(async_client, test_session, test_directory, init_test_inventory):
     """You can't save over a newer version of an inventory."""
     config = get_inventories_config()
 
@@ -284,10 +286,12 @@ def test_inventories_version(test_async_client, test_session, test_directory, in
 
     # Version is set to 1 on first save.
     save_inventories_file()
+    await await_switches()
     assert config.version == 1
 
     # Version is incremented when saving.
     save_inventories_file()
+    await await_switches()
     assert config.version == 2
 
     # Version is greater than what will be saved.
@@ -299,7 +303,7 @@ def test_inventories_version(test_async_client, test_session, test_directory, in
 
 
 @pytest.mark.asyncio
-async def test_inventories_config(test_async_client, test_session, test_directory, init_test_inventory):
+async def test_inventories_config(async_client, test_session, test_directory, init_test_inventory):
     for item in TEST_ITEMS:
         item = Item(**item)
         test_session.add(item)

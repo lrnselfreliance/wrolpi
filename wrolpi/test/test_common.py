@@ -814,7 +814,7 @@ def test_find_file(test_directory, make_files_structure):
     assert common.find_file(test_directory, 'does not exist', 100) is None
 
 
-def test_config_backup(test_async_client, test_config, test_directory):
+def test_config_backup(async_client, test_config, test_directory):
     """Configs have a backup each day."""
     config = common.get_wrolpi_config()
 
@@ -860,7 +860,7 @@ def test_can_connect_to_server(simple_web_server):
 
 
 @pytest.mark.asyncio
-async def test_log_level(test_async_client, test_config):
+async def test_log_level(async_client, test_config):
     """User can change API log level."""
     from wrolpi.api_utils import api_app
     try:
@@ -869,19 +869,19 @@ async def test_log_level(test_async_client, test_config):
 
         # Change log level to WARNING.
         body = dict(log_level=30)
-        request, response = await test_async_client.patch('/api/settings', json=body)
+        request, response = await async_client.patch('/api/settings', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         assert api_app.shared_ctx.log_level.value == 30
 
         # Change log level to NOTSET.
         body = dict(log_level=0)
-        request, response = await test_async_client.patch('/api/settings', json=body)
+        request, response = await async_client.patch('/api/settings', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         assert api_app.shared_ctx.log_level.value == 0
     finally:
         # Reset log level to debug.
         body = dict(log_level=10)
-        request, response = await test_async_client.patch('/api/settings', json=body)
+        request, response = await async_client.patch('/api/settings', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         assert api_app.shared_ctx.log_level.value == 10
 

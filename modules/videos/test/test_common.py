@@ -11,6 +11,7 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
+from wrolpi.switches import await_switches
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, \
@@ -135,7 +136,7 @@ def test_generate_video_poster(video_file):
 
 
 @pytest.mark.asyncio
-async def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config,
+async def test_import_channel_downloads(async_client, test_session, channel_factory, test_channels_config,
                                         tag_factory):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
@@ -155,6 +156,8 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
 
     # Two Channels, but neither have Downloads.
     save_channels_config()
+    await await_switches()
+    # Import after config is saved.
     import_channels_config()
     assert not channel1.downloads
     assert not channel2.downloads
@@ -167,6 +170,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
                           {'downloads': [
                               {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly}
                           ]})
+    await await_switches()
 
     # Download record is created on import.
     import_channels_config()
@@ -189,6 +193,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     save_channels_config()
     Download.find_by_url(channel2.url).delete(add_to_skip_list=False)
     test_session.commit()
+    await await_switches()
 
     # Missing Download is re-created on import.
     import_channels_config()
@@ -204,6 +209,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
     channel2.get_or_create_download('https://example.com/channel2', 60, session=test_session)
     test_session.commit()
     save_channels_config()
+    await await_switches()
     # Check config is written to match new URLs.
     config = get_channels_config()
     assert len(config.channels) == 2
@@ -242,7 +248,7 @@ async def test_import_channel_downloads(test_async_client, test_session, channel
 
 @pytest.mark.asyncio
 async def test_import_channel_delete_missing_channels(
-        test_async_client, test_session, channel_factory, test_channels_config):
+        async_client, test_session, channel_factory, test_channels_config):
     """The Channel import function deletes any Channels that are not in the config."""
     # Create a DB and config with two Channels.
     channel1 = channel_factory(source_id='foo')
@@ -253,6 +259,7 @@ async def test_import_channel_delete_missing_channels(
     test_session.delete(channel1)
     test_session.delete(channel2)
     test_session.commit()
+    await await_switches()
 
     # Importing the config creates two Channels.
     import_channels_config()
@@ -265,6 +272,7 @@ async def test_import_channel_delete_missing_channels(
     config_dict = config.dict()
     config_dict['channels'] = [i for i in config.channels if i['directory'] != str(channel2.directory)]
     config.update(config_dict)
+    await await_switches()
     assert str(channel1.directory) in test_channels_config.read_text()
     assert str(channel2.directory) not in test_channels_config.read_text()
 
@@ -282,7 +290,7 @@ async def test_import_channel_delete_missing_channels(
 
 
 @pytest.mark.asyncio
-async def test_ffprobe_json(test_async_client, video_file, corrupted_video_file):
+async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
     content = await common.ffprobe_json(video_file)
     assert not content['chapters']
     assert content['format']['duration'] == '5.312000'

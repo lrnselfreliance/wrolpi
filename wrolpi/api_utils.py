@@ -1,4 +1,7 @@
+import asyncio
 import json
+import logging
+from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
@@ -106,3 +109,57 @@ def json_error_handler(request: Request, exception: Exception):
 
     # Some unknown error, use internal error code.
     return json_response(body, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+PERPETUAL_WORKERS = list()
+
+
+@api_app.after_server_start
+async def start_perpetual_tasks(app: Sanic):
+    # Only one set of perpetual tasks needs to be started.
+    if app.shared_ctx.perpetual_tasks_started.is_set():
+        return
+    logger.info('start_perpetual_tasks started')
+    app.shared_ctx.perpetual_tasks_started.set()
+
+    try:
+        for event_ in PERPETUAL_WORKERS:
+            logger.debug(f'start_perpetual_tasks {event_}')
+            await app.dispatch(event_)
+    except Exception as e:
+        logger.error('Failed to start perpetual tasks', exc_info=e)
+        raise
+
+    logger.debug('start_perpetual_tasks completed')
+
+
+def perpetual_signal(event: str = None, sleep: int | float = 1):
+    """Use Sanic signals to continually call the wrapped function.  The wrapped function will continually be called,
+    even if it has errors.  If the function is long-running, it will only be called again after it has finished."""
+
+    def wrapper(func: callable):
+        # Create a Sanic "signal" for the provided function.
+        event_ = event or f'wrolpi.perpetual.{func.__name__}'
+
+        # Wrap the function in a worker that will call it perpetually.
+        @api_app.signal(event_)
+        async def worker(*args, **kwargs):
+            logger.log(logging.NOTSET, f'perpetual_signal {event_}')
+            cancelled = False
+            try:
+                await func(*args, **kwargs)
+            except CancelledError:
+                cancelled = True
+                raise
+            except Exception as e:
+                logger.error(f'Perpetual worker {event_} had error', exc_info=e)
+            finally:
+                if not cancelled:
+                    await asyncio.sleep(sleep)
+                    await api_app.dispatch(event_)
+
+        # Add this new signal to the global list so that a task will be started after server startup.
+        PERPETUAL_WORKERS.append(event_)
+        return func
+
+    return wrapper

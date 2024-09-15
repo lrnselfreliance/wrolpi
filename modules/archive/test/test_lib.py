@@ -80,7 +80,7 @@ async def test_relationships(test_session, example_singlefile):
 
 
 @pytest.mark.asyncio
-async def test_archive_title(test_async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory):
     """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
     # Create some test files, delete all records for a fresh refresh.
     archive_factory(
@@ -459,7 +459,7 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives(test_session, test_directory, test_async_client, make_files_structure):
+async def test_refresh_archives(test_session, test_directory, async_client, make_files_structure):
     """Archives can be found and put in the database.  A single Archive will have multiple files."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
@@ -484,7 +484,7 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
     })
 
     # The single archive is found.
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Cause a re-index of the archive.
@@ -493,7 +493,7 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
     test_session.commit()
 
     # Running the refresh does not result in a new archive.
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Archives file format was changed, lets check the new formats are found.
@@ -501,13 +501,13 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
         'archive/example.com/2021-10-05-16-20-11_The Title.html': '<html></html>',
         'archive/example.com/2021-10-05-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    await test_async_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     # The old formatted archive above is renamed.
     assert (test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html').is_file()
     assert test_session.query(Archive).count() == 2
 
     content = json.dumps({'search_str': 'text', 'model': 'archive'})
-    request, response = await test_async_client.post('/api/files/search', content=content)
+    request, response = await async_client.post('/api/files/search', content=content)
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups'], 'No files matched "text"'
     assert response.json['file_groups'][0]['model'] == 'archive', 'Returned file was not an archive'
@@ -821,7 +821,7 @@ def test_get_url_from_singlefile():
 
 
 @pytest.mark.asyncio
-async def test_get_custom_archive_directory(test_async_client, test_directory, test_config):
+async def test_get_custom_archive_directory(async_client, test_directory, test_config):
     """Custom directory can be used for archive directory."""
     # Default location.
     assert lib.get_archive_directory() == (test_directory / 'archive')

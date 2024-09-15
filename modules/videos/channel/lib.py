@@ -6,7 +6,7 @@ from sqlalchemy import or_, func, desc, asc
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
-from wrolpi.common import run_after, logger, \
+from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_curs, optional_session, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager
@@ -114,7 +114,6 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
     return channel
 
 
-@run_after(save_channels_config)
 @optional_session
 async def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
@@ -150,10 +149,11 @@ async def update_channel(session: Session, *, data: schema.ChannelPutRequest, ch
         else:
             background_task(_())
 
+    save_channels_config.activate_switch()
+
     return channel
 
 
-@run_after(save_channels_config)
 @optional_session
 def create_channel(session: Session, data: schema.ChannelPostRequest, return_dict: bool = True) -> Union[Channel, dict]:
     """
@@ -180,16 +180,19 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 
     session.commit()
 
+    save_channels_config.activate_switch()
+
     return channel.dict() if return_dict else channel
 
 
-@run_after(save_channels_config)
 @optional_session(commit=True)
 def delete_channel(session: Session, *, channel_id: int):
     channel = Channel.find_by_id(channel_id, session=session)
 
     channel_dict = channel.dict()
     channel.delete_with_videos()
+
+    save_channels_config.activate_switch()
 
     return channel_dict
 
@@ -230,8 +233,8 @@ async def create_channel_download(channel_id: int, url: str, frequency: int, set
         download = channel.get_or_create_download(url, frequency, session, reset_attempts=True)
         download.settings = settings
 
-    save_channels_config()
-    await save_downloads_config()
+    save_channels_config.activate_switch()
+    save_downloads_config.activate_switch()
 
     return download
 
@@ -250,8 +253,8 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
 
     download_manager.remove_from_skip_list(url)
 
-    save_channels_config()
-    await save_downloads_config()
+    save_channels_config.activate_switch()
+    save_downloads_config.activate_switch()
 
     return download
 
@@ -287,6 +290,8 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
                 await coro
             else:
                 background_task(coro)
+        else:
+            save_channels_config.activate_switch()
     else:
         logger.info(f'Tagging {channel} with {tag_name}')
 

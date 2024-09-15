@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_file_group_move(test_async_client, test_session, test_directory, video_factory):
+async def test_file_group_move(async_client, test_session, test_directory, video_factory):
     """Any new or renamed files are adopted during FileGroup.move."""
     video = video_factory(title='video', with_poster_ext='.webp')
     test_session.commit()

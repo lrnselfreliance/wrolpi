@@ -8,8 +8,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
-from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
-    get_media_directory, run_after, get_relative_to_media_directory
+from wrolpi.common import logger, wrol_mode_check, get_media_directory, get_relative_to_media_directory
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
@@ -74,11 +73,11 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(schema.ChannelPutRequest)
-@run_after(save_channels_config)
 @wrol_mode_check
 async def channel_update(_: Request, channel_id: int, body: schema.ChannelPutRequest):
     body.directory = pathlib.Path(body.directory) if body.directory else None
     channel = await lib.update_channel(data=body, channel_id=channel_id)
+    save_channels_config.activate_switch()
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.id}'})
 

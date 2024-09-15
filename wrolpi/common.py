@@ -349,14 +349,21 @@ class ConfigFile:
     file_name: str = None
     default_config: dict = None
     width: int = None
+    background_save: callable = None
 
     def __init__(self):
         self.width = self.width or 90
 
-        if PYTEST:
-            # Do not load a global config on import while testing.  A global instance should never be used for testing.
-            self._config = self.default_config.copy()
-            return
+        # Do not load a global config on import while testing.  A global instance should never be used for testing.
+        self._config = self.default_config.copy()
+
+        from wrolpi.switches import register_switch_handler
+
+        @register_switch_handler(f'background_save_{self.file_name}')
+        def background_save():
+            self.save()
+
+        self.background_save = background_save
 
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
@@ -385,7 +392,7 @@ class ConfigFile:
         path = path.with_name(name)
         return path
 
-    def save(self, ignore_lock: bool = False):
+    def save(self):
         """
         Write this config to its file.
 
@@ -401,11 +408,8 @@ class ConfigFile:
             raise ValueError(f'Refusing to save config file while testing: {config_file}')
 
         # Only one process can write to a config.
-        acquired = False
-        lock = None
-        if ignore_lock is False:
-            lock = api_app.shared_ctx.config_save_lock
-            acquired = lock.acquire(block=True, timeout=5.0)
+        lock = api_app.shared_ctx.config_save_lock
+        acquired = lock.acquire(block=True, timeout=5.0)
 
         try:
             # Config directory may not exist.
@@ -457,7 +461,7 @@ class ConfigFile:
         """Update any values of this config.  Save the config to its file."""
         config = {k: v for k, v in config.items() if k in self._config}
         self._config.update(config)
-        self.save(ignore_lock=ignore_lock)
+        self.background_save.activate_switch()
 
     def dict(self) -> dict:
         """Get a deepcopy of this config."""

@@ -31,7 +31,6 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
     # Shared lists.
-    app.shared_ctx.events_history = manager.list()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
 
@@ -41,16 +40,24 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_disabled = multiprocessing.Event()
     app.shared_ctx.download_manager_stopped = multiprocessing.Event()
 
-    # Events.
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
+    app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()
+
+    # Switches
+    app.shared_ctx.switches = manager.dict()
+    app.shared_ctx.switches_lock = multiprocessing.Lock()
+    app.shared_ctx.switches_changed = multiprocessing.Event()
 
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
 
     # Locks
     app.shared_ctx.config_save_lock = multiprocessing.Lock()
+
+    # Events.
     app.shared_ctx.events_lock = multiprocessing.Lock()
+    app.shared_ctx.events_history = manager.list()
 
     reset_shared_contexts(app)
 
@@ -88,11 +95,16 @@ def reset_shared_contexts(app: Sanic):
         killed_downloads=[],
     ))
 
+    # Switches
+    app.shared_ctx.switches.clear()
+    app.shared_ctx.switches_changed.clear()
+
     # Events.
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.download_manager_disabled.clear()
     app.shared_ctx.download_manager_stopped.clear()
     app.shared_ctx.flags_initialized.clear()
+    app.shared_ctx.perpetual_tasks_started.clear()
 
 
 def initialize_configs_contexts(app: Sanic):

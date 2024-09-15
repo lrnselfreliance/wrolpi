@@ -8,6 +8,7 @@ from modules.videos.channel import lib
 from modules.videos.errors import UnknownChannel
 from modules.videos.lib import save_channels_config, import_channels_config
 from modules.videos.models import Channel
+from wrolpi.switches import await_switches
 
 
 @pytest.mark.parametrize('params', [
@@ -66,7 +67,7 @@ def test_get_channel(test_session, test_directory, channel_factory):
 
 
 @pytest.mark.asyncio
-async def test_channels_no_url(test_async_client, test_session, test_directory, test_channels_config):
+async def test_channels_no_url(async_client, test_session, test_directory, test_channels_config):
     """Test that a Channel's URL is coerced to None if it is empty."""
     channel1_directory = test_directory / 'channel1'
     channel1_directory.mkdir()
@@ -91,7 +92,7 @@ async def test_channels_no_url(test_async_client, test_session, test_directory, 
     assert len(channels) == 2
     assert all(i.url is None for i in channels), [(i.name, i.url) for i in channels]
 
-    save_channels_config()
+    save_channels_config.activate_switch()
     import_channels_config()
 
 
@@ -128,20 +129,21 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
 
 
 @pytest.mark.asyncio
-async def test_tag_channel_existing(test_async_client, test_session, test_directory, channel_factory, tag_factory,
+async def test_tag_channel_existing(async_client, test_session, test_directory, channel_factory, tag_factory,
                                     video_factory, test_channels_config):
-    """A Channel can already exist in a Tag's directory and still be tagged."""
+    """A Channel already in a Tag's directory can still be tagged."""
     channel_directory = test_directory / 'videos/one/Channel Name'
     channel = channel_factory(name='Channel Name', download_frequency=120, directory=channel_directory)
     video_factory(channel_id=channel.id)
     test_session.commit()
+    await await_switches()
     assert str(channel.directory).startswith(f'{test_directory}/videos/one/')
 
     tag = await tag_factory()
     await lib.tag_channel(tag.name, channel_directory, channel.id, test_session)
+    await await_switches()
 
     # Channel's tag is saved to the config.
-    save_channels_config(test_session)
     with test_channels_config.open() as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
     assert config['channels'][0]['tag_name'] == tag.name

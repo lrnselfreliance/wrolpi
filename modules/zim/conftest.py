@@ -100,14 +100,14 @@ def zim_factory(test_session, zim_path_factory, test_directory):
 
 
 @pytest.fixture
-def assert_zim_search(test_async_client, test_directory):
+def assert_zim_search(async_client, test_directory):
     from http import HTTPStatus
 
     async def _(search_str: str, zim_id: int, expected: Dict, tag_names: List[str] = [],
                 expected_status_code: int = HTTPStatus.OK):
         content = dict(search_str=search_str, tag_names=tag_names)
         assert isinstance(zim_id, int), 'This fixture only supports Zim ids of type integer'
-        request, response = await test_async_client.post(f'api/zim/search/{zim_id}', content=json.dumps(content))
+        request, response = await async_client.post(f'api/zim/search/{zim_id}', content=json.dumps(content))
         assert response.status_code == expected_status_code
 
         result = response.json['zim']

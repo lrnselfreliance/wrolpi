@@ -180,7 +180,7 @@ def save_inventories_file():
 
         config.inventories = inventories
         config.version = version
-        config.save()
+        config.background_save.activate_switch()
 
 
 @before_startup

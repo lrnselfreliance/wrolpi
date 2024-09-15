@@ -19,7 +19,7 @@ async def test_ffprobe_stream_methods(simple_video):
 
 
 @pytest.mark.asyncio
-async def test_channel_move(test_async_client, test_session, test_directory, channel_factory, video_factory):
+async def test_channel_move(async_client, test_session, test_directory, channel_factory, video_factory):
     """A Channel can be moved to another directory, any files in the Channel's directory are moved."""
     channel = channel_factory(name='Channel Name')
     video = video_factory(title='Vid', channel_id=channel.id)

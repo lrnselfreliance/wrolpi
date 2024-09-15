@@ -20,7 +20,7 @@ def test_delete_channel_no_url(test_session, test_client, channel_factory):
 
 
 @pytest.mark.asyncio
-async def test_delete_channel_with_videos(test_session, test_async_client, channel_factory, video_factory):
+async def test_delete_channel_with_videos(test_session, async_client, channel_factory, video_factory):
     """Videos are disowned when their Channel is deleted."""
     channel = channel_factory()
     video = video_factory(channel_id=channel.id)
@@ -28,7 +28,7 @@ async def test_delete_channel_with_videos(test_session, test_async_client, chann
     test_session.commit()
 
     # Delete the Channel.
-    request, response = await test_async_client.delete(f'/api/videos/channels/{channel.id}')
+    request, response = await async_client.delete(f'/api/videos/channels/{channel.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video still exists, but has no channel.
@@ -39,7 +39,7 @@ async def test_delete_channel_with_videos(test_session, test_async_client, chann
 
 
 @pytest.mark.asyncio
-async def test_nested_channel_directories(test_session, test_async_client, test_directory, channel_factory,
+async def test_nested_channel_directories(test_session, async_client, test_directory, channel_factory,
                                           video_factory):
     """Channel directories cannot contain another Channel's directory."""
     (test_directory / 'foo').mkdir()
@@ -54,7 +54,7 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
         name='channel 2',
         directory=str(channel2_directory),
     )
-    request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
+    request, response = await async_client.post('/api/videos/channels', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
            response.json['cause']['message'] == 'The directory is already used by another channel.'
@@ -64,7 +64,7 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
         name='channel 3',
         directory=str(test_directory),
     )
-    request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
+    request, response = await async_client.post('/api/videos/channels', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
            response.json['cause']['message'] == 'The directory is already used by another channel.'

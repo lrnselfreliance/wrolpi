@@ -1,6 +1,8 @@
 import asyncio
 from typing import List, Tuple
 
+from sqlalchemy.orm import Session
+
 from modules.videos.models import Video
 from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
@@ -33,14 +35,19 @@ async def video_modeler():
                 video_id = None
                 try:
                     if not video:
-                        video = Video(file_group=file_group)
+                        video = Video(file_group=file_group, file_group_id=file_group.id)
                         session.add(video)
                         session.flush([video])
                     video_id = video.id
+                    if not Session.object_session(video):
+                        session.add(video)
+                        video.flush()
                     # Extract ffprobe data.
                     await video.get_ffprobe_json()
+                    video.flush(session)
                     # Validate and index subtitles.
-                    video.validate()
+                    video.validate(session)
+                    processed += 1
                 except Exception as e:
                     if PYTEST:
                         raise

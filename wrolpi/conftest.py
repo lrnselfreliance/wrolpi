@@ -45,6 +45,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
+from wrolpi.switches import await_switches
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
 
@@ -164,18 +165,33 @@ def test_client(test_directory) -> ReusableClient:
         raise RuntimeError('Test never got unused port')
 
 
-@pytest.fixture
-async def test_async_client(test_directory) -> SanicASGITestClient:
-    """Get an Async Sanic Test Client with all default routes attached."""
-    attach_shared_contexts(api_app)
+@api_app.on_response
+async def background_task_listener(request, response):
+    """Wait for all background tasks to finish before returning API response while testing."""
+    await await_switches()
 
+
+@pytest.fixture
+async def async_client(test_directory) -> SanicASGITestClient:
+    """Get an Async Sanic Test Client with all default routes attached."""
+    api_app.signalize()
+    attach_shared_contexts(api_app)
     initialize_configs_contexts(api_app)
 
-    return SanicASGITestClient(api_app)
+    # Call API so server actually starts.
+    client = SanicASGITestClient(api_app)
+    await client.get('/api/echo')
+
+    try:
+        yield client
+        # Do not remove, or tests will be significantly slower.
+        # await switches.await_switches()
+    finally:
+        logger.debug('Destroying async_client')
 
 
 @pytest.fixture
-def test_download_manager_config(test_async_client, test_directory) -> pathlib.Path:
+def test_download_manager_config(async_client, test_directory) -> pathlib.Path:
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
@@ -184,13 +200,11 @@ def test_download_manager_config(test_async_client, test_directory) -> pathlib.P
 
 @pytest.fixture
 async def test_download_manager(
-        test_async_client,
+        async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
 ) -> DownloadManager:
-    # Needed to use signals in test app?
-    api_app.signalize()
-
+    # Needed to use signals in
     manager = DownloadManager()
     await manager.enable()
 
@@ -486,7 +500,7 @@ def mock_create_subprocess_shell() -> Callable:
 
 
 @pytest.fixture
-def events_history(test_async_client):
+def events_history(async_client):
     """Give each test its own Events history."""
     yield api_app.shared_ctx.events_history
 

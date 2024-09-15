@@ -192,7 +192,7 @@ class Zim(Base):
             else Tag.get_by_id(tag_id_or_name, session)
         tag_zim_entry = TagZimEntry(tag=tag, zim=self, zim_entry=zim_entry)
         session.add(tag_zim_entry)
-        tags.save_tags_config()
+        tags.save_tags_config.activate_switch()
         return tag_zim_entry
 
     def untag_entry(self, tag_id_or_name: int | str, zim_entry: str):
@@ -207,7 +207,7 @@ class Zim(Base):
             session.delete(tag_zim_entry)
         else:
             raise UnknownZimTagEntry(f'Could not find at {repr(str(zim_entry))}')
-        tags.save_tags_config()
+        tags.save_tags_config.activate_switch()
 
     @staticmethod
     def _entries_with_tags_process(limit: int, offset: int, params: dict, session: Session, tags_sub_select: str):

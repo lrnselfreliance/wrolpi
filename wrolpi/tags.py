@@ -1,6 +1,7 @@
 import contextlib
 import pathlib
 from datetime import datetime
+from pprint import pprint
 from typing import List, Dict, Tuple, Optional
 
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
@@ -33,7 +34,7 @@ class TagFile(ModelHelper, Base):
     file_group = relationship('FileGroup', back_populates='tag_files')
 
     def __repr__(self):
-        return f'<TagFile tag={self.tag.name=} file_group={self.file_group.primary_path}>'
+        return f'<TagFile tag={self.tag.name} file_group={self.file_group.primary_path}>'
 
     @staticmethod
     @optional_session
@@ -225,7 +226,7 @@ class TagsConfig(ConfigFile):
     default_config = dict(
         tag_files=list(),
         tag_zims=list(),
-        tags=list(),
+        tags=dict(),
     )
 
     @property
@@ -516,10 +517,8 @@ def import_tags_config(session: Session = None):
             primary_paths = [str(media_directory / i[1]) for i in config.tag_files]
             file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(primary_paths))
             file_groups_by_primary_path = {i.primary_path: i for i in file_groups}
-            file_group_ids = [i.id for i in file_groups]
-            # Get all TagFiles referencing the FileGroups.
-            tag_files = session.query(TagFile).filter(TagFile.file_group_id.in_(file_group_ids))
-            tag_files = {(i.tag_id, i.file_group_id): i for i in tag_files}
+            # Get all TagFiles so we can create new ones.
+            tag_files = {(i.tag_id, i.file_group_id): i for i in session.query(TagFile)}
 
             for tag_name, primary_path, created_at in config.tag_files:
                 tag: Tag = tags_by_name.get(tag_name)
@@ -541,9 +540,9 @@ def import_tags_config(session: Session = None):
                     tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
+                        logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
                         tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag, file_group=file_group)
                         session.add(tag_file)
-                        logger.info(f'Created TagFile: {tag_file}')
                         tag_file.flush()
                     tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
                     need_commit = True
@@ -605,10 +604,10 @@ def import_tags_config(session: Session = None):
                         session.delete(tag)
                         need_commit = True
 
-        logger.info('Importing tags config complete')
-
         if need_commit:
             session.commit()
+
+        logger.info('Importing tags config complete')
     except Exception as e:
         logger.error(f'Failed to import tags config', exc_info=e)
         if PYTEST:

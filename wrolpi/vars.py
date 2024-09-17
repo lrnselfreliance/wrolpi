@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import os
 import pathlib
@@ -43,6 +44,13 @@ def truthy_arg(value: str) -> bool:
 def list_var(name: str, default='') -> List[str]:
     return [i for i in os.environ.get(name, default).split(',')]
 
+
+LOG_LEVEL_INT = logging.INFO
+if '-vv' in sys.argv:
+    LOG_LEVEL_INT = logging.DEBUG
+elif '-vvv' in sys.argv:
+    LOG_LEVEL_INT = logging.NOTSET
+LOG_LEVEL = logging.getLevelName(LOG_LEVEL_INT)
 
 # Special environment variable set in the docker/api/Dockerfile.
 DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))

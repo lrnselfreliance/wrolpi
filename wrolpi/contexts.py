@@ -3,7 +3,7 @@ import multiprocessing
 
 from sanic import Sanic
 
-default_log_level = 20
+from wrolpi.vars import LOG_LEVEL_INT
 
 
 def attach_shared_contexts(app: Sanic):
@@ -32,7 +32,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.map_importing = manager.dict()
     # Shared lists.
     # Shared ints
-    app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
+    app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, LOG_LEVEL_INT)
 
     # Download Manager
     app.shared_ctx.download_manager_data = manager.dict()
@@ -86,7 +86,7 @@ def reset_shared_contexts(app: Sanic):
     ))
     app.shared_ctx.map_importing.clear()
     # Shared ints
-    app.shared_ctx.log_level.value = default_log_level
+    app.shared_ctx.log_level.value = LOG_LEVEL_INT
 
     # Download Manager
     app.shared_ctx.download_manager_data.clear()

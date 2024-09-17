@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
-from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
 
 LOGGING_CONFIG = {
     'version': 1,
@@ -98,7 +98,7 @@ LOGGING_CONFIG = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO'
+        'level': LOG_LEVEL
     }
 }
 

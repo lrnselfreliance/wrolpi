@@ -383,14 +383,6 @@ def srt_file3(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def bad_vtt_file(test_directory) -> pathlib.Path:
-    """Return a copy of the bad_caption VTT file in the `test_directory`."""
-    destination = test_directory / f'{uuid4()}.en.vtt'
-    shutil.copy(PROJECT_DIR / 'test/bad_caption.en.vtt', destination)
-    yield destination
-
-
-@pytest.fixture
 def example_pdf(test_directory) -> pathlib.Path:
     destination = test_directory / 'pdf example.pdf'
     shutil.copy(PROJECT_DIR / 'test/pdf example.pdf', destination)

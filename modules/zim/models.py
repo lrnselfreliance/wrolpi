@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry
 from wrolpi import dates, tags
-from wrolpi.common import Base, extract_html_text, logger, get_relative_to_media_directory
+from wrolpi.common import Base, logger, get_relative_to_media_directory
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.downloader import Download, download_manager

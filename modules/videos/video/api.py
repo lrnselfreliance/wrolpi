@@ -6,7 +6,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
-from wrolpi.common import logger, wrol_mode_check, run_after
+from wrolpi.common import logger, wrol_mode_check
 from wrolpi.errors import InvalidOrderBy, ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse

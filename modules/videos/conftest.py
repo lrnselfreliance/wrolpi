@@ -9,7 +9,6 @@ from uuid import uuid4
 import mock
 import pytest
 from PIL import Image
-from requests import session
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config, format_videos_destination

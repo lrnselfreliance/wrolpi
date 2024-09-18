@@ -3,6 +3,7 @@ import dataclasses
 import html
 import pathlib
 import re
+from datetime import datetime
 from typing import Generator, Type
 from typing import Tuple, Optional
 
@@ -38,13 +39,14 @@ class VideoInfoJSON:
     channel_source_id: str | None = None
     channel_url: str | None = None
     duration: int | None = None
+    epoch: int | None = None
     title: str | None = None
+    upload_date: datetime | None = None
     url: str | None = None
     view_count: int | None = None
-    epoch: int | None = None
 
 
-def process_video_info_json(video: Video) -> VideoInfoJSON:
+def extract_video_info_json(video: Video) -> VideoInfoJSON:
     """
     Parse the Video's info json file, return the relevant data.
     """
@@ -53,12 +55,17 @@ def process_video_info_json(video: Video) -> VideoInfoJSON:
         title = info_json.get('fulltitle') or info_json.get('title')
         video_info_json.title = html.unescape(title) if title else None
 
-        video_info_json.duration = int(i) if (i := info_json.get('duration')) else None
-        video_info_json.view_count = int(i) if (i := info_json.get('view_count')) else None
-        video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
+        upload_date = dates.strpdate(i) if (i := info_json.get('upload_date')) else None
+        if upload_date:
+            upload_date = upload_date.astimezone(pytz.UTC)
+
         video_info_json.channel_source_id = info_json.get('channel_id') or info_json.get('uploader_id') or None
         video_info_json.channel_url = info_json.get('channel_url') or info_json.get('uploader_url') or None
+        video_info_json.duration = int(i) if (i := info_json.get('duration')) else None
         video_info_json.epoch = int(i) if (i := info_json.get('epoch')) else None
+        video_info_json.upload_date = upload_date
+        video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
+        video_info_json.view_count = int(i) if (i := info_json.get('view_count')) else None
 
     return video_info_json
 
@@ -76,15 +83,16 @@ def validate_video(video: Video, channel_generate_poster: bool):
     A Video is also valid when it has a JPEG poster, if any.  If no poster can be
     found, it will be generated from the video file.
     """
-    info_json_path = video.info_json_path
-    json_data_missing = bool(video.file_group.title) and bool(video.file_group.length) and bool(video.view_count) \
-                        and bool(video.file_group.url) and bool(video.file_group.download_datetime)
-    if info_json_path and json_data_missing is False:
+    json_published_datetime = None
+
+    if video.info_json_path:
         # These properties can be found in the info json.
-        video_info_json = process_video_info_json(video)
+        video_info_json = extract_video_info_json(video)
         video.file_group.title = video_info_json.title
         video.file_group.length = video_info_json.duration
         video.file_group.url = video_info_json.url
+        json_published_datetime = video.file_group.published_datetime = \
+            video_info_json.upload_date or video.file_group.published_datetime
         video.file_group.download_datetime = from_timestamp(video_info_json.epoch) if video_info_json.epoch else None
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
@@ -117,7 +125,8 @@ def validate_video(video: Video, channel_generate_poster: bool):
             if not published_date.tzinfo:
                 published_date = published_date.astimezone(pytz.UTC)
         video.file_group.title = video.file_group.title or html.unescape(title)
-        video.file_group.published_datetime = published_date
+        # Trust info json upload_date before file name datetime.
+        video.file_group.published_datetime = json_published_datetime or published_date
         video.source_id = video.source_id or source_id
 
     if channel_generate_poster:

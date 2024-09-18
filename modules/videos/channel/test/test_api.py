@@ -316,7 +316,7 @@ async def test_channel_crud(test_session, async_client, test_directory, test_dow
 
     # Can't update channel that doesn't exist
     request, response = await async_client.put('/api/videos/channels/doesnt_exist',
-                                                    content=json.dumps(new_channel))
+                                               content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.NOT_FOUND
 
     # Delete the new channel

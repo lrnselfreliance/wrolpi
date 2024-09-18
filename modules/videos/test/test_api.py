@@ -179,7 +179,7 @@ async def test_api_download_video_tags(test_session, async_client, tag_factory):
 
 
 @pytest.mark.asyncio
-async def test_search_videos_file(test_client, test_session, test_directory, video_with_search_factory,
+async def test_search_videos_file(test_session, test_directory, video_with_search_factory,
                                   assert_video_search):
     """Test that videos can be searched and that their order is by their textsearch rank."""
     # These captions have repeated letters, so they will be higher in the ranking.

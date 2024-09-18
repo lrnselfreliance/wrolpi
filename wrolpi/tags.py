@@ -1,7 +1,6 @@
 import contextlib
 import pathlib
 from datetime import datetime
-from pprint import pprint
 from typing import List, Dict, Tuple, Optional
 
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger

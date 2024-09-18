@@ -89,6 +89,25 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     assert vid1.source_id == '1234567890'
     assert vid1.file_group.title == 'The Title'
 
+    # Replace info json, FileGroup attributes should be replaced.
+    info_json = {
+        'channel_id': 'channel id',
+        'channel_url': 'https://example.com/example_video_json_channel',
+        'duration': 635,
+        'epoch': 123456789,
+        'fulltitle': 'The full title',
+        'id': 'some long id',
+        'title': 'The title',
+        'upload_date': '20240917',
+        'uploader_id': 'uploader id',
+        'uploader_url': 'https://example.com/example_video_json_uploader',
+        'view_count': 406
+    }
+    vid1.replace_info_json(info_json)
+    validate_video(vid1, False)
+    assert vid1.file_group.published_datetime and vid1.file_group.published_datetime.year == 2024
+    assert vid1.file_group.title == 'The full title'
+
     # A PNG is replaced.
     vid2 = video_factory(with_video_file=True, with_poster_ext='.png')
     vid2.poster_path.with_suffix('.jpg').write_bytes(image_bytes_factory())  # New poster exists, replace it.

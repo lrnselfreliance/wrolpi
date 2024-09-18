@@ -1,5 +1,3 @@
-import multiprocessing
-
 __all__ = ['Events', 'get_events']
 
 from datetime import datetime

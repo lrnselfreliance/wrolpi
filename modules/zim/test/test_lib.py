@@ -250,7 +250,8 @@ async def test_zim_download(test_session, kiwix_download_zim, test_directory, te
 
 
 @pytest.mark.asyncio
-async def test_zim_tag_migration(async_client, test_session, test_directory, zim_factory, tag_factory, test_tags_config):
+async def test_zim_tag_migration(async_client, test_session, test_directory, zim_factory, tag_factory,
+                                 test_tags_config):
     """When an outdated Zim file is deleted, the Tags should be moved to the latest Zim."""
     zim1 = zim_factory('wikipedia_en_all_maxi_2020-01.zim')  # The outdated Zim.
     zim2 = zim_factory('wikipedia_en_all_maxi_2020-02.zim')

@@ -5,7 +5,6 @@ from datetime import datetime
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
-from unittest.mock import AsyncMock
 
 import pytest
 import pytz

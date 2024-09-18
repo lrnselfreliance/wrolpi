@@ -5,7 +5,6 @@ from itertools import zip_longest
 import pytest
 from mock import mock
 from sanic import Request
-from selenium.webdriver.common.devtools.v112.runtime import await_promise
 
 from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_error_handler

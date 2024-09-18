@@ -49,6 +49,7 @@ LOG_LEVEL_INT = logging.INFO
 if '-vv' in sys.argv:
     LOG_LEVEL_INT = logging.DEBUG
 elif '-vvv' in sys.argv:
+    # SQLAlchemy will increase logging.
     LOG_LEVEL_INT = logging.NOTSET
 LOG_LEVEL = logging.getLevelName(LOG_LEVEL_INT)
 

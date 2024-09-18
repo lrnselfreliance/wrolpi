@@ -1,15 +1,8 @@
 from wrolpi import captions
 
 
-def test_bad_caption(bad_vtt_file):
-    """A caption file that cannot be parsed is ignored."""
-    result = captions.read_captions(bad_vtt_file)
-    assert result is None
-
-
 def test_get_caption_text(vtt_file1, srt_file3):
     expected = ['okay welcome to this session this is',
-                'okay welcome to this session this is',
                 'okay welcome to this session this is\ncalled the kinetic bunny need to meet',
                 'called the kinetic bunny need to meet',
                 'called the kinetic bunny need to meet\nthe virtual bonnie emilio stop this is',

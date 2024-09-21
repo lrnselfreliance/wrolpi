@@ -137,11 +137,11 @@ class ChannelDownloader(Downloader, ABC):
                 downloads=downloads,
                 settings=settings,
             )
-        except Exception:
+        except Exception as e:
             if PYTEST:
                 raise
             kind = 'playlist' if is_a_playlist else 'channel'
-            logger.warning(f'Failed to update catalog of {kind} {download.url}')
+            logger.error(f'Failed to update catalog of {kind} {download.url}', exc_info=e)
             return DownloadResult(
                 success=False,
                 location=location,

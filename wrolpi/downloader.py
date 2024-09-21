@@ -245,8 +245,7 @@ class Download(ModelHelper, Base):  # noqa
     def get_all_by_destination(cls, destination: str | pathlib.Path, session: Session = None) -> List['Download']:
         destination = str(destination)
         downloads = session.query(Download) \
-            .filter(Download.settings.contains({'destination': destination})) \
-            .all()
+            .filter(Download.settings.contains({'destination': destination})).all()  # noqa
         return downloads
 
 
@@ -595,7 +594,7 @@ class DownloadManager:
         ).order_by(
             Download.frequency.is_(None),
             Download.frequency,
-            Download.id))  # noqa
+            Download.id))
         count = 0
         for download in new_downloads:
             domain = download.domain
@@ -727,7 +726,7 @@ class DownloadManager:
         for download in recurring:
             # A new download may not have a `next_download`, create it if necessary.
             download.next_download = download.next_download or self.calculate_next_download(download, session=session)
-            if download.next_download < now_:
+            if download.next_download < now_ and download.status not in (DownloadStatus.new, DownloadStatus.pending):
                 download.renew()
                 renewed_count += 1
 
@@ -823,6 +822,7 @@ class DownloadManager:
         """Delete all once-downloads that have expired.
 
         Do not delete downloads that are new, or should be tried again."""
+        count = 0
         with get_db_session(commit=True) as session:
             downloads = self.get_once_downloads(session)
             one_month = now() - timedelta(days=30)
@@ -830,6 +830,9 @@ class DownloadManager:
                 if download.status in self.FINISHED_STATUSES and download.last_successful_download and \
                         download.last_successful_download < one_month:
                     session.delete(download)
+                    count += 1
+        if count:
+            self.log_debug(f'Deleted {count} once downloads')
 
     def list_downloaders(self) -> List[Downloader]:
         """Return a list of the Downloaders available on this Download Manager."""

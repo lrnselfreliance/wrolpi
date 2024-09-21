@@ -1570,4 +1570,5 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
                     file_group.add_tag(tag.id)
 
     session.commit()
+    file_group.flush()
     return file_group

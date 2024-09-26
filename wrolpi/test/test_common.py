@@ -18,7 +18,8 @@ import pytz
 
 import wrolpi.vars
 from wrolpi import common
-from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after
+from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config
+from wrolpi.switches import await_switches
 from wrolpi.test.common import build_test_directories, skip_circleci
 
 
@@ -814,18 +815,18 @@ def test_find_file(test_directory, make_files_structure):
     assert common.find_file(test_directory, 'does not exist', 100) is None
 
 
-def test_config_backup(async_client, test_config, test_directory):
+def test_config_backup(async_client, test_wrolpi_config, test_directory):
     """Configs have a backup each day."""
     config = common.get_wrolpi_config()
 
     # No backups yet.
-    config.save()
+    config.dump_config()
     assert (test_directory / 'config').is_dir()
     assert not (test_directory / 'config/backup').is_dir()
     assert (test_directory / 'config/wrolpi.yaml').is_file()
 
     # Backups directory is created.  New backup config is saved.
-    config.save()
+    config.dump_config()
     assert (test_directory / 'config').is_dir()
     assert (test_directory / 'config/backup').is_dir()
     assert (test_directory / 'config/wrolpi.yaml').is_file()
@@ -860,7 +861,7 @@ def test_can_connect_to_server(simple_web_server):
 
 
 @pytest.mark.asyncio
-async def test_log_level(async_client, test_config):
+async def test_log_level(async_client, test_wrolpi_config):
     """User can change API log level."""
     from wrolpi.api_utils import api_app
     try:
@@ -916,3 +917,67 @@ def test_is_valid_hex_color(color, expected):
 ])
 def test_unique_by_predicate(iterable, predicate, expected):
     assert common.unique_by_predicate(iterable, predicate) == expected
+
+
+@pytest.mark.asyncio
+async def test_config_lifecycle(async_client, test_wrolpi_config):
+    """Test importing, dumping, updating, saving a config."""
+    config = get_wrolpi_config()
+    # Config is not imported, default values are used.
+    assert config.successful_import is False
+    assert config.wrol_mode is False
+    assert config.version == 0
+
+    # Bad config cannot be imported.
+    test_wrolpi_config.parent.mkdir(exist_ok=True)
+    test_wrolpi_config.write_text('bad config\ndata')
+    with pytest.raises(RuntimeError) as e:
+        config.import_config()
+    assert config.successful_import is False
+    assert config.version == 0
+    assert 'invalid' in str(e)
+
+    # Cannot dump config because import was not successful.
+    with pytest.raises(RuntimeError) as e:
+        config.dump_config()
+    assert 'imported' in str(e)
+    assert config.version == 0
+
+    # Incomplete config can still be imported.
+    test_wrolpi_config.write_text('wrol_mode: true')
+    config.import_config()
+    assert config.successful_import is True
+    assert config.wrol_mode is True
+    assert config.version == 0
+
+    # Items from the default config are written to the file.
+    config.dump_config()
+    assert 'version: ' in test_wrolpi_config.read_text()
+    assert config.wrol_mode is True
+    assert config.version == 1
+
+    # Other data is ignored.
+    test_wrolpi_config.write_text('wrol_mode: false\nother_data: false')
+    config.import_config()
+    assert 'other_data' not in config._config, 'Extra data in config should be ignored'
+    assert config.wrol_mode is False
+
+    # Changing value changes both file and config data.
+    config.wrol_mode = True
+    assert config._config['wrol_mode'] is True
+    await await_switches()
+    assert 'wrol_mode: true' in test_wrolpi_config.read_text()
+    assert 'other_data' not in test_wrolpi_config.read_text(), 'Other data should be removed on save.'
+    assert config.version == 2
+
+    # Cannot overwrite newer config.
+    config_data = config.read_config_file()
+    config_data['version'] = 5
+    config.write_config_data(config_data, test_wrolpi_config)
+    with pytest.raises(RuntimeError) as e:
+        config.dump_config()
+    assert 'newer config' in str(e)
+
+    # Can import, then config can be saved.
+    config.import_config()
+    config.dump_config()

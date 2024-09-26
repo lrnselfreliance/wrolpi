@@ -267,17 +267,18 @@ async def test_zim_tag_migration(async_client, test_session, test_directory, zim
     test_session.commit()
     assert test_session.query(TagZimEntry).count() == 4
     await await_switches()
+    assert tags.get_tags_config().successful_import is True
 
     # All Zims have been tagged.
     tags_config = tags.get_tags_config()
-    tags_config.save_tags(session=test_session)
+    tags_config.dump_config()
     assert 'wikipedia_en_all_maxi_2020-01.zim' in (config_text := tags_config.get_file().read_text())
     assert 'wikipedia_en_all_maxi_2020-02.zim' in config_text
     assert 'wikipedia_en_all_maxi_2020-03.zim' in config_text
 
     # Zim was deleted, as well as it's ZimTagEntry(s).
     zim1.delete()
-    tags.import_tags_config(test_session)
+    tags.import_tags_config()
 
     tag_zim_entries = sorted([(i.tag.name, i.zim.path, i.zim_entry) for i in test_session.query(TagZimEntry)])
     assert tag_zim_entries == [
@@ -390,7 +391,7 @@ async def test_zim_modeler(test_session, zim_factory):
     assert fg.a_text == 'the zim title'
 
 
-def test_get_custom_zims_directory(test_directory, test_config):
+def test_get_custom_zims_directory(test_directory, test_wrolpi_config):
     """Custom directory can be used for zims directory."""
     assert lib.get_zim_directory() == (test_directory / 'zims')
 

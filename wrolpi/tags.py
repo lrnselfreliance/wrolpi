@@ -226,6 +226,7 @@ class TagsConfig(ConfigFile):
         tag_files=list(),
         tag_zims=list(),
         tags=dict(),
+        version=0,
     )
 
     @property
@@ -254,62 +255,211 @@ class TagsConfig(ConfigFile):
     def tags(self, value: dict):
         self.update({'tags': value})
 
-    def save_tags(self, session: Session):
+    def dump_config(self, file: pathlib.Path = None):
         media_directory = get_media_directory()
 
-        tags = dict()
-        tag_rows = session.query(Tag)
-        for tag in tag_rows:
-            tags[tag.name] = dict(color=tag.color)
+        with get_db_session() as session:
+            tags = dict()
+            tag_rows = session.query(Tag)
+            for tag in tag_rows:
+                tags[tag.name] = dict(color=tag.color)
 
-        from wrolpi.files.models import FileGroup
-        results = session.query(Tag, TagFile, FileGroup) \
-            .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
-            .order_by(FileGroup.primary_path)
+            from wrolpi.files.models import FileGroup
+            results = session.query(Tag, TagFile, FileGroup) \
+                .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
+                .order_by(FileGroup.primary_path)
 
-        tag_files = []
-        for tag, tag_file, file_group in results:
-            value = [
-                tag.name,
-                str(file_group.primary_path.relative_to(media_directory)),
-                # Fallback to current time if not set.
-                tag_file.created_at.isoformat() if tag_file.created_at else dates.now().isoformat(),
-            ]
-            tag_files.append(value)
-        logger.debug(f'Got {len(tag_files)} tag files for config.')
+            tag_files = []
+            for tag, tag_file, file_group in results:
+                value = [
+                    tag.name,
+                    str(file_group.primary_path.relative_to(media_directory)),
+                    # Fallback to current time if not set.
+                    tag_file.created_at.isoformat() if tag_file.created_at else dates.now().isoformat(),
+                ]
+                tag_files.append(value)
+            logger.debug(f'Got {len(tag_files)} tag files for config.')
 
+            from modules.zim.models import Zim, TagZimEntry
+            results = session.query(Tag, Zim, TagZimEntry) \
+                .filter(Tag.id == TagZimEntry.tag_id, Zim.id == TagZimEntry.zim_id) \
+                .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry)
+
+            tag_zims = []
+            for tag, zim, tag_zim_entry in results:
+                zim: Zim
+                tag_zim_entry: TagZimEntry
+                value = [
+                    tag.name,
+                    str(get_relative_to_media_directory(zim.path)),
+                    tag_zim_entry.zim_entry,
+                    # Fallback to current time if not set.
+                    tag_zim_entry.created_at.isoformat() if tag_zim_entry.created_at else dates.now().isoformat(),
+                ]
+                tag_zims.append(value)
+            logger.debug(f'Got {len(tag_zims)} tag zims for config.')
+
+            # Write to the config.
+            self.update({
+                'tag_files': tag_files,
+                'tag_zims': tag_zims,
+                'tags': tags,
+            })
+
+    def import_config(self, file: pathlib.Path = None):
+        from modules.zim import lib as zim_lib
         from modules.zim.models import Zim, TagZimEntry
-        results = session.query(Tag, Zim, TagZimEntry) \
-            .filter(Tag.id == TagZimEntry.tag_id, Zim.id == TagZimEntry.zim_id) \
-            .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry)
+        from wrolpi.files.lib import glob_shared_stem
 
-        tag_zims = []
-        for tag, zim, tag_zim_entry in results:
-            zim: Zim
-            tag_zim_entry: TagZimEntry
-            value = [
-                tag.name,
-                str(get_relative_to_media_directory(zim.path)),
-                tag_zim_entry.zim_entry,
-                # Fallback to current time if not set.
-                tag_zim_entry.created_at.isoformat() if tag_zim_entry.created_at else dates.now().isoformat(),
-            ]
-            tag_zims.append(value)
-        logger.debug(f'Got {len(tag_zims)} tag zims for config.')
+        if PYTEST and not TEST_TAGS_CONFIG:
+            logger.warning('Refusing to import tags without test tags config.  '
+                           'Use `test_tags_config` fixture if you would like to call this.')
+            return
 
-        # Write to the config.
-        self.update({
-            'tag_files': tag_files,
-            'tag_zims': tag_zims,
-            'tags': tags,
-        })
+        config = get_tags_config()
+        if not (path := config.get_file()).is_file():
+            logger.warning(f'Refusing to import tags config because it does not exist: {path}')
+            return
+
+        logger.info('Importing tags config')
+        super().import_config(file)
+
+        try:
+            with get_db_session() as session:
+                if config.tags:
+                    # Tags have been saved to config, import them
+                    tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
+                    new_tags = list()
+                    for name, attrs in config.tags.items():
+                        tag = tags_by_name.get(name)
+                        if not tag:
+                            # Maintainer added a Tag to the config manually, or DB was wiped.
+                            tag = Tag(name=name, color=attrs['color'])
+                            new_tags.append(tag)
+                            logger.info(f'Creating new {tag}')
+                        tag.color = attrs['color']
+
+                    if new_tags:
+                        session.add_all(new_tags)
+
+                media_directory = get_media_directory()
+
+                need_commit = False
+
+                # Get all Tags again because new ones may exist.
+                tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
+
+                # Tag all FileGroups.
+                if config.tag_files:
+                    from wrolpi.files.models import FileGroup
+
+                    primary_paths = [str(media_directory / i[1]) for i in config.tag_files]
+                    file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(primary_paths))
+                    file_groups_by_primary_path = {i.primary_path: i for i in file_groups}
+                    # Get all TagFiles so we can create new ones.
+                    tag_files = {(i.tag_id, i.file_group_id): i for i in session.query(TagFile)}
+
+                    for tag_name, primary_path, created_at in config.tag_files:
+                        tag: Tag = tags_by_name.get(tag_name)
+                        # Paths are absolute in the DB, relative in config.
+                        absolute_path = media_directory / primary_path
+                        file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
+                        if not file_group and absolute_path.is_file():
+                            # File exists, but is not yet in DB.
+                            files = glob_shared_stem(absolute_path)
+                            try:
+                                file_group = FileGroup.from_paths(session, *files)
+                                session.add(file_group)
+                                session.flush([file_group, ])
+                            except NoPrimaryFile:
+                                logger.error(f'Failed to tag {absolute_path}')
+                                continue
+
+                        if tag and file_group:
+                            tag_file: TagFile = tag_files.get((tag.id, file_group.id))
+                            if not tag_file:
+                                # This FileGroup has not been tagged with the Tag, add it.
+                                logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
+                                tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag,
+                                                   file_group=file_group)
+                                session.add(tag_file)
+                                tag_file.flush()
+                            tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
+                            need_commit = True
+                        elif not file_group:
+                            logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
+                        elif not tag:
+                            logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
+
+                # Tag all Zim entries.
+                if config.tag_zims:
+                    # { pathlib.Path('/media/wrolpi/...'): <Zim>, ... }
+                    zims_by_path = {i.path: i for i in session.query(Zim)}
+
+                    # { (pathlib.Path('relative/path'), 'entry path'): <TagZimEntry>, ... }
+                    tag_zim_entries = {(get_relative_to_media_directory(i.zim.path), i.zim_entry): i for i in
+                                       session.query(TagZimEntry)}
+
+                    for tag_name, zim_path, zim_entry, created_at in config.tag_zims:
+                        zim_path = pathlib.Path(zim_path)
+                        tag: Tag = tags_by_name.get(tag_name)
+                        absolute_path = media_directory / zim_path
+                        zim: Zim = zims_by_path.get(absolute_path)
+                        if not zim:
+                            # No Zim matches the path.  It's likely that the old Zim file was deleted.  Attempt to migrate
+                            # the entry.
+                            name, date = zim_lib.parse_name(absolute_path)
+                            # Find any Zims that match the old Zim's name (wikipedia_en_all_maxi_*)
+                            possible_zims = {i: j for i, j in zims_by_path.items() if i.name.startswith(name)}
+                            if not possible_zims:
+                                logger.warning(f'Cannot find Zim for {repr(str(zim_path))}')
+                                continue
+                            zim = zims_by_path[sorted(possible_zims.keys())[-1]]
+                            new_zim_path = get_relative_to_media_directory(media_directory / zim.path)
+                            logger.warning(
+                                f'Migrating Zim entry tag {repr(str(tag_name))} from {zim_path} to {new_zim_path}')
+                            zim_path = new_zim_path
+
+                        if tag:
+                            tag_zim_entry: TagZimEntry = tag_zim_entries.get((zim_path, zim_entry))
+                            if not tag_zim_entry:
+                                tag_zim_entry = TagZimEntry(tag=tag, zim=zim, zim_entry=zim_entry)
+                                session.add(tag_zim_entry)
+                                # Track this new TagZimEntry because migration may cause duplicates.
+                                tag_zim_entries[(zim_path, zim_entry)] = tag_zim_entry
+                                logger.info(f'Created TagZimEntry: {tag_zim_entry}')
+                            tag_zim_entry.created_at = datetime.fromisoformat(created_at) if created_at else dates.now()
+                            need_commit = True
+                        elif not tag:
+                            logger.warning(f'Cannot find Tag for {repr(str(zim_path))}')
+
+                # Delete missing Tags last in case they are used above.
+                if config.tags:
+                    config_tag_names = set(config.tags.keys())
+                    for tag in session.query(Tag):
+                        if tag.name not in config_tag_names:
+                            if tag.has_relations():
+                                logger.warning(f'Refusing to delete {tag} because it is used.')
+                            else:
+                                logger.warning(f'Deleting {tag} because it is not in the config.')
+                                session.delete(tag)
+                                need_commit = True
+
+                if need_commit:
+                    session.commit()
+
+            self.successful_import = True
+            logger.info('Importing tags config complete')
+        except Exception as e:
+            logger.error(f'Failed to import tags config', exc_info=e)
+            raise
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig()
-TEST_TAGS_CONFIG: TAGS_CONFIG = None
+TEST_TAGS_CONFIG: TagsConfig = None  # noqa
 
 
-def get_tags_config():
+def get_tags_config() -> TagsConfig:
     global TEST_TAGS_CONFIG
     if isinstance(TEST_TAGS_CONFIG, ConfigFile):
         return TEST_TAGS_CONFIG
@@ -329,9 +479,14 @@ def test_tags_config():
 @register_switch_handler('save_tags_config')
 def save_tags_config():
     """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
-    with get_db_session() as session:
-        get_tags_config().save_tags(session)
+    get_tags_config().dump_config()
     logger.info('save_tags_config complete')
+
+
+def import_tags_config():
+    """Reads the Tags and TagFiles from the config file, upserts them in the DB."""
+    get_tags_config().import_config()
+    sync_tags_directory.activate_switch()
 
 
 save_tags_config: ActivateSwitchMethod
@@ -462,157 +617,6 @@ async def upsert_tag(name: str, color: str, tag_id: int = None, session: Session
     sync_tags_directory.activate_switch()
 
     return tag
-
-
-@optional_session
-def import_tags_config(session: Session = None):
-    """Reads the Tags and TagFiles from the config file, upserts them in the DB."""
-    from modules.zim import lib as zim_lib
-    from modules.zim.models import Zim, TagZimEntry
-    from wrolpi.files.lib import glob_shared_stem
-
-    if PYTEST and not TEST_TAGS_CONFIG:
-        logger.warning('Refusing to import tags without test tags config.  '
-                       'Use `test_tags_config` fixture if you would like to call this.')
-        return
-
-    config = get_tags_config()
-    if not (path := config.get_file()).is_file():
-        logger.warning(f'Refusing to import tags config because it does not exist: {path}')
-        return
-
-    logger.info('Importing tags config')
-
-    try:
-        if config.tags:
-            # Tags have been saved to config, import them
-            tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
-            new_tags = list()
-            for name, attrs in config.tags.items():
-                tag = tags_by_name.get(name)
-                if not tag:
-                    # Maintainer added a Tag to the config manually, or DB was wiped.
-                    tag = Tag(name=name, color=attrs['color'])
-                    new_tags.append(tag)
-                    logger.info(f'Creating new {tag}')
-                tag.color = attrs['color']
-
-            if new_tags:
-                session.add_all(new_tags)
-
-            session.commit()
-
-        media_directory = get_media_directory()
-
-        need_commit = False
-
-        # Get all Tags again because new ones may exist.
-        tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
-
-        # Tag all FileGroups.
-        if config.tag_files:
-            from wrolpi.files.models import FileGroup
-
-            primary_paths = [str(media_directory / i[1]) for i in config.tag_files]
-            file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(primary_paths))
-            file_groups_by_primary_path = {i.primary_path: i for i in file_groups}
-            # Get all TagFiles so we can create new ones.
-            tag_files = {(i.tag_id, i.file_group_id): i for i in session.query(TagFile)}
-
-            for tag_name, primary_path, created_at in config.tag_files:
-                tag: Tag = tags_by_name.get(tag_name)
-                # Paths are absolute in the DB, relative in config.
-                absolute_path = media_directory / primary_path
-                file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
-                if not file_group and absolute_path.is_file():
-                    # File exists, but is not yet in DB.
-                    files = glob_shared_stem(absolute_path)
-                    try:
-                        file_group = FileGroup.from_paths(session, *files)
-                        session.add(file_group)
-                        session.flush([file_group, ])
-                    except NoPrimaryFile:
-                        logger.error(f'Failed to tag {absolute_path}')
-                        continue
-
-                if tag and file_group:
-                    tag_file: TagFile = tag_files.get((tag.id, file_group.id))
-                    if not tag_file:
-                        # This FileGroup has not been tagged with the Tag, add it.
-                        logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
-                        tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag, file_group=file_group)
-                        session.add(tag_file)
-                        tag_file.flush()
-                    tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
-                    need_commit = True
-                elif not file_group:
-                    logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
-                elif not tag:
-                    logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
-
-        # Tag all Zim entries.
-        if config.tag_zims:
-            # { pathlib.Path('/media/wrolpi/...'): <Zim>, ... }
-            zims_by_path = {i.path: i for i in session.query(Zim)}
-
-            # { (pathlib.Path('relative/path'), 'entry path'): <TagZimEntry>, ... }
-            tag_zim_entries = {(get_relative_to_media_directory(i.zim.path), i.zim_entry): i for i in
-                               session.query(TagZimEntry)}
-
-            for tag_name, zim_path, zim_entry, created_at in config.tag_zims:
-                zim_path = pathlib.Path(zim_path)
-                tag: Tag = tags_by_name.get(tag_name)
-                absolute_path = media_directory / zim_path
-                zim: Zim = zims_by_path.get(absolute_path)
-                if not zim:
-                    # No Zim matches the path.  It's likely that the old Zim file was deleted.  Attempt to migrate
-                    # the entry.
-                    name, date = zim_lib.parse_name(absolute_path)
-                    # Find any Zims that match the old Zim's name (wikipedia_en_all_maxi_*)
-                    possible_zims = {i: j for i, j in zims_by_path.items() if i.name.startswith(name)}
-                    if not possible_zims:
-                        logger.warning(f'Cannot find Zim for {repr(str(zim_path))}')
-                        continue
-                    zim = zims_by_path[sorted(possible_zims.keys())[-1]]
-                    new_zim_path = get_relative_to_media_directory(media_directory / zim.path)
-                    logger.warning(f'Migrating Zim entry tag {repr(str(tag_name))} from {zim_path} to {new_zim_path}')
-                    zim_path = new_zim_path
-
-                if tag:
-                    tag_zim_entry: TagZimEntry = tag_zim_entries.get((zim_path, zim_entry))
-                    if not tag_zim_entry:
-                        tag_zim_entry = TagZimEntry(tag=tag, zim=zim, zim_entry=zim_entry)
-                        session.add(tag_zim_entry)
-                        # Track this new TagZimEntry because migration may cause duplicates.
-                        tag_zim_entries[(zim_path, zim_entry)] = tag_zim_entry
-                        logger.info(f'Created TagZimEntry: {tag_zim_entry}')
-                    tag_zim_entry.created_at = datetime.fromisoformat(created_at) if created_at else dates.now()
-                    need_commit = True
-                elif not tag:
-                    logger.warning(f'Cannot find Tag for {repr(str(zim_path))}')
-
-        # Delete missing Tags last in case they are used above.
-        if config.tags:
-            config_tag_names = set(config.tags.keys())
-            for tag in session.query(Tag):
-                if tag.name not in config_tag_names:
-                    if tag.has_relations():
-                        logger.warning(f'Refusing to delete {tag} because it is used.')
-                    else:
-                        logger.warning(f'Deleting {tag} because it is not in the config.')
-                        session.delete(tag)
-                        need_commit = True
-
-        if need_commit:
-            session.commit()
-
-        logger.info('Importing tags config complete')
-    except Exception as e:
-        logger.error(f'Failed to import tags config', exc_info=e)
-        if PYTEST:
-            raise
-
-    sync_tags_directory.activate_switch()
 
 
 def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tuple[str, dict]:

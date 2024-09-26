@@ -4,11 +4,15 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import suppress
 
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
+from modules.inventory import init_inventory
+from modules.inventory.common import import_inventories_config
+from modules.videos.lib import import_channels_config
+from wrolpi import flags, admin
 from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -145,7 +149,7 @@ def main():
 
 
 @api_app.main_process_ready
-async def startup(app: Sanic):
+async def main_process_startup(app: Sanic):
     """
     Initializes multiprocessing tools, flags, etc.
 
@@ -153,7 +157,7 @@ async def startup(app: Sanic):
 
     @warning: This is NOT run after auto-reload!  You must stop and start Sanic.
     """
-    logger.debug('startup')
+    logger.debug('main_process_startup')
 
     check_media_directory()
 
@@ -163,7 +167,7 @@ async def startup(app: Sanic):
 
     # Initialize multiprocessing shared contexts before forking Sanic processes.
     attach_shared_contexts(app)
-    logger.debug('startup done')
+    logger.debug('main_process_startup done')
 
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
@@ -208,14 +212,34 @@ async def start_single_tasks(app: Sanic):
         return
     app.shared_ctx.single_tasks_started.set()
 
-    from modules.zim.lib import flag_outdated_zim_files
-
     logger.debug(f'start_single_tasks started')
+
+    # Import configs, ignore errors so the service will start.  Configs will refuse to save if they failed to import.
+    with suppress(Exception):
+        get_wrolpi_config().import_config()
+        logger.debug('wrolpi config imported')
+    with suppress(Exception):
+        tags.import_tags_config()
+        logger.debug('tags config imported')
+    with suppress(Exception):
+        await import_downloads_config()
+        logger.debug('downloads config imported')
+    # Channels uses both downloads and tags.
+    with suppress(Exception):
+        import_channels_config()
+        logger.debug('channels config imported')
+    with suppress(Exception):
+        import_inventories_config()
+        logger.debug('inventories config imported')
+    with suppress(Exception):
+        init_inventory()
+
     if get_wrolpi_config().download_on_startup:
         download_manager.enable()
     else:
         download_manager.disable()
 
+    from modules.zim.lib import flag_outdated_zim_files
     try:
         flag_outdated_zim_files()
     except Exception as e:
@@ -224,10 +248,6 @@ async def start_single_tasks(app: Sanic):
     logger.debug('start_single_tasks waiting for db...')
     async with flags.db_up.wait_for():
         logger.debug('start_single_tasks db is up')
-
-    tags.import_tags_config()
-
-    await import_downloads_config()
 
     if flags.refresh_complete.is_set():
         # Set all downloads to new.
@@ -253,19 +273,11 @@ async def start_single_tasks(app: Sanic):
         else:
             logger.info('CPU throttle on startup is disabled')
 
-    # Run the startup functions
-    for func in BEFORE_STARTUP_FUNCTIONS:
-        try:
-            logger.debug(f'Calling {func} before startup.')
-            func()
-        except Exception as e:
-            logger.warning(f'Startup {func} failed!', exc_info=e)
-
     logger.debug(f'start_single_tasks done')
 
 
 @perpetual_signal(sleep=1)
-async def periodic_check_log_level():
+async def perpetual_check_log_level():
     """Copies global log level into this Sanic worker's logger."""
     log_level = api_app.shared_ctx.log_level.value
     if log_level != logger.getEffectiveLevel():
@@ -297,7 +309,7 @@ async def perpetual_have_internet_worker():
 
 
 @perpetual_signal(sleep=30)
-async def periodic_start_video_missing_comments_download():
+async def perpetual_start_video_missing_comments_download():
     from modules.videos.video.lib import get_missing_videos_comments
 
     async with flags.refresh_complete.wait_for():
@@ -310,10 +322,10 @@ async def periodic_start_video_missing_comments_download():
     # Fetch comments for videos every hour.
     if download_manager.is_disabled or download_manager.is_stopped:
         logger.debug('Waiting for downloads to be enabled before downloading comments...')
-        await asyncio.sleep(10)
+        return
     elif not flags.have_internet.is_set():
         logger.debug('Waiting for internet before downloading comments...')
-        await asyncio.sleep(30)
+        return
     else:
         try:
             await get_missing_videos_comments()

@@ -30,7 +30,6 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
-    # Shared lists.
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, LOG_LEVEL_INT)
 
@@ -52,8 +51,10 @@ def attach_shared_contexts(app: Sanic):
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
 
-    # Locks
+    # Configs
     app.shared_ctx.config_save_lock = multiprocessing.Lock()
+    app.shared_ctx.config_update_lock = multiprocessing.Lock()
+    app.shared_ctx.configs_imported = manager.dict()
 
     # Events.
     app.shared_ctx.events_lock = multiprocessing.Lock()
@@ -94,6 +95,9 @@ def reset_shared_contexts(app: Sanic):
         processing_domains=[],
         killed_downloads=[],
     ))
+
+    # Configs
+    app.shared_ctx.configs_imported.clear()
 
     # Switches
     app.shared_ctx.switches.clear()

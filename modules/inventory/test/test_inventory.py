@@ -4,17 +4,16 @@ from typing import List, Iterable
 
 import pytest
 import sqlalchemy
-import yaml
 from pint import Quantity
 
 from wrolpi.common import Base
 from wrolpi.db import get_db_session
 from wrolpi.switches import await_switches
 from wrolpi.test.common import PytestCase
-from .. import init
+from .. import init_inventory
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
-    compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file, get_inventories_config
-from ..errors import NoInventories, InventoriesVersionMismatch
+    compact_unit, cleanup_quantity, save_inventories_config, import_inventories_config
+from ..errors import NoInventories
 from ..inventory import get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories, get_unit_registry
 from ..models import Item, Inventory
@@ -67,7 +66,7 @@ class TestInventory(PytestCase):
         """
         This exists rather than setUp because the DB is wrapped.
         """
-        init(force=True)
+        init_inventory(force=True)
 
         with get_db_session(commit=True) as session:
             for item in TEST_ITEMS:
@@ -266,40 +265,12 @@ def test_sum_by_key(items, expected):
     assert sum_by_key(items, lambda i: (i.category,)) == expected
 
 
-def test_no_inventories(test_session, test_directory):
+def test_no_inventories(async_client, test_session, test_directory):
     """Can't save empty inventories."""
     try:
-        save_inventories_file()
+        save_inventories_config()
     except NoInventories:
         pass
-
-
-@pytest.mark.asyncio
-async def test_inventories_version(async_client, test_session, test_directory, init_test_inventory):
-    """You can't save over a newer version of an inventory."""
-    config = get_inventories_config()
-
-    for item in TEST_ITEMS:
-        item = Item(**item)
-        test_session.add(item)
-    test_session.commit()
-
-    # Version is set to 1 on first save.
-    save_inventories_file()
-    await await_switches()
-    assert config.version == 1
-
-    # Version is incremented when saving.
-    save_inventories_file()
-    await await_switches()
-    assert config.version == 2
-
-    # Version is greater than what will be saved.
-    with config.get_file().open('wt') as fh:
-        config._config['version'] = 5
-        yaml.dump(config._config, fh)
-    with pytest.raises(InventoriesVersionMismatch):
-        save_inventories_file()
 
 
 @pytest.mark.asyncio
@@ -310,14 +281,15 @@ async def test_inventories_config(async_client, test_session, test_directory, in
     test_session.commit()
 
     # Save the Inventories/Items that were created above.
-    save_inventories_file()
+    save_inventories_config()
+    await await_switches()
 
     # Clear out the DB so the import will be tested
     test_session.query(Item).delete()
     test_session.query(Inventory).delete()
     test_session.commit()
 
-    import_inventories_file()
+    import_inventories_config()
 
     inventories = get_inventories()
     assert len(inventories) == 1

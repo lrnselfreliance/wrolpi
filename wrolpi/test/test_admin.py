@@ -69,7 +69,7 @@ def test_enable_hotspot_connected():
         )
 
 
-def test_change_hotspot(test_config, async_client):
+def test_change_hotspot(test_wrolpi_config, async_client):
     """The hotspot can be configured."""
     with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
             mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \

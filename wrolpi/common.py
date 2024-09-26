@@ -338,13 +338,13 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
-TESTING_SKIP_BACKUP = False
-
-
 class ConfigFile:
     """
-    This class keeps track of the contents of a config file.  You can update the config (and it's file) by
-    calling .update().
+    This is used to keep the DB and config files in sync.  Importing the config reads the config from file, then
+    applies it to this config instance, AND the database.  Dumping the config copies data from the database and saves it
+    to the config file.  Updating this config is automatically saved to the config file.
+
+    Configs cannot be saved until they are imported without error.
     """
     file_name: str = None
     default_config: dict = None
@@ -357,6 +357,9 @@ class ConfigFile:
         # Do not load a global config on import while testing.  A global instance should never be used for testing.
         self._config = self.default_config.copy()
 
+        if self._config['version'] != 0:
+            raise RuntimeError('Configs should start at version 0')
+
         from wrolpi.switches import register_switch_handler
 
         @register_switch_handler(f'background_save_{self.file_name}')
@@ -364,6 +367,12 @@ class ConfigFile:
             self.save()
 
         self.background_save = background_save
+
+        @register_switch_handler(f'background_dump_{self.file_name}')
+        def background_dump(file: pathlib.Path = None):
+            self.dump_config(file)
+
+        self.background_dump = background_dump
 
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
@@ -375,13 +384,29 @@ class ConfigFile:
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
 
-        config_file = self.get_file()
-        if config_file.is_file():
-            # Use the config file to get the values the user set.
-            with config_file.open('rt') as fh:
-                config_data = yaml.load(fh, Loader=yaml.Loader)
-                self._config.update(config_data)
+        file = self.get_file()
+        if file.is_file():
+            config_data = {k: v for k, v in self.read_config_file(file).items() if k in self.default_config}
+            self._config.update(config_data)
         return self
+
+    @property
+    def successful_import(self) -> bool:
+        from wrolpi.api_utils import api_app
+        return bool(api_app.shared_ctx.configs_imported.get(self.file_name))
+
+    @successful_import.setter
+    def successful_import(self, value: bool):
+        from wrolpi.api_utils import api_app
+        api_app.shared_ctx.configs_imported[self.file_name] = value
+
+    def read_config_file(self, file: pathlib.Path = None) -> Dict:
+        file = file or self.get_file()
+        with file.open('rt') as fh:
+            config_data = yaml.load(fh, Loader=yaml.Loader)
+            if not isinstance(config_data, dict):
+                raise RuntimeError(f'Config file is invalid: {file}')
+            return config_data
 
     def _get_backup_filename(self):
         """Returns the path for the backup file for today."""
@@ -392,61 +417,67 @@ class ConfigFile:
         path = path.with_name(name)
         return path
 
-    def save(self):
+    def save(self, file: pathlib.Path = None):
         """
         Write this config to its file.
-
-        Use the existing config file as a template; if any values are missing in the new config, use the values from the
-        config file.
         """
         from wrolpi.api_utils import api_app
 
-        config_file = self.get_file()
-        logger_.debug(f'Save config called for {config_file}')
+        file = file or self.get_file()
+        if self.file_name not in file.name:
+            raise RuntimeError(f'Refusing to save config to file which does not match {self.__class__.__name__}')
+
+        rel_path = get_relative_to_media_directory(file)
+
+        if file.exists():
+            if not self.successful_import:
+                raise RuntimeError(f'Refusing to save config because it was never successfully imported! {rel_path}')
+            version = self.read_config_file(file).get('version')
+            if version and version > self.version:
+                raise RuntimeError(f'Refusing to overwrite newer config ({rel_path}): '
+                                   f'{version} > {self.version}')
+
         # Don't overwrite a real config while testing.
-        if PYTEST and not str(config_file).startswith('/tmp'):
-            raise ValueError(f'Refusing to save config file while testing: {config_file}')
+        if PYTEST and not str(file).startswith('/tmp'):
+            raise ValueError(f'Refusing to save config file while testing: {rel_path}')
+
+        logger_.debug(f'Save config called for {rel_path}')
 
         # Only one process can write to a config.
-        lock = api_app.shared_ctx.config_save_lock
-        acquired = lock.acquire(block=True, timeout=5.0)
+        with api_app.shared_ctx.config_save_lock:
+            try:
+                # Config directory may not exist.
+                if not file.parent.is_dir():
+                    file.parent.mkdir()
 
-        try:
-            # Config directory may not exist.
-            if not config_file.parent.is_dir():
-                config_file.parent.mkdir()
-
-            backup_file = self._get_backup_filename()
-
-            # Read the existing config, replace all values, then save.
-            if config_file.is_file():
-                with config_file.open('rt') as fh:
-                    config = yaml.load(fh, Loader=yaml.Loader)
-                # Skip backups when testing when the test needs it.
-                if not PYTEST or TESTING_SKIP_BACKUP is False:
-                    # Copy the existing config to the backup directory.  One for each day.
+                # Backup the existing config file.
+                if file.is_file():
+                    backup_file = self._get_backup_filename()
                     if not backup_file.parent.exists():
                         backup_file.parent.mkdir(parents=True)
-                    shutil.copy(config_file, backup_file)
-                    logger_.debug(f'Copied backup config: {config_file} -> {backup_file}')
-            else:
-                # Config file does not yet exist.
-                config = dict()
+                    shutil.copy(file, backup_file)
+                    logger_.debug(f'Copied backup config: {rel_path} -> {backup_file}')
 
-            config.update({k: v for k, v in self._config.items() if v is not None})
-            with config_file.open('wt') as fh:
-                yaml.dump(config, fh, width=self.width, sort_keys=True)
-                # Wait for data to be written before releasing lock.
-                fh.flush()
-                os.fsync(fh.fileno())
-            logger_.info(f'Saved config: {config_file}')
-        except Exception as e:
-            # Configs are vital, raise a big error when this fails.
-            logger_.critical(f'Failed to save config: {config_file}', exc_info=e)
-            raise e
-        finally:
-            if acquired:
-                lock.release()
+                # Write the config in-memory to the file.  Track version changes to avoid overriding newer config.
+                self._config['version'] += 1
+                config = deepcopy(self._config)
+                self.write_config_data(config, file)
+
+                # Set successful_import in case this was the first time the config was written.
+                self.successful_import = True
+
+                logger_.info(f'Saved config: {rel_path}')
+            except Exception as e:
+                # Configs are vital, raise a big error when this fails.
+                logger_.critical(f'Failed to save config: {rel_path}', exc_info=e)
+                raise e
+
+    def write_config_data(self, config: dict, config_file: pathlib.Path):
+        with config_file.open('wt') as fh:
+            yaml.dump(config, fh, width=self.width, sort_keys=True)
+            # Wait for data to be written before releasing lock.
+            fh.flush()
+            os.fsync(fh.fileno())
 
     def get_file(self) -> Path:
         if not self.file_name:
@@ -457,10 +488,33 @@ class ConfigFile:
 
         return CONFIG_DIR / self.file_name
 
-    def update(self, config: dict, ignore_lock: bool = False):
+    def import_config(self, file: pathlib.Path = None):
+        """Read config file data, apply it to the in-memory config and database."""
+        file = file or self.get_file()
+        file_str = str(get_relative_to_media_directory(file))
+        if file.is_file():
+            data = self.read_config_file(file)
+            new_data, extra_data = partition(lambda i: i[0] in self.default_config, data.items())
+            new_data, extra_data = dict(new_data), dict(extra_data)
+            if extra_data:
+                logger_.warning(f'Ignoring extra config data ({file_str}): {extra_data}')
+            self._config.update(new_data)
+            # Import call above this will set successful_import.
+            # self.successful_import = True
+        else:
+            logger_.error(f'Failed to import {file_str} because it does not exist.')
+
+    def dump_config(self, file: pathlib.Path = None):
+        """Dump database data, copy it to this the in-memory config, then write it to the config file."""
+        # Copy the data as-is by default.  Other classes will overwrite this and dump the database before saving.
+        self.save(file)
+
+    def update(self, config: dict):
         """Update any values of this config.  Save the config to its file."""
-        config = {k: v for k, v in config.items() if k in self._config}
-        self._config.update(config)
+        from wrolpi.api_utils import api_app
+        with api_app.shared_ctx.config_update_lock:
+            config = {k: v for k, v in config.items() if k in self._config}
+            self._config.update(config)
         self.background_save.activate_switch()
 
     def dict(self) -> dict:
@@ -469,6 +523,12 @@ class ConfigFile:
             raise NotImplementedError('You cannot use a global config while testing!')
 
         return deepcopy(self._config)
+
+    # `version` is used to prevent overwriting of newer configs.  Cannot not be modified directly.
+
+    @property
+    def version(self) -> int:
+        return self._config['version']
 
 
 class WROLPiConfig(ConfigFile):
@@ -486,6 +546,7 @@ class WROLPiConfig(ConfigFile):
         map_destination='map',
         nav_color='violet',
         throttle_on_startup=False,
+        version=0,
         videos_destination='videos/%(channel_tag)s/%(channel_name)s',
         wrol_mode=False,
         zims_destination='zims',
@@ -511,6 +572,15 @@ class WROLPiConfig(ConfigFile):
 
         # Not testing, and can't find file deep in media directory.  Use the default.
         return default_config_path
+
+    def import_config(self, file: pathlib.Path = None):
+        try:
+            super().import_config(file)
+            # WROLPiConfig does not sync to database.
+            self.successful_import = True
+        except Exception as e:
+            logger.error(f'Failed to import {self.file_name}', exc_info=e)
+            raise
 
     @property
     def download_on_startup(self) -> bool:

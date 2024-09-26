@@ -7,8 +7,7 @@ from .models import Item, Inventory
 INVENTORY_INITIALIZED = False
 
 
-@wrolpi.before_startup
-def init(force=False):
+def init_inventory(force=False):
     """
     Initialize inventory categories, but only if none already exist.  Initializes the inventories, but only if none
     already exist.

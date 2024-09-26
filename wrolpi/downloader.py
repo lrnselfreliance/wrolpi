@@ -27,7 +27,7 @@ from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import pid_is_running
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    limit_concurrent, wrol_mode_enabled, background_task
+    wrol_mode_enabled, background_task
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
@@ -42,10 +42,14 @@ async def perpetual_download_worker():
     async with flags.db_up.wait_for():
         pass
 
-    async with flags.have_internet.wait_for(timeout=5):
-        pass
-
     if download_manager.is_stopped:
+        return
+
+    try:
+        async with flags.have_internet.wait_for(timeout=5):
+            pass
+    except TimeoutError:
+        # Internet is not up.
         return
 
     await download_manager.do_downloads()
@@ -1142,8 +1146,9 @@ async def signal_download_download(download_id: int, download_url: str):
 class DownloadManagerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
     default_config = dict(
-        skip_urls=[],
         downloads=[],
+        skip_urls=[],
+        version=0,
     )
 
     @property
@@ -1161,6 +1166,99 @@ class DownloadManagerConfig(ConfigFile):
     @downloads.setter
     def downloads(self, value: List[dict]):
         self.update({'downloads': value})
+
+    def dump_config(self, file: pathlib.Path = None):
+        with get_db_session() as session:
+            downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
+            new_downloads = []
+            for download in downloads:
+                if download.last_successful_download and not download.frequency:
+                    # This once-download has completed, do not save it.
+                    continue
+                new_downloads.append(dict(
+                    downloader=download.downloader,
+                    frequency=download.frequency,
+                    last_successful_download=download.last_successful_download,
+                    next_download=download.next_download,
+                    settings=download.settings,
+                    status=download.status,
+                    sub_downloader=download.sub_downloader,
+                    url=download.url,
+                ))
+            get_download_manager_config().downloads = new_downloads
+
+    def import_config(self, file: pathlib.Path = None):
+        super().import_config(file)
+        with get_db_session(commit=True) as session:
+            from modules.zim.lib import zim_download_url_to_name
+            from modules.zim.models import ZimSubscription
+
+            try:
+                logger.warning('Importing downloads in config')
+
+                downloads_by_url = {i['url']: i for i in get_download_manager_config().downloads}
+                existing_downloads: List[Download] = list(session.query(Download))
+                for existing in existing_downloads:
+                    download = downloads_by_url.pop(existing.url, None)
+                    if download:
+                        # Download in config already exists, update the DB record.
+                        # The config is the source of truth.
+                        existing.downloader = download['downloader']
+                        existing.frequency = download['frequency']
+                        existing.last_successful_download = download['last_successful_download']
+                        existing.next_download = download['next_download']
+                        existing.status = download['status']
+                        existing.sub_downloader = download['sub_downloader']
+                        existing.settings = download.get('settings') or dict()
+                        existing.flush()
+                    else:
+                        logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
+                        session.delete(existing)
+
+                for download in downloads_by_url.values():
+                    # These downloads are new, import them.
+                    download = Download(
+                        downloader=download['downloader'],
+                        frequency=download['frequency'],
+                        last_successful_download=download['last_successful_download'],
+                        next_download=download['next_download'],
+                        settings=download['settings'] or dict(),
+                        status=download['status'],
+                        sub_downloader=download['sub_downloader'],
+                        url=(url := download['url']),
+                    )
+                    session.add(download)
+                    logger.info(f'Adding new download {url}')
+
+                session.commit()
+            except Exception as e:
+                logger.error('Failed to import downloads', exc_info=e)
+                raise
+
+            try:
+                # Claim any Kiwix subscriptions for ZimSubscription(s).
+                downloads: List[Download] = session.query(Download)
+                need_commit = False
+                for download in downloads:
+                    if not download.url.startswith('https://download.kiwix.org/') or not download.frequency:
+                        # ZimSubscription requires download.kiwix.org AND a frequency.
+                        continue
+
+                    name, language = zim_download_url_to_name(download.url)
+                    subscription = session.query(ZimSubscription).filter_by(name=name, language=language).one_or_none()
+                    if not subscription:
+                        subscription = ZimSubscription(name=name, language=language)
+                    subscription.change_download(download.url, download.frequency, session=session)
+                    session.add(subscription)
+                    need_commit = True
+
+                if need_commit:
+                    session.commit()
+            except Exception as e:
+                logger.error('Failed to restore ZimSubscriptions', exc_info=e)
+                raise
+
+            self.successful_import = True
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
@@ -1188,26 +1286,7 @@ def get_download_manager_config() -> DownloadManagerConfig:
 @register_switch_handler('save_downloads_config')
 def save_downloads_config():
     """Fetch all Downloads from the DB, save them to the Download Manager Config."""
-    with get_db_session() as session:
-        downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
-        config = []
-        for download in downloads:
-            if download.last_successful_download and not download.frequency:
-                # This once-download has completed, do not save it.
-                continue
-            config.append(dict(
-                downloader=download.downloader,
-                frequency=download.frequency,
-                last_successful_download=download.last_successful_download,
-                next_download=download.next_download,
-                settings=download.settings,
-                status=download.status,
-                sub_downloader=download.sub_downloader,
-                url=download.url,
-            ))
-        if config != get_download_manager_config().downloads:
-            # Only save if there are changes.
-            get_download_manager_config().downloads = config
+    get_download_manager_config().dump_config()
     logger.info('save_downloads_config completed')
 
 
@@ -1215,7 +1294,6 @@ save_downloads_config: ActivateSwitchMethod
 
 
 @optional_session
-@limit_concurrent(1)
 async def import_downloads_config(session: Session):
     """Upsert all Downloads in the Download Manager Config into the DB.
 
@@ -1224,73 +1302,7 @@ async def import_downloads_config(session: Session):
         logger.warning(f'Refusing to import downloads config when DB is not up.')
         return
 
-    from modules.zim.lib import zim_download_url_to_name
-    from modules.zim.models import ZimSubscription
-
-    try:
-        logger.warning('Importing downloads in config')
-
-        downloads_by_url = {i['url']: i for i in get_download_manager_config().downloads}
-        existing_downloads: List[Download] = list(session.query(Download))
-        for existing in existing_downloads:
-            download = downloads_by_url.pop(existing.url, None)
-            if download:
-                # Download in config already exists, update the DB record.
-                # The config is the source of truth.
-                existing.downloader = download['downloader']
-                existing.frequency = download['frequency']
-                existing.last_successful_download = download['last_successful_download']
-                existing.next_download = download['next_download']
-                existing.status = download['status']
-                existing.sub_downloader = download['sub_downloader']
-                existing.settings = download.get('settings') or dict()
-                existing.flush()
-            else:
-                logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
-                session.delete(existing)
-
-        for download in downloads_by_url.values():
-            # These downloads are new, import them.
-            download = Download(
-                downloader=download['downloader'],
-                frequency=download['frequency'],
-                last_successful_download=download['last_successful_download'],
-                next_download=download['next_download'],
-                settings=download['settings'] or dict(),
-                status=download['status'],
-                sub_downloader=download['sub_downloader'],
-                url=(url := download['url']),
-            )
-            session.add(download)
-            logger.info(f'Adding new download {url}')
-
-        session.commit()
-    except Exception as e:
-        logger.error('Failed to import downloads', exc_info=e)
-        raise
-
-    try:
-        # Claim any Kiwix subscriptions for ZimSubscription(s).
-        downloads: List[Download] = session.query(Download)
-        need_commit = False
-        for download in downloads:
-            if not download.url.startswith('https://download.kiwix.org/') or not download.frequency:
-                # ZimSubscription requires download.kiwix.org AND a frequency.
-                continue
-
-            name, language = zim_download_url_to_name(download.url)
-            subscription = session.query(ZimSubscription).filter_by(name=name, language=language).one_or_none()
-            if not subscription:
-                subscription = ZimSubscription(name=name, language=language)
-            subscription.change_download(download.url, download.frequency, session=session)
-            session.add(subscription)
-            need_commit = True
-
-        if need_commit:
-            session.commit()
-    except Exception as e:
-        logger.error('Failed to restore ZimSubscriptions', exc_info=e)
-        raise
+    get_download_manager_config().import_config()
 
 
 def parse_feed(url: str) -> FeedParserDict:

@@ -120,7 +120,7 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture
-def test_config(test_directory) -> pathlib.Path:
+def test_wrolpi_config(test_directory) -> pathlib.Path:
     """
     Create a test config based off the example config.
     """
@@ -128,13 +128,6 @@ def test_config(test_directory) -> pathlib.Path:
     set_test_config(True)
     yield config_path
     set_test_config(False)
-
-
-@pytest.fixture
-def skip_config_backups():
-    """Do not backup configs during testing."""
-    with mock.patch('wrolpi.common.TESTING_SKIP_BACKUP', True):
-        yield
 
 
 ROUTES_ATTACHED = False
@@ -468,7 +461,7 @@ async def set_wrol_mode(enabled: bool):
 
 
 @pytest.fixture
-def wrol_mode_fixture(test_config, test_download_manager) -> Callable[[bool], Coroutine]:
+def wrol_mode_fixture(test_wrolpi_config, test_download_manager) -> Callable[[bool], Coroutine]:
     return set_wrol_mode
 
 

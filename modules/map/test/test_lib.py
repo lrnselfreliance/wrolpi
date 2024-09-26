@@ -102,7 +102,7 @@ def test_seconds_to_import_rpi5(size, expected):
     assert lib.seconds_to_import(size, True) == expected
 
 
-def test_get_custom_map_directory(test_directory, test_config):
+def test_get_custom_map_directory(test_directory, test_wrolpi_config):
     """Custom directory can be used for map directory."""
     # Default location.
     assert lib.get_map_directory() == (test_directory / 'map')

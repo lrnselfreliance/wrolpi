@@ -26,8 +26,6 @@ from .models import Channel
 
 logger = logger.getChild(__name__)
 
-REQUIRED_OPTIONS = ['name', 'directory']
-
 
 class ConfigError(Exception):
     pass

@@ -47,7 +47,7 @@ def get_inventory(_: Request, inventory_id: int):
     body=schema.InventoryPostRequest,
 )
 @validate(schema.InventoryPostRequest)
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def post_inventory(_: Request, body: schema.InventoryPostRequest):
     data = remove_whitespace(body.__dict__)
 
@@ -61,7 +61,7 @@ def post_inventory(_: Request, body: schema.InventoryPostRequest):
     body=schema.InventoryPutRequest,
 )
 @validate(schema.InventoryPutRequest)
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def put_inventory(_: Request, inventory_id: int, body: schema.InventoryPutRequest):
     data = remove_whitespace(body.__dict__)
 
@@ -71,7 +71,7 @@ def put_inventory(_: Request, inventory_id: int, body: schema.InventoryPutReques
 
 @inventory_bp.delete('/<inventory_id:int>')
 @openapi.description('Delete an inventory.')
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def inventory_delete(_: Request, inventory_id: int):
     inventory.delete_inventory(inventory_id)
     return response.empty()
@@ -90,7 +90,7 @@ def items_get(_: Request, inventory_id: int):
     body=schema.ItemPostRequest,
 )
 @validate(schema.ItemPostRequest)
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def post_item(_: Request, inventory_id: int, body: schema.ItemPostRequest):
     data = remove_whitespace(body.__dict__)
 
@@ -104,7 +104,7 @@ def post_item(_: Request, inventory_id: int, body: schema.ItemPostRequest):
     body=schema.ItemPutRequest,
 )
 @validate(schema.ItemPutRequest)
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def put_item(_: Request, item_id: int, body: schema.ItemPutRequest):
     data = remove_whitespace(body.__dict__)
 
@@ -115,7 +115,7 @@ def put_item(_: Request, item_id: int, body: schema.ItemPutRequest):
 @inventory_bp.delete('/item/<item_ids:[0-9,]+>', name='item_delete_many')
 @inventory_bp.delete('/item/<item_ids:int>', name='item_delete_one')
 @openapi.description('Delete items from an inventory.')
-@run_after(common.save_inventories_file)
+@run_after(common.save_inventories_config)
 def item_delete(_: Request, item_ids: str):
     try:
         if isinstance(item_ids, int):

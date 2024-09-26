@@ -99,9 +99,10 @@ async def test_tags_config_file(async_client, test_session, test_directory, tag_
     tag1 = await tag_factory()
     tag2 = await tag_factory()
     test_session.commit()
-
-    tags.save_tags_config.activate_switch()
     await await_switches()
+    # tags.get_tags_config().successful_import = True
+
+    tags.save_tags_config()
     assert tag1.name in test_tags_config.read_text()
     assert tag2.name in test_tags_config.read_text()
 
@@ -251,7 +252,7 @@ async def test_import_tags_config(async_client, test_session, test_directory, te
     FileGroup.from_paths(test_session, example_singlefile)
     test_session.commit()
 
-    tags.import_tags_config(test_session)
+    tags.import_tags_config()
 
     # '🔫' Tag was created.
     assert test_session.query(tags.Tag).count() == 1
@@ -277,7 +278,7 @@ async def test_import_tags_config_missing_file(test_session, test_directory, tes
     # Re-initialize config with the data we just saved.
     tags.get_tags_config().initialize()
 
-    tags.import_tags_config(test_session)
+    tags.import_tags_config()
 
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.tag_files, 'File was not tagged during import.'

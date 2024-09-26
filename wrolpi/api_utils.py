@@ -120,6 +120,7 @@ async def start_perpetual_tasks(app: Sanic):
     if app.shared_ctx.perpetual_tasks_started.is_set():
         return
     logger.info('start_perpetual_tasks started')
+    logger.debug(f'start_perpetual_tasks: {PERPETUAL_WORKERS}')
     app.shared_ctx.perpetual_tasks_started.set()
 
     try:

@@ -1,4 +1,3 @@
-import contextlib
 from functools import partial
 from operator import itemgetter
 from typing import List, Tuple
@@ -6,12 +5,11 @@ from typing import List, Tuple
 import pint
 import psycopg2
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import logger, Base
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import APIError
-from .models import Inventory, Item, InventoriesVersion
+from .models import Inventory, Item
 
 logger = logger.getChild(__name__)
 
@@ -23,11 +21,8 @@ __all__ = [
     'get_brands',
     'get_categories',
     'get_inventories',
-    'get_inventories_version',
     'get_items',
-    'get_next_inventories_version',
     'get_unit_registry',
-    'increment_inventories_version',
     'logger',
     'save_inventory',
     'save_item',
@@ -90,15 +85,15 @@ DEFAULT_INVENTORIES = [
 sort_categories = partial(sorted, key=itemgetter(1, 0))
 
 
-def get_inventories() -> List[Inventory]:
-    with get_db_session() as session:
-        inventories = session.query(Inventory).filter(
-            Inventory.deleted_at == None,  # noqa
-        ).order_by(
-            Inventory.viewed_at.desc(),
-        ).all()
-        inventories = list(inventories)
-        return inventories
+@optional_session
+def get_inventories(session: Session = None) -> List[Inventory]:
+    inventories = session.query(Inventory).filter(
+        Inventory.deleted_at == None,  # noqa
+    ).order_by(
+        Inventory.viewed_at.desc(),
+    ).all()
+    inventories = list(inventories)
+    return inventories
 
 
 IGNORED_INVENTORY_KEYS = {'viewed_at', 'created_at', 'deleted_at'}
@@ -210,40 +205,3 @@ def delete_items(items_ids: List[int]):
         deleted_ids = {i['id'] for i in curs.fetchall()}
         if set(items_ids) != deleted_ids:
             raise APIError('Could not delete the items')
-
-
-def get_inventories_version():
-    """
-    The inventory_version table contains a single row with the Inventories version integer.
-    """
-    with get_db_session() as session:
-        try:
-            version = session.query(InventoriesVersion).one()
-            return version.version
-        except NoResultFound:
-            # No version is saved yet.
-            pass
-
-
-def get_next_inventories_version():
-    """
-    Get the current inventories version, increment it if there is one.
-    """
-    version = get_inventories_version()
-    if version:
-        return version + 1
-    return 1
-
-
-@contextlib.contextmanager
-def increment_inventories_version():
-    """
-    Context manager that will increment the Inventories Version by 1 when exiting.
-    """
-    version = get_next_inventories_version()
-    yield version
-    with get_db_session(commit=True) as session:
-        if session.query(InventoriesVersion).count() == 0:
-            session.add(InventoriesVersion(version=version))
-        else:
-            session.query(InventoriesVersion).one().version = version

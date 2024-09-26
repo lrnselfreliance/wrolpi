@@ -12,10 +12,10 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from modules.videos.models import Video
-from wrolpi import before_startup, dates, flags
+from wrolpi import dates, flags
 from wrolpi.captions import extract_captions
-from wrolpi.common import ConfigFile, limit_concurrent, get_wrolpi_config, extract_domain, \
-    escape_file_name, get_media_directory, background_task, Base
+from wrolpi.common import ConfigFile, extract_domain, \
+    escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
@@ -24,7 +24,7 @@ from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
-    generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
+    generate_video_poster, logger, ConfigError, \
     get_video_duration
 from .errors import UnknownChannel
 from .models import Channel
@@ -32,6 +32,8 @@ from .models import Channel
 logger = logger.getChild(__name__)
 
 DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
+
+REQUIRED_OPTIONS = ['name', 'directory']
 
 
 @dataclasses.dataclass
@@ -214,6 +216,7 @@ class ChannelsConfig(ConfigFile):
             directory='videos/wrolpi',
             download_frequency=604800,
         )],
+        version=0,
     )
 
     @property
@@ -223,6 +226,80 @@ class ChannelsConfig(ConfigFile):
     @channels.setter
     def channels(self, value: dict):
         self.update({'channels': value})
+
+    def import_config(self, file: pathlib.Path = None):
+        from modules.videos.channel.lib import get_channel
+        super().import_config()
+        try:
+            channels = self.channels
+            channel_directories = [i['directory'] for i in channels]
+            if len(channel_directories) != len(set(channel_directories)):
+                raise RuntimeError('Refusing to import channels config because it contains duplicate directories!')
+            updated_channel_ids = set()
+
+            with get_db_session(commit=True) as session:
+                for data in channels:
+                    # A Channel's directory is saved (in config) relative to the media directory.
+                    directory = get_media_directory() / data['directory']
+                    for option in (i for i in REQUIRED_OPTIONS if i not in data):
+                        raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
+
+                    # Try to find Channel by directory because it is unique.
+                    channel = Channel.get_by_path(directory, session)
+                    if not channel:
+                        try:
+                            # Try to find Channel using other attributes before creating new Channel.
+                            channel = get_channel(
+                                session,
+                                source_id=data.get('source_id'),
+                                url=data.get('url'),
+                                directory=str(directory),
+                                return_dict=False,
+                            )
+                        except UnknownChannel:
+                            # Channel not yet in the DB, add it.
+                            channel = Channel(directory=directory)
+                            session.add(channel)
+                            channel.flush()
+                            # TODO refresh the files in the channel.
+                            logger.warning(f'Creating new Channel from config {channel}')
+
+                    # Copy existing channel data, update all values from the config.  This is necessary to clear out
+                    # values not in the config.
+                    full_data = channel.dict()
+                    full_data.update(data)
+                    channel.update(full_data)
+                    updated_channel_ids.add(channel.id)
+
+                    if not channel.source_id and channel.url and flags.have_internet.is_set():
+                        # If we can download from a channel, we must have its source_id.
+                        logger.info(f'Fetching channel source id for {channel}')
+                        background_task(fetch_channel_source_id(channel.id))
+
+                    channel_import_logger.debug(f'Updated {repr(channel.name)}'
+                                                f' url={channel.url}'
+                                                f' source_id={channel.source_id}'
+                                                f' directory={channel.directory}'
+                                                )
+
+            with get_db_session(commit=True) as session:
+                # Delete any Channels that were deleted from the config.
+                for channel in session.query(Channel):
+                    if channel.id not in updated_channel_ids:
+                        logger.warning(f'Deleting {channel} because it is not in the config.')
+                        channel.delete_with_videos()
+
+            # Create any missing Downloads.  Associated Downloads with any necessary Channels.
+            with get_db_session() as session:
+                link_channel_and_downloads(session)
+
+            self.successful_import = True
+            channel_import_logger.info('Importing channels config complete')
+        except Exception as e:
+            channel_import_logger.warning('Failed to load channels config!', exc_info=e)
+            if PYTEST:
+                # Do not interrupt startup, only raise during testing.
+                raise
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()
@@ -259,6 +336,7 @@ class VideoDownloaderConfig(ConfigFile):
         file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
         nooverwrites=True,
         quiet=False,
+        version=0,
         writeautomaticsub=True,
         writeinfojson=True,
         writesubtitles=True,
@@ -408,91 +486,15 @@ async def fetch_channel_source_id(channel_id: int):
         logger.error(f'Failed to get Channel source id of id={channel_id}', exc_info=e)
 
 
-@before_startup
-@limit_concurrent(1)
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     if PYTEST and not get_channels_config():
         logger.warning('Skipping import_channels_config for this test')
         return
 
-    from .channel.lib import get_channel
     channel_import_logger.info('Importing channels config')
-    try:
-        config = get_channels_config()
-        channels = config.channels
-        channel_directories = [i['directory'] for i in channels]
-        if len(channel_directories) != len(set(channel_directories)):
-            logger.error('Refusing to import channels config because it contains duplicate directories!')
-            return
-        updated_channel_ids = set()
-
-        with get_db_session(commit=True) as session:
-            for data in channels:
-                if isinstance(data, str):
-                    # Outdated style config.
-                    # TODO remove this after beta.
-                    data = channels[data]
-                # A Channel's directory is saved (in config) relative to the media directory.
-                directory = get_media_directory() / data['directory']
-                for option in (i for i in REQUIRED_OPTIONS if i not in data):
-                    raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
-
-                # Try to find Channel by directory because it is unique.
-                channel = Channel.get_by_path(directory, session)
-                if not channel:
-                    try:
-                        # Try to find Channel using other attributes before creating new Channel.
-                        channel = get_channel(
-                            session,
-                            source_id=data.get('source_id'),
-                            url=data.get('url'),
-                            directory=str(directory),
-                            return_dict=False,
-                        )
-                    except UnknownChannel:
-                        # Channel not yet in the DB, add it.
-                        channel = Channel(directory=directory)
-                        session.add(channel)
-                        channel.flush()
-                        # TODO refresh the files in the channel.
-                        logger.warning(f'Creating new Channel from config {channel}')
-
-                # Copy existing channel data, update all values from the config.  This is necessary to clear out
-                # values not in the config.
-                full_data = channel.dict()
-                full_data.update(data)
-                channel.update(full_data)
-                updated_channel_ids.add(channel.id)
-
-                if not channel.source_id and channel.url and flags.have_internet.is_set():
-                    # If we can download from a channel, we must have its source_id.
-                    logger.info(f'Fetching channel source id for {channel}')
-                    background_task(fetch_channel_source_id(channel.id))
-
-                channel_import_logger.debug(f'Updated {repr(channel.name)}'
-                                            f' url={channel.url}'
-                                            f' source_id={channel.source_id}'
-                                            f' directory={channel.directory}'
-                                            )
-
-        with get_db_session(commit=True) as session:
-            # Delete any Channels that were deleted from the config.
-            for channel in session.query(Channel):
-                if channel.id not in updated_channel_ids:
-                    logger.warning(f'Deleting {channel} because it is not in the config.')
-                    channel.delete_with_videos()
-
-        # Create any missing Downloads.  Associated Downloads with any necessary Channels.
-        with get_db_session() as session:
-            link_channel_and_downloads(session)
-
-        channel_import_logger.info('Importing channels config complete')
-    except Exception as e:
-        channel_import_logger.warning('Failed to load channels config!', exc_info=e)
-        if PYTEST:
-            # Do not interrupt startup, only raise during testing.
-            raise
+    get_channels_config().import_config()
+    channel_import_logger.info('Importing channels config completed')
 
 
 def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel):

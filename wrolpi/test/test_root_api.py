@@ -206,7 +206,7 @@ async def test_echo(async_client):
     assert response.json['args'] == {}
 
 
-def test_hotspot_settings(test_session, test_client, test_config):
+def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
     """
     The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
     """
@@ -268,7 +268,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
 
 
 @skip_circleci
-def test_throttle_toggle(test_session, test_client, test_config):
+def test_throttle_toggle(test_session, test_client, test_wrolpi_config):
     get_wrolpi_config().ignored_directories = list()
 
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
@@ -286,7 +286,7 @@ def test_throttle_toggle(test_session, test_client, test_config):
 
 
 @pytest.mark.asyncio
-async def test_clear_downloads(test_session, async_client, test_config, test_download_manager_config):
+async def test_clear_downloads(test_session, async_client, test_wrolpi_config, test_download_manager_config):
     d1 = Download(url='https://example.com/1', status='complete')
     d2 = Download(url='https://example.com/2', status='pending')
     d3 = Download(url='https://example.com/3', status='deferred')
@@ -706,7 +706,7 @@ def test_recursive_errors():
 
 
 @pytest.mark.asyncio
-async def test_settings_special_directories(async_client, test_config):
+async def test_settings_special_directories(async_client, test_wrolpi_config):
     """Maintainer can change special directories."""
     request, response = await async_client.get('/api/settings')
     assert response.status_code == HTTPStatus.OK

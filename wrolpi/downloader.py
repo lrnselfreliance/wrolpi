@@ -31,6 +31,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
+from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod, await_switches
 from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
@@ -1143,6 +1144,25 @@ async def signal_download_download(download_id: int, download_url: str):
             download_manager._delete_processing_domain(download_domain)
 
 
+@dataclass
+class DownloadDictConfig:
+    downloader: str
+    last_successful_download: str
+    next_download: str
+    url: str
+    frequency: int = None
+    settings: dict = None
+    status: str = None
+    sub_downloader: str = None
+
+
+@dataclass
+class DownloadManagerConfigValidator:
+    version: int = None
+    downloads: list[DownloadDictConfig] = field(default_factory=list)
+    skip_urls: list[str] = field(default_factory=list)
+
+
 class DownloadManagerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
     default_config = dict(
@@ -1150,6 +1170,7 @@ class DownloadManagerConfig(ConfigFile):
         skip_urls=[],
         version=0,
     )
+    validator = DownloadManagerConfigValidator
 
     @property
     def skip_urls(self) -> List[str]:
@@ -1167,27 +1188,33 @@ class DownloadManagerConfig(ConfigFile):
     def downloads(self, value: List[dict]):
         self.update({'downloads': value})
 
-    def dump_config(self, file: pathlib.Path = None):
-        with get_db_session() as session:
-            downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
-            new_downloads = []
-            for download in downloads:
-                if download.last_successful_download and not download.frequency:
-                    # This once-download has completed, do not save it.
-                    continue
-                new_downloads.append(dict(
-                    downloader=download.downloader,
-                    frequency=download.frequency,
-                    last_successful_download=download.last_successful_download,
-                    next_download=download.next_download,
-                    settings=download.settings,
-                    status=download.status,
-                    sub_downloader=download.sub_downloader,
-                    url=download.url,
-                ))
-            get_download_manager_config().downloads = new_downloads
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
+        try:
+            with get_db_session() as session:
+                downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
+                new_downloads = []
+                for download in downloads:
+                    if download.last_successful_download and not download.frequency:
+                        # This once-download has completed, do not save it.
+                        continue
+                    new_downloads.append(dict(
+                        downloader=download.downloader,
+                        frequency=download.frequency,
+                        last_successful_download=download.last_successful_download,
+                        next_download=download.next_download,
+                        settings=download.settings,
+                        status=download.status,
+                        sub_downloader=download.sub_downloader,
+                        url=download.url,
+                    ))
+                get_download_manager_config().downloads = new_downloads
+        except Exception as e:
+            message = f'Failed to save {self.get_relative_file()} config'
+            logger.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_save_failed(message)
 
-    def import_config(self, file: pathlib.Path = None):
+    def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file)
         with get_db_session(commit=True) as session:
             from modules.zim.lib import zim_download_url_to_name
@@ -1231,8 +1258,13 @@ class DownloadManagerConfig(ConfigFile):
                     logger.info(f'Adding new download {url}')
 
                 session.commit()
+                self.successful_import = True
             except Exception as e:
-                logger.error('Failed to import downloads', exc_info=e)
+                self.successful_import = False
+                message = f'Failed to import {self.file_name}'
+                logger.error(message, exc_info=e)
+                if send_events:
+                    Events.send_config_import_failed(message)
                 raise
 
             try:
@@ -1254,8 +1286,13 @@ class DownloadManagerConfig(ConfigFile):
 
                 if need_commit:
                     session.commit()
+                self.successful_import = True
             except Exception as e:
-                logger.error('Failed to restore ZimSubscriptions', exc_info=e)
+                self.successful_import = False
+                message = 'Failed to restore ZimSubscriptions'
+                logger.error(message, exc_info=e)
+                if send_events:
+                    Events.send_config_import_failed(message)
                 raise
 
             self.successful_import = True

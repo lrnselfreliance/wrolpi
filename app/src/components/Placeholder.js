@@ -53,3 +53,9 @@ export function TagPlaceholder() {
         <PlaceholderImage/>
     </Placeholder>
 }
+
+export function TableRowPlaceholder() {
+    return <Placeholder>
+        <PlaceholderLine/>
+    </Placeholder>
+}

@@ -25,7 +25,6 @@ import {
     HandPointMessage,
     humanFileSize,
     isoDatetimeToAgoPopup,
-    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     Paginator,

@@ -6,6 +6,7 @@ import os
 import pathlib
 import re
 import tempfile
+import time
 from datetime import date, datetime
 from decimal import Decimal
 from http import HTTPStatus
@@ -19,6 +20,7 @@ import pytz
 import wrolpi.vars
 from wrolpi import common
 from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config
+from wrolpi.errors import InvalidConfig
 from wrolpi.switches import await_switches
 from wrolpi.test.common import build_test_directories, skip_circleci
 
@@ -460,6 +462,12 @@ async def test_cum_timer():
     assert calls == 1
 
     print_timer()
+
+
+def test_timer():
+    """`cum_timer` can be used to profile code."""
+    with common.timer(name='test_timer'):
+        time.sleep(0.1)
 
 
 @pytest.mark.asyncio
@@ -926,12 +934,14 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
     # Config is not imported, default values are used.
     assert config.successful_import is False
     assert config.wrol_mode is False
+    assert config.is_valid() is False
     assert config.version == 0
 
     # Bad config cannot be imported.
     test_wrolpi_config.parent.mkdir(exist_ok=True)
     test_wrolpi_config.write_text('bad config\ndata')
-    with pytest.raises(RuntimeError) as e:
+    assert config.is_valid() is False
+    with pytest.raises(InvalidConfig) as e:
         config.import_config()
     assert config.successful_import is False
     assert config.version == 0
@@ -945,29 +955,35 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
 
     # Incomplete config can still be imported.
     test_wrolpi_config.write_text('wrol_mode: true')
+    assert config.is_valid() is True
     config.import_config()
     assert config.successful_import is True
     assert config.wrol_mode is True
+    assert config.is_valid() is True
     assert config.version == 0
 
     # Items from the default config are written to the file.
     config.dump_config()
     assert 'version: ' in test_wrolpi_config.read_text()
     assert config.wrol_mode is True
+    assert config.is_valid() is True
     assert config.version == 1
 
     # Other data is ignored.
     test_wrolpi_config.write_text('wrol_mode: false\nother_data: false')
+    assert config.is_valid() is True
     config.import_config()
     assert 'other_data' not in config._config, 'Extra data in config should be ignored'
+    assert config.is_valid() is True
     assert config.wrol_mode is False
 
     # Changing value changes both file and config data.
     config.wrol_mode = True
     assert config._config['wrol_mode'] is True
-    await await_switches()
+    await await_switches()  # `wrol_mode = True` calls background switch
     assert 'wrol_mode: true' in test_wrolpi_config.read_text()
     assert 'other_data' not in test_wrolpi_config.read_text(), 'Other data should be removed on save.'
+    assert config.is_valid() is True
     assert config.version == 2
 
     # Cannot overwrite newer config.
@@ -981,3 +997,20 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
     # Can import, then config can be saved.
     config.import_config()
     config.dump_config()
+    assert config.is_valid() is True
+
+
+@pytest.mark.asyncio
+async def test_config_valid(async_client, test_wrolpi_config):
+    # Config file does not yet exist.
+    config = get_wrolpi_config()
+    assert config.is_valid() is False
+
+    config.dump_config()
+    assert config.is_valid() is True
+
+    test_wrolpi_config.write_text('bad config')
+    assert config.is_valid() is False
+
+    test_wrolpi_config.write_text('wrol_mode: true')
+    assert config.is_valid() is True

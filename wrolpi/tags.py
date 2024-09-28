@@ -1,5 +1,6 @@
 import contextlib
 import pathlib
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 
@@ -13,6 +14,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs, get_db_session
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict, NoPrimaryFile
+from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import PYTEST
 
@@ -218,10 +220,18 @@ class Tag(ModelHelper, Base):
         sync_tags_directory.activate_switch()
 
 
+@dataclass
+class TagsConfigValidator:
+    tag_files: list[list] = field(default_factory=list)
+    tag_zims: list[list] = field(default_factory=list)
+    tags: dict = field(default_factory=dict)
+    version: int = None
+
+
 class TagsConfig(ConfigFile):
     file_name = 'tags.yaml'
     width = 500
-
+    validator = TagsConfigValidator
     default_config = dict(
         tag_files=list(),
         tag_zims=list(),
@@ -255,58 +265,64 @@ class TagsConfig(ConfigFile):
     def tags(self, value: dict):
         self.update({'tags': value})
 
-    def dump_config(self, file: pathlib.Path = None):
-        media_directory = get_media_directory()
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
+        try:
+            media_directory = get_media_directory()
 
-        with get_db_session() as session:
-            tags = dict()
-            tag_rows = session.query(Tag)
-            for tag in tag_rows:
-                tags[tag.name] = dict(color=tag.color)
+            with get_db_session() as session:
+                tags = dict()
+                tag_rows = session.query(Tag)
+                for tag in tag_rows:
+                    tags[tag.name] = dict(color=tag.color)
 
-            from wrolpi.files.models import FileGroup
-            results = session.query(Tag, TagFile, FileGroup) \
-                .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
-                .order_by(FileGroup.primary_path)
+                from wrolpi.files.models import FileGroup
+                results = session.query(Tag, TagFile, FileGroup) \
+                    .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
+                    .order_by(FileGroup.primary_path)
 
-            tag_files = []
-            for tag, tag_file, file_group in results:
-                value = [
-                    tag.name,
-                    str(file_group.primary_path.relative_to(media_directory)),
-                    # Fallback to current time if not set.
-                    tag_file.created_at.isoformat() if tag_file.created_at else dates.now().isoformat(),
-                ]
-                tag_files.append(value)
-            logger.debug(f'Got {len(tag_files)} tag files for config.')
+                tag_files = []
+                for tag, tag_file, file_group in results:
+                    value = [
+                        tag.name,
+                        str(file_group.primary_path.relative_to(media_directory)),
+                        # Fallback to current time if not set.
+                        tag_file.created_at.isoformat() if tag_file.created_at else dates.now().isoformat(),
+                    ]
+                    tag_files.append(value)
+                logger.debug(f'Got {len(tag_files)} tag files for config.')
 
-            from modules.zim.models import Zim, TagZimEntry
-            results = session.query(Tag, Zim, TagZimEntry) \
-                .filter(Tag.id == TagZimEntry.tag_id, Zim.id == TagZimEntry.zim_id) \
-                .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry)
+                from modules.zim.models import Zim, TagZimEntry
+                results = session.query(Tag, Zim, TagZimEntry) \
+                    .filter(Tag.id == TagZimEntry.tag_id, Zim.id == TagZimEntry.zim_id) \
+                    .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry)
 
-            tag_zims = []
-            for tag, zim, tag_zim_entry in results:
-                zim: Zim
-                tag_zim_entry: TagZimEntry
-                value = [
-                    tag.name,
-                    str(get_relative_to_media_directory(zim.path)),
-                    tag_zim_entry.zim_entry,
-                    # Fallback to current time if not set.
-                    tag_zim_entry.created_at.isoformat() if tag_zim_entry.created_at else dates.now().isoformat(),
-                ]
-                tag_zims.append(value)
-            logger.debug(f'Got {len(tag_zims)} tag zims for config.')
+                tag_zims = []
+                for tag, zim, tag_zim_entry in results:
+                    zim: Zim
+                    tag_zim_entry: TagZimEntry
+                    value = [
+                        tag.name,
+                        str(get_relative_to_media_directory(zim.path)),
+                        tag_zim_entry.zim_entry,
+                        # Fallback to current time if not set.
+                        tag_zim_entry.created_at.isoformat() if tag_zim_entry.created_at else dates.now().isoformat(),
+                    ]
+                    tag_zims.append(value)
+                logger.debug(f'Got {len(tag_zims)} tag zims for config.')
 
-            # Write to the config.
-            self.update({
-                'tag_files': tag_files,
-                'tag_zims': tag_zims,
-                'tags': tags,
-            })
+                # Write to the config.
+                self.update({
+                    'tag_files': tag_files,
+                    'tag_zims': tag_zims,
+                    'tags': tags,
+                })
+        except Exception as e:
+            message = f'Failed to save {self.get_relative_file()} config'
+            logger.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_save_failed(message)
 
-    def import_config(self, file: pathlib.Path = None):
+    def import_config(self, file: pathlib.Path = None, send_events=False):
         from modules.zim import lib as zim_lib
         from modules.zim.models import Zim, TagZimEntry
         from wrolpi.files.lib import glob_shared_stem
@@ -317,14 +333,12 @@ class TagsConfig(ConfigFile):
             return
 
         config = get_tags_config()
-        if not (path := config.get_file()).is_file():
-            logger.warning(f'Refusing to import tags config because it does not exist: {path}')
-            return
-
         logger.info('Importing tags config')
         super().import_config(file)
 
         try:
+            need_commit = False
+
             with get_db_session() as session:
                 if config.tags:
                     # Tags have been saved to config, import them
@@ -341,10 +355,9 @@ class TagsConfig(ConfigFile):
 
                     if new_tags:
                         session.add_all(new_tags)
+                        need_commit = True
 
                 media_directory = get_media_directory()
-
-                need_commit = False
 
                 # Get all Tags again because new ones may exist.
                 tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
@@ -451,7 +464,12 @@ class TagsConfig(ConfigFile):
             self.successful_import = True
             logger.info('Importing tags config complete')
         except Exception as e:
-            logger.error(f'Failed to import tags config', exc_info=e)
+            self.successful_import = False
+            message = f'Failed to import {self.file_name}'
+            logger.error(message, exc_info=e)
+            if send_events:
+                from wrolpi.events import Events
+                Events.send_config_import_failed(message)
             raise
 
 

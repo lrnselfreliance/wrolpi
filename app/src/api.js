@@ -313,6 +313,55 @@ export async function getDownloads() {
     return response
 }
 
+export async function getConfigs() {
+    const response = await apiGet(`${API_URI}/configs`);
+    if (response.ok) {
+        const data = await response.json();
+        return {
+            configs: data.configs,
+        }
+    } else {
+        const message = getErrorMessage(response, 'Could not get configs.');
+        toast({
+            type: 'error',
+            title: 'Getting Configs Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
+}
+
+export async function postImportConfig(fileName) {
+    const body = {file_name: fileName};
+    const response = await apiPost(`${API_URI}/configs/import`, body);
+    if (!response.ok) {
+        const message = getErrorMessage(response, 'Could not import config.');
+        toast({
+            type: 'error',
+            title: 'Importing config Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
+}
+
+export async function postSaveConfig(fileName) {
+    const body = {file_name: fileName, overwrite: true};
+    const response = await apiPost(`${API_URI}/configs/save`, body);
+    if (!response.ok) {
+        const message = getErrorMessage(response, 'Could not save config.');
+        toast({
+            type: 'error',
+            title: 'Saving config Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
+}
+
 export async function validateRegex(regex) {
     const response = await apiPost(`${API_URI}/valid_regex`, {regex});
     try {

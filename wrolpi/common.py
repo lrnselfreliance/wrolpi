@@ -17,7 +17,7 @@ import tempfile
 import traceback
 from asyncio import Task
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
@@ -41,7 +41,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
+from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
 
 LOGGING_CONFIG = {
@@ -346,10 +346,12 @@ class ConfigFile:
 
     Configs cannot be saved until they are imported without error.
     """
-    file_name: str = None
-    default_config: dict = None
-    width: int = None
+    background_dump: callable = None
     background_save: callable = None
+    default_config: dict = None
+    file_name: str = None
+    validator: dataclass = None
+    width: int = None
 
     def __init__(self):
         self.width = self.width or 90
@@ -386,8 +388,10 @@ class ConfigFile:
 
         file = self.get_file()
         if file.is_file():
-            config_data = {k: v for k, v in self.read_config_file(file).items() if k in self.default_config}
-            self._config.update(config_data)
+            if not self.is_valid(file):
+                raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
+            config_data = self.read_config_file(file)
+            self._config.update(asdict(self.validator(**config_data)))
         return self
 
     @property
@@ -405,7 +409,7 @@ class ConfigFile:
         with file.open('rt') as fh:
             config_data = yaml.load(fh, Loader=yaml.Loader)
             if not isinstance(config_data, dict):
-                raise RuntimeError(f'Config file is invalid: {file}')
+                raise InvalidConfig(f'Config file is invalid: {file}')
             return config_data
 
     def _get_backup_filename(self):
@@ -488,11 +492,17 @@ class ConfigFile:
 
         return CONFIG_DIR / self.file_name
 
+    def get_relative_file(self):
+        return get_relative_to_media_directory(self.get_file())
+
     def import_config(self, file: pathlib.Path = None):
         """Read config file data, apply it to the in-memory config and database."""
         file = file or self.get_file()
         file_str = str(get_relative_to_media_directory(file))
         if file.is_file():
+            if not self.is_valid(file):
+                raise InvalidConfig(f'Config is invalid: {file_str}')
+
             data = self.read_config_file(file)
             new_data, extra_data = partition(lambda i: i[0] in self.default_config, data.items())
             new_data, extra_data = dict(new_data), dict(extra_data)
@@ -524,11 +534,49 @@ class ConfigFile:
 
         return deepcopy(self._config)
 
+    def is_valid(self, file: pathlib.Path = None) -> bool:
+        if not self.validator:
+            raise NotImplementedError(f'Cannot validate {self.file_name} without validator!')
+
+        file = file or self.get_file()
+        if not file.is_file():
+            return False
+
+        allowed_fields = fields(self.validator)
+        try:
+            # Remove keys no longer in the config.
+            config = {k: v for k, v in self.read_config_file(file).items() if k in allowed_fields}
+            self.validator(**config)
+            return True
+        except Exception as e:
+            logger.debug(f'Failed to validate config: {file}', exc_info=e)
+            return False
+
     # `version` is used to prevent overwriting of newer configs.  Cannot not be modified directly.
 
     @property
     def version(self) -> int:
         return self._config['version']
+
+
+@dataclass
+class WROLPiConfigValidator:
+    archive_destination: str = None
+    download_on_startup: bool = None
+    download_timeout: int = None
+    hotspot_device: str = None
+    hotspot_on_startup: bool = None
+    hotspot_password: str = None
+    hotspot_ssid: str = None
+    ignore_outdated_zims: bool = None
+    map_destination: str = None
+    nav_color: str = None
+    throttle_on_startup: bool = None
+    version: int = None
+    videos_destination: str = None
+    wrol_mode: bool = None
+    zims_destination: str = None
+    ignored_directories: list[str] = field(default_factory=list)
 
 
 class WROLPiConfig(ConfigFile):
@@ -551,6 +599,7 @@ class WROLPiConfig(ConfigFile):
         wrol_mode=False,
         zims_destination='zims',
     )
+    validator = WROLPiConfigValidator
 
     def get_file(self) -> Path:
         """WROLPiConfig must be discovered so that other config files can be found."""
@@ -820,7 +869,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
 
         async def after(*a, **kw):
             if logger.isEnabledFor(logging.DEBUG):
-                traceback.print_stack()
                 logger.debug(f'run_after synchronous_after called for {after}')
             return synchronous_after(*a, **kw)
 
@@ -833,7 +881,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             async def wrapped(*a, **kw):
                 results = await func(*a, **kw)
                 if logger.isEnabledFor(logging.DEBUG):
-                    traceback.print_stack()
                     logger.debug(f'run_after async called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)
@@ -843,7 +890,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             def wrapped(*a, **kw):
                 results = func(*a, **kw)
                 if logger.isEnabledFor(logging.DEBUG):
-                    traceback.print_stack()
                     logger.debug(f'run_after sync called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)

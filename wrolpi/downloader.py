@@ -1143,6 +1143,25 @@ async def signal_download_download(download_id: int, download_url: str):
             download_manager._delete_processing_domain(download_domain)
 
 
+@dataclass
+class DownloadDictConfig:
+    downloader: str
+    last_successful_download: str
+    next_download: str
+    url: str
+    frequency: int = None
+    settings: dict = None
+    status: str = None
+    sub_downloader: str = None
+
+
+@dataclass
+class DownloadManagerConfigValidator:
+    version: int = None
+    downloads: list[DownloadDictConfig] = field(default_factory=list)
+    skip_urls: list[str] = field(default_factory=list)
+
+
 class DownloadManagerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
     default_config = dict(
@@ -1150,6 +1169,7 @@ class DownloadManagerConfig(ConfigFile):
         skip_urls=[],
         version=0,
     )
+    validator = DownloadManagerConfigValidator
 
     @property
     def skip_urls(self) -> List[str]:

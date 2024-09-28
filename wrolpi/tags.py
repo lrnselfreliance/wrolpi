@@ -1,5 +1,6 @@
 import contextlib
 import pathlib
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 
@@ -218,10 +219,18 @@ class Tag(ModelHelper, Base):
         sync_tags_directory.activate_switch()
 
 
+@dataclass
+class TagsConfigValidator:
+    tag_files: list[list] = field(default_factory=list)
+    tag_zims: list[list] = field(default_factory=list)
+    tags: dict = field(default_factory=dict)
+    version: int = None
+
+
 class TagsConfig(ConfigFile):
     file_name = 'tags.yaml'
     width = 500
-
+    validator = TagsConfigValidator
     default_config = dict(
         tag_files=list(),
         tag_zims=list(),

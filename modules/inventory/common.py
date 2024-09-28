@@ -1,4 +1,5 @@
 import pathlib
+from dataclasses import field, dataclass
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
@@ -116,12 +117,19 @@ def cleanup_quantity(quantity: Quantity) -> Quantity:
     return Decimal(num) * unit
 
 
+@dataclass
+class InventoriesConfigValidator:
+    version: int = None
+    inventories: list[str] = field(default_factory=list)
+
+
 class InventoriesConfig(ConfigFile):
     file_name = 'inventories.yaml'
     default_config = dict(
         inventories=[],
         version=0,
     )
+    validator = InventoriesConfigValidator
 
     @property
     def inventories(self) -> dict:

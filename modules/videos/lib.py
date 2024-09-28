@@ -3,6 +3,7 @@ import dataclasses
 import html
 import pathlib
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Generator, Type
 from typing import Tuple, Optional
@@ -207,6 +208,20 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
     return None, None
 
 
+@dataclass
+class ChannelDictValidator:
+    name: str
+    directory: str
+    download_frequency: int
+    url: str = None
+
+
+@dataclass
+class ChannelsConfigValidator:
+    version: int = None
+    channels: list[ChannelDictValidator] = dataclasses.field(default_factory=list)
+
+
 class ChannelsConfig(ConfigFile):
     file_name = 'channels.yaml'
     default_config = dict(
@@ -218,6 +233,7 @@ class ChannelsConfig(ConfigFile):
         )],
         version=0,
     )
+    validator = ChannelsConfigValidator
 
     @property
     def channels(self) -> dict:
@@ -328,6 +344,21 @@ def set_test_channels_config():
     TEST_CHANNELS_CONFIG = None
 
 
+@dataclass
+class VideoDownloaderConfigValidator:
+    continue_dl: bool
+    dateafter: str
+    file_name_format: str
+    nooverwrites: bool
+    quiet: bool
+    writeautomaticsub: bool
+    writeinfojson: bool
+    writesubtitles: bool
+    writethumbnail: bool
+    youtube_include_dash_manifest: bool
+    version: int = None
+
+
 class VideoDownloaderConfig(ConfigFile):
     file_name = 'videos_downloader.yaml'
     default_config = dict(
@@ -343,6 +374,7 @@ class VideoDownloaderConfig(ConfigFile):
         writethumbnail=True,
         youtube_include_dash_manifest=False,
     )
+    validator = VideoDownloaderConfigValidator
 
     @property
     def continue_dl(self) -> bool:

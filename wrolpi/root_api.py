@@ -20,10 +20,11 @@ from modules.zim.api import zim_bp
 from wrolpi import admin, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
-from wrolpi.api_utils import json_response, json_error_handler, api_app
+from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory, search_other_estimates
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates, get_all_configs, \
+    get_config_by_file_name
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
@@ -605,4 +606,33 @@ async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstima
     return json_response(ret)
 
 
-api_app.error_handler.add(Exception, json_error_handler)
+@api_bp.get('/configs')
+def get_configs(_: Request):
+    configs = get_all_configs()
+    return json_response(dict(configs=configs))
+
+
+@api_bp.post('/configs/import')
+@validate(json=schema.ConfigsImportRequest)
+def post_configs_import(_: Request, body: schema.ConfigsImportRequest):
+    config = get_config_by_file_name(body.file_name)
+    try:
+        config.import_config(send_events=True)
+    except Exception as e:
+        logger.error(f'Failed to import config: {body.file_name}', exc_info=e)
+        raise InvalidConfig(f'Failed to import config {body.file_name}')
+
+    return response.empty()
+
+
+@api_bp.post('/configs/save')
+@validate(json=schema.ConfigsImportRequest)
+def post_configs_save(_: Request, body: schema.ConfigsImportRequest):
+    config = get_config_by_file_name(body.file_name)
+    try:
+        config.dump_config(send_events=True, overwrite=body.overwrite)
+    except Exception as e:
+        logger.error(f'Failed to dump config: {body.file_name}', exc_info=e)
+        raise InvalidConfig(f'Failed to dump config {body.file_name}')
+
+    return response.empty()

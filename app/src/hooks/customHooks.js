@@ -7,6 +7,7 @@ import {
     getArchive,
     getChannel,
     getChannels,
+    getConfigs,
     getDirectories,
     getDownloads,
     getFiles,
@@ -17,7 +18,10 @@ import {
     getStatus,
     getVideo,
     getVideosStatistics,
-    searchArchives, searchChannels,
+    postImportConfig,
+    postSaveConfig,
+    searchArchives,
+    searchChannels,
     searchDirectories,
     searchVideos,
     searchZim,
@@ -677,6 +681,44 @@ export const useDownloads = () => {
     useRecurringTimeout(fetchDownloads, 3 * 1000);
 
     return {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads}
+}
+
+export const useConfigs = () => {
+    const [configs, setConfigs] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const fetchConfigs = async () => {
+        setLoading(true);
+        console.log('fetching configs...');
+        try {
+            const data = await getConfigs();
+            setConfigs(data['configs']);
+            console.debug('fetching configs successful');
+        } catch (e) {
+            console.error(e);
+            setConfigs(undefined);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const importConfig = async (fileName) => {
+        try {
+            await postImportConfig(fileName);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const saveConfig = async (fileName) => {
+        try {
+            await postSaveConfig(fileName);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    return {configs, loading, fetchConfigs, importConfig, saveConfig}
 }
 
 export const useThrottle = () => {

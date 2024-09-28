@@ -527,7 +527,7 @@ async def status_worker(count: int = None, sleep_time: int = 5):
         # Always sleep so this does not become a busy loop with errors.
         if load_stats and load_stats.minute_1 and load_stats.minute_1 > multiprocessing.cpu_count():
             # System is stressed, slow down status updates.
-            await asyncio.sleep((sleep_time * load_stats.minute_1) / multiprocessing.cpu_count())
+            await asyncio.sleep((sleep_time * float(load_stats.minute_1)) / multiprocessing.cpu_count())
 
         if count:
             # Running in testing, or __main__.

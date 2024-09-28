@@ -14,10 +14,9 @@ import socket
 import string
 import sys
 import tempfile
-import traceback
 from asyncio import Task
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
@@ -26,7 +25,7 @@ from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
 from types import GeneratorType
-from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set, Coroutine
+from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
 from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
@@ -41,7 +40,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
+from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
 
 LOGGING_CONFIG = {
@@ -192,6 +191,7 @@ __all__ = [
     'format_html_string',
     'format_json_file',
     'get_absolute_media_path',
+    'get_all_configs',
     'get_download_info',
     'get_files_and_directories',
     'get_global_statistics',
@@ -346,10 +346,12 @@ class ConfigFile:
 
     Configs cannot be saved until they are imported without error.
     """
-    file_name: str = None
-    default_config: dict = None
-    width: int = None
+    background_dump: callable = None
     background_save: callable = None
+    default_config: dict = None
+    file_name: str = None
+    validator: dataclass = None
+    width: int = None
 
     def __init__(self):
         self.width = self.width or 90
@@ -377,6 +379,15 @@ class ConfigFile:
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
 
+    def __json__(self) -> dict:
+        d = dict(
+            file_name=self.file_name,
+            rel_path=get_relative_to_media_directory(self.get_file()),
+            successful_import=self.successful_import,
+            valid=self.is_valid(),
+        )
+        return d
+
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
         # Use the provided multiprocessing.Manager().dict(), or dict() for testing.
@@ -386,8 +397,10 @@ class ConfigFile:
 
         file = self.get_file()
         if file.is_file():
-            config_data = {k: v for k, v in self.read_config_file(file).items() if k in self.default_config}
-            self._config.update(config_data)
+            if not self.is_valid(file):
+                raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
+            config_data = self.read_config_file(file)
+            self._config.update(asdict(self.validator(**config_data)))
         return self
 
     @property
@@ -405,7 +418,7 @@ class ConfigFile:
         with file.open('rt') as fh:
             config_data = yaml.load(fh, Loader=yaml.Loader)
             if not isinstance(config_data, dict):
-                raise RuntimeError(f'Config file is invalid: {file}')
+                raise InvalidConfig(f'Config file is invalid: {file}')
             return config_data
 
     def _get_backup_filename(self):
@@ -417,9 +430,13 @@ class ConfigFile:
         path = path.with_name(name)
         return path
 
-    def save(self, file: pathlib.Path = None):
+    def save(self, file: pathlib.Path = None, send_events: bool = False, overwrite: bool = False):
         """
         Write this config to its file.
+
+        @param file: The destination of the config file (defaults to `self.get_file()`).
+        @param send_events: Send failure Events to UI.
+        @param overwrite: Will overwrite the config file even if it was not imported successfully.
         """
         from wrolpi.api_utils import api_app
 
@@ -429,13 +446,12 @@ class ConfigFile:
 
         rel_path = get_relative_to_media_directory(file)
 
-        if file.exists():
+        if file.exists() and overwrite is False:
             if not self.successful_import:
                 raise RuntimeError(f'Refusing to save config because it was never successfully imported! {rel_path}')
             version = self.read_config_file(file).get('version')
             if version and version > self.version:
-                raise RuntimeError(f'Refusing to overwrite newer config ({rel_path}): '
-                                   f'{version} > {self.version}')
+                raise RuntimeError(f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}')
 
         # Don't overwrite a real config while testing.
         if PYTEST and not str(file).startswith('/tmp'):
@@ -469,7 +485,11 @@ class ConfigFile:
                 logger_.info(f'Saved config: {rel_path}')
             except Exception as e:
                 # Configs are vital, raise a big error when this fails.
-                logger_.critical(f'Failed to save config: {rel_path}', exc_info=e)
+                message = f'Failed to save config: {rel_path}'
+                logger_.critical(message, exc_info=e)
+                if send_events:
+                    from wrolpi.events import Events
+                    Events.send_config_save_failed(message)
                 raise e
 
     def write_config_data(self, config: dict, config_file: pathlib.Path):
@@ -488,11 +508,19 @@ class ConfigFile:
 
         return CONFIG_DIR / self.file_name
 
-    def import_config(self, file: pathlib.Path = None):
+    def get_relative_file(self):
+        return get_relative_to_media_directory(self.get_file())
+
+    def import_config(self, file: pathlib.Path = None, send_events=False):
         """Read config file data, apply it to the in-memory config and database."""
         file = file or self.get_file()
         file_str = str(get_relative_to_media_directory(file))
+        # Caller will set to successful if it works.
+        self.successful_import = False
         if file.is_file():
+            if not self.is_valid(file):
+                raise InvalidConfig(f'Config is invalid: {file_str}')
+
             data = self.read_config_file(file)
             new_data, extra_data = partition(lambda i: i[0] in self.default_config, data.items())
             new_data, extra_data = dict(new_data), dict(extra_data)
@@ -504,10 +532,10 @@ class ConfigFile:
         else:
             logger_.error(f'Failed to import {file_str} because it does not exist.')
 
-    def dump_config(self, file: pathlib.Path = None):
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         """Dump database data, copy it to this the in-memory config, then write it to the config file."""
         # Copy the data as-is by default.  Other classes will overwrite this and dump the database before saving.
-        self.save(file)
+        self.save(file, send_events, overwrite)
 
     def update(self, config: dict):
         """Update any values of this config.  Save the config to its file."""
@@ -524,11 +552,90 @@ class ConfigFile:
 
         return deepcopy(self._config)
 
+    def is_valid(self, file: pathlib.Path = None) -> bool:
+        if not self.validator:
+            raise NotImplementedError(f'Cannot validate {self.file_name} without validator!')
+
+        file = file or self.get_file()
+        if not file.is_file():
+            return False
+
+        allowed_fields = {i.name for i in fields(self.validator)}
+        try:
+            # Remove keys no longer in the config.
+            config_items = self.read_config_file(file).items()
+            extra_items = {k: v for k, v in config_items if k not in allowed_fields}
+            if extra_items:
+                logger.error(f'Invalid config items ({get_relative_to_media_directory(file)}): {extra_items}')
+            config = {k: v for k, v in config_items if k in allowed_fields}
+            self.validator(**config)
+            return True
+        except Exception as e:
+            logger.debug(f'Failed to validate config: {file}', exc_info=e)
+            return False
+
     # `version` is used to prevent overwriting of newer configs.  Cannot not be modified directly.
 
     @property
     def version(self) -> int:
         return self._config['version']
+
+
+@dataclass
+class WROLPiConfigValidator:
+    archive_destination: str = None
+    download_on_startup: bool = None
+    download_timeout: int = None
+    hotspot_device: str = None
+    hotspot_on_startup: bool = None
+    hotspot_password: str = None
+    hotspot_ssid: str = None
+    ignore_outdated_zims: bool = None
+    map_destination: str = None
+    nav_color: str = None
+    throttle_on_startup: bool = None
+    version: int = None
+    videos_destination: str = None
+    wrol_mode: bool = None
+    zims_destination: str = None
+    ignored_directories: list[str] = field(default_factory=list)
+
+
+def get_all_configs() -> Dict[str, ConfigFile]:
+    all_configs = dict()
+
+    if wrolpi_config := get_wrolpi_config():
+        all_configs[wrolpi_config.file_name] = wrolpi_config
+
+    from wrolpi.tags import get_tags_config
+    if tags_config := get_tags_config():
+        all_configs[tags_config.file_name] = tags_config
+
+    from modules.videos.lib import get_channels_config
+    if channels_config := get_channels_config():
+        all_configs[channels_config.file_name] = channels_config
+
+    from modules.inventory.common import get_inventories_config
+    if inventories_config := get_inventories_config():
+        all_configs[inventories_config.file_name] = inventories_config
+
+    from modules.videos.lib import get_downloader_config
+    if videos_downloader_config := get_downloader_config():
+        all_configs[videos_downloader_config.file_name] = videos_downloader_config
+
+    from wrolpi.downloader import get_download_manager_config
+    if download_manager_config := get_download_manager_config():
+        all_configs[download_manager_config.file_name] = download_manager_config
+
+    return all_configs
+
+
+def get_config_by_file_name(file_name: str) -> ConfigFile:
+    configs = get_all_configs()
+    if file_name not in configs:
+        raise InvalidConfig(f'No config with {file_name} exists')
+
+    return configs[file_name]
 
 
 class WROLPiConfig(ConfigFile):
@@ -551,6 +658,7 @@ class WROLPiConfig(ConfigFile):
         wrol_mode=False,
         zims_destination='zims',
     )
+    validator = WROLPiConfigValidator
 
     def get_file(self) -> Path:
         """WROLPiConfig must be discovered so that other config files can be found."""
@@ -573,13 +681,18 @@ class WROLPiConfig(ConfigFile):
         # Not testing, and can't find file deep in media directory.  Use the default.
         return default_config_path
 
-    def import_config(self, file: pathlib.Path = None):
+    def import_config(self, file: pathlib.Path = None, send_events=False):
         try:
             super().import_config(file)
             # WROLPiConfig does not sync to database.
             self.successful_import = True
         except Exception as e:
-            logger.error(f'Failed to import {self.file_name}', exc_info=e)
+            self.successful_import = False
+            message = f'Failed to import {self.file_name}'
+            logger.error(message, exc_info=e)
+            if send_events:
+                from wrolpi.events import Events
+                Events.send_config_import_failed(message)
             raise
 
     @property
@@ -820,7 +933,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
 
         async def after(*a, **kw):
             if logger.isEnabledFor(logging.DEBUG):
-                traceback.print_stack()
                 logger.debug(f'run_after synchronous_after called for {after}')
             return synchronous_after(*a, **kw)
 
@@ -833,7 +945,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             async def wrapped(*a, **kw):
                 results = await func(*a, **kw)
                 if logger.isEnabledFor(logging.DEBUG):
-                    traceback.print_stack()
                     logger.debug(f'run_after async called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)
@@ -843,7 +954,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             def wrapped(*a, **kw):
                 results = func(*a, **kw)
                 if logger.isEnabledFor(logging.DEBUG):
-                    traceback.print_stack()
                     logger.debug(f'run_after sync called for {func}')
                 coro = after(*args, **kwargs)
                 asyncio.ensure_future(coro)
@@ -1483,7 +1593,7 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Genera
 
 
 @contextlib.contextmanager
-def timer(name, level: str = 'debug', logger__: logging.Logger = logger_):
+def timer(name, level: str = 'debug', logger__: logging.Logger = None):
     """Prints out the time elapsed during the call of some block.
 
     Example:
@@ -1491,6 +1601,7 @@ def timer(name, level: str = 'debug', logger__: logging.Logger = logger_):
             time.sleep(10)
 
     """
+    logger__ = logger__ or logger_
     before = datetime.now()
     log_method = getattr(logger__, level)
     try:
@@ -1498,16 +1609,6 @@ def timer(name, level: str = 'debug', logger__: logging.Logger = logger_):
     finally:
         elapsed = (datetime.now() - before).total_seconds()
         log_method(f'{name} elapsed {elapsed} seconds')
-
-
-def async_timer(coro: Coroutine, name: str = 'async timer', level: str = 'debug') -> callable:
-    """Returns a new coroutine which prints out time elapsed when calling the coroutine."""
-
-    async def _():
-        with timer(name, level):
-            return await coro
-
-    return _()
 
 
 @contextlib.contextmanager

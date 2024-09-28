@@ -111,6 +111,8 @@ def json_error_handler(request: Request, exception: Exception):
     return json_response(body, HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
+api_app.error_handler.add(Exception, json_error_handler)
+
 PERPETUAL_WORKERS = list()
 
 

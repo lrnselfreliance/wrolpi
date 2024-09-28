@@ -83,6 +83,14 @@ function handleEvents(events) {
             eventToast('Move Failed', message, 'error');
         }
 
+        if (event === 'config_import_failed') {
+            eventToast('Config Import Failed', message, 'error');
+        }
+
+        if (event === 'config_save_failed') {
+            eventToast('Config Save Failed', message, 'error');
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

@@ -303,3 +303,16 @@ async def test_inventories_config(async_client, test_session, test_directory, in
     test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
     db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
     assert test_items == db_items
+
+    # An extra Inventory with items should be deleted from the DB.
+    inventory = Inventory(name='delete me')
+    test_session.add(inventory)
+    inventory.flush()
+    test_session.add(Item(inventory_id=inventory.id))
+    test_session.commit()
+    assert test_session.query(Inventory).count() == 2
+    assert {i for i, in test_session.query(Inventory.name)} == {'Food Storage', 'delete me'}
+
+    import_inventories_config()
+    assert test_session.query(Inventory).count() == 1
+    assert test_session.query(Inventory).one().name == 'Food Storage'

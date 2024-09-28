@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, DECIMAL
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import Base, ModelHelper
@@ -55,6 +55,10 @@ class Inventory(Base, ModelHelper):
         Delete all Items of this Inventory.  Then delete this inventory.
         """
         self.deleted_at = now()
+
+    @staticmethod
+    def find_by_name(session: Session, name: str) -> 'Inventory':
+        return session.query(Inventory).filter_by(name=name).one()
 
 
 class InventoriesVersion(Base, ModelHelper):

@@ -297,8 +297,17 @@ export class SettingsPage extends React.Component {
     }
 
     render() {
+        const controlSegment = <Segment>
+            <Header as='h3'>Control WROLPi</Header>
+            <RestartButton/>
+            <ShutdownButton/>
+        </Segment>;
+
         if (this.state.ready === false) {
-            return <Loader active inline='centered'/>
+            return <>
+                <Loader active inline='centered'/>
+                {controlSegment}
+            </>
         } else if (this.state.ready === undefined) {
             return <ErrorMessage>Unable to fetch settings</ErrorMessage>
         }
@@ -539,11 +548,7 @@ export class SettingsPage extends React.Component {
                     </Form>
                 </Segment>
 
-                <Segment>
-                    <Header as='h3'>Control WROLPi</Header>
-                    <RestartButton/>
-                    <ShutdownButton/>
-                </Segment>
+                {controlSegment}
             </Container>;
         }
         }</SettingsContext.Consumer>

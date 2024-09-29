@@ -213,3 +213,9 @@ class SearchFileEstimateRequest:
 @dataclass
 class SearchOtherEstimateRequest:
     tag_names: List[str] = field(default_factory=lambda: list())
+
+
+@dataclass
+class ConfigsImportRequest:
+    file_name: str
+    overwrite: bool = False

@@ -6,6 +6,7 @@ import os
 import pathlib
 import re
 import tempfile
+import time
 from datetime import date, datetime
 from decimal import Decimal
 from http import HTTPStatus
@@ -461,6 +462,12 @@ async def test_cum_timer():
     assert calls == 1
 
     print_timer()
+
+
+def test_timer():
+    """`cum_timer` can be used to profile code."""
+    with common.timer(name='test_timer'):
+        time.sleep(0.1)
 
 
 @pytest.mark.asyncio

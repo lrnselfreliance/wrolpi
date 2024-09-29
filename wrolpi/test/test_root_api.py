@@ -12,6 +12,7 @@ from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
 from wrolpi.switches import await_switches
+from wrolpi.tags import Tag
 from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
@@ -759,3 +760,51 @@ async def test_search_other_estimates(async_client, test_session, channel_factor
     request, response = await async_client.post('/api/search_other_estimates', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['others']['channel_count'] == 1, 'Only one Channel is tagged.'
+
+
+@pytest.mark.asyncio
+async def test_import_configs(async_client, test_session, test_tags_config, tag_factory, test_wrolpi_config,
+                              test_channels_config):
+    """Tags can be imported or saved on demand."""
+    # Create a tag, save it to config, delete it from the DB.
+    one = await tag_factory()
+    test_session.commit()
+    await await_switches()
+    test_session.delete(one)
+    test_session.commit()
+    assert 'one' in test_tags_config.read_text()
+    assert test_session.query(Tag).count() == 0, 'Tag should have been deleted'
+
+    # Can get list of configs, and if they are valid.
+    request, response = await async_client.get('/api/configs')
+    assert response.status_code == HTTPStatus.OK
+    # WROLPiConfig was not saved.
+    assert 'wrolpi.yaml' in response.json['configs']
+    assert response.json['configs']['wrolpi.yaml']['valid'] is False
+    assert response.json['configs']['wrolpi.yaml']['successful_import'] is False
+    # Tags was saved, and is valid.
+    assert 'tags.yaml' in response.json['configs']
+    assert response.json['configs']['tags.yaml']['valid'] is True
+    assert response.json['configs']['wrolpi.yaml']['successful_import'] is False
+
+    # Can import the config.
+    body = dict(file_name='tags.yaml')
+    request, response = await async_client.post('/api/configs/import', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    # Deleted Tag was re-created.
+    assert [i for i, in test_session.query(Tag.name)] == ['one', ]
+
+    # Can trigger a save of a config
+    assert not test_wrolpi_config.exists()
+    body = dict(file_name='wrolpi.yaml')
+    request, response = await async_client.post('/api/configs/save', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_wrolpi_config.is_file()
+    assert 'wrol_mode:' in test_wrolpi_config.read_text()
+
+    # Config is now valid because it exists.
+    request, response = await async_client.get('/api/configs')
+    assert response.status_code == HTTPStatus.OK
+    assert 'wrolpi.yaml' in response.json['configs']
+    assert response.json['configs']['wrolpi.yaml']['valid'] is True
+    assert response.json['configs']['tags.yaml']['successful_import'] is True

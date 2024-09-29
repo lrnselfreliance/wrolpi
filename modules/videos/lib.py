@@ -21,6 +21,7 @@ from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
 from wrolpi.errors import UnknownDirectory
+from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
@@ -243,7 +244,7 @@ class ChannelsConfig(ConfigFile):
     def channels(self, value: dict):
         self.update({'channels': value})
 
-    def import_config(self, file: pathlib.Path = None):
+    def import_config(self, file: pathlib.Path = None, send_events=False):
         from modules.videos.channel.lib import get_channel
         super().import_config()
         try:
@@ -312,10 +313,12 @@ class ChannelsConfig(ConfigFile):
             self.successful_import = True
             channel_import_logger.info('Importing channels config complete')
         except Exception as e:
-            channel_import_logger.warning('Failed to load channels config!', exc_info=e)
-            if PYTEST:
-                # Do not interrupt startup, only raise during testing.
-                raise
+            self.successful_import = False
+            message = f'Failed to import {self.get_relative_file()} config!'
+            if send_events:
+                channel_import_logger.warning(message, exc_info=e)
+                Events.send_config_import_failed(message)
+            raise
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()

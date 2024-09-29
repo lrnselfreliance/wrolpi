@@ -84,6 +84,14 @@ class Events:
     def send_file_move_failed(message: str = None):
         send_event('file_move_failed', message, subject='refresh')
 
+    @staticmethod
+    def send_config_import_failed(message: str = None):
+        send_event('config_import_failed', message, subject='configs')
+
+    @staticmethod
+    def send_config_save_failed(message: str = None):
+        send_event('config_save_failed', message, subject='configs')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

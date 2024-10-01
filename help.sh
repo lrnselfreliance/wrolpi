@@ -174,9 +174,15 @@ if [ -f /etc/systemd/system/wrolpi-app.service ]; then
 fi
 
 if curl -s http://0.0.0.0:5000 | grep -i wrolpi >/dev/null; then
-  echo "OK: WROLPi app responded with interface"
+  echo "OK: WROLPi app responded with UI"
 else
-  echo "FAILED: WROLPi app did not respond with interface"
+  echo "FAILED: WROLPi app did not respond with UI"
+fi
+
+if curl -s http://0.0.0.0:5000/epub/epub.html | grep -i epub.js >/dev/null; then
+  echo "OK: WROLPi app responded with ebook interface"
+else
+  echo "FAILED: WROLPi app did not respond with ebook interface"
 fi
 
 if netstat -ant | grep LISTEN | grep 0.0.0.0:80 >/dev/null; then
@@ -249,7 +255,7 @@ else
   echo "FAILED: Media directory is not a mounted drive.  (This is fine if you don't have an external drive.)"
 fi
 
-if curl -k -s https://0.0.0.0/media/ | grep "Index of" >/dev/null; then
+if curl -k -s https://0.0.0.0/media/ | grep "Index of /media/" >/dev/null; then
   echo "OK: Media directory files are served by nginx"
   if curl -k -s -I https://0.0.0.0/media/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
     echo "OK: Config can be fetched from nginx"
@@ -258,6 +264,17 @@ if curl -k -s https://0.0.0.0/media/ | grep "Index of" >/dev/null; then
   fi
 else
   echo "FAILED: Media directory files are not being served"
+fi
+
+if curl -k -s https://0.0.0.0/download/ | grep "Index of /download/" >/dev/null; then
+  echo "OK: Media download directory files are served by nginx"
+  if curl -k -s -I https://0.0.0.0/download/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
+    echo "OK: Config can be downloaded from nginx"
+  else
+    echo "FAILED: Media download directory files are not being served"
+  fi
+else
+  echo "FAILED: Media download directory files are not being served"
 fi
 
 if [ "$(stat -c '%U' /media/wrolpi/)" == 'wrolpi' ]; then

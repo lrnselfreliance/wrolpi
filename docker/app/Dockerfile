@@ -18,4 +18,4 @@ USER node
 RUN npm install
 
 # Run the production build
-CMD ["serve", "-s", "build"]
+CMD ["npm", "run", "start"]

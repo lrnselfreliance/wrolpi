@@ -4,7 +4,8 @@ Wants=wrolpi-api.service
 PartOf=wrolpi.target
 
 [Service]
-ExecStart=/usr/local/bin/serve -s build -l 5000
+# Use development React app
+ExecStart=/usr/bin/npm run start
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/

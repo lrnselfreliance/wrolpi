@@ -38,9 +38,6 @@ git config --global --add safe.directory /opt/wrolpi
 git reset HEAD --hard
 chown -R wrolpi:wrolpi /opt/wrolpi
 
-# Rebuild the app after reset.
-(cd app && npm run build)
-
 # Copy configs to system.
 cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
 [ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf

@@ -33,7 +33,7 @@ rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
 
 # We only need to build the Lite and Desktop images.
 rm "${BUILD_DIR}"/stage*/EXPORT*
-echo 'IMG_SUFFIX="-lite"' > "${BUILD_DIR}/stage2/EXPORT_IMAGE"
+#echo 'IMG_SUFFIX="-lite"' > "${BUILD_DIR}/stage2/EXPORT_IMAGE"
 echo 'IMG_SUFFIX="-desktop"' > "${BUILD_DIR}/stage5/EXPORT_IMAGE"
 
 # Build the images.
@@ -45,7 +45,7 @@ grep "03-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (
 grep "04-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 4 failed!" && exit 1)
 
 # Move the built images out of the build directory.
-mv "${BUILD_DIR}"/deploy/*lite*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-lite.img.xz
+#mv "${BUILD_DIR}"/deploy/*lite*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-lite.img.xz
 mv "${BUILD_DIR}"/deploy/*desktop*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-desktop.img.xz
 chmod 644 "${SCRIPT_DIR}"/*xz
 chown -R 1000:1000 "${SCRIPT_DIR}"

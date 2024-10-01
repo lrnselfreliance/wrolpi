@@ -173,13 +173,13 @@ if [ -f /etc/systemd/system/wrolpi-app.service ]; then
   fi
 fi
 
-if curl -s http://0.0.0.0:5000 | grep -i wrolpi >/dev/null; then
+if curl -s http://0.0.0.0:3000 | grep -i wrolpi >/dev/null; then
   echo "OK: WROLPi app responded with UI"
 else
   echo "FAILED: WROLPi app did not respond with UI"
 fi
 
-if curl -s http://0.0.0.0:5000/epub/epub.html | grep -i epub.js >/dev/null; then
+if curl -s http://0.0.0.0:3000/epub/epub.html | grep -i epub.js >/dev/null; then
   echo "OK: WROLPi app responded with ebook interface"
 else
   echo "FAILED: WROLPi app did not respond with ebook interface"

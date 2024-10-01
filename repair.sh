@@ -25,6 +25,14 @@ systemctl stop nginx || :
 systemctl stop renderd || :
 systemctl stop apache2 || :
 
+# Create the WROLPi user
+grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
+[ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
+127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5432:wrolpi:wrolpi:wrolpi
+EOF
+chmod 0600 /home/wrolpi/.pgpass
+
 # Reset any inadvertent changes to the WROLPi repo.  Restore ownership in case this repair script fails.
 git config --global --add safe.directory /opt/wrolpi
 git reset HEAD --hard
@@ -75,14 +83,6 @@ a2enmod headers
 
 systemctl enable renderd
 systemctl start renderd
-
-# Create the WROLPi user
-grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
-[ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chmod 0600 /home/wrolpi/.pgpass
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi

@@ -119,6 +119,7 @@ def test_timedelta_to_timestamp(td, expected):
     ('2022-02-18T11:00:03.028Z', datetime(2022, 2, 18, 11, 0, 3, 28000, tzinfo=pytz.UTC)),
     # From SingleFile.
     ('Fri Jun 17 2022 19:24:52', datetime(2022, 6, 17, 19, 24, 52)),
+    ('9/26/2024 11:55:13 AM', datetime(2024, 9, 26, 11, 55, 13)),
     # PDFs are the Wild West...
     ("D:20221226113758-07'00", datetime(2022, 12, 26, 11, 37, 58, tzinfo=timezone(timedelta(days=-1, seconds=61200)))),
     ('D:20200205184724', datetime(2020, 2, 5, 18, 47, 24)),

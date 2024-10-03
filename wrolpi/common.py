@@ -476,7 +476,7 @@ class ConfigFile:
                     logger_.debug(f'Copied backup config: {rel_path} -> {backup_file}')
 
                 # Write the config in-memory to the file.  Track version changes to avoid overriding newer config.
-                self._config['version'] += 1
+                self._config['version'] = (self._config['version'] or 0) + 1
                 config = deepcopy(self._config)
                 self.write_config_data(config, file)
 
@@ -1213,22 +1213,31 @@ def escape_file_name(name: str) -> str:
 
 
 # Maximum length is probably 255, but we need more length for large suffixes like `.readability.json`, and temporary
-# downloading suffixes.
+# downloading suffixes from yt-dlp.
 MAXIMUM_FILE_LENGTH = 180
 
 
-def trim_file_name(name: str) -> str:
+def trim_file_name(path: str | pathlib.Path) -> str | pathlib.Path:
     """Shorten the file name only if it is longer than the file system supports.  Trim from the end of the name until
-     the name is short enough, excluding suffix."""
-    if len(name) < MAXIMUM_FILE_LENGTH:
-        return name
+     the name is short enough (preserving any suffix)."""
+    name_type = pathlib.Path if isinstance(path, pathlib.Path) else str
+    parent = path.parent if isinstance(path, pathlib.Path) else '/'.join(i for i in path.split('/')[:-1])
+    path = path.name if isinstance(path, pathlib.Path) else path
+
+    if len(path) < MAXIMUM_FILE_LENGTH:
+        return name_type(path)
 
     # Don't trim the filename to exactly 256 characters.
     # This is because a FileGroup will have varying filename lengths.
     from wrolpi.files.lib import split_path_stem_and_suffix
-    stem, suffix = split_path_stem_and_suffix(name)
+    stem, suffix = split_path_stem_and_suffix(path)
     excess = MAXIMUM_FILE_LENGTH - len(suffix)
-    return stem[:excess].strip() + suffix
+    new_name = stem[:excess].strip() + suffix
+    if parent:
+        if name_type == pathlib.Path:
+            return parent / new_name
+        return f'{parent}/{new_name}'
+    return name_type(new_name)
 
 
 def native_only(func: callable):

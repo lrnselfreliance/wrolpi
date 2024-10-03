@@ -400,6 +400,7 @@ class ConfigFile:
             if not self.is_valid(file):
                 raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
             config_data = self.read_config_file(file)
+            config_data = {k: v for k, v in config_data.items() if k in self.default_config}
             self._config.update(asdict(self.validator(**config_data)))
         return self
 

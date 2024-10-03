@@ -271,7 +271,30 @@ export async function getStatus() {
 export async function getSettings() {
     const response = await apiGet(`${API_URI}/settings`);
     if (response.ok) {
-        return await response.json();
+        const content = await response.json();
+        return {
+            archive_destination: content.archive_destination,
+            download_manager_disabled: content.download_manager_disabled,
+            download_manager_stopped: content.download_manager_stopped,
+            download_on_startup: content.download_on_startup,
+            download_timeout: content.download_timeout,
+            hotspot_device: content.hotspot_device,
+            hotspot_on_startup: content.hotspot_on_startup,
+            hotspot_password: content.hotspot_password,
+            hotspot_ssid: content.hotspot_ssid,
+            hotspot_status: content.hotspot_status,
+            ignore_outdated_zims: content.ignore_outdated_zims,
+            ignored_directories: content.ignored_directories,
+            log_level: content.log_level,
+            map_destination: content.map_destination,
+            nav_color: content.nav_color,
+            media_directory: content.media_directory,
+            throttle_on_startup: content.throttle_on_startup,
+            throttle_status: content.throttle_status,
+            videos_destination: content.videos_destination,
+            wrol_mode: content.wrol_mode,
+            zims_destination: content.zims_destination,
+        }
     } else {
         const message = await getErrorMessage(response, 'Could not get settings.');
         toast({

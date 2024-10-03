@@ -11,6 +11,8 @@ export const StatusContext = React.createContext({
 export const SettingsContext = React.createContext({
     settings: {},
     fetchSettings: null,
+    saveSettings: null,
+    pending: false,
 });
 
 // `useQuery`

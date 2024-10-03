@@ -12,6 +12,34 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
+Help() {
+  # Display Help
+  echo "Build WROLPi Raspberry Pi images"
+  echo
+  echo "Syntax: upgrade.sh [-h] [-b BRANCH]"
+  echo "options:"
+  echo "h     Print this help."
+  echo "b     Build from this git BRANCH."
+  echo
+}
+
+BRANCH="master"
+while getopts ":hb:" option; do
+  case $option in
+  h) # display Help
+    Help
+    exit
+    ;;
+  b)
+    BRANCH="${OPTARG}"
+    ;;
+  *) # invalid argument(s)
+    echo "Error: Invalid option"
+    exit 1
+    ;;
+  esac
+done
+
 if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/gis-map.dump.gz" ]; then
   echo "stage2/04-wrolpi/files/gis-map.dump.gz does not exist!"
   exit 1
@@ -29,6 +57,7 @@ git clone --branch arm64 https://github.com/RPI-Distro/pi-gen.git "${BUILD_DIR}"
 
 # Copy the configuration and build files into the pi-gen directory.
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
+echo "WROLPI_BRANCH=${BRANCH}" >>  "${BUILD_DIR}/config.txt"
 rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
 
 # We only need to build the Lite and Desktop images.

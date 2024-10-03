@@ -14,7 +14,7 @@ import {
 import {
     APIButton,
     BackButton,
-    DirectoryInput,
+    DirectorySearch,
     ErrorMessage,
     frequencyOptions,
     HelpHeader,
@@ -370,10 +370,10 @@ function ChannelPage({create, header}) {
                         <label>
                             Directory <RequiredAsterisk/>
                         </label>
-                        <DirectoryInput required
-                                        value={channel.directory}
-                                        setInput={value => changeValue('directory', value)}
-                                        placeholder='videos/channel directory'
+                        <DirectorySearch
+                            value={channel.directory}
+                            setInput={value => changeValue('directory', value)}
+                            placeholder='videos/channel directory'
                         />
                     </FormField>
                 </FormGroup>

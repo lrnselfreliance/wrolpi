@@ -5,7 +5,7 @@ After=network.target auditd.service
 
 [Service]
 # Delay startup so WROLPi API has time to start.
-ExecStartPre=/bin/sleep 30
+ExecStartPre=/bin/sleep 60
 # Map is intense, but not a high priority.
 Nice=19
 ExecStart=/usr/bin/renderd -f

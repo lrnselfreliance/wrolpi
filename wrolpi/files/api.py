@@ -1,6 +1,5 @@
 import pathlib
 from http import HTTPStatus
-from typing import List
 
 import sanic.request
 from sanic import response, Request, Blueprint
@@ -127,31 +126,51 @@ def post_directories(_, body: schema.DirectoriesRequest):
 
 @files_bp.post('/search_directories')
 @openapi.definition(
-    summary='Get all directories whose name matches the provided name.',
+    summary='Get all directories whose name matches the provided name or path.',
     body=schema.DirectoriesSearchRequest,
 )
 @validate(schema.DirectoriesSearchRequest)
 async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
-    if len(body.name) <= 1:
-        return response.empty()
+    if len(body.path) <= 1:
+        # Need more data before searching.
+        return json_response({
+            'is_dir': False,
+            'directories': [],
+            'channel_directories': [],
+            'domain_directories': [],
+        })
 
-    from modules.videos.channel import lib as channels_lib
-    channels = await channels_lib.search_channels_by_name(name=body.name)
+    path = get_media_directory() / body.path
+
+    try:
+        matching_directories = lib.get_matching_directories(str(path))
+        matching_directories = list(map(pathlib.Path, matching_directories))
+    except FileNotFoundError:
+        matching_directories = []
+
+    # Search Channels by name.
+    from modules.videos.channel.lib import search_channels_by_name
+    channels = await search_channels_by_name(name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
 
-    from modules.archive import lib as archives_lib
-    domains = await archives_lib.search_domains_by_name(name=body.name)
+    # Search Domains by name.
+    from modules.archive.lib import search_domains_by_name
+    domains = await search_domains_by_name(name=body.path)
     domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
 
-    # Get all directories that match but do not contain the above directories.
-    from wrolpi.files.models import Directory
-    directories: List[Directory] = await lib.search_directories_by_name(
-        name=body.name,
-        excluded=list(map(str, channel_paths + domain_paths)))
+    # Get all Directory that match but do not contain the above directories.
+    excluded = [str(i) for i in channel_paths + domain_paths + matching_directories]
+    directories = await lib.search_directories_by_name(name=body.path, excluded=excluded)
+
+    # Return only the top 20 directories.
+    directories = [i.__json__() for i in directories]
+    directories.extend([{'path': i, 'name': i.name} for i in matching_directories])
+    directories = list(sorted(directories, key=lambda i: i['path']))[:20]
 
     body = {
+        'is_dir': path.is_dir(),
         'directories': directories,
         'channel_directories': channel_directories,
         'domain_directories': domain_directories

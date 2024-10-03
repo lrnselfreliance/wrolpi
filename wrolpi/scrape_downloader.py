@@ -61,7 +61,7 @@ class ScrapeHTMLDownloader(Downloader):
             raise UnrecoverableDownloadError('Destination must be defined')
         destination = pathlib.Path(destination)
         if not destination.is_dir():
-            raise UnrecoverableDownloadError(f'Destination does not exist: {destination}')
+            destination.mkdir(parents=True)
 
         suffix = suffix.lower()
 

@@ -8,7 +8,7 @@ import {
     encodeMediaPath,
     getParentDirectory,
     humanFileSize,
-    humanNumber,
+    humanNumber, isoDatetimeToElapsedPopup,
     isoDatetimeToString,
     MultilineText,
     PageContainer,
@@ -367,7 +367,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <Segment>
 
                 <Header as='h2'>{title}</Header>
-                {videoFile.published_datetime && <h3>{isoDatetimeToString(videoFile.published_datetime)}</h3>}
+                {videoFile.published_datetime && <h3>{isoDatetimeToElapsedPopup(videoFile.published_datetime)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.id}/video`}>
                         {channel.name}

@@ -96,7 +96,7 @@ export async function createChannel(channel) {
 export async function deleteChannel(channelId) {
     const response = await apiDelete(`${VIDEOS_API}/channels/${channelId}`);
     if (response.status !== 204) {
-        const message = getErrorMessage(response, 'Failed to delete channel.');
+        const message = await getErrorMessage(response, 'Failed to delete channel.');
         toast({
             type: 'error',
             title: 'Unexpected server response',
@@ -112,7 +112,7 @@ export async function getChannels() {
     if (response.status === 200) {
         return (await response.json())['channels'];
     } else {
-        const message = getErrorMessage(response, 'Failed to get channels.');
+        const message = await getErrorMessage(response, 'Failed to get channels.');
         toast({
             type: 'error',
             title: 'Unexpected server response',
@@ -153,7 +153,7 @@ export async function tagChannelInfo(channelId, tagName) {
     if (response.ok) {
         return (await response.json()).videos_destination;
     }
-    const message = getErrorMessage(response, 'Failed to get channel tag info.');
+    const message = await getErrorMessage(response, 'Failed to get channel tag info.');
     toast({
         type: 'error',
         title: 'Getting Channel Tag Info Failed',
@@ -188,7 +188,7 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
         let data = await response.json();
         return [data['file_groups'], data['totals']['file_groups']];
     } else {
-        const message = getErrorMessage(response, 'Failed to search videos.');
+        const message = await getErrorMessage(response, 'Failed to search videos.');
         toast({
             type: 'error',
             title: 'Searching Videos failed',
@@ -218,7 +218,7 @@ export async function deleteVideos(videoIds) {
     const i = videoIds.join(',');
     const response = await apiDelete(`${VIDEOS_API}/video/${i}`);
     if (response.status !== 204) {
-        const message = getErrorMessage(response, 'Failed to delete videos.');
+        const message = await getErrorMessage(response, 'Failed to delete videos.');
         toast({
             type: 'error',
             title: 'Deleting Videos failed',
@@ -258,7 +258,7 @@ export async function getStatus() {
     if (response.status === 200) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Could not get server status.');
+        const message = await getErrorMessage(response, 'Could not get server status.');
         toast({
             type: 'error',
             title: 'Fetching Status Failed',
@@ -273,7 +273,7 @@ export async function getSettings() {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Could not get settings.');
+        const message = await getErrorMessage(response, 'Could not get settings.');
         toast({
             type: 'error',
             title: 'Fetching Settings Failed',
@@ -286,7 +286,7 @@ export async function getSettings() {
 export async function saveSettings(settings) {
     const response = await apiPatch(`${API_URI}/settings`, settings);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not save settings.');
+        const message = await getErrorMessage(response, 'Could not save settings.');
         toast({
             type: 'error',
             title: 'Saving Settings Failed',
@@ -302,7 +302,7 @@ export async function getDownloads() {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Could not get downloads.');
+        const message = await getErrorMessage(response, 'Could not get downloads.');
         toast({
             type: 'error',
             title: 'Getting Downloads Failed',
@@ -321,7 +321,7 @@ export async function getConfigs() {
             configs: data.configs,
         }
     } else {
-        const message = getErrorMessage(response, 'Could not get configs.');
+        const message = await getErrorMessage(response, 'Could not get configs.');
         toast({
             type: 'error',
             title: 'Getting Configs Failed',
@@ -336,7 +336,7 @@ export async function postImportConfig(fileName) {
     const body = {file_name: fileName};
     const response = await apiPost(`${API_URI}/configs/import`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not import config.');
+        const message = await getErrorMessage(response, 'Could not import config.');
         toast({
             type: 'error',
             title: 'Importing config Failed',
@@ -351,7 +351,7 @@ export async function postSaveConfig(fileName) {
     const body = {file_name: fileName, overwrite: true};
     const response = await apiPost(`${API_URI}/configs/save`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not save config.');
+        const message = await getErrorMessage(response, 'Could not save config.');
         toast({
             type: 'error',
             title: 'Saving config Failed',
@@ -376,7 +376,7 @@ export async function getVideosStatistics() {
     if (response.status === 200) {
         return (await response.json())['statistics'];
     } else {
-        const message = getErrorMessage(response, 'Could not get statistics.');
+        const message = await getErrorMessage(response, 'Could not get statistics.');
         toast({
             type: 'error',
             title: 'Getting Statistics Failed',
@@ -409,7 +409,7 @@ export async function createChannelDownload(channelId, url, frequency, title_inc
                 time: 5000,
             });
         } else {
-            const message = getErrorMessage(response, 'Could not create Channel download.');
+            const message = await getErrorMessage(response, 'Could not create Channel download.');
             toast({
                 type: 'error',
                 title: 'Creating Channel Download Failed',
@@ -443,7 +443,7 @@ export async function updateChannelDownload(channelId, downloadId, url, frequenc
                 time: 5000,
             });
         } else {
-            const message = getErrorMessage(response, 'Could not update Channel download.');
+            const message = await getErrorMessage(response, 'Could not update Channel download.');
             toast({
                 type: 'error',
                 title: 'Updating Channel Download Failed',
@@ -459,7 +459,7 @@ export async function refreshChannel(channelId) {
     let url = `${VIDEOS_API}/channels/refresh/${channelId}`;
     const response = await apiPost(url);
     if (!response.ok) {
-        const message = getErrorMessage(response, "Failed to refresh this channel's directory");
+        const message = await getErrorMessage(response, "Failed to refresh this channel's directory");
         toast({
             type: 'error',
             title: 'Failed to refresh',
@@ -476,7 +476,7 @@ export async function encryptOTP(otp, plaintext) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to encrypt OTP.  See server logs.');
+        const message = await getErrorMessage(response, 'Failed to encrypt OTP.  See server logs.');
         toast({
             type: 'error',
             title: 'Failed to encrypt OTP',
@@ -492,7 +492,7 @@ export async function decryptOTP(otp, ciphertext) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to decrypt OTP.  See server logs.');
+        const message = await getErrorMessage(response, 'Failed to decrypt OTP.  See server logs.');
         toast({
             type: 'error',
             title: 'Failed to decrypt OTP',
@@ -507,7 +507,7 @@ export async function getCategories() {
     if (response.ok) {
         return (await response.json())['categories'];
     } else {
-        const message = getErrorMessage(response, 'Could not get categories');
+        const message = await getErrorMessage(response, 'Could not get categories');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -519,7 +519,7 @@ export async function getBrands() {
     if (response.ok) {
         return (await response.json())['brands'];
     } else {
-        const message = getErrorMessage(response, 'Could not get brands');
+        const message = await getErrorMessage(response, 'Could not get brands');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -531,7 +531,7 @@ export async function getInventories() {
     if (response.ok) {
         return (await response.json())['inventories'];
     } else {
-        const message = getErrorMessage(response, 'Could not get inventories');
+        const message = await getErrorMessage(response, 'Could not get inventories');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -543,7 +543,7 @@ export async function getInventory(inventoryId) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Could not get inventory');
+        const message = await getErrorMessage(response, 'Could not get inventory');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -553,7 +553,7 @@ export async function getInventory(inventoryId) {
 export async function saveInventory(inventory) {
     const response = await apiPost(`${API_URI}/inventory`, inventory);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to save inventory');
+        const message = await getErrorMessage(response, 'Failed to save inventory');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -565,7 +565,7 @@ export async function updateInventory(inventoryId, inventory) {
     delete inventory['id'];
     const response = await apiPut(`${API_URI}/inventory/${inventoryId}`, inventory);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to update inventory');
+        const message = await getErrorMessage(response, 'Failed to update inventory');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -576,7 +576,7 @@ export async function updateInventory(inventoryId, inventory) {
 export async function deleteInventory(inventoryId) {
     const response = await apiDelete(`${API_URI}/inventory/${inventoryId}`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to delete inventory');
+        const message = await getErrorMessage(response, 'Failed to delete inventory');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -589,7 +589,7 @@ export async function getItems(inventoryId) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to get items');
+        const message = await getErrorMessage(response, 'Failed to get items');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -602,7 +602,7 @@ export async function saveItem(inventoryId, item) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to save item');
+        const message = await getErrorMessage(response, 'Failed to save item');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -616,7 +616,7 @@ export async function updateItem(itemId, item) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to update item');
+        const message = await getErrorMessage(response, 'Failed to update item');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -630,7 +630,7 @@ export async function deleteItems(itemIds) {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Failed to delete items');
+        const message = await getErrorMessage(response, 'Failed to delete items');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -651,7 +651,7 @@ export async function deleteArchives(archiveIds) {
     let i = archiveIds.join(',');
     const response = await apiDelete(`${API_URI}/archive/${i}`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to delete archives');
+        const message = await getErrorMessage(response, 'Failed to delete archives');
         toast({
             type: 'error', title: 'Unexpected server response', description: message, time: 5000,
         });
@@ -687,7 +687,7 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
         let data = await response.json();
         return [data['file_groups'], data['totals']['file_groups']];
     } else {
-        const message = getErrorMessage(response, 'Cannot search archives.  See server logs.');
+        const message = await getErrorMessage(response, 'Cannot search archives.  See server logs.');
         toast({
             type: 'error',
             title: 'Unable to search archives',
@@ -704,7 +704,7 @@ export async function fetchDomains() {
         let data = await response.json();
         return [data['domains'], data['totals']['domains']];
     } else {
-        const message = getErrorMessage(response, 'Unable to fetch Domains.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to fetch Domains.  See server logs.');
         toast({
             type: 'error',
             title: 'Domains Error',
@@ -720,7 +720,7 @@ export async function getArchive(archiveId) {
         const data = await response.json();
         return [data['file_group'], data['history']];
     } else {
-        const message = getErrorMessage(response, 'Unable to get Archive.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to get Archive.  See server logs.');
         toast({
             type: 'error', title: 'Archive Error', description: message, time: 5000,
         });
@@ -773,7 +773,7 @@ export async function postDownload(
     };
     const response = await apiPost(`${API_URI}/download`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to create Download.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to create Download.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -809,7 +809,7 @@ export async function putDownload(
     };
     const response = await apiPut(`${API_URI}/download/${download_id}`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to update Download.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to update Download.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -820,7 +820,7 @@ export async function putDownload(
 export async function killDownload(download_id) {
     const response = await apiPost(`${API_URI}/download/${download_id}/kill`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to stop Download.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to stop Download.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -831,7 +831,7 @@ export async function killDownload(download_id) {
 export async function restartDownload(download_id) {
     const response = await apiPost(`${API_URI}/download/${download_id}/restart`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to restart Download.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to restart Download.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -842,7 +842,7 @@ export async function restartDownload(download_id) {
 export async function killDownloads() {
     const response = await apiPost(`${API_URI}/download/kill`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to stop downloading.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to stop downloading.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -853,7 +853,7 @@ export async function killDownloads() {
 export async function startDownloads() {
     const response = await apiPost(`${API_URI}/download/enable`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to start downloading.  See server logs.');
+        const message = await getErrorMessage(response, 'Unable to start downloading.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
@@ -875,7 +875,7 @@ export async function deleteDownload(downloadId) {
     try {
         const response = await apiDelete(`${API_URI}/download/${downloadId}`);
         if (!response.ok) {
-            const message = getErrorMessage(response, 'Unable to delete the download.  See server logs.');
+            const message = await getErrorMessage(response, 'Unable to delete the download.  See server logs.');
             toast({
                 type: 'error',
                 title: 'Download Error',
@@ -919,7 +919,7 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
         let [file_groups, total] = [data['file_groups'], data['totals']['file_groups']];
         return [file_groups, total];
     } else {
-        const message = getErrorMessage(response, 'Cannot search files.  See server logs.');
+        const message = await getErrorMessage(response, 'Cannot search files.  See server logs.');
         toast({
             type: 'error',
             title: 'Unable to search files',
@@ -942,7 +942,7 @@ export async function refreshFiles(paths) {
         response = await apiPost(`${API_URI}/files/refresh`);
     }
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Cannot refresh files.  See server logs.');
+        const message = await getErrorMessage(response, 'Cannot refresh files.  See server logs.');
         toast({
             type: 'error',
             title: 'Files Error',
@@ -957,7 +957,7 @@ export async function makeDirectory(path) {
     const body = {path: path};
     const response = await apiPost(`${API_URI}/files/directory`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to create directory.  See server logs.');
+        const message = await getErrorMessage(response, 'Failed to create directory.  See server logs.');
         toast({
             type: 'error',
             title: 'Unable to create directory',
@@ -983,7 +983,7 @@ export async function getFile(path) {
         const {file} = await response.json();
         return file;
     } else {
-        const message = getErrorMessage(response, 'Failed to get file data.  See server logs.');
+        const message = await getErrorMessage(response, 'Failed to get file data.  See server logs.');
         toast({
             type: 'error',
             title: 'Files Error',
@@ -997,7 +997,7 @@ export async function deleteFile(paths) {
     let body = {paths: paths};
     const response = await apiPost(`${API_URI}/files/delete`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to delete file.  See server logs.');
+        const message = await getErrorMessage(response, 'Failed to delete file.  See server logs.');
         toast({
             type: 'error',
             title: 'Files Error',
@@ -1036,7 +1036,7 @@ export async function setHotspot(on) {
                 time: 5000,
             });
         } else {
-            const message = getErrorMessage(response, 'Could not modify hotspot.  See server logs.');
+            const message = await getErrorMessage(response, 'Could not modify hotspot.  See server logs.');
             toast({
                 type: 'error',
                 title: 'Hotspot Error',
@@ -1067,7 +1067,7 @@ export async function setThrottle(on) {
                 time: 5000,
             });
         } else {
-            const message = getErrorMessage(response, 'Could not modify throttle.  See server logs.');
+            const message = await getErrorMessage(response, 'Could not modify throttle.  See server logs.');
             toast({type: 'error', title: 'Throttle Error', description: message, time: 5000});
         }
     }
@@ -1078,7 +1078,7 @@ export async function getMapImportStatus() {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Could not get import status');
+        const message = await getErrorMessage(response, 'Could not get import status');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     }
 }
@@ -1087,7 +1087,7 @@ export async function importMapFiles(paths) {
     let body = {'files': paths};
     const response = await apiPost(`${API_URI}/map/import`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not start import!  See server logs.');
+        const message = await getErrorMessage(response, 'Could not start import!  See server logs.');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     }
 }
@@ -1095,7 +1095,7 @@ export async function importMapFiles(paths) {
 export async function clearCompletedDownloads() {
     const response = await apiPost(`${API_URI}/download/clear_completed`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not clear completed downloads!  See server logs.');
+        const message = await getErrorMessage(response, 'Could not clear completed downloads!  See server logs.');
         toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
     }
     return response
@@ -1104,7 +1104,7 @@ export async function clearCompletedDownloads() {
 export async function deleteOnceDownloads() {
     const response = await apiPost(`${API_URI}/download/delete_once`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not delete once downloads!  See server logs.');
+        const message = await getErrorMessage(response, 'Could not delete once downloads!  See server logs.');
         toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
     }
     return response
@@ -1113,7 +1113,7 @@ export async function deleteOnceDownloads() {
 export async function retryOnceDownloads() {
     const response = await apiPost(`${API_URI}/download/retry_once`);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Could not retry once downloads!  See server logs.');
+        const message = await getErrorMessage(response, 'Could not retry once downloads!  See server logs.');
         toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
     }
     return response
@@ -1124,7 +1124,7 @@ export async function getStatistics() {
     if (response.ok) {
         return await response.json();
     } else {
-        const message = getErrorMessage(response, 'Unable to get file statistics');
+        const message = await getErrorMessage(response, 'Unable to get file statistics');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1168,7 +1168,7 @@ export async function tagFileGroup(fileGroup, name) {
     const uri = `${API_URI}/files/tag`;
     const response = await apiPost(uri, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to add tag');
+        const message = await getErrorMessage(response, 'Unable to add tag');
         toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
     }
 }
@@ -1188,7 +1188,7 @@ export async function untagFileGroup(fileGroup, name) {
     const uri = `${API_URI}/files/untag`;
     const response = await apiPost(uri, body)
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Unable to untag');
+        const message = await getErrorMessage(response, 'Unable to untag');
         toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
     }
 }
@@ -1209,7 +1209,7 @@ export async function saveTag(name, color, id) {
             type: 'info', title: 'Created new tag', description: `Created new tag: ${name}`, time: 2000,
         });
     } else {
-        const message = getErrorMessage(response, 'Unable to save tag');
+        const message = await getErrorMessage(response, 'Unable to save tag');
         toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
     }
 }
@@ -1219,7 +1219,7 @@ export async function deleteTag(id, name) {
     const response = await apiDelete(uri);
     if (response.status === 400) {
         const content = await response.json();
-        const message = getErrorMessage(response, 'Cannot delete, Tag is used');
+        const message = await getErrorMessage(response, 'Cannot delete, Tag is used');
         if (content['code'] === 'USED_TAG') {
             toast({
                 type: 'error', title: 'Error!', description: message, time: 5000,
@@ -1227,7 +1227,7 @@ export async function deleteTag(id, name) {
         }
     } else if (!response.ok) {
         console.error('Failed to delete tag');
-        const message = getErrorMessage(response, `Unable to delete tag: ${name}`);
+        const message = await getErrorMessage(response, `Unable to delete tag: ${name}`);
         toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
     }
 }
@@ -1241,7 +1241,7 @@ export async function fetchFile(path) {
         return content['file'];
     } else {
         console.error('Unable to fetch file dict!  See client logs.');
-        const message = getErrorMessage(response, 'Unable to get File');
+        const message = await getErrorMessage(response, 'Unable to get File');
         toast({type: 'error', title: 'File Error', description: message, time: 5000});
     }
 }
@@ -1252,20 +1252,26 @@ export async function sendNotification(message, url) {
     if (response.status === 201) {
         toast({type: 'success', title: 'Shared', description: 'Your share was sent', time: 2000});
     } else {
-        const message = getErrorMessage(response, 'Your share failed to send!');
+        const message = await getErrorMessage(response, 'Your share failed to send!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
 
-export async function searchDirectories(name) {
-    const body = {name: name || ''};
+export async function searchDirectories(path) {
+    const body = {path: path || ''};
     const response = await apiPost(`${API_URI}/files/search_directories`, body);
     if (response.status === 204) {
         return [];
     } else if (response.status === 200) {
-        return await response.json();
+        const content = await response.json();
+        return {
+            is_dir: content.is_dir,
+            directories: content.directories,
+            channel_directories: content.channel_directories,
+            domain_directories: content.domain_directories,
+        }
     } else {
-        const message = getErrorMessage(response, 'Failed to search directories!');
+        const message = await getErrorMessage(response, 'Failed to search directories!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1274,7 +1280,7 @@ export async function renamePath(path, newName) {
     const body = {path, new_name: newName};
     const response = await apiPost(`${API_URI}/files/rename`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to rename!');
+        const message = await getErrorMessage(response, 'Failed to rename!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1283,7 +1289,7 @@ export async function movePaths(destination, paths) {
     const body = {destination, paths};
     const response = await apiPost(`${API_URI}/files/move`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to move!');
+        const message = await getErrorMessage(response, 'Failed to move!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1292,7 +1298,7 @@ export async function ignoreDirectory(directory) {
     const body = {path: directory};
     const response = await apiPost(`${API_URI}/files/ignore_directory`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to ignore directory!');
+        const message = await getErrorMessage(response, 'Failed to ignore directory!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1301,7 +1307,7 @@ export async function unignoreDirectory(directory) {
     const body = {path: directory};
     const response = await apiPost(`${API_URI}/files/unignore_directory`, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to unignore directory!');
+        const message = await getErrorMessage(response, 'Failed to unignore directory!');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1314,7 +1320,7 @@ export async function fetchZims() {
             zims: content['zims'],
         }
     } else {
-        const message = getErrorMessage(response, 'Cannot fetch Zims');
+        const message = await getErrorMessage(response, 'Cannot fetch Zims');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1329,7 +1335,7 @@ export async function fetchZimSubscriptions() {
             iso_639_codes: content['iso_639_codes'],
         }
     } else {
-        const message = getErrorMessage(response, 'Cannot fetch Zim Subscriptions');
+        const message = await getErrorMessage(response, 'Cannot fetch Zim Subscriptions');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1356,7 +1362,7 @@ export async function tagZimEntry(zim_id, zim_entry, name) {
     const uri = `${API_URI}/zim/tag`;
     const response = await apiPost(uri, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to add zim tag');
+        const message = await getErrorMessage(response, 'Failed to add zim tag');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1367,7 +1373,7 @@ export async function untagZimEntry(zim_id, zim_entry, name) {
     const uri = `${API_URI}/zim/untag`;
     const response = await apiPost(uri, body);
     if (!response.ok) {
-        const message = getErrorMessage(response, 'Failed to untag zim');
+        const message = await getErrorMessage(response, 'Failed to untag zim');
         toast({type: 'error', title: 'Error', description: message, time: 5000});
     }
 }
@@ -1472,7 +1478,7 @@ export async function getOutdatedZims() {
             current: content['current'],
         }
     } else {
-        const message = getErrorMessage(response, 'Cannot fetch outdated Zims.  See server logs.');
+        const message = await getErrorMessage(response, 'Cannot fetch outdated Zims.  See server logs.');
         toast({
             type: 'error',
             title: 'Error',

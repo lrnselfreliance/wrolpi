@@ -20,7 +20,6 @@ import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useCPUTemperature,
-    useDirectories,
     useHotspot,
     useLoad,
     useSearchDirectories,
@@ -53,7 +52,6 @@ import {
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads} from "../api";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `https://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -1213,16 +1211,21 @@ export function DirectorySearch({onSelect, value, ...props}) {
         directories,
         channelDirectories,
         domainDirectories,
+        isDir,
         loading,
     } = useSearchDirectories(value);
     const [results, setResults] = useState();
 
     useEffect(() => {
-        if (
-            (directories && directories.length >= 0)
-            || (channelDirectories && channelDirectories.length >= 0)
-            || (domainDirectories && domainDirectories.length >= 0)) {
-            setResults({
+        if (directories && directories.length >= 0) {
+            const newDirectory = isDir ? {} : {
+                newDirectory: {
+                    name: 'New Directory',
+                    results: [{title: directoryName}],
+                }
+            };
+            const newResults = {
+                ...newDirectory,
                 directories: {
                     name: 'Directories',
                     results: directories.map(i => {
@@ -1240,8 +1243,9 @@ export function DirectorySearch({onSelect, value, ...props}) {
                     results: domainDirectories.map(i => {
                         return {title: i['path'], description: i['domain']};
                     }),
-                }
-            });
+                },
+            };
+            setResults(newResults);
         }
     }, [
         JSON.stringify(directories),
@@ -1254,9 +1258,6 @@ export function DirectorySearch({onSelect, value, ...props}) {
         if (e) {
             e.preventDefault();
         }
-        if (onSelect) {
-            onSelect('');
-        }
         setDirectoryName(data.value);
     }
 
@@ -1264,77 +1265,22 @@ export function DirectorySearch({onSelect, value, ...props}) {
         if (e) {
             e.preventDefault();
         }
+        setDirectoryName(data.result.title);
         // title is the relative path.
         if (onSelect) {
             onSelect(data.result.title);
         }
-        setDirectoryName(data.result.title);
     }
 
-    const handleClear = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        onSelect('');
-        setDirectoryName('');
-    }
-
-    return <Grid>
-        <Grid.Row>
-            <Grid.Column mobile={13} tablet={14} computer={15}>
-                <Search category
-                        placeholder='Search directory names...'
-                        onSearchChange={handleSearchChange}
-                        onResultSelect={handleResultSelect}
-                        loading={loading}
-                        value={directoryName}
-                        results={results}
-                        {...props}
-                />
-            </Grid.Column>
-            <Grid.Column mobile={3} tablet={2} computer={1}>
-                <Button secondary icon='close' onClick={handleClear}/>
-            </Grid.Column>
-        </Grid.Row>
-    </Grid>
-}
-
-export function DirectoryInput({disabled, error, placeholder, setInput, value, required, isDirectory}) {
-    const {directory, directories, setDirectory, isDir} = useDirectories(value);
-    const {settings} = React.useContext(SettingsContext);
-
-    if (!directories || !settings) {
-        return <></>;
-    }
-
-    const localSetInput = (e, {value}) => {
-        setInput(value);
-        setDirectory(value);
-    }
-
-    let {media_directory} = settings;
-    if (media_directory && !media_directory.endsWith('/')) {
-        media_directory = `${media_directory}/`;
-    }
-    error = error || isDirectory && !isDir;
-
-    return <div>
-        <Input
-            action={{
-                color: error ? 'red' : 'green', labelPosition: 'left', icon: 'folder', content: media_directory,
-            }}
-            required={required}
-            disabled={disabled}
-            actionPosition='left'
-            value={directory}
-            onChange={localSetInput}
-            placeholder={placeholder}
-            list='directories'
-        />
-        <datalist id='directories'>
-            {directories.map(i => <option key={i} value={i}>{i}</option>)}
-        </datalist>
-    </div>;
+    return <Search category
+                   placeholder='Search directory names...'
+                   onSearchChange={handleSearchChange}
+                   onResultSelect={handleResultSelect}
+                   loading={loading}
+                   value={directoryName}
+                   results={results}
+                   {...props}
+    />
 }
 
 export const BackButton = ({...props}) => {

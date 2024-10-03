@@ -8,7 +8,6 @@ import {
     getChannel,
     getChannels,
     getConfigs,
-    getDirectories,
     getDownloads,
     getFiles,
     getInventory,
@@ -745,58 +744,22 @@ export const useThrottle = () => {
     return {on, setOn, setThrottle: localSetThrottle};
 }
 
-export const useDirectories = (defaultDirectory) => {
-    const [directories, setDirectories] = useState();
-    const [directory, setDirectory] = useState(defaultDirectory);
-    const [exists, setExists] = useState();
-    const [isDir, setIsDir] = useState();
-    const [isFile, setIsFile] = useState();
-
-    const fetchDirectories = async () => {
-        if (defaultDirectory && directory === '') {
-            setDirectory(defaultDirectory);
-        }
-        try {
-            const {directories, is_dir, exists_, is_file} = await getDirectories(directory);
-            setDirectories(directories);
-            setIsDir(is_dir);
-            setExists(exists_);
-            setIsFile(is_file);
-        } catch (e) {
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get directories',
-                time: 5000,
-            });
-        }
-    }
-
-    useEffect(() => {
-        fetchDirectories();
-    }, [directory, defaultDirectory]);
-
-    useEffect(() => {
-        setDirectory(defaultDirectory);
-    }, [defaultDirectory])
-
-    return {directory, directories, setDirectory, exists, isDir, isFile};
-}
-
 export const useSearchDirectories = (value) => {
     const [directoryName, setDirectoryName] = useState(value ?? '');
     const [directories, setDirectories] = useState(null);
     const [channelDirectories, setChannelDirectories] = useState(null);
     const [domainDirectories, setDomainDirectories] = useState(null);
+    const [isDir, setIsDir] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const localSearchDirectories = async () => {
         setLoading(true);
         try {
-            const {directories: dirs, channel_directories, domain_directories} = await searchDirectories(directoryName);
-            setDirectories(dirs);
-            setChannelDirectories(channel_directories);
-            setDomainDirectories(domain_directories);
+            const result = await searchDirectories(directoryName);
+            setDirectories(result.directories);
+            setChannelDirectories(result.channel_directories);
+            setDomainDirectories(result.domain_directories);
+            setIsDir(result.is_dir);
         } finally {
             setLoading(false);
         }
@@ -806,13 +769,19 @@ export const useSearchDirectories = (value) => {
         localSearchDirectories();
     }, [directoryName]);
 
+    useEffect(() => {
+        // Directory value was changed above.
+        setDirectoryName(value);
+    }, [value]);
+
     return {
         directoryName,
         setDirectoryName,
         directories,
         loading,
         channelDirectories,
-        domainDirectories
+        domainDirectories,
+        isDir,
     }
 }
 

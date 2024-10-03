@@ -15,7 +15,9 @@ logger = logger.getChild(__name__)
 
 
 async def fetch_hrefs(url: str) -> List[str]:
-    content, status = await aiohttp_get(url, timeout=20)
+    async with aiohttp_get(url, timeout=20) as response:
+        status = response.status
+        content = await response.content.read()
     if status != HTTPStatus.OK:
         raise RuntimeError(f'Failed to fetch file catalog')
 

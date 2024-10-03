@@ -1274,37 +1274,42 @@ async def aiohttp_session(timeout: int = None) -> ClientSession:
             yield session
 
 
-async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]:
-    """Perform an async aiohttp POST request.  Return the json contents."""
+@contextlib.asynccontextmanager
+async def aiohttp_post(url: str, json_, timeout: int = None, headers: dict = None) -> ClientResponse:
+    """Perform an async aiohttp POST request.  Yield the response in a session."""
+    headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
-        async with session.post(url, json=json_) as response:
-            return await response.json(), response.status
+        async with session.post(url, json=json_, headers=headers) as response:
+            yield response
 
 
-async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Tuple[bytes, int]:
-    """Perform an async aiohttp GET request.  Return the contents."""
+@contextlib.asynccontextmanager
+async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> ClientResponse:
+    """Perform an async aiohttp GET request.  Yield the response in a session."""
     headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
         async with session.get(url, headers=headers) as response:
-            return await response.content.read(), response.status
+            yield response
 
 
-async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> Tuple[ClientResponse, int]:
-    """Perform an async aiohttp HEAD request.  Return the contents."""
+@contextlib.asynccontextmanager
+async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> ClientResponse:
+    """Perform an async aiohttp HEAD request.  Yield the response in a session."""
     headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
         async with session.head(url, headers=headers) as response:
-            return response, response.status
+            yield response
 
 
 async def speed_test(url: str, timeout: int | None = 10) -> int:
     """Request the last megabyte of the provided url, return the content length divided by the time elapsed (speed)."""
-    response, status = await aiohttp_head(url)
-    content_length = response.headers['Content-Length']
+    async with aiohttp_head(url) as response:
+        content_length = response.headers['Content-Length']
     start_bytes = int(content_length) - 10485760
     range_ = f'bytes={start_bytes}-{content_length}'
     start_time = datetime.now()
-    content, status = await aiohttp_get(url, headers={'Range': range_}, timeout=timeout)
+    async with aiohttp_get(url, headers={'Range': range_}, timeout=timeout) as response:
+        content = await response.content.read()
     elapsed = int((datetime.now() - start_time).total_seconds())
     return len(content) // elapsed
 
@@ -1355,41 +1360,41 @@ FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
 
 async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
     """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
-    response, status = await aiohttp_head(url, timeout)
-    download_logger.debug(f'{response.headers=}')
-    try:
-        links = response.headers.getall('Link')
-    except KeyError:
-        links = None
+    async with aiohttp_head(url, timeout) as response:
+        download_logger.debug(f'{response.headers=}')
+        try:
+            links = response.headers.getall('Link')
+        except KeyError:
+            links = None
 
-    new_links = list()
-    if links:
-        # Convert "Link" header strings to DownloadFileInfoLink.
-        for idx, link in enumerate(links):
-            url, *props = link.split(';')
-            url = url[1:-1]
-            properties = dict()
-            for prop in props:
-                name, value = prop.strip().split('=')
-                properties[name] = value
-            new_links.append(DownloadFileInfoLink(
-                url,
-                properties.get('rel').strip() if 'rel' in properties else None,
-                properties.get('type').strip() if 'type' in properties else None,
-                int(properties.get('pri').strip()) if 'pri' in properties else None,
-                properties.get('geo').strip() if 'geo' in properties else None,
-            ))
+        new_links = list()
+        if links:
+            # Convert "Link" header strings to DownloadFileInfoLink.
+            for idx, link in enumerate(links):
+                url, *props = link.split(';')
+                url = url[1:-1]
+                properties = dict()
+                for prop in props:
+                    name, value = prop.strip().split('=')
+                    properties[name] = value
+                new_links.append(DownloadFileInfoLink(
+                    url,
+                    properties.get('rel').strip() if 'rel' in properties else None,
+                    properties.get('type').strip() if 'type' in properties else None,
+                    int(properties.get('pri').strip()) if 'pri' in properties else None,
+                    properties.get('geo').strip() if 'geo' in properties else None,
+                ))
 
-    info = DownloadFileInfo(
-        type=response.headers.get('Content-Type'),
-        size=int(response.headers['Content-Length']) if 'Content-Length' in response.headers else None,
-        accept_ranges=response.headers.get('Accept-Ranges'),
-        status=response.status,
-        location=response.headers.get('Location'),
-        links=new_links,
-    )
+        info = DownloadFileInfo(
+            type=response.headers.get('Content-Type'),
+            size=int(response.headers['Content-Length']) if 'Content-Length' in response.headers else None,
+            accept_ranges=response.headers.get('Accept-Ranges'),
+            status=response.status,
+            location=response.headers.get('Location'),
+            links=new_links,
+        )
 
-    disposition = response.headers.get('Content-Disposition')
+        disposition = response.headers.get('Content-Disposition')
 
     if disposition and 'filename' in disposition:
         if (match := FILENAME_MATCHER.match(disposition)) and (groups := match.groups()):

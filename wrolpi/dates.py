@@ -61,7 +61,7 @@ def strpdate(dt: str) -> datetime:
                 if len(c) == 13:
                     # d/m/Y HH:MM:SS
                     return datetime.strptime(dt, '%m/%d/%Y %H:%M:%S')
-                elif len(c) == 15:
+                elif len(c) in (15, 16):
                     # d/m/Y HH:MM:SS PM
                     return datetime.strptime(dt, '%m/%d/%Y %H:%M:%S %p')
         elif dt.count('-') == 2 and len(dt) <= 10:

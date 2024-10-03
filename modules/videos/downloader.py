@@ -8,7 +8,7 @@ from typing import Tuple, List, Dict, Optional
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
-from yt_dlp import YoutubeDL
+from yt_dlp import YoutubeDL, DownloadError
 from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
@@ -19,7 +19,7 @@ from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.files.lib import glob_shared_stem
+from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
@@ -503,8 +503,30 @@ class VideoDownloader(Downloader, ABC):
         ydl.add_default_info_extractors()
 
         # Get the path where the video will be saved.
-        entry = extract_info(url, ydl=ydl, process=True)
-        final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
+        try:
+            entry = extract_info(url, ydl=ydl, process=True)
+            final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
+            final_filename = trim_file_name(final_filename)
+        except DownloadError as e:
+            if ' Cannot write ' in str(e):
+                # yt-dlp does not handle long file names well, get the name from the error (lol)
+                last_line = str(e).splitlines()[-1]
+                filename = last_line.split(' file ')[-1].strip()
+                full_path, _ = split_path_stem_and_suffix(filename, full=True)
+                if not full_path.startswith('/'):
+                    logger.error(f'Failed to extract filename from {last_line}')
+                    raise
+                # Trim long filename, add video suffix.
+                final_filename = pathlib.Path(f'{full_path}.{PREFERRED_VIDEO_EXTENSION}')
+                final_filename = trim_file_name(final_filename)
+                # Get entry info json.
+                options['outtmpl'] = str(final_filename)
+                ydl = YoutubeDL(options)
+                ydl.params['logger'] = ydl_logger
+                ydl.add_default_info_extractors()
+                entry = extract_info(url, ydl=ydl, process=True)
+            else:
+                raise
 
         logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
         return final_filename, entry

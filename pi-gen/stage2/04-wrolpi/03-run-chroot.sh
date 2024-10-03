@@ -21,7 +21,8 @@ sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 npm i -g serve@12.0.1 single-file-cli@1.1.54 readability-extractor@0.0.6 carto@1.2.0
 
 # Put the latest WROLPi master in /opt/wrolpi.
-git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+export WROLPI_BRANCH=${WROLPI_BRANCH:master}
+git clone -b ${WROLPI_BRANCH} https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 git config --global --add safe.directory /opt/wrolpi
 
 # Install Python requirements.

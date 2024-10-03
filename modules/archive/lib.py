@@ -112,7 +112,9 @@ async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
 
     data = {'url': url}
     try:
-        contents, status = await aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT)
+        async with aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT) as response:
+            status = response.status
+            contents = await response.json()
         if contents and (error := contents.get('error')):
             # Report the error from the archive service.
             raise Exception(f'Received error from archive service: {error}')

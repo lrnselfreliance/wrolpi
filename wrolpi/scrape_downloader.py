@@ -1,11 +1,9 @@
 import pathlib
-from http import HTTPStatus
 from urllib.parse import urlparse
 
-from wrolpi.common import aiohttp_session, logger, get_html_soup
+from wrolpi.common import logger, get_html_soup, aiohttp_get
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.vars import DEFAULT_HTTP_HEADERS
 
 logger = logger.getChild(__name__)
 
@@ -39,12 +37,9 @@ class ScrapeHTMLDownloader(Downloader):
         return '<ScrapeHTMLDownloader>'
 
     @staticmethod
-    async def fetch_http(url: str) -> str:
-        async with aiohttp_session(timeout=60 * 5) as session:
-            async with session.get(url, headers=DEFAULT_HTTP_HEADERS) as response:
-                logger.debug(f'Got status={response.status_code} from {url}')
-                if response.status_code == HTTPStatus.OK:
-                    return await response.text()
+    async def fetch_html(url: str) -> str:
+        async with aiohttp_get(url, timeout=60 * 5) as response:
+            return await response.text()
 
     async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts > 3:
@@ -68,6 +63,8 @@ class ScrapeHTMLDownloader(Downloader):
         if not destination.is_dir():
             raise UnrecoverableDownloadError(f'Destination does not exist: {destination}')
 
+        suffix = suffix.lower()
+
         page_count = 0
 
         for i in range(depth):
@@ -80,7 +77,7 @@ class ScrapeHTMLDownloader(Downloader):
                     break
 
                 # Get the HTML of the URL.
-                content = await self.fetch_http(url)
+                content = await self.fetch_html(url)
                 page_count += 1
                 if not content:
                     logger.error(f'Failed to download url: {url}')
@@ -101,7 +98,7 @@ class ScrapeHTMLDownloader(Downloader):
                         logger.debug(f'Not a real anchor: {a}')
                         continue
                     child_url = resolve_url(url, href)
-                    if child_url and child_url.endswith(suffix):
+                    if child_url and child_url.lower().endswith(suffix):
                         # Found a file that the User requested.
                         download_urls.append(child_url)
                     else:

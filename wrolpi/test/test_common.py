@@ -850,13 +850,13 @@ async def test_aiohttp(simple_web_server):
     """Test that aiohttp convenience functions work."""
     httpd, server_url = simple_web_server
 
-    content, status = await common.aiohttp_get(server_url)
-    assert content
-    assert status == 200
+    async with common.aiohttp_get(server_url) as response:
+        assert response.content.read()
+        assert response.status == 200
 
-    content, status = await common.aiohttp_head(server_url)
-    assert content
-    assert status == 200
+    async with common.aiohttp_head(server_url) as response:
+        assert response.content.read()
+        assert response.status == 200
 
 
 def test_can_connect_to_server(simple_web_server):

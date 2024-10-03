@@ -5,6 +5,7 @@ import mock
 from wrolpi.downloader import DownloadResult
 from wrolpi.files.downloader import FileDownloader
 from wrolpi.scrape_downloader import ScrapeHTMLDownloader
+from wrolpi.switches import await_switches
 
 EXAMPLE_HTTP = '''
 <html>
@@ -20,7 +21,7 @@ EXAMPLE_HTTP = '''
 '''
 
 
-async def fake_fetch_http(self, url: str):
+async def fake_fetch_html(self, url: str):
     return EXAMPLE_HTTP
 
 
@@ -37,17 +38,17 @@ async def test_scrape_html_downloader(test_directory, test_session, test_downloa
 
     settings = {
         'depth': 1,
-        'suffix': '.pdf',
+        'suffix': '.PDF',  # Suffix case is ignored.
         'destination': str(destination),
     }
     test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
                                           sub_downloader_name='file')
     assert_download_urls(['https://example.com/dir', ])
 
-    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_http', fake_fetch_http), \
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
             mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
-        await asyncio.sleep(1)
+        await await_switches()
 
     assert_download_urls([
         'https://example.com/dir',
@@ -70,7 +71,7 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
                                           sub_downloader_name='file')
     assert_download_urls(['https://example.com/dir', ])
 
-    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_http', fake_fetch_http), \
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
             mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
         await asyncio.sleep(1)

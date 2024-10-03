@@ -13,7 +13,7 @@ libzim==3.5.0
 mock==5.1.0
 psutil==6.0.0
 psycopg2-binary==2.9.9
-pypdf==4.3.1
+pypdf==5.0.1
 pytest-asyncio==0.24.0
 pytest==8.3.3
 python-docx==1.1.2
@@ -26,6 +26,6 @@ sanic==23.6.0  # This is the latest version of Sanic that avoids this bug: https
 selenium==4.9.1
 srt==3.5.3
 vininfo[cli]==1.8.0
-websockets==12.0
+websockets==13.1
 webvtt-py==0.5.1
 yt-dlp==2024.9.27

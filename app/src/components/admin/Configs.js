@@ -66,7 +66,7 @@ function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
     </TableRow>
 }
 
-function ConfigsTable({configs, loading, importConfig, saveConfig, fetchConfigs}) {
+export function ConfigsTable({configs, loading, importConfig, saveConfig, fetchConfigs}) {
     let body = <TableRow>
         <TableCell colSpan={4}><TableRowPlaceholder/></TableCell>
     </TableRow>
@@ -108,41 +108,4 @@ function ConfigsTable({configs, loading, importConfig, saveConfig, fetchConfigs}
             {body}
         </TableBody>
     </Table>
-}
-
-export function ConfigsPage() {
-    const {configs, loading, importConfig, saveConfig, fetchConfigs} = useConfigs();
-
-    React.useEffect(() => {
-        fetchConfigs();
-    }, []);
-
-    const refreshButton = <APIButton
-        icon='refresh'
-        onClick={fetchConfigs}
-    />;
-    const refreshPopupButton = <Popup
-        content='Check if configs are valid'
-        on='hover'
-        trigger={refreshButton}
-    />;
-
-    return <PageContainer>
-        <Grid columns={2}>
-            <GridRow>
-                <GridColumn>
-                    <Header as='h1'>Configs</Header>
-                </GridColumn>
-                <GridColumn textAlign='right'>{refreshPopupButton}</GridColumn>
-            </GridRow>
-        </Grid>
-
-        <ConfigsTable
-            configs={configs}
-            loading={loading}
-            importConfig={importConfig}
-            saveConfig={saveConfig}
-            fetchConfigs={fetchConfigs}
-        />
-    </PageContainer>
 }

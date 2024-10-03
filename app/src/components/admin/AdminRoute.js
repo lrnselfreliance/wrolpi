@@ -8,7 +8,6 @@ import {Header, Loader, Segment} from "../Theme";
 import {DownloadsPage} from "./Downloads";
 import {SettingsPage} from "./Settings";
 import {StatusPage} from "./Status";
-import {ConfigsPage} from "./Configs";
 
 class WROLMode extends React.Component {
 
@@ -72,7 +71,6 @@ export default function AdminRoute() {
         {text: 'Downloads', to: '/admin', key: 'admin', end: true},
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
         {text: 'Status', to: '/admin/status', key: 'status'},
-        {text: 'Configs', to: '/admin/configs', key: 'configs'},
         {text: 'WROL Mode', to: '/admin/wrol', key: 'wrol'},
     ];
 
@@ -82,7 +80,6 @@ export default function AdminRoute() {
             <Route path='/' exact element={<DownloadsPage/>}/>
             <Route path='settings' exact element={<SettingsPage/>}/>
             <Route path='status' exact element={<StatusPage/>}/>
-            <Route path='configs' exact element={<ConfigsPage/>}/>
             <Route path='wrol' exact element={<WROLMode/>}/>
         </Routes>
     </PageContainer>

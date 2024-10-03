@@ -19,6 +19,7 @@ import {
     getVideosStatistics,
     postImportConfig,
     postSaveConfig,
+    saveSettings,
     searchArchives,
     searchChannels,
     searchDirectories,
@@ -787,8 +788,10 @@ export const useSearchDirectories = (value) => {
 
 export const useSettings = () => {
     const [settings, setSettings] = useState({});
+    const [pending, setPending] = useState(false);
 
     const fetchSettings = async () => {
+        setPending(true);
         try {
             setSettings(await getSettings())
         } catch (e) {
@@ -799,6 +802,8 @@ export const useSettings = () => {
                 description: 'Could not get directories',
                 time: 5000,
             });
+        } finally {
+            setPending(false);
         }
     }
 
@@ -806,21 +811,21 @@ export const useSettings = () => {
         fetchSettings();
     }, []);
 
-    return {settings, fetchSettings};
+    return {settings, pending, fetchSettings, saveSettings};
+}
+
+export const useSettingsInterval = () => {
+    const {settings, pending, fetchSettings, saveSettings} = useSettings();
+
+    useRecurringTimeout(fetchSettings, 1000 * 10);
+
+    return {settings, pending, fetchSettings, saveSettings};
 }
 
 export const useMediaDirectory = () => {
     const {settings} = React.useContext(SettingsContext);
 
     return settings['media_directory'];
-}
-
-export const useSettingsInterval = () => {
-    const {settings, fetchSettings} = useSettings();
-
-    useRecurringTimeout(fetchSettings, 1000 * 10);
-
-    return {settings, fetchSettings};
 }
 
 export const useStatus = () => {

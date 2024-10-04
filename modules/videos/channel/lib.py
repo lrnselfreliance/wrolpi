@@ -274,10 +274,6 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
 
     channel = Channel.find_by_id(channel_id, session)
 
-    # Do not move Channel files into a directory with files.
-    if directory and directory != channel.directory and directory.is_dir() and next(directory.iterdir(), None):
-        raise ChannelDirectoryConflict('Channel directory already exists and is not empty')
-
     # May also clear the tag if `tag_name` is None.
     channel.set_tag(tag_name)
     channel.flush()

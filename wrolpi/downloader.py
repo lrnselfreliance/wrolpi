@@ -347,7 +347,7 @@ class Downloader:
             # Output all logs from the process.
             # TODO is there a way to stream this output while the process is running?
             logger.debug(f'Download exited with {proc.returncode}')
-            logs = {'stdout': stdout, 'stderr': stderr}
+            logs = {'stdout': stdout or '', 'stderr': stderr or ''}
 
         return proc.returncode, logs, stdout
 

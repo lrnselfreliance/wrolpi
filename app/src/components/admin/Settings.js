@@ -515,7 +515,7 @@ export function SettingsPage() {
         </Grid>
 
         <p>Configs control a WROLPi, they are the source of truth. Any changes to a config will be applied to the
-            database when import (typically at startup).</p>
+            database when imported (typically at startup).</p>
 
         <ConfigsTable
             configs={configs}

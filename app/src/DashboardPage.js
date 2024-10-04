@@ -38,25 +38,22 @@ function FlagsMessages() {
 
     const flags = status['flags'];
 
-    let refreshing;
-    let refreshRequired;
-    let kiwixRestart;
-    let dbDown;
-    let internetDown;
+    let refreshingMessage;
+    let refreshRequiredMessage;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
-    if (flags['refreshing']) {
+    if (flags.refreshing) {
         // Actively refreshing.
-        refreshing = <Message icon>
+        refreshingMessage = <Message icon>
             <Icon name='circle notched' loading/>
             <Message.Content>
                 <Message.Header>Your files are being refreshed.</Message.Header>
                 <p><Link to='/files'>Click here to view the progress</Link></p>
             </Message.Content>
         </Message>;
-    } else if (!flags['refresh_complete']) {
+    } else if (!flags.refresh_complete) {
         // `refresh_complete` flag is not set.  Tell the maintainer to refresh the files.
-        refreshRequired = <Message icon warning onClick={refreshFiles}>
+        refreshRequiredMessage = <Message icon warning onClick={refreshFiles}>
             <Icon name='hand point right'/>
             <Message.Content>
                 <Message.Header>Refresh required</Message.Header>
@@ -65,31 +62,34 @@ function FlagsMessages() {
         </Message>;
     }
 
-    if (flags['kiwix_restart']) {
-        kiwixRestart = <KiwixRestartMessage/>;
-    }
-
-    if (!flags['db_up']) {
-        dbDown = <ErrorMessage>
+    let dbDownMessage;
+    if (!flags.db_up) {
+        dbDownMessage = <ErrorMessage>
             <Message.Header>Database is down</Message.Header>
             API is unable to connect to the database. Check the server logs.
         </ErrorMessage>
     }
 
-    if (!flags.have_internet) {
-        internetDown = <ErrorMessage icon='globe'>
+    let kiwixRestartMessage;
+    if (flags.kiwix_restart) {
+        kiwixRestartMessage = <KiwixRestartMessage/>;
+    }
+
+    let internetDownMessage;
+    if (!flags.have_internet && !flags.wrol_mode) {
+        internetDownMessage = <ErrorMessage icon='globe'>
             <Message.Header>No Internet</Message.Header>
             WROLPi has no Internet. Downloads will not start.
         </ErrorMessage>;
     }
 
     return <>
-        {refreshing}
-        {dbDown || refreshRequired}
-        {settings && settings['ignore_outdated_zims'] === false && flags['outdated_zims'] ?
+        {refreshingMessage}
+        {dbDownMessage || refreshRequiredMessage}
+        {settings && settings['ignore_outdated_zims'] === false && flags.outdated_zims ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
-        {kiwixRestart}
-        {status.wrol_mode || internetDown}
+        {kiwixRestartMessage}
+        {internetDownMessage}
     </>
 }
 

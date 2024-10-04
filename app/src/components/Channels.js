@@ -100,7 +100,7 @@ function ChannelPage({create, header}) {
     const {channel, changeValue, fetchChannel} = useChannel(channelId);
     const {SingleTag} = React.useContext(TagsContext);
 
-    const [tagModalOpen, setTagModalOpen] = useState(false);
+    const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
     const [newTagName, setNewTagName] = useState(channel ? channel.tag_name : null);
     const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
     const [newTagDirectory, setNewTagDirectory] = useState('');
@@ -147,6 +147,7 @@ function ChannelPage({create, header}) {
             name: channel.name,
             directory: channel.directory,
             url: channel.url,
+            tag_name: channel.tag_name,
         };
 
         setDisabled(true);
@@ -252,13 +253,13 @@ function ChannelPage({create, header}) {
         if (e) {
             e.preventDefault();
         }
-        setTagModalOpen(true);
+        setTagEditModalOpen(true);
     }
 
-    const handleTagChannel = async () => {
+    const handleTagEditChannel = async () => {
         try {
             await tagChannel(channelId, newTagName, moveToTagDirectory ? newTagDirectory : null);
-            setTagModalOpen(false);
+            setTagEditModalOpen(false);
         } catch (e) {
             console.error('Failed to tag channel', e);
         } finally {
@@ -269,9 +270,10 @@ function ChannelPage({create, header}) {
         }
     }
 
-    const handleTagSelect = async (newTagName_) => {
+    const handleTagSelectMoveSuggestion = async (newTagName_) => {
         setNewTagName(newTagName_);
         try {
+            // Get suggested Tag directory for this Tag and Channel.
             const videosDestination = await tagChannelInfo(channelId, newTagName_);
             setNewTagDirectory(videosDestination);
         } catch (e) {
@@ -279,53 +281,57 @@ function ChannelPage({create, header}) {
         }
     }
 
-    const tagModal = <Modal
-        open={tagModalOpen}
-        onClose={() => setTagModalOpen(false)}
-        closeIcon
-    >
-        <ModalHeader>{channel.tag_name ? 'Modify Tag' : 'Add Tag'}</ModalHeader>
-        <ModalContent>
-            <Grid columns={1}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <TagsSelector
-                            limit={1}
-                            selectedTagNames={newTagName ? [newTagName] : []}
-                            onAdd={handleTagSelect}
-                            onRemove={() => handleTagSelect(null)}
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
-                        <Toggle
-                            label='Move to directory: '
-                            checked={moveToTagDirectory}
-                            onChange={setMoveToTagDirectory}
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
-                        <Input fluid
-                               value={newTagDirectory}
-                               onChange={(e, {value}) => setNewTagDirectory(value)}
-                               disabled={!moveToTagDirectory}
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </ModalContent>
-        <ModalActions>
-            <Button onClick={() => setTagModalOpen(false)}>Cancel</Button>
-            <APIButton
-                color='violet'
-                onClick={handleTagChannel}
-                obeyWROLMode={true}
-            >Save</APIButton>
-        </ModalActions>
-    </Modal>;
+    let tagEditModal;
+    if (!create) {
+        // User is editing the Tag of the Channel.
+        tagEditModal = <Modal
+            open={tagEditModalOpen}
+            onClose={() => setTagEditModalOpen(false)}
+            closeIcon
+        >
+            <ModalHeader>{channel.tag_name ? 'Modify Tag' : 'Add Tag'}</ModalHeader>
+            <ModalContent>
+                <Grid columns={1}>
+                    <Grid.Row>
+                        <Grid.Column>
+                            <TagsSelector
+                                limit={1}
+                                selectedTagNames={newTagName ? [newTagName] : []}
+                                onAdd={handleTagSelectMoveSuggestion}
+                                onRemove={() => handleTagSelectMoveSuggestion(null)}
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column>
+                            <Toggle
+                                label='Move to directory: '
+                                checked={moveToTagDirectory}
+                                onChange={setMoveToTagDirectory}
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column>
+                            <Input fluid
+                                   value={newTagDirectory}
+                                   onChange={(e, {value}) => setNewTagDirectory(value)}
+                                   disabled={!moveToTagDirectory}
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </ModalContent>
+            <ModalActions>
+                <Button onClick={() => setTagEditModalOpen(false)}>Cancel</Button>
+                <APIButton
+                    color='violet'
+                    onClick={handleTagEditChannel}
+                    obeyWROLMode={true}
+                >Save</APIButton>
+            </ModalActions>
+        </Modal>;
+    }
 
     return <>
         <BackButton/>
@@ -383,7 +389,7 @@ function ChannelPage({create, header}) {
                     </FormField>
                 </FormGroup>
 
-                {channel.tag_name && <SingleTag name={channel.tag_name}/>}
+                {channel.tag_name && !create && <SingleTag name={channel.tag_name}/>}
 
                 <Message error
                          header={messageHeader}
@@ -395,9 +401,9 @@ function ChannelPage({create, header}) {
                 />
 
                 <Grid stackable columns={2}>
-                    <Grid.Row>
-                        <Grid.Column>
-                            {!create &&
+                    <Grid.Row style={{marginTop: '1em'}}>
+                        <Grid.Column width={8}>
+                            {!create ?
                                 <>
                                     <APIButton
                                         color='red'
@@ -415,14 +421,22 @@ function ChannelPage({create, header}) {
                                         obeyWROLMode={true}
                                         style={{marginTop: '1em'}}
                                     >Refresh</APIButton>
+                                    <Button
+                                        size='small'
+                                        onClick={handleTagModalOpen}
+                                        color='green'
+                                    >Tag</Button>
+                                    {tagEditModal}
+                                </>
+                                : <>
+                                    <TagsSelector
+                                        limit={1}
+                                        selectedTagNames={channel.tag_name ? [channel.tag_name] : []}
+                                        onAdd={i => changeValue('tag_name', i)}
+                                        onRemove={() => changeValue('tag_name', null)}
+                                    />
                                 </>
                             }
-                            <Button
-                                size='small'
-                                onClick={handleTagModalOpen}
-                                color='green'
-                            >Tag</Button>
-                            {tagModal}
                         </Grid.Column>
                         <Grid.Column>
                             <APIButton

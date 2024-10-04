@@ -426,6 +426,7 @@ export const useChannel = (channel_id) => {
         url: '',
         download_frequency: '',
         match_regex: '',
+        tag_name: null,
     };
     const [fetched, setFetched] = useState(false);
     const [channel, setChannel] = useState(emptyChannel);

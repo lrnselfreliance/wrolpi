@@ -550,6 +550,26 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
 
 
 @pytest.mark.asyncio
+async def test_create_channel_with_tag(async_client, test_session, test_directory, tag_factory):
+    """A Channel can be created with a single Tag."""
+    tag = await tag_factory()
+    assert not (test_directory / 'some/deep/new/directory').exists()
+
+    body = dict(
+        name='Channel Name',
+        directory='some/deep/new/directory',
+        tag_name=tag.name,
+    )
+    request, response = await async_client.post('/api/videos/channels', json=body)
+    assert response.status_code == HTTPStatus.CREATED, response.content.decode()
+
+    channel = test_session.query(Channel).one()
+    assert channel.tag_name == tag.name
+    assert channel.directory == (test_directory / 'some/deep/new/directory')
+    assert (test_directory / 'some/deep/new/directory').is_dir()
+
+
+@pytest.mark.asyncio
 async def test_move_channel(async_client, test_session, test_directory, channel_factory, tag_factory,
                             video_factory, test_channels_config, test_download_manager, test_downloader):
     """A Channel can be moved."""

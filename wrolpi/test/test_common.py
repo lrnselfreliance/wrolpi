@@ -925,6 +925,7 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
     assert config.wrol_mode is False
     assert config.is_valid() is False
     assert config.version == 0
+    assert config.zims_destination
 
     # Bad config cannot be imported.
     test_wrolpi_config.parent.mkdir(exist_ok=True)
@@ -935,6 +936,7 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
     assert config.successful_import is False
     assert config.version == 0
     assert 'invalid' in str(e)
+    assert config.zims_destination
 
     # Cannot dump config because import was not successful.
     with pytest.raises(RuntimeError) as e:
@@ -942,14 +944,16 @@ async def test_config_lifecycle(async_client, test_wrolpi_config):
     assert 'imported' in str(e)
     assert config.version == 0
 
-    # Incomplete config can still be imported.
-    test_wrolpi_config.write_text('wrol_mode: true')
+    # Incomplete config can still be imported.  "destinations" cannot be empty
+    test_wrolpi_config.write_text('wrol_mode: true\nzims_destination: null')
     assert config.is_valid() is True
     config.import_config()
     assert config.successful_import is True
     assert config.wrol_mode is True
     assert config.is_valid() is True
     assert config.version == 0
+    # Default destination was used instead.
+    assert config.zims_destination
 
     # Items from the default config are written to the file.
     config.dump_config()

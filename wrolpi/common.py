@@ -684,8 +684,15 @@ class WROLPiConfig(ConfigFile):
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         try:
-            super().import_config(file)
             # WROLPiConfig does not sync to database.
+            super().import_config(file)
+
+            # Destinations cannot be empty.
+            self.archive_destination = self.archive_destination or self.default_config['archive_destination']
+            self.map_destination = self.map_destination or self.default_config['map_destination']
+            self.videos_destination = self.videos_destination or self.default_config['videos_destination']
+            self.zims_destination = self.zims_destination or self.default_config['zims_destination']
+
             self.successful_import = True
         except Exception as e:
             self.successful_import = False

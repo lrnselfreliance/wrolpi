@@ -11,7 +11,6 @@ class ChannelPostRequest:
     directory: str
     calculate_duration: Optional[bool] = None
     generate_posters: Optional[bool] = None
-    mkdir: Optional[bool] = None
     url: Optional[str] = None
     source_id: Optional[str] = None
 

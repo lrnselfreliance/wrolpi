@@ -28,10 +28,6 @@ export function Upload({disabled}) {
         }
     }, [destination]);
 
-    const handleDestination = (value) => {
-        setDestination(value);
-    }
-
     let progressBars;
     if (!_.isEmpty(progresses)) {
         progressBars = Object.entries(progresses).map(([name, value]) => {
@@ -71,7 +67,7 @@ export function Upload({disabled}) {
             <SForm.Field required>
                 <label>Destination</label>
                 <DirectorySearch
-                    onSelect={handleDestination}
+                    onSelect={i => setDestination(i)}
                     disabled={disabled}
                     style={{marginBottom: '0.5em'}}
                 />

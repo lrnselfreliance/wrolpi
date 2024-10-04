@@ -584,6 +584,7 @@ async def test_move_channel_after_terminal_move(async_client, test_session, test
     vid1 = video_factory(channel_id=channel.id)
     test_session.commit()
 
+    # TODO this does not seem to work
     assert str(channel.directory) == str(test_directory / 'videos/Channel Name')
     assert str(vid1.video_path).startswith(str(test_directory / 'videos/Channel Name/'))
 

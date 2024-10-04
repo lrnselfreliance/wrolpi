@@ -311,7 +311,6 @@ class ChannelsConfig(ConfigFile):
                 link_channel_and_downloads(session)
 
             self.successful_import = True
-            channel_import_logger.info('Importing channels config complete')
         except Exception as e:
             self.successful_import = False
             message = f'Failed to import {self.get_relative_file()} config!'

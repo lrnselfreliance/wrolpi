@@ -485,7 +485,7 @@ class VideoDownloader(Downloader, ABC):
 
     @staticmethod
     def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:
-        """Get the full path of a video file from its URL."""
+        """Get the full path of a video file from its URL using yt-dlp."""
         if not out_dir.is_dir():
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
@@ -506,27 +506,34 @@ class VideoDownloader(Downloader, ABC):
         try:
             entry = extract_info(url, ydl=ydl, process=True)
             final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
-            final_filename = trim_file_name(final_filename)
         except DownloadError as e:
-            if ' Cannot write ' in str(e):
-                # yt-dlp does not handle long file names well, get the name from the error (lol)
-                last_line = str(e).splitlines()[-1]
-                filename = last_line.split(' file ')[-1].strip()
-                full_path, _ = split_path_stem_and_suffix(filename, full=True)
-                if not full_path.startswith('/'):
-                    logger.error(f'Failed to extract filename from {last_line}')
-                    raise
-                # Trim long filename, add video suffix.
-                final_filename = pathlib.Path(f'{full_path}.{PREFERRED_VIDEO_EXTENSION}')
-                final_filename = trim_file_name(final_filename)
-                # Get entry info json.
-                options['outtmpl'] = str(final_filename)
-                ydl = YoutubeDL(options)
-                ydl.params['logger'] = ydl_logger
-                ydl.add_default_info_extractors()
-                entry = extract_info(url, ydl=ydl, process=True)
-            else:
+            if ' Cannot write ' not in str(e):
                 raise
+
+            # yt-dlp does not handle long file names well, get the name from the error (lol)
+            last_line = str(e).splitlines()[-1]
+            full_path = last_line.split(' file ')[-1].strip()
+            if not full_path.startswith('/'):
+                logger.error(f'Failed to extract filename from {last_line}')
+                raise
+
+            # Split filename from parent.
+            full_path = pathlib.Path(full_path)
+            parent = full_path.parent
+            filename, _ = split_path_stem_and_suffix(full_path.name)
+
+            # Trim long filename, add video suffix, add back into parent directory.
+            filename = escape_file_name(filename)
+            final_filename = parent / f'{filename}.{PREFERRED_VIDEO_EXTENSION}'
+            final_filename = trim_file_name(final_filename)
+            logger.debug(f'Video file name was too long.  Trimmed to: {final_filename.name}')
+
+            # Get entry info json.
+            options['outtmpl'] = str(final_filename)
+            ydl = YoutubeDL(options)
+            ydl.params['logger'] = ydl_logger
+            ydl.add_default_info_extractors()
+            entry = extract_info(url, ydl=ydl, process=True)
 
         logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
         return final_filename, entry

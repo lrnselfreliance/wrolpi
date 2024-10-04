@@ -2095,6 +2095,7 @@ def get_title_from_html(html: str, url: str = None) -> str:
         logger_.debug(f'Unable to extract title {url}')
 
 
+@wrol_mode_check
 def can_connect_to_server(hostname: str, port: int = 80) -> bool:
     """Return True only if `hostname` responds."""
     # Thanks https://stackoverflow.com/questions/20913411/test-if-an-internet-connection-is-present-in-python

@@ -21,6 +21,7 @@ from wrolpi.common import logger, check_media_directory, set_log_level, limit_co
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager
+from wrolpi.errors import WROLModeEnabled
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -203,7 +204,6 @@ async def handle_server_shutdown_reset(app: Sanic, loop):
     reset_shared_contexts(app)
 
 
-# Start periodic tasks after configs are ready.
 @api_app.after_server_start
 async def start_single_tasks(app: Sanic):
     """Recurring/Single tasks that are started in only one Sanic process."""
@@ -213,6 +213,9 @@ async def start_single_tasks(app: Sanic):
     app.shared_ctx.single_tasks_started.set()
 
     logger.debug(f'start_single_tasks started')
+
+    # Do not start downloads until configs have been imported.
+    download_manager.disable()
 
     # Import configs, ignore errors so the service will start.  Configs will refuse to save if they failed to import.
     with suppress(Exception):
@@ -236,8 +239,6 @@ async def start_single_tasks(app: Sanic):
 
     if get_wrolpi_config().download_on_startup:
         download_manager.enable()
-    else:
-        download_manager.disable()
 
     from modules.zim.lib import flag_outdated_zim_files
     try:
@@ -304,6 +305,8 @@ async def perpetual_have_internet_worker():
         else:
             # Check more often until the internet is back.
             flags.have_internet.clear()
+    except WROLModeEnabled:
+        flags.have_internet.clear()
     except Exception as e:
         logger.error('Failed to check if internet is up', exc_info=e)
 

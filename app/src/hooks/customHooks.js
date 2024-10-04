@@ -423,7 +423,6 @@ export const useChannel = (channel_id) => {
     const emptyChannel = {
         name: '',
         directory: '',
-        mkdir: false,
         url: '',
         download_frequency: '',
         match_regex: '',
@@ -462,7 +461,9 @@ export const useChannel = (channel_id) => {
     }, [channel_id])
 
     const changeValue = (name, value) => {
-        setChannel({...channel, [name]: value});
+        const newChannel = {...channel, [name]: value};
+        console.debug('useChannel.changeValue', newChannel);
+        setChannel(newChannel);
     }
 
     return {channel, changeValue, original, fetched, fetchChannel: localGetChannel};

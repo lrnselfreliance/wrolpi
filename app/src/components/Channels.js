@@ -118,14 +118,6 @@ function ChannelPage({create, header}) {
         return <Loader active/>;
     }
 
-
-    const handleCheckbox = (e, {name, checked}) => {
-        if (e) {
-            e.preventDefault();
-        }
-        changeValue(name, checked);
-    }
-
     const handleInputChange = (e, {name, value}) => {
         if (e) {
             e.preventDefault();
@@ -154,7 +146,6 @@ function ChannelPage({create, header}) {
         const body = {
             name: channel.name,
             directory: channel.directory,
-            mkdir: channel.mkdir,
             url: channel.url,
         };
 
@@ -372,32 +363,12 @@ function ChannelPage({create, header}) {
                         </label>
                         <DirectorySearch
                             value={channel.directory}
-                            setInput={value => changeValue('directory', value)}
+                            onSelect={value => changeValue('directory', value)}
                             placeholder='videos/channel directory'
                         />
                     </FormField>
                 </FormGroup>
-                {
-                    create !== undefined &&
-                    <FormGroup>
-                        <FormField width={8}/>{/* Empty field*/}
-                        <FormField width={8}>
-                            <FormField>
-                                <Toggle
-                                    toggle
-                                    label="Create this directory, if it doesn't exist."
-                                    name="mkdir"
-                                    disabled={disabled}
-                                    error={errors.mkdir}
-                                    checked={channel.mkdir}
-                                    onChange={i => {
-                                        handleCheckbox(null, {name: 'mkdir', checked: i})
-                                    }}
-                                />
-                            </FormField>
-                        </FormField>
-                    </FormGroup>
-                }
+
                 <FormGroup>
                     <FormField width={16}>
                         <FormInput

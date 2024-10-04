@@ -268,7 +268,7 @@ export function SettingsPage() {
         setQrOpen(true);
     }
 
-    const qrButton = <Button icon style={{marginBottom: '1em'}}>
+    const qrButton = <Button icon color='violet' style={{marginBottom: '1em'}}>
         <Icon name='qrcode' size='big'/>
     </Button>;
 
@@ -386,13 +386,13 @@ export function SettingsPage() {
                 <br/>
 
                 <ButtonGroup>
-                    <Button color={state.navColor} onClick={e => e.preventDefault()}>Navbar Color</Button>
+                    <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
                     <Dropdown
                         className='button icon'
                         floating
                         options={navColorOptions}
-                        onChange={(e, {value}) => setState({...state, navColor: value})}
-                        value={state.navColor}
+                        onChange={(e, {value}) => setState({...state, nav_color: value})}
+                        value={state.nav_color}
                     />
                 </ButtonGroup>
 
@@ -514,8 +514,8 @@ export function SettingsPage() {
             </GridRow>
         </Grid>
 
-        <p>Configs control a WROLPi, they are the source of truth. Any changes to a config will be applied to the
-            database when imported (typically at startup).</p>
+        <p>These configs control this WROLPi; they are the source of truth. Any changes to configs will be applied to
+            the database when imported (typically at startup).</p>
 
         <ConfigsTable
             configs={configs}

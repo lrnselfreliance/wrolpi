@@ -11,8 +11,9 @@ class ChannelPostRequest:
     directory: str
     calculate_duration: Optional[bool] = None
     generate_posters: Optional[bool] = None
-    url: Optional[str] = None
     source_id: Optional[str] = None
+    tag_name: Optional[str] = None
+    url: Optional[str] = None
 
     def __post_init__(self):
         self.name = self.name.strip() or None

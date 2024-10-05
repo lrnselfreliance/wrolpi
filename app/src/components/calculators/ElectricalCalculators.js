@@ -1,4 +1,4 @@
-import {HelpPopup, roundDigits, Toggle} from "../Common";
+import {HelpPopup, roundDigits, Toggle, useLocalStorage, useLocalStorageInt} from "../Common";
 import React, {useState} from "react";
 import {Form, Header, Segment, Table} from "../Theme";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -264,22 +264,14 @@ export const calcPowerLossPercent = (isSAE, volts, amps, resistancePerKiloLength
     return (voltageDrop / volts) * 100; // Return as a percentage
 };
 
-const PowerLossCalculator = ({defaultVolts = 120}) => {
-    const [volts, setVolts] = useState(defaultVolts);
-    const [wireType, setWireType] = useState('solid');
-    const [isSAE, setIsSAE] = useState(true);
-    const [length, setLength] = useState(100);
+const PowerLossCalculator = ({volts, setVolts}) => {
+    const [wireType, setWireType] = useLocalStorage('calculators.power_loss.wire_type', 'solid');
+    const [isSAE, setIsSAE] = useLocalStorage('calculators.power_loss.is_sae', true);
+    const [length, setLength] = useLocalStorageInt('calculators.power_loss.length', 100);
     const [ampsRange] = useState([1, 5, 10, 20, 40, 100]);
 
     const {inverted} = React.useContext(ThemeContext);
     const warningBackgroundColor = inverted === 'inverted' ? '#332020' : '#ffbebe';
-
-    React.useEffect(() => {
-        // Copy voltage from Ohm's Law calculator.
-        if (defaultVolts > 0) {
-            setVolts(defaultVolts);
-        }
-    }, [defaultVolts]);
 
     const resistances = isSAE ? resistancesPerKFeet[wireType]
         : resistancesPerKm[wireType];
@@ -385,9 +377,9 @@ const PowerLossCalculator = ({defaultVolts = 120}) => {
 };
 
 export const ElectricalCalculators = () => {
-    const [volts, setVolts] = React.useState();
+    const [volts, setVolts] = useLocalStorageInt('calculators.electrical.volts', 120);
     return <Container>
         <Segment><OhmsLawCalculator setVolts={setVolts}/></Segment>
-        <Segment><PowerLossCalculator defaultVolts={volts}/></Segment>
+        <Segment><PowerLossCalculator volts={volts} setVolts={setVolts}/></Segment>
     </Container>
 }

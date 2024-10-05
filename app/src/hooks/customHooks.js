@@ -428,7 +428,7 @@ export const useChannel = (channel_id) => {
         match_regex: '',
         tag_name: null,
     };
-    const [fetched, setFetched] = useState(false);
+    const [ready, setReady] = useState(false);
     const [channel, setChannel] = useState(emptyChannel);
     const [original, setOriginal] = useState({});
 
@@ -442,8 +442,9 @@ export const useChannel = (channel_id) => {
                 c['match_regex'] = c['match_regex'] || '';
                 setChannel(c);
                 setOriginal(c);
-                setFetched(true);
+                setReady(true);
             } catch (e) {
+                setReady(false);
                 console.error(e);
                 toast({
                     type: 'error',
@@ -459,7 +460,7 @@ export const useChannel = (channel_id) => {
 
     useEffect(() => {
         localGetChannel();
-    }, [channel_id])
+    }, [channel_id]);
 
     const changeValue = (name, value) => {
         const newChannel = {...channel, [name]: value};
@@ -467,7 +468,7 @@ export const useChannel = (channel_id) => {
         setChannel(newChannel);
     }
 
-    return {channel, changeValue, original, fetched, fetchChannel: localGetChannel};
+    return {channel, changeValue, original, ready, fetchChannel: localGetChannel};
 }
 
 export const useChannels = () => {

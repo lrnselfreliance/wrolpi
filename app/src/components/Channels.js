@@ -88,7 +88,6 @@ function ChannelStatistics({statistics}) {
 
 function ChannelPage({create, header}) {
     const [disabled, setDisabled] = useState(false);
-    const [errors, setErrors] = useState({});
     const [error, setError] = useState(false);
     const [success, setSuccess] = useState(false);
     const [messageHeader, setMessageHeader] = useState();
@@ -97,24 +96,22 @@ function ChannelPage({create, header}) {
 
     const navigate = useNavigate();
     const {channelId} = useParams();
-    const {channel, changeValue, fetchChannel} = useChannel(channelId);
+    const {channel, ready: channelReady, changeValue, fetchChannel} = useChannel(channelId);
     const {SingleTag} = React.useContext(TagsContext);
 
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
-    const [newTagName, setNewTagName] = useState(channel ? channel.tag_name : null);
+    const [newTagName, setNewTagName] = useState(null);
     const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
     const [newTagDirectory, setNewTagDirectory] = useState('');
 
     useTitle(_.isEmpty(channel) ? null : `${channel.name} Channel`);
 
     React.useEffect(() => {
-        console.debug(channel);
-        if (!_.isEmpty(channel)) {
-            setNewTagName(channel.tag_name);
-        }
-    }, [JSON.stringify(channel)]);
+        setNewTagName(channel.tag_name);
+    }, [channel.tag_name]);
 
-    if (_.isEmpty(channel)) {
+    if (!create && !channelReady) {
+        // Waiting for editing Channel to be fetched.
         return <Loader active/>;
     }
 
@@ -147,7 +144,6 @@ function ChannelPage({create, header}) {
             name: channel.name,
             directory: channel.directory,
             url: channel.url,
-            tag_name: channel.tag_name,
         };
 
         setDisabled(true);
@@ -155,6 +151,8 @@ function ChannelPage({create, header}) {
         let response = null;
         try {
             if (create !== undefined) {
+                // Can create a Channel with a Tag.
+                body.tag_name = channel.tag_name;
                 response = await createChannel(body);
             } else {
                 response = await updateChannel(channelId, body);
@@ -172,7 +170,7 @@ function ChannelPage({create, header}) {
             setDisabled(false);
         }
 
-        if (response && response.status >= 200 && response.status < 300) {
+        if (response && response.ok) {
             let location = response.headers.get('Location');
             let channelResponse = await fetch(location);
             let data = await channelResponse.json();
@@ -198,13 +196,7 @@ function ChannelPage({create, header}) {
             // Some error occurred.
             let error = await response.json();
             let cause = error.cause;
-            if (error.code === 'UNKNOWN_DIRECTORY' || (cause && cause.code === 'UNKNOWN_DIRECTORY')) {
-                setErrorMessage(
-                    'Invalid directory',
-                    'This directory does not exist.',
-                    'directory',
-                );
-            } else if (cause && cause.code === 'CHANNEL_DIRECTORY_CONFLICT') {
+            if (cause && cause.code === 'CHANNEL_DIRECTORY_CONFLICT') {
                 setErrorMessage(
                     'Invalid directory',
                     'This directory is already used by another channel',
@@ -247,13 +239,6 @@ function ChannelPage({create, header}) {
     const afterNewDownloadSave = async () => {
         await fetchChannel();
         setDownloadModalOpen(false);
-    }
-
-    const handleTagModalOpen = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setTagEditModalOpen(true);
     }
 
     const handleTagEditChannel = async () => {
@@ -348,7 +333,6 @@ function ChannelPage({create, header}) {
                 error={error}
                 success={success}
                 autoComplete="off"
-                onSubmit={handleSubmit}
             >
                 <FormGroup>
                     <FormField width={8}>
@@ -358,7 +342,6 @@ function ChannelPage({create, header}) {
                                    type="text"
                                    placeholder="Short Channel Name"
                                    disabled={disabled}
-                                   error={errors.name}
                                    value={channel.name}
                                    onChange={(e, {value}) => changeValue('name', value)}
                         />
@@ -382,7 +365,6 @@ function ChannelPage({create, header}) {
                             name="url"
                             type="url"
                             placeholder='https://example.com/channel/videos'
-                            error={errors.url}
                             value={channel.url}
                             onChange={handleInputChange}
                         />
@@ -410,6 +392,7 @@ function ChannelPage({create, header}) {
                                         size='small'
                                         confirmContent='Are you sure you want to delete this channel?  No video files will be deleted.'
                                         confirmButton='Delete'
+                                        confirmHeader='Delete Channel?'
                                         onClick={handleDelete}
                                         obeyWROLMode={true}
                                         style={{marginTop: '1em'}}
@@ -423,7 +406,7 @@ function ChannelPage({create, header}) {
                                     >Refresh</APIButton>
                                     <Button
                                         size='small'
-                                        onClick={handleTagModalOpen}
+                                        onClick={() => setTagEditModalOpen(true)}
                                         color='green'
                                     >Tag</Button>
                                     {tagEditModal}

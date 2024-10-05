@@ -2,7 +2,7 @@ import React from "react";
 import {Link, NavLink} from "react-router-dom";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
+import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
@@ -59,15 +59,28 @@ function NavIconWrapper(props) {
     return <div style={{margin: '0.8em'}}>{props.children}</div>
 }
 
+function useNavColorSetting() {
+    // Use localstorage to avoid flickering navbar color on startup.
+    const {settings} = React.useContext(SettingsContext);
+    const [navColor, setNavColor] = useLocalStorage('nav_color', 'violet');
+
+    React.useEffect(() => {
+        const newColor = settings.nav_color || 'violet';
+        setNavColor(newColor);
+        localStorage.setItem('nav_color', newColor);
+    }, [settings.nav_color]);
+
+    return navColor
+}
+
 export function NavBar() {
     const wrolModeEnabled = useWROLMode();
     const {status} = React.useContext(StatusContext);
-    const {settings} = React.useContext(SettingsContext);
+    const navColor = useNavColorSetting();
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = <i>{NAME || wrolpiIcon}</i>;
     const topNavText = wrolModeEnabled ? <>{name}&nbsp; <SIcon name='lock'/></> : name;
     const {i} = React.useContext(ThemeContext);
-    const navColor = settings && settings.nav_color ? settings.nav_color : 'violet';
 
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}

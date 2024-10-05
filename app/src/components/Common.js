@@ -1451,6 +1451,7 @@ export function useAPIButton(
     disabled,
     confirmContent,
     confirmButton,
+    confirmHeader,
     themed = true,
     obeyWROLMode = false,
     icon = null,
@@ -1565,6 +1566,7 @@ export function useAPIButton(
                      onCancel={() => setConfirmOpen(false)}
                      onConfirm={localOnConfirm}
                      confirmButton={confirmButton}
+                     header={confirmHeader}
             />
         </>
     }
@@ -1580,6 +1582,7 @@ export function APIButton({
                               disabled,
                               confirmContent,
                               confirmButton,
+                              confirmHeader,
                               themed,
                               obeyWROLMode,
                               icon,
@@ -1593,6 +1596,7 @@ export function APIButton({
         disabled,
         confirmContent,
         confirmButton,
+        confirmHeader,
         themed,
         obeyWROLMode,
         icon,
@@ -1810,4 +1814,38 @@ const validUrlRegex = /^(http|https):\/\/[^ "]+$/;
 
 export function validURL(url) {
     return !(url && !validUrlRegex.test(url));
+}
+
+export function useLocalStorage(key, initialValue, decode = JSON.parse, encode = JSON.stringify) {
+    // Use localstorage to store some JSON encode-able.
+
+    // Initialize state with the value from localStorage or initial value
+    const [value, setValue] = useState(() => {
+        try {
+            const item = window.localStorage.getItem(key);
+            // Parse the stored item (integer, bool, etc.).  Use the initial value if empty.
+            return item ? decode(item) : initialValue;
+        } catch (error) {
+            console.error('Error reading localStorage:', error);
+            return initialValue;
+        }
+    });
+
+    // Save to localStorage when the value changes
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(key, encode(value));
+        } catch (error) {
+            console.error('Error setting localStorage:', error);
+        }
+    }, [key, value, encode]);
+
+    // Return the stored value and a function to update it
+    return [value, setValue];
+}
+
+export function useLocalStorageInt(key, initialValue) {
+    // Use localStorage to store an integer.
+    const [storedValue, setStoredValue] = useLocalStorage(key, initialValue, parseInt, (num) => num.toString());
+    return [storedValue, setStoredValue];
 }

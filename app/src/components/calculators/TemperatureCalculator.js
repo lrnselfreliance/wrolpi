@@ -13,7 +13,7 @@ export function TemperatureCalculator() {
     const handleInputChange = (e, {name, value}) => {
         if (value === '') {
             // User has cleared the input;
-            setState({volt: '', ohm: '', amp: ''});
+            setState({celsius: '', fahrenheit: '', kelvin: ''});
             return
         }
 

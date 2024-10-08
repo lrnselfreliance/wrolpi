@@ -62,7 +62,8 @@ export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 
 // Other services on a WROLPi.
-export const FILES_MEDIA_URI = `https://${window.location.hostname}:${window.location.port}/media/`;
+const port = window.location.port ? `${window.location.port}` : '';
+export const FILES_MEDIA_URI = `https://${window.location.hostname}${port}/media/`;
 export const MAP_VIEWER_URI = `https://${window.location.hostname}:8084`;
 export const ZIM_VIEWER_URI = `https://${window.location.hostname}:8085`;
 export const HELP_VIEWER_URI = `https://${window.location.hostname}:8086`;
@@ -1821,11 +1822,13 @@ export function useLocalStorage(key, initialValue, decode = JSON.parse, encode =
 
     // Initialize state with the value from localStorage or initial value
     const [value, setValue] = useState(() => {
+        let item;
         try {
-            const item = window.localStorage.getItem(key);
+            item = window.localStorage.getItem(key);
             // Parse the stored item (integer, bool, etc.).  Use the initial value if empty.
             return item ? decode(item) : initialValue;
         } catch (error) {
+            console.error('useLocalStorage', key, item, initialValue);
             console.error('Error reading localStorage:', error);
             return initialValue;
         }

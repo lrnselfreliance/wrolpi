@@ -23,7 +23,7 @@ def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
 
-    session.execute('ALTER TABLE channel ADD COLUMN tag_id INTEGER REFERENCES tag(id)')
+    session.execute('ALTER TABLE channel ADD COLUMN IF NOT EXISTS tag_id INTEGER REFERENCES tag(id)')
 
 
 def downgrade():

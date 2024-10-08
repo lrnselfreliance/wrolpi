@@ -9,7 +9,7 @@ from selenium import webdriver
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, READABILITY_BIN
+from wrolpi.cmd import READABILITY_BIN, SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, html_screenshot, get_title_from_html
 from wrolpi.db import optional_session, get_db_session
@@ -71,33 +71,41 @@ class ArchiveDownloader(Downloader, ABC):
 
     async def do_singlefile(self, download: Download) -> Tuple[bytes, dict]:
         """Create a Singlefile from the archive's URL."""
-        cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
-               str(SINGLE_FILE_BIN),
-               download.url,
-               '--browser-executable-path', CHROMIUM,
-               '--browser-args', '["--no-sandbox"]',
-               '--dump-content',
-               '--user-agent', USER_AGENT,
-               )
-        return_code, logs, stdout = await self.process_runner(
-            download.id,
-            download.url,
-            cmd,
-            pathlib.Path('/home/wrolpi'),
-        )
-        if return_code != 0:
-            raise RuntimeError(f'Archive singlefile exited with {return_code}')
+        with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as output:
+            output = pathlib.Path(output.name)
+            cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
+                   str(SINGLE_FILE_BIN),
+                   '--browser-executable-path', CHROMIUM,
+                   '--browser-args', '["--no-sandbox"]',
+                   '--user-agent', USER_AGENT,
+                   download.url,
+                   output,
+                   )
+            return_code, logs, stdout = await self.process_runner(
+                download.id,
+                download.url,
+                cmd,
+                pathlib.Path('/home/wrolpi'),
+            )
 
-        if not stdout or SINGLEFILE_HEADER.encode() not in stdout[:1000]:
-            if logs and (stderr := logs.get('stderr')):
-                e = ChildProcessError(stderr.decode()[:1000])
-                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
-            if stdout:
-                e = ChildProcessError(stdout.decode()[:1000])
-                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
-            raise RuntimeError(f'Singlefile created was invalid: {download.url}')
+            stdout = stdout.decode()
+            stderr = logs['stderr'].decode()
+            log_output = stderr or stdout or 'No stderr or stdout!'
 
-        return stdout, logs
+            if return_code != 0:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'Archive singlefile exited with {return_code}') from e
+
+            content = output.read_bytes() if output.is_file() else ''
+            if not content:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'Singlefile created was empty: {download.url}') from e
+
+            if SINGLEFILE_HEADER.encode() not in content:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+
+        return content, logs
 
     async def do_readability(self, download: Download, html: bytes) -> dict:
         """Extract the readability dict from the provided HTML."""

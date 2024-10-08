@@ -1,5 +1,7 @@
 import asyncio
 import json
+import pathlib
+import tempfile
 from abc import ABC
 from datetime import datetime
 from http import HTTPStatus
@@ -295,6 +297,50 @@ async def test_process_runner_timeout(async_client, test_session, test_directory
     await downloader.process_runner(3, 'https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 4
+
+
+GOOD_SCRIPT = '''#! /usr/bin/env bash
+echo "standard output"
+echo "standard error" >&2
+'''
+
+BAD_SCRIPT = '''#! /usr/bin/env bash
+echo "new standard output"
+echo "new standard error" >&2
+exit 123
+'''
+
+
+@pytest.mark.asyncio
+async def test_process_runner_output(async_client, test_directory, test_downloader):
+    with tempfile.TemporaryDirectory() as directory:
+        directory = pathlib.Path(directory)
+        script = directory / 'echo_script.sh'
+        script.write_text(GOOD_SCRIPT)
+        cmd = ('/bin/bash', script)
+        return_code, logs, stdout = await test_downloader.process_runner(
+            1,
+            'https://example.com',
+            cmd,
+            directory,
+            timeout=1
+        )
+        assert return_code == 0
+        assert logs['stdout'] == b'standard output\n'
+        assert logs['stderr'] == b'standard error\n'
+
+        script.write_text(BAD_SCRIPT)
+        cmd = ('/bin/bash', script)
+        return_code, logs, stdout = await test_downloader.process_runner(
+            1,
+            'https://example.com',
+            cmd,
+            directory,
+            timeout=1
+        )
+        assert return_code == 123
+        assert logs['stdout'] == b'new standard output\n'
+        assert logs['stderr'] == b'new standard error\n'
 
 
 @pytest.mark.asyncio

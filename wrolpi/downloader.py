@@ -296,7 +296,7 @@ class Downloader:
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
         """
         str_cmd = " ".join([str(i) for i in cmd])
-        logger.debug(f'{self} launching download process with args: {str_cmd}')
+        logger.info(f'{self} launching download process with args: {str_cmd}')
         start = now()
         proc = await asyncio.create_subprocess_exec(*cmd,
                                                     stdout=asyncio.subprocess.PIPE,
@@ -310,7 +310,7 @@ class Downloader:
         timeout = WROLPI_CONFIG.download_timeout or timeout or self.timeout
         logger.debug(f'{self} launched download process {pid=} {timeout=} for {url}')
 
-        stdout, stderr = None, None
+        stdout, stderr = b'', b''
         try:
             while True:
                 task = asyncio.Task(proc.communicate())
@@ -346,8 +346,10 @@ class Downloader:
         finally:
             # Output all logs from the process.
             # TODO is there a way to stream this output while the process is running?
-            logger.debug(f'Download exited with {proc.returncode}')
-            logs = {'stdout': stdout or '', 'stderr': stderr or ''}
+            stdout_len = len(stdout)
+            stderr_len = len(stderr)
+            logger.debug(f'Download exited with {proc.returncode} and stdout={stdout_len} stderr={stderr_len}')
+            logs = {'stdout': stdout, 'stderr': stderr}
 
         return proc.returncode, logs, stdout
 

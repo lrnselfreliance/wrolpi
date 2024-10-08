@@ -440,6 +440,7 @@ class ConfigFile:
         @param overwrite: Will overwrite the config file even if it was not imported successfully.
         """
         from wrolpi.api_utils import api_app
+        from wrolpi.events import Events
 
         file = file or self.get_file()
         if self.file_name not in file.name:
@@ -449,6 +450,7 @@ class ConfigFile:
 
         if file.exists() and overwrite is False:
             if not self.successful_import:
+                Events.send_config_save_failed(f'Failed to save config: {rel_path}')
                 raise RuntimeError(f'Refusing to save config because it was never successfully imported! {rel_path}')
             version = self.read_config_file(file).get('version')
             if version and version > self.version:
@@ -489,7 +491,6 @@ class ConfigFile:
                 message = f'Failed to save config: {rel_path}'
                 logger_.critical(message, exc_info=e)
                 if send_events:
-                    from wrolpi.events import Events
                     Events.send_config_save_failed(message)
                 raise e
 

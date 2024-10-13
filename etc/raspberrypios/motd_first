@@ -1,0 +1,24 @@
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+
+██╗    ██╗██████╗  ██████╗ ██╗     ██████╗ ██╗
+██║    ██║██╔══██╗██╔═══██╗██║     ██╔══██╗  ║
+██║ █╗ ██║██████╔╝██║   ██║██║     ██████╔╝██
+██║███╗██║██╔══██╗██║   ██║██║     ██╔═══╝ ██║
+╚███╔███╔╝██║  ██║╚██████╔╝███████╗██║     ██║
+ ╚══╝╚══╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝
+
+Welcome to your new WROLPi!  Follow the steps below to finish the setup:
+
+   1. If you have an external drive, mount it to /media/wrolpi
+   2. Run the repair script: /opt/wrolpi/repair.sh
+   3. Refresh your files in the UI at https://wrolpi.local or https://127.0.0.1
+
+Run the help script to find potential problems:
+   /opt/wrolpi/help.sh
+
+Help documentation is available here: /opt/wrolpi-help/docs

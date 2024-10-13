@@ -137,6 +137,9 @@ chown wrolpi:wrolpi /media/wrolpi
 
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
+# Copy MOTD once the repair has been successful.
+cp /opt/wrolpi/etc/raspberrypios/motd /etc/motd
+
 systemctl restart wrolpi-help
 systemctl start wrolpi.target
 

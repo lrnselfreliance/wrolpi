@@ -19,7 +19,7 @@ from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, move
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile, save_tags_config
-from wrolpi.vars import PYTEST, DELETED_VIDEO_KEYS
+from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 
 logger = logger.getChild(__name__)
 
@@ -505,15 +505,21 @@ class Video(ModelHelper, Base):
         """Remove large and mostly useless data in the info_json."""
         info_json_contents = info_json_contents or self.get_info_json()
         if info_json_contents:
-            for key in DELETED_VIDEO_KEYS:
+            for key in VIDEO_INFO_JSON_KEYS_TO_CLEAN:
                 info_json_contents.pop(key, None)
         return info_json_contents
 
-    def replace_info_json(self, info_json: dict):
+    def replace_info_json(self, info_json: dict, clean: bool = True, format_: bool = True):
         """Replace the info json file with the new json dict.  Handles adding new info_json file, if necessary."""
         info_json_path = self.info_json_path or self.video_path.with_suffix('.info.json')
-        info_json = self.clean_info_json(info_json)
-        info_json = json.dumps(info_json, indent=2)
+        if clean:
+            info_json = self.clean_info_json(info_json)
+
+        if format_:
+            info_json = json.dumps(info_json, indent=2, sort_keys=True)
+        else:
+            info_json = json.dumps(info_json)
+
         replace_file(info_json_path, info_json, missing_ok=True)
 
         if not self.info_json_path:

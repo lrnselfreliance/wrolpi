@@ -5,6 +5,7 @@ import logging
 import multiprocessing
 import os
 import pathlib
+import tempfile
 import traceback
 from abc import ABC
 from dataclasses import dataclass, field
@@ -25,9 +26,8 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
-from wrolpi.cmd import pid_is_running
-from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    wrol_mode_enabled, background_task
+from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
+    wrol_mode_enabled, background_task, get_wrolpi_config
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
@@ -298,60 +298,51 @@ class Downloader:
         str_cmd = " ".join([str(i) for i in cmd])
         logger.info(f'{self} launching download process with args: {str_cmd}')
         start = now()
-        proc = await asyncio.create_subprocess_exec(*cmd,
-                                                    stdout=asyncio.subprocess.PIPE,
-                                                    stderr=asyncio.subprocess.PIPE,
-                                                    cwd=cwd,
-                                                    **kwargs)
-        pid = proc.pid
+        # Use temporary files to prevent trucating of stdout/stderr.
+        with tempfile.NamedTemporaryFile() as stdout, tempfile.NamedTemporaryFile() as stderr:
+            stdout, stderr = pathlib.Path(stdout.name), pathlib.Path(stderr.name)
+            with stdout.open('wb') as stdout_fh, stderr.open('wb') as stderr_fh:
+                # stdout/stderr is written to real files.
+                proc = await asyncio.create_subprocess_exec(*cmd,
+                                                            stdout=stdout_fh,
+                                                            stderr=stderr_fh,
+                                                            cwd=cwd,
+                                                            **kwargs)
+                pid = proc.pid
 
-        # Timeout can be any positive integer.  Global download timeout takes precedence, unless it is 0.
-        # A timeout of 0 means the download will never be killed.
-        timeout = WROLPI_CONFIG.download_timeout or timeout or self.timeout
-        logger.debug(f'{self} launched download process {pid=} {timeout=} for {url}')
+                # Timeout can be any positive integer.  Global download timeout takes precedence, unless it is 0.
+                # A timeout of 0 means the download will never be killed.
+                timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
+                logger.debug(f'{self} launched download process {pid=} {timeout=} for {url}')
 
-        stdout, stderr = b'', b''
-        try:
-            while True:
-                task = asyncio.Task(proc.communicate())
-                done, pending = await asyncio.wait([task, ], timeout=1)
-                # Cancel communicate.
-                if pending:
-                    pending.pop().cancel()
-                if done:
-                    # Process finished, get the result of proc.communicate().
-                    stdout, stderr = done.pop().result()
-                    break
-                if proc.returncode:
-                    # Process died.
-                    stdout, stderr = await proc.communicate()
-                    break
+                while True:
+                    # Calculate the seconds since the process started.
+                    elapsed = int((now() - start).total_seconds())
 
-                if not pid_is_running(pid):
-                    logger.debug(f'Process is no longer running!  {str_cmd}')
-                    break
+                    # Check if the cancel event is set or if the timeout is reached
+                    if download_manager.download_is_killed(download_id):
+                        logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed.')
+                        proc.kill()
+                        await proc.wait()
+                        break
+                    if timeout and elapsed > timeout:
+                        # TODO this logic should be handled by the Download Manager.
+                        download_manager.kill_download(download_id)
+                        continue
 
-                elapsed = (now() - start).total_seconds()
-                if timeout and elapsed > timeout:
-                    logger.warning(f'Download has exceeded its timeout {elapsed=}')
-                    download_manager.kill_download(download_id)
+                    try:
+                        # Wait for the process to finish.
+                        await asyncio.wait_for(proc.wait(), timeout=1)
+                        break
+                    except TimeoutError:
+                        # Subprocess has not yet finished, loop again and wait for it to finish.
+                        continue
 
-                if download_manager.download_is_killed(download_id):
-                    logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed.')
-                    proc.kill()
-                    break
-        except Exception as e:
-            logger.error(f'{self}.process_runner had a download error', exc_info=e)
-            raise
-        finally:
-            # Output all logs from the process.
-            # TODO is there a way to stream this output while the process is running?
-            stdout_len = len(stdout)
-            stderr_len = len(stderr)
+            # Read stdout/stderr files.
+            stdout, stderr = stdout.read_bytes(), stderr.read_bytes()
+            stdout_len, stderr_len = len(stdout) if stdout else 0, len(stderr) if stderr else 0
             logger.debug(f'Download exited with {proc.returncode} and stdout={stdout_len} stderr={stderr_len}')
-            logs = {'stdout': stdout, 'stderr': stderr}
-
-        return proc.returncode, logs, stdout
+            return proc.returncode, dict(stdout=stdout, stderr=stderr), stdout
 
     @staticmethod
     async def cancel_wrapper(coro: Coroutine, download: Download):

@@ -3,6 +3,7 @@ import json
 import pathlib
 import tempfile
 from abc import ABC
+from json import JSONDecodeError
 from typing import List, Tuple, Iterable
 
 from selenium import webdriver
@@ -71,41 +72,38 @@ class ArchiveDownloader(Downloader, ABC):
 
     async def do_singlefile(self, download: Download) -> Tuple[bytes, dict]:
         """Create a Singlefile from the archive's URL."""
-        with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as output:
-            output = pathlib.Path(output.name)
-            cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
-                   str(SINGLE_FILE_BIN),
-                   '--browser-executable-path', CHROMIUM,
-                   '--browser-args', '["--no-sandbox"]',
-                   '--user-agent', USER_AGENT,
-                   download.url,
-                   output,
-                   )
-            return_code, logs, stdout = await self.process_runner(
-                download.id,
-                download.url,
-                cmd,
-                pathlib.Path('/home/wrolpi'),
-            )
+        cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
+               str(SINGLE_FILE_BIN),
+               '--browser-executable-path', CHROMIUM,
+               '--browser-args', '["--no-sandbox"]',
+               '--user-agent', USER_AGENT,
+               '--dump-content',
+               '--load-deferred-images-dispatch-scroll-event',
+               download.url,
+               )
+        return_code, logs, stdout = await self.process_runner(
+            download.id,
+            download.url,
+            cmd,
+            pathlib.Path('/home/wrolpi'),
+        )
 
-            stdout = stdout.decode()
-            stderr = logs['stderr'].decode()
-            log_output = stderr or stdout or 'No stderr or stdout!'
+        stderr = logs['stderr'].decode()
+        log_output = stderr or stdout.decode() or 'No stderr or stdout!'
 
-            if return_code != 0:
-                e = ChildProcessError(log_output[:1000])
-                raise RuntimeError(f'Archive singlefile exited with {return_code}') from e
+        if return_code != 0:
+            e = ChildProcessError(log_output[:1000])
+            raise RuntimeError(f'singlefile exited with {return_code}') from e
 
-            content = output.read_bytes() if output.is_file() else ''
-            if not content:
-                e = ChildProcessError(log_output[:1000])
-                raise RuntimeError(f'Singlefile created was empty: {download.url}') from e
+        if not stdout:
+            e = ChildProcessError(log_output[:1000])
+            raise RuntimeError(f'Singlefile created was empty: {download.url}') from e
 
-            if SINGLEFILE_HEADER.encode() not in content:
-                e = ChildProcessError(log_output[:1000])
-                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+        if SINGLEFILE_HEADER.encode() not in stdout:
+            e = ChildProcessError(log_output[:1000])
+            raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
 
-        return content, logs
+        return stdout, logs
 
     async def do_readability(self, download: Download, html: bytes) -> dict:
         """Extract the readability dict from the provided HTML."""
@@ -121,9 +119,11 @@ class ArchiveDownloader(Downloader, ABC):
                 pathlib.Path('/home/wrolpi'),
             )
             if return_code == 0:
+                if not stdout:
+                    raise RuntimeError('readability stdout was empty')
                 try:
                     readability = json.loads(stdout)
-                except TypeError:
+                except TypeError or JSONDecodeError:
                     # JSON was invalid.
                     e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
                     if logs and (stderr := logs.get('stderr')):

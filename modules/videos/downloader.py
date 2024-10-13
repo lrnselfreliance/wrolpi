@@ -354,13 +354,9 @@ class VideoDownloader(Downloader, ABC):
                 video.source_id = entry['id']
                 video.channel_id = channel_id
                 video_id, video_info_json_path = video.id, video.info_json_path
-                if video_info_json_path:
-                    if new_info_json := video.clean_info_json():
-                        video.replace_info_json(new_info_json)
+                if video_info_json_path and (new_info_json := video.clean_info_json()):
+                    video.replace_info_json(new_info_json, clean=False)
                 session.commit()
-
-            if video_info_json_path:
-                format_json_file(video_info_json_path)
 
             with get_db_session(commit=True) as session:
                 # Second session is started because SQLAlchemy will forget what we have done.

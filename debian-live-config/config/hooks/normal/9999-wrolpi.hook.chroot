@@ -53,6 +53,8 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 
+cp /opt/wrolpi/etc/raspberrypios/motd_first /etc/motd
+
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager
 

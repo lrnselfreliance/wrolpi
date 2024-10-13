@@ -249,11 +249,14 @@ class VideoDownloader(Downloader, ABC):
             download.info_json = download.info_json or extract_info(url)
         except yt_dlp.utils.DownloadError as e:
             # Video may be private.
-            return DownloadResult(
-                success=False,
-                location=location,
-                error='\n'.join(traceback.format_exception(e)),
-            )
+            try:
+                raise RuntimeError('Failed to extract_info') from e
+            except Exception as e:
+                return DownloadResult(
+                    success=False,
+                    location=location,
+                    error='\n'.join(traceback.format_exception(e)),
+                )
 
         if not download.info_json:
             raise ValueError(f'Cannot download video with no info_json.')
@@ -503,14 +506,14 @@ class VideoDownloader(Downloader, ABC):
             entry = extract_info(url, ydl=ydl, process=True)
             final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         except DownloadError as e:
-            if ' Cannot write ' not in str(e):
-                raise
-
-            # yt-dlp does not handle long file names well, get the name from the error (lol)
-            last_line = str(e).splitlines()[-1]
-            full_path = last_line.split(' file ')[-1].strip()
-            if not full_path.startswith('/'):
-                logger.error(f'Failed to extract filename from {last_line}')
+            if ' Cannot write ' in str(e):
+                # yt-dlp does not handle long file names well, get the name from the error (lol)
+                last_line = str(e).splitlines()[-1]
+                full_path = last_line.split(' file ')[-1].strip()
+                if not full_path.startswith('/'):
+                    logger.error(f'Failed to extract filename from {last_line}')
+                    raise
+            else:
                 raise
 
             # Split filename from parent.

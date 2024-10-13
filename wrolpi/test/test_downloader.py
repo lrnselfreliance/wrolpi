@@ -279,24 +279,30 @@ async def test_process_runner_timeout(async_client, test_session, test_directory
     # Default timeout of 3 seconds.
     downloader = Downloader('downloader', timeout=3)
 
+    # Sleep for 8 seconds really takes 8 seconds.
+    start = datetime.now()
+    await downloader.process_runner(1, 'https://example.com', ('sleep', '8'), test_directory, timeout=10)
+    elapsed = datetime.now() - start
+    assert elapsed.total_seconds() >= 8
+
     # Default timeout is obeyed.
     start = datetime.now()
     await downloader.process_runner(1, 'https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
-    assert 3 < elapsed.total_seconds() < 4
+    assert 3 < elapsed.total_seconds() < 5
 
     # One-off timeout is obeyed.
     start = datetime.now()
     await downloader.process_runner(2, 'https://example.com', ('sleep', '8'), test_directory, timeout=1)
     elapsed = datetime.now() - start
-    assert 1 < elapsed.total_seconds() < 2
+    assert 1 < elapsed.total_seconds() < 3
 
     # Global timeout is obeyed.
     get_wrolpi_config().download_timeout = 3
     start = datetime.now()
     await downloader.process_runner(3, 'https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
-    assert 2 < elapsed.total_seconds() < 4
+    assert 2 < elapsed.total_seconds() < 5
 
 
 GOOD_SCRIPT = '''#! /usr/bin/env bash

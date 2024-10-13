@@ -298,10 +298,10 @@ class Downloader:
         str_cmd = " ".join([str(i) for i in cmd])
         logger.info(f'{self} launching download process with args: {str_cmd}')
         start = now()
-        # Use temporary files to prevent trucating of stdout/stderr.
-        with tempfile.NamedTemporaryFile() as stdout, tempfile.NamedTemporaryFile() as stderr:
-            stdout, stderr = pathlib.Path(stdout.name), pathlib.Path(stderr.name)
-            with stdout.open('wb') as stdout_fh, stderr.open('wb') as stderr_fh:
+        # Use temporary files to prevent truncating of stdout/stderr.
+        with tempfile.NamedTemporaryFile() as stdout_file, tempfile.NamedTemporaryFile() as stderr_file:
+            stdout_file, stderr_file = pathlib.Path(stdout_file.name), pathlib.Path(stderr_file.name)
+            with stdout_file.open('wb') as stdout_fh, stderr_file.open('wb') as stderr_fh:
                 # stdout/stderr is written to real files.
                 proc = await asyncio.create_subprocess_exec(*cmd,
                                                             stdout=stdout_fh,
@@ -339,7 +339,7 @@ class Downloader:
                         continue
 
             # Read stdout/stderr files.
-            stdout, stderr = stdout.read_bytes(), stderr.read_bytes()
+            stdout, stderr = stdout_file.read_bytes(), stderr_file.read_bytes()
             stdout_len, stderr_len = len(stdout) if stdout else 0, len(stderr) if stderr else 0
             logger.debug(f'Download exited with {proc.returncode} and stdout={stdout_len} stderr={stderr_len}')
             return proc.returncode, dict(stdout=stdout, stderr=stderr), stdout

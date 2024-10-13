@@ -238,7 +238,7 @@ async def start_single_tasks(app: Sanic):
         init_inventory()
 
     if get_wrolpi_config().download_on_startup:
-        download_manager.enable()
+        await download_manager.enable()
 
     from modules.zim.lib import flag_outdated_zim_files
     try:

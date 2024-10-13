@@ -1222,7 +1222,7 @@ def escape_file_name(name: str) -> str:
 
 # Maximum length is probably 255, but we need more length for large suffixes like `.readability.json`, and temporary
 # downloading suffixes from yt-dlp.
-MAXIMUM_FILE_LENGTH = 180
+MAXIMUM_FILE_LENGTH = 140
 
 
 def trim_file_name(path: str | pathlib.Path) -> str | pathlib.Path:

@@ -388,6 +388,7 @@ export function SettingsPage() {
                 <ButtonGroup>
                     <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
                     <Dropdown
+                         id='settings_navbar_color_dropdown'
                         className='button icon'
                         floating
                         options={navColorOptions}
@@ -466,6 +467,7 @@ export function SettingsPage() {
                 <Divider/>
 
                 <APIButton
+                    id='settings_save_button'
                     color='violet'
                     size='big'
                     onClick={() => localSaveSettings(state)}

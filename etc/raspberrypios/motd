@@ -12,7 +12,10 @@ permitted by applicable law.
 ╚███╔███╔╝██║  ██║╚██████╔╝███████╗██║     ██║
  ╚══╝╚══╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝     ╚═╝
 
+ Welcome to your WROLPi!
+
  Run the help script to find potential problems:
    /opt/wrolpi/help.sh
 
-Help documentation is available here: /opt/wrolpi-help/docs
+Help documentation is available: https://wrolpi.local:8086 or /opt/wrolpi-help/docs
+

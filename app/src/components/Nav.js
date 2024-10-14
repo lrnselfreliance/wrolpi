@@ -104,7 +104,7 @@ export function NavBar() {
 
     return <>
         <Media at='mobile'>
-            <Menu {...i} attached='top' color={navColor}>
+            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
@@ -117,7 +117,7 @@ export function NavBar() {
             </Menu>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Menu {...i} attached='top' color={navColor}>
+            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}
 

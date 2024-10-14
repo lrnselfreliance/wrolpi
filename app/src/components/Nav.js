@@ -2,7 +2,15 @@ import React from "react";
 import {Link, NavLink} from "react-router-dom";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon, useLocalStorage} from "./Common";
+import {
+    CPUTemperatureIcon,
+    DarkModeToggle,
+    HELP_VIEWER_URI,
+    HotspotStatusIcon,
+    NAME,
+    SystemLoadIcon,
+    useLocalStorage
+} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
@@ -25,7 +33,7 @@ const links = [
         ]
     },
 ];
-const help = {to: '/help', text: 'Help', key: 'help'};
+const help = {to: HELP_VIEWER_URI, text: 'Help', key: 'help', target: '_blank'};
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [help, admin];
 
@@ -45,10 +53,12 @@ function MenuLink({link}) {
         return <DropdownLinks link={link}/>
     } else {
         const end = link.end ? {end: true} : {end: undefined};
+        const target = link.target ? {target: link.target} : {};
         return <NavLink
             className='item'
             to={link.to}
             {...end}
+            {...target}
         >
             {link.text}
         </NavLink>

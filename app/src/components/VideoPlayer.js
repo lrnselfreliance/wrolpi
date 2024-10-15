@@ -153,16 +153,22 @@ const Comments = ({comments, video}) => {
 
     const rootComments = comments.filter(i => i['parent'] === 'root');
 
-    const sortedByParent = {};
+    // Comments are in an array, convert it to a dict, grouped by their parent.
+    const groupedByParent = {};
     comments.forEach(obj => {
-        if (!sortedByParent[obj.parent]) {
-            sortedByParent[obj.parent] = [];
+        if (!groupedByParent[obj.parent]) {
+            groupedByParent[obj.parent] = [];
         }
-        sortedByParent[obj.parent].push(obj);
+        groupedByParent[obj.parent].push(obj);
+    })
+    // Sort replies to each parent by the time they were created.
+    comments.forEach(obj => {
+        const children = groupedByParent[obj.parent];
+        groupedByParent[obj.parent] = _.sortBy(children, ['timestamp']);
     })
 
     return <CommentGroup>
-        {rootComments.map((i, key) => <VideoComment key={key} comment={i} children={sortedByParent[i.id]}/>)}
+        {rootComments.map((i, key) => <VideoComment key={key} comment={i} children={groupedByParent[i.id]}/>)}
     </CommentGroup>
 }
 
@@ -350,7 +356,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </Container>
 
         <video controls
-               class='video-player'
+               className='video-player'
                autoPlay={props.autoplay !== undefined ? props.autoplay : true}
                poster={posterUrl}
                id="player"

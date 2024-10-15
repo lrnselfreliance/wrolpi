@@ -250,6 +250,7 @@ export function StatusPage() {
                 {memoryUsageProgress}
                 <StatisticGroup>
                     <CPUTemperatureStatistic
+                        id='cpu_temperature_statistic'
                         temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
@@ -266,6 +267,7 @@ export function StatusPage() {
                 {memoryUsageProgress}
                 <StatisticGroup size='mini'>
                     <CPUTemperatureStatistic
+                        id='cpu_temperature_statistic'
                         temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}

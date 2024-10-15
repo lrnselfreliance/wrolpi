@@ -1306,7 +1306,7 @@ async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Sess
         # Move FileGroups in groups.
         for chunk in chunks(plan_.items(), MOVE_CHUNK_SIZE):
             old_paths = [i for i, j in chunk]
-            old_files, old_directories = partition(lambda i: i.is_file(), old_paths)
+            old_files, old_directories_ = partition(lambda i: i.is_file(), old_paths)
             file_groups_ = session.query(FileGroup).filter(FileGroup.primary_path.in_(old_files)).all()
             if len(file_groups_) != len(old_files):
                 # We ensured there are FileGroups while building the plan, maybe user deleted a file?
@@ -1321,7 +1321,7 @@ async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Sess
                     new_directories.add(parent)
                 file_group_.move(new_primary_path_)
                 revert_plan[new_primary_path_] = old_file
-            for directory_ in old_directories:
+            for directory_ in old_directories_:
                 delete_directory(directory_)
 
             existing_directories = {i[0] for i in session.query(Directory.path)}

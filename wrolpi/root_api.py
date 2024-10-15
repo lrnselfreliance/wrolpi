@@ -355,7 +355,7 @@ async def clear_failed(_: Request):
 @api_bp.post('/download/retry_once')
 @openapi.description('Retry failed once-downloads')
 async def retry_once(_: Request):
-    download_manager.retry_downloads()
+    download_manager.retry_downloads(reset_attempts=True)
     return response.empty()
 
 

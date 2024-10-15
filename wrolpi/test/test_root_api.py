@@ -376,6 +376,34 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
 
 
 @pytest.mark.asyncio
+async def test_retry_downloads(test_session, async_client, test_wrolpi_config, assert_downloads):
+    """Downloads that are pending or deferred can be retried, and their attempts reset."""
+    d1 = Download(url='https://example.com/1', status='complete', attempts=1)
+    d2 = Download(url='https://example.com/2', status='pending', attempts=1)
+    d3 = Download(url='https://example.com/3', status='deferred', attempts=1)
+    d4 = Download(url='https://example.com/4', status='new', attempts=1)
+    d5 = Download(url='https://example.com/5', status='failed', attempts=1)
+    d6 = Download(url='https://example.com/6', status='failed', frequency=60, attempts=1)
+    d7 = Download(url='https://example.com/7', status='complete', frequency=60, attempts=1)
+    test_session.add_all([d1, d2, d3, d4, d5, d6, d7])
+    test_session.commit()
+
+    # Retry all once-downloads.
+    request, response = await async_client.post('/api/download/retry_once')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    assert_downloads([
+        dict(url='https://example.com/1', status='complete', attempts=1),  # complete is not retried.
+        dict(url='https://example.com/2', status='new', attempts=0),  # pending is retried.
+        dict(url='https://example.com/3', status='new', attempts=0),  # deferred is retried.
+        dict(url='https://example.com/4', status='new', attempts=1),  # new does not need to be retried.
+        dict(url='https://example.com/5', status='failed', attempts=1),  # failed has been given up on.
+        dict(url='https://example.com/6', status='failed', frequency=60, attempts=1,),  # recurring is always retried.
+        dict(url='https://example.com/7', status='complete', frequency=60, attempts=1),  # recurring is always retried.
+    ])
+
+
+@pytest.mark.asyncio
 async def test_get_status(async_client, test_session):
     """Get the server status information."""
     request, response = await async_client.get('/api/status')

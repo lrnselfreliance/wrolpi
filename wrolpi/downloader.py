@@ -121,6 +121,7 @@ class Download(ModelHelper, Base):  # noqa
 
     def __json__(self) -> dict:
         d = dict(
+            attempts=self.attempts,
             channel_id=self.channel_id,
             downloader=self.downloader,
             frequency=self.frequency,
@@ -654,10 +655,13 @@ class DownloadManager:
             raise TimeoutError('Downloads never finished!')
 
     @staticmethod
-    def retry_downloads():
+    def retry_downloads(reset_attempts: bool = False):
         """Set any incomplete Downloads to `new` so they will be retried."""
         with get_db_curs(commit=True) as curs:
-            curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
+            if reset_attempts:
+                curs.execute("UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred'")
+            else:
+                curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
         save_downloads_config.activate_switch()
 

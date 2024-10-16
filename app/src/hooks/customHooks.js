@@ -1122,8 +1122,7 @@ export const useUploadFile = () => {
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            console.log(`Starting file upload`);
-            console.log(file);
+            console.log(`Uploading file:`, file.path);
 
             const chunkNum = 0;
             const chunkSize = 10 * 1024 * 1024; // 10MB

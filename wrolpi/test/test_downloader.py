@@ -311,8 +311,8 @@ echo "standard error" >&2
 '''
 
 BAD_SCRIPT = '''#! /usr/bin/env bash
-echo "new standard output"
-echo "new standard error" >&2
+echo "bad standard output"
+echo "bad standard error" >&2
 exit 123
 '''
 
@@ -345,8 +345,8 @@ async def test_process_runner_output(async_client, test_directory, test_download
             timeout=1
         )
         assert return_code == 123
-        assert logs['stdout'] == b'new standard output\n'
-        assert logs['stderr'] == b'new standard error\n'
+        assert logs['stdout'] == b'bad standard output\n'
+        assert logs['stderr'] == b'bad standard error\n'
 
 
 @pytest.mark.asyncio

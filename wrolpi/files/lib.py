@@ -1376,7 +1376,7 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False):
                 .join(TagFile, TagFile.file_group_id == FileGroup.id) \
                 .limit(1).one_or_none()
             if tagged:
-                raise FileGroupIsTagged()
+                raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
         shutil.rmtree(directory)
     else:
         directory.rmdir()

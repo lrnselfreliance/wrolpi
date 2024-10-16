@@ -30,6 +30,7 @@ UPTIME_BIN = which('uptime', '/usr/bin/uptime')
 
 warn_once = get_warn_once('Unable to use psutil', logger)
 warn_cpu_once = get_warn_once('Cannot read CPU stats', logger)
+warn_cpu_temperature_once = get_warn_once('Cannot read CPU Temperature stats', logger)
 status_worker_warn_once = get_warn_once('Status worker encountered error', logger)
 
 
@@ -124,21 +125,25 @@ async def get_cpu_stats() -> CPUInfo:
             warn_cpu_once(e)
 
     # Get temperature using psutil.
-    temp = psutil.sensors_temperatures()
-    name = 'coretemp' if 'coretemp' in temp else list(temp.keys())[0]
-    # Temperatures may be None.  Get average temperatures from CPU because one core may be hot.
-    temperatures = temp.get(name)
-    temperature = temperature or statistics.median([i.current or 0 for i in temperatures])
-    high_temperature = statistics.median([i.high or 0 for i in temperatures])
-    critical_temperature = statistics.median([i.critical or 0 for i in temperatures])
+    temperature = high_temperature = critical_temperature = None
+    try:
+        temp = psutil.sensors_temperatures()
+        name = 'coretemp' if 'coretemp' in temp else list(temp.keys())[0]
+        # Temperatures may be None.  Get average temperatures from CPU because one core may be hot.
+        temperatures = temp.get(name)
+        temperature = temperature or statistics.median([i.current or 0 for i in temperatures])
+        high_temperature = statistics.median([i.high or 0 for i in temperatures])
+        critical_temperature = statistics.median([i.critical or 0 for i in temperatures])
 
-    # Temperatures may not exist.
-    high_temperature = high_temperature or 60
-    critical_temperature = critical_temperature or 95
+        # Temperatures may not exist.
+        high_temperature = high_temperature or 60
+        critical_temperature = critical_temperature or 95
 
-    if high_temperature and high_temperature == critical_temperature:
-        # Display yellow warning before red warning.
-        high_temperature = critical_temperature - 25
+        if high_temperature and high_temperature == critical_temperature:
+            # Display yellow warning before red warning.
+            high_temperature = critical_temperature - 25
+    except Exception as e:
+        warn_cpu_temperature_once(e)
 
     info = CPUInfo(
         cores=multiprocessing.cpu_count(),

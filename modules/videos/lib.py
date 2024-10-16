@@ -186,11 +186,8 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
             # Poster is not valid, convert it and place it in the new location.
             try:
                 convert_image(old, new)
-                if not new.is_file():
+                if not new.is_file() or not new.stat().st_size:
                     raise FileNotFoundError(f'Failed to convert poster: {new}')
-                if old != new:
-                    # Only remove the old one if we are not converting in-place.
-                    old.unlink(missing_ok=True)
                 logger.info(f'Converted invalid poster {repr(str(old))} to {repr(str(new))}')
                 return new, None
             except Exception as e:

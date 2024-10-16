@@ -108,14 +108,14 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     assert vid1.file_group.published_datetime and vid1.file_group.published_datetime.year == 2024
     assert vid1.file_group.title == 'The full title'
 
-    # A PNG is replaced.
+    # A PNG is converted, but not deleted.
     vid2 = video_factory(with_video_file=True, with_poster_ext='.png')
-    vid2.poster_path.with_suffix('.jpg').write_bytes(image_bytes_factory())  # New poster exists, replace it.
-    assert vid2.poster_path and vid2.poster_path.is_file() and vid2.poster_path.suffix == '.png', \
-        'Poster was not initialized'
+    assert vid2.poster_path and vid2.poster_path.suffix == '.png', 'Poster was not initialized'
+    assert {i.suffix for i in vid2.file_group.my_paths()} == {'.png', '.mp4'}
     validate_video(vid2, True)
     assert vid2.poster_path.is_file(), 'New poster was not generated'
-    assert vid2.poster_path.suffix == '.jpg'
+    assert vid2.poster_path.suffix == '.jpg' and vid2.poster_path.stat().st_size > 0
+    assert {i.suffix for i in vid2.file_group.my_paths()} == {'.jpg', '.png', '.mp4'}
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,8 @@ from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, \
     is_valid_poster
-from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
+from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig, \
+    convert_or_generate_poster
 
 
 def test_get_absolute_media_path(test_directory):

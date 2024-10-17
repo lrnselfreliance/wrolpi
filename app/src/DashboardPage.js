@@ -76,7 +76,7 @@ function FlagsMessages() {
     }
 
     let internetDownMessage;
-    if (!flags.have_internet && !flags.wrol_mode) {
+    if (!flags.have_internet && !settings.wrol_mode) {
         internetDownMessage = <ErrorMessage icon='globe'>
             <Message.Header>No Internet</Message.Header>
             WROLPi has no Internet. Downloads will not start.

@@ -656,22 +656,18 @@ class DownloadManager:
 
     @staticmethod
     def retry_downloads(reset_attempts: bool = False):
-        """Set any incomplete Downloads to `new` so they will be retried."""
+        """Set any incomplete Downloads to `new` so they will be retried.
+
+        @param reset_attempts: Will set `download.attempts` to 0 if True.
+        """
         with get_db_curs(commit=True) as curs:
             if reset_attempts:
-                curs.execute("UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred'")
+                stmt = "UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred'"
             else:
-                curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
+                stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred'"
+            curs.execute(stmt)
 
         save_downloads_config.activate_switch()
-
-    DOWNLOAD_SORT = (
-        DownloadStatus.pending,
-        DownloadStatus.failed,
-        DownloadStatus.new,
-        DownloadStatus.deferred,
-        DownloadStatus.complete,
-    )
 
     @optional_session
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:

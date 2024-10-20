@@ -362,7 +362,17 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
         # Only one file is always the primary.
         return files[0]
 
-    file_mimetypes = [(i, get_mimetype(i)) for i in files]
+    file_mimetypes = list()
+    for idx, i in enumerate(files):
+        try:
+            file_mimetypes.append((i, get_mimetype(i)))
+        except FileNotFoundError:
+            # File was deleted.
+            pass
+
+    if not file_mimetypes:
+        raise FileNotFoundError(f'Cannot find primary file.  All files are no longer accessible: {files[0]}')
+
     # EPUB has high priority.
     mimetypes = {i[1] for i in file_mimetypes}
     has_epub = any(i.startswith('application/epub') for i in mimetypes)

@@ -180,14 +180,14 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.last_successful_download == now_
 
     # Download is not due for an hour.
-    test_download_manager.renew_recurring_downloads(test_session)
+    test_download_manager.renew_recurring_downloads()
     await test_download_manager.wait_for_all_downloads()
     assert list(test_download_manager.get_new_downloads(test_session)) == []
     assert download.last_successful_download == now_
 
     # Download is due an hour later.
     fake_now(datetime(2020, 1, 1, 2, 0, 1, tzinfo=pytz.UTC))
-    test_download_manager.renew_recurring_downloads(test_session)
+    test_download_manager.renew_recurring_downloads()
     (download,) = list(test_download_manager.get_new_downloads(test_session))
     # Download is "new" but has not been downloaded a second time.
     assert download.is_new, download.status_code
@@ -211,7 +211,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.do_download.reset_mock()
     now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1, tzinfo=pytz.UTC))
     test_downloader.set_test_success()
-    test_download_manager.renew_recurring_downloads(test_session)
+    test_download_manager.renew_recurring_downloads()
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()

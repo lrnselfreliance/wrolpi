@@ -714,26 +714,26 @@ class DownloadManager:
         downloads = query.all()
         return downloads
 
-    @optional_session
-    def renew_recurring_downloads(self, session: Session = None):
+    def renew_recurring_downloads(self):
         """Mark any recurring downloads that are due for download as "new".  Start a download."""
         now_ = now()
 
-        recurring = self.get_recurring_downloads(session)
-        renewed_count = 0
-        for download in recurring:
-            # A new download may not have a `next_download`, create it if necessary.
-            download.next_download = download.next_download or self.calculate_next_download(download, session=session)
-            if download.next_download < now_ and download.status not in (DownloadStatus.new, DownloadStatus.pending):
-                download.renew()
-                renewed_count += 1
+        with get_db_session() as session:
+            recurring = self.get_recurring_downloads(session)
+            renewed_count = 0
+            for download in recurring:
+                # A new download may not have a `next_download`, create it if necessary.
+                download.next_download = download.next_download or self.calculate_next_download(download, session=session)
+                if download.next_download < now_ and download.status not in (DownloadStatus.new, DownloadStatus.pending):
+                    download.renew()
+                    renewed_count += 1
 
-        if renewed_count:
-            self.log_debug(f'Renewed {renewed_count} recurring downloads')
-            session.commit()
+            if renewed_count:
+                self.log_debug(f'Renewed {renewed_count} recurring downloads')
+                session.commit()
 
-            # Save the config now that some Downloads renewed.
-            save_downloads_config.activate_switch()
+        # Save the config now that some Downloads renewed.
+        save_downloads_config.activate_switch()
 
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:

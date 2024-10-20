@@ -147,16 +147,6 @@ def search_videos(
     return results, total
 
 
-@run_after(save_channels_config)
-def tag_video(video_id: int, tag_name: str) -> Dict:
-    """Tag a video"""
-    with get_db_session(commit=True):
-        video = Video.find_by_id(video_id)
-        video.add_tag(tag_name)
-        video_dict = video.dict()
-    return video_dict
-
-
 @optional_session
 def delete_videos(*video_ids: int, session: Session = None):
     videos = list(session.query(Video).filter(Video.id.in_(video_ids)))

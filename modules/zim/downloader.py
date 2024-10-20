@@ -15,16 +15,19 @@ logger = logger.getChild(__name__)
 
 
 async def fetch_hrefs(url: str) -> List[str]:
-    async with aiohttp_get(url, timeout=20) as response:
-        status = response.status
-        content = await response.content.read()
-    if status != HTTPStatus.OK:
-        raise RuntimeError(f'Failed to fetch file catalog')
+    try:
+        async with aiohttp_get(url, timeout=20) as response:
+            status = response.status
+            content = await response.content.read()
+        if status != HTTPStatus.OK:
+            raise RuntimeError(f'Failed to fetch Zim file catalog: {url}')
+    except TimeoutError:
+        raise TimeoutError(f'Timeout while fetching Zim file catalog: {url}')
 
     soup = get_html_soup(content)
     downloads = list()
-    for a_ in soup.find_all('a'):
-        downloads.append(a_['href'])
+    for a in soup.find_all('a'):
+        downloads.append(a['href'])
     return downloads
 
 

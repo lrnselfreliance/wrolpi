@@ -105,10 +105,12 @@ def reset_shared_contexts(app: Sanic):
 
     # Events.
     app.shared_ctx.single_tasks_started.clear()
-    app.shared_ctx.download_manager_disabled.clear()
     app.shared_ctx.download_manager_stopped.clear()
     app.shared_ctx.flags_initialized.clear()
     app.shared_ctx.perpetual_tasks_started.clear()
+
+    # Do not start downloads when reloading.
+    app.shared_ctx.download_manager_disabled.set()
 
 
 def initialize_configs_contexts(app: Sanic):

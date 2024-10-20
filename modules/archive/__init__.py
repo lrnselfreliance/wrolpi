@@ -17,7 +17,7 @@ from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST, DOCKERIZED, USER_AGENT
+from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT
 from . import lib
 from .api import archive_bp  # noqa
 from .errors import InvalidArchive
@@ -76,7 +76,7 @@ class ArchiveDownloader(Downloader, ABC):
                str(SINGLE_FILE_BIN),
                '--browser-executable-path', CHROMIUM,
                '--browser-args', '["--no-sandbox"]',
-               '--user-agent', USER_AGENT,
+               '--user-agent', DOWNLOAD_USER_AGENT,
                '--dump-content',
                '--load-deferred-images-dispatch-scroll-event',
                download.url,

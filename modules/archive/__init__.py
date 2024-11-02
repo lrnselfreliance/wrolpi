@@ -54,11 +54,13 @@ class ArchiveDownloader(Downloader, ABC):
 
         with get_db_session() as session:
             archive = Archive.find_by_id(archive_id, session)
-            if download.settings and (tag_names := download.settings.get('tag_names')):
+            need_commit = False
+            if tag_names := download.tag_names:
                 for name in tag_names:
                     archive.add_tag(name, session)
+                    need_commit = True
 
-                if session := Session.object_session(archive):
+                if need_commit:
                     session.commit()
 
             logger.info(f'Successfully downloaded Archive {download.url} {archive}')

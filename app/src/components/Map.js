@@ -7,7 +7,6 @@ import {
     humanFileSize,
     IframeViewer,
     InfoMessage,
-    MAP_VIEWER_URI,
     PageContainer,
     TabLinks,
     useTitle,
@@ -32,6 +31,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Header, Loader, Placeholder, Segment, Table} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
 import _ from "lodash";
+import {MAP_VIEWER_URI} from "./Vars";
 
 function DockerMapImportWarning() {
     const {status} = useContext(StatusContext);

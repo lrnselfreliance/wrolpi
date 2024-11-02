@@ -1,11 +1,14 @@
 import asyncio
 import inspect
+import logging
 import multiprocessing
 from functools import partial
 from typing import Dict, Mapping, Protocol
 
 from wrolpi.api_utils import api_app, logger, perpetual_signal
 from wrolpi.vars import PYTEST
+
+logger = logger.getChild(__name__)
 
 SWITCH_HANDLERS: Dict[str, callable] = dict()
 
@@ -33,7 +36,12 @@ def activate_switch(switch_name: str, context: dict = None):
 
             switches_changed.set()
             switches.update({**switches.copy(), switch_name: context})
-            logger.debug(f'activate_switch: {switch_name}')
+            if logger.isEnabledFor(logging.DEBUG):
+                # Switches can be difficult to troubleshoot.  Log the function that activates a switch.
+                caller_frame_record = inspect.stack()[1]
+                frame = caller_frame_record[0]
+                info = inspect.getframeinfo(frame)
+                logger.debug(f'activate_switch: {switch_name} called by {info.function} in {info.filename}')
         finally:
             switches_lock.release()
     else:
@@ -94,15 +102,19 @@ async def switch_worker():
         switches_changed.wait(timeout=1)
         switches: dict = api_app.shared_ctx.switches
         with api_app.shared_ctx.switches_lock:
-            switches_keys = switches.keys()
             switch_name, context = switches.popitem()
+            switches_keys = list(switches.keys())
         # Call handler with the stored context, await coroutine, if any.
         handler = SWITCH_HANDLERS[switch_name]
-        logger.debug(f'switch_worker handling {switch_name} of {len(switches_keys)}')
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'switch_worker handling {switch_name} of {switches_keys}')
+        else:
+            logger.info(f'switch_worker handling {switch_name} of {len(switches_keys)}')
         coro = handler(**context)
         if inspect.iscoroutine(coro):
             # Handler is async.
             await coro
+        logger.debug(f'switch_worker completed {switch_name}')
     except TimeoutError:
         # `switches_changed` is not set.
         pass

@@ -1,19 +1,23 @@
 #! /usr/bin/env python3
 import json
+import logging
 import os.path
 import pathlib
 import traceback
 from abc import ABC
+from datetime import timedelta
 from typing import Tuple, List, Dict, Optional
 
+import cachetools
 import yt_dlp.utils
+from cachetools.keys import hashkey
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL, DownloadError
 from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    format_json_file, trim_file_name
+    trim_file_name, cached_multiprocessing_result
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -23,10 +27,10 @@ from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
-from .common import get_no_channel_directory, get_videos_directory, update_view_counts_and_censored, \
+from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
 from .errors import UnknownChannel
-from .lib import get_downloader_config, YDL, ydl_logger
+from .lib import get_downloader_config, YDL, ydl_logger, format_videos_destination
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
@@ -34,27 +38,41 @@ from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
 
-# Channels are handled differently than a single video.
-ChannelIEs = {
-    YoutubeTabIE,
+VIDEO_RESOLUTION_MAP = {
+    '360p': ['134+140', 'mp4-360p', 'res:360'],
+    '480p': ['135+140', '135+139', 'mp4-480p', 'res:480'],
+    '720p': [
+        '298+140',  # 720@60 avc1 + 135k audio
+        '136+140', '22', 'res:720'],
+    '1080p': [
+        '299+140',  # 1080@60 avc1 + 135k audio
+        '137+140', '614+140', 'res:1080'],
+    '1440p': [
+        '639+140',  # vp9 + 135k audio
+        '620+140', 'res:1440'],
+    '2160p': [
+        '642+140',  # vp9 + 135k audio
+        '625+140', 'res:2160'],
+    'maximum': ['bestvideo*+bestaudio/best'],
 }
 
-PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMAT = ','.join([
-    'res:720',  # Use the best 720p available first
-    '136+140',  # 130=720p video-only, 140=medium quality audio only
-    '22',  # 720p video with audio
-    '135+140',  # 135=480p video-only, 140=medium quality audio only
-    '135+139',  # 135=480p video-only, 139=low quality audio only
-    'mp4-480p',
-    'bestvideo*+bestaudio/best',  # Download the highest resolution as a last resort (can be quite large).
-])
-PREFERRED_CAPTION_FORMAT = 'vtt'
-PREFERRED_POSTER_FORMAT = 'jpg'
+# VTT is the only format that a browser can use to display captions on a <video/>.
+DEFAULT_CAPTION_FORMAT = 'vtt'
+DEFAULT_POSTER_FORMAT = 'jpg'
+DEFAULT_CHANNEL_DOWNLOAD_ORDER = 'newest'
 
 
-def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
-    """Get info about a video.  Separated for testing."""
+def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False):
+    return hashkey(url, process=process)
+
+
+extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
+
+
+# Cache results for each URL for a few minutes.
+@cachetools.cached(cache=extract_info_cache, key=extract_info_key)
+def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False) -> dict:
+    """Get info about a video, channel, or playlist.  Separated for testing."""
     if PYTEST:
         raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
 
@@ -67,6 +85,25 @@ def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
     return f'{dir_name}/{file_name}'
+
+
+@cached_multiprocessing_result
+async def fetch_video_duration(url: str) -> int:
+    """Get video duration in seconds.  Attempts to get the duration from a Video that has already been downloaded,
+    otherwise, fetches the duration using yt-dlp."""
+    with get_db_session() as session:
+        # Join with Video to get duration; a URL may have other files (such as an Archive).
+        video = Video.get_by_url(url, session=session)
+        if video and (duration := video.file_group.length):
+            logger.debug(f'Using already-known duration {duration} for {url} from FileGroup')
+            return duration
+
+    logger.debug(f'Fetching video duration from {url}')
+    # Duration can be extracted without processing.
+    info = extract_info(url, process=False)
+    duration = info['duration']
+    logger.info(f'Fetched video duration of {duration} from {url}')
+    return duration
 
 
 class ChannelDownloader(Downloader, ABC):
@@ -87,13 +124,16 @@ class ChannelDownloader(Downloader, ABC):
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         info = extract_info(download.url, process=False)
         # Resolve the "entries" generator.
-        info: Dict = resolve_generators(info)
+        info: dict = resolve_generators(info)
         entries = info.get('entries')
         if entries and isinstance(entries[0], Dict) and entries[0].get('entries'):
             # Entries contains more channels/playlist, tell the Maintainer to specify the URL.
             raise UnrecoverableDownloadError(f'Unable to download {download.url} because the URL is ambiguous.'
                                              f' Try requesting the videos only:'
                                              f' https://example.com -> https://example.com/videos')
+
+        download_settings = download.settings or dict()
+        channel_tag_name = i[0] if (i := download_settings.get('channel_tag_name')) else None
 
         download.sub_downloader = video_downloader.name
         download.info_json = info
@@ -105,7 +145,7 @@ class ChannelDownloader(Downloader, ABC):
         if not name:
             raise ValueError(f'Could not find name')
         channel_source_id = info.get('channel_id') or info.get('id')
-        channel = get_or_create_channel(channel_source_id, download.url, name)
+        channel = get_or_create_channel(channel_source_id, download.url, name, channel_tag_name)
         channel.dict()  # get all attributes while we have the session.
 
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
@@ -114,14 +154,14 @@ class ChannelDownloader(Downloader, ABC):
         settings = dict()
         if channel:
             settings.update(dict(channel_id=channel.id, channel_url=download.url))
-        # Downloads will inherit the destination, if defined.
-        destination = download.settings.get('destination') if download.settings else None
-        if destination:
-            settings['destination'] = destination
-        # A Download may have applied tags, send any to the VideoDownloader.
-        tag_names = download.settings.get('tag_names') if download.settings else None
-        if tag_names:
-            settings['tag_names'] = tag_names
+        if download.destination:
+            settings['destination'] = str(download.destination)  # Need str for JSON conversion
+        if download.tag_names:
+            settings['tag_names'] = download.tag_names
+        if video_resolutions := download_settings.get('video_resolutions'):
+            settings['video_resolutions'] = video_resolutions
+        if video_format := download_settings.get('video_format'):
+            settings['video_format'] = video_format
 
         is_a_playlist = self.is_a_playlist(info)
         try:
@@ -173,28 +213,49 @@ class ChannelDownloader(Downloader, ABC):
         downloads = download.info_json['entries']
         total_downloads = len(downloads)
 
-        title_include = download.settings.get('title_include') if download.settings else None
-        if title_include:
-            # Only download Videos that have title match words in title.
-            title_include = [i.strip() for i in title_include.split(',')]
+        settings = download.settings or dict()
+        title_exclude = settings.get('title_exclude', '')
+        title_exclude = [i.lower() for i in title_exclude.split(',') if i]
+        title_include = settings.get('title_include', '')
+        title_include = [i.lower() for i in title_include.split(',') if i]
+        if title_exclude or title_include:
             new_downloads = []
             for i in downloads:
-                if (title := i.get('title', '')) and any(j for j in title_include if j in title):
-                    logger.debug(f'Video with title {title} matches {title_include}')
-                    new_downloads.append(i)
+                title = i.get('title', '').lower()
+                if title and title_exclude and any(i in title for i in title_exclude):
+                    logger.debug(f'Video with title {str(repr(title))} matches {title_exclude=}')
+                    continue
+                if title and title_include and not any(i in title for i in title_include):
+                    logger.debug(f'Video with title {str(repr(title))} matches {title_include=}')
+                    continue
+                new_downloads.append(i)
             downloads = new_downloads
 
-        title_exclude = download.settings.get('title_exclude') if download.settings else None
-        if title_exclude:
-            # Do not download any videos that contain the exclude words.
-            title_exclude = [i.strip() for i in title_exclude.split(',')]
-            new_downloads = list()
-            for i in downloads:
-                if (title := i.get('title', '')) and any(j for j in title_exclude if j in title):
-                    logger.debug(f'Video with title {title} matches EXCLUDE {title_exclude}')
-                else:
-                    new_downloads.append(i)
-            downloads = new_downloads
+        # Filter videos by their length.
+        try:
+            if minimum_duration := settings.get('minimum_duration'):
+                downloads = [i for i in downloads if int(i['duration']) >= minimum_duration]
+            if maximum_duration := settings.get('maximum_duration'):
+                downloads = [i for i in downloads if int(i['duration']) <= maximum_duration]
+        except KeyError as e:
+            raise RuntimeError('Unable to filter videos because there is no duration') from e
+
+        # Sort videos now that we have reduced the number necessary to sort, but before we limit count.
+        sort_key = settings.get('download_order', DEFAULT_CHANNEL_DOWNLOAD_ORDER)
+        # Default is videos are sorted by newest first.
+        if sort_key == 'oldest':
+            logger.debug(f'Downloading oldest videos from {download.url}')
+            downloads = downloads.reverse()
+        elif sort_key == 'views':
+            # Download videos with most views.
+            logger.debug(f'Downloading most viewed videos from {download.url}')
+            downloads = sorted(downloads, key=lambda i: i['view_count'], reverse=True)
+
+        # Limit the videos that will be downloads (this allows the user to download the "top 100" videos of a Channel)
+        if video_count_limit := settings.get('video_count_limit'):
+            logger.debug(f'Limiting video count to {video_count_limit}: {download.url}')
+            video_count_limit = int(video_count_limit)
+            downloads = downloads[:video_count_limit]
 
         filtered_entries = len(downloads)
         if filtered_entries != total_downloads:
@@ -240,6 +301,11 @@ class VideoDownloader(Downloader, ABC):
         download_id = download.id
         url = normalize_video_url(download.url)
 
+        # Copy settings into Download (they may be from the ChannelDownloader)
+        settings = download.settings or dict()
+        download.destination = download.destination or settings.get('destination')
+        tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
+
         # Video may have been downloaded previously, get its location for error reporting.
         with get_db_session() as session:
             video_ = Video.get_by_url(url, session)
@@ -265,8 +331,8 @@ class VideoDownloader(Downloader, ABC):
 
         if destination:
             # Download to the directory specified in the settings.
-            out_dir = pathlib.Path(settings['destination'])
-            logger.debug(f'Downloading {url} to destination from settings')
+            out_dir = destination
+            logger.debug(f'Downloading {url} to destination {destination} from settings')
         elif channel:
             out_dir = channel_directory
             logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
@@ -275,11 +341,24 @@ class VideoDownloader(Downloader, ABC):
             out_dir = get_no_channel_directory()
             logger.debug(f'Downloading {url} to default directory')
 
+        # Make output directory.  (Maybe string from settings)
+        out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
         out_dir.mkdir(exist_ok=True, parents=True)
+
+        if tag_names and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Downloading {url} with {tag_names=}')
+
+        config = get_downloader_config()
 
         logs = None  # noqa
         try:
-            video_path, entry = self.prepare_filename(url, out_dir)
+            # Use user-provided/channel-provided first, or fallback to defaults from config.
+            video_resolutions = settings.get('video_resolutions') or config.video_resolutions
+            # yt-dlp expects a string like so: 299+140,298+140,bestvideo*+bestaudio/best
+            video_resolutions = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+
+            video_format = settings.get('video_format') or config.merge_output_format
+            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions, video_format)
 
             if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
@@ -289,18 +368,17 @@ class VideoDownloader(Downloader, ABC):
             cmd = (
                 str(YT_DLP_BIN),
                 '-c',  # Continue downloads
-                '-f', PREFERRED_VIDEO_FORMAT,
+                '-f', video_resolutions,
                 '--match-filter', '!is_live',  # Do not attempt to download Live videos.
                 '--write-subs',
                 '--write-auto-subs',
-                '--sub-format', PREFERRED_CAPTION_FORMAT,
-                '--convert-subs', PREFERRED_CAPTION_FORMAT,
-                '--convert-thumbnails', PREFERRED_POSTER_FORMAT,
+                '--sub-format', DEFAULT_CAPTION_FORMAT,
+                '--convert-subs', DEFAULT_CAPTION_FORMAT,
+                '--convert-thumbnails', DEFAULT_POSTER_FORMAT,
                 '--write-thumbnail',
                 '--write-info-json',
-                '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
-                '--remux-video', PREFERRED_VIDEO_EXTENSION,
-                '-o', video_path,
+                '--merge-output-format', video_format,
+                # '--remux-video', video_format,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
                 # Get top 20 comments, 10 replies per parent.
@@ -308,6 +386,7 @@ class VideoDownloader(Downloader, ABC):
                 '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
                 # Use experimental feature to merge files.
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
+                '-o', video_path,
                 url,
             )
             return_code, logs, _ = await self.process_runner(download_id, url, cmd, out_dir)
@@ -323,7 +402,7 @@ class VideoDownloader(Downloader, ABC):
                     location=location,
                 )
 
-            preferred_path = video_path.with_suffix(f'.{PREFERRED_VIDEO_EXTENSION}')
+            preferred_path = video_path.with_suffix(f'.{video_format}')
             if not video_path.is_file() and preferred_path.is_file():
                 # Prepared filename does not exist, but video with preferred video extension does, it was probably
                 # remuxed by yt-dlp.
@@ -364,7 +443,7 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 # Second session is started because SQLAlchemy will forget what we have done.
                 video = Video.get_by_id(video_id, session)
-                if download.settings and (tag_names := download.settings.get('tag_names')):
+                if tag_names:
                     existing_names = video.file_group.tag_names
                     for name in tag_names:
                         if name not in existing_names:
@@ -428,6 +507,9 @@ class VideoDownloader(Downloader, ABC):
     @staticmethod
     async def _get_channel(download: Download) \
             -> Tuple[Optional[Channel], Optional[pathlib.Path], Optional[int], Optional[pathlib.Path], dict]:
+        settings = download.settings or dict()
+        channel_tag_name = i[0] if (i := settings.get('channel_tag_name')) else None
+
         found_channel = None
         # Look for Channel using channel data first, fallback to uploader data.
         channel_name = download.info_json.get('channel') or download.info_json.get('uploader')
@@ -437,15 +519,15 @@ class VideoDownloader(Downloader, ABC):
         if channel_name or channel_source_id or channel_url:
             # Try to find the channel via info_json from yt-dlp.
             try:
-                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name)
+                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name,
+                                                tag_name=channel_tag_name)
                 if channel:
                     found_channel = 'yt_dlp'
                     logger.debug(f'Found a channel with source_id {channel=}')
             except UnknownChannel:
                 # Can't find a channel, use the no channel directory.
                 pass
-        settings = download.settings or dict()
-        destination = settings.get('destination')
+        destination = download.destination
         if not channel and destination:
             # Destination may find Channel if not already found.
             try:
@@ -455,7 +537,7 @@ class VideoDownloader(Downloader, ABC):
             except UnknownChannel:
                 # Destination must not be a channel.
                 pass
-        channel_id = settings.get('channel_id')
+        channel_id = download.channel_id
         channel_url = settings.get('channel_url')
         if not channel and (channel_id or channel_url):
             # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
@@ -469,6 +551,7 @@ class VideoDownloader(Downloader, ABC):
                     raise
             if channel:
                 found_channel = 'download_settings'
+
         channel_id = channel.id if channel else None
         channel_directory = channel.directory if channel else None
         if found_channel == 'yt_dlp':
@@ -483,17 +566,20 @@ class VideoDownloader(Downloader, ABC):
         return channel, channel_directory, channel_id, destination, settings
 
     @staticmethod
-    def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:
+    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str) \
+            -> Tuple[pathlib.Path, dict]:
         """Get the full path of a video file from its URL using yt-dlp."""
         if not out_dir.is_dir():
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
         # YoutubeDL expects specific options, add onto the default options
-        options = get_downloader_config().dict()
-        options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
-        options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
-        options['remuxvideo'] = PREFERRED_VIDEO_EXTENSION
-        options['format'] = PREFERRED_VIDEO_FORMAT
+        config = get_downloader_config()
+        options = config.yt_dlp_options
+        # yt-dlp expects the absolute path.
+        options['outtmpl'] = f'{out_dir}/{config.file_name_format}'
+        options['merge_output_format'] = video_format
+        # options['remuxvideo'] = video_format
+        options['format'] = video_resolutions
         options['cachdir'] = YTDLP_CACHE_DIR
 
         # Create a new YoutubeDL for the output directory.
@@ -523,7 +609,7 @@ class VideoDownloader(Downloader, ABC):
 
             # Trim long filename, add video suffix, add back into parent directory.
             filename = escape_file_name(filename)
-            final_filename = parent / f'{filename}.{PREFERRED_VIDEO_EXTENSION}'
+            final_filename = parent / f'{filename}.{video_format}'
             final_filename = trim_file_name(final_filename)
             logger.debug(f'Video file name was too long.  Trimmed to: {final_filename.name}')
 
@@ -586,7 +672,7 @@ channel_downloader = ChannelDownloader()
 video_downloader = VideoDownloader()
 
 
-def get_or_create_channel(source_id: str = None, url: str = None, name: str = None) -> Channel:
+def get_or_create_channel(source_id: str = None, url: str = None, name: str = None, tag_name: str = None) -> Channel:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
@@ -604,7 +690,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         raise UnknownChannel(f'Cannot create channel without a name')
 
     # Channel does not exist.  Create one in the video directory.
-    channel_directory = get_videos_directory() / escape_file_name(name)
+    channel_directory = format_videos_destination(name, tag_name, url)
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
     data = ChannelPostRequest(
@@ -612,6 +698,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         name=name,
         url=url,
         directory=str(channel_directory.relative_to(get_media_directory())),
+        tag_name=tag_name,
     )
     channel = create_channel(data=data, return_dict=False)
     # Create the directory now that the channel is approved.

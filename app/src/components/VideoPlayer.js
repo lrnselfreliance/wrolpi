@@ -8,8 +8,8 @@ import {
     encodeMediaPath,
     getParentDirectory,
     humanFileSize,
-    humanNumber, isoDatetimeToAgoPopup,
-    isoDatetimeToString,
+    humanNumber,
+    isoDatetimeToAgoPopup,
     MultilineText,
     PageContainer,
     PreviewPath,
@@ -110,7 +110,7 @@ const VideoComment = ({comment, children}) => {
         specialIcon = <Icon name='heart' color='red'/>;
     }
 
-    const dateElm = <div {...t}>{isoDatetimeToString(timestamp * 1000)}</div>;
+    const dateElm = <div {...t}>{isoDatetimeToAgoPopup(timestamp * 1000)}</div>;
     const likesElm = like_count && <div {...t}>
         <Icon name='thumbs up'/>{humanNumber(comment['like_count'])}
     </div>;
@@ -303,7 +303,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                 </Grid.Column>
                 <Grid.Column>
                     <h3>Censored</h3>
-                    <p>{video.censored ? 'Yes' : 'No'}</p>
+                    <p>{videoFile.censored ? 'Yes' : 'No'}</p>
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={1}>

@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from wrolpi import status
+from wrolpi.test.common import skip_circleci
 
 
 @pytest.mark.asyncio
@@ -26,6 +27,7 @@ async def test_get_cpu_stats(async_client):
     assert isinstance(info.temperature, int)
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_get_drives_stats(async_client):
     """Minimum drives info testing because this will fail in docker, etc."""

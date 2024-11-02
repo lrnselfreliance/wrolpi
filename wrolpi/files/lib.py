@@ -1546,6 +1546,8 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         return
 
     for i in range(2):
+        # Try multiple times because uploads happen concurrently and may conflict.
+        # TODO convert uploads to syncronous.
         with get_db_session() as session:
             file_group = FileGroup.from_paths(session, *paths)
             # Re-index the contents of the file.

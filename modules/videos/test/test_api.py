@@ -148,16 +148,16 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
 
 def test_api_download(test_session, test_client, test_directory):
     """A video can be downloaded."""
-    content = dict(urls=['https://example.com/video1', ], downloader='video',
-                   settings=dict(excluded_urls='example.com', destination='dest'))
+    content = dict(urls=['https://example.com/video1', ], downloader='video', destination='dest',
+                   settings=dict(excluded_urls='example.com'))
     request, response = test_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     download = test_session.query(Download).one()
     assert download.url == 'https://example.com/video1'
     assert download.downloader == 'video'
-    assert download.settings['excluded_urls'] == ['example.com']
-    assert download.settings['destination'] == str(test_directory / 'dest')
+    assert download.settings['excluded_urls'] == 'example.com'
+    assert download.destination == test_directory / 'dest'
     assert not download.settings.get('tag_names')
 
 

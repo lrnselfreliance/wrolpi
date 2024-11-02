@@ -1,0 +1,18 @@
+{
+  "tags": [
+    {
+        "id": 1,
+        "name": "Automotive",
+        "color": "#353535",
+        "file_group_count": 0,
+        "zim_entry_count": 0
+    },
+    {
+        "id": 2,
+        "name": "Clothing",
+        "color": "#9858C5",
+        "file_group_count": 0,
+        "zim_entry_count": 0
+    }
+  ]
+}

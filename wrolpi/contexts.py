@@ -19,7 +19,7 @@ def attach_shared_contexts(app: Sanic):
 
     # ConfigFile multiprocessing_dict's.
     # Shared Configs
-    app.shared_ctx.wrolpi_config = multiprocessing.Manager().dict()
+    app.shared_ctx.wrolpi_config = manager.dict()
     app.shared_ctx.tags_config = manager.dict()
     app.shared_ctx.inventories_config = manager.dict()
     app.shared_ctx.channels_config = manager.dict()
@@ -30,6 +30,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
+    app.shared_ctx.cache = manager.dict()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, LOG_LEVEL_INT)
 
@@ -86,6 +87,7 @@ def reset_shared_contexts(app: Sanic):
         memory_stats=dict(),
     ))
     app.shared_ctx.map_importing.clear()
+    app.shared_ctx.cache.clear()
     # Shared ints
     app.shared_ctx.log_level.value = LOG_LEVEL_INT
 

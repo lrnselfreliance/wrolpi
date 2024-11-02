@@ -18,6 +18,7 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager, Download, DownloadResult
 from wrolpi.files.models import Directory
+from wrolpi.switches import await_switches
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -218,8 +219,7 @@ async def test_channel_download_requires_refresh(
         downloaded_urls.append(download.url)
         return DownloadResult(success=True)
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download), \
-            mock.patch('wrolpi.files.lib.apply_indexers'):  # TODO why does apply_indexers break this test?
+    with mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download):
         entries = [
             dict(id=vid.source_id, view_count=0, webpage_url='https://example.com/1'),  # Already downloaded.
             dict(id='not downloaded', view_count=0, webpage_url='https://example.com/2'),
@@ -228,8 +228,7 @@ async def test_channel_download_requires_refresh(
                                                     channel_id='the id', id='the id')
         await video_download_manager.do_downloads()
         await video_download_manager.wait_for_all_downloads()
-        # Give time for background tasks to finish.  :(
-        await asyncio.sleep(1)
+        await await_switches()
 
     # Channel was refreshed before downloading videos.
     assert_refreshed(True)
@@ -465,13 +464,12 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
     # Create recurring download which uses the Channel's directory.
     download = download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
-                                                   settings={
-                                                       'destination': str(test_directory / 'videos/Channel Name')})
+                                                   destination=str(test_directory / 'videos/Channel Name'))
     test_session.commit()
     save_channels_config()
     assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Channel Name')
     # Channel download downloads into the Channel's directory.
-    assert channel.downloads[0].settings['destination'] == str(test_directory / 'videos/Channel Name')
+    assert channel.downloads[0].destination == test_directory / 'videos/Channel Name'
     # Make extra file in the Channel's directory, it should be moved.
     (channel_directory / 'extra file.txt').write_text('extra file contents')
     # Channel directory is in the Videos directory.
@@ -498,10 +496,8 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     assert not channel_directory.exists(), 'Old Channel directory should have been deleted.'
     # Channel download goes into the Channel's directory.
     d1, d2 = test_session.query(Download).all()
-    assert d1.settings['destination'] == str(test_directory / 'videos/Tag Name/Channel Name'), \
-        f'{d1} was not moved'
-    assert d2.settings['destination'] == str(test_directory / 'videos/Tag Name/Channel Name'), \
-        f'{d2} was not moved'
+    assert d1.destination == test_directory / 'videos/Tag Name/Channel Name', f'{d1} was not moved'
+    assert d2.destination == test_directory / 'videos/Tag Name/Channel Name', f'{d2} was not moved'
     # Directory record was replaced.
     assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
@@ -529,8 +525,8 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     assert not (test_directory / 'videos/Tag Name/Channel Name').exists()
     # Downloads are moved back.
     d1, d2 = test_session.query(Download).all()
-    assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
-    assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+    assert d1.destination == test_directory / 'videos/Channel Name', f'{d1} was not moved'
+    assert d2.destination == test_directory / 'videos/Channel Name', f'{d2} was not moved'
     assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
     # Channel can be Tagged, without moving directories.
@@ -544,8 +540,8 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
     # Downloads were not changed.
     d1, d2 = test_session.query(Download).all()
-    assert d1.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d1} was not moved'
-    assert d2.settings['destination'] == str(test_directory / 'videos/Channel Name'), f'{d2} was not moved'
+    assert d1.destination == test_directory / 'videos/Channel Name', f'{d1} was not moved'
+    assert d2.destination == test_directory / 'videos/Channel Name', f'{d2} was not moved'
     assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
 

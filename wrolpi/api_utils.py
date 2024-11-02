@@ -101,7 +101,10 @@ def json_error_handler(request: Request, exception: Exception):
     error = repr(str(body["error"]))
     message = repr(str(body["message"]))
     code = body['code']
-    logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}')
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}', exc_info=exception)
+    else:
+        logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}')
     if isinstance(exception, SanicException):
         return json_response(body, exception.status_code)
 

@@ -21,7 +21,6 @@ import {
     ErrorMessage,
     HelpPopup,
     HotspotToggle,
-    semanticUIColorMap,
     ThrottleToggle,
     Toggle,
     WROLModeMessage
@@ -32,6 +31,7 @@ import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {SettingsContext} from "../../contexts/contexts";
 import {ConfigsTable} from "./Configs";
+import {semanticUIColorMap} from "../Vars";
 
 export function ShutdownButton() {
     const dockerized = useDockerized();
@@ -388,7 +388,7 @@ export function SettingsPage() {
                 <ButtonGroup>
                     <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
                     <Dropdown
-                         id='settings_navbar_color_dropdown'
+                        id='settings_navbar_color_dropdown'
                         className='button icon'
                         floating
                         options={navColorOptions}

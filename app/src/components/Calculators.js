@@ -1,6 +1,6 @@
 import React from "react";
 import {Breadcrumbs, useTitle} from "./Common";
-import {Button, Icon, Segment} from "./Theme";
+import {Button, Icon} from "./Theme";
 import {useCalcQuery} from "../hooks/customHooks";
 import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
 import {ElectricalCalculators} from "./calculators/ElectricalCalculators";

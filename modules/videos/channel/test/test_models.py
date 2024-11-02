@@ -88,7 +88,7 @@ async def test_channel_download_relationships(test_session, download_channel):
     assert len(channel.downloads) == 1
     assert channel.downloads[0] == download and channel.downloads[0].url == 'https://example.com/channel1'
     assert download.frequency == DownloadFrequency.weekly
-    assert download.settings['destination'] == str(channel.directory)
+    assert download.destination == channel.directory
 
     # Deleting Download deletes the Download, but not the Channel.
     download.delete()

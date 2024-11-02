@@ -9,12 +9,16 @@ import os
 import pathlib
 
 from alembic import op
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, deferred
+from sqlalchemy.orm import Session, deferred, relationship
+from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.lib import link_channel_and_downloads
 from wrolpi.common import ModelHelper
+from wrolpi.dates import TZDateTime
+from wrolpi.downloader import DownloadStatus
 from wrolpi.media_path import MediaPathType
 
 # revision identifiers, used by Alembic.
@@ -43,6 +47,8 @@ class MChannel(ModelHelper, Base):
     info_json = deferred(Column(JSON))
     info_date = Column(Date)
 
+    downloads: InstrumentedList = relationship('MDownload', primaryjoin='MDownload.channel_id==MChannel.id')
+
     @staticmethod
     def get_by_url(url: str, session: Session = None):
         if not url:
@@ -55,6 +61,28 @@ class MChannel(ModelHelper, Base):
             return f'https://www.youtube.com/feeds/videos.xml?channel_id={self.source_id}'
 
 
+# The `Download` model at the time of this migration.
+class MDownload(ModelHelper, Base):
+    __tablename__ = 'download'
+    id = Column(Integer, primary_key=True)
+    url = Column(String, nullable=False, unique=True)
+
+    attempts = Column(Integer, default=0)
+    downloader = Column(Text)
+    sub_downloader = Column(Text)
+    error = Column(Text)
+    frequency = Column(Integer)
+    info_json = Column(JSONB)
+    last_successful_download = Column(TZDateTime)
+    location = Column(Text)
+    next_download = Column(TZDateTime)
+    settings = Column(JSONB)
+    status = Column(String, default=DownloadStatus.new)
+
+    channel_id = Column(Integer, ForeignKey('channel.id'))
+    channel = relationship('MChannel', primaryjoin='MDownload.channel_id==MChannel.id', back_populates='downloads')
+
+
 def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
@@ -62,7 +90,7 @@ def upgrade():
     session.execute('ALTER TABLE download ADD CONSTRAINT download_url_unique UNIQUE (url)')
     session.execute('ALTER TABLE download ADD COLUMN channel_id INTEGER REFERENCES channel(id)')
 
-    link_channel_and_downloads(session, MChannel)
+    link_channel_and_downloads(session, MChannel, MDownload)
 
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS match_regex')
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS download_frequency')

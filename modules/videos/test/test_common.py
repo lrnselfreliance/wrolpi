@@ -14,7 +14,7 @@ from wrolpi.files import lib as files_lib
 from wrolpi.switches import await_switches
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import convert_image, update_view_counts_and_censored, get_video_duration, generate_video_poster, \
+from ..common import convert_image, update_view_counts_and_censored, extract_video_duration, generate_video_poster, \
     is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig, \
     convert_or_generate_poster
@@ -25,23 +25,23 @@ def test_get_absolute_media_path(test_directory):
     assert str(path).endswith('videos')
 
 
-def test_get_video_duration(test_directory, corrupted_video_file):
+def test_extract_video_duration(test_directory, corrupted_video_file):
     """
     Video duration can be retrieved from the video file.
     """
     video_path = PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4'
-    assert get_video_duration(video_path) == 5
+    assert extract_video_duration(video_path) == 5
 
     with pytest.raises(FileNotFoundError):
-        get_video_duration(PROJECT_DIR / 'test/does not exist.mp4')
+        extract_video_duration(PROJECT_DIR / 'test/does not exist.mp4')
 
     with pytest.raises(subprocess.CalledProcessError):
         empty_file = test_directory / 'empty.mp4'
         empty_file.touch()
-        get_video_duration(empty_file)
+        extract_video_duration(empty_file)
 
     with pytest.raises(subprocess.CalledProcessError):
-        get_video_duration(corrupted_video_file)
+        extract_video_duration(corrupted_video_file)
 
 
 def test_convert_image():
@@ -304,10 +304,10 @@ async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
 
 
 @pytest.mark.asyncio
-async def test_video_ffprobe_json(test_session, video_file):
+async def test_video_ffprobe_json(async_client, test_session, video_file):
     """ffprobe data is extracted when a video is modeled."""
-    with mock.patch('modules.videos.lib.get_video_duration') as mock_get_video_duration:
-        mock_get_video_duration.side_effect = Exception('duration should be from ffprobe json')
+    with mock.patch('modules.videos.lib.extract_video_duration') as mock_extract_video_duration:
+        mock_extract_video_duration.side_effect = Exception('duration should be from ffprobe json')
         await files_lib.refresh_files()
 
     video = test_session.query(Video).one()

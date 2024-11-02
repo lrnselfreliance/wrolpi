@@ -16,7 +16,7 @@ from wrolpi.common import get_wrolpi_config
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
-    RSSDownloader, get_download_manager_config
+    get_download_manager_config, RSSDownloader
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
 from wrolpi.switches import await_switches
 from wrolpi.test.common import assert_dict_contains
@@ -83,6 +83,29 @@ async def test_recreate_download(test_session, test_download_manager, test_downl
     test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=dict())
     download: Download = test_session.query(Download).one()
     assert download.settings == dict()
+
+
+@pytest.mark.asyncio
+async def test_download_rename_tag(async_client, test_session, test_download_manager, test_downloader, tag_factory):
+    """Renaming a Tag renames any Downloads that reference that Tag."""
+    tag = await tag_factory()
+
+    tag_names = [tag.name, ]
+    test_download_manager.create_downloads(
+        ['https://example.com/1', ], test_downloader.name, tag_names=tag_names)
+
+    download = test_session.query(Download).one()
+    assert download.tag_names == ['one', ]
+
+    await tag.update_tag('new name', tag.color, test_session)
+
+    download = test_session.query(Download).one()
+    assert download.tag_names == ['new name', ]
+
+    tag.delete()
+
+    download = test_session.query(Download).one()
+    assert download.tag_names == []
 
 
 def test_downloader_must_have_name():
@@ -366,7 +389,7 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
     assert download.url == 'https://example.com'
     assert download.downloader == test_downloader.name
     assert download.frequency == DownloadFrequency.weekly
-    assert download.settings['excluded_urls'] == ['example.org', 'something']
+    assert download.settings['excluded_urls'] == 'example.org,something'
 
     request, response = await async_client.get('/api/download')
     assert response.status_code == HTTPStatus.OK
@@ -391,12 +414,14 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
 
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
-                                test_downloader, assert_downloads):
+                                test_downloader, assert_downloads, tag_factory):
     # Can import with an empty config.
     await import_downloads_config()
     assert_downloads([])
 
     test_downloader.set_test_success()
+
+    tag = await tag_factory()
 
     download1, download2 = test_download_manager.create_downloads([
         'https://example.com/1',
@@ -405,7 +430,8 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     test_download_manager.recurring_download('https://example.com/3', frequency=DownloadFrequency.weekly,
                                              downloader_name=test_downloader.name)
     download2.next_download = datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC)
-    download2.settings = {'destination': 'some directory'}
+    download2.destination = 'some directory'
+    download2.tag_names = [tag.name, ]
     # Completed once-downloads should be ignored.
     download1.last_successful_download = datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
     test_session.commit()
@@ -422,8 +448,9 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
             frequency=None,
             next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='test_downloader',
-            settings={'destination': 'some directory'},
+            destination='some directory',
             sub_downloader=None,
+            tag_names=['one', ]
         ),
         dict(
             url='https://example.com/3',
@@ -431,6 +458,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
             downloader='test_downloader',
             settings=None,
             sub_downloader=None,
+            tag_names=None,
         ),
     ]
     for download, expected in zip_longest(get_download_manager_config().downloads, expected):
@@ -440,12 +468,13 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     test_session.query(Download).delete()
     test_session.commit()
 
-    # Change the destination.
+    # Change the destination, remove Tags.
     with test_download_manager_config.open('rt') as fh:
         config_contents = yaml.load(fh, Loader=yaml.Loader)
         for idx, download in enumerate(config_contents['downloads']):
             if download['url'] == 'https://example.com/2':
-                config_contents['downloads'][idx]['settings'] = dict(destination='a different directory')
+                config_contents['downloads'][idx]['destination'] = 'a different directory'
+                config_contents['downloads'][idx]['tag_names'] = None
     with test_download_manager_config.open('wt') as fh:
         yaml.dump(config_contents, fh)
     get_download_manager_config().initialize()
@@ -459,15 +488,18 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
             next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='test_downloader',
             # The destination was imported from the config.
-            settings={'destination': 'a different directory'},
+            destination=pathlib.Path('a different directory'),
             sub_downloader=None,
+            tag_names=None,  # Tags were removed.
         ),
         dict(
             url='https://example.com/3',
             frequency=DownloadFrequency.weekly,
             downloader='test_downloader',
+            destination=None,
             settings=dict(),
             sub_downloader=None,
+            tag_names=None,  # Tags were not added.
         ),
     ]
     assert_downloads(expected)
@@ -495,7 +527,7 @@ async def test_download_excluded_urls(test_session, test_download_manager, test_
                 dict(link='https://example.gov/d'),
             ]
         )
-        settings = dict(excluded_urls=['example.org', 'example.gov'])
+        settings = dict(excluded_urls='example.org,example.gov')
         feed_download: Download = test_download_manager.create_download('https://example.com/feed', rss_downloader.name,
                                                                         test_session,
                                                                         sub_downloader_name=test_downloader.name,

@@ -1,5 +1,6 @@
 import pathlib
 import shutil
+from http import HTTPStatus
 
 import pytest
 
@@ -266,3 +267,26 @@ async def test_format_videos_destination(async_client, test_directory):
     wrolpi_config.videos_destination = '%(channel_tag)s/%(channel)s'
     with pytest.raises(FileNotFoundError):
         assert format_videos_destination()
+
+
+@pytest.mark.asyncio
+async def test_video_downloader_config_api(async_client, test_directory):
+    config = lib.get_downloader_config()
+    assert config.video_resolutions == ['1080p', '720p', '480p', '360p', 'maximum']
+
+    request, response = await async_client.get('/api/config/videos_downloader.yaml')
+    assert response.status == HTTPStatus.OK
+    config = response.json['config']
+
+    config['video_resolutions'] = ['720p', 'maximum']
+    body = dict(config=config)
+    request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
+    assert response.status == HTTPStatus.NO_CONTENT
+
+    config = lib.get_downloader_config()
+    assert config.video_resolutions == ['720p', 'maximum']
+    assert (test_directory / 'config/videos_downloader.yaml').is_file()
+    assert config.is_valid()
+    contents = config.read_config_file()
+    assert contents['video_resolutions'] == ['720p', 'maximum']
+    assert '1080p' not in config.get_file().read_text()

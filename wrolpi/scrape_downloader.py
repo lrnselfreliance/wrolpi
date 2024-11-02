@@ -1,4 +1,5 @@
 import pathlib
+from copy import copy
 from urllib.parse import urlparse
 
 from wrolpi.common import logger, get_html_soup, aiohttp_get
@@ -51,7 +52,7 @@ class ScrapeHTMLDownloader(Downloader):
         depth = download.settings.get('depth') or 1
         suffix = download.settings.get('suffix')
         max_pages = download.settings.get('max_pages') or 100
-        destination = download.settings.get('destination')
+        destination = download.destination
 
         if 0 > depth > 10:
             raise UnrecoverableDownloadError('Depth must be between 0 and 100')
@@ -100,8 +101,10 @@ class ScrapeHTMLDownloader(Downloader):
                     child_url = resolve_url(url, href)
                     if child_url and child_url.lower().endswith(suffix):
                         # Found a file that the User requested.
+                        logger.info(f'ScrapeHTMLDownloader will download {child_url}')
                         download_urls.append(child_url)
                     else:
+                        logger.debug(f'ScrapeHTMLDownloader scraping {child_url}')
                         urls.append(child_url)
 
         if not download_urls:
@@ -110,10 +113,12 @@ class ScrapeHTMLDownloader(Downloader):
                 error=f'No files with {suffix} found in {page_count} pages!'
             )
 
+        settings = copy(download.settings)
+        settings['destination'] = str(download.destination)  # Use str for json conversion.
         return DownloadResult(
             success=True,
             downloads=download_urls,
-            settings=download.settings,
+            settings=settings,
             error='Reached max page count.' if page_count >= max_pages else None,
             location=f'/files?folders={destination}'
         )

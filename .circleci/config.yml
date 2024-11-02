@@ -5,48 +5,6 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  app-tests-18:
-    docker:
-      - image: cimg/node:18.12
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-          paths:
-            - ./app/node_modules
-      - run: cd app && npm run test
-  app-tests-20:
-    docker:
-      - image: cimg/node:20.13
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-          paths:
-            - ./app/node_modules
-      - run: cd app && npm run test
-  app-tests-22:
-    docker:
-      - image: cimg/node:22.1
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-          paths:
-            - ./app/node_modules
-      - run: cd app && npm run test
   api-tests-3-11:
     docker:
       - image: cimg/python:3.11
@@ -156,32 +114,25 @@ jobs:
       - run:
           name: Stop Sanic API
           command: pkill -f sanic
-  react-app-build:
+  react-app-start:
     docker:
       - image: cimg/node:20.13
     resource_class: large
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          key: app-{{ checksum "app/package-lock.json" }}
       - run: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
       - run:
           name: Build React App
           command: cd app && DISABLE_ESLINT_PLUGIN=true npm run build
-  react-app-start:
-    docker:
-      - image: cimg/node:20.13
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
       - run:
           name: Start React App
-          command: |
-            cd app
-            npm run start
+          command: cd app && DISABLE_ESLINT_PLUGIN=true npm run start
           background: true
       - run:
           name: Test React App
@@ -191,6 +142,66 @@ jobs:
       - run:
           name: Stop React App
           command: pkill -f npm
+  react-app-cypress-components-chrome:
+    docker:
+      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - run:
+          name: Run Cypress component tests
+          command: |
+            cd app
+            npx cypress run --component --browser chrome --reporter junit --reporter-options "mochaFile=test-results.xml"
+      - store_artifacts:
+          path: app/cypress/videos
+      - store_artifacts:
+          path: app/cypress/screenshots
+      - store_test_results:
+          path: app/test-results.xml
+  react-app-cypress-components-firefox:
+    docker:
+      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - run:
+          name: Run Cypress component tests
+          command: |
+            cd app
+            npx cypress run --component --browser firefox --reporter junit --reporter-options "mochaFile=test-results.xml"
+      - store_artifacts:
+          path: app/cypress/videos
+      - store_artifacts:
+          path: app/cypress/screenshots
+      - store_test_results:
+          path: app/test-results.xml
+  react-app-cypress-components-edge:
+    docker:
+      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - run:
+          name: Run Cypress component tests
+          command: |
+            cd app
+            npx cypress run --component --browser edge --reporter junit --reporter-options "mochaFile=test-results.xml"
+      - store_artifacts:
+          path: app/cypress/videos
+      - store_artifacts:
+          path: app/cypress/screenshots
+      - store_test_results:
+          path: app/test-results.xml
 
 workflows:
   wrolpi-api-tests:
@@ -201,8 +212,7 @@ workflows:
   #      - api-tests-3-12 Sanic does not yet support 3.12.
   wrolpi-app-test:
     jobs:
-      - app-tests-18
-      - app-tests-20
-      - app-tests-22
-      - react-app-build
       - react-app-start
+      - react-app-cypress-components-chrome
+      - react-app-cypress-components-firefox
+      - react-app-cypress-components-edge

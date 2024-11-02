@@ -20,7 +20,6 @@ import {
     ErrorMessage,
     ExternalCardLink,
     FileIcon,
-    FILES_MEDIA_URI,
     findPosterPath,
     HandPointMessage,
     humanFileSize,
@@ -69,6 +68,7 @@ import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
 import {useSearch} from "./Search";
+import {FILES_MEDIA_URI} from "./Vars";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);

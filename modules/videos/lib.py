@@ -3,9 +3,9 @@ import dataclasses
 import html
 import pathlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Generator, Type
+from typing import Generator, Type, List
 from typing import Tuple, Optional
 
 import pytz
@@ -15,7 +15,7 @@ from yt_dlp import YoutubeDL
 from modules.videos.models import Video
 from wrolpi import dates, flags
 from wrolpi.captions import extract_captions
-from wrolpi.common import ConfigFile, extract_domain, \
+from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session
@@ -26,8 +26,8 @@ from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
-    generate_video_poster, logger, ConfigError, \
-    get_video_duration
+    generate_video_poster, ConfigError, \
+    extract_video_duration
 from .errors import UnknownChannel
 from .models import Channel
 
@@ -151,7 +151,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
                 video.file_group.length = float(video_streams[0]['duration'])
         else:
             # Slowest method.
-            video.file_group.length = get_video_duration(video_path)
+            video.file_group.length = extract_video_duration(video_path)
 
     if video_path and not video.caption_paths and video.file_group.d_text and not EXTRACT_SUBTITLES:
         # Caption file was deleted, clear out old captions.
@@ -276,7 +276,7 @@ class ChannelsConfig(ConfigFile):
                             session.add(channel)
                             channel.flush()
                             # TODO refresh the files in the channel.
-                            logger.warning(f'Creating new Channel from config {channel}')
+                            logger.warning(f'Creating new Channel from config: {directory}')
 
                     # Copy existing channel data, update all values from the config.  This is necessary to clear out
                     # values not in the config.
@@ -344,9 +344,8 @@ def set_test_channels_config():
 
 
 @dataclass
-class VideoDownloaderConfigValidator:
+class VideoDownloaderConfigYtDlpOptionsValidator:
     continue_dl: bool
-    dateafter: str
     file_name_format: str
     nooverwrites: bool
     quiet: bool
@@ -355,105 +354,90 @@ class VideoDownloaderConfigValidator:
     writesubtitles: bool
     writethumbnail: bool
     youtube_include_dash_manifest: bool
+
+
+@dataclass
+class VideoDownloaderConfigValidator:
+    video_resolutions: List[str] = field(default_factory=lambda: ['1080p', '720p', '480p', '360p', 'maximum'])
     version: int = None
+    yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
 
 
 class VideoDownloaderConfig(ConfigFile):
     file_name = 'videos_downloader.yaml'
     default_config = dict(
-        continue_dl=True,
-        dateafter='19900101',
-        file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
-        nooverwrites=True,
-        quiet=False,
+        video_resolutions=['1080p', '720p', '480p', '360p', 'maximum'],
         version=0,
-        writeautomaticsub=True,
-        writeinfojson=True,
-        writesubtitles=True,
-        writethumbnail=True,
-        youtube_include_dash_manifest=False,
+        yt_dlp_options=dict(
+            continue_dl=True,
+            file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+            merge_output_format='mp4',
+            nooverwrites=True,
+            quiet=False,
+            writeautomaticsub=True,
+            writeinfojson=True,
+            writesubtitles=True,
+            writethumbnail=True,
+            youtube_include_dash_manifest=False,
+        ),
     )
     validator = VideoDownloaderConfigValidator
 
     @property
     def continue_dl(self) -> bool:
-        return self._config['continue_dl']
-
-    @continue_dl.setter
-    def continue_dl(self, value: bool):
-        self.update({'continue_dl': value})
+        return self._config['yt_dlp_options']['continue_dl']
 
     @property
-    def dateafter(self) -> str:
-        return self._config['dateafter']
+    def video_resolutions(self) -> List[str]:
+        return self._config['video_resolutions']
 
-    @dateafter.setter
-    def dateafter(self, value: str):
-        self.update({'dateafter': value})
+    @video_resolutions.setter
+    def video_resolutions(self, value: List[str]):
+        self.update({'video_resolutions': value})
 
     @property
     def file_name_format(self) -> str:
-        return self._config['file_name_format']
-
-    @file_name_format.setter
-    def file_name_format(self, value: str):
-        self.update({'file_name_format': value})
+        return self._config['yt_dlp_options']['file_name_format']
 
     @property
     def nooverwrites(self) -> bool:
-        return self._config['nooverwrites']
+        return self._config['yt_dlp_options']['nooverwrites']
 
-    @nooverwrites.setter
-    def nooverwrites(self, value: bool):
-        self.update({'nooverwrites': value})
+    @property
+    def merge_output_format(self) -> bool:
+        return self._config['yt_dlp_options']['merge_output_format']
 
     @property
     def quiet(self) -> bool:
-        return self._config['quiet']
-
-    @quiet.setter
-    def quiet(self, value: bool):
-        self.update({'quiet': value})
+        return self._config['yt_dlp_options']['quiet']
 
     @property
     def writeautomaticsub(self) -> bool:
-        return self._config['writeautomaticsub']
-
-    @writeautomaticsub.setter
-    def writeautomaticsub(self, value: bool):
-        self.update({'writeautomaticsub': value})
+        return self._config['yt_dlp_options']['writeautomaticsub']
 
     @property
     def writeinfojson(self) -> bool:
-        return self._config['writeinfojson']
-
-    @writeinfojson.setter
-    def writeinfojson(self, value: bool):
-        self.update({'writeinfojson': value})
+        return self._config['yt_dlp_options']['writeinfojson']
 
     @property
     def writesubtitles(self) -> bool:
-        return self._config['writesubtitles']
-
-    @writesubtitles.setter
-    def writesubtitles(self, value: bool):
-        self.update({'writesubtitles': value})
+        return self._config['yt_dlp_options']['writesubtitles']
 
     @property
     def writethumbnail(self) -> bool:
-        return self._config['writethumbnail']
-
-    @writethumbnail.setter
-    def writethumbnail(self, value: bool):
-        self.update({'writethumbnail': value})
+        return self._config['yt_dlp_options']['writethumbnail']
 
     @property
     def youtube_include_dash_manifest(self) -> bool:
-        return self._config['youtube_include_dash_manifest']
+        return self._config['yt_dlp_options']['youtube_include_dash_manifest']
 
-    @youtube_include_dash_manifest.setter
-    def youtube_include_dash_manifest(self, value: bool):
-        self.update({'youtube_include_dash_manifest': value})
+    @property
+    def yt_dlp_options(self) -> dict:
+        return self._config['yt_dlp_options']
+
+    @yt_dlp_options.setter
+    def yt_dlp_options(self, value: dict):
+        self.update({'yt_dlp_options': value})
 
 
 VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig()
@@ -528,11 +512,11 @@ def import_channels_config():
     channel_import_logger.info('Importing channels config completed')
 
 
-def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel):
+def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel, download_: Type[Base] = Download):
     """Create any missing Downloads for any Channel.url/Channel.directory that has a Download.  Associate any Download
     related to a Channel."""
     # Only Downloads with a frequency can be a Channel Download.
-    downloads = list(session.query(Download).filter(Download.frequency.isnot(None)).all())
+    downloads = list(session.query(download_).filter(download_.frequency.isnot(None)).all())
     # Download.url is unique and cannot be null.
     downloads_by_url = {i.url: i for i in downloads}
     # Many Downloads may share the same destination.
@@ -738,7 +722,8 @@ def format_videos_destination(channel_name: str = None, channel_tag: str = None,
     try:
         videos_destination = videos_destination % variables
     except KeyError as e:
-        raise FileNotFoundError(f'Cannot download to the defined "videos_destination"') from e
+        msg = f'Cannot download to the "videos_destination" from Settings: {videos_destination}'
+        raise FileNotFoundError(msg) from e
 
     videos_destination = get_media_directory() / videos_destination.lstrip('/')
 

@@ -2,6 +2,7 @@ import asyncio
 import json
 import shutil
 from copy import copy
+from http import HTTPStatus
 from unittest import mock
 
 import pytest
@@ -9,8 +10,10 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader
 from modules.videos.models import Channel, Video
+from wrolpi.conftest import test_directory
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
+from wrolpi.switches import await_switches
 from wrolpi.vars import PROJECT_DIR
 
 example_video_json = {
@@ -50,6 +53,7 @@ example_channel_json = {
          'uploader': None,
          'url': 'video_1_url',
          'view_count': 58504,
+         'upload_date': '20190707',
          'webpage_url': 'https://youtube.com/watch?v=video_1_url'},
         {'_type': 'url',
          'description': None,
@@ -60,6 +64,7 @@ example_channel_json = {
          'uploader': None,
          'url': 'video_2_url',
          'view_count': 1413,
+         'upload_date': '20190707',
          'webpage_url': 'https://youtube.com/watch?v=video_2_url'},
     ],
     'extractor': 'youtube:tab',
@@ -124,7 +129,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
 
 
 @pytest.mark.asyncio
-async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
+async def test_download_channel(test_session, test_directory, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename,
                                 mock_video_process_runner):
     """Downloading (updating the catalog of) a Channel updates its info_json.
@@ -170,6 +175,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     assert downloads[0].settings == {
         'channel_id': 1,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
+        'destination': str(test_directory),
     }
 
     reset_downloads()
@@ -187,17 +193,21 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     assert downloads[0].settings == {
         'channel_id': 1,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
+        'destination': str(test_directory),
     }
 
 
-def test_get_or_create_channel(test_session):
+@pytest.mark.asyncio
+async def test_get_or_create_channel(async_client, test_session, test_directory, tag_factory):
     """A Channel may need to be created for an arbitrary download.
 
     Attempt to use an existing Channel if we can match it.
     """
-    c1 = Channel(name='foo', source_id='foo', url='foo')
+    one, two = await tag_factory(), await tag_factory()
+
+    c1 = Channel(name='foo', source_id='foo', url='https://example.com')
     c2 = Channel(name='bar', source_id='bar')
-    c3 = Channel(name='baz', source_id='baz', url='baz')
+    c3 = Channel(name='baz', source_id='baz', url='https://example.net')
     c4 = Channel(name='qux')
     test_session.add_all([c1, c2, c3, c4])
     test_session.commit()
@@ -205,8 +215,8 @@ def test_get_or_create_channel(test_session):
     # All existing channels should be used.
     tests = [
         (dict(source_id='foo'), c1),
-        (dict(url='foo'), c1),
-        (dict(url='foo', source_id='bar'), c2),  # source_id has priority.
+        (dict(url='https://example.com'), c1),
+        (dict(url='https://example.com', source_id='bar'), c2),  # source_id has priority.
         (dict(name='foo', source_id='bar'), c2),
         (dict(source_id='bar'), c2),
         (dict(source_id='baz'), c3),
@@ -217,14 +227,29 @@ def test_get_or_create_channel(test_session):
         assert expected.id == channel.id, f'Expected {expected} for {kwargs} but got {channel}'
 
     # A new channel is created.  It will not be automatically downloaded.
-    channel = get_or_create_channel(source_id='quux', name='quux', url='quux')
+    channel = get_or_create_channel(source_id='quux', name='quux', url='https://example.org')
     assert channel.id == 5
     assert channel.source_id == 'quux'
     assert channel.name == 'quux'
-    assert channel.url == 'quux'
+    assert channel.url == 'https://example.org'
 
     # New channel can be retrieved.
     assert get_or_create_channel(source_id='quux') == channel
+
+    # A Channel can be created with a tag name.
+    channel = get_or_create_channel(name='One Channel', tag_name=one.name)
+    await await_switches()
+    assert channel.directory == test_directory / f'videos/one/One Channel'
+    assert channel.tag_name == one.name and channel.tag == one
+
+    # Getting the same Channel will not change the tag.
+    channel = get_or_create_channel(name='One Channel', tag_name=two.name)
+    assert channel.directory == test_directory / f'videos/one/One Channel'
+    assert channel.tag_name == one.name and channel.tag == one
+    channel = get_or_create_channel(name='One Channel')
+    assert channel.directory == test_directory / f'videos/one/One Channel'
+    assert channel.directory.is_dir()
+    assert channel.tag_name == one.name and channel.tag == one
 
 
 def test_channel_downloader_hidden(video_download_manager):
@@ -331,9 +356,8 @@ async def test_download_destination(test_session, test_directory, video_download
 
     mock_video_prepare_filename.reset_mock()
 
-    settings = dict(destination=f'{test_directory}/custom')
     video_download_manager.create_download('https://example.com/2', downloader_name=VideoDownloader.name,
-                                           settings=settings)
+                                           destination=f'{test_directory}/custom')
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the custom directory specified.
     assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default'] \
@@ -356,6 +380,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 2 title',
          'uploader': None,
+         'upload_date': '20241108',
          'url': 'https://www.youtube.com/shorts/video_2_url',
          'view_count': 1413,
          'webpage_url': 'https://www.youtube.com/shorts/video_2_url'},
@@ -366,6 +391,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 1 title',
          'uploader': None,
+         'upload_date': '20241108',
          'url': 'https://www.youtube.com/watch?v=video_1_url',
          'view_count': 58504,
          'webpage_url': 'https://www.youtube.com/watch?v=video_1_url'},
@@ -376,6 +402,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 3 title',
          'uploader': None,
+         'upload_date': '20241108',
          'url': 'https://youtube.com/watch?v=video_3_url',
          'view_count': 58504,
          'webpage_url': 'https://youtube.com/watch?v=video_3_url'},
@@ -403,7 +430,7 @@ example_playlist_json = {
 async def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager,
                                  video_file):
     """All videos in a playlist can be downloaded for it's Channel."""
-    download = Download(url='playlist url')
+    download = Download(url='https://example.com/playlist-url')
     test_session.add(download)
     channel = get_or_create_channel(example_playlist_json['channel_id'], download.url, example_channel_json['uploader'])
     video = Video.from_paths(test_session, video_file)
@@ -422,3 +449,48 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
         'https://www.youtube.com/watch?v=video_2_url',  # Shorts is converted to regular URL.
         'https://youtube.com/watch?v=video_3_url',
     }
+
+
+@pytest.mark.asyncio
+async def test_channel_download_crud(test_session, async_client, assert_downloads, tag_factory):
+    """Test creatin"""
+    one, two = await tag_factory(), await tag_factory()
+    download = {
+        'urls': ['https://www.youtube.com/@wrolpi/videos'],
+        'destination': '',
+        'downloader': 'video_channel',
+        'sub_downloader': 'video',
+        'frequency': 2592000,
+        'tag_names': [one.name, two.name],
+        'settings': {
+            'channel_tag_name': [one.name, ],
+            'download_order': 'newest',
+            'maximum_duration': 600,
+            'minimum_duration': 60,
+            'title_exclude': 'foo,bar',
+            'title_include': 'baz,qux',
+            'video_count_limit': 100,
+            'video_resolutions': ['1080p', '720p', '480p', '360p', 'maximum'],
+            'video_format': 'mp4',
+        }
+    }
+
+    request, response = await async_client.post('/api/download', json=download)
+    assert response.status == HTTPStatus.NO_CONTENT
+
+    download = test_session.query(Download).one()
+    assert download.url == 'https://www.youtube.com/@wrolpi/videos'
+    assert download.tag_names == ['one', 'two']
+    assert download.downloader == 'video_channel'
+    assert download.sub_downloader == 'video'
+    assert download.frequency == 2592000
+    assert download.settings
+    assert download.settings['channel_tag_name'] == ['one']
+    assert download.settings['download_order'] == 'newest'
+    assert download.settings['maximum_duration'] == 600
+    assert download.settings['minimum_duration'] == 60
+    assert download.settings['title_exclude'] == 'foo,bar'
+    assert download.settings['title_include'] == 'baz,qux'
+    assert download.settings['video_count_limit'] == 100
+    assert download.settings['video_resolutions'] == ['1080p', '720p', '480p', '360p', 'maximum']
+    assert download.settings['video_format'] == 'mp4'

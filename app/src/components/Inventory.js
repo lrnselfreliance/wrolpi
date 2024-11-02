@@ -29,7 +29,6 @@ import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";
 import {useInventory} from "../hooks/customHooks";
 import {Button, FormGroup, FormInput, Header, Segment, Table} from "./Theme";
-import {toast} from "react-semantic-toasts-2";
 
 function InventorySummary() {
     const {t} = useContext(ThemeContext);

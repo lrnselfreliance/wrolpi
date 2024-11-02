@@ -552,6 +552,10 @@ class Channel(ModelHelper, Base):
     def tag_name(self) -> str | None:
         return self.tag.name if self.tag else None
 
+    @property
+    def location(self) -> str:
+        return f'/videos/channel/{self.id}/video'
+
     def delete_with_videos(self):
         """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
         session = Session.object_session(self)
@@ -658,6 +662,7 @@ class Channel(ModelHelper, Base):
     def dict(self, with_statistics: bool = False, with_downloads: bool = True) -> dict:
         d = super(Channel, self).dict()
         d['tag_name'] = self.tag_name
+        d['rss_url'] = self.get_rss_url()
         d['directory'] = \
             self.directory.relative_to(get_media_directory()) if self.directory else None
         if with_statistics:
@@ -767,7 +772,7 @@ class Channel(ModelHelper, Base):
         if not download:
             download = download_manager.recurring_download(url, frequency, ChannelDownloader.name, session=session,
                                                            sub_downloader_name=VideoDownloader.name,
-                                                           settings=dict(destination=str(self.directory)),
+                                                           destination=self.directory,
                                                            reset_attempts=reset_attempts,
                                                            )
         if reset_attempts:
@@ -778,7 +783,9 @@ class Channel(ModelHelper, Base):
 
     def get_rss_url(self) -> str | None:
         """Return the RSS Feed URL for this Channel, if any is possible."""
-        if self.url and self.source_id and 'youtube.com' in self.url:
+        yt_url = 'youtube.com' in self.url if self.url else False
+        yt_source_id = self.source_id.startswith('UC') if self.source_id else False
+        if yt_url and yt_source_id:
             return f'https://www.youtube.com/feeds/videos.xml?channel_id={self.source_id}'
 
     @staticmethod
@@ -806,11 +813,7 @@ class Channel(ModelHelper, Base):
             downloads.extend(Download.get_all_by_destination(from_directory))
             downloads = unique_by_predicate(downloads, lambda i: i.id)
             for download in downloads:
-                # Get new copy of `settings` to avoid bug where it wouldn't update.
-                settings = download.settings.copy() if download.settings else dict()
-                if settings.get('destination'):
-                    logger.debug(f'Updating destination of {download}')
-                    download.settings = {**settings, 'destination': str(to_directory)}
+                download.destination = to_directory
             session.flush(downloads)
 
         # Only one tag can be moved at a time.
@@ -858,3 +861,7 @@ class Channel(ModelHelper, Base):
             if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
                 # Old directory is empty, delete it.
                 old_directory.rmdir()
+
+    @staticmethod
+    def get_by_source_id(session: Session, source_id: str) -> Optional['Channel']:
+        return session.query(Channel).filter_by(source_id=source_id).one_or_none()

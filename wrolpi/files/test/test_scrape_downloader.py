@@ -39,10 +39,9 @@ async def test_scrape_html_downloader(test_directory, test_session, test_downloa
     settings = {
         'depth': 1,
         'suffix': '.PDF',  # Suffix case is ignored.
-        'destination': str(destination),
     }
     test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
-                                          sub_downloader_name='file')
+                                          sub_downloader_name='file', destination=destination)
     assert_download_urls(['https://example.com/dir', ])
 
     with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
@@ -63,12 +62,9 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
     test_download_manager.register_downloader(ScrapeHTMLDownloader())
     test_download_manager.register_downloader(FileDownloader())
 
-    settings = {
-        'suffix': '.html',
-        'destination': str(test_directory),
-    }
+    settings = {'suffix': '.html'}
     test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
-                                          sub_downloader_name='file')
+                                          sub_downloader_name='file', destination=test_directory)
     assert_download_urls(['https://example.com/dir', ])
 
     with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \

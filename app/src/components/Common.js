@@ -1,5 +1,7 @@
 import React, {useContext, useEffect, useState} from "react";
 import {
+    AccordionContent,
+    AccordionTitle,
     BreadcrumbSection,
     Button as SButton,
     ButtonGroup,
@@ -29,6 +31,7 @@ import {
 } from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
+    Accordion,
     Breadcrumb,
     BreadcrumbDivider,
     Button,
@@ -52,21 +55,7 @@ import {
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads} from "../api";
-
-export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `https://${window.location.host}/api`;
-export const VIDEOS_API = `${API_URI}/videos`;
-export const ARCHIVES_API = `${API_URI}/archive`;
-export const OTP_API = `${API_URI}/otp`;
-export const ZIM_API = `${API_URI}/zim`;
-export const DEFAULT_LIMIT = 20;
-export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
-
-// Other services on a WROLPi.
-const port = window.location.port ? `${window.location.port}` : '';
-export const FILES_MEDIA_URI = `https://${window.location.hostname}${port}/media/`;
-export const MAP_VIEWER_URI = `https://${window.location.hostname}:8084`;
-export const ZIM_VIEWER_URI = `https://${window.location.hostname}:8085`;
-export const HELP_VIEWER_URI = `https://${window.location.hostname}:8086`;
+import {allFrequencyOptions, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
     const handlePageChange = (e, {activePage}) => {
@@ -105,7 +94,7 @@ export function divmod(x, y) {
     return [Math.floor(x / y), x % y];
 }
 
-export function secondsElapsed(seconds, short = true) {
+export function secondsToHumanElapsed(seconds, short = true) {
     // Convert the provided seconds into a human-readable string of the time elapsed between the provided timestamp
     // and now.
     if (!seconds || seconds < 0) {
@@ -158,7 +147,7 @@ export function secondsElapsed(seconds, short = true) {
 
 export function secondsToElapsedPopup(seconds) {
     // Return a Popup which allows the user see a more detailed timestamp when hovering.
-    const elapsed = secondsElapsed(seconds);
+    const elapsed = secondsToHumanElapsed(seconds);
     if (!elapsed) {
         return <></>;
     }
@@ -177,7 +166,7 @@ export function isoDatetimeToElapsedPopup(dt) {
 export function isoDatetimeToAgoPopup(dt, short = true) {
     const seconds = (new Date(dt)).getTime() / 1000;
     // Return a Popup which allows the user see a more detailed timestamp when hovering.
-    const elapsed = secondsElapsed(seconds, short);
+    const elapsed = secondsToHumanElapsed(seconds, short);
     if (seconds === 0 || !elapsed) {
         return <></>;
     }
@@ -271,31 +260,9 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
-export let defaultFileOrder = '-published_datetime';
-export let defaultSearchOrder = 'rank';
-
-export const frequencyOptions = [{key: null, text: '', value: null}, {
-    key: 'daily', text: 'Daily', value: 86400
-}, {key: 'weekly', text: 'Weekly', value: 604800}, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {
-    key: '30days', text: '30 Days', value: 2592000
-}, {key: '90days', text: '90 Days', value: 7776000},];
-
-export const rssFrequencyOptions = [{key: 'once', text: 'Once', value: 0}, {
-    key: 'hourly', text: 'Hourly', value: 3600
-}, {key: '3hours', text: '3 hours', value: 10800}, {key: '12hours', text: '12 hours', value: 43200}, {
-    key: 'daily', text: 'Daily', value: 86400
-}, {key: 'weekly', text: 'Weekly', value: 604800}, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {
-    key: '30days', text: '30 Days', value: 2592000
-}, {key: '90days', text: '90 Days', value: 7776000}, {key: '180days', text: '180 Days', value: 15552000}];
-
 export function secondsToFrequency(seconds) {
-    for (let i = 0; i < Object.keys(rssFrequencyOptions).length; i++) {
-        let d = rssFrequencyOptions[i];
-        if (d.value === seconds) {
-            return d.text;
-        }
-    }
-    return null;
+    const option = allFrequencyOptions[seconds];
+    return option ? option.text : null;
 }
 
 const secondsToYears = 31536000;
@@ -782,10 +749,14 @@ export function HelpHeader({
                                iconSize,
                                headerContent,
                                popupContent,
-                               popupPosition = 'top center'
+                               popupPosition = null,
+                               for_ = null,
+                               required = false,
                            }) {
     return <div className='inline-header'>
-        <Header as={headerSize}>{headerContent}</Header>
+        <label for={for_}>
+            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
+        </label>
         <span>
             <HelpPopup content={popupContent} size={iconSize} icon={icon} position={popupPosition}/>
         </span>
@@ -1205,7 +1176,7 @@ export function useTitle(title) {
     }, [title]);
 }
 
-export function DirectorySearch({onSelect, value, ...props}) {
+export function DirectorySearch({onSelect, value, disabled, required, ...props}) {
     const {
         directoryName,
         setDirectoryName,
@@ -1280,6 +1251,7 @@ export function DirectorySearch({onSelect, value, ...props}) {
                    loading={loading}
                    value={directoryName}
                    results={results}
+                   disabled={disabled}
                    {...props}
     />
 }
@@ -1287,21 +1259,6 @@ export function DirectorySearch({onSelect, value, ...props}) {
 export const BackButton = ({...props}) => {
     const navigate = useNavigate();
     return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
-}
-
-export const semanticUIColorMap = {
-    red: '#db2828',
-    orange: '#f2711c',
-    yellow: '#fbbd08',
-    olive: '#b5cc18',
-    green: '#21ba45',
-    teal: '#00b5ad',
-    blue: '#2185d0',
-    violet: '#6435c9',
-    purple: '#a333c8',
-    pink: '#e03997',
-    brown: '#a5673f',
-    grey: '#767676',
 }
 
 export const ColorToSemanticHexColor = (color) => {
@@ -1456,13 +1413,15 @@ export function useAPIButton(
     themed = true,
     obeyWROLMode = false,
     icon = null,
+    type = 'button',
+    id = null,
     props
 ) {
     props = props || {};
     const ref = React.useRef();
 
     const [confirmOpen, setConfirmOpen] = React.useState(false);
-    const [pending, setPending] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
     const [animation, setAnimation] = React.useState('jiggle');
     const [animationVisible, setAnimationVisible] = React.useState(true);
     const [showSuccess, setShowSuccess] = React.useState(false);
@@ -1471,7 +1430,7 @@ export function useAPIButton(
     const wrolModeEnabled = useWROLMode();
 
     // Disable when API call is pending, or button is disabled.
-    disabled = pending || disabled;
+    disabled = loading || disabled;
     // Disable when WROL Mode is enabled, otherwise normal disabled.
     disabled = obeyWROLMode ? wrolModeEnabled || disabled : disabled;
 
@@ -1496,15 +1455,16 @@ export function useAPIButton(
 
     const handleAPICall = async () => {
         // Handle when user clicks button, or clicks confirm.
-        setPending(true);
+        setLoading(true);
         try {
             await onClick();
             setSuccess();
         } catch (e) {
             console.error(e);
             setFailure();
+        } finally {
+            setLoading(false);
         }
-        setPending(false);
     }
 
     const localOnClick = async (e) => {
@@ -1533,7 +1493,14 @@ export function useAPIButton(
     }
 
     // Create button with or without theme.  Pass all props to the <Button/> (except props.children).
-    const buttonArgs = {color, onClick: localOnClick, disabled, loading: pending, size, floated, ...props};
+    const buttonArgs = {
+        color, onClick: localOnClick, disabled, loading, size, floated, type,
+        ...props
+    };
+
+    if (id) {
+        buttonArgs['id'] = id;
+    }
 
     let buttonContent = props.children || null;
     if (icon) {
@@ -1587,6 +1554,8 @@ export function APIButton({
                               themed,
                               obeyWROLMode,
                               icon,
+                              type = 'button',
+                              id = null,
                               ...props
                           }) {
     const {button} = useAPIButton(
@@ -1601,6 +1570,8 @@ export function APIButton({
         themed,
         obeyWROLMode,
         icon,
+        type,
+        id,
         props
     );
 
@@ -1811,10 +1782,22 @@ export function Breadcrumbs({crumbs, size = undefined}) {
     </Breadcrumb>
 }
 
-const validUrlRegex = /^(http|https):\/\/[^ "]+$/;
-
 export function validURL(url) {
     return !(url && !validUrlRegex.test(url));
+}
+
+export function validURLs(urls) {
+    if (!!!urls) {
+        // Invalid while empty.
+        return false;
+    }
+    urls = urls.split(/\r?\n/);
+    for (let i = 0; i < urls.length; i++) {
+        if (!validURL(urls[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 export function useLocalStorage(key, initialValue, decode = JSON.parse, encode = JSON.stringify) {
@@ -1852,3 +1835,43 @@ export function useLocalStorageInt(key, initialValue) {
     const [storedValue, setStoredValue] = useLocalStorage(key, initialValue, parseInt, (num) => num.toString());
     return [storedValue, setStoredValue];
 }
+
+export function SimpleAccordion({title = 'Advanced', ...props}) {
+    const [active, setActive] = React.useState(false);
+
+    return <Accordion>
+        <AccordionTitle
+            active={active}
+            onClick={() => setActive(!active)}
+        >
+            <Icon name='dropdown'/>
+            {title}
+        </AccordionTitle>
+        <AccordionContent active={active}>
+            {props.children}
+        </AccordionContent>
+    </Accordion>
+}
+
+export function mergeDeep(target, source) {
+    if (_.isEmpty(source)) {
+        return target;
+    }
+
+    // Initialize the result as target
+    let result = Object.assign({}, target);
+
+    for (let key of Object.keys(source)) {
+        if (Array.isArray(source[key])) {
+            // source overwrites target if it is a list with values.
+            result[key] = source[key] || target[key];
+        } else if (typeof source[key] === 'object' && typeof target[key] === 'object') {
+            result[key] = mergeDeep(target[key] || {}, source[key]);
+        } else {
+            result[key] = source[key] !== undefined ? source[key] : target[key];
+        }
+    }
+
+    return result;
+}
+

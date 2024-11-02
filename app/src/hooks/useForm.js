@@ -1,0 +1,417 @@
+import React from "react";
+import _ from "lodash";
+import {HelpPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
+import {FormInput, TextArea} from "../components/Theme";
+
+
+async function asyncNoOp() {
+}
+
+export function useForm({
+                            fetcher,
+                            submitter,
+                            defaultFormData,
+                            emptyFormData,
+                            onSuccess = asyncNoOp,
+                            onFailure = asyncNoOp,
+                            onDirty = _.noop,
+                            clearOnSuccess = false,
+                            fetchOnSuccess = false,
+                        }) {
+    const [formData, setFormData] = React.useState(defaultFormData || {});
+    const [disabled, setDisabled] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
+    const [ready, setReady] = React.useState(false);
+    const [dirty, setDirty] = React.useState(false);
+
+    const [errors, setErrors] = React.useState({});
+    const [validators, setValidators] = React.useState({});
+    const [validValues, setValidValues] = React.useState({});
+    const [requires, setRequires] = React.useState({});
+
+    const memoizedFormData = React.useMemo(() => formData, [formData]);
+    const memoizedErrors = React.useMemo(() => errors, [errors]);
+    const memoizedValidValues = React.useMemo(() => validValues, [validValues]);
+    const memoizedRequires = React.useMemo(() => requires, [requires]);
+
+    if (clearOnSuccess && fetchOnSuccess) {
+        console.error('Cannot use both clearOnSuccess and fetchOnSuccess!');
+    }
+
+    if (fetchOnSuccess && !fetcher) {
+        console.error('Cannot fetchOnSuccess without fetcher!');
+    }
+
+    React.useEffect(() => {
+        // Form is dirty if it has deviated from the default.
+        setDirty(!_.isEqual(defaultFormData, memoizedFormData));
+
+        const errorValues = Object.values(errors).filter(i => !!i);
+        if (errorValues.length > 0) {
+            console.debug('Form invalid because it has errors');
+            setReady(false);
+            return
+        }
+        const invalidValues = Object.values(memoizedValidValues).filter(i => i !== true);
+        if (invalidValues.length > 0) {
+            console.debug('Form invalid because it failed validators');
+            setReady(false);
+            return
+        }
+        const missingValues = Object.keys(memoizedRequires).filter(i => !_.get(formData, i));
+        if (missingValues.length > 0) {
+            console.debug(`Form invalid because it is missing required value: ${missingValues[0]}`);
+            setReady(false);
+            return
+        }
+        setReady(true);
+    }, [loading, memoizedFormData, memoizedErrors, memoizedValidValues, memoizedRequires]);
+
+    const localFetch = async () => {
+        if (fetcher) {
+            const result = await fetcher();
+            setFormData(result);
+        }
+    }
+
+    React.useEffect(() => {
+        localFetch();
+    }, []);
+
+    React.useEffect(() => {
+        if (dirty) {
+            onDirty();
+        }
+    }, [dirty, onDirty]);
+
+    const patchFormData = (newFormData) => {
+        newFormData = {...formData, ...newFormData};
+        // console.debug('useForm.patchFormData', newFormData);
+        setFormData(newFormData);
+    };
+
+    const reset = () => {
+        setFormData(emptyFormData || defaultFormData);
+    }
+
+    const onSubmit = async () => {
+        if (!ready) {
+            console.error('Refusing to submit form because it is not ready');
+            return;
+        }
+
+        setDisabled(true);
+        setLoading(true);
+        setReady(false);
+        try {
+            await submitter(formData);
+            if (fetchOnSuccess && fetcher) {
+                const result = await fetcher();
+                setFormData(result);
+            } else if (clearOnSuccess) {
+                reset();
+            }
+            await onSuccess();
+        } finally {
+            setLoading(false);
+            setDisabled(false);
+            await onFailure();
+        }
+    }
+
+    // Using useCallback with dependencies to ensure the debounce function doesn't change on every render
+    const debouncedValidate = React.useCallback(_.debounce((path, value) => {
+        const validator = validators[path];
+        let error = null;
+        if (validator) {
+            try {
+                error = validator(value);
+            } catch (e) {
+                console.error(`Failed to validate ${path}`);
+            }
+        }
+        console.debug('useForm.debouncedValidate', path, value, 'error=', error);
+        setValidValues(prev => ({...prev, [path]: !error}));
+        setErrors(prev => {
+            if (error) {
+                return {...prev, [path]: error};
+            } else {
+                const {[path]: _, ...newErrors} = prev;
+                return newErrors;
+            }
+        });
+    }, 300), [validators]);
+
+    const handleInputEvent = (e) => {
+        if (e) e.preventDefault();
+        let {type, value} = e.target;
+        let {path} = e.target.dataset;
+        path = path || e.target.name;
+        if (type === 'number' && !isNaN(value)) {
+            value = parseInt(value);
+        }
+        console.debug('handleInputEvent', 'path=', path, 'type=', type, 'value=', value);
+
+        // Change value in state first, this part happens immediately
+        const newFormData = _.set(formData, path.split('.'), value);
+        patchFormData(newFormData);
+
+        // Trigger validation after a delay
+        debouncedValidate(path, value);
+    }
+
+    const addValidator = (path, validator) => {
+        if (path && !!validator && !(path in validators)) {
+            setValidators({...validators, [path]: validator});
+        }
+    }
+
+    const addRequires = (name) => {
+        if (name && !(name in requires)) {
+            setRequires({...requires, [name]: false});
+        }
+    }
+
+    const getCustomProps = ({name, validator, type = 'text', path, required = false}) => {
+        // Props for any other elements.
+
+        path = path || name;
+        addValidator(path, validator);
+        if (required) {
+            addRequires(path);
+        }
+        const value = _.get(formData, path); // Get a path, separated by .'s
+        if (value === undefined) {
+            patchFormData(_.set(formData, path, null));
+        }
+        // Allow bypass of `handleInputEvent` which only handles an input event.
+        const setValue = newValue => {
+            patchFormData(_.set(formData, path, newValue));
+            debouncedValidate(path, newValue);
+        }
+
+        // Props for <input/>, etc.
+        const inputProps = {
+            type,
+            disabled,
+            value,
+            onChange: setValue,
+            'data-path': path,
+        }
+        // Attributes about the input, but should not be passed as properties.
+        const inputAttrs = {
+            valid: validValues[path],
+            path,
+            setValue,
+        };
+        return [inputProps, inputAttrs]
+    }
+
+    const getInputProps = ({name, validator, path, required = false, type = 'text'}) => {
+        // Props for <input/>
+        path = path || name;
+
+        // Use generic validators if no validator is provided.
+        if (!validator && type === 'url') {
+            validator = validURL;
+        }
+
+        const [customProps, inputAttrs] = getCustomProps({name, validator, path, type, required});
+
+        // Attributes that should be passed as properties to the input.
+        const inputProps = {
+            ...customProps,
+            name: name,
+            onChange: handleInputEvent,
+            error: errors[path] || null,
+            required: required ? null : undefined,
+        }
+        return [inputProps, inputAttrs]
+    }
+
+    const getSelectionProps = ({name, validator, path, type, required = false}) => {
+        // Props for Dropdowns.
+        path = path || name;
+        const [customProps, inputAttrs] = getCustomProps({name, validator, type, path, required});
+        customProps.onChange = (e, {value}) => {
+            patchFormData(_.set(formData, path, value))
+        };
+        return [customProps, inputAttrs]
+    }
+
+    return {
+        dirty,
+        disabled,
+        fetcher: localFetch,
+        formData,
+        getCustomProps,
+        getInputProps,
+        getSelectionProps,
+        handleInputEvent,
+        loading,
+        onSubmit,
+        ready,
+        reset,
+    }
+}
+
+export const commaSeparatedValidator = (value) => {
+    if (typeof value !== 'string') {
+        return 'Expected a string';
+    }
+    if (value.endsWith(',')) {
+        return 'Cannot end with comma';
+    }
+    if (value.startsWith(',')) {
+        return 'Cannot start with comma';
+    }
+}
+
+export function InputForm({
+                              form,
+                              required = false,
+                              name,
+                              path,
+                              type = 'text',
+                              validator,
+                              placeholder = '',
+                              label,
+                              helpContent = null,
+                              helpPosition = 'top',
+                              extraInputProps = {},
+                              disabled = false,
+                          }) {
+    const [inputProps, inputAttrs] = form.getInputProps({name, path, validator, type, required});
+    inputProps.disabled = disabled || inputProps.disabled;
+
+    return <>
+        <label for={`${name}_input`}>
+            <b>{label} {required && <RequiredAsterisk/>}</b>
+            {helpContent &&
+                <HelpPopup
+                    content={helpContent}
+                    position={helpPosition}
+                />
+            }
+        </label>
+        <FormInput
+            id={`${name}_input`}
+            placeholder={placeholder}
+            error={inputProps.error}
+        >
+            <input {...extraInputProps} {...inputProps}/>
+        </FormInput>
+    </>
+}
+
+export function NumberInputForm({
+                                    form,
+                                    required,
+                                    name,
+                                    path,
+                                    validator,
+                                    placeholder = '',
+                                    label,
+                                    helpContent,
+                                    helpPosition,
+                                    min = 1,
+                                    max = 9999999999,
+                                }) {
+    // Default to positive number.
+    validator = validator || ((value) => {
+        value = _.isNumber(value) ? value : parseInt(value);
+        if (value < 0) {
+            return 'Number must be positive'
+        }
+    });
+
+    return <InputForm
+        form={form}
+        required={required}
+        name={name}
+        path={path}
+        type='number'
+        validator={validator}
+        placeholder={placeholder}
+        label={label}
+        helpContent={helpContent}
+        helpPosition={helpPosition}
+        extraInputProps={{min, max}}
+    />
+}
+
+export function UrlInput({form, required = true, name = 'url', path = 'url', disabled = false}) {
+    const validator = (i) => {
+        return validURL(i) ? null : 'Invalid URL';
+    };
+
+    return <InputForm
+        form={form}
+        type='url'
+        label='URL'
+        required={required}
+        name={name}
+        path={path}
+        validator={validator}
+        disabled={disabled}
+    />
+}
+
+export function UrlsTextarea({name = 'urls', required, form}) {
+    required = required !== undefined;
+
+    const validator = (value) => {
+        if (!validURLs(value)) {
+            return 'Invalid URLs';
+        }
+    }
+
+    const [inputProps, inputAttrs] = form.getInputProps({name, validator, required});
+
+    const handleDrop = (e) => {
+        if (e) e.preventDefault();
+        // Handle user dropping multiple URLs into the textarea.  Assume each drop is a URL.  Ensure each URL
+        // is on its own line.
+        const droppedUrl = e.dataTransfer.getData('text');
+        let urls = (inputProps.value || '').split('\n');
+        urls = [...urls, droppedUrl];
+        urls = urls.filter(i => !!i).join('\n');
+        // Leave trailing newline for user to type.
+        inputAttrs.setValue(`${urls}\n`)
+    };
+
+    const handleKeyDown = (event) => {
+        // Check if Ctrl (or Cmd for Mac) + Enter are pressed
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault(); // Prevents the addition of a new line in textarea if necessary
+            form.onSubmit(); // Call your submit handler
+        }
+    };
+
+    return <FormInput required
+                      error={inputProps.error}
+                      label='URLs'
+    >
+        <TextArea
+            id='urls_textarea'
+            placeholder={'Enter one URL per line'}
+            name='urls'
+            onDrop={handleDrop}
+            onKeyDown={handleKeyDown}
+            {...inputProps}
+        />
+    </FormInput>
+}
+
+export function ToggleForm({form, name, label, path}) {
+    const [inputProps, inputAttrs] = form.getCustomProps({name, path})
+
+    return <FormInput
+        label={label}>
+        <Toggle
+            disabled={form.disabled}
+            name={name}
+            checked={inputProps.value}
+        />
+    </FormInput>
+}

@@ -33,8 +33,10 @@ class FileDownloader(Downloader, ABC):
 
         media_directory = get_media_directory()
 
+        settings = download.settings or dict()
+
         # We don't know where to put the file if we don't have a destination.
-        destination = download.settings.get('destination')
+        destination = download.destination or settings.get('destination')
         if not destination:
             raise UnrecoverableDownloadError(f'Cannot download the file without a destination')
 
@@ -52,7 +54,7 @@ class FileDownloader(Downloader, ABC):
         try:
             await download_file(download.url, output_path, info)
 
-            fg = await upsert_file(output_path, tag_names=download.settings.get('tag_names'))
+            fg = await upsert_file(output_path, tag_names=download.tag_names)
             location = fg.location
 
             return DownloadResult(

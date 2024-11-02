@@ -1,7 +1,9 @@
 import enum
+import pathlib
 from dataclasses import dataclass, field
 from typing import Optional, List
 
+from wrolpi.common import get_relative_to_media_directory, unique_by_predicate
 from wrolpi.errors import InvalidDownload, ValidationError
 
 
@@ -78,24 +80,31 @@ class EchoResponse:
 
 @dataclass
 class DownloadSettings:
+    channel_id: int = None
+    channel_tag_name: List[str] = field(default_factory=lambda: list())
     depth: Optional[int] = None
-    destination: Optional[str] = None
     download_metadata_only: bool = False
+    download_order: Optional[str] = None
     excluded_urls: Optional[str] = None
     max_pages: Optional[int] = None
+    maximum_duration: Optional[int] = None
+    minimum_duration: Optional[int] = None
     suffix: Optional[str] = None
     tag_names: List[str] = field(default_factory=lambda: list())
     title_exclude: str = None
     title_include: str = None
+    video_count_limit: Optional[int] = None
+    video_format: str = None
+    video_resolutions: List[str] = field(default_factory=lambda: list())
 
     def __post_init__(self):
-        from wrolpi.common import get_media_directory
         self.tag_names = [i.strip() for i in self.tag_names] if self.tag_names else []
-        if isinstance(self.excluded_urls, str):
-            self.excluded_urls = [i.strip() for i in self.excluded_urls.split(',')] if self.excluded_urls else None
-        else:
-            self.excluded_urls = [i.strip() for i in self.excluded_urls] if self.excluded_urls else None
-        self.destination = str(get_media_directory() / self.destination) if self.destination else None
+
+        if self.excluded_urls and self.excluded_urls.endswith(','):
+            raise ValidationError('Excluded urls cannot end with ,')
+        if self.excluded_urls and self.excluded_urls.startswith(','):
+            raise ValidationError('Excluded urls cannot start with ,')
+
         if self.suffix and not self.suffix.startswith('.'):
             raise ValidationError('suffix must start with .')
         self.title_exclude = self.title_exclude or None
@@ -103,24 +112,43 @@ class DownloadSettings:
         if not self.download_metadata_only:
             del self.download_metadata_only
 
+        if self.download_order not in (None, 'newest', 'oldest', 'views'):
+            raise ValidationError(f'Download order must be one of newest, oldest, views, or null.')
+
+        if self.video_format not in (None, 'mp4', 'mkv'):
+            raise ValidationError(f'Download order must be one of mp4, mkv, or null.')
+
+        valid_resolutions = ('360p', '480p', '720p', '1080p', '1440p', '2160p', 'maximum')
+        if not all(i in valid_resolutions for i in self.video_resolutions):
+            raise ValidationError(f'Download order must be one of 360p, 480p, 720p, 1080p, 1440p, 2160p, or maximum.')
+
 
 @dataclass
 class DownloadRequest:
     urls: List[str]
     downloader: str
+    destination: Optional[str] = None
+    tag_names: List[str] = field(default_factory=list)
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
-    settings: Optional[dict] = field(default_factory=lambda: dict())
+    settings: Optional[dict] = field(default_factory=dict)
 
     def __post_init__(self):
         urls = [j for i in self.urls if (j := i.strip())]
         if not urls:
             raise InvalidDownload(f'urls cannot be empty')
         # Get unique URLs, preserve order.
-        self.urls = list(dict.fromkeys(urls))
+        self.urls = unique_by_predicate(urls)
+
+        if self.destination:
+            destination = pathlib.Path(self.destination)
+            if destination.is_absolute():
+                destination = get_relative_to_media_directory(destination)
+            self.destination = str(destination)
 
         # Validate settings contents.  Remove empty values.
-        self.settings = {k: v for k, v in DownloadSettings(**self.settings).__dict__.items() if v not in ([], None)}
+        settings = self.settings or dict()
+        self.settings = {k: v for k, v in DownloadSettings(**settings).__dict__.items() if v not in ([], None)}
 
 
 @dataclass
@@ -219,3 +247,8 @@ class SearchOtherEstimateRequest:
 class ConfigsImportRequest:
     file_name: str
     overwrite: bool = False
+
+
+@dataclass
+class ConfigSaveRequest:
+    config: dict

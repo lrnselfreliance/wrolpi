@@ -4,8 +4,6 @@ import {
     APIButton,
     CardLink,
     CardPoster,
-    defaultFileOrder,
-    defaultSearchOrder,
     Duration,
     encodeMediaPath,
     ErrorMessage,
@@ -14,7 +12,6 @@ import {
     humanFileSize,
     humanNumber,
     isoDatetimeToAgoPopup,
-    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     PreviewLink,
@@ -32,6 +29,7 @@ import {
     CardDescription,
     CardHeader,
     Container,
+    Form,
     Image,
     PlaceholderHeader,
     PlaceholderLine,
@@ -45,9 +43,12 @@ import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
-import {deleteVideos} from "../api";
+import {deleteVideos, fetchVideoDownloaderConfig, saveVideoDownloaderConfig} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
+import {defaultFileOrder, defaultSearchOrder} from "./Vars";
+import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
+import {VideoResolutionSelectorForm} from "./Download";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -221,6 +222,114 @@ function VideosPage() {
     </>
 }
 
+function VideosSettings() {
+    useTitle('Videos Settings');
+
+    const emptyFormData = {
+        video_resolutions: ['1080p', '720p', '480p', 'maximum'],
+        yt_dlp_options: {
+            file_name_format: '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+            nooverwrites: true,
+            writeautomaticsub: true,
+            writesubtitles: true,
+            writethumbnail: true,
+        },
+    };
+
+    const fetcher = async () => {
+        return await fetchVideoDownloaderConfig();
+    }
+
+    const submitter = async () => {
+        return await saveVideoDownloaderConfig(form.formData);
+    }
+
+    const form = useForm({
+        fetcher,
+        submitter,
+        emptyFormData,
+    });
+
+    return <Segment>
+        <Header as='h3'>Video Downloader Settings</Header>
+
+        <Form>
+            <Grid>
+                <Grid.Row>
+                    <Grid.Column>
+                        <VideoResolutionSelectorForm
+                            form={form}
+                            name='video_resolutions'
+                            path='video_resolutions'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <InputForm
+                            form={form}
+                            name='file_name_format'
+                            path='yt_dlp_options.file_name_format'
+                            label='Video File Format'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Do not overwrite existing files'
+                            name='nooverwrites'
+                            path='yt_dlp_options.nooverwrites'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download automatic subtitles'
+                            name='writeautomaticsub'
+                            path='yt_dlp_options.writeautomaticsub'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download subtitles'
+                            name='writesubtitles'
+                            path='yt_dlp_options.writesubtitles'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download thumbnail'
+                            name='writethumbnail'
+                            path='yt_dlp_options.writethumbnail'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row columns={1}>
+                    <Grid.Column textAlign='right'>
+                        <APIButton
+                            disabled={form.disabled || !form.ready}
+                            type='submit'
+                            style={{marginTop: '0.5em'}}
+                            onClick={form.onSubmit}
+                            id='video_settings_save_button'
+                        >Save</APIButton>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Form>
+    </Segment>
+}
+
 function VideosStatistics() {
     useTitle('Video Statistics');
 
@@ -286,6 +395,7 @@ export function VideosRoute(props) {
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
         {text: 'Channels', to: '/videos/channel', key: 'channel'},
+        {text: 'Settings', to: '/videos/settings', key: 'settings'},
         {text: 'Statistics', to: '/videos/statistics', key: 'statistics'},
     ];
 
@@ -294,6 +404,7 @@ export function VideosRoute(props) {
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
             <Route path='channel' exact element={<ChannelsPage/>}/>
+            <Route path='settings' exact element={<VideosSettings/>}/>
             <Route path='statistics' exact element={<VideosStatistics/>}/>
             <Route path='channel/new' exact element={<ChannelNewPage/>}/>
             <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
@@ -384,7 +495,7 @@ export function VideoRowCells({file}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
-    let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
+    let dataCell = file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime) : '';
     if (sort === 'length') {
         dataCell = secondsToFullDuration(file.length || 0);
     } else if (sort === 'size') {
@@ -392,7 +503,7 @@ export function VideoRowCells({file}) {
     } else if (sort === 'view_count') {
         dataCell = humanNumber(video.view_count || 0);
     } else if (sort === 'viewed') {
-        dataCell = isoDatetimeToString(file.viewed);
+        dataCell = isoDatetimeToAgoPopup(file.viewed);
     }
 
     // Fragment for SelectableRow

@@ -1,6 +1,7 @@
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API, ZIM_API} from "./components/Common";
+import {emptyToNull} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, Downloaders, OTP_API, VIDEOS_API, ZIM_API} from "./components/Vars";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return
@@ -229,19 +230,8 @@ export async function deleteVideos(videoIds) {
 }
 
 export async function downloadVideoMetadata(videoUrl, destination) {
-    return await postDownload(
-        [videoUrl],
-        'video',
-        null,
-        null,
-        null,
-        destination,
-        null,
-        null,
-        null,
-        null,
-        true,
-    );
+    const downloadData = {urls: [videoUrl], downloader: Downloaders.Video, destination: destination};
+    return await postDownload(downloadData);
 }
 
 export async function getDirectories(search_str) {
@@ -383,6 +373,19 @@ export async function postSaveConfig(fileName) {
         });
     }
     return response
+}
+
+export async function fetchVideoDownloaderConfig() {
+    const response = await apiGet(`${API_URI}/config/videos_downloader.yaml`);
+    return (await response.json())['config'];
+}
+
+export async function saveVideoDownloaderConfig(config) {
+    const body = {config};
+    const response = await apiPost(`${API_URI}/config/videos_downloader.yaml`, body);
+    if (!response.ok) {
+        throw Error('Failed to save config');
+    }
 }
 
 export async function validateRegex(regex) {
@@ -750,32 +753,8 @@ export async function getArchive(archiveId) {
     }
 }
 
-function calculateDownloadSettings(excludedURLs, depth, suffix, tagNames, downloadMetadataOnly, destination, max_pages) {
-    let settings = {};
-    if (excludedURLs) settings['excluded_urls'] = excludedURLs;
-    if (depth) settings['depth'] = depth;
-    if (suffix) settings['suffix'] = suffix;
-    if (tagNames) settings['tag_names'] = tagNames;
-    if (downloadMetadataOnly) settings['download_metadata_only'] = downloadMetadataOnly;
-    if (destination) settings['destination'] = destination;
-    if (max_pages) settings['max_pages'] = max_pages;
-    return settings;
-}
-
-export async function postDownload(
-    urls,
-    downloader,
-    frequency,
-    sub_downloader,
-    excludedURLs,
-    destination,
-    tagNames,
-    depth,
-    suffix,
-    max_pages,
-    downloadMetadataOnly,
-) {
-    if (!downloader) {
+export async function postDownload(downloadData) {
+    if (!downloadData.downloader) {
         toast({
             type: 'error',
             title: 'Failed to submit download',
@@ -785,14 +764,14 @@ export async function postDownload(
         throw new Error('downloader is required, but was not provided');
     }
 
-    let settings = calculateDownloadSettings(excludedURLs, depth, suffix, tagNames, downloadMetadataOnly, destination,
-        max_pages);
     let body = {
-        urls: urls,
-        downloader: downloader,
-        sub_downloader: sub_downloader,
-        frequency: frequency || null,
-        settings: settings,
+        urls: downloadData.urls,
+        destination: downloadData.destination,
+        downloader: downloadData.downloader,
+        sub_downloader: downloadData.sub_downloader || null,
+        frequency: downloadData.frequency || null,
+        tag_names: downloadData.tag_names || null,
+        settings: downloadData.settings,
     };
     const response = await apiPost(`${API_URI}/download`, body);
     if (!response.ok) {
@@ -800,19 +779,13 @@ export async function postDownload(
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
+        throw new Error('Failed to create download');
     }
     return response;
 }
 
-export async function putDownload(
-    urls,
-    download_id,
-    downloader,
-    sub_downloader,
-    frequency,
-    excludedURLs,
-) {
-    if (!downloader) {
+export async function putDownload(download_id, downloadData) {
+    if (!downloadData.downloader) {
         toast({
             type: 'error',
             title: 'Failed to submit download',
@@ -822,20 +795,13 @@ export async function putDownload(
         throw new Error('downloader is required, but was not provided');
     }
 
-    let settings = calculateDownloadSettings(excludedURLs)
-    let body = {
-        urls: urls,
-        downloader: downloader,
-        sub_downloader: sub_downloader,
-        frequency: frequency || null,
-        settings: settings,
-    };
-    const response = await apiPut(`${API_URI}/download/${download_id}`, body);
+    const response = await apiPut(`${API_URI}/download/${download_id}`, downloadData);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Unable to update Download.  See server logs.');
         toast({
             type: 'error', title: 'Download Error', description: message, time: 5000,
         });
+        throw new Error('Failed to update download');
     }
     return response;
 }

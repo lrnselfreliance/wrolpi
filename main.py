@@ -58,12 +58,12 @@ This is the interactive WROLPi shell.  Use this to interact with the WROLPi API 
 
 Example (get the duration of every video file):
     from modules.videos.models import Video
-    from modules.videos.common import get_video_duration
+    from modules.videos.common import extract_video_duration
 
     videos = session.query(Video).all()
     videos = list(videos)
     for video in videos:
-        get_video_duration(video.file_group.primary_path)
+        extract_video_duration(video.file_group.primary_path)
 
 Check local variables:
 locals().keys()

@@ -26,9 +26,10 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     set_global_log_level, get_relative_to_media_directory, search_other_estimates, get_all_configs, \
     get_config_by_file_name
 from wrolpi.dates import now
+from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
-    HotspotPasswordTooShort, NativeOnly, InvalidConfig
+    HotspotPasswordTooShort, NativeOnly, InvalidConfig, ValidationError
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
@@ -262,13 +263,14 @@ async def post_download(_: Request, body: schema.DownloadRequest):
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
 
+    kwargs = dict(downloader_name=body.downloader,
+                  sub_downloader_name=body.sub_downloader, reset_attempts=True,
+                  destination=body.destination, tag_names=body.tag_names,
+                  settings=body.settings)
     if body.frequency:
-        download_manager.recurring_download(body.urls[0], body.frequency, downloader_name=body.downloader,
-                                            sub_downloader_name=body.sub_downloader, reset_attempts=True,
-                                            settings=body.settings)
+        download_manager.recurring_download(body.urls[0], body.frequency, **kwargs)
     else:
-        download_manager.create_downloads(body.urls, downloader_name=body.downloader, reset_attempts=True,
-                                          sub_downloader_name=body.sub_downloader, settings=body.settings)
+        download_manager.create_downloads(body.urls, **kwargs)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -283,10 +285,21 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 async def put_download(_: Request, download_id: int, body: schema.DownloadRequest):
     downloader = download_manager.find_downloader_by_name(body.downloader)
     if not downloader:
-        raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
+        raise ValidationError(f'Cannot find downloader with name {body.downloader}')
+    if len(body.urls) != 1:
+        raise ValidationError('Only one URL can be specified when updating a Download')
 
-    download_manager.create_downloads(body.urls, downloader_name=body.downloader, reset_attempts=True,
-                                      sub_downloader_name=body.sub_downloader, settings=body.settings)
+    with get_db_session(commit=True) as session:
+        download_manager.update_download(
+            id_=download_id,
+            url=body.urls[0],
+            downloader=body.downloader,
+            destination=body.destination,
+            tag_names=body.tag_names,
+            sub_downloader=body.sub_downloader,
+            settings=body.settings,
+            session=session,
+        )
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -310,9 +323,18 @@ async def restart_download(_: Request, download_id: int):
 
 
 @api_bp.get('/download')
-@openapi.description('Get all Downloads that need to be processed.')
+@openapi.description('Get all Downloads so they can be displayed to the User.')
 async def get_downloads(_: Request):
     data = download_manager.get_fe_downloads()
+
+    # Convert `destination` to relative.
+    for download in data['once_downloads']:
+        download['destination'] = get_relative_to_media_directory(download['destination']) \
+            if download['destination'] else None
+    for download in data['recurring_downloads']:
+        download['destination'] = get_relative_to_media_directory(download['destination']) \
+            if download['destination'] else None
+
     return json_response(data)
 
 
@@ -417,7 +439,7 @@ async def throttle_off(_: Request):
 
 @api_bp.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
-async def get_status(_: Request):
+async def get_status(request: Request):
     downloads = dict()
     if flags.db_up.is_set():
         try:
@@ -425,15 +447,25 @@ async def get_status(_: Request):
         except Exception as e:
             logger.debug('Unable to get download status', exc_info=e)
 
+    sanic_workers = dict()
+    if hasattr(request.app, 'multiplexer'):
+        # `multiplexer` may be empty while testing.
+        sanic_workers = {
+            i: {'pid': j['pid'], 'state': j['state']}
+            for i, j in request.app.multiplexer.workers.items()
+            if i.startswith('Sanic-Server')
+        }
+
     ret = dict(
         dockerized=DOCKERIZED,
-        is_rpi=IS_RPI,
-        is_rpi4=IS_RPI4,
-        is_rpi5=IS_RPI5,
         downloads=downloads,
         flags=flags.get_flags(),
-        hotspot_status=admin.hotspot_status().name,
         hotspot_ssid=admin.get_current_ssid(get_wrolpi_config().hotspot_device),
+        hotspot_status=admin.hotspot_status().name,
+        is_rpi4=IS_RPI4,
+        is_rpi5=IS_RPI5,
+        is_rpi=IS_RPI,
+        sanic_workers=sanic_workers,
         throttle_status=admin.throttle_status().name,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),
@@ -607,9 +639,27 @@ async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstima
 
 
 @api_bp.get('/configs')
+@openapi.description('Get the status (imported, valid, etc.) of all configs.')
 def get_configs(_: Request):
     configs = get_all_configs()
+    configs = {k: v.config_status() for k, v in configs.items()}
     return json_response(dict(configs=configs))
+
+
+@api_bp.get('/config/<name:str>')
+@openapi.description('Get the contents of a specific config.')
+def get_config(_: Request, name: str):
+    config = get_all_configs()[name]
+    return json_response(dict(config=config))
+
+
+@api_bp.post('/config/<name:str>')
+@openapi.description('Save the contents of a specific config.')
+@validate(json=schema.ConfigSaveRequest)
+def save_config(_: Request, name: str, body: schema.ConfigSaveRequest):
+    config = get_all_configs()[name]
+    config.update(body.config)
+    return response.empty()
 
 
 @api_bp.post('/configs/import')

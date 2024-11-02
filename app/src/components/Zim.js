@@ -43,8 +43,7 @@ import {
     TabLinks,
     TagIcon,
     useTitle,
-    WarningMessage,
-    ZIM_VIEWER_URI
+    WarningMessage
 } from "./Common";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {TagsSelector} from "../Tags";
@@ -66,6 +65,7 @@ import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
+import {ZIM_VIEWER_URI} from "./Vars";
 
 export const OutdatedZimsMessage = ({onClick}) => {
     const [open, setOpen] = React.useState(false);

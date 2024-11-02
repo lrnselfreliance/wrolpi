@@ -1,586 +1,1128 @@
-import React, {useContext, useState} from "react";
-import {getDownloaders, postDownload} from "../api";
+import React, {useState} from "react";
+import {getDownloaders, postDownload, putDownload} from "../api";
 import {
     APIButton,
     DirectorySearch,
-    frequencyOptions,
+    HelpHeader,
     HelpPopup,
-    rssFrequencyOptions,
-    validURL,
-    WROLModeMessage
+    mergeDeep,
+    RequiredAsterisk,
+    useLocalStorage
 } from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {ThemeContext} from "../contexts/contexts";
-import {Accordion, Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
-import {AccordionContent, AccordionTitle, Form as SForm, FormDropdown} from "semantic-ui-react";
+import {Button, Form, FormInput, Header} from "./Theme";
+import {Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
-import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {commaSeparatedValidator, InputForm, NumberInputForm, UrlInput, UrlsTextarea, useForm} from "../hooks/useForm";
+import {
+    channelFrequencyOptions,
+    days30Option,
+    defaultVideoFormatOption,
+    defaultVideoResolutionOptions,
+    Downloaders,
+    downloadFormatOptions,
+    downloadOrderOptions,
+    downloadResolutionOptions,
+    extendedFrequencyOptions,
+    frequencyOptions,
+    weeklyOption
+} from "./Vars";
 
-class Downloader extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            advancedOpen: false,
-            destination: '',
-            disabled: this.props.disabled,
-            downloader: props.downloader,
-            pending: false,
-            submitted: false,
-            tagNames: [],
-            urls: '',
-            valid: true,
-            destinationRequired: props.destinationRequired !== undefined ? props.destinationRequired : false,
-        };
-    }
-
-    submitDownload = async () => {
-        let {urls, downloader, destination, tagNames} = this.state;
-        if (urls) {
-            urls = urls.split(/\r?\n/);
-            this.setState({pending: true, submitted: false});
-            try {
-                let response = await postDownload(urls, downloader, null, null, null, destination, tagNames);
-                if (response.ok) {
-                    this.setState({urls: '', pending: false, submitted: true});
-                }
-            } finally {
-                this.setState({pending: false});
-            }
-        }
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value}, this.validateUrls);
-    }
-
-    validateUrls = async () => {
-        // Validate that all URLs in state are valid.
-        if (this.state.urls) {
-            let urls = this.state.urls.split(/\r?\n/);
-            let valid = true;
-            urls.forEach((url) => {
-                valid = validURL(url);
-            })
-            this.setState({valid});
-        }
-    }
-
-    handleKeydown = async (e) => {
-        const {valid, urls} = this.state;
-        if (e.keyCode === 13 && e.ctrlKey && urls && valid) {
-            await this.submitDownload();
-        }
-    }
-
-    handleTagsChange = (tagNames, newAnyTag) => {
-        this.setState({tagNames});
-    }
-
-    componentDidMount() {
-        document.addEventListener('keydown', this.handleKeydown);
-    }
-
-    componentWillUnmount() {
-        document.removeEventListener('keydown', this.handleKeydown);
-    }
-
-    render() {
-        const {
-            advancedOpen,
-            submitted,
-            tagNames,
-            urls,
-            valid,
-            pending,
-            downloader,
-            destination,
-            destinationRequired
-        } = this.state;
-        let disabled = !urls || !valid || pending || !downloader;
-        const {header, withTags, withSearchDirectory} = this.props;
-
-        let directorySearch;
-        if (withSearchDirectory) {
-            directorySearch = <div style={{marginTop: '1em'}}>
-                <SForm.Field required={destinationRequired}>
-                    <label>Destination</label>
-                    <DirectorySearch onSelect={i => this.setState({destination: i})}/>
-                </SForm.Field>
-            </div>;
-        }
-        if (destinationRequired) {
-            disabled = !destination || disabled;
-        }
-
-        let tagsSelector;
-        if (withTags) {
-            tagsSelector = <TagsSelector selectedTagNames={tagNames} onChange={this.handleTagsChange}/>;
-        }
-
-        const advancedAccordion = <Accordion>
-            <AccordionTitle active={advancedOpen} onClick={() => this.setState({advancedOpen: !advancedOpen})}>
-                <Icon name='dropdown'/>
-                Advanced
-            </AccordionTitle>
-            <AccordionContent active={advancedOpen}>
-                {directorySearch}
-            </AccordionContent>
-        </Accordion>;
-
-        const viewDownloads = <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>;
-
-        const handleDrop = (e) => {
-            // Handle user dropping multiple URLs into the textarea.  Assume each drop is a URL.  Ensure each URL
-            // is on its own line.
-            e.preventDefault();
-            const url = e.dataTransfer.getData('text');
-            const separator = (this.state.urls.endsWith('\n') || this.state.urls === '') ? '' : '\n';
-            const urls = `${this.state.urls}${separator}${url}\n`;
-            this.setState({urls: urls}, this.validateUrls);
-        };
-
-        return <ThemeContext.Consumer>
-            {({i}) => (<Form onSubmit={this.submitDownload}>
-                <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-                <Header as='h3'>{header}</Header>
-                <TextArea required
-                          placeholder={'Enter one URL per line'}
-                          name='urls'
-                          onChange={this.handleInputChange}
-                          value={this.state.urls}
-                          style={{marginBottom: '1em'}}
-                          onDrop={handleDrop}
-                />
-                {tagsSelector}
-                {pending && <Loader active={pending}/>}
-
-                {/* Display DirectorySearch if its required, show it in an Accordion if it's not required */}
-                {withSearchDirectory ? destinationRequired ? directorySearch : advancedAccordion : null}
-
-                <Button content='Cancel' onClick={this.props.clearSelected}/>
-                <APIButton
-                    disabled={disabled}
-                    onClick={this.submitDownload}
-                    style={{marginTop: '0.5em'}}
-                >Download</APIButton>
-                {submitted && viewDownloads}
-            </Form>)}
-        </ThemeContext.Consumer>
-    }
+export function DepthInputForm({form, required, name = 'depth', path = 'settings.depth'}) {
+    return <NumberInputForm
+        form={form}
+        required={required}
+        name={name}
+        path={path}
+        label='Depth'
+        max={4}
+        helpContent='Search the URLs provided, and any URLs they contain up to this depth. Warning: This can be exponential!'
+    />
 }
 
-class ChannelDownload extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            advancedOpen: false,
-            destination: null,
-            disabled: false,
-            error: null,
-            frequency: 604800,
-            pending: false,
-            ready: false,
-            success: null,
-            url: '',
-        };
-        this.freqOptions = [{key: 'once', text: 'Once', value: 0}, ...frequencyOptions.slice(1),];
-        this.handleUrlChange = this.handleUrlChange.bind(this);
-        this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleFrequencyChange = this.handleFrequencyChange.bind(this);
-    }
-
-    handleUrlChange = (e, {value}) => {
-        e.preventDefault();
-        let ready = value && validURL(value);
-        this.setState({url: value, ready, success: false});
-    }
-
-    handleFrequencyChange(e, {value}) {
-        this.setState({frequency: value, success: false});
-    }
-
-    handleSubmit = async () => {
-        this.setState({disabled: true, pending: true, success: null, error: null});
-        const {url, frequency, destination} = this.state;
-        if (!url) {
-            this.setState({error: 'URL is required'});
-            return;
-        }
-        let response = await postDownload([url], 'video_channel', frequency,
-            null, null, destination);
-        if (response.status === 204) {
-            this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
-        } else {
-            let error = (await response.json()).message || null;
-            this.setState({pending: false, disabled: false, success: false, error});
-        }
-    }
-
-    toggleAdvancedAccordion = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        this.setState({advancedOpen: !this.state.advancedOpen});
-    }
-
-    render() {
-        const {advancedOpen, ready, disabled, url, error, frequency, pending, success} = this.state;
-        const buttonDisabled = !ready || disabled;
-
-        const onceMessage = (<Message>
-            <Message.Header>Download Once</Message.Header>
-            <Message.Content>You have selected a frequency of Once, this is useful when you want to download
-                all videos in a Playlist, and when you do not want to download any videos added to the playlist
-                in the future.</Message.Content>
-        </Message>);
-
-        const directorySearch = <div style={{marginTop: '1em'}}>
-            <SForm.Field>
-                <label>
-                    Destination
-                    <HelpPopup
-                        content="Always download videos into this directory, rather than the Channel's directory."/>
-                </label>
-                <DirectorySearch onSelect={i => this.setState({destination: i})}/>
-            </SForm.Field>
-        </div>;
-
-        return <Form>
-            <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h3'><Icon name='film' color='blue'/> Channel / Playlist</Header>
-            <FormInput
-                required
-                label='URL'
-                placeholder='https://example.com/channel/videos'
-                value={url}
-                error={error}
-                onChange={this.handleUrlChange}
-            />
-            <FormDropdown
-                required
-                selection
-                label='Download Frequency'
-                name='download_frequency'
-                placeholder='Frequency'
-                options={this.freqOptions}
-                value={frequency}
-                selected={frequency}
-                onChange={this.handleFrequencyChange}
-            />
-
-            {frequency === 0 && onceMessage}
-
-            <Accordion>
-                <AccordionTitle active={advancedOpen} onClick={this.toggleAdvancedAccordion}>
-                    <Icon name='dropdown'/>
-                    Advanced
-                </AccordionTitle>
-                <AccordionContent active={advancedOpen}>
-                    {directorySearch}
-                </AccordionContent>
-            </Accordion>
-
-            <br/>
-
-            <Button content='Cancel' onClick={this.props.clearSelected}/>
-            <APIButton
-                onClick={this.handleSubmit}
-                disabled={buttonDisabled}
-            >Download</APIButton>
-            {pending && <Loader active={pending}/>}
-            {success && <Icon name='check'/>}
-        </Form>
-    }
+export function MaximumPagesInputForm({form, required, name = 'max_pages', path = 'settings.max_pages'}) {
+    return <NumberInputForm
+        form={form}
+        required={required}
+        name={name}
+        path={path}
+        label='Maximum Pages'
+        max={100000}
+        helpContent='Stop searching for files if this many pages have been searched.'
+    />
 }
 
-function ExcludedURLsLabel() {
-    const {t} = useContext(ThemeContext);
-    const excludedURLsHelp = <HelpPopup content='A comma-separated list of words that should not be downloaded.'/>
-    return <div style={{marginBottom: '0.5em'}} {...t}>
-        Excluded URLs
-        {excludedURLsHelp}
-    </div>
+export function DestinationForm({
+                                    form,
+                                    helpContent,
+                                    label = 'Destination',
+                                    path = 'destination',
+                                    required = false,
+                                }) {
+    const [inputProps, inputAttrs] = form.getCustomProps({name: 'destination', path, required});
+    const {disabled, value, onChange} = inputProps;
+    const helpPopup = helpContent ? <HelpPopup content={helpContent}/> : null;
+    return <SForm.Field>
+        <label>{label} {required && <RequiredAsterisk/>}{helpPopup}</label>
+        <DirectorySearch
+            required={required}
+            value={value}
+            onSelect={onChange}
+            disabled={disabled}
+        />
+    </SForm.Field>
 }
 
-class RSSDownload extends ChannelDownload {
-    constructor(props) {
-        super(props);
-        this.state = {
-            disabled: false,
-            downloader: null,
-            downloaders: [],
-            error: null,
-            excludedURLs: '',
-            frequency: 604800,
-            pending: false,
-            ready: false,
-            sub_downloader: null,
-            success: null,
-            url: '',
-            activeIndex: -1,
-        };
-        this.freqOptions = rssFrequencyOptions;
-    }
+export function DownloadTagsSelector({form, limit, path = 'tag_names', name = 'tag_names'}) {
+    const [inputProps, inputAttrs] = form.getCustomProps({name, path});
+    const {value, onChange} = inputProps;
 
-    async componentDidMount() {
-        await this.fetchDownloaders();
-    }
+    return <TagsSelector
+        disabled={form.disabled}
+        selectedTagNames={value}
+        limit={limit}
+        onChange={onChange}
+        closeAfterAdd={!!limit}
+    />;
+}
 
-    fetchDownloaders = async () => {
-        let {downloaders} = await getDownloaders();
-        downloaders = downloaders.map((i) => {
+export function DownloadFrequencySelector({
+                                              form,
+                                              freqOptions = frequencyOptions,
+                                              name = 'frequency',
+                                              path = 'frequency',
+                                          }) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({name: 'frequency', path});
+
+    return <FormDropdown
+        required
+        selection
+        label='Download Frequency'
+        placeholder='Frequency'
+        options={freqOptions}
+        name={name}
+        id='download_frequency_selector'
+        {...inputProps}
+    />
+}
+
+export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_downloader'}) {
+    const [downloaders, setDownloaders] = React.useState([]);
+    const [inputProps, inputAttrs] = form.getSelectionProps({name, path, required: true});
+
+    const fetchDownloaders = async () => {
+        let {downloaders: downloaders_} = await getDownloaders();
+        downloaders_ = downloaders_.map((i) => {
             return {key: i.name, text: i.pretty_name || i.name, value: i.name}
         })
-        this.setState({downloaders});
+        setDownloaders(downloaders_);
     }
 
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value});
-    }
+    React.useEffect(() => {
+        fetchDownloaders();
+    }, []);
 
-    handleSubmit = async () => {
-        this.setState({disabled: true, pending: true, success: null, error: null});
-        const {url, frequency, sub_downloader, excludedURLs} = this.state;
-        if (!url) {
-            this.setState({error: 'URL is required'});
-            return;
+    return <FormDropdown selection required
+                         label='Downloader'
+                         placeholder='Select a downloader'
+                         options={downloaders}
+                         {...inputProps}
+    />
+}
+
+export function ExcludedUrls({form, name = 'excluded_urls', path = 'settings.excluded_urls'}) {
+    return <InputForm
+        form={form}
+        type='text'
+        name={name}
+        path={path}
+        helpContent="Comma-separated list of keywords that will be ignored if they are in any link's URL"
+        label='Excluded URLs'
+        placeholder='prize,gift'
+        validator={commaSeparatedValidator}
+    />
+}
+
+export function TitleInclusionInput({form, path = 'settings.title_include'}) {
+    const [inputProps, inputAttrs] = form.getInputProps({
+        name: 'title_include',
+        path,
+        validator: commaSeparatedValidator,
+    });
+
+    return <>
+        <HelpHeader
+            headerSize='h4'
+            headerContent='Title Match Words'
+            popupContent='List of words, separated by commas, that titles must contain to be downloaded.'
+        />
+        <FormInput
+            placeholder='Shelter,Solar Power'
+            error={inputProps.error}
+        >
+            <input {...inputProps}/>
+        </FormInput>
+    </>
+}
+
+export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
+    const [inputProps, inputAttrs] = form.getInputProps({
+        name: 'title_exclude',
+        path,
+        validator: commaSeparatedValidator,
+    });
+
+    return <>
+        <HelpHeader
+            headerSize='h4'
+            headerContent='Title Exclusion Words'
+            popupContent='List of words, separated by commas, that may not appear in titles to be downloaded.'
+        />
+        <FormInput
+            placeholder='Giveaway,Prize'
+            error={inputProps.error}
+        >
+            <input {...inputProps}/>
+        </FormInput>
+    </>
+}
+
+export function DownloadFormButtons({onCancel, form}) {
+    return <Grid columns={2}>
+        <Grid.Row>
+            <Grid.Column textAlign='left'>
+                <Button content='Cancel' onClick={onCancel} type='button'/>
+            </Grid.Column>
+            <Grid.Column textAlign='right'>
+                <APIButton
+                    disabled={form.disabled || !form.ready}
+                    type='submit'
+                    style={{marginTop: '0.5em'}}
+                    onClick={form.onSubmit}
+                    id='download_form_download_button'
+                >Download</APIButton>
+            </Grid.Column>
+        </Grid.Row>
+    </Grid>
+}
+
+export function EditDownloadFormButtons({onDelete, onCancel, form}) {
+    return <Grid columns={2}>
+        <Grid.Row>
+            <Grid.Column textAlign='left'>
+                <APIButton
+                    confirmButton='Delete'
+                    confirmContent='Delete this Download?'
+                    confirmHeader='Delete'
+                    color='red'
+                    onClick={onDelete}
+                >Delete</APIButton>
+            </Grid.Column>
+            <Grid.Column textAlign='right'>
+                <Button content='Cancel' onClick={onCancel}/>
+                <APIButton
+                    disabled={form.disabled || !form.ready}
+                    type='submit'
+                    style={{marginTop: '0.5em'}}
+                    onClick={form.onSubmit}
+                >Save</APIButton>
+            </Grid.Column>
+        </Grid.Row>
+    </Grid>
+}
+
+function VideoDownloadOrder({form, path = 'settings.download_order'}) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({
+        name: 'download_order',
+        path,
+    });
+
+    return <FormDropdown selection
+                         label='Download Order'
+                         options={downloadOrderOptions}
+                         {...inputProps}
+    />
+}
+
+function VideoDownloadCountLimit({form, name = 'video_count_limit', path = 'settings.video_count_limit'}) {
+    return <NumberInputForm
+        form={form}
+        helpContent='Stop downloading videos from this channel/playlist when this many have been downloaded.'
+        helpPosition='top right'
+        name={name}
+        path={path}
+        label='Video Count Limit'
+        placeholder='100'
+    />
+}
+
+export function VideoResolutionSelectorForm({form, name = 'video_resolutions', path = 'settings.video_resolutions'}) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
+
+    return <>
+        <HelpHeader
+            headerSize='h5'
+            headerContent='Video Resolutions'
+            popupContent='Videos will be downloaded in the first available resolution from the list you select.'
+            for_='video_resolutions_input'
+        />
+        <FormDropdown selection multiple
+                      id='video_resolutions_input'
+                      options={downloadResolutionOptions}
+                      {...inputProps}
+        />
+    </>
+}
+
+function VideoFormatSelectorForm({form, name = 'video_format', path = 'settings.video_format'}) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({
+        name,
+        path,
+        defaultValue: defaultVideoFormatOption,
+    });
+
+    return <>
+        <HelpHeader
+            headerSize='h5'
+            headerContent='Video Format'
+            popupContent='Videos will be downloaded in this format, or transcoded if not available.'
+            for_='video_format_input'
+        />
+        <FormDropdown selection
+                      id='video_format_input'
+                      options={downloadFormatOptions}
+                      {...inputProps}
+        />
+    </>
+}
+
+function VideoDurationLimit({form, name, path, label, helpContent, placeholder, helpPosition}) {
+    return <NumberInputForm
+        form={form}
+        helpContent={helpContent}
+        helpPosition={helpPosition}
+        placeholder={placeholder}
+        name={name}
+        path={path}
+        label={label}
+    />
+}
+
+export function VideoTagsForm({form}) {
+    return <>
+        <HelpHeader
+            headerSize='h4'
+            headerContent='Videos Tags'
+            popupContent='Tag all Videos with these Tags.'
+        />
+        <DownloadTagsSelector form={form}/>
+    </>
+}
+
+export function ChannelTagNameForm({form}) {
+    return <>
+        <HelpHeader
+            headerSize='h4'
+            headerContent='Channel Tag'
+            popupContent='If the Channel is new, apply this Tag.'
+        />
+        <DownloadTagsSelector
+            form={form}
+            limit={1}
+            name='channel_tag_name'
+            path='settings.channel_tag_name'
+        />
+    </>
+}
+
+export function VideosDownloadForm({singleDownload = true, onCancel}) {
+    // Keep video settings in session to help user start downloads consistently.
+    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
+    const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+
+    const defaultFormData = {
+        urls: '', // Textarea, one URL per line.
+        destination: '',
+        tag_names: [],
+        downloader: Downloaders.Video,
+        settings: {
+            video_resolutions: defaultVideoResolutions,
+            video_format: defaultVideoFormat,
         }
-        let response = await postDownload([url], 'rss', frequency, sub_downloader, excludedURLs);
-        if (response.status === 204) {
-            this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
-        } else {
-            let error = (await response.json()).message || null;
-            this.setState({pending: false, disabled: false, success: false, error});
+    }
+
+    const submitter = async (formData) => {
+        const downloadData = {
+            destination: formData.destination,
+            downloader: formData.downloader,
+            settings: formData.settings,
+            tag_names: formData.tag_names,
+            urls: formData.urls.split(/r?\n/),
+        }
+        await postDownload(downloadData);
+    }
+
+    const onSuccess = () => {
+        form.reset();
+    }
+
+    const form = useForm({submitter, defaultFormData, onSuccess});
+
+    React.useEffect(() => {
+        const {video_resolutions, video_format} = form.formData.settings;
+        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
+            setDefaultVideoResolutions(video_resolutions);
+        }
+        if (video_format && video_format !== defaultVideoFormat) {
+            setDefaultVideoFormat(video_format);
+        }
+    }, [form.formData]);
+
+    const localOnCancel = (e) => {
+        if (e) e.preventDefault();
+        if (onCancel) {
+            onCancel();
         }
     }
 
-    handleAdvancedClick = async (e, {index}) => {
-        const {activeIndex} = this.state;
-        const newIndex = activeIndex === index ? -1 : index;
-        this.setState({activeIndex: newIndex});
-    }
+    // This form can handle a single Video download, or multiple video downloads.
+    const urlInput = singleDownload ?
+        <UrlInput required form={form} path='urls'/>
+        : <UrlsTextarea required form={form}/>;
 
-    handleExcludedURLsChange = async (e, {value}) => {
-        e.preventDefault();
-        this.setState({excludedURLs: value});
-    }
+    return <Form>
+        <Header as='h3'>
+            <Icon name='film' color='blue'/>
+            Videos
+        </Header>
+        <p>Download each video at the URLs provided below.</p>
 
-    render() {
-        const {ready, disabled, url, error, frequency, pending, success, activeIndex, excludedURLs} = this.state;
-        const buttonDisabled = !ready || disabled;
-
-        const onceMessage = (<Message>
-            <Message.Header>Download Once</Message.Header>
-            <Message.Content>You have selected a frequency of Once, this is useful when you want to download
-                all videos in a Playlist, but you do not want to download any videos added to the playlist
-                in the future.</Message.Content>
-        </Message>);
-
-        return <Form onSubmit={this.handleSubmit}>
-            <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h3'><Icon name='rss' color='orange'/> RSS Feed</Header>
-            <FormInput
-                required
-                label='URL'
-                placeholder='https://example.com/feed'
-                value={url}
-                error={error}
-                onChange={this.handleUrlChange}
-            />
-            <FormDropdown
-                required
-                selection
-                label='Download Frequency'
-                name='download_frequency'
-                placeholder='Frequency'
-                options={this.freqOptions}
-                value={frequency}
-                selected={frequency}
-                onChange={this.handleFrequencyChange}
-            />
-            {frequency === 0 && onceMessage}
-            <FormDropdown selection required
-                          name='sub_downloader'
-                          label='Downloader'
-                          options={this.state.downloaders}
-                          placeholder='Select a downloader'
-                          onChange={this.handleInputChange}
-            />
-            <Accordion style={{paddingBottom: '1em'}}>
-                <AccordionTitle
-                    active={activeIndex === 0}
-                    index={0}
-                    onClick={this.handleAdvancedClick}
-                >
-                    <Icon name='dropdown'/>
-                    Advanced
-                </AccordionTitle>
-                <AccordionContent active={activeIndex === 0}>
-                    <FormInput
-                        label={<ExcludedURLsLabel/>}
-                        placeholder='example.com,example.org'
-                        value={excludedURLs}
-                        error={error}
-                        onChange={this.handleExcludedURLsChange}
+        <Grid stackable columns={1}>
+            <Grid.Row>
+                <Grid.Column>{urlInput}</Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Row columns={1}>
+                    <Grid.Column>
+                        <VideoTagsForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DestinationForm
+                        form={form}
+                        helpContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this Channel/Playlist will download to this directory instead."
                     />
-                </AccordionContent>
-            </Accordion>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={11}>
+                    <VideoResolutionSelectorForm form={form}/>
+                </Grid.Column>
+                <Grid.Column width={4}>
+                    <VideoFormatSelectorForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <ChannelTagNameForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DownloadFormButtons onCancel={localOnCancel} form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
 
-            <Button content='Cancel' onClick={this.props.clearSelected}/>
-            <Button
-                color='violet'
-                content='Download'
-                onClick={this.handleSubmit}
-                disabled={buttonDisabled}
-            />
-            {pending && <Loader active={pending}/>}
-            {success && <Icon name='check'/>}
-        </Form>
+
+export function VideoMinimumDurationForm({form}) {
+    return <VideoDurationLimit
+        form={form}
+        path='settings.minimum_duration'
+        label='Minimum Duration'
+        name='minimum_duration'
+        helpContent='Download only Videos this many seconds long, or greater.'
+        placeholder='60'
+    />
+}
+
+export function VideoMaximumDurationForm({form}) {
+    return <VideoDurationLimit
+        form={form}
+        path='settings.maximum_duration'
+        label='Maximum Duration'
+        name='maximum_duration'
+        helpContent='Do not download videos longer than this many seconds.'
+        placeholder='3600'
+    />
+}
+
+
+export function ChannelDownloadForm({
+                                        download,
+                                        onCancel,
+                                        onSuccess,
+                                        onDelete = async () => {
+                                        },
+                                        submitter,
+                                        actions = null,
+                                        clearOnSuccess = true,
+                                        channel_id = null,
+                                    }) {
+
+    // May have received submitter from EditChannelDownloadForm.
+    submitter = submitter || (async (formData) => {
+        const downloadData = {
+            destination: formData.destination,
+            downloader: formData.downloader,
+            frequency: formData.frequency,
+            settings: formData.settings,
+            sub_downloader: formData.sub_downloader,
+            tag_names: formData.tag_names || [],
+            urls: [formData.url,],
+        }
+        await postDownload(downloadData);
+    });
+
+    // Keep video settings in session to help user start downloads consistently.
+    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
+    const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+
+    const emptyFormData = {
+        destination: '',
+        downloader: Downloaders.VideoChannel,
+        frequency: days30Option.value,
+        url: '',
+        settings: {
+            channel_id,
+            channel_tag_name: [],
+            download_order: 'newest',
+            maximum_duration: null,
+            minimum_duration: null,
+            title_exclude: null,
+            title_include: null,
+            video_count_limit: null,
+            video_resolutions: defaultVideoResolutions,
+            video_format: defaultVideoFormat,
+        },
+        sub_downloader: Downloaders.Video,
+        tag_names: [],
+    };
+
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        onSuccess,
+        clearOnSuccess,
+    });
+
+    React.useEffect(() => {
+        const {video_resolutions, video_format} = form.formData.settings;
+        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
+            setDefaultVideoResolutions(video_resolutions);
+        }
+        if (video_format && video_format !== defaultVideoFormat) {
+            setDefaultVideoFormat(video_format);
+        }
+    }, [form.formData]);
+
+    const onceMessage = <Message>
+        <Message.Header>Download Once</Message.Header>
+        <Message.Content>You have selected a frequency of Once, this is useful when you want to download
+            all videos in a Playlist, and when you do not want to download any videos added to the playlist
+            in the future.</Message.Content>
+    </Message>;
+
+    // Default to "new" download buttons.
+    actions = actions || DownloadFormButtons;
+    const actionsElm = actions({onDelete, onCancel, form});
+
+    return <Form>
+        <Header as='h3'><Icon name='film' color='blue'/> Channel / Playlist</Header>
+
+        <Grid stackable columns={1}>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlInput required form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <VideoTagsForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column mobile={4} tablet={4}>
+                    <DownloadFrequencySelector form={form} freqOptions={channelFrequencyOptions}/>
+                </Grid.Column>
+                <Grid.Column mobile={4} tablet={12}>
+                    <DestinationForm
+                        form={form}
+                        helpContent='Destination is not required.  Videos will download into the automatically created Channel directory.'
+                    />
+                </Grid.Column>
+            </Grid.Row>
+            {form.formData.frequency === 0 && <Grid.Row><Grid.Column>{onceMessage}</Grid.Column></Grid.Row>}
+            <Grid.Row columns={2}>
+                <Grid.Column>
+                    <TitleInclusionInput form={form}/>
+                </Grid.Column>
+                <Grid.Column>
+                    <TitleExclusionInput form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column mobile={4} tablet={5}>
+                    <VideoDownloadOrder form={form}/>
+                </Grid.Column>
+                <Grid.Column mobile={4} tablet={5}>
+                    <VideoDownloadCountLimit form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={11}>
+                    <VideoResolutionSelectorForm form={form}/>
+                </Grid.Column>
+                <Grid.Column width={4}>
+                    <VideoFormatSelectorForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column tablet={8} computer={4}>
+                    <VideoMinimumDurationForm form={form}/>
+                </Grid.Column>
+                <Grid.Column tablet={8} computer={4}>
+                    <VideoMaximumDurationForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <ChannelTagNameForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column textAlign='right'>
+                    {actionsElm}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+export function EditChannelDownloadForm({
+                                            download,
+                                            onCancel,
+                                            onSuccess,
+                                            onDelete,
+                                            withTags = true,
+                                            actions = EditDownloadFormButtons,
+                                        }) {
+
+    const submitter = async (formData) => {
+        const downloadData = {
+            destination: formData.destination,
+            downloader: formData.downloader,
+            frequency: formData.frequency,
+            settings: formData.settings,
+            tag_names: formData.tag_names,
+            urls: [formData.url,],
+        }
+        await putDownload(download.id, downloadData);
+    }
+
+    return <ChannelDownloadForm
+        download={download}
+        submitter={submitter}
+        onCancel={onCancel}
+        onSuccess={onSuccess}
+        onDelete={onDelete}
+        withTags={withTags}
+        actions={actions}
+        clearOnSuccess={false}
+    />
+}
+
+function SuccessfulDownloadSubmitMessage() {
+    return <Message positive>
+        <Message.Header>Download Submitted</Message.Header>
+        <Message.Content>
+            <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>
+        </Message.Content>
+    </Message>
+}
+
+export function ArchiveDownloadForm({download, onCancel}) {
+    const [showMessage, setShowMessage] = React.useState(false);
+
+    const submitter = async (formData) => {
+        const downloadData = {
+            downloader: formData.downloader,
+            tag_names: formData.tag_names,
+            urls: formData.urls.split(/\r?\n/),
+        }
+        await postDownload(downloadData);
+    };
+
+    const emptyFormData = {
+        downloader: Downloaders.Archive,
+        urls: '',
+        tag_names: [],
+    };
+
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        clearOnSuccess: true,
+        onSuccess: async () => setShowMessage(true),
+    });
+
+    return <Form>
+        <Header as='h3'><Icon name='file text' color='green'/> Archives</Header>
+        <p>Create a Singlefile Archive for each of the URLs provided below.</p>
+
+        <Grid stackable columns={1}>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlsTextarea required form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DownloadTagsSelector form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            {showMessage &&
+                <Grid.Row>
+                    <Grid.Column>
+                        <SuccessfulDownloadSubmitMessage/>
+                    </Grid.Column>
+                </Grid.Row>}
+            <Grid.Row>
+                <Grid.Column textAlign='right'>
+                    <DownloadFormButtons onCancel={onCancel} form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+export function RSSDownloadForm({download, submitter, onDelete, onCancel, actions, clearOnSuccess = true}) {
+    const [showMessage, setShowMessage] = React.useState(false);
+
+    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
+    const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+
+    submitter = submitter || (async (formData) => {
+        const downloadData = {
+            destination: formData.destination,
+            downloader: formData.downloader,
+            frequency: formData.frequency,
+            settings: formData.settings,
+            sub_downloader: formData.sub_downloader,
+            tag_names: formData.tag_names,
+            urls: [formData.url],
+        }
+        await postDownload(downloadData);
+    });
+
+    const emptyFormData = {
+        destination: null,
+        downloader: Downloaders.RSS,
+        frequency: weeklyOption.value,
+        sub_downloader: null,
+        settings: {
+            excluded_urls: null,
+            title_exclude: null,
+            title_include: null,
+            video_resolutions: defaultVideoResolutions,
+            video_format: defaultVideoFormat,
+        },
+        tag_names: [],
+        url: '',
+    };
+
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        clearOnSuccess,
+        onSuccess: async () => setShowMessage(true),
+    });
+
+    React.useEffect(() => {
+        const {video_resolutions, video_format} = form.formData.settings;
+        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
+            setDefaultVideoResolutions(video_resolutions);
+        }
+        if (video_format && video_format !== defaultVideoFormat) {
+            setDefaultVideoFormat(video_format);
+        }
+    }, [form.formData]);
+
+    // Default to "new" download buttons.
+    actions = actions || DownloadFormButtons;
+    const actionsElm = actions({onDelete, onCancel, form});
+
+    let downloaderRows;
+    if (form.formData.sub_downloader === Downloaders.Video) {
+        downloaderRows = <>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <DestinationForm
+                        form={form}
+                        helpContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this feed will download to this directory instead."
+                    />
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column mobile={16} computer={8}>
+                    <TitleInclusionInput form={form}/>
+                </Grid.Column>
+                <Grid.Column mobile={16} computer={8}>
+                    <TitleExclusionInput form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column mobile={16} computer={11}>
+                    <VideoResolutionSelectorForm form={form}/>
+                </Grid.Column>
+                <Grid.Column mobile={8} computer={3}>
+                    <VideoFormatSelectorForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column tablet={8} computer={4}>
+                    <VideoMinimumDurationForm form={form}/>
+                </Grid.Column>
+                <Grid.Column tablet={8} computer={4}>
+                    <VideoMaximumDurationForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+        </>;
+    } else if (form.formData.sub_downloader === Downloaders.Archive) {
+        downloaderRows = <Grid.Row>
+            <Grid.Column>
+                <ExcludedUrls form={form}/>
+            </Grid.Column>
+        </Grid.Row>;
+    }
+
+    return <Form>
+        <Header as='h3'><Icon name='rss' color='orange'/> RSS Feed</Header>
+        <p>Download each link provided by this RSS feed using the selected downloader.</p>
+
+        <Grid columns={1}>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlInput required form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DownloadTagsSelector form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={8}>
+                    <DownloadFrequencySelector form={form} freqOptions={extendedFrequencyOptions}/>
+                </Grid.Column>
+                <Grid.Column width={8}>
+                    <DownloaderSelector form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            {downloaderRows}
+            {showMessage &&
+                <Grid.Row>
+                    <Grid.Column>
+                        <SuccessfulDownloadSubmitMessage/>
+                    </Grid.Column>
+                </Grid.Row>}
+            <Grid.Row>
+                <Grid.Column textAlign='right'>
+                    {actionsElm}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+export function EditRSSDownloadForm({download, onDelete, onCancel, actions = EditDownloadFormButtons}) {
+
+    const submitter = async (formData) => {
+        const downloadData = {
+            downloader: formData.downloader,
+            frequency: formData.frequency,
+            settings: formData.settings,
+            sub_downloader: formData.sub_downloader,
+            tag_names: formData.tag_names,
+            urls: [formData.url,],
+        }
+        await putDownload(download.id, downloadData);
+    }
+
+    return <RSSDownloadForm
+        submitter={submitter}
+        onDelete={onDelete}
+        onCancel={onCancel}
+        download={download}
+        actions={actions}
+        clearOnSuccess={false}
+    />
+}
+
+export function EditZimDownloadForm({download, onDelete, onCancel, actions = EditDownloadFormButtons}) {
+
+    const submitter = async (formData) => {
+        const downloadData = {
+            downloader: formData.downloader,
+            frequency: formData.frequency,
+            settings: formData.settings,
+            sub_downloader: formData.sub_downloader,
+            tag_names: formData.tag_names,
+            urls: [formData.url,],
+        }
+        await putDownload(download.id, downloadData);
+    }
+    const [showMessage, setShowMessage] = React.useState(false);
+
+    const emptyFormData = {
+        downloader: Downloaders.RSS,
+        frequency: weeklyOption.value,
+        sub_downloader: null,
+        tag_names: [],
+        url: '',
+    };
+
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        onSuccess: async () => setShowMessage(true),
+    });
+
+    // Default to "new" download buttons.
+    actions = actions || DownloadFormButtons;
+    const actionsElm = actions({onDelete, onCancel, form});
+
+    return <Form>
+        <Header as='h3'>Zim File</Header>
+
+        <Grid stackable columns={1}>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlInput required form={form} disabled={true}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={8}>
+                    <DownloadFrequencySelector form={form} longFrequenciesAvailable={true}/>
+                </Grid.Column>
+            </Grid.Row>
+            {showMessage &&
+                <Grid.Row>
+                    <Grid.Column>
+                        <SuccessfulDownloadSubmitMessage/>
+                    </Grid.Column>
+                </Grid.Row>}
+            <Grid.Row>
+                <Grid.Column textAlign='right'>
+                    {actionsElm}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+export function FilesDownloadForm({
+                                      download,
+                                      submitter,
+                                      onCancel,
+                                      actions = DownloadFormButtons,
+                                      clearOnSuccess = true,
+                                  }) {
+    const [showMessage, setShowMessage] = React.useState(false);
+
+    submitter = submitter || (async (formData) => {
+        const downloadData = {
+            downloader: Downloaders.File,
+            tag_names: formData.tag_names,
+            destination: formData.destination,
+            urls: formData.urls.split(/\r?\n/),
+        }
+        await postDownload(downloadData);
+    });
+
+    const emptyFormData = {
+        destination: null,
+        tag_names: [],
+        urls: '',
+    };
+
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        clearOnSuccess,
+        onSuccess: async () => setShowMessage(true),
+    });
+
+    const actionsElm = actions({onCancel, form});
+
+    return <Form>
+        <Header as='h3'><Icon name='file'/> Files</Header>
+        <p>Download each file at the URLs provided below.</p>
+
+        <Grid>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlsTextarea form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DownloadTagsSelector form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <DestinationForm required form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            {showMessage &&
+                <Grid.Row>
+                    <Grid.Column>
+                        <SuccessfulDownloadSubmitMessage/>
+                    </Grid.Column>
+                </Grid.Row>}
+            <Grid.Row>
+                <Grid.Column textAlign='right'>
+                    {actionsElm}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
+}
+
+const suffixValidator = (value) => {
+    const error = commaSeparatedValidator(value);
+    if (error) {
+        return error;
+    }
+
+    const suffixes = value.split(',');
+    for (const suffix of suffixes) {
+        if (!suffix.startsWith('.')) {
+            return 'Suffix must start with .';
+        }
+        if (suffix.length === 1) {
+            return 'Suffix must have characters after .';
+        }
     }
 }
 
-class ScrapeDownloader extends Downloader {
+export function SuffixFormInput({form, name = 'suffix', path = 'settings.suffix'}) {
+    return <InputForm
+        form={form}
+        label='File Suffixes'
+        helpContent='Comma-separated list of file suffixes that should be downloaded'
+        required={true}
+        placeholder='.pdf,.mp4'
+        name={name}
+        path={path}
+        validator={suffixValidator}
+    />
+}
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            depth: 1,
-            disabled: false,
-            max_pages: 100,
-            pending: false,
-            ready: false,
-            sub_downloader: null,
-            success: null,
-            suffix: '',
-            urls: '',
-        };
-    }
+export function ScrapeFilesDownloadForm({
+                                            download,
+                                            submitter,
+                                            clearOnSuccess,
+                                            onCancel,
+                                            actions = DownloadFormButtons,
+                                        }) {
+    const [showMessage, setShowMessage] = React.useState(false);
 
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value});
-    }
-
-    submitDownload = async () => {
-        let {urls, destination, depth, suffix, max_pages} = this.state;
-        depth = parseInt(depth);
-        max_pages = parseInt(max_pages);
-        if (urls) {
-            urls = urls.split(/\r?\n/);
-            this.setState({pending: true, submitted: false});
-            try {
-                let response = await postDownload(
-                    urls,
-                    'scrape_html',
-                    null,
-                    'file',
-                    null,
-                    destination,
-                    null,
-                    depth,
-                    suffix,
-                    max_pages,
-                );
-                if (response.ok) {
-                    this.setState({urls: '', pending: false, submitted: true});
-                }
-            } finally {
-                this.setState({pending: false});
-            }
+    submitter = submitter || (async (formData) => {
+        const downloadData = {
+            downloader: Downloaders.ScrapeHtml,
+            sub_downloader: Downloaders.File,
+            tag_names: formData.tag_names,
+            destination: formData.destination,
+            urls: formData.urls.split(/\r?\n/),
+            settings: formData.settings,
         }
-    }
+        await postDownload(downloadData);
+    });
 
-    render() {
-        const {urls, depth, max_pages, suffix, destination} = this.state;
-        const depths = [
-            {key: 1, text: 1, value: 1},
-            {key: 2, text: 2, value: 2},
-            {key: 3, text: 3, value: 3},
-            {key: 4, text: 4, value: 4},
-        ];
-        const validSuffix = suffix && suffix.startsWith('.');
-        const complete = urls && depth && validSuffix && max_pages && destination;
+    const emptyFormData = {
+        destination: null,
+        tag_names: [],
+        urls: '',
+        settings: {
+            depth: 1,
+            max_pages: 1,
+            suffix: '',
+        }
+    };
 
-        let destinationField = <SForm.Field required>
-            <label>
-                Destination
-                <HelpPopup content="Download any found files into this directory."/>
-            </label>
-            <DirectorySearch onSelect={i => this.setState({destination: i})}/>
-        </SForm.Field>;
+    const form = useForm({
+        submitter,
+        defaultFormData: mergeDeep(emptyFormData, download),
+        emptyFormData,
+        clearOnSuccess,
+        onSuccess: async () => setShowMessage(true),
+    });
 
-        let depthField = <SForm.Field required>
-            <label>
-                Depth
-                <HelpPopup
-                    content='Search the URLs provided, and any URLs they contain up to this depth. Warning: This can be exponential!'/>
-            </label>
-            <FormDropdown selection
-                          name='depth'
-                          options={depths}
-                          value={depth}
-                          type="number"
-                          onChange={this.handleInputChange}
-            />
-        </SForm.Field>;
+    const actionsElm = actions({onCancel, form});
 
-        let suffixField = <SForm.Field required>
-            <label>
-                Suffix
-                <HelpPopup content='.pdf, .wav, .mp3, etc.'/>
-            </label>
-            <FormInput name='suffix' onChange={this.handleInputChange} placeholder='.pdf'/>
-        </SForm.Field>;
+    return <Form>
+        <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
+        <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
 
-        let maxPagesField = <SForm.Field required>
-            <label>
-                Maximum Pages
-                <HelpPopup content='Stop searching for files if this many pages have been searched.'/>
-            </label>
-            <FormInput
-                name='max_pages'
-                value={max_pages}
-                onChange={this.handleInputChange}
-                placeholder='100'
-            />
-        </SForm.Field>;
-
-        return <Form>
-            <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
-
-            <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
-
-            <TextArea required
-                      placeholder='Enter one URL per line'
-                      name='urls'
-                      onChange={this.handleInputChange}
-                      value={urls}
-                      style={{marginBottom: '1em'}}
-            />
-
-            {destinationField}
-
-            <Grid style={{marginBottom: '0.5em'}}>
+        <Grid>
+            <Grid.Row>
+                <Grid.Column>
+                    <UrlsTextarea form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={10}>
+                    <DestinationForm required={true} form={form}/>
+                </Grid.Column>
+                <Grid.Column width={6}>
+                    <SuffixFormInput required={true} form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={2}>
+                <Grid.Column width={4}>
+                    <DepthInputForm form={form} required={true}/>
+                </Grid.Column>
+                <Grid.Column width={4}>
+                    <MaximumPagesInputForm form={form} required={true}/>
+                </Grid.Column>
+            </Grid.Row>
+            {showMessage &&
                 <Grid.Row>
-                    <Grid.Column width={6}>{suffixField}</Grid.Column>
-                    <Grid.Column width={6}>{depthField}</Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column width={6}>{maxPagesField}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-
-            <Button content='Cancel' onClick={this.props.clearSelected}/>
-            <Button
-                color='violet'
-                content='Download'
-                onClick={i => this.submitDownload()}
-                disabled={!complete}
-            />
-        </Form>
-    }
+                    <Grid.Column>
+                        <SuccessfulDownloadSubmitMessage/>
+                    </Grid.Column>
+                </Grid.Row>}
+            <Grid.Row>
+                <Grid.Column>
+                    {actionsElm}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Form>
 }
 
 export function DownloadMenu({onOpen, disabled}) {
@@ -643,35 +1185,20 @@ export function DownloadMenu({onOpen, disabled}) {
     }
 
     const downloaders = {
-        archive: <Downloader
-            clearSelected={clearSelected}
-            header={<><Icon name='file alternate' color='green'/> Archives</>}
-            downloader='archive'
-            withTags={true}/>,
-        video: <Downloader
-            clearSelected={clearSelected}
-            header={<><Icon name='film' color='blue'/> Videos</>}
-            downloader='video'
-            withSearchDirectory={true}
-            withTags={true}/>,
-        video_channel: <ChannelDownload clearSelected={clearSelected}/>,
-        rss: <RSSDownload clearSelected={clearSelected}/>,
-        file: <Downloader
-            clearSelected={clearSelected}
-            header={<><Icon name='file'/> Files</>}
-            downloader='file'
-            withSearchDirectory={true}
-            destinationRequired={true}
-            withTags={true}/>,
-        scrape: <ScrapeDownloader
-            clearSelected={clearSelected}
-            downloader='scrape'
-            withSearchDirectory={true}
-            destinationRequired={true}
-        />,
+        archive: <ArchiveDownloadForm onCancel={clearSelected}/>,
+        video: <VideosDownloadForm singleDownload={false} onCancel={clearSelected}/>,
+        video_channel: <ChannelDownloadForm onCancel={clearSelected}/>,
+        rss: <RSSDownloadForm onCancel={clearSelected}/>,
+        file: <FilesDownloadForm onCancel={clearSelected}/>,
+        scrape: <ScrapeFilesDownloadForm onCancel={clearSelected}/>
     };
 
-    body = downloader in downloaders ? downloaders[downloader] : body;
+    if (downloader in downloaders) {
+        const downloaderForm = downloaders[downloader];
+        body = <>
+            {downloaderForm}
+        </>
+    }
 
     return <>
         {body}

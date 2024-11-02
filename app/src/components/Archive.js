@@ -27,7 +27,6 @@ import {
     HelpHeader,
     humanFileSize,
     isoDatetimeToAgoPopup,
-    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     PreviewPath,
@@ -49,6 +48,7 @@ import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, S
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
+import {Downloaders} from "./Vars";
 
 function archiveFileLink(path, directory = false) {
     if (path) {
@@ -111,7 +111,8 @@ function ArchivePage() {
     }
 
     const localUpdateArchive = async () => {
-        const response = await postDownload([archiveFile.url], 'archive');
+        const downloadData = {urls: [archiveFile.url], downloader: Downloaders.Archive};
+        const response = await postDownload(downloadData);
         if (response.ok) {
             toast({
                 type: 'success',
@@ -170,11 +171,11 @@ function ArchivePage() {
         await fetchArchive();
     }
 
-    const archivedDatetimeString = isoDatetimeToString(archiveFile.download_datetime, true);
-    const publishedDatetimeString = archiveFile.published_datetime ? isoDatetimeToString(archiveFile.published_datetime, true)
+    const archivedDatetimeString = isoDatetimeToAgoPopup(archiveFile.download_datetime, true);
+    const publishedDatetimeString = archiveFile.published_datetime ? isoDatetimeToAgoPopup(archiveFile.published_datetime, true)
         : 'unknown';
     const modifiedDatetimeString = archiveFile.published_modified_datetime
-        ? isoDatetimeToString(archiveFile.published_modified_datetime, true)
+        ? isoDatetimeToAgoPopup(archiveFile.published_modified_datetime, true)
         : 'unknown';
 
     const aboutPane = {
@@ -568,15 +569,15 @@ export function ArchiveRowCells({file}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
-    let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
+    let dataCell = file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime) : '';
     if (sort === 'published_modified_datetime') {
-        dataCell = file.published_modified_datetime ? isoDatetimeToString(file.published_modified_datetime) : '';
+        dataCell = file.published_modified_datetime ? isoDatetimeToAgoPopup(file.published_modified_datetime) : '';
     } else if (sort === 'download_datetime') {
-        dataCell = file.download_datetime ? isoDatetimeToString(file.download_datetime) : '';
+        dataCell = file.download_datetime ? isoDatetimeToAgoPopup(file.download_datetime) : '';
     } else if (sort === 'size') {
         dataCell = humanFileSize(file.size);
     } else if (sort === 'viewed') {
-        dataCell = isoDatetimeToString(file.viewed);
+        dataCell = isoDatetimeToAgoPopup(file.viewed);
     }
 
     // Fragment for SelectableRow

@@ -7,7 +7,6 @@ import os
 import pathlib
 import tempfile
 import traceback
-from abc import ABC
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
@@ -19,7 +18,7 @@ from urllib.parse import urlparse
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import Delete
@@ -27,11 +26,12 @@ from sqlalchemy.sql import Delete
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
-    wrol_mode_enabled, background_task, get_wrolpi_config
+    wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
-from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload
+from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError
 from wrolpi.events import Events
+from wrolpi.media_path import MediaPathType
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod, await_switches
 from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
@@ -93,23 +93,22 @@ class Download(ModelHelper, Base):  # noqa
     url = Column(String, nullable=False, unique=True)
 
     attempts = Column(Integer, default=0)
+    destination: pathlib.Path = Column(MediaPathType)  # '/media/wrolpi/videos/WROLPi'
     downloader = Column(Text)  # 'videos', 'archive', 'kiwix_zim', etc.
     sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
     error = Column(Text)  # traceback from an error during downloading.
     frequency = Column(Integer)  # seconds between re-downloading.
     info_json = Column(JSONB)  # information retrieved WHILE downloading (from yt-dlp)
     last_successful_download = Column(TZDateTime)
-    location = Column(Text)  # Relative App URL where the item is downloaded
+    location = Column(Text)  # Relative App URL where the downloaded item can be viewed.
     next_download = Column(TZDateTime)
-    settings = Column(JSONB)  # information about how the download should happen (destination, etc.)
+    settings = Column(JSONB)  # information about how the download should happen (video_resolution, etc.)
     status = Column(String, default=DownloadStatus.new)  # `DownloadStatus` enum.
+    tag_names = Column(ARRAY(Text))
 
     # A Download may be associated with a Channel (downloads all Channel videos, or a playlist, etc.).
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Download.channel_id==Channel.id', back_populates='downloads')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     def __repr__(self):
         if self.next_download or self.frequency:
@@ -125,6 +124,7 @@ class Download(ModelHelper, Base):  # noqa
             channel_id=self.channel_id,
             downloader=self.downloader,
             frequency=self.frequency,
+            destination=self.destination,
             id=self.id,
             last_successful_download=self.last_successful_download,
             location=self.location,
@@ -132,6 +132,7 @@ class Download(ModelHelper, Base):  # noqa
             settings=self.settings,
             status=self.status,
             sub_downloader=self.sub_downloader,
+            tag_names=self.tag_names,
             url=self.url,
         )
         return d
@@ -196,6 +197,8 @@ class Download(ModelHelper, Base):  # noqa
     def filter_excluded(self, urls: List[str]) -> List[str]:
         """Return any URLs that do not match my excluded_urls."""
         if self.settings and (excluded_urls := self.settings.get('excluded_urls')):
+            excluded_urls = excluded_urls.split(',')
+
             def excluded(url: str):
                 return any(i in url for i in excluded_urls)
 
@@ -222,7 +225,7 @@ class Download(ModelHelper, Base):  # noqa
         save_downloads_config.activate_switch()
 
     @staticmethod
-    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+    def get_by_id(id_: int, session: Session = None) -> Optional['Download']:
         download = session.query(Download).filter(Download.id == id_).one_or_none()
         return download
 
@@ -250,8 +253,7 @@ class Download(ModelHelper, Base):  # noqa
     @optional_session
     def get_all_by_destination(cls, destination: str | pathlib.Path, session: Session = None) -> List['Download']:
         destination = str(destination)
-        downloads = session.query(Download) \
-            .filter(Download.settings.contains({'destination': destination})).all()  # noqa
+        downloads = session.query(Download).filter_by(destination=destination).all()
         return downloads
 
 
@@ -498,16 +500,32 @@ class DownloadManager:
 
     @optional_session
     def create_downloads(self, urls: List[str], downloader_name: str, session: Session = None,
-                         reset_attempts: bool = False, sub_downloader_name: str = None, settings: dict = None) \
+                         reset_attempts: bool = False, sub_downloader_name: str = None,
+                         destination: str | pathlib.Path = None, tag_names: List[str] = None, settings: dict = None) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not urls or not all(urls):
             raise ValueError(f'Download must have a URL: {urls=}')
         logger.debug(f'Attempting to create {len(urls)} new downloads')
 
+        # Ensure all Tags exist before creating downloads.
+        if tag_names:
+            with get_db_curs() as curs:
+                stmt = 'SELECT name FROM tag WHERE name = ANY(%(tag_names)s)'
+                curs.execute(stmt, dict(tag_names=tag_names))
+                existing_tag_names = {i[0] for i in curs.fetchall()}
+                missing_tag_names = set(tag_names) - existing_tag_names
+                if missing_tag_names:
+                    raise ValidationError(f'Tag does not exist: {missing_tag_names.pop()}')
+
         downloads = []
         # Throws an error if no downloader is found.
         self.find_downloader_by_name(downloader_name)
+
+        if destination:
+            destination = pathlib.Path(destination) if isinstance(destination, str) else destination
+            if not destination.is_absolute():
+                destination = get_absolute_media_path(destination)
 
         for url in urls:
             if url in get_download_manager_config().skip_urls and reset_attempts:
@@ -520,9 +538,15 @@ class DownloadManager:
             download = self.get_or_create_download(url, session, reset_attempts=reset_attempts)
             # Download may have failed, try again.
             download.renew(reset_attempts=reset_attempts)
+            download.destination = destination or None
             download.downloader = downloader_name
             download.sub_downloader = sub_downloader_name
+            download.tag_names = tag_names or None
+            # Preserve existing settings, unless new settings are provided.
             download.settings = settings if settings is not None else download.settings
+            if download.frequency and download.settings and (channel_id := download.settings.get('channel_id')):
+                # Attach a recurring Channel download to it's Channel.
+                download.channel_id = download.channel_id or channel_id
 
             downloads.append(download)
 
@@ -543,16 +567,18 @@ class DownloadManager:
 
     @optional_session
     def create_download(self, url: str, downloader_name: str, session: Session = None, reset_attempts: bool = False,
-                        sub_downloader_name: str = None, settings: Dict = None) -> Download:
+                        sub_downloader_name: str = None, destination: str | pathlib.Path = None,
+                        tag_names: List[str] = None, settings: Dict = None) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
         downloads = self.create_downloads([url], session=session, downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
-                                          settings=settings)
+                                          destination=destination, tag_names=tag_names, settings=settings)
         return downloads[0]
 
     @optional_session
     def recurring_download(self, url: str, frequency: int, downloader_name: str, session: Session = None,
                            sub_downloader_name: str = None, reset_attempts: bool = False,
+                           destination: str | pathlib.Path = None, tag_names: List[str] = None,
                            settings: Dict = None) -> Download:
         """Schedule a recurring download."""
         if not frequency or not isinstance(frequency, int):
@@ -560,7 +586,7 @@ class DownloadManager:
 
         download, = self.create_downloads([url, ], session=session, downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
-                                          settings=settings)
+                                          destination=destination, tag_names=tag_names, settings=settings)
         download.frequency = frequency
 
         # Only recurring Downloads can be Channel Downloads.
@@ -570,6 +596,22 @@ class DownloadManager:
 
         session.commit()
 
+        return download
+
+    @optional_session
+    def update_download(self, id_: int, url: str, downloader: str,
+                        destination: str | pathlib.Path = None, tag_names: List[str] = None,
+                        sub_downloader: str | None = None,
+                        settings: Dict = None, session: Session = None) -> Download:
+        download = self.find_download(session=session, id_=id_)
+        download.url = url
+        download.downloader = downloader
+        # Preserve existing settings, unless new settings are provided.
+        download.settings = settings if settings is not None else download.settings
+        # Use provided params even if empty.
+        download.destination = destination or None
+        download.tag_names = tag_names or None
+        download.sub_downloader = sub_downloader or None
         return download
 
     @wrol_mode_check
@@ -723,8 +765,10 @@ class DownloadManager:
             renewed_count = 0
             for download in recurring:
                 # A new download may not have a `next_download`, create it if necessary.
-                download.next_download = download.next_download or self.calculate_next_download(download, session=session)
-                if download.next_download < now_ and download.status not in (DownloadStatus.new, DownloadStatus.pending):
+                download.next_download = download.next_download or self.calculate_next_download(download,
+                                                                                                session=session)
+                if download.next_download < now_ and download.status not in (
+                        DownloadStatus.new, DownloadStatus.pending):
                     download.renew()
                     renewed_count += 1
 
@@ -732,24 +776,34 @@ class DownloadManager:
                 self.log_debug(f'Renewed {renewed_count} recurring downloads')
                 session.commit()
 
-        # Save the config now that some Downloads renewed.
-        save_downloads_config.activate_switch()
-
     @staticmethod
     def get_downloads(session: Session) -> List[Download]:
         downloads = list(session.query(Download).all())
         return downloads
 
     @staticmethod
-    def get_download(session: Session, url: str = None, id_: int = None) -> Optional[Download]:
+    def get_download(session: Session, url: str = None, id_: int = None) -> Download | None:
         """Attempt to find a Download by its URL or by its id."""
         query = session.query(Download)
         if url:
             download = query.filter_by(url=url).one_or_none()
-        elif id:
+        elif id_:
             download = query.filter_by(id=id_).one_or_none()
         else:
             raise RuntimeError('Cannot find download without some params.')
+        return download
+
+    @optional_session
+    def find_download(self, url: str = None, id_: int = None, session: Session = None) -> Download:
+        """Find the requested Download, or raise an exception if not found.
+
+        @raise UnknownDownload: If the Download cannot be found."""
+        download = self.get_download(session=session, url=url, id_=id_)
+        if not download:
+            if url:
+                raise UnknownDownload(f'Cannot find Download with URL: {url}')
+            raise UnknownDownload(f'Cannot find Download with id: {id}')
+
         return download
 
     @optional_session
@@ -851,6 +905,8 @@ class DownloadManager:
         with get_db_curs() as curs:
             stmt = f'''
                 SELECT
+                    channel_id,
+                    destination,
                     downloader,
                     error,
                     frequency,
@@ -861,8 +917,8 @@ class DownloadManager:
                     settings,
                     status,
                     sub_downloader,
-                    url,
-                    channel_id
+                    tag_names,
+                    url
                 FROM download
                 WHERE frequency IS NOT NULL
                 ORDER BY
@@ -875,6 +931,7 @@ class DownloadManager:
 
             stmt = f'''
                 SELECT
+                    destination,
                     downloader,
                     error,
                     frequency,
@@ -882,7 +939,9 @@ class DownloadManager:
                     last_successful_download,
                     location,
                     next_download,
+                    settings,
                     status,
+                    tag_names,
                     url
                 FROM download
                 WHERE frequency IS NULL
@@ -1190,7 +1249,9 @@ class DownloadManagerConfig(ConfigFile):
                     if download.last_successful_download and not download.frequency:
                         # This once-download has completed, do not save it.
                         continue
-                    new_downloads.append(dict(
+                    destination = download.destination
+                    new_download = dict(
+                        destination=str(destination) if destination else None,
                         downloader=download.downloader,
                         frequency=download.frequency,
                         last_successful_download=download.last_successful_download,
@@ -1198,9 +1259,11 @@ class DownloadManagerConfig(ConfigFile):
                         settings=download.settings,
                         status=download.status,
                         sub_downloader=download.sub_downloader,
+                        tag_names=download.tag_names,
                         url=download.url,
-                    ))
-                get_download_manager_config().downloads = new_downloads
+                    )
+                    new_downloads.append(new_download)
+                get_download_manager_config().update({'downloads': new_downloads}, overwrite=overwrite)
         except Exception as e:
             message = f'Failed to save {self.get_relative_file()} config'
             logger.error(message, exc_info=e)
@@ -1224,12 +1287,21 @@ class DownloadManagerConfig(ConfigFile):
                         # Download in config already exists, update the DB record.
                         # The config is the source of truth.
                         existing.downloader = download['downloader']
+                        existing.destination = download['destination']
                         existing.frequency = download['frequency']
                         existing.last_successful_download = download['last_successful_download']
                         existing.next_download = download['next_download']
                         existing.status = download['status']
                         existing.sub_downloader = download['sub_downloader']
                         existing.settings = download.get('settings') or dict()
+                        if 'destination' in existing.settings:
+                            # `destination` may be from old config, or from ChannelDownloader.
+                            destination = existing.settings.pop('destination')
+                            existing.destination = existing.destination or destination
+                        if 'tag_names' in existing.settings:
+                            # `tag_names` may be from old config, or from ChannelDownloader.
+                            tag_names = existing.settings.pop('tag_names')
+                            existing.tag_names = existing.tag_names or tag_names
                         existing.flush()
                     else:
                         logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
@@ -1238,6 +1310,7 @@ class DownloadManagerConfig(ConfigFile):
                 for download in downloads_by_url.values():
                     # These downloads are new, import them.
                     download = Download(
+                        destination=download['destination'],
                         downloader=download['downloader'],
                         frequency=download['frequency'],
                         last_successful_download=download['last_successful_download'],
@@ -1245,6 +1318,7 @@ class DownloadManagerConfig(ConfigFile):
                         settings=download['settings'] or dict(),
                         status=download['status'],
                         sub_downloader=download['sub_downloader'],
+                        tag_names=download['tag_names'],
                         url=(url := download['url']),
                     )
                     session.add(download)
@@ -1340,7 +1414,7 @@ def parse_feed(url: str) -> FeedParserDict:
     return feedparser.parse(url)
 
 
-class RSSDownloader(Downloader, ABC):
+class RSSDownloader(Downloader):
     """Downloads an RSS feed and creates new downloads for every unique link in the feed."""
     name = 'rss'
     pretty_name = 'RSS'
@@ -1350,26 +1424,30 @@ class RSSDownloader(Downloader, ABC):
         return '<RSSDownloader>'
 
     async def do_download(self, download: Download) -> DownloadResult:
-        if isinstance(download.info_json, dict) and download.info_json.get('feed'):
-            feed = download.info_json['feed']
-        else:
-            # self.valid_url was not called by the manager, do it here.
-            feed: FeedParserDict = parse_feed(download.url)
-            if feed['bozo'] and not self.acceptable_bozo_errors(feed):
-                # Feed did not parse
-                return DownloadResult(success=False, error='Failed to parse RSS feed')
+        sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
+        if not sub_downloader:
+            raise ValueError(f'Unable to find sub_downloader for {download.url}')
+
+        feed: FeedParserDict = parse_feed(download.url)
+        if feed['bozo'] and not self.acceptable_bozo_errors(feed):
+            # Feed did not parse
+            return DownloadResult(success=False, error='Failed to parse RSS feed')
 
         if not isinstance(feed, dict) or not feed.get('entries'):
             # RSS parsed but does not have entries.
             return DownloadResult(success=False, error='RSS feed did not have any entries')
 
-        # Only download URLs that have not yet been downloaded.
-        urls = []
-        sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
-        if not sub_downloader:
-            raise ValueError(f'Unable to find sub_downloader for {download.url}')
+        # Apply YT channel to the Download, if not already applied.
+        if yt_channel_id := feed.get('feed', dict()).get('yt_channelid'):
+            if not (download.location or download.channel_id):
+                self.apply_yt_channel(download.id, yt_channel_id)
 
-        for idx, entry in enumerate(feed['entries']):
+        # Filter entries using Download.settings.
+        entries = self.filter_entries(download, feed['entries'])
+
+        # Filter URL links.
+        urls = []
+        for idx, entry in enumerate(entries):
             if url := entry.get('link'):
                 urls.append(url.strip())
             else:
@@ -1377,10 +1455,100 @@ class RSSDownloader(Downloader, ABC):
 
         # Only download new URLs.
         urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(*urls)]]
+        # Remove skipped URLs before duration checks. (Typically done after this by the download worker).
+        urls = [i for i in urls if not download_manager.is_skipped(i)]
+
+        if download.sub_downloader == 'video':  # VideoDownloader
+            urls = await self.filter_videos(download, urls)
 
         logger.info(f'Successfully got {len(urls)} new URLs from RSS {download.url}')
 
-        return DownloadResult(success=True, downloads=urls)
+        # Pass settings onto the next Downloader.
+        next_download_settings = dict()
+        settings = download.settings or dict()
+        if i := settings.get('video_resolutions'):
+            next_download_settings['video_resolutions'] = i
+        if i := settings.get('video_format'):
+            next_download_settings['video_format'] = i
+        if i := settings.get('destination'):
+            next_download_settings['destination'] = i
+
+        result = DownloadResult(
+            success=True,
+            downloads=urls,
+            settings=next_download_settings,
+        )
+        return result
+
+    @staticmethod
+    async def filter_videos(download: Download, urls: list[str]) -> list[str]:
+        """Filter Video URLs by comparing the Download's settings."""
+        from modules.videos.downloader import fetch_video_duration
+        settings = download.settings or dict()
+        urls_before = urls.copy()
+        maximum_duration: int = settings.get('maximum_duration')
+        minimum_duration: int = settings.get('minimum_duration')
+        if maximum_duration or minimum_duration:
+            # RSS feeds do not have video duration in the XML, so use a cached function to fetch the duration of the
+            # linked videos for filtering.
+            new_urls = []
+            for url in urls:
+                # `fetch_video_duration` is cached so can be called frequently.
+                try:
+                    if maximum_duration and await fetch_video_duration(url) > maximum_duration:
+                        continue
+                except Exception as e:
+                    logger.error(f'Failed to fetch duration: {url}', exc_info=e)
+                try:
+                    if minimum_duration and await fetch_video_duration(url) < minimum_duration:
+                        continue
+                except Exception as e:
+                    logger.error(f'Failed to fetch duration: {url}', exc_info=e)
+                # Download videos even if we fail to fetch their duration.
+                new_urls.append(url)
+            urls = new_urls
+            if urls_before != urls:
+                logger.info(f'Filtered videos using min/maximum_duration from {len(urls_before)} to {len(urls)}')
+
+        return urls
+
+    @staticmethod
+    def filter_entries(download: Download, entries: List[dict]) -> List[dict]:
+        """Filter Feed entries using Download's settings."""
+        # Use .lower() to ignore case.
+        title_exclude = (download.settings or dict()).get('title_exclude', '')
+        title_exclude = [i.lower() for i in title_exclude.split(',') if i]
+        title_include = (download.settings or dict()).get('title_include', '')
+        title_include = [i.lower() for i in title_include.split(',') if i]
+
+        if title_exclude or title_include:
+            filtered_entries = []
+            for entry in entries:
+                # Filter entries based off title.
+                title = entry.get('title', '').lower()
+                if title and title_exclude and any(i in title for i in title_exclude):
+                    logger.info(f'RSSDownloader skipping excluded entry ({download.url}): {title}')
+                    continue
+                if title and title_include and not any(i in title for i in title_include):
+                    logger.info(f'RSSDownloader skipping non-included entry ({download.url}): {title}')
+                    continue
+                filtered_entries.append(entry)
+            entries = filtered_entries
+
+        return entries
+
+    @staticmethod
+    def apply_yt_channel(download_id: int, yt_channel_id: str):
+        """Get Channel that matches this Download, apply Channel information to the Download."""
+        with get_db_session() as session:
+            from modules.videos.models import Channel
+            channel = Channel.get_by_source_id(session, f'UC{yt_channel_id}')
+            if channel:
+                download_ = Download.get_by_id(download_id, session=session)
+                download_.channel = channel
+                download_.channel_id = channel.id
+                download_.location = download_.location or channel.location
+                session.commit()
 
     @staticmethod
     def acceptable_bozo_errors(feed):

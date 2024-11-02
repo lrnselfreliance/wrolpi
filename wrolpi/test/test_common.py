@@ -1005,6 +1005,7 @@ async def test_config_valid(async_client, test_wrolpi_config):
     test_wrolpi_config.write_text('bad config')
     assert config.is_valid() is False
 
+    # Does not require all items.
     test_wrolpi_config.write_text('wrol_mode: true')
     assert config.is_valid() is True
 
@@ -1033,3 +1034,25 @@ async def test_config_valid(async_client, test_wrolpi_config):
 ])
 def test_trim_file_name(name, expected_name):
     assert common.trim_file_name(name) == expected_name
+
+
+async def test_cached_multiprocessing_result(async_client):
+    call_count = 0
+
+    @common.cached_multiprocessing_result
+    async def func(inc: int) -> int:
+        nonlocal call_count
+        call_count += 1
+        return inc + call_count
+
+    # First call, math is done.
+    assert await func(1) == 2
+    # Second call is cached.
+    assert await func(1) == 2
+    assert await func(1) == 2
+    # New args, math is done again.
+    assert await func(2) == 4
+    assert await func(2) == 4
+    # Kwargs are supported
+    assert await func(inc=1) == 4
+    assert await func(inc=1) == 4

@@ -4,9 +4,10 @@
   "private": true,
   "dependencies": {
     "@artsy/fresnel": "^6.1.0",
-    "@testing-library/jest-dom": "^5.16.5",
+    "@cypress/react18": "^2.0.1",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "cypress": "^13.15.2",
     "lodash": "^4.17.21",
     "query-string": "^8.1.0",
     "react": "^18.2.0",
@@ -31,8 +32,7 @@
   },
   "eslintConfig": {
     "extends": [
-      "react-app",
-      "react-app/jest"
+      "react-app"
     ]
   },
   "browserslist": {

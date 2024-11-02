@@ -5,9 +5,7 @@ import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/c
 import {
     CPUTemperatureIcon,
     DarkModeToggle,
-    HELP_VIEWER_URI,
     HotspotStatusIcon,
-    NAME,
     SystemLoadIcon,
     useLocalStorage
 } from "./Common";
@@ -15,6 +13,7 @@ import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
 import {Icon} from "./Theme";
+import {HELP_VIEWER_URI, NAME} from "./Vars";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},

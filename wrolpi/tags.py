@@ -13,6 +13,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs, get_db_session
+from wrolpi.downloader import save_downloads_config
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict, NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
@@ -182,6 +183,25 @@ class Tag(ModelHelper, Base):
         from modules.videos.errors import ChannelDirectoryConflict
 
         async def _():
+            # Rename old name referenced in any Downloads.
+            from wrolpi.downloader import Download
+            to_flush = list()
+            for download in session.query(Download):
+                if download.tag_names:
+                    download.tag_names = [i if i != old_name else name for i in download.tag_names]
+                    to_flush.append(download)
+                if download.settings and 'channel_tag_name' in download.settings:
+                    settings = download.settings
+                    tag_name = settings.pop('channel_tag_name')
+                    tag_name = [i for i in tag_name if i != old_name]
+                    settings['channel_tag_name'] = tag_name
+                    download.settings = settings
+                    to_flush.append(download)
+
+            if to_flush:
+                session.flush(to_flush)
+                save_downloads_config.activate_switch()
+
             for channel in self.channels:
                 channel: Channel
                 possible_directory = channel.format_directory(old_name)
@@ -212,8 +232,22 @@ class Tag(ModelHelper, Base):
         if self.has_relations():
             raise UsedTag(f'Cannot delete {self.name} it is used')
 
+        name = self.name
+
         session = Session.object_session(self)
         session.delete(self)
+
+        # Remove any Download references.
+        from wrolpi.downloader import Download
+        to_flush = list()
+        for download in session.query(Download):
+            if download.tag_names:
+                download.tag_names = [i for i in download.tag_names if i != name]
+                to_flush.append(download)
+        if to_flush:
+            session.flush(to_flush)
+            save_downloads_config.activate_switch()
+
         session.commit()
 
         save_tags_config.activate_switch()
@@ -395,6 +429,7 @@ class TagsConfig(ConfigFile):
                                 logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
                                 tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag,
                                                    file_group=file_group)
+                                tag_files[(tag_file.tag_id, tag_file.file_group_id)] = tag_file
                                 session.add(tag_file)
                                 tag_file.flush()
                             tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()

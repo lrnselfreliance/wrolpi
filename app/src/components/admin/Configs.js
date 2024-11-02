@@ -1,17 +1,7 @@
-import {useConfigs} from "../../hooks/customHooks";
-import {APIButton, PageContainer} from "../Common";
-import {Header, Icon, Popup, Table} from "../Theme";
+import {APIButton} from "../Common";
+import {Icon, Table} from "../Theme";
 import React from "react";
-import {
-    Grid,
-    GridColumn,
-    GridRow,
-    TableBody,
-    TableCell,
-    TableHeader,
-    TableHeaderCell,
-    TableRow
-} from "semantic-ui-react";
+import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {TableRowPlaceholder} from "../Placeholder";
 import {useNavigate} from "react-router-dom";
 

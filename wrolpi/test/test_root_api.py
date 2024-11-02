@@ -398,7 +398,7 @@ async def test_retry_downloads(test_session, async_client, test_wrolpi_config, a
         dict(url='https://example.com/3', status='new', attempts=0),  # deferred is retried.
         dict(url='https://example.com/4', status='new', attempts=1),  # new does not need to be retried.
         dict(url='https://example.com/5', status='failed', attempts=1),  # failed has been given up on.
-        dict(url='https://example.com/6', status='failed', frequency=60, attempts=1,),  # recurring is always retried.
+        dict(url='https://example.com/6', status='failed', frequency=60, attempts=1, ),  # recurring is always retried.
         dict(url='https://example.com/7', status='complete', frequency=60, attempts=1),  # recurring is always retried.
     ])
 
@@ -417,6 +417,7 @@ async def test_get_status(async_client, test_session):
     assert isinstance(response.json.get('version'), str), 'version should be a str'
     assert isinstance(response.json.get('memory_stats'), dict), 'memory_stats should be a dict'
     assert isinstance(response.json.get('flags'), dict), 'flags should be a dict'
+    assert isinstance(response.json.get('sanic_workers'), dict), 'Sanic worker status should be a dict'
 
 
 @pytest.mark.asyncio
@@ -511,6 +512,33 @@ async def test_restart_download(test_session, async_client, test_download_manage
     await test_download_manager.wait_for_all_downloads()
     download = test_session.query(Download).one()
     assert download.is_deferred, download.status
+
+
+@pytest.mark.asyncio
+async def test_put_download(test_session, async_client, test_download_manager, test_downloader, channel_factory):
+    """A Download can be updated using a PUT request."""
+    channel = channel_factory()
+    download = test_download_manager.create_download('https://example.com', test_downloader.name)
+    assert not download.settings
+
+    body = dict(
+        downloader=test_downloader.name,
+        urls=['https://example.com/new-url'],  # URL can be changed.
+        settings=dict(channel_id=channel.id),
+    )
+    request, response = await async_client.put(f'/api/download/{download.id}', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(Download).count() == 1, 'Download should have been updated'
+    download = test_session.query(Download).one()
+    assert download.url == 'https://example.com/new-url', 'Download URL was not changed'
+    assert download.settings == dict(channel_id=channel.id), 'Download settings were not changed'
+
+    # Settings can be cleared by sending `None`
+    body['settings'] = None
+    request, response = await async_client.put(f'/api/download/{download.id}', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    download = test_session.query(Download).one()
+    assert download.settings == dict(), 'Download settings were not changed'
 
 
 def test_get_global_statistics(test_session, test_client):

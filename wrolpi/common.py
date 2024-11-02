@@ -1,6 +1,7 @@
 import asyncio
 import atexit
 import contextlib
+import functools
 import inspect
 import json
 import logging
@@ -40,7 +41,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig
+from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig, \
+    ValidationError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
 
 LOGGING_CONFIG = {
@@ -365,8 +367,8 @@ class ConfigFile:
         from wrolpi.switches import register_switch_handler
 
         @register_switch_handler(f'background_save_{self.file_name}')
-        def background_save():
-            self.save()
+        def background_save(overwrite: bool = False):
+            self.save(overwrite=overwrite)
 
         self.background_save = background_save
 
@@ -379,7 +381,7 @@ class ConfigFile:
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
 
-    def __json__(self) -> dict:
+    def config_status(self) -> dict:
         d = dict(
             file_name=self.file_name,
             rel_path=get_relative_to_media_directory(self.get_file()),
@@ -387,6 +389,9 @@ class ConfigFile:
             valid=self.is_valid(),
         )
         return d
+
+    def __json__(self) -> dict:
+        return dict(self._config)
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
@@ -414,7 +419,7 @@ class ConfigFile:
         from wrolpi.api_utils import api_app
         api_app.shared_ctx.configs_imported[self.file_name] = value
 
-    def read_config_file(self, file: pathlib.Path = None) -> Dict:
+    def read_config_file(self, file: pathlib.Path = None) -> dict:
         file = file or self.get_file()
         with file.open('rt') as fh:
             config_data = yaml.load(fh, Loader=yaml.Loader)
@@ -539,13 +544,16 @@ class ConfigFile:
         # Copy the data as-is by default.  Other classes will overwrite this and dump the database before saving.
         self.save(file, send_events, overwrite)
 
-    def update(self, config: dict):
+    def update(self, config: dict, overwrite: bool = False):
         """Update any values of this config.  Save the config to its file."""
         from wrolpi.api_utils import api_app
+        if not self.validate(config):
+            raise ValidationError(f'Invalid config: {config}')
+
         with api_app.shared_ctx.config_update_lock:
             config = {k: v for k, v in config.items() if k in self._config}
             self._config.update(config)
-        self.background_save.activate_switch()
+        self.background_save.activate_switch(context={'overwrite': overwrite})
 
     def dict(self) -> dict:
         """Get a deepcopy of this config."""
@@ -553,6 +561,21 @@ class ConfigFile:
             raise NotImplementedError('You cannot use a global config while testing!')
 
         return deepcopy(self._config)
+
+    def validate(self, config: dict) -> bool:
+        allowed_fields = {i.name for i in fields(self.validator)}
+        try:
+            # Remove keys no longer in the config.
+            config_items = config.items()
+            extra_items = {k: v for k, v in config_items if k not in allowed_fields}
+            if extra_items:
+                logger.error(f'Invalid config items: {extra_items}')
+            config = {k: v for k, v in config_items if k in allowed_fields}
+            self.validator(**config)
+            return True
+        except Exception as e:
+            logger.debug(f'Failed to validate config', exc_info=e)
+            return False
 
     def is_valid(self, file: pathlib.Path = None) -> bool:
         if not self.validator:
@@ -562,19 +585,12 @@ class ConfigFile:
         if not file.is_file():
             return False
 
-        allowed_fields = {i.name for i in fields(self.validator)}
         try:
-            # Remove keys no longer in the config.
-            config_items = self.read_config_file(file).items()
-            extra_items = {k: v for k, v in config_items if k not in allowed_fields}
-            if extra_items:
-                logger.error(f'Invalid config items ({get_relative_to_media_directory(file)}): {extra_items}')
-            config = {k: v for k, v in config_items if k in allowed_fields}
-            self.validator(**config)
-            return True
-        except Exception as e:
-            logger.debug(f'Failed to validate config: {file}', exc_info=e)
+            config_data = self.read_config_file(file)
+        except InvalidConfig:
             return False
+
+        return self.validate(config_data)
 
     # `version` is used to prevent overwriting of newer configs.  Cannot not be modified directly.
 
@@ -1007,7 +1023,7 @@ def check_media_directory():
     return result
 
 
-def get_absolute_media_path(path: str) -> Path:
+def get_absolute_media_path(path: str | Path) -> Path:
     """
     Get the absolute path of file/directory within the config media directory.
 
@@ -1053,7 +1069,7 @@ def make_media_directory(path: Union[str, Path]):
     path.mkdir(parents=True)
 
 
-def extract_domain(url):
+def extract_domain(url: str) -> str:
     """
     Extract the domain from a URL.  Remove leading www.
 
@@ -2152,3 +2168,23 @@ def unique_by_predicate(
         return unique_items
     # Return the same type as the provided iterable
     return iterable.__class__(unique_items)
+
+
+def cached_multiprocessing_result(func: callable):
+    """Simple multiprocessing results cacher which uses the args/kwargs of the wrapped function as the caching key.
+
+    @warning: Asumes the wrapped function is async.
+    """
+
+    @functools.wraps(func)
+    async def wrapped(*args, **kwargs):
+        from wrolpi.api_utils import api_app
+        key = (func.__name__, *args, *tuple(kwargs.items()))
+        if result := api_app.shared_ctx.cache.get(key):
+            return result
+
+        result = await func(*args, **kwargs)
+        api_app.shared_ctx.cache[key] = result
+        return result
+
+    return wrapped

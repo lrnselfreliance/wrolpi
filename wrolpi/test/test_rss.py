@@ -5,7 +5,7 @@ import mock
 import pytest
 
 from wrolpi.db import optional_session
-from wrolpi.downloader import Download, DownloadResult, RSSDownloader, Downloader, DownloadManager
+from wrolpi.downloader import Download, DownloadResult, Downloader, DownloadManager, RSSDownloader
 
 
 class RSSHTTPDownloader(Downloader):
@@ -85,6 +85,8 @@ async def test_rss_no_entries(test_session, test_download_manager):
     """An RSS feed with no entries is handled."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
 
     with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
         mock_parse_feed.return_value = dict(bozo=0, )  # missing `entries`
@@ -95,3 +97,30 @@ async def test_rss_no_entries(test_session, test_download_manager):
     (download,) = test_download_manager.get_downloads(test_session)
     assert download.is_deferred
     assert 'entries' in download.error
+
+
+@pytest.mark.asyncio
+async def test_rss_downloader_filter_titles(test_session):
+    rss_downloader = RSSDownloader()
+
+    entries = [
+        dict(link='https://example.com/a', title='A'), # Case should be ignored.
+        dict(link='https://example.com/b', title='b'),
+        dict(link='https://example.com/c', title='c'),
+    ]
+
+    download = Download(url='https://example.com/feed', settings=dict(title_include='a'))
+    assert rss_downloader.filter_entries(download, entries) == [
+        dict(link='https://example.com/a', title='A'),
+    ]
+
+    download = Download(url='https://example.com/feed', settings=dict(title_include='b'))
+    assert rss_downloader.filter_entries(download, entries) == [
+        dict(link='https://example.com/b', title='b'),
+    ]
+
+    download = Download(url='https://example.com/feed', settings=dict(title_exclude='C'))
+    assert rss_downloader.filter_entries(download, entries) == [
+        dict(link='https://example.com/a', title='A'),
+        dict(link='https://example.com/b', title='b'),
+    ]

@@ -21,7 +21,8 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
-import {HELP_VIEWER_URI, IframeViewer} from "./components/Common";
+import {IframeViewer} from "./components/Common";
+import {HELP_VIEWER_URI} from "./components/Vars";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);

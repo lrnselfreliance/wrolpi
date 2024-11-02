@@ -32,7 +32,7 @@ function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {status} = useContext(StatusContext);
 
-    if (!status || !'flags' in status || _.isEmpty(status['flags'])) {
+    if (_.isEmpty(status?.flags)) {
         return <></>
     }
 

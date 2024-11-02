@@ -1,5 +1,6 @@
 import React, {useContext, useEffect, useRef, useState} from "react";
 import {
+    createChannel,
     fetchDecoded,
     fetchDomains,
     fetchFilesProgress,
@@ -27,6 +28,7 @@ import {
     searchZim,
     setHotspot,
     setThrottle,
+    updateChannel,
 } from "../api";
 import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
@@ -35,6 +37,7 @@ import {toast} from "react-semantic-toasts-2";
 import {useSearch} from "../components/Search";
 import _ from "lodash";
 import {TagsSelector} from "../Tags";
+import {useForm} from "./useForm";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -424,51 +427,55 @@ export const useChannel = (channel_id) => {
         name: '',
         directory: '',
         url: '',
-        download_frequency: '',
-        match_regex: '',
         tag_name: null,
     };
-    const [ready, setReady] = useState(false);
-    const [channel, setChannel] = useState(emptyChannel);
-    const [original, setOriginal] = useState({});
 
-    const localGetChannel = async () => {
+    const fetchChannel = async () => {
+        if (!channel_id) {
+            console.debug('Not fetching channel because no channel_id is provided');
+            return;
+        }
+        const c = await getChannel(channel_id);
+        // Prevent controlled to uncontrolled.
+        c['url'] = c['url'] || '';
+        c['download_frequency'] = c['download_frequency'] || '';
+        c['match_regex'] = c['match_regex'] || '';
+        return c;
+    }
+
+    const submitChannel = async () => {
+        const body = {
+            name: form.formData.name,
+            directory: form.formData.directory,
+            url: form.formData.url,
+        };
+
         if (channel_id) {
-            try {
-                const c = await getChannel(channel_id);
-                // Prevent controlled to uncontrolled.
-                c['url'] = c['url'] || '';
-                c['download_frequency'] = c['download_frequency'] || '';
-                c['match_regex'] = c['match_regex'] || '';
-                setChannel(c);
-                setOriginal(c);
-                setReady(true);
-            } catch (e) {
-                setReady(false);
-                console.error(e);
-                toast({
-                    type: 'error',
-                    title: 'Unexpected server response',
-                    description: 'Could not get Channel',
-                    time: 5000,
-                });
-            }
+            // Can create a Channel with a Tag.
+            body.tag_name = form.formData.tag_name;
+            return await createChannel(body);
         } else {
-            setChannel(emptyChannel);
+            return await updateChannel(channel_id, body);
         }
     }
 
-    useEffect(() => {
-        localGetChannel();
+    const form = useForm({
+        fetcher: fetchChannel,
+        emptyFormData: emptyChannel,
+        clearOnSuccess: false,
+        submitter: submitChannel
+    });
+
+    React.useEffect(() => {
+        // Channel may be gotten from Video data, fetch the Channel again.
+        form.fetcher();
     }, [channel_id]);
 
-    const changeValue = (name, value) => {
-        const newChannel = {...channel, [name]: value};
-        console.debug('useChannel.changeValue', newChannel);
-        setChannel(newChannel);
-    }
-
-    return {channel, changeValue, original, ready, fetchChannel: localGetChannel};
+    return {
+        channel: form.formData,
+        form,
+        fetchChannel,
+    };
 }
 
 export const useChannels = () => {

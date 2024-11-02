@@ -1,6 +1,6 @@
 import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
-import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Input, Label, TableCell, TableRow,} from "semantic-ui-react";
+import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {APIButton, contrastingColor, ErrorMessage, fuzzyMatch, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
@@ -75,7 +75,6 @@ export function useTags() {
     }
 
     const NameToTagLabel = ({name, to, ...props}) => {
-        const defaultTag = <Label size='large'>{name}</Label>;
         const tag = findTagByName(name);
         if (tag !== null && tag !== undefined) {
             const tagColor = tag['color'] || DEFAULT_TAG_COLOR;
@@ -92,7 +91,7 @@ export function useTags() {
         }
 
         // No tags have been fetched.
-        return defaultTag;
+        return <Label size='large'>{name}</Label>;
     }
 
     const TagsGroup = ({tagNames, onClick}) => {
@@ -326,7 +325,9 @@ export function AddTagsButton({
                                   onAdd = _.noop,
                                   onRemove = _.noop,
                                   onChange = _.noop,  // Expects to send: (tagNames, anyTag)
+                                  closeAfterLimit = true,
                                   limit = null,
+                                  disabled = false,
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
 
@@ -347,13 +348,16 @@ export function AddTagsButton({
     const addTag = (name) => {
         setLoading(true);
         try {
-            const newTags = [...localTags, name];
+            const newTags = [...(localTags || []), name];
             if (limit !== null && newTags.length > limit) {
                 return;
             }
             setLocalTags(newTags);
             onAdd(name);
             onChange(newTags, null);
+            if (closeAfterLimit && newTags && limit && newTags.length >= limit) {
+                setOpen(false);
+            }
         } finally {
             setLoading(false);
         }
@@ -399,6 +403,8 @@ export function AddTagsButton({
             icon={active ? 'tags' : 'tag'}
             color={active ? 'violet' : undefined}
             onClick={handleOpen}
+            type="button"
+            disabled={disabled}
         />
         <Modal closeIcon
                open={open}
@@ -443,7 +449,9 @@ export const TagsSelector = ({
                                  onAdd = _.noop,
                                  onRemove = _.noop,
                                  onChange = _.noop,
+                                 closeAfterLimit = true,
                                  limit = null,
+                                 disabled = false,
                              }) => {
     // Provides a button to add tags to a list.  Displays the tags of that list.
     const {TagsLinkGroup} = React.useContext(TagsContext);
@@ -460,15 +468,17 @@ export const TagsSelector = ({
         onAdd={onAdd}
         onRemove={onRemove}
         onChange={onChange}
+        closeAfterLimit={closeAfterLimit}
         anyTag={anyTag}
         limit={limit}
+        disabled={disabled}
     />;
 
     if (hideGroup) {
         return button;
     }
 
-    return <Grid>
+    return <Grid columns={2}>
         <Grid.Row>
             <Grid.Column mobile={2} computer={1}>
                 {button}

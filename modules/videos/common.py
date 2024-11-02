@@ -147,7 +147,7 @@ def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
         path = Path(fh.name)
         path.unlink()
         try:
-            seconds = seconds or get_video_duration(video_path) - 5
+            seconds = seconds or extract_video_duration(video_path) - 5
             ffmpeg_poster(video_path, path, seconds)
             return True
         except subprocess.CalledProcessError:
@@ -243,7 +243,7 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
     return content
 
 
-def get_video_duration(video_path: Path) -> Optional[int]:
+def extract_video_duration(video_path: Path) -> Optional[int]:
     """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):
         video_path = Path(video_path)

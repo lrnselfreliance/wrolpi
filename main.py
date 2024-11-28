@@ -11,13 +11,14 @@ from sanic.signals import Event
 
 from modules.inventory import init_inventory
 from modules.inventory.common import import_inventories_config
-from modules.videos.lib import import_channels_config
+from modules.videos.lib import import_channels_config, get_videos_downloader_config
 from wrolpi import flags, admin
 from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
-    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled
+    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
+    initialize_config_files
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager
@@ -170,6 +171,13 @@ async def main_process_startup(app: Sanic):
     attach_shared_contexts(app)
     logger.debug('main_process_startup done')
 
+    download_manager.disable()
+
+    try:
+        initialize_config_files()
+    except Exception as e:
+        logger.error('Failed to initialize config files', exc_info=e)
+
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
 async def initialize_configs(app: Sanic):
@@ -214,9 +222,6 @@ async def start_single_tasks(app: Sanic):
 
     logger.debug(f'start_single_tasks started')
 
-    # Do not start downloads until configs have been imported.
-    download_manager.disable()
-
     # Import configs, ignore errors so the service will start.  Configs will refuse to save if they failed to import.
     with suppress(Exception):
         get_wrolpi_config().import_config()
@@ -224,6 +229,9 @@ async def start_single_tasks(app: Sanic):
     with suppress(Exception):
         tags.import_tags_config()
         logger.debug('tags config imported')
+    with suppress(Exception):
+        get_videos_downloader_config().import_config()
+        logger.debug('videos downloader config imported')
     with suppress(Exception):
         await import_downloads_config()
         logger.debug('downloads config imported')
@@ -236,9 +244,6 @@ async def start_single_tasks(app: Sanic):
         logger.debug('inventories config imported')
     with suppress(Exception):
         init_inventory()
-
-    if get_wrolpi_config().download_on_startup:
-        await download_manager.enable()
 
     from modules.zim.lib import flag_outdated_zim_files
     try:
@@ -253,6 +258,9 @@ async def start_single_tasks(app: Sanic):
     if flags.refresh_complete.is_set():
         # Set all downloads to new.
         download_manager.retry_downloads()
+
+    if get_wrolpi_config().download_on_startup:
+        await download_manager.enable()
 
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED:

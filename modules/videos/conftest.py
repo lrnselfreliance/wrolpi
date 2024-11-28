@@ -179,9 +179,9 @@ def test_channels_config(test_directory):
 
 
 @pytest.fixture
-def test_downloader_config(test_directory):
+def test_videos_downloader_config(test_directory):
     (test_directory / 'config').mkdir(exist_ok=True)
-    config_path = test_directory / 'config/downloader.yaml'
+    config_path = test_directory / 'config/videos_downloader.yaml'
     set_test_downloader_config(True)
     yield config_path
     set_test_downloader_config(False)

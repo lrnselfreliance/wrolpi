@@ -270,9 +270,9 @@ async def test_format_videos_destination(async_client, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_video_downloader_config_api(async_client, test_directory):
-    config = lib.get_downloader_config()
-    assert config.video_resolutions == ['1080p', '720p', '480p', '360p', 'maximum']
+async def test_videos_downloader_config_api(async_client, test_directory, test_videos_downloader_config):
+    config = lib.get_videos_downloader_config()
+    assert config.video_resolutions == ['1080p', '720p', '480p', 'maximum']
 
     request, response = await async_client.get('/api/config/videos_downloader.yaml')
     assert response.status == HTTPStatus.OK
@@ -283,7 +283,7 @@ async def test_video_downloader_config_api(async_client, test_directory):
     request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
     assert response.status == HTTPStatus.NO_CONTENT
 
-    config = lib.get_downloader_config()
+    config = lib.get_videos_downloader_config()
     assert config.video_resolutions == ['720p', 'maximum']
     assert (test_directory / 'config/videos_downloader.yaml').is_file()
     assert config.is_valid()

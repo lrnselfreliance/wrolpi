@@ -1056,3 +1056,58 @@ async def test_cached_multiprocessing_result(async_client):
     # Kwargs are supported
     assert await func(inc=1) == 4
     assert await func(inc=1) == 4
+
+
+@pytest.mark.asyncio
+async def test_initialize_config_files(async_client, test_session, test_directory, test_wrolpi_config,
+                                       test_channels_config, test_tags_config, test_videos_downloader_config,
+                                       test_download_manager_config, simple_channel, test_inventory, tag_factory,
+                                       test_download_manager, test_downloader):
+    """Config files should only be created if they are missing, and they will not overwrite existing entries in the DB."""
+    from modules.videos.lib import get_videos_downloader_config, get_channels_config
+    from wrolpi.tags import get_tags_config
+    from wrolpi.downloader import get_download_manager_config
+    from modules.inventory.common import get_inventories_config
+
+    # Create some DB entries so the configs will not be imported.
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    download = test_download_manager.create_download('https://example.com', downloader_name=test_downloader.name)
+    test_session.commit()
+    # Write some config files, they should not be re-created.
+    get_wrolpi_config().get_file().write_text('wrolpi')
+    get_videos_downloader_config().get_file().write_text('video downloader')
+
+    assert common.initialize_config_files() == [], 'No configs should have been created.'
+    # Config files were not overwritten with real configs.
+    assert get_wrolpi_config().get_file().read_text() == 'wrolpi'
+    assert get_videos_downloader_config().get_file().read_text() == 'video downloader'
+
+    # WROLPi config can be created because it is now missing.
+    get_wrolpi_config().get_file().unlink()
+    assert common.initialize_config_files() == ['wrolpi.yaml'], 'WROLPi config should have been created.'
+    assert get_wrolpi_config().is_valid()
+
+    # Videos Downloader config can be created because it is now missing.
+    get_videos_downloader_config().get_file().unlink()
+    assert common.initialize_config_files() == ['videos_downloader.yaml'], \
+        'Videos Downloader config should have been created.'
+    assert get_videos_downloader_config().is_valid()
+
+    # Channels config file does not exist, no conflicting Channels so the file is created.
+    simple_channel.delete_with_videos()
+    assert common.initialize_config_files() == ['channels.yaml'], 'Channels config should have been created.'
+    assert get_channels_config().is_valid()
+
+    tag1.delete()
+    tag2.delete()
+    assert common.initialize_config_files() == ['tags.yaml'], 'Tags config should have been created.'
+    assert get_tags_config().is_valid()
+
+    download.delete()
+    assert common.initialize_config_files() == ['download_manager.yaml'], \
+        'Download Manager config should have been created.'
+    assert get_download_manager_config().is_valid()
+
+    test_session.delete(test_inventory)
+    assert common.initialize_config_files() == ['inventories.yaml'], 'Inventory config should have been created.'
+    assert get_inventories_config().is_valid()

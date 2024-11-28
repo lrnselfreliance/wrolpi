@@ -24,7 +24,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.inventories_config = manager.dict()
     app.shared_ctx.channels_config = manager.dict()
     app.shared_ctx.download_manager_config = manager.dict()
-    app.shared_ctx.video_downloader_config = manager.dict()
+    app.shared_ctx.videos_downloader_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.refresh = manager.dict()
     app.shared_ctx.uploaded_files = manager.dict()
@@ -74,7 +74,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.inventories_config.clear()
     app.shared_ctx.channels_config.clear()
     app.shared_ctx.download_manager_config.clear()
-    app.shared_ctx.video_downloader_config.clear()
+    app.shared_ctx.videos_downloader_config.clear()
     # Shared dicts.
     app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
@@ -119,13 +119,13 @@ def initialize_configs_contexts(app: Sanic):
     """Assign multiprocessing Dicts to their respective FileConfigs in this process."""
     from modules.inventory.common import INVENTORIES_CONFIG
     from modules.videos.lib import CHANNELS_CONFIG
-    from modules.videos.lib import VIDEO_DOWNLOADER_CONFIG
+    from modules.videos.lib import VIDEOS_DOWNLOADER_CONFIG
     from wrolpi.common import WROLPI_CONFIG
     from wrolpi.tags import TAGS_CONFIG
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
     INVENTORIES_CONFIG.initialize(app.shared_ctx.inventories_config)
     CHANNELS_CONFIG.initialize(app.shared_ctx.channels_config)
-    VIDEO_DOWNLOADER_CONFIG.initialize(app.shared_ctx.video_downloader_config)
+    VIDEOS_DOWNLOADER_CONFIG.initialize(app.shared_ctx.videos_downloader_config)
     WROLPI_CONFIG.initialize(app.shared_ctx.wrolpi_config)
     TAGS_CONFIG.initialize(app.shared_ctx.tags_config)
     DOWNLOAD_MANAGER_CONFIG.initialize(app.shared_ctx.download_manager_config)

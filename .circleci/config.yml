@@ -145,7 +145,7 @@ jobs:
   react-app-cypress-components-chrome:
     docker:
       - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: small
+    resource_class: medium
     steps:
       - checkout
       - restore_cache:
@@ -165,7 +165,7 @@ jobs:
   react-app-cypress-components-firefox:
     docker:
       - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: small
+    resource_class: medium
     steps:
       - checkout
       - restore_cache:
@@ -185,7 +185,7 @@ jobs:
   react-app-cypress-components-edge:
     docker:
       - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: small
+    resource_class: medium
     steps:
       - checkout
       - restore_cache:

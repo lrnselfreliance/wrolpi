@@ -1,7 +1,7 @@
 import React from "react";
 import {ChannelPage} from "./Channels";
 
-describe(' Channels Page', () => {
+describe('Channels Page', () => {
     beforeEach(() => {
         // Do not return directories for these tests.
         cy.intercept('POST', '**/api/files/search_directories', {

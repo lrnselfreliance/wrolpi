@@ -358,7 +358,7 @@ class VideoDownloaderConfigYtDlpOptionsValidator:
 
 @dataclass
 class VideoDownloaderConfigValidator:
-    video_resolutions: List[str] = field(default_factory=lambda: ['1080p', '720p', '480p', '360p', 'maximum'])
+    video_resolutions: List[str] = field(default_factory=lambda: ['1080p', '720p', '480p', 'maximum'])
     version: int = None
     yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
 
@@ -366,7 +366,7 @@ class VideoDownloaderConfigValidator:
 class VideoDownloaderConfig(ConfigFile):
     file_name = 'videos_downloader.yaml'
     default_config = dict(
-        video_resolutions=['1080p', '720p', '480p', '360p', 'maximum'],
+        video_resolutions=['1080p', '720p', '480p', 'maximum'],
         version=0,
         yt_dlp_options=dict(
             continue_dl=True,
@@ -439,23 +439,27 @@ class VideoDownloaderConfig(ConfigFile):
     def yt_dlp_options(self, value: dict):
         self.update({'yt_dlp_options': value})
 
+    def import_config(self, file: pathlib.Path = None, send_events=False):
+        super().import_config(file, send_events)
+        self.successful_import = True
 
-VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig()
-TEST_VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = None
+
+VIDEOS_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig()
+TEST_VIDEOS_DOWNLOADER_CONFIG: VideoDownloaderConfig = None
 
 
-def get_downloader_config() -> VideoDownloaderConfig:
-    global TEST_VIDEO_DOWNLOADER_CONFIG
-    if isinstance(TEST_VIDEO_DOWNLOADER_CONFIG, VideoDownloaderConfig):
-        return TEST_VIDEO_DOWNLOADER_CONFIG
+def get_videos_downloader_config() -> VideoDownloaderConfig:
+    global TEST_VIDEOS_DOWNLOADER_CONFIG
+    if isinstance(TEST_VIDEOS_DOWNLOADER_CONFIG, VideoDownloaderConfig):
+        return TEST_VIDEOS_DOWNLOADER_CONFIG
 
-    global VIDEO_DOWNLOADER_CONFIG
-    return VIDEO_DOWNLOADER_CONFIG
+    global VIDEOS_DOWNLOADER_CONFIG
+    return VIDEOS_DOWNLOADER_CONFIG
 
 
 def set_test_downloader_config(enabled: bool):
-    global TEST_VIDEO_DOWNLOADER_CONFIG
-    TEST_VIDEO_DOWNLOADER_CONFIG = VideoDownloaderConfig() if enabled else None
+    global TEST_VIDEOS_DOWNLOADER_CONFIG
+    TEST_VIDEOS_DOWNLOADER_CONFIG = VideoDownloaderConfig() if enabled else None
 
 
 def get_channels_config_from_db(session: Session) -> dict:

@@ -348,7 +348,7 @@ def test_zim_download_url_to_name(url, expected):
 
 
 @pytest.mark.asyncio
-async def test_zim_subscription_download_import(test_session, test_downloader_config):
+async def test_zim_subscription_download_import(async_client, test_session):
     # Subscription creates a ZimSubscription and Download
     await lib.subscribe('Wikisource', 'en', session=test_session)
     # Add a once-download.  This should not be associated with a ZimSubscription.

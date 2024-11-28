@@ -637,8 +637,8 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if inventories_config := get_inventories_config():
         all_configs[inventories_config.file_name] = inventories_config
 
-    from modules.videos.lib import get_downloader_config
-    if videos_downloader_config := get_downloader_config():
+    from modules.videos.lib import get_videos_downloader_config
+    if videos_downloader_config := get_videos_downloader_config():
         all_configs[videos_downloader_config.file_name] = videos_downloader_config
 
     from wrolpi.downloader import get_download_manager_config
@@ -705,10 +705,10 @@ class WROLPiConfig(ConfigFile):
             super().import_config(file)
 
             # Destinations cannot be empty.
-            self.archive_destination = self.archive_destination or self.default_config['archive_destination']
-            self.map_destination = self.map_destination or self.default_config['map_destination']
-            self.videos_destination = self.videos_destination or self.default_config['videos_destination']
-            self.zims_destination = self.zims_destination or self.default_config['zims_destination']
+            self._config['archive_destination'] = self.archive_destination or self.default_config['archive_destination']
+            self._config['map_destination'] = self.map_destination or self.default_config['map_destination']
+            self._config['videos_destination'] = self.videos_destination or self.default_config['videos_destination']
+            self._config['zims_destination'] = self.zims_destination or self.default_config['zims_destination']
 
             self.successful_import = True
         except Exception as e:
@@ -2188,3 +2188,53 @@ def cached_multiprocessing_result(func: callable):
         return result
 
     return wrapped
+
+
+def initialize_config_files() -> list[str]:
+    """Creates config files only if they do not exist and will not conflict with the DB."""
+    from modules.inventory.common import get_inventories_config
+    from modules.videos.lib import get_channels_config, get_videos_downloader_config
+    from wrolpi.downloader import get_download_manager_config
+    from wrolpi.tags import get_tags_config
+    from wrolpi.db import get_db_session
+
+    created = []  # The names of the configs that are created.
+
+    if not get_wrolpi_config().get_file().is_file():
+        get_wrolpi_config().save(overwrite=True)
+        created.append(get_wrolpi_config().get_file().name)
+
+    with get_db_session() as session:
+        if not get_channels_config().get_file().is_file():
+            from modules.videos.models import Channel
+            if session.query(Channel).count() == 0:
+                # No Channels will be deleted, create the empty Channels config file.
+                get_channels_config().save(overwrite=True)
+                created.append(get_channels_config().get_file().name)
+
+        if not get_tags_config().get_file().is_file():
+            from wrolpi.tags import Tag
+            if session.query(Tag).count() == 0:
+                # No Tags will be deleted, create the empty Tags config file.
+                get_tags_config().save(overwrite=True)
+                created.append(get_tags_config().get_file().name)
+
+        if not get_download_manager_config().get_file().is_file():
+            from wrolpi.downloader import Download
+            if session.query(Download).count() == 0:
+                # No Downloads will be deleted, create the empty Download Manager config file.
+                get_download_manager_config().save(overwrite=True)
+                created.append(get_download_manager_config().get_file().name)
+
+        if not get_videos_downloader_config().get_file().is_file():
+            get_videos_downloader_config().save(overwrite=True)
+            created.append(get_videos_downloader_config().get_file().name)
+
+        if not get_inventories_config().get_file().is_file():
+            from modules.inventory.models import Inventory
+            if session.query(Inventory).count() == 0:
+                # No Inventories will be deleted, create the empty Inventory config file.
+                get_inventories_config().save(overwrite=True)
+                created.append(get_inventories_config().get_file().name)
+
+    return created

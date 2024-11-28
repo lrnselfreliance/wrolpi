@@ -30,7 +30,7 @@ from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
 from .errors import UnknownChannel
-from .lib import get_downloader_config, YDL, ydl_logger, format_videos_destination
+from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
@@ -348,7 +348,7 @@ class VideoDownloader(Downloader, ABC):
         if tag_names and logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Downloading {url} with {tag_names=}')
 
-        config = get_downloader_config()
+        config = get_videos_downloader_config()
 
         logs = None  # noqa
         try:
@@ -573,7 +573,7 @@ class VideoDownloader(Downloader, ABC):
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
         # YoutubeDL expects specific options, add onto the default options
-        config = get_downloader_config()
+        config = get_videos_downloader_config()
         options = config.yt_dlp_options
         # yt-dlp expects the absolute path.
         options['outtmpl'] = f'{out_dir}/{config.file_name_format}'

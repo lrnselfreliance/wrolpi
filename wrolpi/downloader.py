@@ -709,8 +709,6 @@ class DownloadManager:
                 stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred'"
             curs.execute(stmt)
 
-        save_downloads_config.activate_switch()
-
     @optional_session
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """

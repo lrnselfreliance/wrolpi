@@ -57,7 +57,7 @@ describe('<ChannelDownloadForm/>', () => {
         cy.get('#url_input').should('have.attr', 'error');
     });
 
-    it('Can choose different options', () => {
+    it('can choose different options', () => {
         cy.get('#download_frequency_selector').click()
             .get('.item').contains('Once').click();
         cy.get('#download_frequency_selector').click()

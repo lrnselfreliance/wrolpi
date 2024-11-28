@@ -20,6 +20,13 @@ import {QueryProvider} from "../../src/hooks/customHooks";
 import {TagsProvider} from "../../src/Tags";
 import React from "react";
 
+Cypress.on('uncaught:exception', (err, runnable) => {
+    if (err.message.includes('ChunkLoadError')) {
+        return false; // Ignore this error which happens after CircleCI tests.
+    }
+    // Otherwise, fail like normal
+    return true;
+});
 
 Cypress.Commands.add('mountWithRouter', (component, options) => {
     options = options || {};

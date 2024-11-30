@@ -1607,7 +1607,7 @@ export function WarningMessage({children, size = null, icon = 'exclamation'}) {
 }
 
 export function ErrorMessage({children, size = null, icon = 'exclamation'}) {
-    return <Message error icon size={size}>
+    return <Message negative icon size={size}>
         <SIcon name={icon}/>
         <Message.Content>{children}</Message.Content>
     </Message>

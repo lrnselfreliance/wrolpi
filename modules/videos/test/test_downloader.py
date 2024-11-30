@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 
 from modules.videos.downloader import VideoDownloader, \
-    get_or_create_channel, channel_downloader, video_downloader
+    get_or_create_channel, channel_downloader, video_downloader, preview_filename
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory
 from wrolpi.downloader import Download, DownloadResult
@@ -494,3 +494,19 @@ async def test_channel_download_crud(test_session, async_client, assert_download
     assert download.settings['video_count_limit'] == 100
     assert download.settings['video_resolutions'] == ['1080p', '720p', '480p', '360p', 'maximum']
     assert download.settings['video_format'] == 'mp4'
+
+
+def test_preview_filename(test_directory, fake_now):
+    assert preview_filename('%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s') \
+           == 'WROLPi_20000101_Qz-FuenRylQ_The title of the video.mp4'
+    assert preview_filename('%(upload_date)s_%(id)s_%(title)s.%(ext)s') \
+           == '20000101_Qz-FuenRylQ_The title of the video.mp4'
+    assert preview_filename('%(upload_date)s_%(title)s.%(ext)s') \
+           == '20000101_The title of the video.mp4'
+    assert preview_filename('%(upload_date)s_%(description)s.%(ext)s') \
+           == '20000101_A description of the video.mp4'
+    assert preview_filename('%(timestamp)s_%(title)s.%(ext)s') \
+           == '946684800_The title of the video.mp4'
+
+    with pytest.raises(RuntimeError):
+        preview_filename('%(upload_date)s_%(title)s.asdf')

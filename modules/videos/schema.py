@@ -229,3 +229,8 @@ class CensoredVideoResponse:
 @dataclass
 class ChannelSearchRequest:
     tag_names: List[str] = field(default_factory=list)
+
+
+@dataclass
+class VideoFileFormatRequest:
+    video_file_format: str

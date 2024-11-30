@@ -139,7 +139,7 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
 
 
 @pytest.mark.asyncio
-async def test_orphaned_files(test_session, make_files_structure, test_directory, video_factory):
+async def test_orphaned_files(async_client, test_session, make_files_structure, test_directory, video_factory):
     # A Video without associated files is not orphaned.
     vid1 = video_factory(title='vid1', with_video_file=True)
     # The video files will be removed...
@@ -271,6 +271,7 @@ async def test_format_videos_destination(async_client, test_directory):
 
 @pytest.mark.asyncio
 async def test_videos_downloader_config_api(async_client, test_directory, test_videos_downloader_config):
+    # The WROLPi default resolutions.
     config = lib.get_videos_downloader_config()
     assert config.video_resolutions == ['1080p', '720p', '480p', 'maximum']
 
@@ -278,11 +279,12 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
     assert response.status == HTTPStatus.OK
     config = response.json['config']
 
+    # Change the `video_resolutions`
     config['video_resolutions'] = ['720p', 'maximum']
     body = dict(config=config)
     request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
     assert response.status == HTTPStatus.NO_CONTENT
-
+    # Config file was actually changed.
     config = lib.get_videos_downloader_config()
     assert config.video_resolutions == ['720p', 'maximum']
     assert (test_directory / 'config/videos_downloader.yaml').is_file()
@@ -290,3 +292,11 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
     contents = config.read_config_file()
     assert contents['video_resolutions'] == ['720p', 'maximum']
     assert '1080p' not in config.get_file().read_text()
+
+    # Cannot set invalid `file_name_format`.
+    config = lib.get_videos_downloader_config().dict()
+    config['yt_dlp_options']['file_name_format'] = 'invalid format'
+    body = dict(config=config)
+    request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert 'Invalid config' in response.json.get('error')

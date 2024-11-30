@@ -307,3 +307,21 @@ async def test_format_videos_description(async_client, test_session, test_direct
     request, response = await async_client.post('/api/videos/tag_info', json=body)
     assert response.status_code == HTTPStatus.OK
     assert response.json['videos_destination'] == 'videos/one/example.com/Channel Name'
+
+
+@pytest.mark.asyncio
+async def test_video_file_format(async_client, test_session, fake_now):
+    body = dict(video_file_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s')
+    request, response = await async_client.post('/api/videos/file_format', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['preview'] == 'WROLPi_20000101_Qz-FuenRylQ_The title of the video.mp4'
+
+    body = dict(video_file_format='%(upload_date)s_%(id)s_%(title)s.%(ext)s')
+    request, response = await async_client.post('/api/videos/file_format', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['preview'] == '20000101_Qz-FuenRylQ_The title of the video.mp4'
+
+    body = dict(video_file_format='%(upload_date)s_%(id)s_%(title)s')
+    request, response = await async_client.post('/api/videos/file_format', json=body)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json['error'] == 'Filename must end with .%(ext)s'

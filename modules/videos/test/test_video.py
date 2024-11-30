@@ -77,7 +77,7 @@ async def test_video_channel_refresh(async_client, test_session, test_directory,
 
 
 @pytest.mark.asyncio
-async def test_delete_duplicate_video(test_session, channel_factory, video_factory, tag_factory):
+async def test_delete_duplicate_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, and everything about the files matches, delete a random one."""
     channel = channel_factory(name='Channel Name')
     video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'

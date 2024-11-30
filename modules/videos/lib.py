@@ -44,6 +44,7 @@ class VideoInfoJSON:
     channel_url: str | None = None
     duration: int | None = None
     epoch: int | None = None
+    timestamp: datetime | None = None
     title: str | None = None
     upload_date: datetime | None = None
     url: str | None = None
@@ -62,11 +63,17 @@ def extract_video_info_json(video: Video) -> VideoInfoJSON:
         upload_date = dates.strpdate(i) if (i := info_json.get('upload_date')) else None
         if upload_date:
             upload_date = upload_date.astimezone(pytz.UTC)
+        timestamp = None
+        try:
+            timestamp = dates.from_timestamp(info_json['timestamp']) if info_json.get('timestamp') else None
+        except Exception:
+            pass
 
         video_info_json.channel_source_id = info_json.get('channel_id') or info_json.get('uploader_id') or None
         video_info_json.channel_url = info_json.get('channel_url') or info_json.get('uploader_url') or None
         video_info_json.duration = int(i) if (i := info_json.get('duration')) else None
         video_info_json.epoch = int(i) if (i := info_json.get('epoch')) else None
+        video_info_json.timestamp = timestamp
         video_info_json.upload_date = upload_date
         video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
         video_info_json.view_count = int(i) if (i := info_json.get('view_count')) else None
@@ -95,8 +102,11 @@ def validate_video(video: Video, channel_generate_poster: bool):
         video.file_group.title = video_info_json.title
         video.file_group.length = video_info_json.duration
         video.file_group.url = video_info_json.url
-        json_published_datetime = video.file_group.published_datetime = \
-            video_info_json.upload_date or video.file_group.published_datetime
+        json_published_datetime = video.file_group.published_datetime = (
+                video_info_json.timestamp  # The exact second the video was published.
+                or video_info_json.upload_date  # The day the video was published.
+                or video.file_group.published_datetime
+        )
         video.file_group.download_datetime = from_timestamp(video_info_json.epoch) if video_info_json.epoch else None
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
@@ -349,11 +359,19 @@ class VideoDownloaderConfigYtDlpOptionsValidator:
     file_name_format: str
     nooverwrites: bool
     quiet: bool
+    merge_output_format: str
     writeautomaticsub: bool
     writeinfojson: bool
     writesubtitles: bool
     writethumbnail: bool
     youtube_include_dash_manifest: bool
+
+    def __post_init__(self):
+        from modules.videos.downloader import preview_filename
+        try:
+            preview_filename(self.file_name_format)
+        except Exception as e:
+            raise ValueError(f'file_name_format is invalid: {str(e)}')
 
 
 @dataclass
@@ -361,6 +379,12 @@ class VideoDownloaderConfigValidator:
     video_resolutions: List[str] = field(default_factory=lambda: ['1080p', '720p', '480p', 'maximum'])
     version: int = None
     yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
+
+    def __post_init__(self):
+        allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
+        yt_dlp_options = {k: v for k, v in dict(self.yt_dlp_options).items() if k in allowed_fields}
+        VideoDownloaderConfigYtDlpOptionsValidator(**yt_dlp_options)
+        self.yt_dlp_options = yt_dlp_options
 
 
 class VideoDownloaderConfig(ConfigFile):

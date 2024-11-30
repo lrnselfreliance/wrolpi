@@ -1,7 +1,8 @@
 import React from "react";
 import _ from "lodash";
 import {HelpPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
-import {FormInput, TextArea} from "../components/Theme";
+import {FormInput, Icon, TextArea} from "../components/Theme";
+import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 
 
 async function asyncNoOp() {
@@ -158,6 +159,8 @@ export function useForm({
 
         // Trigger validation after a delay
         debouncedValidate(path, value);
+
+        return value;
     }
 
     const addValidator = (path, validator) => {
@@ -207,7 +210,7 @@ export function useForm({
         return [inputProps, inputAttrs]
     }
 
-    const getInputProps = ({name, validator, path, required = false, type = 'text'}) => {
+    const getInputProps = ({name, validator, path, required = false, type = 'text', onChange = null}) => {
         // Props for <input/>
         path = path || name;
 
@@ -218,11 +221,19 @@ export function useForm({
 
         const [customProps, inputAttrs] = getCustomProps({name, validator, path, type, required});
 
+        const localHandleInputEvent = async (e) => {
+            if (e) e.preventDefault();
+            const value = handleInputEvent(e);
+            if (onChange) {
+                await onChange(value);
+            }
+        }
+
         // Attributes that should be passed as properties to the input.
         const inputProps = {
             ...customProps,
             name: name,
-            onChange: handleInputEvent,
+            onChange: localHandleInputEvent,
             error: errors[path] || null,
             required: required ? null : undefined,
         }
@@ -280,9 +291,20 @@ export function InputForm({
                               helpPosition = 'top',
                               extraInputProps = {},
                               disabled = false,
+                              onChange = null,
+                              message = null,
                           }) {
-    const [inputProps, inputAttrs] = form.getInputProps({name, path, validator, type, required});
+    const [inputProps, inputAttrs] = form.getInputProps({name, path, validator, type, required, onChange});
     inputProps.disabled = disabled || inputProps.disabled;
+
+    let messageElm = null;
+    if (message && message.positive) {
+        messageElm = <Message {...message} positive/>;
+    } else if (message && message.negative) {
+        messageElm = <Message {...message}/>;
+    } else if (message) {
+        messageElm = <Message {...message}/>;
+    }
 
     return <>
         <label for={`${name}_input`}>
@@ -301,6 +323,7 @@ export function InputForm({
         >
             <input {...extraInputProps} {...inputProps}/>
         </FormInput>
+        {messageElm}
     </>
 }
 
@@ -403,11 +426,13 @@ export function UrlsTextarea({name = 'urls', required, form}) {
     </FormInput>
 }
 
-export function ToggleForm({form, name, label, path}) {
+export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big'}) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
+    const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;
     return <FormInput
         label={label}>
+        {iconElm}
         <Toggle
             disabled={form.disabled}
             name={name}

@@ -43,7 +43,7 @@ import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
-import {deleteVideos, fetchVideoDownloaderConfig, saveVideoDownloaderConfig} from "../api";
+import {deleteVideos, fetchVideoDownloaderConfig, postVideoFileFormat, saveVideoDownloaderConfig} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder} from "./Vars";
@@ -222,6 +222,29 @@ function VideosPage() {
     </>
 }
 
+function VideoFileNameForm({form}) {
+    const [message, setMessage] = React.useState(null);
+
+    const onChange = async (value) => {
+        const response = await postVideoFileFormat(value);
+        const {error, preview} = await response.json();
+        if (error) {
+            setMessage({content: error, header: 'Invalid File Name', negative: true});
+        } else {
+            setMessage({content: preview, header: 'File Name Preview', positive: true});
+        }
+    }
+
+    return <InputForm
+        form={form}
+        name='file_name_format'
+        path='yt_dlp_options.file_name_format'
+        label='Video File Format'
+        onChange={onChange}
+        message={message}
+    />
+}
+
 function VideosSettings() {
     useTitle('Videos Settings');
 
@@ -255,62 +278,55 @@ function VideosSettings() {
 
         <Form>
             <Grid>
-                <Grid.Row>
-                    <Grid.Column>
+                <Grid.Row columns={2}>
+                    <Grid.Column mobile={16} computer={8}>
                         <VideoResolutionSelectorForm
                             form={form}
                             name='video_resolutions'
                             path='video_resolutions'
                         />
                     </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
-                        <InputForm
-                            form={form}
-                            name='file_name_format'
-                            path='yt_dlp_options.file_name_format'
-                            label='Video File Format'
-                        />
+                    <Grid.Column mobile={16} computer={8}>
+                        <VideoFileNameForm form={form}/>
                     </Grid.Column>
                 </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
+                <Grid.Row columns={2}>
+                    <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
                             form={form}
                             label='Do not overwrite existing files'
                             name='nooverwrites'
                             path='yt_dlp_options.nooverwrites'
+                            icon='file video'
                         />
                     </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
+                    <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
                             form={form}
                             label='Download automatic subtitles'
                             name='writeautomaticsub'
                             path='yt_dlp_options.writeautomaticsub'
+                            icon='closed captioning'
                         />
                     </Grid.Column>
                 </Grid.Row>
                 <Grid.Row>
-                    <Grid.Column>
+                    <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
                             form={form}
                             label='Download subtitles'
                             name='writesubtitles'
                             path='yt_dlp_options.writesubtitles'
+                            icon='closed captioning outline'
                         />
                     </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
+                    <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
                             form={form}
                             label='Download thumbnail'
                             name='writethumbnail'
                             path='yt_dlp_options.writethumbnail'
+                            icon='image'
                         />
                     </Grid.Column>
                 </Grid.Row>

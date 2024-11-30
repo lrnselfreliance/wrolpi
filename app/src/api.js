@@ -1499,3 +1499,8 @@ export async function postRestart() {
     }
     return null
 }
+
+export async function postVideoFileFormat(video_file_format) {
+    const body = {video_file_format};
+    return await apiPost(`${API_URI}/videos/file_format`, body);
+}

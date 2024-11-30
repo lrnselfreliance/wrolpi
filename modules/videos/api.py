@@ -9,6 +9,7 @@ from wrolpi.api_utils import json_response
 from wrolpi.common import logger
 from . import lib, schema
 from .channel.api import channel_bp
+from .downloader import preview_filename
 from .lib import format_videos_destination
 from .models import Channel
 from .video.api import video_bp
@@ -45,3 +46,23 @@ async def channel_tag_info(_: Request, body: schema.ChannelTagInfoRequest):
     videos_destination = format_videos_destination(channel_name, tag_name, channel_url)
     ret = dict(videos_destination=videos_destination)
     return json_response(ret)
+
+
+@content_bp.post('/file_format')
+@openapi.definition(
+    description='Preview the video file format',
+    body=schema.VideoFileFormatRequest,
+)
+@validate(schema.VideoFileFormatRequest)
+async def post_file_format(_: Request, body: schema.VideoFileFormatRequest):
+    try:
+        preview = preview_filename(body.video_file_format)
+        return json_response(dict(
+            video_file_format=body.video_file_format,
+            preview=preview,
+        ))
+    except RuntimeError as e:
+        return json_response(dict(
+            error=str(e),
+            video_file_format=body.video_file_format,
+        ), status=HTTPStatus.BAD_REQUEST)

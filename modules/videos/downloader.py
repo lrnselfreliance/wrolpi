@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import copy
 import json
 import logging
 import os.path
@@ -85,6 +86,31 @@ def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
     return f'{dir_name}/{file_name}'
+
+
+def preview_filename(filename_format: str) -> str:
+    """Return an example video file name formatted using the provided filename format.
+
+    @raise RuntimeError: If the format is invalid.
+    """
+    if not filename_format.endswith('.%(ext)s'):
+        raise RuntimeError('Filename must end with .%(ext)s')
+
+    options = get_videos_downloader_config().yt_dlp_options
+    options['outtmpl'] = filename_format
+    ydl = YoutubeDL(copy.deepcopy(options))
+    entry = dict(
+        uploader='WROLPi',
+        timestamp=int(now().timestamp()),
+        upload_date=now().strftime('%Y%m%d'),
+        id='Qz-FuenRylQ',
+        title='The title of the video',
+        ext='mp4',
+        description='A description of the video',
+    )
+    filename = prepare_filename(entry, ydl=ydl)[1:]
+
+    return filename
 
 
 @cached_multiprocessing_result
@@ -583,7 +609,7 @@ class VideoDownloader(Downloader, ABC):
         options['cachdir'] = YTDLP_CACHE_DIR
 
         # Create a new YoutubeDL for the output directory.
-        ydl = YoutubeDL(options)
+        ydl = YoutubeDL(copy.deepcopy(options))
         ydl.params['logger'] = ydl_logger
         ydl.add_default_info_extractors()
 
@@ -615,7 +641,7 @@ class VideoDownloader(Downloader, ABC):
 
             # Get entry info json.
             options['outtmpl'] = str(final_filename)
-            ydl = YoutubeDL(options)
+            ydl = YoutubeDL(copy.deepcopy(options))
             ydl.params['logger'] = ydl_logger
             ydl.add_default_info_extractors()
             entry = extract_info(url, ydl=ydl, process=True)

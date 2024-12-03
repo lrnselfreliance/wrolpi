@@ -1865,7 +1865,7 @@ export function mergeDeep(target, source) {
         if (Array.isArray(source[key])) {
             // source overwrites target if it is a list with values.
             result[key] = source[key] || target[key];
-        } else if (typeof source[key] === 'object' && typeof target[key] === 'object') {
+        } else if (typeof source[key] === 'object' && typeof target[key] === 'object' && source[key] !== null) {
             result[key] = mergeDeep(target[key] || {}, source[key]);
         } else {
             result[key] = source[key] !== undefined ? source[key] : target[key];

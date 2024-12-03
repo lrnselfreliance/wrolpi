@@ -215,7 +215,7 @@ export const useArchive = (archiveId) => {
 
     const fetchArchive = async () => {
         try {
-            const [file_group, history] = await getArchive(archiveId);
+            const {file_group, history} = await getArchive(archiveId);
             setArchiveFileGroup(file_group);
             setHistory(history);
         } catch (e) {

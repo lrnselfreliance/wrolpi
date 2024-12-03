@@ -107,34 +107,6 @@ def channel_refresh(_: Request, channel_id: int):
     return response.empty()
 
 
-@channel_bp.post('/<channel_id:int>/download', name='post_channel_download')
-@channel_bp.put('/<channel_id:int>/download/<download_id:int>', name='put_channel_download')
-@openapi.description('Create or update a Channel Download record')
-@validate(schema.ChannelDownloadRequest)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@wrol_mode_check
-async def channel_download(_: Request, channel_id: int, body: schema.ChannelDownloadRequest, download_id: int = None):
-    if download_id:
-        await lib.update_channel_download(
-            channel_id,
-            download_id,
-            body.url,
-            body.frequency,
-            body.settings,
-        )
-    else:
-        await lib.create_channel_download(
-            channel_id,
-            body.url,
-            body.frequency,
-            body.settings,
-        )
-    if download_manager.is_disabled:
-        # Warn the user that downloads are disabled.
-        Events.send_downloads_disabled('Channel download created. But downloads are disabled.')
-    return response.empty()
-
-
 @channel_bp.post('/<channel_id:int>/tag')
 @openapi.definition(
     description='Tag/untag a Channel with a single tag',

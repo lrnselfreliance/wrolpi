@@ -31,7 +31,12 @@ import {
 } from "semantic-ui-react";
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
-import {EditChannelDownloadForm, EditRSSDownloadForm, EditZimDownloadForm} from "../Download";
+import {
+    EditChannelDownloadForm,
+    EditRSSDownloadForm,
+    EditScrapeFilesDownloadForm,
+    EditZimDownloadForm
+} from "../Download";
 import {Downloaders} from "../Vars";
 
 function ClearDownloadsButton({callback}) {
@@ -195,6 +200,13 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         />;
     } else if (downloader === Downloaders.KiwixCatalog) {
         editForm = <EditZimDownloadForm
+            download={download}
+            onDelete={localOnDelete}
+            onCancel={handleEditClose}
+            onSuccess={onSuccess}
+        />;
+    } else if (downloader === Downloaders.ScrapeHtml) {
+        editForm = <EditScrapeFilesDownloadForm
             download={download}
             onDelete={localOnDelete}
             onCancel={handleEditClose}

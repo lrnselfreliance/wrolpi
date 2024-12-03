@@ -453,7 +453,7 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
 
 @pytest.mark.asyncio
 async def test_channel_download_crud(test_session, async_client, assert_downloads, tag_factory):
-    """Test creatin"""
+    """Test creating more complex Channel Download."""
     one, two = await tag_factory(), await tag_factory()
     download = {
         'urls': ['https://www.youtube.com/@wrolpi/videos'],
@@ -476,10 +476,11 @@ async def test_channel_download_crud(test_session, async_client, assert_download
     }
 
     request, response = await async_client.post('/api/download', json=download)
-    assert response.status == HTTPStatus.NO_CONTENT
+    assert response.status == HTTPStatus.CREATED, request.body
 
     download = test_session.query(Download).one()
     assert download.url == 'https://www.youtube.com/@wrolpi/videos'
+    assert download.destination is None
     assert download.tag_names == ['one', 'two']
     assert download.downloader == 'video_channel'
     assert download.sub_downloader == 'video'

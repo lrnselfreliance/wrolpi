@@ -151,7 +151,7 @@ def test_api_download(test_session, test_client, test_directory):
     content = dict(urls=['https://example.com/video1', ], downloader='video', destination='dest',
                    settings=dict(excluded_urls='example.com'))
     request, response = test_client.post('/api/download', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.CREATED
 
     download = test_session.query(Download).one()
     assert download.url == 'https://example.com/video1'
@@ -167,15 +167,14 @@ async def test_api_download_video_tags(test_session, async_client, tag_factory):
     tag1 = await tag_factory()
     tag2 = await tag_factory()
 
-    content = dict(urls=['https://example.com/video1', ], downloader='video',
-                   settings={'tag_names': [tag1.name, tag2.name]})
+    content = dict(urls=['https://example.com/video1', ], downloader='video', tag_names=[tag1.name, tag2.name])
     request, response = await async_client.post('/api/download', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.CREATED
 
     download = test_session.query(Download).one()
     assert download.url == 'https://example.com/video1'
     assert download.downloader == 'video'
-    assert download.settings['tag_names'] == [tag1.name, tag2.name]
+    assert download.tag_names == [tag1.name, tag2.name]
 
 
 @pytest.mark.asyncio

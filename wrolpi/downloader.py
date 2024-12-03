@@ -584,6 +584,10 @@ class DownloadManager:
         if not frequency or not isinstance(frequency, int):
             raise ValueError('Recurring download must have a frequency!')
 
+        from wrolpi.scrape_downloader import ScrapeHTMLDownloader
+        if downloader_name == ScrapeHTMLDownloader.name and frequency:
+            raise InvalidDownload(f'Cannot schedule recurring download for {downloader_name=}')
+
         download, = self.create_downloads([url, ], session=session, downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
                                           destination=destination, tag_names=tag_names, settings=settings)
@@ -601,17 +605,22 @@ class DownloadManager:
     @optional_session
     def update_download(self, id_: int, url: str, downloader: str,
                         destination: str | pathlib.Path = None, tag_names: List[str] = None,
-                        sub_downloader: str | None = None,
+                        sub_downloader: str | None = None, frequency: int = None,
                         settings: Dict = None, session: Session = None) -> Download:
         download = self.find_download(session=session, id_=id_)
+        if settings and settings.get('channel_id') and not frequency:
+            raise InvalidDownload(f'A once-download cannot be associated with a Channel')
         download.url = url
         download.downloader = downloader
+        download.frequency = frequency
         # Preserve existing settings, unless new settings are provided.
         download.settings = settings if settings is not None else download.settings
         # Use provided params even if empty.
         download.destination = destination or None
         download.tag_names = tag_names or None
         download.sub_downloader = sub_downloader or None
+        # Remove Channel relationship, if necessary.
+        download.channel_id = (settings or dict()).get('channel_id')
         return download
 
     @wrol_mode_check

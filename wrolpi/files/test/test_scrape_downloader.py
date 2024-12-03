@@ -1,7 +1,10 @@
 import asyncio
+from http import HTTPStatus
 
 import mock
+import pytest
 
+from wrolpi.dates import Seconds
 from wrolpi.downloader import DownloadResult
 from wrolpi.files.downloader import FileDownloader
 from wrolpi.scrape_downloader import ScrapeHTMLDownloader
@@ -76,3 +79,18 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
         'https://example.com/dir',
         'https://example.com/dir/other.html',
     ])
+
+
+@pytest.mark.asyncio
+async def test_scrape_html_downloader_api(async_client, test_session, test_download_manager):
+    """Scrape Download cannot be recurring."""
+    body = dict(
+        urls=['https://example.com'],
+        destination='uploads',
+        downloader='scrape_html',
+        sub_downloader='file',
+        frequency=Seconds.week,
+        tag_names=[],
+        settings=dict(depth=1, max_pages=1, suffix='.mp4'))
+    request, response = await async_client.post('/api/download', json=body)
+    assert response.status == HTTPStatus.BAD_REQUEST

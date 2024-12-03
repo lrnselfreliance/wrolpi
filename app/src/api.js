@@ -413,74 +413,6 @@ export async function getVideosStatistics() {
     return response
 }
 
-export async function createChannelDownload(channelId, url, frequency, title_include, title_exclude, tag_names) {
-    const body = {
-        url: url,
-        frequency: frequency,
-        settings: {
-            title_include: title_include,
-            title_exclude: title_exclude,
-            tag_names: tag_names,
-        },
-    }
-    url = `${VIDEOS_API}/channels/${channelId}/download`;
-    const response = await apiPost(url, body);
-    if (!response.ok) {
-        const json = await response.json();
-        if (json['code'] === 'INVALID_DOWNLOAD') {
-            toast({
-                type: 'error',
-                title: 'Cannot Download!',
-                description: 'This channel does not have a download record.  Modify the frequency.',
-                time: 5000,
-            });
-        } else {
-            const message = await getErrorMessage(response, 'Could not create Channel download.');
-            toast({
-                type: 'error',
-                title: 'Creating Channel Download Failed',
-                description: message,
-                time: 5000,
-            });
-        }
-    }
-    return response;
-}
-
-export async function updateChannelDownload(channelId, downloadId, url, frequency, title_include, title_exclude, tag_names) {
-    const body = {
-        url: url,
-        frequency: frequency,
-        settings: {
-            title_include: title_include,
-            title_exclude: title_exclude,
-            tag_names: tag_names,
-        },
-    }
-    url = `${VIDEOS_API}/channels/${channelId}/download/${downloadId}`;
-    const response = await apiPut(url, body);
-    if (!response.ok) {
-        const json = await response.json();
-        if (json['code'] === 'INVALID_DOWNLOAD') {
-            toast({
-                type: 'error',
-                title: 'Cannot Download!',
-                description: 'This channel does not have a download record.  Modify the frequency.',
-                time: 5000,
-            });
-        } else {
-            const message = await getErrorMessage(response, 'Could not update Channel download.');
-            toast({
-                type: 'error',
-                title: 'Updating Channel Download Failed',
-                description: message,
-                time: 5000,
-            });
-        }
-    }
-    return response;
-}
-
 export async function refreshChannel(channelId) {
     let url = `${VIDEOS_API}/channels/refresh/${channelId}`;
     const response = await apiPost(url);
@@ -744,7 +676,10 @@ export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.ok) {
         const data = await response.json();
-        return [data['file_group'], data['history']];
+        return {
+            file_group: data['file_group'],
+            history: data['history'],
+        }
     } else {
         const message = await getErrorMessage(response, 'Unable to get Archive.  See server logs.');
         toast({
@@ -764,7 +699,7 @@ export async function postDownload(downloadData) {
         throw new Error('downloader is required, but was not provided');
     }
 
-    let body = {
+    const body = {
         urls: downloadData.urls,
         destination: downloadData.destination,
         downloader: downloadData.downloader,

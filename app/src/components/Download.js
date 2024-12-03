@@ -59,10 +59,11 @@ export function DestinationForm({
                                     form,
                                     helpContent,
                                     label = 'Destination',
+                                    name = 'destination',
                                     path = 'destination',
                                     required = false,
                                 }) {
-    const [inputProps, inputAttrs] = form.getCustomProps({name: 'destination', path, required});
+    const [inputProps, inputAttrs] = form.getCustomProps({name, path, required});
     const {disabled, value, onChange} = inputProps;
     const helpPopup = helpContent ? <HelpPopup content={helpContent}/> : null;
     return <SForm.Field>
@@ -72,6 +73,7 @@ export function DestinationForm({
             value={value}
             onSelect={onChange}
             disabled={disabled}
+            id='destination_search_form'
         />
     </SForm.Field>
 }
@@ -129,6 +131,7 @@ export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_d
                          label='Downloader'
                          placeholder='Select a downloader'
                          options={downloaders}
+                         id='downloader_selector'
                          {...inputProps}
     />
 }
@@ -339,6 +342,8 @@ export function ChannelTagNameForm({form}) {
 }
 
 export function VideosDownloadForm({singleDownload = true, onCancel}) {
+    const [showMessage, setShowMessage] = React.useState(false);
+
     // Keep video settings in session to help user start downloads consistently.
     const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
@@ -366,10 +371,15 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
     }
 
     const onSuccess = () => {
+        setShowMessage(true);
         form.reset();
     }
 
-    const form = useForm({submitter, defaultFormData, onSuccess});
+    const form = useForm({
+        submitter,
+        defaultFormData,
+        onSuccess,
+    });
 
     React.useEffect(() => {
         const {video_resolutions, video_format} = form.formData.settings;
@@ -432,6 +442,7 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
                     <ChannelTagNameForm form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column>
                     <DownloadFormButtons onCancel={localOnCancel} form={form}/>
@@ -476,6 +487,7 @@ export function ChannelDownloadForm({
                                         clearOnSuccess = true,
                                         channel_id = null,
                                     }) {
+    const [showMessage, setShowMessage] = React.useState(false);
 
     // May have received submitter from EditChannelDownloadForm.
     submitter = submitter || (async (formData) => {
@@ -490,6 +502,13 @@ export function ChannelDownloadForm({
         }
         await postDownload(downloadData);
     });
+
+    const localOnSuccess = async () => {
+        setShowMessage(true);
+        if (onSuccess) {
+            onSuccess();
+        }
+    }
 
     // Keep video settings in session to help user start downloads consistently.
     const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
@@ -520,7 +539,7 @@ export function ChannelDownloadForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        onSuccess,
+        onSuccess: localOnSuccess,
         clearOnSuccess,
     });
 
@@ -608,6 +627,7 @@ export function ChannelDownloadForm({
                     <ChannelTagNameForm form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
                     {actionsElm}
@@ -632,7 +652,7 @@ export function EditChannelDownloadForm({
             downloader: formData.downloader,
             frequency: formData.frequency,
             settings: formData.settings,
-            tag_names: formData.tag_names,
+            tag_names: formData.tag_names || [],
             urls: [formData.url,],
         }
         await putDownload(download.id, downloadData);
@@ -651,12 +671,15 @@ export function EditChannelDownloadForm({
 }
 
 function SuccessfulDownloadSubmitMessage() {
-    return <Message positive>
-        <Message.Header>Download Submitted</Message.Header>
-        <Message.Content>
-            <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>
-        </Message.Content>
-    </Message>
+    return <Grid.Row>
+        <Grid.Column><Message positive>
+            <Message.Header>Download Submitted</Message.Header>
+            <Message.Content>
+                <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>
+            </Message.Content>
+        </Message>
+        </Grid.Column>
+    </Grid.Row>
 }
 
 export function ArchiveDownloadForm({download, onCancel}) {
@@ -700,12 +723,7 @@ export function ArchiveDownloadForm({download, onCancel}) {
                     <DownloadTagsSelector form={form}/>
                 </Grid.Column>
             </Grid.Row>
-            {showMessage &&
-                <Grid.Row>
-                    <Grid.Column>
-                        <SuccessfulDownloadSubmitMessage/>
-                    </Grid.Column>
-                </Grid.Row>}
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
                     <DownloadFormButtons onCancel={onCancel} form={form}/>
@@ -728,7 +746,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             frequency: formData.frequency,
             settings: formData.settings,
             sub_downloader: formData.sub_downloader,
-            tag_names: formData.tag_names,
+            tag_names: formData.tag_names || [],
             urls: [formData.url],
         }
         await postDownload(downloadData);
@@ -840,12 +858,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
                 </Grid.Column>
             </Grid.Row>
             {downloaderRows}
-            {showMessage &&
-                <Grid.Row>
-                    <Grid.Column>
-                        <SuccessfulDownloadSubmitMessage/>
-                    </Grid.Column>
-                </Grid.Row>}
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
                     {actionsElm}
@@ -859,11 +872,12 @@ export function EditRSSDownloadForm({download, onDelete, onCancel, actions = Edi
 
     const submitter = async (formData) => {
         const downloadData = {
+            destination: formData.destination,
             downloader: formData.downloader,
             frequency: formData.frequency,
             settings: formData.settings,
             sub_downloader: formData.sub_downloader,
-            tag_names: formData.tag_names,
+            tag_names: formData.tag_names || [],
             urls: [formData.url,],
         }
         await putDownload(download.id, downloadData);
@@ -927,12 +941,7 @@ export function EditZimDownloadForm({download, onDelete, onCancel, actions = Edi
                     <DownloadFrequencySelector form={form} longFrequenciesAvailable={true}/>
                 </Grid.Column>
             </Grid.Row>
-            {showMessage &&
-                <Grid.Row>
-                    <Grid.Column>
-                        <SuccessfulDownloadSubmitMessage/>
-                    </Grid.Column>
-                </Grid.Row>}
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
                     {actionsElm}
@@ -997,12 +1006,7 @@ export function FilesDownloadForm({
                     <DestinationForm required form={form}/>
                 </Grid.Column>
             </Grid.Row>
-            {showMessage &&
-                <Grid.Row>
-                    <Grid.Column>
-                        <SuccessfulDownloadSubmitMessage/>
-                    </Grid.Column>
-                </Grid.Row>}
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
                     {actionsElm}
@@ -1046,8 +1050,11 @@ export function ScrapeFilesDownloadForm({
                                             download,
                                             submitter,
                                             clearOnSuccess,
+                                            onDelete,
                                             onCancel,
+                                            onSuccess,
                                             actions = DownloadFormButtons,
+                                            singleDownload = false,
                                         }) {
     const [showMessage, setShowMessage] = React.useState(false);
 
@@ -1055,7 +1062,7 @@ export function ScrapeFilesDownloadForm({
         const downloadData = {
             downloader: Downloaders.ScrapeHtml,
             sub_downloader: Downloaders.File,
-            tag_names: formData.tag_names,
+            tag_names: formData.tag_names || [],
             destination: formData.destination,
             urls: formData.urls.split(/\r?\n/),
             settings: formData.settings,
@@ -1074,15 +1081,28 @@ export function ScrapeFilesDownloadForm({
         }
     };
 
+    const localOnSuccess = async () => {
+        setShowMessage(true);
+        if (onSuccess) {
+            onSuccess();
+        }
+    }
+
     const form = useForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
         clearOnSuccess,
-        onSuccess: async () => setShowMessage(true),
+        onSuccess: localOnSuccess,
     });
 
-    const actionsElm = actions({onCancel, form});
+    const urlInput = singleDownload ?
+        <UrlInput required form={form} path='url'/>
+        : <UrlsTextarea required form={form}/>;
+
+    // Default to "new" download buttons.
+    actions = actions || DownloadFormButtons;
+    const actionsElm = actions({onDelete, onCancel, form});
 
     return <Form>
         <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
@@ -1091,7 +1111,7 @@ export function ScrapeFilesDownloadForm({
         <Grid>
             <Grid.Row>
                 <Grid.Column>
-                    <UrlsTextarea form={form}/>
+                    {urlInput}
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={2}>
@@ -1110,12 +1130,7 @@ export function ScrapeFilesDownloadForm({
                     <MaximumPagesInputForm form={form} required={true}/>
                 </Grid.Column>
             </Grid.Row>
-            {showMessage &&
-                <Grid.Row>
-                    <Grid.Column>
-                        <SuccessfulDownloadSubmitMessage/>
-                    </Grid.Column>
-                </Grid.Row>}
+            {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column>
                     {actionsElm}
@@ -1123,6 +1138,30 @@ export function ScrapeFilesDownloadForm({
             </Grid.Row>
         </Grid>
     </Form>
+}
+
+export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuccess}) {
+    const submitter = async (formData) => {
+        const downloadData = {
+            downloader: Downloaders.ScrapeHtml,
+            sub_downloader: Downloaders.File,
+            tag_names: formData.tag_names || [],
+            destination: formData.destination,
+            urls: [formData.url],
+            settings: formData.settings,
+        }
+        await postDownload(downloadData);
+    };
+
+    return <ScrapeFilesDownloadForm
+        download={download}
+        submitter={submitter}
+        onDelete={onDelete}
+        onCancel={onCancel}
+        onSuccess={onSuccess}
+        actions={EditDownloadFormButtons}
+        singleDownload={true}
+    />
 }
 
 export function DownloadMenu({onOpen, disabled}) {

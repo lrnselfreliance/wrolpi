@@ -255,13 +255,15 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 
 
 @api_bp.post('/download')
-@openapi.description('Download all the URLs that are provided.')
-@validate(schema.DownloadRequest)
+@openapi.definition(
+    description='Download all the URLs that are provided.',
+    body=schema.DownloadRequest,
+    validate=True,
+)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
-    downloader = download_manager.find_downloader_by_name(body.downloader)
-    if not downloader:
-        raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
+    # Raises an InvalidDownload if the Downloader cannot be found.
+    download_manager.find_downloader_by_name(body.downloader)
 
     kwargs = dict(downloader_name=body.downloader,
                   sub_downloader_name=body.sub_downloader, reset_attempts=True,
@@ -275,17 +277,20 @@ async def post_download(_: Request, body: schema.DownloadRequest):
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
 
-    return response.empty()
+    return response.empty(status=HTTPStatus.CREATED)
 
 
 @api_bp.put('/download/<download_id:int>')
-@openapi.description('Update properties of the Download')
-@validate(schema.DownloadRequest)
+@openapi.definition(
+    description='Update properties of the Download',
+    body=schema.DownloadRequest,
+    validate=True,
+)
 @wrol_mode_check
 async def put_download(_: Request, download_id: int, body: schema.DownloadRequest):
-    downloader = download_manager.find_downloader_by_name(body.downloader)
-    if not downloader:
-        raise ValidationError(f'Cannot find downloader with name {body.downloader}')
+    # Raises an InvalidDownload if the Downloader cannot be found.
+    download_manager.find_downloader_by_name(body.downloader)
+
     if len(body.urls) != 1:
         raise ValidationError('Only one URL can be specified when updating a Download')
 
@@ -295,6 +300,7 @@ async def put_download(_: Request, download_id: int, body: schema.DownloadReques
             url=body.urls[0],
             downloader=body.downloader,
             destination=body.destination,
+            frequency=body.frequency,
             tag_names=body.tag_names,
             sub_downloader=body.sub_downloader,
             settings=body.settings,

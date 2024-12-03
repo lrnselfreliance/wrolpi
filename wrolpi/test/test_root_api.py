@@ -430,42 +430,46 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
 
     with mock.patch('wrolpi.downloader.DownloadManager.dispatch_downloads', dispatch_downloads):
         # Create a single recurring Download.
-        content = dict(
+        body = dict(
             urls=['https://example.com/1', ],
             frequency=1_000,
             downloader='archive',
+            tag_names=None,  # tag_names can be a None.
         )
-        request, response = await async_client.post('/api/download', content=json.dumps(content))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+        request, response = await async_client.post('/api/download', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.CREATED
 
         assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
 
         # Create two once-downloads.
-        content = dict(
+        body = dict(
             urls=['https://example.com/2', 'https://example.com/3'],
             downloader='archive',
+            # tag_names=None,  # tag_names can be missing.
         )
-        request, response = await async_client.post('/api/download', json=content)
-        assert response.status_code == HTTPStatus.NO_CONTENT
+        request, response = await async_client.post('/api/download', json=body)
+        assert response.status_code == HTTPStatus.CREATED
 
         assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
 
         download1, download2, download3 = test_session.query(Download).order_by(Download.url).all()
         assert not download1.settings
-        expected_download1 = dict(download1.__json__()).copy()
+        expected_download = dict(download1.__json__()).copy()
 
         # Update a download.
-        content = dict(
+        body = dict(
             urls=['https://example.com/1'],
             downloader='archive',
-            settings={'tag_names': [tag1.name, tag2.name]},
+            frequency=1_000,
+            tag_names=[tag1.name, tag2.name],
         )
-        expected_download1.update({'url': 'https://example.com/1', 'settings': {'tag_names': [tag1.name, tag2.name]}})
-        request, response = await async_client.put(f'/api/download/{download1.id}', json=content)
+        expected_download.update({'url': 'https://example.com/1', 'tag_names': [tag1.name, tag2.name]})
+        request, response = await async_client.put(f'/api/download/{download1.id}', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT
         test_session.flush([download2])
-        download2 = test_session.query(Download).filter_by(id=expected_download1['id']).first()
-        assert download2.__json__() == expected_download1
+        download2 = test_session.query(Download).filter_by(id=expected_download['id']).first()
+        assert download2.__json__() == expected_download
+        assert download2.tag_names == [tag1.name, tag2.name]
 
 
 def test_get_downloaders(test_client):
@@ -512,33 +516,6 @@ async def test_restart_download(test_session, async_client, test_download_manage
     await test_download_manager.wait_for_all_downloads()
     download = test_session.query(Download).one()
     assert download.is_deferred, download.status
-
-
-@pytest.mark.asyncio
-async def test_put_download(test_session, async_client, test_download_manager, test_downloader, channel_factory):
-    """A Download can be updated using a PUT request."""
-    channel = channel_factory()
-    download = test_download_manager.create_download('https://example.com', test_downloader.name)
-    assert not download.settings
-
-    body = dict(
-        downloader=test_downloader.name,
-        urls=['https://example.com/new-url'],  # URL can be changed.
-        settings=dict(channel_id=channel.id),
-    )
-    request, response = await async_client.put(f'/api/download/{download.id}', json=body)
-    assert response.status_code == HTTPStatus.NO_CONTENT
-    assert test_session.query(Download).count() == 1, 'Download should have been updated'
-    download = test_session.query(Download).one()
-    assert download.url == 'https://example.com/new-url', 'Download URL was not changed'
-    assert download.settings == dict(channel_id=channel.id), 'Download settings were not changed'
-
-    # Settings can be cleared by sending `None`
-    body['settings'] = None
-    request, response = await async_client.put(f'/api/download/{download.id}', json=body)
-    assert response.status_code == HTTPStatus.NO_CONTENT
-    download = test_session.query(Download).one()
-    assert download.settings == dict(), 'Download settings were not changed'
 
 
 def test_get_global_statistics(test_session, test_client):

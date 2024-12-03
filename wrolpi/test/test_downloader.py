@@ -382,7 +382,7 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
         settings=dict(excluded_urls='example.org,something'),
     )
     request, response = await async_client.post('/api/download', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+    assert response.status_code == HTTPStatus.CREATED, response.body
 
     download: Download = test_session.query(Download).one()
     assert download.id

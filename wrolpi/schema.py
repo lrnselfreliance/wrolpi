@@ -80,8 +80,8 @@ class EchoResponse:
 
 @dataclass
 class DownloadSettings:
-    channel_id: int = None
-    channel_tag_name: List[str] = field(default_factory=lambda: list())
+    channel_id: Optional[int] = None
+    channel_tag_name: List[str] = field(default_factory=list)
     depth: Optional[int] = None
     download_metadata_only: bool = False
     download_order: Optional[str] = None
@@ -90,16 +90,13 @@ class DownloadSettings:
     maximum_duration: Optional[int] = None
     minimum_duration: Optional[int] = None
     suffix: Optional[str] = None
-    tag_names: List[str] = field(default_factory=lambda: list())
-    title_exclude: str = None
-    title_include: str = None
+    title_exclude: Optional[str] = None
+    title_include: Optional[str] = None
     video_count_limit: Optional[int] = None
-    video_format: str = None
-    video_resolutions: List[str] = field(default_factory=lambda: list())
+    video_format: Optional[str] = None
+    video_resolutions: List[str] = field(default_factory=list)
 
     def __post_init__(self):
-        self.tag_names = [i.strip() for i in self.tag_names] if self.tag_names else []
-
         if self.excluded_urls and self.excluded_urls.endswith(','):
             raise ValidationError('Excluded urls cannot end with ,')
         if self.excluded_urls and self.excluded_urls.startswith(','):
@@ -128,7 +125,7 @@ class DownloadRequest:
     urls: List[str]
     downloader: str
     destination: Optional[str] = None
-    tag_names: List[str] = field(default_factory=list)
+    tag_names: Optional[List[str]] = field(default_factory=list)
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
     settings: Optional[dict] = field(default_factory=dict)
@@ -145,6 +142,8 @@ class DownloadRequest:
             if destination.is_absolute():
                 destination = get_relative_to_media_directory(destination)
             self.destination = str(destination)
+
+        self.tag_names = self.tag_names or []
 
         # Validate settings contents.  Remove empty values.
         settings = self.settings or dict()
@@ -226,8 +225,8 @@ class SearchSuggestionsRequest:
 @dataclass
 class SearchFileEstimateRequest:
     search_str: Optional[str] = None
-    mimetypes: List[str] = field(default_factory=lambda: list())
-    tag_names: List[str] = field(default_factory=lambda: list())
+    mimetypes: List[str] = field(default_factory=list)
+    tag_names: List[str] = field(default_factory=list)
     months: Optional[List[int]] = None
     from_year: Optional[int] = None
     to_year: Optional[int] = None
@@ -240,7 +239,7 @@ class SearchFileEstimateRequest:
 
 @dataclass
 class SearchOtherEstimateRequest:
-    tag_names: List[str] = field(default_factory=lambda: list())
+    tag_names: List[str] = field(default_factory=list)
 
 
 @dataclass

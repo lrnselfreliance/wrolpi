@@ -14,7 +14,28 @@ class SettingsObject:
 
 @dataclass
 class SettingsResponse:
-    config: SettingsObject
+    download_manager_disabled: bool
+    download_manager_stopped: bool
+    download_on_startup: bool
+    download_timeout: int
+    hotspot_device: str
+    hotspot_on_startup: bool
+    hotspot_password: str
+    hotspot_ssid: str
+    hotspot_status: str
+    ignore_outdated_zims: str
+    ignored_directories: str
+    log_level: str
+    nav_color: str
+    media_directory: str
+    throttle_on_startup: bool
+    throttle_status: str
+    version: str
+    wrol_mode: bool
+    archive_destination: str = 'archive/%(domain)s'
+    map_destination: str = 'map'
+    videos_destination: str = 'videos/%(channel_tag)s/%(channel_name)s'
+    zims_destination: str = 'zims'
 
 
 class SemanticUIColors(enum.StrEnum):
@@ -57,6 +78,115 @@ class SettingsRequest:
         self.nav_color = self.nav_color.lower() if self.nav_color else None
         if self.nav_color and self.nav_color not in SemanticUIColors.__members__:
             raise ValidationError('Nav color is invalid')
+
+
+@dataclass
+class FlagsStatusResponse:
+    db_up: bool
+    kiwix_restart: bool
+    map_importing: bool
+    outdated_zims: bool
+    refresh_cleanup: bool
+    refresh_complete: bool
+    refresh_counting: bool
+    refresh_discovery: bool
+    refresh_indexing: bool
+    refresh_modeling: bool
+    refreshing: bool
+    have_internet: bool
+
+
+@dataclass
+class CPUStatusResponse:
+    cores: int
+    cur_frequency: int
+    max_frequency: int
+    min_frequency: int
+    percent: int
+    temperature: int
+    high_temperature: int
+    critical_temperature: int
+
+
+@dataclass
+class LoadStatusStat:
+    minute_1: int
+    minute_5: int
+    minute_15: int
+
+
+@dataclass
+class DriveStatusStat:
+    mount: str
+    percent: int
+    size: int
+    used: int
+
+
+@dataclass
+class ProcessStatusStat:
+    pid: int
+    percent_cpu: int
+    percent_mem: int
+    command: str
+
+
+@dataclass
+class MemoryStatusStat:
+    total: int
+    used: int
+    free: int
+    cached: int
+
+
+@dataclass
+class NicBandwidthStatusStat:
+    name: str
+    now: float
+    bytes_recv: int
+    bytes_sent: int
+    speed: int
+    bytes_recv_ps: int
+    bytes_sent_ps: int
+    elapsed: int
+
+
+@dataclass
+class DiskBandwidthStatusStat:
+    bytes_read: int
+    bytes_read_ps: int
+    bytes_write: int
+    bytes_write_ps: int
+    elapsed: int
+    max_read_ps: int
+    max_write_ps: int
+    name: str
+    now: float
+    speed: int
+
+
+@dataclass
+class StatusResponse:
+    cpu_stats: CPUStatusResponse
+    disk_bandwidth_stats: dict[str, DiskBandwidthStatusStat]
+    dockerized: bool
+    downloads: int
+    drive_status: List[DriveStatusStat]
+    flags: FlagsStatusResponse
+    hotspot_ssid: str
+    hotspot_status: str
+    is_rpi4: bool
+    is_rpi5: bool
+    is_rpi: bool
+    last_status: str
+    load_stats: LoadStatusStat
+    memory_stats: MemoryStatusStat
+    nic_bandwidth_stats: dict[str, NicBandwidthStatusStat]
+    processes_stats: List[ProcessStatusStat]
+    sanic_workers: dict
+    throttle_status: str
+    version: str
+    wrol_mode: str
 
 
 @dataclass

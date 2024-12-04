@@ -28,8 +28,8 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
-    HotspotPasswordTooShort, NativeOnly, InvalidConfig, ValidationError
+from wrolpi.errors import WROLModeEnabled, HotspotError, HotspotPasswordTooShort, InvalidConfig, \
+    ValidationError
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
@@ -118,8 +118,10 @@ async def index(_):
 
 
 @api_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
-@openapi.description('Echo whatever is sent to this.')
-@openapi.response(HTTPStatus.OK, schema.EchoResponse)
+@openapi.definition(
+    description='Echo whatever is sent to this.',
+    response=schema.EchoResponse,
+)
 async def echo(request: Request):
     try:
         request_json = request.json
@@ -138,8 +140,10 @@ async def echo(request: Request):
 
 
 @api_bp.route('/settings', methods=['GET', 'OPTIONS'])
-@openapi.description('Get WROLPi settings')
-@openapi.response(HTTPStatus.OK, schema.SettingsResponse)
+@openapi.definition(
+    description='Get WROLPi settings',
+    response=schema.SettingsResponse,
+)
 def get_settings(_: Request):
     wrolpi_config = get_wrolpi_config()
 
@@ -173,8 +177,11 @@ def get_settings(_: Request):
 
 
 @api_bp.patch('/settings')
-@openapi.description('Update WROLPi settings')
-@validate(json=schema.SettingsRequest)
+@openapi.definition(
+    description='Update WROLPi settings',
+    body=schema.SettingsRequest,
+    validate=True,
+)
 async def update_settings(_: Request, body: schema.SettingsRequest):
     if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
@@ -242,10 +249,12 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
 
 
 @api_bp.post('/valid_regex')
-@openapi.description('Check if the regex is valid.')
-@openapi.response(HTTPStatus.OK, schema.RegexResponse)
-@openapi.response(HTTPStatus.BAD_REQUEST, schema.RegexResponse)
-@validate(schema.RegexRequest)
+@openapi.definition(
+    description='Check if the regex is valid.',
+    body=schema.RegexRequest,
+    response=schema.RegexResponse,
+    validate=True,
+)
 def valid_regex(_: Request, body: schema.RegexRequest):
     try:
         re.compile(body.regex)
@@ -444,7 +453,10 @@ async def throttle_off(_: Request):
 
 
 @api_bp.get('/status')
-@openapi.description('Get the status of CPU/load/etc.')
+@openapi.definition(
+    description='Get the status of CPU/load/etc.',
+    response=schema.StatusResponse,
+)
 async def get_status(request: Request):
     downloads = dict()
     if flags.db_up.is_set():
@@ -483,7 +495,7 @@ async def get_status(request: Request):
 
 @api_bp.get('/statistics')
 @openapi.definition(
-    summary='Get summary statistics of all files',
+    description='Get summary statistics of all files',
 )
 async def get_statistics(_):
     file_statistics = get_file_statistics()
@@ -495,6 +507,7 @@ async def get_statistics(_):
 
 
 @api_bp.get('/events/feed')
+@openapi.description('Get all events after the provided date.')
 @validate(query=schema.EventsRequest)
 async def feed(request: Request, query: schema.EventsRequest):
     # Get the current datetime from the API.  The frontend will use this to request any events that happen after it's
@@ -509,7 +522,7 @@ async def feed(request: Request, query: schema.EventsRequest):
 
 @api_bp.get('/tag')
 @openapi.definition(
-    summary='Get a list of all Tags',
+    description='Get a list of all Tags',
 )
 async def get_tags_request(_: Request):
     tags_ = tags.get_tags()
@@ -518,9 +531,10 @@ async def get_tags_request(_: Request):
 
 @api_bp.post('/tag', name='tag_crate')
 @api_bp.post('/tag/<tag_id:int>', name='tag_update')
-@validate(schema.TagRequest)
 @openapi.definition(
-    summary='Create or update a Tag',
+    description='Create or update a Tag',
+    body=schema.TagRequest,
+    validate=True,
 )
 async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
     await tags.upsert_tag(body.name, body.color, tag_id)
@@ -546,7 +560,12 @@ async def post_notify(_: Request, body: schema.NotifyRequest):
 
 
 @api_bp.post('/vin_number_decoder')
-@validate(schema.VINDecoderRequest)
+@openapi.definition(
+    description='Decode a VIN number',
+    body=schema.VINDecoderRequest,
+    response=schema.VINDecoderResponse,
+    validate=True,
+)
 async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
     try:
         vin = Vin(body.vin_number)
@@ -579,27 +598,28 @@ async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
 
 
 @api_bp.post('/restart')
+@openapi.definition(description='Restart the system')
+@native_only
 async def post_restart(_: Request):
-    if DOCKERIZED:
-        raise NativeOnly(f'Cannot restart when running in Docker')
-
     await admin.shutdown(reboot=True)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
 @api_bp.post('/shutdown')
+@openapi.definition(description='Shutdown the system')
+@native_only
 async def post_shutdown(_: Request):
-    if DOCKERIZED:
-        raise NativeOnly(f'Cannot shutdown when running in Docker')
-
     await admin.shutdown()
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
 @api_bp.post('/search_suggestions')
-@validate(json=schema.SearchSuggestionsRequest)
+@openapi.definition(
+    description='Suggest related Channels/Domains/etc. to the user.',
+    body=schema.SearchSuggestionsRequest,
+    validate=True,
+)
 async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
-    """Used by the Global search to suggest related Channels/Domains/etc. to the user."""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
@@ -616,7 +636,11 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
 
 
 @api_bp.post('/search_file_estimates')
-@validate(json=schema.SearchFileEstimateRequest)
+@openapi.definition(
+    description='Get a count of FileGroup suggestions.',
+    body=schema.SearchFileEstimateRequest,
+    validate=True,
+)
 async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
     file_groups = await search_file_suggestion_count(
@@ -636,7 +660,11 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
 
 
 @api_bp.post('/search_other_estimates')
-@validate(json=schema.SearchOtherEstimateRequest)
+@openapi.definition(
+    description='Get a count of other suggestions.',
+    body=schema.SearchOtherEstimateRequest,
+    validate=True,
+)
 async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
     others = await search_other_estimates(body.tag_names)
@@ -660,8 +688,11 @@ def get_config(_: Request, name: str):
 
 
 @api_bp.post('/config/<name:str>')
-@openapi.description('Save the contents of a specific config.')
-@validate(json=schema.ConfigSaveRequest)
+@openapi.definition(
+    description='Save the contents of a specific config.',
+    body=schema.ConfigSaveRequest,
+    validate=True,
+)
 def save_config(_: Request, name: str, body: schema.ConfigSaveRequest):
     config = get_all_configs()[name]
     config.update(body.config)
@@ -669,7 +700,11 @@ def save_config(_: Request, name: str, body: schema.ConfigSaveRequest):
 
 
 @api_bp.post('/configs/import')
-@validate(json=schema.ConfigsImportRequest)
+@openapi.definition(
+    description='Import the contents of a specific config.',
+    body=schema.ConfigsImportRequest,
+    validate=True,
+)
 def post_configs_import(_: Request, body: schema.ConfigsImportRequest):
     config = get_config_by_file_name(body.file_name)
     try:
@@ -682,7 +717,11 @@ def post_configs_import(_: Request, body: schema.ConfigsImportRequest):
 
 
 @api_bp.post('/configs/save')
-@validate(json=schema.ConfigsImportRequest)
+@openapi.definition(
+    description='Save the contents of a specific config.',
+    body=schema.ConfigsImportRequest,
+    validate=True,
+)
 def post_configs_save(_: Request, body: schema.ConfigsImportRequest):
     config = get_config_by_file_name(body.file_name)
     try:

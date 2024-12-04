@@ -25,7 +25,7 @@ async def test_events_api_feed(test_session, async_client, example_pdf):
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     request, response = await async_client.get('/api/events/feed')
-    assert response.status_code == HTTPStatus.OK
+    assert response.status_code == HTTPStatus.OK, response.body
     assert (result := response.json.get('events'))
 
     expected = [

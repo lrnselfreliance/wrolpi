@@ -19,7 +19,7 @@ import {
     getVideo,
     getVideosStatistics,
     postImportConfig,
-    postSaveConfig,
+    postDumpConfig,
     saveSettings,
     searchArchives,
     searchChannels,
@@ -722,7 +722,7 @@ export const useConfigs = () => {
 
     const saveConfig = async (fileName) => {
         try {
-            await postSaveConfig(fileName);
+            await postDumpConfig(fileName);
         } catch (e) {
             console.error(e);
         }

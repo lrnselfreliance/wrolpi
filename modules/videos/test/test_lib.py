@@ -275,14 +275,14 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
     config = lib.get_videos_downloader_config()
     assert config.video_resolutions == ['1080p', '720p', '480p', 'maximum']
 
-    request, response = await async_client.get('/api/config/videos_downloader.yaml')
+    request, response = await async_client.get('/api/config?file_name=videos_downloader.yaml')
     assert response.status == HTTPStatus.OK
     config = response.json['config']
 
     # Change the `video_resolutions`
     config['video_resolutions'] = ['720p', 'maximum']
     body = dict(config=config)
-    request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
+    request, response = await async_client.post('/api/config?file_name=videos_downloader.yaml', json=body)
     assert response.status == HTTPStatus.NO_CONTENT
     # Config file was actually changed.
     config = lib.get_videos_downloader_config()
@@ -297,6 +297,6 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
     config = lib.get_videos_downloader_config().dict()
     config['yt_dlp_options']['file_name_format'] = 'invalid format'
     body = dict(config=config)
-    request, response = await async_client.post('/api/config/videos_downloader.yaml', json=body)
+    request, response = await async_client.post('/api/config?file_name=videos_downloader.yaml', json=body)
     assert response.status == HTTPStatus.BAD_REQUEST
     assert 'Invalid config' in response.json.get('error')

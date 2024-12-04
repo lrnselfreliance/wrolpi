@@ -371,13 +371,3 @@ class SearchFileEstimateRequest:
 class SearchOtherEstimateRequest:
     tag_names: List[str] = field(default_factory=list)
 
-
-@dataclass
-class ConfigsImportRequest:
-    file_name: str
-    overwrite: bool = False
-
-
-@dataclass
-class ConfigSaveRequest:
-    config: dict

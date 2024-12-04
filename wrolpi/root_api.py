@@ -23,8 +23,8 @@ from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory, search_other_estimates, get_all_configs, \
-    get_config_by_file_name
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates
+from wrolpi.config_api import config_bp
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
@@ -47,6 +47,7 @@ api_bp = Blueprint('RootAPI', url_prefix='/api')
 # Blueprints order here defines what order they are displayed in OpenAPI Docs.
 api_app.blueprint(api_bp)
 api_app.blueprint(archive_bp)
+api_app.blueprint(config_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
@@ -670,64 +671,3 @@ async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstima
     others = await search_other_estimates(body.tag_names)
     ret = dict(others=others)
     return json_response(ret)
-
-
-@api_bp.get('/configs')
-@openapi.description('Get the status (imported, valid, etc.) of all configs.')
-def get_configs(_: Request):
-    configs = get_all_configs()
-    configs = {k: v.config_status() for k, v in configs.items()}
-    return json_response(dict(configs=configs))
-
-
-@api_bp.get('/config/<name:str>')
-@openapi.description('Get the contents of a specific config.')
-def get_config(_: Request, name: str):
-    config = get_all_configs()[name]
-    return json_response(dict(config=config))
-
-
-@api_bp.post('/config/<name:str>')
-@openapi.definition(
-    description='Save the contents of a specific config.',
-    body=schema.ConfigSaveRequest,
-    validate=True,
-)
-def save_config(_: Request, name: str, body: schema.ConfigSaveRequest):
-    config = get_all_configs()[name]
-    config.update(body.config)
-    return response.empty()
-
-
-@api_bp.post('/configs/import')
-@openapi.definition(
-    description='Import the contents of a specific config.',
-    body=schema.ConfigsImportRequest,
-    validate=True,
-)
-def post_configs_import(_: Request, body: schema.ConfigsImportRequest):
-    config = get_config_by_file_name(body.file_name)
-    try:
-        config.import_config(send_events=True)
-    except Exception as e:
-        logger.error(f'Failed to import config: {body.file_name}', exc_info=e)
-        raise InvalidConfig(f'Failed to import config {body.file_name}')
-
-    return response.empty()
-
-
-@api_bp.post('/configs/save')
-@openapi.definition(
-    description='Save the contents of a specific config.',
-    body=schema.ConfigsImportRequest,
-    validate=True,
-)
-def post_configs_save(_: Request, body: schema.ConfigsImportRequest):
-    config = get_config_by_file_name(body.file_name)
-    try:
-        config.dump_config(send_events=True, overwrite=body.overwrite)
-    except Exception as e:
-        logger.error(f'Failed to dump config: {body.file_name}', exc_info=e)
-        raise InvalidConfig(f'Failed to dump config {body.file_name}')
-
-    return response.empty()

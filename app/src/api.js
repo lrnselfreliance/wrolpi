@@ -327,7 +327,7 @@ export async function getDownloads() {
 }
 
 export async function getConfigs() {
-    const response = await apiGet(`${API_URI}/configs`);
+    const response = await apiGet(`${API_URI}/config`);
     if (response.ok) {
         const data = await response.json();
         return {
@@ -347,7 +347,7 @@ export async function getConfigs() {
 
 export async function postImportConfig(fileName) {
     const body = {file_name: fileName};
-    const response = await apiPost(`${API_URI}/configs/import`, body);
+    const response = await apiPost(`${API_URI}/config/import`, body);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Could not import config.');
         toast({
@@ -360,14 +360,14 @@ export async function postImportConfig(fileName) {
     return response
 }
 
-export async function postSaveConfig(fileName) {
+export async function postDumpConfig(fileName) {
     const body = {file_name: fileName, overwrite: true};
-    const response = await apiPost(`${API_URI}/configs/save`, body);
+    const response = await apiPost(`${API_URI}/config/dump`, body);
     if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not save config.');
+        const message = await getErrorMessage(response, 'Could not dump config.');
         toast({
             type: 'error',
-            title: 'Saving config Failed',
+            title: 'Dumping config failed',
             description: message,
             time: 5000,
         });
@@ -375,17 +375,25 @@ export async function postSaveConfig(fileName) {
     return response
 }
 
-export async function fetchVideoDownloaderConfig() {
-    const response = await apiGet(`${API_URI}/config/videos_downloader.yaml`);
+export async function getConfig(fileName) {
+    const response = await apiGet(`${API_URI}/config?file_name=${fileName}`);
     return (await response.json())['config'];
 }
 
-export async function saveVideoDownloaderConfig(config) {
+export async function fetchVideoDownloaderConfig() {
+    return await getConfig('videos_downloader.yaml');
+}
+
+export async function updateConfig(fileName, config) {
     const body = {config};
-    const response = await apiPost(`${API_URI}/config/videos_downloader.yaml`, body);
+    const response = await apiPost(`${API_URI}/config?file_name=${fileName}`, body);
     if (!response.ok) {
         throw Error('Failed to save config');
     }
+}
+
+export async function updateVideoDownloaderConfig(config) {
+    return await updateConfig('videos_downloader.yaml', config);
 }
 
 export async function validateRegex(regex) {

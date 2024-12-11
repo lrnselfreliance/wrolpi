@@ -21,7 +21,7 @@ class RSSHTTPDownloader(Downloader):
 
 
 @pytest.mark.asyncio
-async def test_rss_download(test_session, test_download_manager):
+async def test_rss_download(test_session, test_download_manager, await_switches):
     """An RSS Downloader will create new Downloads for every link in the feed."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
@@ -81,7 +81,7 @@ async def test_rss_download(test_session, test_download_manager):
 
 
 @pytest.mark.asyncio
-async def test_rss_no_entries(test_session, test_download_manager):
+async def test_rss_no_entries(test_session, test_download_manager, await_switches):
     """An RSS feed with no entries is handled."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)

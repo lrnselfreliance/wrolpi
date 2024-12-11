@@ -20,7 +20,6 @@ from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
-from wrolpi.switches import await_switches
 from wrolpi.tags import TagFile
 from wrolpi.vars import PROJECT_DIR
 
@@ -106,7 +105,7 @@ async def test_delete_file_link(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_delete_tagged(async_client, test_session, make_files_structure, tag_factory, video_bytes):
+async def test_delete_tagged(await_switches, test_session, make_files_structure, tag_factory, video_bytes):
     """Cannot delete a file that has been tagged."""
     tag = await tag_factory()
     make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})

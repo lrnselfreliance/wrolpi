@@ -20,13 +20,13 @@ async def switch_handler_test1(**context):
 
 
 @pytest.mark.asyncio
-async def test_switches1(async_client):
+async def test_switches1(await_switches):
     global expected_context
 
     # Dispatch "test" switch, the switch handler should call the handler above, once.
     expected_context = {'foo': 'bar'}
     switches.activate_switch('test1', expected_context)
-    await switches.await_switches(timeout=2)
+    await await_switches(timeout=2)
     assert count1.value == 1
 
     # Dispatching many times only causes switch handler to be called once because it is already pending.
@@ -38,7 +38,7 @@ async def test_switches1(async_client):
     switch_handler_test1.activate_switch(context={'foo': 'bar4'})
     switch_handler_test1.activate_switch(context={'foo': 'bar5'})
     switch_handler_test1.activate_switch(context=expected_context)
-    await switches.await_switches(timeout=2)
+    await await_switches(timeout=2)
     assert count1.value == 2
 
 
@@ -50,7 +50,7 @@ async def switch_handler_test2(**context):
 
 
 @pytest.mark.asyncio
-async def test_perpetual_signal(async_client):
+async def test_perpetual_signal(await_switches):
     """Test that perpetual_signal survives errors."""
     # Signal event is dispatched again.
     switch_handler_test2.activate_switch()
@@ -69,7 +69,7 @@ async def test_perpetual_signal(async_client):
 
 
 @pytest.mark.asyncio
-async def test_invalid_activate_switch(async_client):
+async def test_invalid_activate_switch(await_switches):
     with pytest.raises(RuntimeError):
         switches.activate_switch('does not exist')
 

@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
-from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode
+from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL
 from wrolpi.common import logger
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
@@ -45,7 +45,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
-from wrolpi.switches import await_switches
+from wrolpi.switches import await_switches as await_switches_
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
 
@@ -100,8 +100,17 @@ def test_session() -> Session:
 
 
 @pytest.fixture(autouse=True)
-def test_debug_logger(level: int = logging.DEBUG):
-    """Tests use debug logging by default."""
+def test_debug_logger(request):
+    """Tests use debug logging by default.  Use pytest's verbosity level if set."""
+    level = logging.INFO
+    verbose = request.config.option.verbose
+    if verbose == 2:
+        # -vv
+        level = logging.DEBUG
+    elif verbose == 3:
+        # -vvv
+        level = TRACE_LEVEL
+
     with log_level_context(level):
         yield
 
@@ -161,7 +170,7 @@ def test_client(test_directory) -> ReusableClient:
 @api_app.on_response
 async def background_task_listener(request, response):
     """Wait for all background tasks to finish before returning API response while testing."""
-    await await_switches()
+    await await_switches_()
 
 
 @pytest.fixture
@@ -171,14 +180,10 @@ async def async_client(test_directory) -> SanicASGITestClient:
     attach_shared_contexts(api_app)
     initialize_configs_contexts(api_app)
 
-    # Call API so server actually starts.
     client = SanicASGITestClient(api_app)
-    await client.get('/api/echo')
 
     try:
         yield client
-        # Do not remove, or tests will be significantly slower.
-        # await switches.await_switches()
     finally:
         logger.debug('Destroying async_client')
 
@@ -192,14 +197,22 @@ def test_download_manager_config(async_client, test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
+async def await_switches(async_client):
+    """Returns the `switches.await_switches` function, but primes the Sanic App to actually handle signals."""
+    await async_client.get('/api')
+    return await_switches_
+
+
+@pytest.fixture
 async def test_download_manager(
         async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
 ) -> DownloadManager:
-    # Needed to use signals in
-    manager = DownloadManager()
-    await manager.enable()
+    with timer('test_download_manager'):
+        # Needed to use signals in
+        manager = DownloadManager()
+        await manager.enable()
 
     yield manager
 

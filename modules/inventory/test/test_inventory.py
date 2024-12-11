@@ -8,7 +8,6 @@ from pint import Quantity
 
 from wrolpi.common import Base
 from wrolpi.db import get_db_session
-from wrolpi.switches import await_switches
 from wrolpi.test.common import PytestCase
 from .. import init_inventory
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
@@ -274,7 +273,7 @@ def test_no_inventories(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_inventories_config(async_client, test_session, test_directory, init_test_inventory):
+async def test_inventories_config(await_switches, test_session, test_directory, init_test_inventory):
     for item in TEST_ITEMS:
         item = Item(**item)
         test_session.add(item)

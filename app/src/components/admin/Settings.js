@@ -136,7 +136,7 @@ export function RestartButton() {
 }
 
 const levelNameMap = {
-    5: 'All',
+    5: 'Trace',
     4: 'Debug',
     3: 'Info',
     2: 'Warning',
@@ -155,14 +155,14 @@ function fromApiLogLevel(logLevel) {
         30: 2,
         20: 3,
         10: 4,
-        0: 5,
+        5: 5,
     }[logLevel]
 }
 
 function toApiLogLevel(logLevel) {
     // Reverse the above levels.
     return {
-        5: 0,
+        5: 5,
         4: 10,
         3: 20,
         2: 30,
@@ -380,7 +380,7 @@ export function SettingsPage() {
                     <option value='2'>Warning</option>
                     <option value='3'>Info</option>
                     <option value='4'>Debug</option>
-                    <option value='5'>All</option>
+                    <option value='5'>Trace</option>
                 </datalist>
 
                 <br/>

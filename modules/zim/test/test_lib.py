@@ -12,7 +12,6 @@ from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.switches import await_switches
 
 
 @pytest.mark.asyncio
@@ -128,7 +127,7 @@ def test_get_unique_paths():
 
 @pytest.mark.asyncio
 async def test_zim_tags_config(async_client, test_session, test_directory, test_zim, tag_factory, test_tags_config,
-                               fake_now):
+                               fake_now, await_switches):
     fake_now(datetime.datetime(2000, 1, 1, 0, 0, 0, 1))
     config = tags.get_tags_config()
     assert not config.tag_zims
@@ -184,7 +183,8 @@ def test_zim_all_entries(test_session, test_zim):
 
 
 @pytest.mark.asyncio
-async def test_zim_download(test_session, kiwix_download_zim, test_directory, test_zim_bytes, flags_lock):
+async def test_zim_download(test_session, kiwix_download_zim, test_directory, test_zim_bytes, flags_lock,
+                            await_switches):
     await lib.subscribe('Wikipedia (with images)', 'es')
 
     # Downloading the catalog should lead to a new Zim file being downloaded.
@@ -250,7 +250,7 @@ async def test_zim_download(test_session, kiwix_download_zim, test_directory, te
 
 
 @pytest.mark.asyncio
-async def test_zim_tag_migration(async_client, test_session, test_directory, zim_factory, tag_factory,
+async def test_zim_tag_migration(await_switches, test_session, test_directory, zim_factory, tag_factory,
                                  test_tags_config):
     """When an outdated Zim file is deleted, the Tags should be moved to the latest Zim."""
     zim1 = zim_factory('wikipedia_en_all_maxi_2020-01.zim')  # The outdated Zim.

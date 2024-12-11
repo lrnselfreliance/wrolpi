@@ -121,7 +121,7 @@ async def get_zim_subscriptions(_: Request):
 @validate(schema.ZimSubscribeRequest)
 async def post_zim_subscribe(_: Request, body: schema.ZimSubscribeRequest):
     await lib.subscribe(body.name, body.language)
-    if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+    if download_manager.disabled or download_manager.stopped:
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
     Events.send_created(f'Zim subscription created')

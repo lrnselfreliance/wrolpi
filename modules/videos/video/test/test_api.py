@@ -108,7 +108,7 @@ def test_get_video_prev_next_no_upload_date(async_client, test_session, video_fa
 
 
 @pytest.mark.asyncio
-async def test_video_delete(async_client, test_session, channel_factory, video_factory, test_download_manager):
+async def test_delete_video_api(async_client, test_session, channel_factory, video_factory, test_download_manager):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True,

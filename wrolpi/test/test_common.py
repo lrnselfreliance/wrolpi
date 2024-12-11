@@ -19,9 +19,8 @@ import pytz
 
 import wrolpi.vars
 from wrolpi import common
-from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config
+from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config, TRACE_LEVEL
 from wrolpi.errors import InvalidConfig
-from wrolpi.switches import await_switches
 from wrolpi.test.common import build_test_directories, skip_circleci
 
 
@@ -871,11 +870,11 @@ async def test_log_level(async_client, test_wrolpi_config):
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         assert api_app.shared_ctx.log_level.value == 30
 
-        # Change log level to NOTSET.
-        body = dict(log_level=0)
+        # Change log level to TRACE.
+        body = dict(log_level=5)
         request, response = await async_client.patch('/api/settings', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
-        assert api_app.shared_ctx.log_level.value == 0
+        assert api_app.shared_ctx.log_level.value == 5 == TRACE_LEVEL
     finally:
         # Reset log level to debug.
         body = dict(log_level=10)
@@ -917,7 +916,7 @@ def test_unique_by_predicate(iterable, predicate, expected):
 
 
 @pytest.mark.asyncio
-async def test_config_lifecycle(async_client, test_wrolpi_config):
+async def test_config_lifecycle(await_switches, test_wrolpi_config):
     """Test importing, dumping, updating, saving a config."""
     config = get_wrolpi_config()
     # Config is not imported, default values are used.
@@ -1077,37 +1076,37 @@ async def test_initialize_config_files(async_client, test_session, test_director
     get_wrolpi_config().get_file().write_text('wrolpi')
     get_videos_downloader_config().get_file().write_text('video downloader')
 
-    assert common.initialize_config_files() == [], 'No configs should have been created.'
+    assert common.create_empty_config_files() == [], 'No configs should have been created.'
     # Config files were not overwritten with real configs.
     assert get_wrolpi_config().get_file().read_text() == 'wrolpi'
     assert get_videos_downloader_config().get_file().read_text() == 'video downloader'
 
     # WROLPi config can be created because it is now missing.
     get_wrolpi_config().get_file().unlink()
-    assert common.initialize_config_files() == ['wrolpi.yaml'], 'WROLPi config should have been created.'
+    assert common.create_empty_config_files() == ['wrolpi.yaml'], 'WROLPi config should have been created.'
     assert get_wrolpi_config().is_valid()
 
     # Videos Downloader config can be created because it is now missing.
     get_videos_downloader_config().get_file().unlink()
-    assert common.initialize_config_files() == ['videos_downloader.yaml'], \
+    assert common.create_empty_config_files() == ['videos_downloader.yaml'], \
         'Videos Downloader config should have been created.'
     assert get_videos_downloader_config().is_valid()
 
     # Channels config file does not exist, no conflicting Channels so the file is created.
     simple_channel.delete_with_videos()
-    assert common.initialize_config_files() == ['channels.yaml'], 'Channels config should have been created.'
+    assert common.create_empty_config_files() == ['channels.yaml'], 'Channels config should have been created.'
     assert get_channels_config().is_valid()
 
     tag1.delete()
     tag2.delete()
-    assert common.initialize_config_files() == ['tags.yaml'], 'Tags config should have been created.'
+    assert common.create_empty_config_files() == ['tags.yaml'], 'Tags config should have been created.'
     assert get_tags_config().is_valid()
 
     download.delete()
-    assert common.initialize_config_files() == ['download_manager.yaml'], \
+    assert common.create_empty_config_files() == ['download_manager.yaml'], \
         'Download Manager config should have been created.'
     assert get_download_manager_config().is_valid()
 
     test_session.delete(test_inventory)
-    assert common.initialize_config_files() == ['inventories.yaml'], 'Inventory config should have been created.'
+    assert common.create_empty_config_files() == ['inventories.yaml'], 'Inventory config should have been created.'
     assert get_inventories_config().is_valid()

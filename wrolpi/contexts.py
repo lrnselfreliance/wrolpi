@@ -3,7 +3,10 @@ import multiprocessing
 
 from sanic import Sanic
 
+from wrolpi.common import logger
 from wrolpi.vars import LOG_LEVEL_INT
+
+logger = logger.getChild(__name__)
 
 
 def attach_shared_contexts(app: Sanic):
@@ -36,9 +39,12 @@ def attach_shared_contexts(app: Sanic):
 
     # Download Manager
     app.shared_ctx.download_manager_data = manager.dict()
-    app.shared_ctx.download_manager_queue = multiprocessing.Queue()
     app.shared_ctx.download_manager_disabled = multiprocessing.Event()
     app.shared_ctx.download_manager_stopped = multiprocessing.Event()
+    # Downloads are only begun on startup using the wrolpi config's value. Do not start downloads before importing
+    # config.
+    app.shared_ctx.download_manager_disabled.set()
+    app.shared_ctx.download_manager_stopped.set()
 
     app.shared_ctx.single_tasks_started = multiprocessing.Event()
     app.shared_ctx.flags_initialized = multiprocessing.Event()
@@ -107,11 +113,11 @@ def reset_shared_contexts(app: Sanic):
 
     # Events.
     app.shared_ctx.single_tasks_started.clear()
-    app.shared_ctx.download_manager_stopped.clear()
     app.shared_ctx.flags_initialized.clear()
     app.shared_ctx.perpetual_tasks_started.clear()
 
     # Do not start downloads when reloading.
+    app.shared_ctx.download_manager_stopped.set()
     app.shared_ctx.download_manager_disabled.set()
 
 
@@ -123,9 +129,33 @@ def initialize_configs_contexts(app: Sanic):
     from wrolpi.common import WROLPI_CONFIG
     from wrolpi.tags import TAGS_CONFIG
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
-    INVENTORIES_CONFIG.initialize(app.shared_ctx.inventories_config)
-    CHANNELS_CONFIG.initialize(app.shared_ctx.channels_config)
-    VIDEOS_DOWNLOADER_CONFIG.initialize(app.shared_ctx.videos_downloader_config)
-    WROLPI_CONFIG.initialize(app.shared_ctx.wrolpi_config)
-    TAGS_CONFIG.initialize(app.shared_ctx.tags_config)
-    DOWNLOAD_MANAGER_CONFIG.initialize(app.shared_ctx.download_manager_config)
+
+    try:  # noqa
+        INVENTORIES_CONFIG.initialize(app.shared_ctx.inventories_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory inventories config: {e}')
+
+    try:
+        CHANNELS_CONFIG.initialize(app.shared_ctx.channels_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory channels config: {e}')
+
+    try:
+        VIDEOS_DOWNLOADER_CONFIG.initialize(app.shared_ctx.videos_downloader_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory videos downloader config: {e}')
+
+    try:  # noqa
+        WROLPI_CONFIG.initialize(app.shared_ctx.wrolpi_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory wrolpi config config: {e}')
+
+    try:
+        TAGS_CONFIG.initialize(app.shared_ctx.tags_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory tags config: {e}')
+
+    try:
+        DOWNLOAD_MANAGER_CONFIG.initialize(app.shared_ctx.download_manager_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory download manager config: {e}')

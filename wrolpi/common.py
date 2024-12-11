@@ -43,7 +43,62 @@ from sqlalchemy.orm import Session
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig, \
     ValidationError
-from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS, LOG_LEVEL
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
+
+
+def add_logging_level(level_name: str, level_int: int, methodName=None):
+    """
+    Comprehensively adds a new logging level to the `logging` module and the
+    currently configured logging class.
+
+    `levelName` becomes an attribute of the `logging` module with the value
+    `levelNum`. `methodName` becomes a convenience method for both `logging`
+    itself and the class returned by `logging.getLoggerClass()` (usually just
+    `logging.Logger`). If `methodName` is not specified, `levelName.lower()` is
+    used.
+
+    To avoid accidental clobberings of existing attributes, this method will
+    raise an `AttributeError` if the level name is already an attribute of the
+    `logging` module or if the method name is already present
+
+    Example
+    -------
+    >>> add_logging_level('TRACE', logging.DEBUG - 5)
+    >>> logging.getLogger(__name__).setLevel("TRACE")
+    >>> logging.getLogger(__name__).trace('that worked')
+    >>> logging.trace('so did this')
+    >>> logging.TRACE
+    5
+
+    This function is taken directly from: https://stackoverflow.com/questions/2183233/how-to-add-a-custom-loglevel-to-pythons-logging-facility/35804945#35804945
+    """
+    if not methodName:
+        methodName = level_name.lower()
+
+    if hasattr(logging, level_name):
+        raise AttributeError('{} already defined in logging module'.format(level_name))
+    if hasattr(logging, methodName):
+        raise AttributeError('{} already defined in logging module'.format(methodName))
+    if hasattr(logging.getLoggerClass(), methodName):
+        raise AttributeError('{} already defined in logger class'.format(methodName))
+
+    # This method was inspired by the answers to Stack Overflow post
+    # http://stackoverflow.com/q/2183233/2988730, especially
+    # http://stackoverflow.com/a/13638084/2988730
+    def logForLevel(self, message, *args, **kwargs):
+        if self.isEnabledFor(level_int):
+            kwargs.setdefault('stacklevel', 3)
+            self._log(level_int, message, args, **kwargs)
+
+    def logToRoot(message, *args, **kwargs):
+        kwargs.setdefault('stacklevel', 3)
+        logging.log(level_int, message, *args, **kwargs)
+
+    logging.addLevelName(level_int, level_name)
+    setattr(logging, level_name, level_int)
+    setattr(logging.getLoggerClass(), methodName, logForLevel)
+    setattr(logging, methodName, logToRoot)
+
 
 LOGGING_CONFIG = {
     'version': 1,
@@ -99,13 +154,25 @@ LOGGING_CONFIG = {
     },
     'root': {
         'handlers': ['console'],
-        'level': LOG_LEVEL
+        'level': logging.DEBUG
     }
 }
 
+
+# Used so IDE will suggest `logger.trace`
+class TraceLogger(logging.Logger):
+    def trace(self, msg, *args, **kwargs):
+        return self.log(TRACE_LEVEL, msg, *args, **kwargs)
+
+
 # Apply logging config.
-logger = logging.getLogger()
+logger: TraceLogger = logging.getLogger()  # noqa Not really a TraceLogger, but I wanted IDE suggestions.
 logging.config.dictConfig(LOGGING_CONFIG)
+
+# Add extra verbose debug level (-vvv)
+TRACE_LEVEL = logging.DEBUG - 5
+if not hasattr(logging, 'TRACE'):
+    add_logging_level('TRACE', TRACE_LEVEL)
 
 logger_ = logger.getChild(__name__)
 
@@ -129,10 +196,10 @@ def set_log_level(level: int, warn_level: bool = True):
     for handler in logger.handlers:
         handler.setLevel(level)
 
-    # Enable debug logging in SQLAlchemy when logging is NOTSET.
+    # Enable debug logging in SQLAlchemy when logging is TRACE.
     sa_logger = logging.getLogger('sqlalchemy.engine')
-    sa_level = logging.DEBUG if level == logging.NOTSET else logging.WARNING
-    sa_logger.setLevel(sa_level)
+    sa_level = logging.DEBUG if level == TRACE_LEVEL else logging.WARNING
+    sa_logger.setLevel(logging.NOTSET)
 
     # Hide sanic access logs when not at least "INFO".
     sanic_access = logging.getLogger('sanic.access')
@@ -395,7 +462,7 @@ class ConfigFile:
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
-        # Use the provided multiprocessing.Manager().dict(), or dict() for testing.
+        # Use the provided multiprocessing.Manager().dict() when live, or, dict() for testing.
         self._config = multiprocessing_dict if multiprocessing_dict is not None else dict()
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
@@ -1640,14 +1707,15 @@ def timer(name, level: str = 'debug', logger__: logging.Logger = None):
             time.sleep(10)
 
     """
+    level = level.lower()
     logger__ = logger__ or logger_
     before = datetime.now()
-    log_method = getattr(logger__, level)
     try:
         yield
     finally:
         elapsed = (datetime.now() - before).total_seconds()
-        log_method(f'{name} elapsed {elapsed} seconds')
+        msg = f'{name} elapsed {elapsed} seconds'
+        getattr(logger__, level)(msg)
 
 
 @contextlib.contextmanager
@@ -2190,7 +2258,7 @@ def cached_multiprocessing_result(func: callable):
     return wrapped
 
 
-def initialize_config_files() -> list[str]:
+def create_empty_config_files() -> list[str]:
     """Creates config files only if they do not exist and will not conflict with the DB."""
     from modules.inventory.common import get_inventories_config
     from modules.videos.lib import get_channels_config, get_videos_downloader_config

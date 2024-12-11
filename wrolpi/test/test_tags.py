@@ -9,7 +9,6 @@ from wrolpi.common import is_hardlinked, walk
 from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged, UsedTag
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.switches import await_switches
 from wrolpi.tags import TagFile, Tag
 
 
@@ -90,7 +89,7 @@ async def test_tags_file_group(async_client, test_session, make_files_structure,
 
 
 @pytest.mark.asyncio
-async def test_tags_config_file(async_client, test_session, test_directory, tag_factory, example_pdf, video_file,
+async def test_tags_config_file(test_session, test_directory, tag_factory, example_pdf, video_file, await_switches,
                                 test_tags_config):
     """Test that the config is updated when a FileGroup is tagged."""
     await files_lib.refresh_files()
@@ -286,7 +285,7 @@ async def test_import_tags_config_missing_file(test_session, test_directory, tes
 
 @pytest.mark.asyncio
 async def test_import_tags_delete_missing(test_session, test_directory, test_tags_config, make_files_structure,
-                                          tag_factory, test_zim, async_client):
+                                          tag_factory, test_zim, await_switches):
     """Tags not in the config are deleted on import.  Tags that are used will not be deleted."""
     from modules.zim import lib as zim_lib
 
@@ -351,8 +350,7 @@ async def test_invalid_tag(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_tags_directory(async_client, test_session, test_directory, tag_factory, video_factory,
-                              example_pdf):
+async def test_tags_directory(test_session, test_directory, tag_factory, video_factory, example_pdf, await_switches):
     """Test that Tag Directory is synchronized with database."""
     readme = test_directory / 'tags/README.txt'
 
@@ -460,7 +458,7 @@ async def test_tags_directory(async_client, test_session, test_directory, tag_fa
 
 
 @pytest.mark.asyncio
-async def test_update_tag(async_client, test_session, test_directory, video_factory, tag_factory):
+async def test_update_tag(test_session, test_directory, video_factory, tag_factory, await_switches):
     """Linked files in the Tag Directory are moved when the tag is renamed."""
     # Create tagged Video.
     tag = await tag_factory()
@@ -485,8 +483,8 @@ async def test_update_tag(async_client, test_session, test_directory, video_fact
 
 
 @pytest.mark.asyncio
-async def test_tag_rename_with_channel(async_client, test_session, test_directory, video_factory, tag_factory,
-                                       channel_factory):
+async def test_tag_rename_with_channel(test_session, test_directory, video_factory, tag_factory,
+                                       channel_factory, await_switches):
     tag = await tag_factory()
     channel = channel_factory(name='Channel Name', tag_name=tag.name)
     video_factory(title='video', channel_id=channel.id)

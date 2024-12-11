@@ -3,13 +3,12 @@ from http import HTTPStatus
 import pytest
 
 from wrolpi.common import get_wrolpi_config
-from wrolpi.switches import await_switches
 from wrolpi.tags import Tag
 
 
 @pytest.mark.asyncio
 async def test_configs_crud(async_client, test_session, test_tags_config, tag_factory, test_wrolpi_config,
-                            test_channels_config):
+                            test_channels_config, await_switches):
     """Configs can be imported or saved on demand."""
     # Create a tag, save it to config, delete it from the DB.
     one = await tag_factory()

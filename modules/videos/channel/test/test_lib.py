@@ -8,7 +8,6 @@ from modules.videos.channel import lib
 from modules.videos.errors import UnknownChannel
 from modules.videos.lib import save_channels_config, import_channels_config
 from modules.videos.models import Channel
-from wrolpi.switches import await_switches
 
 
 @pytest.mark.parametrize('params', [
@@ -130,7 +129,7 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
 
 @pytest.mark.asyncio
 async def test_tag_channel_existing(async_client, test_session, test_directory, channel_factory, tag_factory,
-                                    video_factory, test_channels_config):
+                                    video_factory, test_channels_config, await_switches):
     """A Channel already in a Tag's directory can still be tagged."""
     channel_directory = test_directory / 'videos/one/Channel Name'
     channel = channel_factory(name='Channel Name', download_frequency=120, directory=channel_directory)

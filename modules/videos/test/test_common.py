@@ -11,13 +11,11 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
-from wrolpi.switches import await_switches
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts_and_censored, extract_video_duration, generate_video_poster, \
     is_valid_poster
-from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig, \
-    convert_or_generate_poster
+from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
 
 
 def test_get_absolute_media_path(test_directory):
@@ -137,7 +135,7 @@ def test_generate_video_poster(video_file):
 
 
 @pytest.mark.asyncio
-async def test_import_channel_downloads(async_client, test_session, channel_factory, test_channels_config,
+async def test_import_channel_downloads(await_switches, test_session, channel_factory, test_channels_config,
                                         tag_factory):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo', url='https://example.com/channel1')
@@ -248,8 +246,8 @@ async def test_import_channel_downloads(async_client, test_session, channel_fact
 
 
 @pytest.mark.asyncio
-async def test_import_channel_delete_missing_channels(
-        async_client, test_session, channel_factory, test_channels_config):
+async def test_import_channel_delete_missing_channels(await_switches, test_session, channel_factory,
+                                                      test_channels_config):
     """The Channel import function deletes any Channels that are not in the config."""
     # Create a DB and config with two Channels.
     channel1 = channel_factory(source_id='foo')

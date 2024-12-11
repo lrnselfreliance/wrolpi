@@ -605,7 +605,7 @@ class Channel(ModelHelper, Base):
             if isinstance(download, dict):
                 url = download['url']
                 # Use download frequency from downloads config before the channels config.
-                if existing_download := download_manager.get_download(session, url):
+                if existing_download := Download.get_by_url(url, session=session):
                     frequency = existing_download.frequency
                 else:
                     frequency = download.get('frequency')
@@ -768,7 +768,7 @@ class Channel(ModelHelper, Base):
 
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
-        download = download_manager.get_download(session, url)
+        download = Download.get_by_url(url, session=session)
         if not download:
             download = download_manager.recurring_download(url, frequency, ChannelDownloader.name, session=session,
                                                            sub_downloader_name=VideoDownloader.name,

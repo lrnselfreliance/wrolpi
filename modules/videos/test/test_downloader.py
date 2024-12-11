@@ -10,10 +10,9 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename
 from modules.videos.models import Channel, Video
-from wrolpi.conftest import test_directory
+from wrolpi.conftest import test_directory, await_switches
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
-from wrolpi.switches import await_switches
 from wrolpi.vars import PROJECT_DIR
 
 example_video_json = {
@@ -78,7 +77,7 @@ example_channel_json = {
 
 
 @pytest.mark.asyncio
-async def test_download_no_channel(test_session, video_download_manager, test_directory,
+async def test_download_no_channel(test_session, video_download_manager, test_directory, await_switches,
                                    mock_video_extract_info, mock_video_process_runner):
     """A video can be downloaded even if it does not have a Channel."""
     channel_dir = test_directory / 'NO CHANNEL'
@@ -109,7 +108,7 @@ async def test_download_no_channel(test_session, video_download_manager, test_di
 
 @pytest.mark.asyncio
 async def test_download_video_tags(test_session, video_download_manager, video_file_factory, test_directory,
-                                   mock_video_extract_info, mock_video_process_runner, tag_factory):
+                                   mock_video_extract_info, mock_video_process_runner, tag_factory, await_switches):
     """A Video is tagged when Download record requires it."""
     video_path = video_file_factory()
     tag1, tag2 = await tag_factory(), await tag_factory()
@@ -130,7 +129,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
 
 @pytest.mark.asyncio
 async def test_download_channel(test_session, test_directory, simple_channel, video_download_manager, video_file,
-                                mock_video_extract_info, mock_video_prepare_filename,
+                                mock_video_extract_info, mock_video_prepare_filename, await_switches,
                                 mock_video_process_runner):
     """Downloading (updating the catalog of) a Channel updates its info_json.
 
@@ -198,7 +197,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_channel(async_client, test_session, test_directory, tag_factory):
+async def test_get_or_create_channel(async_client, test_session, test_directory, tag_factory, await_switches):
     """A Channel may need to be created for an arbitrary download.
 
     Attempt to use an existing Channel if we can match it.
@@ -269,7 +268,7 @@ def test_bad_downloader(test_session, video_download_manager):
 
 
 @pytest.mark.asyncio
-async def test_video_download(test_session, test_directory, mock_video_extract_info, simple_channel,
+async def test_video_download(test_session, test_directory, mock_video_extract_info, simple_channel, await_switches,
                               video_download_manager, mock_video_process_runner, image_file):
     """A video download is performed, files are grouped."""
     simple_channel.source_id = example_video_json['channel_id']
@@ -311,7 +310,7 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
 
 @pytest.mark.asyncio
 async def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
-                               mock_video_extract_info, image_file):
+                               mock_video_extract_info, image_file, await_switches):
     """VideoDownloader returns a DownloadResult when complete."""
     channel_directory = test_directory / 'videos/channel name'
     channel_directory.mkdir(parents=True)
@@ -338,7 +337,7 @@ async def test_download_result(test_session, test_directory, video_download_mana
 
 
 @pytest.mark.asyncio
-async def test_download_destination(test_session, test_directory, video_download_manager,
+async def test_download_destination(test_session, test_directory, video_download_manager, await_switches,
                                     mock_video_process_runner, mock_video_extract_info, mock_video_prepare_filename):
     """A Video can be downloaded to a directory other than it's Channel's directory."""
     # yt-dlp would return the video json.

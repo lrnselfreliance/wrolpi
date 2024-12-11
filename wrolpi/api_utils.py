@@ -10,7 +10,7 @@ from pathlib import Path
 
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
-from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
+from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG, TRACE_LEVEL
 from wrolpi.errors import APIError
 
 logger = logger.getChild(__name__)
@@ -102,7 +102,8 @@ def json_error_handler(request: Request, exception: Exception):
     message = repr(str(body["message"]))
     code = body['code']
     if logger.isEnabledFor(logging.DEBUG):
-        logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}', exc_info=exception)
+        logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}',
+                     exc_info=exception)
     else:
         logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}')
     if isinstance(exception, SanicException):
@@ -150,8 +151,9 @@ def perpetual_signal(event: str = None, sleep: int | float = 1):
         # Wrap the function in a worker that will call it perpetually.
         @api_app.signal(event_)
         async def worker(*args, **kwargs):
-            logger.log(logging.NOTSET, f'perpetual_signal {event_}')
+            logger.trace(f'perpetual_signal {event_}')
             cancelled = False
+            start = datetime.now()
             try:
                 await func(*args, **kwargs)
             except CancelledError:
@@ -160,6 +162,9 @@ def perpetual_signal(event: str = None, sleep: int | float = 1):
             except Exception as e:
                 logger.error(f'Perpetual worker {event_} had error', exc_info=e)
             finally:
+                if logger.isEnabledFor(TRACE_LEVEL):
+                    elapsed = (datetime.now() - start).total_seconds()
+                    logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
                 if not cancelled:
                     await asyncio.sleep(sleep)
                     await api_app.dispatch(event_)

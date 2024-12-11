@@ -129,7 +129,7 @@ export function ChannelPage({create, header}) {
         try {
             if (create !== undefined) {
                 // Can create a Channel with a Tag.
-                body.tag_name = channel.tag_name;
+                body.tag_name = _.isEmpty(channel.tag_name) ? null : channel.tag_name[0];
                 response = await createChannel(body);
             } else {
                 response = await updateChannel(channelId, body);

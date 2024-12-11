@@ -13,6 +13,7 @@ from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, ge
     get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
+from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
@@ -224,7 +225,7 @@ class FileGroup(ModelHelper, Base):
 
         if session := Session.object_session(self):
             from wrolpi.downloader import download_manager
-            if self.url and (download := download_manager.get_download(session, self.url)):
+            if self.url and (download := Download.get_by_url(self.url, session=session)):
                 download.delete(add_to_skip_list)
             elif self.url and add_to_skip_list is True:
                 download_manager.add_to_skip_list(self.url)

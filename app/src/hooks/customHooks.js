@@ -806,12 +806,6 @@ export const useSettings = () => {
             setSettings(await getSettings())
         } catch (e) {
             setSettings({});
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get directories',
-                time: 5000,
-            });
         } finally {
             setPending(false);
         }

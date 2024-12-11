@@ -50,8 +50,7 @@ if '-vv' in sys.argv:
     LOG_LEVEL_INT = logging.DEBUG
 elif '-vvv' in sys.argv:
     # SQLAlchemy will increase logging.
-    LOG_LEVEL_INT = logging.NOTSET
-LOG_LEVEL = logging.getLevelName(LOG_LEVEL_INT)
+    LOG_LEVEL_INT = logging.DEBUG - 5
 
 # Special environment variable set in the docker/api/Dockerfile.
 DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))

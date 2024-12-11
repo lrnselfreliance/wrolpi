@@ -18,7 +18,7 @@ from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
-    initialize_config_files
+    create_empty_config_files, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager
@@ -131,7 +131,7 @@ def main():
         set_log_level(logging.DEBUG)
     elif args.verbose and args.verbose >= 3:
         # Log everything.  Add SQLAlchemy debug logging.
-        set_log_level(logging.NOTSET)
+        set_log_level(TRACE_LEVEL)
     logger.info(get_version_string())
 
     if DOCKERIZED:
@@ -171,12 +171,10 @@ async def main_process_startup(app: Sanic):
     attach_shared_contexts(app)
     logger.debug('main_process_startup done')
 
-    download_manager.disable()
-
     try:
-        initialize_config_files()
+        create_empty_config_files()
     except Exception as e:
-        logger.error('Failed to initialize config files', exc_info=e)
+        logger.error('Failed to create initial config files', exc_info=e)
 
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
@@ -259,7 +257,7 @@ async def start_single_tasks(app: Sanic):
         # Set all downloads to new.
         download_manager.retry_downloads()
 
-    if get_wrolpi_config().download_on_startup:
+    if get_wrolpi_config().download_on_startup and download_manager.can_download:
         await download_manager.enable()
 
     # Hotspot/throttle are not supported in Docker containers.
@@ -330,20 +328,16 @@ async def perpetual_start_video_missing_comments_download():
     # Wait for download manager to startup.
     await asyncio.sleep(5)
 
-    # Fetch comments for videos every hour.
-    if download_manager.is_disabled or download_manager.is_stopped:
-        logger.debug('Waiting for downloads to be enabled before downloading comments...')
-        return
-    elif not flags.have_internet.is_set():
-        logger.debug('Waiting for internet before downloading comments...')
-        return
-    else:
+    if download_manager.can_download:
         try:
             await get_missing_videos_comments()
         except Exception as e:
             logger.error('Failed to get missing video comments', exc_info=e)
 
+        # Sleep one hour.
         await asyncio.sleep(int(Seconds.hour))
+    else:
+        logger.debug('Waiting for downloads to be enabled before downloading comments...')
 
 
 if __name__ == '__main__':

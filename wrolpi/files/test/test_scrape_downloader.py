@@ -1,4 +1,3 @@
-import asyncio
 from http import HTTPStatus
 
 import mock
@@ -8,7 +7,6 @@ from wrolpi.dates import Seconds
 from wrolpi.downloader import DownloadResult
 from wrolpi.files.downloader import FileDownloader
 from wrolpi.scrape_downloader import ScrapeHTMLDownloader
-from wrolpi.switches import await_switches
 
 EXAMPLE_HTTP = '''
 <html>
@@ -32,7 +30,7 @@ async def fake_file_do_download(*a, **kwargs):
     return DownloadResult(success=True)
 
 
-async def test_scrape_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls):
+async def test_scrape_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls, await_switches):
     """User can scrape for PDF files."""
     test_download_manager.register_downloader(ScrapeHTMLDownloader())
     test_download_manager.register_downloader(FileDownloader())
@@ -60,7 +58,8 @@ async def test_scrape_html_downloader(test_directory, test_session, test_downloa
     ])
 
 
-async def test_scrape_html_downloader_html(test_directory, test_session, test_download_manager, assert_download_urls):
+async def test_scrape_html_downloader_html(test_directory, test_session, test_download_manager, assert_download_urls,
+                                           await_switches):
     """User can also scrape for HTML files."""
     test_download_manager.register_downloader(ScrapeHTMLDownloader())
     test_download_manager.register_downloader(FileDownloader())
@@ -73,7 +72,7 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
     with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
             mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
-        await asyncio.sleep(1)
+        await await_switches()
 
     assert_download_urls([
         'https://example.com/dir',

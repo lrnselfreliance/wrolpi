@@ -11,7 +11,6 @@ from wrolpi.api_utils import json_error_handler
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
-from wrolpi.switches import await_switches
 from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
@@ -494,7 +493,7 @@ async def test_empty_post_download(async_client):
 
 
 @pytest.mark.asyncio
-async def test_restart_download(test_session, async_client, test_download_manager, test_downloader):
+async def test_restart_download(test_session, async_client, test_download_manager, test_downloader, await_switches):
     """A Download can be restarted."""
     # Create a download, fail it, it should be restarted.
     download = test_download_manager.create_download('https://example.com', test_downloader.name)

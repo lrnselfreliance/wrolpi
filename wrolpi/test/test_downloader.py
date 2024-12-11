@@ -18,7 +18,6 @@ from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     get_download_manager_config, RSSDownloader
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
-from wrolpi.switches import await_switches
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -177,7 +176,7 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
 
 
 @pytest.mark.asyncio
-async def test_recurring_downloads(test_session, test_download_manager, fake_now, test_downloader):
+async def test_recurring_downloads(test_session, test_download_manager, fake_now, test_downloader, await_switches):
     """A recurring Download should be downloaded forever."""
     test_downloader.set_test_success()
 
@@ -245,7 +244,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
 
 
 @pytest.mark.asyncio
-async def test_max_attempts(test_session, test_download_manager, test_downloader):
+async def test_max_attempts(test_session, test_download_manager, test_downloader, await_switches):
     """A Download will only be attempted so many times, it will eventually be deleted."""
     _, session = get_db_context()
 
@@ -271,7 +270,7 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
 
 
 @pytest.mark.asyncio
-async def test_skip_urls(test_session, test_download_manager, assert_download_urls, test_downloader,
+async def test_skip_urls(test_session, test_download_manager, assert_download_urls, test_downloader, await_switches,
                          test_download_manager_config):
     """The DownloadManager will not create downloads for URLs in its skip list."""
     _, session = get_db_context()
@@ -414,7 +413,7 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
 
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
-                                test_downloader, assert_downloads, tag_factory):
+                                test_downloader, assert_downloads, tag_factory, await_switches):
     # Can import with an empty config.
     await import_downloads_config()
     assert_downloads([])
@@ -510,7 +509,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
 
 
 @pytest.mark.asyncio
-async def test_download_excluded_urls(test_session, test_download_manager, test_downloader):
+async def test_download_excluded_urls(test_session, test_download_manager, test_downloader, await_switches):
     """Test that URLs that have been excluded are ignored by the download worker."""
     test_downloader.already_downloaded = lambda *i, **kw: []
     test_downloader.set_test_success()

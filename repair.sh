@@ -133,7 +133,9 @@ systemctl enable renderd
 if grep -qs /media/wrolpi /proc/mounts && [ -z "$(ls -A /media/wrolpi)" ] && [ ! -d /media/wrolpi/config ]; then
   mkdir /media/wrolpi/config
 fi
-chown wrolpi:wrolpi /media/wrolpi
+
+# Change owner of the media directory, ignore any errors because the drive may be fat/exfat/etc.
+chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."
 
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 

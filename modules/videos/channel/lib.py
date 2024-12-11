@@ -9,7 +9,7 @@ from wrolpi import flags
 from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_curs, optional_session, get_db_session
-from wrolpi.downloader import save_downloads_config, download_manager
+from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, RefreshConflict
 from wrolpi.vars import PYTEST
 from .. import schema
@@ -248,7 +248,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     with get_db_session(commit=True) as session:
         # Ensure that the Channel exists.
         Channel.find_by_id(channel_id, session=session)
-        download = download_manager.get_download(session, id_=download_id)
+        download = Download.find_by_id(download_id, session=session)
         download.url = url
         download.frequency = frequency
         download.settings = settings

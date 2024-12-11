@@ -16,9 +16,8 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_relative_to_media_directory, walk
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.downloader import download_manager, Download, DownloadResult
+from wrolpi.downloader import Download, DownloadResult
 from wrolpi.files.models import Directory
-from wrolpi.switches import await_switches
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -57,25 +56,26 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     assert_dict_contains(response.json['next'], {'title': 'vid2'})
 
 
-def test_channel_no_download_frequency(test_client, test_session, test_directory, simple_channel):
+@pytest.mark.asyncio
+async def test_channel_no_download_frequency(async_client, test_session, test_directory, simple_channel, test_download_manager):
     """A channel does not require a download frequency."""
     # No downloads are scheduled.
-    assert len(download_manager.get_downloads(test_session)) == 0
+    assert len(test_download_manager.get_downloads(test_session)) == 0
 
     # Get the Channel
-    request, response = test_client.get('/api/videos/channels/1')
+    request, response = await async_client.get('/api/videos/channels/1')
     assert response.status_code == HTTPStatus.OK
     channel = response.json['channel']
     assert not channel['downloads']
 
     # Update the Channel with a frequency.
     new_download = {'urls': [simple_channel.url], 'frequency': 10, 'downloader': ChannelDownloader.name}
-    request, response = test_client.post('/api/download', json=new_download)
+    request, response = await async_client.post('/api/download', json=new_download)
     assert response.status_code == HTTPStatus.CREATED, response.json
 
     # Download is scheduled.  Download is related to Channel.
-    assert len(download_manager.get_downloads(test_session)) == 1
-    request, response = test_client.get('/api/videos/channels/1')
+    assert len(test_download_manager.get_downloads(test_session)) == 1
+    request, response = await async_client.get('/api/videos/channels/1')
     channel = response.json['channel']
     assert channel['downloads']
     downloads = channel['downloads']
@@ -84,9 +84,9 @@ def test_channel_no_download_frequency(test_client, test_session, test_directory
     download_id = channel['downloads'][0]['id']
 
     # Deleting Download does not delete Channel.
-    request, response = test_client.delete(f'/api/download/{download_id}')
+    request, response = await async_client.delete(f'/api/download/{download_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
-    assert not download_manager.get_downloads(test_session)
+    assert not test_download_manager.get_downloads(test_session)
     assert not test_session.query(Download).all()
     assert test_session.query(Channel).count() == 1
 
@@ -191,7 +191,7 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 @pytest.mark.asyncio
 async def test_channel_download_requires_refresh(
         async_client, test_session, mock_video_extract_info, download_channel, video_download_manager,
-        video_factory, events_history):
+        video_factory, events_history, await_switches):
     """A Channel cannot be downloaded until it has been refreshed.
 
     Videos already downloaded are not downloaded again."""
@@ -464,7 +464,7 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     tag = await tag_factory('Tag Name')
     v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
     # Create recurring download which uses the Channel's directory.
-    download = download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
+    download = test_download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
                                                    destination=str(test_directory / 'videos/Channel Name'))
     test_session.commit()
     save_channels_config()

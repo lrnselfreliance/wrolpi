@@ -138,7 +138,7 @@ if [ -f /etc/systemd/system/wrolpi-api.service ]; then
   fi
 fi
 
-if curl -s http://0.0.0.0:8081/api/echo | grep -i '"method":"GET"' >/dev/null; then
+if curl -s http://0.0.0.0:8081/api/echo --max-time 5 | grep -i '"method":"GET"' >/dev/null; then
   echo "OK: WROLPi API echoed correctly"
 else
   echo "FAILED: WROLPi API did not echo correctly"
@@ -173,13 +173,13 @@ if [ -f /etc/systemd/system/wrolpi-app.service ]; then
   fi
 fi
 
-if curl -s http://0.0.0.0:3000 | grep -i wrolpi >/dev/null; then
+if curl -s http://0.0.0.0:3000 --max-time 5 | grep -i wrolpi >/dev/null; then
   echo "OK: WROLPi app responded with UI"
 else
   echo "FAILED: WROLPi app did not respond with UI"
 fi
 
-if curl -s http://0.0.0.0:3000/epub/epub.html | grep -i epub.js >/dev/null; then
+if curl -s http://0.0.0.0:3000/epub/epub.html --max-time 5 | grep -i epub.js >/dev/null; then
   echo "OK: WROLPi app responded with ebook interface"
 else
   echo "FAILED: WROLPi app did not respond with ebook interface"
@@ -218,7 +218,7 @@ else
   echo "FAILED: renderd systemd does not exist"
 fi
 
-if curl -k -s https://0.0.0.0:8084 2>/dev/null | grep -i openstreetmap >/dev/null; then
+if curl -k -s https://0.0.0.0:8084 --max-time 5 2>/dev/null | grep -i openstreetmap >/dev/null; then
   echo "OK: Map app responded"
 else
   echo "FAILED: Map app did not respond"
@@ -232,7 +232,7 @@ echo
 # Kiwix
 
 check_file /media/wrolpi/zims/library.xml "The kiwix library file exists" "The kiwix library file does not exist at /media/wrolpi/zims/library.xml"
-if curl -k -s https://0.0.0.0:8085 2>/dev/null | grep -i kiwix >/dev/null; then
+if curl -k -s https://0.0.0.0:8085 --max-time 5 2>/dev/null | grep -i kiwix >/dev/null; then
   echo "OK: Kiwix app responded"
 else
   echo "FAILED: Kiwix app did not respond"
@@ -255,9 +255,9 @@ else
   echo "FAILED: Media directory is not a mounted drive.  (This is fine if you don't have an external drive.)"
 fi
 
-if curl -k -s https://0.0.0.0/media/ | grep "Index of /media/" >/dev/null; then
+if curl -k -s https://0.0.0.0/media/ --max-time 5 | grep "Index of /media/" >/dev/null; then
   echo "OK: Media directory files are served by nginx"
-  if curl -k -s -I https://0.0.0.0/media/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
+  if curl -k -s -I https://0.0.0.0/media/config/wrolpi.yaml --max-time 5 | grep '200 OK' >/dev/null; then
     echo "OK: Config can be fetched from nginx"
   else
     echo "FAILED: Media directory files are not being served"
@@ -266,9 +266,9 @@ else
   echo "FAILED: Media directory files are not being served"
 fi
 
-if curl -k -s https://0.0.0.0/download/ | grep "Index of /download/" >/dev/null; then
+if curl -k -s https://0.0.0.0/download/ --max-time 5 | grep "Index of /download/" >/dev/null; then
   echo "OK: Media download directory files are served by nginx"
-  if curl -k -s -I https://0.0.0.0/download/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
+  if curl -k -s -I https://0.0.0.0/download/config/wrolpi.yaml --max-time 5 | grep '200 OK' >/dev/null; then
     echo "OK: Config can be downloaded from nginx"
   else
     echo "FAILED: Media download directory files are not being served"
@@ -337,7 +337,7 @@ else
   echo "FAILED: Help mkdocs cannot be run"
 fi
 
-if curl -k -s https://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
+if curl -k -s https://0.0.0.0:8086/ --max-time 5 | grep MkDocs 2>/dev/null >/dev/null; then
   echo "OK: Help service is running"
 else
   echo "FAILED: Help service is not running"

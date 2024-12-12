@@ -9,7 +9,7 @@ from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
 from wrolpi.files.lib import get_mimetype
-from wrolpi.files.models import FileGroup
+from wrolpi.files.models import FileGroup, Directory
 from wrolpi.tags import TagFile
 from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
@@ -695,17 +695,24 @@ async def test_move(test_session, test_directory, make_files_structure, async_cl
 
 @pytest.mark.asyncio
 async def test_rename_file(test_session, test_directory, make_files_structure, async_client):
-    foo, = make_files_structure({
+    """A FileGroup can be renamed.  The title and search index is updated."""
+    foo_file, = make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
+    await lib.refresh_files()
+    foo_fg = test_session.query(FileGroup).one()
+    assert foo_fg.a_text == 'baz txt'
+    assert foo_fg.d_text == 'asdf'
 
     # mv foo/bar/baz.txt foo/bar/qux.txt
     content = dict(path='foo/bar/baz.txt', new_name='qux.txt')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert not foo.exists()
+    assert not foo_file.exists()
     assert (test_directory / 'foo/bar/qux.txt').is_file()
     assert (test_directory / 'foo/bar/qux.txt').read_text() == 'asdf'
+    assert foo_fg.a_text == 'qux txt'
+    assert foo_fg.d_text == 'asdf'
 
 
 @pytest.mark.asyncio
@@ -713,14 +720,19 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
     make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
+    await lib.refresh_files()
+    bar, foo = test_session.query(Directory).order_by(Directory.name).all()
+    assert foo.name == 'foo' and bar.name == 'bar'
 
-    # mv foo/bar/baz.txt foo/bar/qux.txt
+    # mv foo/bar foo/qux
     content = dict(path='foo/bar', new_name='qux')
     request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/qux/baz.txt').is_file()
     assert (test_directory / 'foo/qux/baz.txt').read_text() == 'asdf'
+    foo, qux = test_session.query(Directory).order_by(Directory.name).all()
+    assert foo.name == 'foo' and qux.name == 'qux'
 
 
 @pytest.mark.asyncio

@@ -337,7 +337,7 @@ class FileGroup(ModelHelper, Base):
 
     def move(self, new_primary_path: pathlib.Path):
         """Move all files in this group to a new location."""
-        from wrolpi.files.lib import split_path_stem_and_suffix, glob_shared_stem
+        from wrolpi.files.lib import split_path_stem_and_suffix, glob_shared_stem, split_file_name_words
 
         if new_primary_path.exists():
             raise FileExistsError(f'Cannot move {self} to {new_primary_path} because it already exists.')
@@ -370,6 +370,7 @@ class FileGroup(ModelHelper, Base):
         if self.title == self.primary_path.name:
             # Do not overwrite title from modeler.
             self.title = new_primary_path.name
+        self.a_text = split_file_name_words(new_primary_path.name)
         self.primary_path = new_primary_path
         # Need to re-index for self.data.
         self.indexed = False if self.data else self.indexed

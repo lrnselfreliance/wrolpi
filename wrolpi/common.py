@@ -231,6 +231,7 @@ __all__ = [
     'DownloadFileInfoLink',
     'LOGGING_CONFIG',
     'ModelHelper',
+    'TRACE_LEVEL',
     'WROLPI_CONFIG',
     'aiohttp_get',
     'aiohttp_head',

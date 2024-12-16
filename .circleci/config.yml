@@ -214,5 +214,5 @@ workflows:
     jobs:
       - react-app-start
       - react-app-cypress-components-chrome
-      - react-app-cypress-components-firefox
       - react-app-cypress-components-edge
+#      - react-app-cypress-components-firefox

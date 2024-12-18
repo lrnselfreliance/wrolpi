@@ -2,18 +2,13 @@ import React from "react";
 import {Link, NavLink} from "react-router-dom";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {
-    CPUTemperatureIcon,
-    DarkModeToggle,
-    HotspotStatusIcon,
-    SystemLoadIcon,
-    useLocalStorage
-} from "./Common";
+import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, SystemLoadIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
 import {Icon} from "./Theme";
 import {HELP_VIEWER_URI, NAME} from "./Vars";
+import _ from "lodash";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -65,7 +60,14 @@ function MenuLink({link}) {
 }
 
 function NavIconWrapper(props) {
-    return <div style={{margin: '0.8em'}}>{props.children}</div>
+    if (_.isEmpty(props.children)) {
+        return <></>
+    } else {
+        if (props.name === 'warning') {
+            // console.log(props.name, props.children);
+        }
+        return <div style={{marginTop: '0.8em', marginLeft: '1.5em'}}>{props.children}</div>
+    }
 }
 
 function useNavColorSetting() {
@@ -98,17 +100,26 @@ export function NavBar() {
     // Display the temperature icon first because it can cause the system to throttle.
     const warningIcon = <CPUTemperatureIcon fallback={<SystemLoadIcon/>}/>;
 
-    const refreshingIcon = status.flags && status.flags.refreshing ?
-        <Link to='/files'><Icon loading name='circle notch' size='large'/></Link>
-        : null;
+    let processingLink;
+    if (status && status.flags) {
+        if (status.flags.refreshing) {
+            processingLink = '/files';
+        } else if (status.flags.map_importing) {
+            processingLink = '/map/manage';
+        }
+    }
+
+    const processingIcon = processingLink &&
+        <Link to={processingLink}>
+            <Icon loading name='circle notch' size='large'/>
+        </Link>;
 
     const icons = <React.Fragment>
-        <NavIconWrapper>{refreshingIcon}</NavIconWrapper>
-        <NavIconWrapper>{warningIcon}</NavIconWrapper>
-        <NavIconWrapper><ShareButton/></NavIconWrapper>
-        <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
-        <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
-        <span style={{marginTop: '0.5em'}}><SearchIconButton/></span>
+        <NavIconWrapper name='processing'>{processingIcon}</NavIconWrapper>
+        <NavIconWrapper name='warning'>{warningIcon}</NavIconWrapper>
+        <NavIconWrapper name='share'><ShareButton/></NavIconWrapper>
+        <NavIconWrapper name='hotspot'><HotspotStatusIcon/></NavIconWrapper>
+        <NavIconWrapper name='dark mode'><DarkModeToggle/></NavIconWrapper>
     </React.Fragment>;
 
     return <>
@@ -117,6 +128,7 @@ export function NavBar() {
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
+                    <SearchIconButton/>
                     <Dropdown item icon="bars">
                         <Dropdown.Menu>
                             {collapsedLinks.map(i => <MenuLink link={i} key={i.key}/>)}
@@ -132,6 +144,7 @@ export function NavBar() {
 
                 <Menu.Menu position='right'>
                     {icons}
+                    <SearchIconButton/>
                     {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
                 </Menu.Menu>
             </Menu>

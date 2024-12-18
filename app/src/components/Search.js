@@ -7,16 +7,7 @@ import {searchEstimateFiles, searchEstimateOthers, searchEstimateZims, searchSug
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
-import {
-    AccordionContent,
-    AccordionTitle,
-    Button as SButton,
-    Grid,
-    GridColumn,
-    GridRow,
-    Header as SHeader,
-    Label
-} from "semantic-ui-react";
+import {AccordionContent, AccordionTitle, Grid, GridColumn, GridRow, Header as SHeader, Label} from "semantic-ui-react";
 import {Accordion, Header, Icon, Loader, Modal, ModalContent, Segment} from "./Theme";
 import {QueryContext, ThemeContext} from "../contexts/contexts";
 
@@ -409,8 +400,11 @@ export function SearchIconButton() {
         prevOpen.current = open;
     }, [open]);
 
-    return <React.Fragment>
-        <SButton icon='search' onClick={() => setOpen(!open)} color='blue' style={{marginTop: '-0.2em'}}/>
+    const toggleOpen = () => setOpen(!open);
+
+    // Return an "item" class because this can be highlighted when hovered over on the nav bar.
+    return <a className='item' style={{paddingRight: '0.8em'}} onClick={toggleOpen}>
+        <Icon name='search' onClick={toggleOpen}/>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
                 <SearchResultsInput clearable
@@ -426,7 +420,7 @@ export function SearchIconButton() {
                 />
             </ModalContent>
         </Modal>
-    </React.Fragment>
+    </a>
 }
 
 function SearchChannelPreview({channel}) {

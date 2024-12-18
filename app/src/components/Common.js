@@ -1010,7 +1010,7 @@ export function DarkModeToggle() {
     return <Icon
         name={iconName}
         onClick={cycleSavedTheme}
-        style={{cursor: 'pointer'}}
+        style={{cursor: 'pointer', marginRight: '0.8em'}}
     />
 }
 

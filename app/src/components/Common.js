@@ -1807,7 +1807,7 @@ export function useLocalStorage(key, initialValue, decode = JSON.parse, encode =
     const [value, setValue] = useState(() => {
         let item;
         try {
-            item = window.localStorage.getItem(key);
+            const item = window.localStorage.getItem(key);
             // Parse the stored item (integer, bool, etc.).  Use the initial value if empty.
             return item ? decode(item) : initialValue;
         } catch (error) {
@@ -1820,9 +1820,10 @@ export function useLocalStorage(key, initialValue, decode = JSON.parse, encode =
     // Save to localStorage when the value changes
     useEffect(() => {
         try {
-            window.localStorage.setItem(key, encode(value));
+            decode(value);
+            window.localStorage.setItem(key, value);
         } catch (error) {
-            console.error('Error setting localStorage:', error);
+            window.localStorage.setItem(key, encode(value));
         }
     }, [key, value, encode]);
 

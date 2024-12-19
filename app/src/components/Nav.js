@@ -76,9 +76,9 @@ function useNavColorSetting() {
     const [navColor, setNavColor] = useLocalStorage('nav_color', 'violet');
 
     React.useEffect(() => {
-        const newColor = settings.nav_color || 'violet';
-        setNavColor(newColor);
-        localStorage.setItem('nav_color', newColor);
+        if (!_.isEmpty(settings)) {
+            setNavColor(settings.nav_color);
+        }
     }, [settings.nav_color]);
 
     return navColor

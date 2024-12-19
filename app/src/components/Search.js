@@ -400,11 +400,10 @@ export function SearchIconButton() {
         prevOpen.current = open;
     }, [open]);
 
-    const toggleOpen = () => setOpen(!open);
-
-    // Return an "item" class because this can be highlighted when hovered over on the nav bar.
-    return <a className='item' style={{paddingRight: '0.8em'}} onClick={toggleOpen}>
-        <Icon name='search' onClick={toggleOpen}/>
+    return <React.Fragment>
+        <a className='item' style={{paddingRight: '0.7em'}} onClick={() => setOpen(true)}>
+            <Icon name='search'/>
+        </a>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
                 <SearchResultsInput clearable
@@ -420,7 +419,7 @@ export function SearchIconButton() {
                 />
             </ModalContent>
         </Modal>
-    </a>
+    </React.Fragment>
 }
 
 function SearchChannelPreview({channel}) {

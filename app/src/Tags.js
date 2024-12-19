@@ -1,7 +1,14 @@
 import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
 import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
-import {APIButton, contrastingColor, ErrorMessage, fuzzyMatch, scrollToTopOfElement} from "./components/Common";
+import {
+    APIButton,
+    contrastingColor,
+    ErrorMessage,
+    fuzzyMatch,
+    getDistinctColor,
+    scrollToTopOfElement
+} from "./components/Common";
 import {
     Button,
     FormInput,
@@ -200,6 +207,9 @@ function EditTagsModal() {
     const {fetchTags, tags} = React.useContext(TagsContext);
     const {inverted} = React.useContext(ThemeContext);
 
+    // Return a random, but distinct Hex color.
+    const getRandomColor = () => getDistinctColor((tags || []).map(i => i.color));
+
     const [open, setOpen] = React.useState(false);
     const [tagId, setTagId] = React.useState(null);
     const [tagName, setTagName] = React.useState('');
@@ -207,6 +217,13 @@ function EditTagsModal() {
     const textColor = contrastingColor(tagColor);
     const [tagNameError, setTagNameError] = React.useState(null);
     const disabled = !!!tagName || !!tagNameError;
+
+    const setRandomColor = () => setTagColor(getRandomColor());
+
+    // Open modal with random color.
+    React.useEffect(() => {
+        setRandomColor();
+    }, [open]);
 
     const localOnClose = () => {
         setOpen(false);
@@ -238,7 +255,8 @@ function EditTagsModal() {
         }
         setTagName('');
         setTagId(null);
-        setTagColor(DEFAULT_TAG_COLOR);
+        // Change suggested color after save.
+        setRandomColor();
     }
 
     const handleTagNameChange = (e, {value}) => {
@@ -282,13 +300,27 @@ function EditTagsModal() {
 
                 <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
 
-                <APIButton
-                    color='violet'
-                    size='big'
-                    onClick={localSaveTag}
-                    style={{marginTop: '2em'}}
-                    disabled={disabled}
-                >Save</APIButton>
+                <Grid>
+                    <Grid.Row columns={2}>
+                        <Grid.Column>
+                            <Button
+                                color='orange'
+                                onClick={setRandomColor}
+                                style={{marginTop: '2em'}}
+                                type='button'
+                            >Random</Button>
+                        </Grid.Column>
+                        <Grid.Column textAlign='right'>
+                            <APIButton
+                                color='violet'
+                                size='big'
+                                onClick={localSaveTag}
+                                style={{marginTop: '2em'}}
+                                disabled={disabled}
+                            >Save</APIButton>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
 
                 <Divider/>
 

@@ -1876,3 +1876,75 @@ export function mergeDeep(target, source) {
     return result;
 }
 
+export function getDistinctColor(hexColors) {
+    function hexToHSL(hex) {
+        let r = parseInt(hex.slice(1, 3), 16) / 255;
+        let g = parseInt(hex.slice(3, 5), 16) / 255;
+        let b = parseInt(hex.slice(5, 7), 16) / 255;
+
+        let cmax = Math.max(r, g, b), cmin = Math.min(r, g, b);
+        let delta = cmax - cmin;
+        let h, s, l = (cmax + cmin) / 2;
+
+        if (delta === 0) h = 0;
+        else if (cmax === r) h = ((g - b) / delta) % 6;
+        else if (cmax === g) h = (b - r) / delta + 2;
+        else h = (r - g) / delta + 4;
+
+        h = Math.round(h * 60);
+        if (h < 0) h += 360;
+
+        s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+
+        return {h: h, s: s, l: l};
+    }
+
+    function hslToHex(h, s, l) {
+        l /= 100;
+        const a = s * Math.min(l, 1 - l) / 100;
+        const f = n => {
+            const k = (n + h / 30) % 12;
+            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+            return Math.round(255 * color).toString(16).padStart(2, '0');
+        };
+        return `#${f(0)}${f(8)}${f(4)}`;
+    }
+
+    function generateRandomHSL() {
+        return {
+            h: Math.random() * 360,
+            s: Math.random() * 100,
+            l: Math.random() * 100
+        };
+    }
+
+    function isDistinct(newColor, existingColors, threshold) {
+        const hslNew = newColor;
+        for (let color of existingColors) {
+            let hslColor = hexToHSL(color);
+            if (Math.abs(hslNew.h - hslColor.h) < threshold &&
+                Math.abs(hslNew.s * 100 - hslColor.s * 100) < threshold &&
+                Math.abs(hslNew.l - hslColor.l * 100) < threshold) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    let newColor, attempt = 0;
+    const maxAttempts = 1000; // Max attempts before returning any color
+    const baseThreshold = 30; // Starting threshold
+
+    do {
+        newColor = generateRandomHSL();
+        // Decreasing threshold as attempts increase, but never below 10 for distinctiveness
+        let threshold = Math.max(baseThreshold - (attempt / 10), 10);
+        if (isDistinct(newColor, hexColors, threshold)) {
+            return hslToHex(newColor.h, newColor.s, newColor.l);
+        }
+        attempt++;
+    } while (attempt < maxAttempts);
+
+    // If we've tried maxAttempts times, return the last generated color regardless
+    return hslToHex(newColor.h, newColor.s, newColor.l);
+}

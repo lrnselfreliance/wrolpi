@@ -114,7 +114,10 @@ export function useEventsInterval() {
             setEvents(response['events']);
         } catch (e) {
             setEvents(null);
-            console.error(e);
+            // Ignore SyntaxError because they happen when the API is down.
+            if (!(e instanceof SyntaxError)) {
+                console.error(e);
+            }
         }
     }
 

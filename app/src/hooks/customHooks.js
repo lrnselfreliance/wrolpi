@@ -18,8 +18,8 @@ import {
     getStatus,
     getVideo,
     getVideosStatistics,
-    postImportConfig,
     postDumpConfig,
+    postImportConfig,
     saveSettings,
     searchArchives,
     searchChannels,
@@ -705,7 +705,10 @@ export const useConfigs = () => {
             setConfigs(data['configs']);
             console.debug('fetching configs successful');
         } catch (e) {
-            console.error(e);
+            // Ignore SyntaxError because they happen when the API is down.
+            if (!(e instanceof SyntaxError)) {
+                console.error(e);
+            }
             setConfigs(undefined);
         } finally {
             setLoading(false);
@@ -840,7 +843,10 @@ export const useStatus = () => {
             const s = await getStatus();
             setStatus(s);
         } catch (e) {
-            console.error(e);
+            // Ignore SyntaxError because they happen when the API is down.
+            if (!(e instanceof SyntaxError)) {
+                console.error(e);
+            }
         }
     }
 

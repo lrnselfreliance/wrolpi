@@ -51,8 +51,10 @@ async function apiCall(url, method, body, ms = 60_000) {
         }
         return response;
     } catch (e) {
-        // Timeout, or some other exception.
-        console.error(e);
+        // Ignore SyntaxError because they happen when the API is down.
+        if (!(e instanceof SyntaxError)) {
+            console.error(e);
+        }
         throw e;
     }
 }

@@ -48,7 +48,10 @@ export function useTags() {
         } catch (e) {
             setTags(undefined);
             setTagNames(undefined);
-            console.error(e);
+            // Ignore SyntaxError because they happen when the API is down.
+            if (!(e instanceof SyntaxError)) {
+                console.error(e);
+            }
         }
     }
 

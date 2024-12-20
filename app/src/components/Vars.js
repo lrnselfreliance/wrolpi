@@ -7,8 +7,8 @@ export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 
 // Other services on a WROLPi.
-const port = window.location.port ? `${window.location.port}` : '';
-export const FILES_MEDIA_URI = `https://${window.location.hostname}${port}/media/`;
+const port = window.location.port ? `${window.location.port.replace(/^/, '')}` : '';
+export const FILES_MEDIA_URI = `https://${window.location.hostname}:${port}/media/`;
 export const MAP_VIEWER_URI = `https://${window.location.hostname}:8084`;
 export const ZIM_VIEWER_URI = `https://${window.location.hostname}:8085`;
 export const HELP_VIEWER_URI = `https://${window.location.hostname}:8086`;

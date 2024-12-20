@@ -244,8 +244,10 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     if mimetype == 'application/x-subrip':
         # Fallback to old mimetype.
         return 'text/srt'
-    if mimetype == 'application/zip' and path.suffix == '.docx':
+    if mimetype == 'application/zip' and suffix == '.docx':
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    if mimetype == 'video/x-ms-asf' and suffix == '.wma':
+        return 'audio/x-ms-wma'
     return mimetype
 
 

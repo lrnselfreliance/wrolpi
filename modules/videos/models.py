@@ -556,6 +556,15 @@ class Channel(ModelHelper, Base):
     def location(self) -> str:
         return f'/videos/channel/{self.id}/video'
 
+    @property
+    def info_json_path(self) -> pathlib.Path:
+        if self.directory:
+            if not self.directory.exists():
+                self.directory.mkdir(parents=True)
+            return self.directory / f'{self.name}.info.json'
+
+        raise FileNotFoundError(f'Cannot create Channel info json because directory is not defined: {self}')
+
     def delete_with_videos(self):
         """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
         session = Session.object_session(self)

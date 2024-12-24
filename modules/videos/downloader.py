@@ -768,7 +768,7 @@ def update_channel_catalog(channel: Channel, info: dict):
 
     # Write the Channel's info to a JSON file.
     if channel.directory:
-        info_json_path = channel.directory / f'{channel.name}.info.json'
+        info_json_path = channel.info_json_path
         with info_json_path.open('wt') as fh:
             json.dump(info, fh, indent=2, sort_keys=True)
         logger.debug(f'Wrote channel info json to {info_json_path}')

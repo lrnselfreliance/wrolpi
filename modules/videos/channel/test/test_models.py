@@ -101,3 +101,20 @@ async def test_channel_download_relationships(test_session, download_channel):
     # Delete the Channel, and any relationships.
     download_channel.delete_with_videos()
     assert test_session.query(Download).count() == 0
+
+
+def test_channel_info_json(test_session, test_directory):
+    channel = Channel(name='new channel')
+    test_session.add(channel)
+
+    with pytest.raises(FileNotFoundError) as e:
+        # Cannot get info json because directory is not defined.
+        channel.info_json_path
+    assert 'directory' in str(e)
+
+    # Channel's directory is created if it does not exist.
+    channel.directory = test_directory / 'new channel'
+    assert channel.info_json_path == test_directory / 'new channel/new channel.info.json'
+    assert channel.directory.is_dir()
+    # info json file is not yet created.
+    assert not channel.info_json_path.exists()

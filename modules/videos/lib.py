@@ -19,7 +19,7 @@ from wrolpi.common import ConfigFile, extract_domain, logger, \
     escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session
-from wrolpi.downloader import Download
+from wrolpi.downloader import Download, download_manager
 from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
@@ -297,8 +297,9 @@ class ChannelsConfig(ConfigFile):
 
                     if not channel.source_id and channel.url and flags.have_internet.is_set():
                         # If we can download from a channel, we must have its source_id.
-                        logger.info(f'Fetching channel source id for {channel}')
-                        background_task(fetch_channel_source_id(channel.id))
+                        if download_manager.can_download:
+                            logger.info(f'Fetching channel source id for {channel}')
+                            background_task(fetch_channel_source_id(channel.id))
 
                     channel_import_logger.debug(f'Updated {repr(channel.name)}'
                                                 f' url={channel.url}'

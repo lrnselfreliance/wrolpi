@@ -21,7 +21,7 @@ from wrolpi.common import logger, check_media_directory, set_log_level, limit_co
     create_empty_config_files, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
-from wrolpi.downloader import import_downloads_config, download_manager
+from wrolpi.downloader import import_downloads_config, download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
@@ -257,9 +257,6 @@ async def start_single_tasks(app: Sanic):
         # Set all downloads to new.
         download_manager.retry_downloads()
 
-    if get_wrolpi_config().download_on_startup and download_manager.can_download:
-        await download_manager.enable()
-
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED:
         if get_wrolpi_config().hotspot_on_startup:
@@ -279,6 +276,15 @@ async def start_single_tasks(app: Sanic):
                 logger.error('Failed to throttle CPU', exc_info=e)
         else:
             logger.info('CPU throttle on startup is disabled')
+
+    if get_wrolpi_config().download_on_startup and not wrol_mode_enabled():
+        # Only start downloading when prerequisites have been met.
+        try:
+            async with flags.have_internet.wait_for(timeout=30):
+                if get_download_manager_config().successful_import:
+                    await download_manager.enable()
+        except TimeoutError as e:
+            logger.error('Failed to enable download', exc_info=e)
 
     logger.debug(f'start_single_tasks done')
 

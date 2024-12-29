@@ -16,6 +16,7 @@ from PIL import Image
 import wrolpi.common
 from modules.videos import Video
 from wrolpi.common import timer
+from wrolpi.conftest import await_switches
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers

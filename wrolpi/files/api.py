@@ -305,11 +305,6 @@ async def post_untag_file_group(_, body: schema.TagFileGroupPost):
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
-# {
-#   '/media/directory/sub-dir/the-file-name.suffix': 2,  # The chunk number we will receive next.
-# }
-
-
 @files_bp.post('/upload')
 async def post_upload(request: Request):
     """Accepts a multipart/form-data request to upload a single file.

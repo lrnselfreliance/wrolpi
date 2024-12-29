@@ -6,7 +6,7 @@ import yaml
 
 from wrolpi import tags
 from wrolpi.common import is_hardlinked, walk
-from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, FileGroupAlreadyTagged, UsedTag
+from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, UsedTag
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile, Tag
@@ -20,18 +20,17 @@ async def test_tags_file_group_json(async_client, test_session, make_files_struc
     await files_lib.refresh_files()
     file_group: FileGroup = test_session.query(FileGroup).one()
 
-    Tag.tag_file_group(file_group.id, tag_one.id)
+    file_group.add_tag(tag_one.id)
     assert file_group.__json__()['tags'] == ['one']
 
-    file_group.add_tag(tag_two.id)
+    file_group.add_tag(tag_two.name)
     assert file_group.__json__()['tags'] == ['one', 'two']
-
-    with pytest.raises(FileGroupAlreadyTagged):
-        # Cannot tag a FileGroup with the same Tag twice.
-        file_group.add_tag(tag_two.id)
 
     file_group.untag(tag_one.id)
     assert file_group.__json__()['tags'] == ['two']
+
+    file_group.untag(tag_two.name)
+    assert file_group.__json__()['tags'] == []
 
 
 @pytest.mark.asyncio
@@ -66,13 +65,13 @@ async def test_tags_file_group(async_client, test_session, make_files_structure,
     tag_one = await tag_factory()
     assert len(tag_one.tag_files) == 0
 
-    Tag.tag_file_group(video_group.id, tag_one.id)
+    video_group.add_tag(tag_one.id)
     test_session.commit()
     assert len(tag_one.tag_files) == 1
     assert sorted([i.tag.name for i in video_group.tag_files]) == ['one', ]
 
     tag_two = await tag_factory()
-    Tag.tag_file_group(video_group.id, tag_two.id)
+    video_group.add_tag(tag_two.id)
     test_session.commit()
     assert len(tag_one.tag_files) == 1
     assert len(tag_two.tag_files) == 1

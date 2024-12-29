@@ -3,6 +3,7 @@ import pathlib
 import shutil
 import urllib.parse
 from datetime import datetime
+from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, Computed, BigInteger, Boolean
@@ -17,7 +18,7 @@ from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
-from wrolpi.tags import Tag, TagFile
+from wrolpi.tags import Tag, TagFile, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -144,12 +145,56 @@ class FileGroup(ModelHelper, Base):
         self.viewed = now()
 
     @optional_session
-    def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
-        return Tag.tag_file_group(self.id, tag_id_or_name, session)
+    def set_tags(self, tag_names_or_ids: Iterable[str | int], session: Session = None):
+        """Insert or Delete TagFiles as necessary to match the provided tags for this FileGroup."""
+        tag_names_or_ids = list(tag_names_or_ids)
+        if tag_names_or_ids and isinstance(tag_names_or_ids[0], str):
+            tag_ids = {Tag.get_id_by_name(i) for i in tag_names_or_ids}
+        else:
+            tag_ids = set(tag_names_or_ids)
 
+        existing_tag_ids = {i.tag_id for i in self.tag_files}
+        if new_tag_ids := (tag_ids - existing_tag_ids):
+            for tag_id in new_tag_ids:
+                tag_file = TagFile(file_group_id=self.id, tag_id=tag_id)
+                self.tag_files.append(tag_file)
+            session.flush(self.tag_files)
+
+        if deleted_tags := (existing_tag_ids - tag_ids):
+            session.query(TagFile).filter(
+                TagFile.file_group_id == self.id,
+                TagFile.tag_id.in_(deleted_tags),
+            ).delete(synchronize_session=False)
+
+        # Save changes to config.
+        save_tags_config.activate_switch()
+        sync_tags_directory.activate_switch()
+
+        return self.tag_files
+
+    @singledispatchmethod
     @optional_session
-    def untag(self, tag_id_or_name: int | str, session: Session = None):
-        Tag.untag_file_group(self.id, tag_id_or_name, session)
+    def add_tag(self, tag_id: int | str, session: Session = None) -> TagFile:
+        tags = [i.tag_id for i in self.tag_files]
+        tags.append(tag_id)
+        tag_files = self.set_tags(tags, session=session)
+        return next(i for i in tag_files if i.tag_id == tag_id)
+
+    @add_tag.register
+    def _(self, tag_name: str, session: Session = None) -> TagFile:
+        tag_id = Tag.get_id_by_name(tag_name, session=session)
+        return self.add_tag(tag_id, session=session)
+
+    @singledispatchmethod
+    @optional_session
+    def untag(self, tag_id: int | str, session: Session = None):
+        tags = [i.tag_id for i in self.tag_files if i.tag_id != tag_id]
+        self.set_tags(tags, session=session)
+
+    @untag.register
+    def _(self, tag_name: str, session: Session = None) -> TagFile:
+        tag_id = Tag.get_id_by_name(tag_name, session=session)
+        return self.untag(tag_id, session=session)
 
     def append_files(self, *paths: pathlib.Path):
         """Add all `paths` to this FileGroup.files."""

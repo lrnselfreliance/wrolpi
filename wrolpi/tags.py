@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 
-from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
+import cachetools
+from cachetools.keys import hashkey
+from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, event
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
@@ -14,7 +16,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileGroupAlreadyTagged, RefreshConflict, NoPrimaryFile
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, RefreshConflict, NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import PYTEST
@@ -51,6 +53,22 @@ class TagFile(ModelHelper, Base):
             .one_or_none()
 
 
+# Tag.get_id_by_name
+def get_id_by_name_key(klass: Base, name: str, session: Session = None):
+    return hashkey(name)
+
+
+get_id_by_name_cache = cachetools.LRUCache(maxsize=1_000)
+
+
+# Tag.get_name_by_id
+def get_name_by_id_key(klass: Base, id_: int, session: Session = None):
+    return hashkey(id_)
+
+
+get_name_by_id_cache = cachetools.LRUCache(maxsize=1_000)
+
+
 class Tag(ModelHelper, Base):
     __tablename__ = 'tag'
     id = Column(Integer, primary_key=True)
@@ -74,55 +92,32 @@ class Tag(ModelHelper, Base):
             color=self.color,
         )
 
-    @staticmethod
+    @classmethod
+    @cachetools.cached(cache=get_id_by_name_cache, key=get_id_by_name_key)
     @optional_session
-    def get_tag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None) -> Optional[TagFile]:
-        if isinstance(tag_id_or_name, int):
-            return TagFile.get_by_primary_keys(file_group_id, tag_id_or_name, session)
+    def get_id_by_name(cls, name: str, session: Session = None) -> int:
+        """Returns a Tag's ID, if a Tag matches the provided name.
 
-        return TagFile.get_by_tag_name(file_group_id, tag_id_or_name, session)
+        @raise UnknownTag: If no Tag matches the provided name."""
+        if tag := session.query(Tag).filter_by(name=name).one_or_none():
+            return tag.id
+        raise UnknownTag(f'No Tag with name={name}')
 
-    @staticmethod
+    @classmethod
+    @cachetools.cached(cache=get_name_by_id_cache, key=get_name_by_id_key)
     @optional_session
-    def tag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None) -> TagFile:
-        """Add a TagFile for the provided FileGroup and this Tag.
+    def get_name_by_id(cls, id_: int, session: Session = None) -> str:
+        """Returns a Tag's name, if a Tag matches the provided ID.
 
-        @warning: Commits the session to keep the config in sync."""
-        existing = Tag.get_tag_file_group(file_group_id, tag_id_or_name, session)
+        @raise UnknownTag: If no Tag matches the provided ID."""
+        if tag := session.query(Tag).filter_by(id=id_).one_or_none():
+            return tag.id
+        raise UnknownTag(f'No Tag with id={id_}')
 
-        if existing:
-            raise FileGroupAlreadyTagged('Tag already used')
-
-        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
-            else Tag.get_by_id(tag_id_or_name, session)
-        tag_file = TagFile(file_group_id=file_group_id, tag_id=tag.id)
-        session.add(tag_file)
-        session.flush([tag_file])
-        session.commit()
-        logger.info(f'Tagged FileGroup {file_group_id} with Tag {tag_id_or_name}')
-
-        # Save changes to config.
-        save_tags_config.activate_switch()
-        sync_tags_directory.activate_switch()
-        return tag_file
-
-    @staticmethod
-    @optional_session
-    def untag_file_group(file_group_id: int, tag_id_or_name: int | str, session: Session = None):
-        """Remove the record of a Tag applied to the FileGroup.
-
-        @warning: Commits the session to keep config in sync."""
-        tag_file = Tag.get_tag_file_group(file_group_id, tag_id_or_name, session)
-        if tag_file:
-            session.delete(tag_file)
-            session.commit()
-            logger.debug(f'Deleted TagFile: {tag_file}')
-
-            # Save changes to config.
-            save_tags_config.activate_switch()
-            sync_tags_directory.activate_switch()
-        else:
-            logger.warning(f'Could not find TagFile for FileGroup.id={file_group_id}/Tag.id={tag_id_or_name}')
+    @classmethod
+    def invalidate_cache(cls):
+        get_id_by_name_cache.clear()
+        get_name_by_id_cache.clear()
 
     @staticmethod
     @optional_session
@@ -136,7 +131,7 @@ class Tag(ModelHelper, Base):
         if tag := Tag.get_by_name(name, session):
             return tag
 
-        raise UnknownTag(f'Unknown Tag with name={name}')
+        raise UnknownTag(f'No Tag with name={name}')
 
     @staticmethod
     @optional_session
@@ -150,7 +145,7 @@ class Tag(ModelHelper, Base):
         if tag := Tag.get_by_id(id_, session):
             return tag
 
-        raise UnknownTag(f'Unknown Tag with id={id_}')
+        raise UnknownTag(f'No Tag with id={id_}')
 
     def has_relations(self) -> bool:
         """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
@@ -252,6 +247,14 @@ class Tag(ModelHelper, Base):
 
         save_tags_config.activate_switch()
         sync_tags_directory.activate_switch()
+
+
+@event.listens_for(Tag, 'after_insert')
+@event.listens_for(Tag, 'after_update')
+@event.listens_for(Tag, 'after_delete')
+def invalidate_cache(mapper, connection, target):
+    """Clear Tag cache when Tags are changed."""
+    Tag.invalidate_cache()
 
 
 @dataclass

@@ -29,6 +29,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     timer, chunks, unique_by_predicate
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
+from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory
 from wrolpi.events import Events
@@ -1021,13 +1022,11 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
             raise UnknownFile(f'Cannot find FileGroup with id {file_group_id}')
     elif file_group_primary_path:
         path = get_media_directory() / file_group_primary_path
-        file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=str(path)).one_or_none()
+
+        file_group = FileGroup.get_by_path(path, session=session)
+        # Create the FileGroup, if possible.
         if not file_group and path.is_file():
-            # File may not have been refreshed.
-            await refresh_discover_paths([path])
-            session.flush()
-            file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=str(path)).one_or_none()
-            background_task(refresh_files([path]))
+            file_group = FileGroup.from_paths(session, path)
 
         if not file_group:
             raise UnknownFile(f'Cannot find FileGroup with primary_path {repr(str(file_group_primary_path))}')
@@ -1549,7 +1548,7 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
 
     for i in range(2):
         # Try multiple times because uploads happen concurrently and may conflict.
-        # TODO convert uploads to syncronous.
+        # TODO convert uploads to synchronous in UI.
         with get_db_session() as session:
             file_group = FileGroup.from_paths(session, *paths)
             # Re-index the contents of the file.
@@ -1574,6 +1573,11 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
         if PYTEST:
             raise
+
+    # If user uploads a file, then remove it from the skip list so comments can be downloaded.
+    url = file_group.url if file_group and file_group.url else None
+    if url and download_manager.is_skipped(url):
+        download_manager.remove_from_skip_list(url)
 
     if tag_names:
         with get_db_session(commit=True) as session:

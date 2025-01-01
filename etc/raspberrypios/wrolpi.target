@@ -1,3 +1,3 @@
 [Unit]
 Description=WROLPi services group
-Wants=wrolpi-api.service wrolpi-app.service nginx.service postgresql.service wrolpi-kiwix.service renderd.service apache2.service
+Wants=wrolpi-api.service wrolpi-app.service nginx.service postgresql.service wrolpi-kiwix.service renderd.service apache2.service postgresql@15-map.service

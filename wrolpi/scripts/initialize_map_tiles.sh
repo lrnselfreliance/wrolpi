@@ -31,6 +31,7 @@ while getopts ":hH:" option; do
 done
 
 # Try to fetch the first tile multiple times if the service is starting, or if new map was imported.
+ATTEMPTS=100
 for i in {1..100}; do
     # Try to fetch the first tile.
     wget "${HOST}/hot/3/0/0.png" \

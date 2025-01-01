@@ -16,5 +16,8 @@ npm install || npm install || npm install || npm install # try install multiple 
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."
 
+# Migrate map DB if necessary.  Do this before repair because it will reset map if map db is empty.
+/opt/wrolpi/wrolpi/scripts/migrate_map_db.sh || echo "Map DB migration failed."
+
 # Install any configs, restart services.
 /opt/wrolpi/repair.sh

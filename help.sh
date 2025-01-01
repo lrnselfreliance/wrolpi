@@ -200,10 +200,16 @@ fi
 echo
 # Map
 
-if sudo -i -u wrolpi psql -l 2>/dev/null | grep gis >/dev/null; then
+if netstat -ant | grep LISTEN | grep 127.0.0.1:5433 >/dev/null; then
+  echo "OK: Port 5433 is occupied"
+else
+  echo "FAILED: Port 5433 is not occupied"
+fi
+
+if sudo -iu postgres psql --port=5433 -l 2>/dev/null | grep gis >/dev/null; then
   echo "OK: Found map database"
 
-  if sudo -i -u wrolpi psql gis -c '\d' | grep water_polygons >/dev/null; then
+  if sudo -iu postgres psql --port=5433 gis -c '\d' | grep water_polygons >/dev/null; then
     echo "OK: Map database is initialized"
   else
     echo "FAILED: Map database is not initialized"

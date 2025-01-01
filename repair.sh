@@ -28,7 +28,7 @@ systemctl stop apache2 || :
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 [ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5433:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
 chmod 0600 /home/wrolpi/.pgpass
@@ -66,6 +66,8 @@ systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
 
+# Copy config files necessary for map.
+cp -r /opt/wrolpi/etc/raspberrypios/postgresql@15-map.service.d /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 cp /opt/wrolpi/etc/raspberrypios/renderd.service /lib/systemd/system/renderd.service
 # Configure Apache2 to listen on 8084.
@@ -91,7 +93,7 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 # Configure Postgresql.  Do this after the API is stopped.
 /opt/wrolpi/scripts/initialize_api_db.sh
 # wrolpi user is superuser so they can import maps.
-sudo -u postgres psql -c "alter user wrolpi with superuser"
+sudo -iu postgres psql -c "alter user wrolpi with superuser"
 
 # Configure renderd.
 if [ ! -d /opt/openstreetmap-carto ]; then
@@ -110,7 +112,9 @@ cp /opt/wrolpi/etc/raspberrypios/mod_tile.conf /etc/apache2/conf-available/mod_t
 carto -v
 
 # Initialize the map if it has not been initialized.
-sudo -u postgres psql -c '\l' | grep gis || /opt/wrolpi/scripts/initialize_map_db.sh
+systemctl enable postgresql@15-map.service || :
+systemctl start postgresql@15-map.service || :
+sudo -iu postgres psql -c '\l' --port=5433 | grep -q gis || yes | /opt/wrolpi/scripts/initialize_map_db.sh
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.
@@ -120,12 +124,6 @@ if [[ ${rpi} == true ]]; then
 else
   cp /opt/wrolpi/etc/debian12/000-default.conf /etc/apache2/sites-available/000-default.conf
 fi
-# Copy Leaflet files to Apache's directory so they can be used offline.
-cp /opt/wrolpi/etc/raspberrypios/index.html \
-  /opt/wrolpi/modules/map/leaflet.js \
-  /opt/wrolpi/modules/map/leaflet.css /var/www/html/
-chmod 644 /var/www/html/*
-systemctl enable renderd
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi

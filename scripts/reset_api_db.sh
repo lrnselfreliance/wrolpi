@@ -17,7 +17,7 @@ set -x
 systemctl stop wrolpi-api
 
 # Delete the WROLPi API DB, if it exists.
-sudo -u postgres dropdb wrolpi
-sudo -u postgres dropuser wrolpi
+sudo -iu postgres dropdb wrolpi
+sudo -iu postgres dropuser wrolpi
 
 /bin/bash /opt/wrolpi/scripts/initialize_api_db.sh

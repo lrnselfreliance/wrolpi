@@ -11,11 +11,11 @@ fi
 set -x
 
 # Create WROLPi API database.
-sudo -u postgres psql -c '\l' | grep wrolpi || (
-  sudo -u postgres createuser -s wrolpi  # superuser so maps can be imported
-  sudo -u postgres psql -c "alter user postgres password 'wrolpi'"
-  sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'"
-  sudo -u postgres createdb -E UTF8 -O wrolpi wrolpi
+sudo -iu postgres psql -c '\l' | grep wrolpi || (
+  sudo -iu postgres createuser -s wrolpi  # superuser so maps can be imported
+  sudo -iu postgres psql -c "alter user postgres password 'wrolpi'"
+  sudo -iu postgres psql -c "alter user wrolpi password 'wrolpi'"
+  sudo -iu postgres createdb -E UTF8 -O wrolpi wrolpi
   echo "Created wrolpi database"
 )
-sudo -u wrolpi /bin/bash -c 'cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 main.py db upgrade'
+sudo -iu wrolpi /bin/bash -c 'cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 main.py db upgrade'

@@ -543,7 +543,7 @@ async def test_post_vin_number_decoder(async_client):
                                     'region': 'North America',
                                     'serial': None,
                                     'transmission': None,
-                                    'years': '1995'}
+                                    'years': '2025,1995'}
 
 
 @pytest.mark.asyncio

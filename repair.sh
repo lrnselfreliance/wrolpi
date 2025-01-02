@@ -81,7 +81,6 @@ a2enmod ssl
 a2enmod headers
 
 systemctl enable renderd
-systemctl start renderd
 /usr/bin/systemctl daemon-reload
 
 # WROLPi needs a few privileged commands.
@@ -115,6 +114,13 @@ carto -v
 systemctl enable postgresql@15-map.service || :
 systemctl start postgresql@15-map.service || :
 sudo -iu postgres psql -c '\l' --port=5433 | grep -q gis || yes | /opt/wrolpi/scripts/initialize_map_db.sh
+# Update openstreetmap-carto to use the new database.
+grep -q 'port: 5433' /opt/openstreetmap-carto/project.mml || (
+  # Append port line after dbname configuration line.
+  sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
+  (cd /opt/openstreetmap-carto/ && carto project.mml >mapnik.xml)
+  chown -R _renderd:_renderd /opt/openstreetmap-carto
+)
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.
@@ -140,6 +146,7 @@ chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 # Copy MOTD once the repair has been successful.
 cp /opt/wrolpi/etc/raspberrypios/motd /etc/motd
 
+systemctl restart renderd
 systemctl restart wrolpi-help
 systemctl start wrolpi.target
 

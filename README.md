@@ -130,6 +130,7 @@ Steps necessary to initialize your WROLPi after installing the Raspberry Pi imag
 2. Two is one, one is none.
 3. Run silently.
 4. Primary, secondary, tertiary.
+5. Secure as a bookshelf in your home.
 
 ## Physical properties
 

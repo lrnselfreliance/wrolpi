@@ -9,6 +9,6 @@ Warning: Typically adds 2GB of planetary data.
 
 Import `map.osm.pbf`, dump to `output.dump`
 
-`# docker run --rm -v /absolute/path/to/your/map.osm.pbf:/data/region.osm.pbf $(docker build -q .) > output.dump.gz`
+`# docker run --rm -v /absolute/path/to/your/map.osm.pbf:/data/region.osm.pbf $(docker build -q .) > output.dump`
 
 See: https://hub.docker.com/r/lrnselfreliance/osm-map-dumper

@@ -88,7 +88,8 @@ echo >&2 "Dumping the DB"
 sudo -u postgres pg_dump \
   --create \
   --clean \
-  --format tar \
+  --format custom \
+  --compress 9 \
   --no-owner \
   --no-comments \
   --encoding UTF-8 \

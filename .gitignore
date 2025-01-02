@@ -129,7 +129,7 @@ test
 pg_data
 
 # Directories used to build images
-/debian-live-config/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz
+/debian-live-config/config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump
 /debian-live-config/build.log
 /debian-live-config/*.iso
 /pi-gen/*xz

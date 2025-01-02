@@ -25,7 +25,7 @@ sudo -iu postgres psql -c '\l' --port=5433 | grep gis || (
   echo "Created gis database"
 )
 # Restore initial dump.
-zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -iu postgres pg_restore --port=5433 --no-owner --role=_renderd -d gis
+sudo -iu postgres pg_restore --port=5433 --no-owner --role=_renderd -d gis -j3 /opt/wrolpi-blobs/map-db-gis.dump
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE spatial_ref_sys OWNER TO _renderd'

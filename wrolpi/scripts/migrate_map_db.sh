@@ -42,7 +42,7 @@ cp -r /opt/wrolpi/etc/raspberrypios/postgresql@15-map.service.d /etc/systemd/sys
 systemctl daemon-reload
 systemctl restart postgresql@15-map.service
 
-# Dump DB, then restore in different DB.
+# Dump old DB, then restore in new DB.
 sudo -iu postgres pg_dump -Fd gis --port=5432 -j3 -f /tmp/map.dump &&  # 5432 is old DB.
   sudo -iu postgres pg_restore --port=5433 -j3 -d gis /tmp/map.dump && # 5433 is new DB.
   sudo -iu postgres dropdb --port=5432 gis

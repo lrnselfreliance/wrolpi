@@ -12,8 +12,8 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-if [ ! -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz" ]; then
-  echo "config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz does not exist!"
+if [ ! -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump" ]; then
+  echo "config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump does not exist!"
   exit 1
 fi
 

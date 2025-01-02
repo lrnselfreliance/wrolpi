@@ -12,8 +12,8 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/gis-map.dump.gz" ]; then
-  echo "stage2/04-wrolpi/files/gis-map.dump.gz does not exist!"
+if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/map-db-gis.dump" ]; then
+  echo "stage2/04-wrolpi/files/map-db-gis.dump does not exist!"
   exit 1
 fi
 

@@ -230,7 +230,7 @@ else
   echo "FAILED: Map app did not respond"
 fi
 
-check_file /opt/wrolpi-blobs/gis-map.dump.gz "Map initialization blob exists" "Map initialization blob does not exist"
+check_file /opt/wrolpi-blobs/map-db-gis.dump "Map initialization blob exists" "Map initialization blob does not exist"
 
 check_file /var/www/html/leaflet.js "Leaflet.js exists" "Leaflet.js does not exist"
 

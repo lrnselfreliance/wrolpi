@@ -35,8 +35,8 @@ git config --global --add safe.directory /opt/openstreetmap-carto
 chown -R _renderd:_renderd /opt/openstreetmap-carto
 
 # Get map initialization dump.
-if [[ ! -f /opt/wrolpi-blobs/gis-map.dump.gz || ! -s /opt/wrolpi-blobs/gis-map.dump.gz ]]; then
-  wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/gis-map.dump.gz -O /opt/wrolpi-blobs/gis-map.dump.gz
+if [[ ! -f /opt/wrolpi-blobs/map-db-gis.dump || ! -s /opt/wrolpi-blobs/map-db-gis.dump ]]; then
+  wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/map-db-gis.dump -O /opt/wrolpi-blobs/map-db-gis.dump
 fi
 
 # Install WROLPi Help.

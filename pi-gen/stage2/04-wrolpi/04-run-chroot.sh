@@ -3,18 +3,24 @@
 set -e
 set -x
 
+# Create postgres cluster for map.
+pg_createcluster 15 map --port=5433
+
 # Create mapnik config.
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 git config --global --add safe.directory /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
-(cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
+# Append port line after dbname configuration line.
+sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
+(cd /opt/openstreetmap-carto/ && carto project.mml >mapnik.xml)
 
 # All users can access wrolpi and map database.
 cat >/etc/skel/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5433:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
+chmod 0600 /etc/skel/.pgpass
 cat >/etc/skel/.gitconfig  <<'EOF'
 [safe]
 	directory = /opt/wrolpi
@@ -48,11 +54,6 @@ chown -R _renderd:_renderd /var/cache/renderd/tiles
 # Create the media directory for the wrolpi user.
 echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab
 mkdir -p /media/wrolpi
-cat >/home/wrolpi/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chmod 0600 /home/wrolpi/.pgpass
 chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi /opt/wrolpi*
 
 set +x

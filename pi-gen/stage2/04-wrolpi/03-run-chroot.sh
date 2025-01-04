@@ -14,8 +14,8 @@ EOF
 # Create WROLPi user.  This user will own the media directory, API, and App.
 useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 
-# Change default postgresql port to 5432.
-sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
+# Change postgresql "main" cluster port to 5432.
+sed -i 's/port =.*/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 
 # Install Node console commands.
 npm i -g serve@12.0.1 single-file-cli@1.1.54 readability-extractor@0.0.6 carto@1.2.0

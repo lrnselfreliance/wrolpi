@@ -98,11 +98,6 @@ sudo -iu postgres psql -c "alter user wrolpi with superuser"
 if [ ! -d /opt/openstreetmap-carto ]; then
   echo "/opt/openstreetmap-carto does not exist!  Has install completed?" && exit 1
 fi
-chown -R _renderd:_renderd /opt/openstreetmap-carto
-if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
-  (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
-fi
-chown -R _renderd:_renderd /opt/openstreetmap-carto
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Enable mod_tile.
@@ -119,8 +114,8 @@ grep -q 'port: 5433' /opt/openstreetmap-carto/project.mml || (
   # Append port line after dbname configuration line.
   sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
   (cd /opt/openstreetmap-carto/ && carto project.mml >mapnik.xml)
-  chown -R _renderd:_renderd /opt/openstreetmap-carto
 )
+chown -R _renderd:_renderd /opt/openstreetmap-carto
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.

@@ -293,7 +293,7 @@ export function ChannelPage({create, header}) {
                     color='violet'
                     onClick={handleTagEditChannel}
                     obeyWROLMode={true}
-                >Save</APIButton>
+                >{moveToTagDirectory ? 'Move' : 'Save'}</APIButton>
             </ModalActions>
         </Modal>;
     }

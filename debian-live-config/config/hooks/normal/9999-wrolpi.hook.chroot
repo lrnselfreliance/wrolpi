@@ -37,8 +37,12 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
+# Create postgres cluster for map.
+pg_createcluster 15 map --port=5433
+
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 git config --global --add safe.directory /opt/openstreetmap-carto
+sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
 (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 
 # Change default postgresql port to 5432.

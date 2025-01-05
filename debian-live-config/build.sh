@@ -2,7 +2,7 @@
 # https://live-team.pages.debian.net/live-manual/html/live-manual/index.en.html
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-BUILD_DIR=/tmp/wrolpi-build
+BUILD_DIR=/tmp/wrolpi-build-debian
 
 VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
 

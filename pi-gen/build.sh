@@ -2,7 +2,7 @@
 # https://github.com/RPI-Distro/pi-gen
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-BUILD_DIR=/tmp/wrolpi-build
+BUILD_DIR=/tmp/wrolpi-build-pi-gen
 
 VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
 

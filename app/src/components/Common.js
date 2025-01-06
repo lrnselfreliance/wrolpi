@@ -1920,11 +1920,13 @@ export function getDistinctColor(hexColors) {
 
     function isDistinct(newColor, existingColors, threshold) {
         const hslNew = newColor;
-        for (let color of existingColors) {
-            let hslColor = hexToHSL(color);
-            if (Math.abs(hslNew.h - hslColor.h) < threshold &&
-                Math.abs(hslNew.s * 100 - hslColor.s * 100) < threshold &&
-                Math.abs(hslNew.l - hslColor.l * 100) < threshold) {
+        for (const color of existingColors) {
+            const hslColor = hexToHSL(color);
+            const h = Math.abs(hslNew.h - hslColor.h);
+            const s = Math.abs(hslNew.s * 100 - hslColor.s * 100);
+            const l = Math.abs(hslNew.l - hslColor.l * 100);
+            if (h < threshold && s < threshold && l < threshold) {
+                console.debug(`trying distinct color h=${h} s=${s} l=${l} with threshold=${threshold}`);
                 return false;
             }
         }

@@ -503,6 +503,11 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     assert (test_directory / 'uploads/foo/bar.txt').read_text() == 'foo'
 
     assert test_session.query(FileGroup).count() == 1
+    assert test_session.query(Directory).count() == 2
+    assert {i for i, in test_session.query(Directory.path)} == {
+        test_directory / 'uploads',
+        test_directory / 'uploads/foo',
+    }
 
 
 @pytest.mark.asyncio

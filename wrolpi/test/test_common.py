@@ -1110,3 +1110,39 @@ async def test_initialize_config_files(async_client, test_session, test_director
     test_session.delete(test_inventory)
     assert common.create_empty_config_files() == ['inventories.yaml'], 'Inventory config should have been created.'
     assert get_inventories_config().is_valid()
+
+
+def test_get_paths_in_parent_directory(test_directory, make_files_structure):
+    make_files_structure([
+        'foo/bar.txt',
+        'foo/bar/baz.txt',
+        'qux.txt',
+    ])
+
+    paths = list(common.walk(test_directory))
+
+    assert common.get_paths_in_parent_directory(paths, test_directory / 'foo') == [
+        test_directory / 'foo/bar.txt',
+        test_directory / 'foo/bar',
+        test_directory / 'foo/bar/baz.txt',
+    ]
+
+    assert common.get_paths_in_parent_directory(paths, test_directory / 'foo/bar') == [
+        test_directory / 'foo/bar/baz.txt',
+    ]
+
+    assert common.get_paths_in_parent_directory(paths, test_directory) == [
+        test_directory / 'qux.txt',
+        test_directory / 'foo',
+        test_directory / 'foo/bar.txt',
+        test_directory / 'foo/bar',
+        test_directory / 'foo/bar/baz.txt',
+    ]
+
+    assert common.get_paths_in_media_directory(paths) == [
+        test_directory / 'qux.txt',
+        test_directory / 'foo',
+        test_directory / 'foo/bar.txt',
+        test_directory / 'foo/bar',
+        test_directory / 'foo/bar/baz.txt',
+    ]

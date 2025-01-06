@@ -1123,6 +1123,17 @@ def get_relative_to_media_directory(path: Union[str, Path]) -> Path:
     return absolute.relative_to(get_media_directory())
 
 
+def get_paths_in_parent_directory(paths: List[Union[str, Path]], parent_directory: pathlib.Path) -> List[Path]:
+    """Return only those of the provided paths that are children of the provided parent directory."""
+    paths = [i if isinstance(i, Path) else Path(i) for i in paths]
+    return [path for path in paths if parent_directory in path.resolve().parents and path != parent_directory]
+
+
+def get_paths_in_media_directory(paths: List[Union[str, Path]]) -> List[Path]:
+    """Return only those of the provided paths that are children of the media directory."""
+    return get_paths_in_parent_directory(paths, get_media_directory())
+
+
 def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
     """Return a new dictionary that contains only the keys provided."""
     if d is None:

@@ -26,7 +26,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     partition, cancelable_wrapper, \
     get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
     get_wrolpi_config, \
-    timer, chunks, unique_by_predicate
+    timer, chunks, unique_by_predicate, get_paths_in_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.downloader import download_manager
@@ -723,8 +723,7 @@ def upsert_directories(parent_directories, directories):
     directories = list(directories) + list(parent_directories)
 
     # Only insert directories that are children of `media_directory` and exist.
-    media_directory = get_media_directory()
-    directories = [i for i in directories if i.is_dir() and i != media_directory]
+    directories = get_paths_in_media_directory([i for i in directories if i.is_dir()])
 
     if directories:
         # Insert any directories that were created, update any directories which previously existed.
@@ -1579,6 +1578,10 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
     if url and download_manager.is_skipped(url):
         download_manager.remove_from_skip_list(url)
 
+    upsert_directories(file.parents, [])
+
+    session.commit()
+
     if tag_names:
         with get_db_session(commit=True) as session:
             file_group = FileGroup.find_by_id(file_group_id, session)
@@ -1587,6 +1590,5 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
                     tag = Tag.get_by_name(tag_name)
                     file_group.add_tag(tag.id)
 
-    session.commit()
     file_group.flush()
     return file_group

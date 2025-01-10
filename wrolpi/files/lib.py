@@ -888,13 +888,12 @@ def glob_shared_stem(path: pathlib.Path) -> List[pathlib.Path]:
     >>> glob_shared_stem(pathlib.Path('foo.mp4'))
     ['foo.mp4', 'foo.png', 'foo.info.json']
     """
-    if isinstance(path, str):
-        path = pathlib.Path(path)
+    path = path if isinstance(path, pathlib.Path) else pathlib.Path(path)
 
     stem, suffix = split_path_stem_and_suffix(path)
     escaped_stem = glob.escape(stem)
-    paths = [pathlib.Path(i) for i in path.parent.glob(f'{escaped_stem}*') if
-             split_path_stem_and_suffix(i)[0] == stem]
+    paths = [pathlib.Path(i) for i in path.parent.glob(f'{escaped_stem}*')
+             if i == path or i.name.startswith(f'{stem}.')]
     return paths
 
 

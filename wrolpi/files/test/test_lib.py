@@ -569,9 +569,9 @@ def test_glob_shared_stem(make_files_structure):
     def check(path, expected):
         assert sorted([i.name for i in lib.glob_shared_stem(path)]) == sorted(expected)
 
-    check(mp4, ['video.mp4', 'video.png', 'video.info.json', 'video'])
-    check(png, ['video.mp4', 'video.png', 'video.info.json', 'video'])
-    check(j, ['video.mp4', 'video.png', 'video.info.json', 'video'])
+    check(mp4, ['video.mp4', 'video.png', 'video.info.json'])
+    check(png, ['video.mp4', 'video.png', 'video.info.json'])
+    check(j, ['video.mp4', 'video.png', 'video.info.json'])
     check(video, ['video.mp4', 'video.png', 'video.info.json', 'video'])
 
     check(something, ['something'])

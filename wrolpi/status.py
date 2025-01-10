@@ -98,7 +98,7 @@ async def get_iostat_stats() -> IostatInfo:
             if iostat_stats:
                 cpu_stats, *_ = iostat_stats
 
-                logger.debug(
+                logger.trace(
                     f'get_iostat_stats got percent_iowait={cpu_stats["percent_iowait"]} percent_idle={cpu_stats["percent_idle"]}')
                 # Return only the CPU stats.
                 return IostatInfo(

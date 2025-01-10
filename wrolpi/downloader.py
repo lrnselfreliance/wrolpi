@@ -30,7 +30,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name
+    get_download_info, trim_file_name, TRACE_LEVEL
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
@@ -404,6 +404,11 @@ class Downloader:
 
     async def download_file(self, download_id: int, url: str, destination: pathlib.Path, check_for_meta4: bool = True) \
             -> pathlib.Path:
+        from wrolpi.files.lib import glob_shared_stem
+
+        if not ARIA2C_PATH:
+            raise DownloadError('Cannot find aria2c executable')
+
         meta4_contents = None
         if check_for_meta4:
             meta4_contents = await self.get_meta4_contents(url)
@@ -444,6 +449,14 @@ class Downloader:
 
             if not output_path.is_file():
                 raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')
+
+        # Delete any trailing meta4 files.
+        matching_files = glob_shared_stem(output_path)
+        for file in matching_files:
+            if file.name.endswith('.meta4'):
+                if logger.isEnabledFor(TRACE_LEVEL):
+                    logger.trace(f'Deleting meta4 file: {file}')
+                file.unlink()
 
         return output_path
 

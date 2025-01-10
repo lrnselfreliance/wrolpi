@@ -2,8 +2,7 @@ from http import HTTPStatus
 from typing import List
 
 from modules.zim import lib
-from wrolpi.common import logger, aiohttp_get, get_download_info, download_file, background_task, get_html_soup, \
-    trim_file_name
+from wrolpi.common import logger, aiohttp_get, background_task, get_html_soup
 from wrolpi.downloader import Downloader, Download, DownloadResult
 
 __all__ = ['KiwixCatalogDownloader', 'KiwixZimDownloader', 'kiwix_zim_downloader', 'kiwix_catalog_downloader']
@@ -72,32 +71,13 @@ class KiwixZimDownloader(Downloader):
     listable = False
 
     async def do_download(self, download: Download) -> DownloadResult:
-        url = download.url
-
-        download_info = await get_download_info(url)
-
         zim_directory = lib.get_zim_directory()
         zim_directory.mkdir(parents=True, exist_ok=True)
-        name = trim_file_name(download_info.name)
-        output_path = zim_directory / name
 
-        if output_path.is_file():
-            output_size = output_path.stat().st_size
-            if download_info.size and download_info.size == output_size:
-                # File is already downloaded.
-                return DownloadResult(success=True)
-
-        logger.info(f'Downloading Zim {url} to {output_path} of size {download_info.size}')
-        await download_file(url, output_path=output_path, info=download_info)
+        output_path = await self.download_file(download.id, download.url, zim_directory)
 
         # Notify the maintainer if outdated Zim files are lying around.
         lib.flag_outdated_zim_files()
-
-        output_size = output_path.stat().st_size
-        if download_info.size and output_size != download_info.size:
-            return DownloadResult(
-                success=False,
-                error=f'Download size does not match: {output_size} != {download_info.size}')
 
         return_code = await lib.check_zim(output_path)
         if return_code == 127:

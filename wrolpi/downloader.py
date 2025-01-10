@@ -7,9 +7,11 @@ import os
 import pathlib
 import tempfile
 import traceback
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
+from http import HTTPStatus
 from itertools import filterfalse
 from typing import List, Dict, Generator, Iterable, Coroutine
 from typing import Tuple, Optional
@@ -25,17 +27,21 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
+from wrolpi.cmd import which
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
-    wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path, timer
+    wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path, timer, aiohttp_get, \
+    get_download_info, trim_file_name
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
-from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError
+from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
 from wrolpi.events import Events
 from wrolpi.media_path import MediaPathType
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod, await_switches
 from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
 logger = logger.getChild(__name__)
+
+ARIA2C_PATH = which('aria2c', '/usr/bin/aria2c')
 
 
 @perpetual_signal(sleep=1 if PYTEST else 5)
@@ -376,6 +382,70 @@ class Downloader:
 
         # Return the result of the download attempt.
         return task.result()
+
+    @staticmethod
+    async def get_meta4_contents(url: str) -> bytes | None:
+        try:
+            meta4_url = f'{url}.meta4'
+            async with aiohttp_get(meta4_url, timeout=5) as response:
+                if response.status == HTTPStatus.OK:
+                    contents = await response.content.read()
+                    try:
+                        root = ET.fromstring(contents)
+                        if root.tag == '{urn:ietf:params:xml:ns:metalink4}metalink':
+                            return contents
+                        logger.debug(f'meta4 file was not a metalink file: {meta4_url}')
+                    except Exception as e:
+                        logger.debug(f'Failed to parse XML {meta4_url}', exc_info=e)
+        except Exception as e:
+            logger.debug(f'Failed to fetch meta4 file {url}', exc_info=e)
+
+        return None
+
+    async def download_file(self, download_id: int, url: str, destination: pathlib.Path, check_for_meta4: bool = True) \
+            -> pathlib.Path:
+        meta4_contents = None
+        if check_for_meta4:
+            meta4_contents = await self.get_meta4_contents(url)
+
+        info = await get_download_info(url)
+
+        # TODO verify that this output_path is exclusive.
+        output_path = destination / trim_file_name(info.name)
+
+        with tempfile.NamedTemporaryFile(suffix='.meta4') as meta4_path:
+            cmd = (
+                ARIA2C_PATH,
+                '-l', '-',
+                '-j3',  # concurrent downloads
+                '-s3',  # split jobs
+                '-d', destination,
+                url
+            )
+            meta4_path = pathlib.Path(meta4_path.name)
+            if meta4_contents:
+                meta4_path.write_bytes(meta4_contents)
+                cmd = (*cmd,
+                       '-M', meta4_path,
+                       )
+
+            return_code, logs, stdout = await self.process_runner(
+                download_id,
+                url,  # Log the original URL.
+                cmd,
+                destination,
+            )
+
+            error = logs.get('stderr') or logs.get('stdout')
+            error = error.decode() if error else error
+
+            if return_code != 0:
+                raise DownloadError(f'{error}\n\nFileDownloader failed with return code {return_code}')
+
+            if not output_path.is_file():
+                raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')
+
+        return output_path
 
 
 class DownloadManager:

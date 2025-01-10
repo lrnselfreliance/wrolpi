@@ -1,7 +1,6 @@
 import asyncio
 import json
 import pathlib
-from http import HTTPStatus
 from itertools import zip_longest
 from typing import List, Dict
 from uuid import uuid4
@@ -28,33 +27,18 @@ def kiwix_download_manager(test_download_manager) -> DownloadManager:
 
 
 @pytest.fixture
-def kiwix_download_zim(test_directory, kiwix_download_manager, test_zim_bytes):
+def kiwix_download_zim(test_directory, kiwix_download_manager, test_zim_bytes, mock_downloader_download_file):
     async def do_download(download_info: DownloadFileInfo = None, expected_url: str = None,
                           download_file_side_effect=None, hrefs: List[str] = None):
-        async def _download_file(url: str, output_path: pathlib.Path = None, info: DownloadFileInfo = None):
-            if expected_url:
-                assert url == expected_url
-            if download_info:
-                assert info == download_info
-            output_path.write_bytes(test_zim_bytes)
-
-        with mock.patch('modules.zim.downloader.fetch_hrefs') as mock_fetch_hrefs, \
-                mock.patch('modules.zim.downloader.get_download_info') as mock_get_download_info, \
-                mock.patch('modules.zim.downloader.download_file') as mock_download_file:
+        with mock.patch('modules.zim.downloader.fetch_hrefs') as mock_fetch_hrefs:
             # Fake the download, but make sure it is called correctly.  Also creates a Zim file at the output_path.
-            mock_download_file.side_effect = download_file_side_effect or _download_file
             # These are the links in the parent directory of the url.
             mock_fetch_hrefs.return_value = hrefs or ['?C=N;O=D', '?C=M;O=A', '?C=S;O=A', '?C=D;O=A', '/zim/',
                                                       'wikipedia_es_all_maxi_2023-05.zim',
                                                       'wikipedia_es_all_maxi_2023-06.zim',
                                                       'wikipedia_es_all_nopic_2023-05.zim',
                                                       'wikipedia_es_all_nopic_2023-06.zim']
-            # This is the DownloadInfo for the latest Zim file that was selected.
-            mock_get_download_info.return_value = download_info or DownloadFileInfo(
-                status=HTTPStatus.OK,
-                name='wikipedia_es_all_maxi_2023-06.zim',
-                size=len(test_zim_bytes),
-            )
+            mock_downloader_download_file(test_zim_bytes)
 
             await kiwix_download_manager.wait_for_all_downloads()
             # Async download are hard to test, sleep to let tasks finish.

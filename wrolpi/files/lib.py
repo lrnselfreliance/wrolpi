@@ -31,7 +31,7 @@ from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_ran
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
-    NoPrimaryFile, InvalidDirectory
+    NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
@@ -1537,13 +1537,16 @@ def remove_ignored_directory(directory: Union[pathlib.Path, str]):
 
 async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> FileGroup:
     """Insert/update all files in the provided file's FileGroup."""
+    if not file or not file.is_file():
+        raise InvalidFile(f'Cannot upsert file that does not exist: {file}')
+
     # Update/Insert all files in the FileGroup.
     paths = glob_shared_stem(pathlib.Path(file))
     # Remove any ignored files.
     paths = remove_files_in_ignored_directories(paths)
     if not paths:
         logger.warning('upsert_file called, but all files are in ignored directories!')
-        return
+        raise IgnoredDirectoryError(f'all files are in ignored directories: {file}')
 
     for i in range(2):
         # Try multiple times because uploads happen concurrently and may conflict.

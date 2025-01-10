@@ -40,20 +40,31 @@ echo "WROLPi version: $(cat /opt/wrolpi/wrolpi/version.txt)"
 echo
 
 rpi=false
+rpi4=false
+rpi5=false
 debian12=false
-if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
-  rpi=true
-fi
-if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
-  debian12=true
-fi
+grep -q 'Raspberry Pi' /proc/cpuinfo >/dev/null && rpi=true
+grep -q 'Raspberry Pi 4' /proc/cpuinfo >/dev/null && rpi4=true
+grep -q 'Raspberry Pi 5' /proc/cpuinfo >/dev/null && rpi5=true
+grep -q 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null && debian12=true
 
-if [[ ${rpi} == true ]]; then
-  echo 'OK: Running on Raspberry Pi'
+if [[ ${rpi4} == true ]]; then
+  echo 'OK: Running on Raspberry Pi 4'
+elif [[ ${rpi5} == true ]]; then
+  echo 'OK: Running on Raspberry Pi 5'
+elif [[ ${rpi} == true ]]; then
+  echo 'OK: Running on unknown Raspberry Pi'
 elif [[ ${debian12} == true ]]; then
   echo 'OK: Running on Debian 12'
 else
   echo "FAILED: Running on unknown operating system"
+fi
+
+if dmesg | grep -q 'Undervoltage detected' >/dev/null 2>&1; then
+  echo 'FAILED: Under voltage detected!  Use a more powerful power supply.'
+fi
+if dmesg | grep -q 'over-current change' >/dev/null 2>&1; then
+  echo 'FAILED: Over current detected!  Your peripherals are using too much power!'
 fi
 
 if id -u wrolpi >/dev/null 2>&1; then

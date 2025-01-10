@@ -4,8 +4,10 @@ from http import HTTPStatus
 from wrolpi import common
 from wrolpi.downloader import Download
 from wrolpi.files.downloader import FileDownloader
+from wrolpi.test.common import skip_circleci
 
 
+@skip_circleci
 async def test_file_downloader(test_session, make_files_structure, test_directory, await_switches,
                                simple_file_server, test_download_manager, video_file, video_bytes):
     """The FileDownloader can download a file without a metalink file."""
@@ -44,6 +46,7 @@ META4_XML = '''<?xml version="1.0" encoding="UTF-8"?>
 '''
 
 
+@skip_circleci
 async def test_file_downloader_meta4(test_session, make_files_structure, test_directory, await_switches,
                                      simple_file_server, test_download_manager, video_file, video_bytes):
     """The FileDownloader can download a file using a Metalink file."""

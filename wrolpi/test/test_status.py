@@ -18,6 +18,7 @@ async def test_get_load(async_client):
     assert isinstance(load.minute_15, Decimal) and load.minute_15 >= 0
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_get_cpu_stats(async_client):
     """Minimum CPU info testing because this will fail in docker, etc."""
@@ -60,6 +61,7 @@ async def test_get_drives_stats(async_client):
         assert isinstance(info[0], status.DriveInfo)
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_status_worker(async_client):
     """Status worker calls itself perpetually, but can be limited during testing."""

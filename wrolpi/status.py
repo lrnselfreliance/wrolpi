@@ -31,6 +31,7 @@ UPTIME_BIN = which('uptime', '/usr/bin/uptime')
 warn_once = get_warn_once('Unable to use psutil', logger)
 warn_cpu_once = get_warn_once('Cannot read CPU stats', logger)
 warn_cpu_temperature_once = get_warn_once('Cannot read CPU Temperature stats', logger)
+warn_iostat_once = get_warn_once('Cannot get iostat stats', logger)
 status_worker_warn_once = get_warn_once('Status worker encountered error', logger)
 
 
@@ -60,6 +61,58 @@ async def get_load_stats() -> SystemLoad:
     load_1, load_5, load_15, *_ = loadavg.split(' ')
     load = SystemLoad(Decimal(load_1), Decimal(load_5), Decimal(load_15))
     return load
+
+
+@dataclass
+class IostatInfo:
+    percent_idle: float = None
+    percent_iowait: float = None
+    percent_nice: float = None
+    percent_steal: float = None
+    percent_system: float = None
+    percent_user: float = None
+
+    def __json__(self) -> dict:
+        return dict(
+            percent_idle=self.percent_idle,
+            percent_iowait=self.percent_iowait,
+            percent_nice=self.percent_nice,
+            percent_steal=self.percent_steal,
+            percent_system=self.percent_system,
+            percent_user=self.percent_user,
+        )
+
+
+async def get_iostat_stats() -> IostatInfo:
+    logger.trace(f'get_iostat_stats called')
+
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            'iostat',
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if stdout and proc.returncode == 0:
+            iostat_stats = jc.parse('iostat', stdout.decode(), quiet=True)
+            if iostat_stats:
+                cpu_stats, *_ = iostat_stats
+
+                logger.debug(
+                    f'get_iostat_stats got percent_iowait={cpu_stats["percent_iowait"]} percent_idle={cpu_stats["percent_idle"]}')
+                # Return only the CPU stats.
+                return IostatInfo(
+                    percent_idle=cpu_stats['percent_idle'],
+                    percent_iowait=cpu_stats['percent_iowait'],
+                    percent_nice=cpu_stats['percent_nice'],
+                    percent_steal=cpu_stats['percent_steal'],
+                    percent_system=cpu_stats['percent_system'],
+                    percent_user=cpu_stats['percent_user'],
+                )
+    except Exception as e:
+        warn_iostat_once(e)
+
+    return IostatInfo()
 
 
 @dataclass
@@ -113,16 +166,9 @@ async def get_cpu_stats() -> CPUInfo:
     """Get core count, max freq, min freq, current freq, cpu temperature."""
     percent = int(psutil.cpu_percent())
 
-    # Get temperature from system file.
-    temperature = cur_frequency = max_frequency = min_frequency = None
-    if TEMPERATURE_PATH.is_file():
-        try:
-            temperature = int(TEMPERATURE_PATH.read_text()) // 1000
-            min_frequency = int(MIN_FREQUENCY_PATH.read_text())
-            max_frequency = int(MAX_FREQUENCY_PATH.read_text())
-            cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
-        except Exception as e:
-            warn_cpu_once(e)
+    min_frequency = int(MIN_FREQUENCY_PATH.read_text())
+    max_frequency = int(MAX_FREQUENCY_PATH.read_text())
+    cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
 
     # Get temperature using psutil.
     temperature = high_temperature = critical_temperature = None
@@ -480,6 +526,41 @@ async def get_disk_counters(shared_status):
     return disk_bandwidth_stats
 
 
+@dataclass
+class PowerStats:
+    under_voltage: bool = False
+    over_current: bool = False
+
+    def __json__(self) -> dict:
+        return dict(
+            under_voltage=self.under_voltage,
+            over_current=self.over_current,
+        )
+
+
+async def get_power_stats() -> PowerStats:
+    logger.trace(f'get_power_stats called')
+
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            'dmesg',
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if stdout and proc.returncode == 0:
+            under_voltage = b' Undervoltage detected' in stdout
+            over_current = b' over-current change ' in stdout
+            return PowerStats(
+                under_voltage=under_voltage,
+                over_current=over_current,
+            )
+    except Exception as e:
+        warn_iostat_once(e)
+
+    return PowerStats()
+
+
 @perpetual_signal(sleep=5)
 async def status_worker(count: int = None, sleep_time: int = 5):
     """A background process which will gather historical data about system statistics."""
@@ -492,13 +573,16 @@ async def status_worker(count: int = None, sleep_time: int = 5):
     load_stats = None
     try:
         # Update global `status` dict with stats that are gathered instantly.
-        cpu_stats, load_stats, drives_stats, memory_stats, processes_stats = await asyncio.gather(
-            get_cpu_stats(),
-            get_load_stats(),
-            get_drives_stats(),
-            get_memory_stats(),
-            get_processes_stats(),
-        )
+        cpu_stats, load_stats, drives_stats, memory_stats, processes_stats, iostat_stats, power_stats = \
+            await asyncio.gather(
+                get_cpu_stats(),
+                get_load_stats(),
+                get_drives_stats(),
+                get_memory_stats(),
+                get_processes_stats(),
+                get_iostat_stats(),
+                get_power_stats(),
+            )
         shared_status.update({
             'cpu_stats': cpu_stats.__json__(),
             'load_stats': load_stats.__json__(),
@@ -506,6 +590,8 @@ async def status_worker(count: int = None, sleep_time: int = 5):
             'processes_stats': [i.__json__() for i in processes_stats],
             'memory_stats': memory_stats.__json__(),
             'last_status': now().isoformat(),
+            'iostat_stats': iostat_stats.__json__(),
+            'power_stats': power_stats.__json__(),
         })
 
         if 'disk_bandwidth_stats' not in shared_status:

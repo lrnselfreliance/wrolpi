@@ -877,39 +877,29 @@ export const StatusProvider = (props) => {
 
 export const useStatusFlag = (flag) => {
     const {status} = useContext(StatusContext);
-    return status && status['flags'] && status['flags'][flag];
+    return status?.flags?.[flag] || false;
 }
 
 export const useCPUTemperature = () => {
     const {status} = React.useContext(StatusContext);
-    let temperature = 0;
-    let highTemperature = 75;
-    let criticalTemperature = 85;
-
-    if (status && status['cpu_info']) {
-        temperature = status['cpu_info']['temperature'];
-        highTemperature = status['cpu_info']['high_temperature'];
-        criticalTemperature = status['cpu_info']['critical_temperature'];
-    }
-
+    const temperature = status?.cpu_stats?.temperature || 0;
+    const highTemperature = status?.cpu_stats?.high_temperature || 75;
+    const criticalTemperature = status?.cpu_stats?.critical_temperature || 85;
     return {temperature, highTemperature, criticalTemperature}
 }
 
 export const useLoad = () => {
     const {status} = React.useContext(StatusContext);
-    let minute_1;
-    let minute_5;
-    let minute_15;
+    let minute_1 = status?.load_stats?.minute_1;
+    let minute_5 = status?.load_stats?.minute_5;
+    let minute_15 = status?.load_stats?.minute_15;
     let mediumLoad = false;
     let highLoad = false;
     let cores;
 
-    if (status && status['load']) {
-        minute_1 = status['load']['minute_1'];
-        minute_5 = status['load']['minute_5'];
-        minute_15 = status['load']['minute_15'];
-
-        cores = status['cpu_info']['cores'];
+    if (status && status.cpu_stats) {
+        // Medium load when 1/2 cores are busy, High load when 3/4+ cores are busy.
+        cores = status.cpu_stats.cores;
         const quarter = cores / 4;
         if (cores && minute_1 >= (quarter * 3)) {
             highLoad = true;
@@ -921,6 +911,37 @@ export const useLoad = () => {
     return {minute_1, minute_5, minute_15, mediumLoad, highLoad, cores};
 }
 
+export const useIOStats = () => {
+    const {status} = React.useContext(StatusContext);
+    const percentIdle = status?.iostat_stats?.percent_idle;
+    const percentIOWait = status?.iostat_stats?.percent_iowait;
+    const percentNice = status?.iostat_stats?.percent_nice;
+    const percentSteal = status?.iostat_stats?.percent_steal;
+    const percentSystem = status?.iostat_stats?.percent_system;
+    const percentUser = status?.iostat_stats?.percent_user;
+
+    return {percentIdle, percentIOWait, percentNice, percentSteal, percentSystem, percentUser};
+}
+
+export const useMemoryStats = () => {
+    const {status} = React.useContext(StatusContext);
+    const total = status?.memory_stats?.total;
+    const used = status?.memory_stats?.used;
+    const free = status?.memory_stats?.free;
+    const cached = status?.memory_stats?.cached;
+    let percent;
+    if (total && used) {
+        percent = Math.round((used / total) * 100);
+    }
+    return {total, used, free, cached, percent}
+}
+
+export const usePowerStats = () => {
+    const {status} = React.useContext(StatusContext);
+    const underVoltage = status?.power_stats?.under_voltage;
+    const overCurrent = status?.power_stats?.over_current;
+    return {underVoltage, overCurrent};
+}
 
 export const useVideoStatistics = () => {
     const [statistics, setStatistics] = useState(null);

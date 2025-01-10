@@ -5,7 +5,7 @@ WORKDIR /opt/wrolpi
 # Update dependencies for the services install.
 RUN apt update
 # ffmpeg for Videos
-RUN apt-get install -y ffmpeg catdoc
+RUN apt-get install -y ffmpeg catdoc sysstat
 RUN ffmpeg -version
 # yt-dlp needs cache directory
 RUN mkdir /.cache && chown -R 1000:1000 /.cache

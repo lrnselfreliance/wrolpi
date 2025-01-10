@@ -20,15 +20,7 @@ import {
 } from 'semantic-ui-react';
 import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {
-    useCPUTemperature,
-    useHotspot,
-    useLoad,
-    useSearchDirectories,
-    useSearchOrder,
-    useThrottle,
-    useWROLMode
-} from "../hooks/customHooks";
+import {useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
@@ -1124,38 +1116,6 @@ export function HotspotStatusIcon() {
     </>
 }
 
-export function CPUTemperatureIcon({size = 'large', fallback = null}) {
-    // Returns an Icon only if temperature is too high.
-    const {temperature, highTemperature, criticalTemperature} = useCPUTemperature();
-
-    if (temperature === null || temperature < highTemperature) {
-        // Temperature is not a problem.
-        return fallback;
-    }
-
-    let icon = temperature >= criticalTemperature ?
-        <Icon data-testid='cpuTemperatureIcon' name='thermometer' size={size} color='red'/>
-        : <Icon data-testid='cpuTemperatureIcon' name='thermometer half' size={size} color='yellow'/>;
-    icon = <Link to='/admin/status'>{icon}</Link>;
-
-    return <Popup content={`CPU: ${temperature}°C`} trigger={icon}/>
-}
-
-export function SystemLoadIcon({size = 'large', fallback = null}) {
-    const {minute_1, mediumLoad, highLoad} = useLoad();
-
-    if (!mediumLoad && !highLoad) {
-        return fallback;
-    }
-
-    // Only return the icon if the load is not low.
-    const color = highLoad ? 'red' : 'yellow';
-    let icon = <Link to='/admin/status'>
-        <Icon name='tachometer alternate' size={size} color={color}/>
-    </Link>;
-    return <Popup content={`Load: ${minute_1}`} trigger={icon}/>
-}
-
 export function useTitle(title) {
     const documentDefined = typeof document !== 'undefined';
     const originalTitle = React.useRef(documentDefined ? document.title : null);
@@ -1949,4 +1909,12 @@ export function getDistinctColor(hexColors) {
 
     // If we've tried maxAttempts times, return the last generated color regardless
     return hslToHex(newColor.h, newColor.s, newColor.l);
+}
+
+export const isReactChildNull = (children) => {
+    // Returns `true` if a React element returns `null` as it's child.
+    const nonNullChildren = React.Children.map(children,
+        (child) => React.isValidElement(child) && child.type(child.props)
+    );
+    return nonNullChildren.length === 0;
 }

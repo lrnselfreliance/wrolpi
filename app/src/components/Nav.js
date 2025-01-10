@@ -2,11 +2,11 @@ import React from "react";
 import {Link, NavLink} from "react-router-dom";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, SystemLoadIcon, useLocalStorage} from "./Common";
+import {DarkModeToggle, HotspotStatusIcon, isReactChildNull, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
-import {useWROLMode} from "../hooks/customHooks";
+import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
-import {Icon} from "./Theme";
+import {Icon, Popup} from "./Theme";
 import {HELP_VIEWER_URI, NAME} from "./Vars";
 import _ from "lodash";
 
@@ -59,15 +59,11 @@ function MenuLink({link}) {
     }
 }
 
-function NavIconWrapper(props) {
-    if (_.isEmpty(props.children)) {
-        return <></>
-    } else {
-        if (props.name === 'warning') {
-            // console.log(props.name, props.children);
-        }
-        return <div style={{marginTop: '0.8em', marginLeft: '1.5em'}}>{props.children}</div>
-    }
+function NavIconWrapper({children}) {
+    // Do not add margins around empty react element to avoid filling up navbar.
+    const emptyChild = !children || isReactChildNull(children);
+    const style = emptyChild ? {} : {marginTop: '0.8em', marginLeft: '1.5em'};
+    return <div style={style}>{children}</div>
 }
 
 function useNavColorSetting() {
@@ -97,8 +93,74 @@ export function NavBar() {
         {topNavText}
     </NavLink>;
 
-    // Display the temperature icon first because it can cause the system to throttle.
-    const warningIcon = <CPUTemperatureIcon fallback={<SystemLoadIcon/>}/>;
+    // Red/Yellow colors will blend in to some navbar colors, swap the colors for high contrast.
+    const conflictingColors = ['red', 'orange', 'yellow', 'olive', 'pink'];
+    const lowWarningColor = conflictingColors.includes(navColor) ? 'white' : 'yellow';
+    const highWarningColor = conflictingColors.includes(navColor) ? 'black' : 'red';
+
+    // Generic system load, the least important warning.
+    const {minute_1, mediumLoad, highLoad} = useLoad();
+    let systemLoadIcon;
+    if (mediumLoad || highLoad) {
+        // System load is high, display a warning icon.
+        const color = highLoad ? highWarningColor : lowWarningColor;
+        const icon = <Link to='/admin/status'>
+            <Icon name='tachometer alternate' size='large' color={color}/>
+        </Link>;
+        systemLoadIcon = <Popup content={`Load: ${minute_1}`} trigger={icon}/>
+    }
+
+    // RAM consumption.
+    const {percent: memoryPercent} = useMemoryStats();
+    let memoryIcon;
+    if (memoryPercent > 80) {
+        const color = memoryPercent > 90 ? highWarningColor : lowWarningColor;
+        const icon = <Link to='/admin/status' color={color}>
+            <Icon name='microchip' size='large'/>
+        </Link>;
+        memoryIcon = <Popup content={`System Memory: ${memoryPercent}%`} trigger={icon}/>
+    }
+
+    // Any disk is busy and processes are waiting.
+    const {percentIOWait} = useIOStats();
+    let diskWaitIcon;
+    if (percentIOWait >= 50) {
+        // Processes are waiting on disk, display a warning icon.
+        const color = percentIOWait > 75 ? highWarningColor : lowWarningColor;
+        const icon = <Link to='/admin/status' color={color}>
+            <Icon name='disk' size='large'/>
+        </Link>;
+        diskWaitIcon = <Popup content={`Processes waiting on disk: ${percentIOWait}`} trigger={icon}/>
+    }
+
+    // CPU temperature.
+    const {temperature, highTemperature, criticalTemperature} = useCPUTemperature();
+    let temperatureIcon;
+    if (temperature && temperature >= highTemperature) {
+        // CPU temperature is high, display a warning icon.
+        const color = temperature >= criticalTemperature ? highWarningColor : lowWarningColor;
+        const name = temperature >= criticalTemperature ? 'thermometer' : 'thermometer half';
+        const icon = <Icon data-testid='cpuTemperatureIcon' name={name} size='large' color={color}/>
+        const link = <Link to='/admin/status'>{icon}</Link>;
+        temperatureIcon = <Popup content={`CPU: ${temperature}°C`} trigger={link}/>;
+    }
+
+    // Power issues, this is always displayed if detected.
+    const {underVoltage, overCurrent} = usePowerStats();
+    let powerIcon;
+    if (underVoltage || overCurrent) {
+        const name = underVoltage ? 'power cord' : 'lightning';
+        const icon = <Icon name={name} size='large' color={highWarningColor}/>;
+        const message = underVoltage
+            ? 'Under-voltage detected! Your power supply is insufficient!'
+            : 'Over-current detected! Your peripherals are using too much power!';
+        powerIcon = <Popup content={message} trigger={icon}/>;
+    }
+
+    // Display the temperature icon first because it can cause the system to throttle.  The rest are in order of effects
+    // that will slow down the system and the user should address.  Generic load is last because it is probably not an
+    // issue.
+    const warningIcon = temperatureIcon || diskWaitIcon || memoryIcon || systemLoadIcon;
 
     let processingLink;
     if (status && status.flags) {
@@ -115,11 +177,12 @@ export function NavBar() {
         </Link>;
 
     const icons = <React.Fragment>
-        <NavIconWrapper name='processing'>{processingIcon}</NavIconWrapper>
-        <NavIconWrapper name='warning'>{warningIcon}</NavIconWrapper>
-        <NavIconWrapper name='share'><ShareButton/></NavIconWrapper>
-        <NavIconWrapper name='hotspot'><HotspotStatusIcon/></NavIconWrapper>
-        <NavIconWrapper name='dark mode'><DarkModeToggle/></NavIconWrapper>
+        <NavIconWrapper>{processingIcon}</NavIconWrapper>
+        <NavIconWrapper>{powerIcon}</NavIconWrapper>
+        <NavIconWrapper>{warningIcon}</NavIconWrapper>
+        <NavIconWrapper><ShareButton/></NavIconWrapper>
+        <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
+        <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
     </React.Fragment>;
 
     return <>

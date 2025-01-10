@@ -21,7 +21,6 @@ from dataclasses import dataclass, asdict, field, fields
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
-from http import HTTPStatus
 from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
@@ -40,8 +39,8 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError, InvalidConfig, \
+from wrolpi.dates import now, from_timestamp
+from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, \
     ValidationError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
@@ -240,6 +239,7 @@ __all__ = [
     'apply_modelers',
     'apply_refresh_cleanup',
     'background_task',
+    'can_connect_to_server',
     'cancel_background_tasks',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
@@ -249,10 +249,10 @@ __all__ = [
     'chunks',
     'chunks_by_stem',
     'compile_tsvector',
+    'create_empty_config_files',
     'cum_timer',
     'date_range',
     'disable_wrol_mode',
-    'download_file',
     'enable_wrol_mode',
     'escape_file_name',
     'extract_domain',
@@ -1414,48 +1414,6 @@ async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> C
             yield response
 
 
-async def speed_test(url: str, timeout: int | None = 10) -> int:
-    """Request the last megabyte of the provided url, return the content length divided by the time elapsed (speed)."""
-    async with aiohttp_head(url) as response:
-        content_length = response.headers['Content-Length']
-    start_bytes = int(content_length) - 10485760
-    range_ = f'bytes={start_bytes}-{content_length}'
-    start_time = datetime.now()
-    async with aiohttp_get(url, headers={'Range': range_}, timeout=timeout) as response:
-        content = await response.content.read()
-    elapsed = int((datetime.now() - start_time).total_seconds())
-    return len(content) // elapsed
-
-
-async def get_fastest_mirror(urls: List[str]) -> str:
-    """Perform a speed test on each URL, return the fastest."""
-    fastest_url = urls[0]
-    fastest_speed = 0
-    for url in urls:
-        try:
-            # Timeout after 5 minutes.  Mirror is less than 27 kbps.
-            speed = await speed_test(url, timeout=60 * 5)
-            download_logger.debug(f'Speed test of {url} was {speed} bps')
-        except Exception as e:
-            download_logger.error(f'Speedtest of {url} failed', exc_info=e)
-            continue
-
-        if speed > fastest_speed:
-            fastest_url = url
-
-    return fastest_url
-
-
-@dataclass
-class DownloadFileInfoLink:
-    """Represents an HTTP "Link" Header."""
-    url: str
-    rel: str
-    type: str
-    priority: int
-    geo: str
-
-
 @dataclass
 class DownloadFileInfo:
     """Information about a file that can be downloaded."""
@@ -1465,7 +1423,6 @@ class DownloadFileInfo:
     accept_ranges: str = None
     status: int = None
     location: str = None
-    links: List[DownloadFileInfoLink] = None
 
 
 FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
@@ -1475,28 +1432,6 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
     """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
     async with aiohttp_head(url, timeout) as response:
         download_logger.debug(f'{response.headers=}')
-        try:
-            links = response.headers.getall('Link')
-        except KeyError:
-            links = None
-
-        new_links = list()
-        if links:
-            # Convert "Link" header strings to DownloadFileInfoLink.
-            for idx, link in enumerate(links):
-                url, *props = link.split(';')
-                url = url[1:-1]
-                properties = dict()
-                for prop in props:
-                    name, value = prop.strip().split('=')
-                    properties[name] = value
-                new_links.append(DownloadFileInfoLink(
-                    url,
-                    properties.get('rel').strip() if 'rel' in properties else None,
-                    properties.get('type').strip() if 'type' in properties else None,
-                    int(properties.get('pri').strip()) if 'pri' in properties else None,
-                    properties.get('geo').strip() if 'geo' in properties else None,
-                ))
 
         info = DownloadFileInfo(
             type=response.headers.get('Content-Type'),
@@ -1504,7 +1439,6 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
             accept_ranges=response.headers.get('Accept-Ranges'),
             status=response.status,
             location=response.headers.get('Location'),
-            links=new_links,
         )
 
         disposition = response.headers.get('Content-Disposition')
@@ -1524,80 +1458,6 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
 
 
 download_logger = logger.getChild('download')
-
-
-async def download_file(url: str, output_path: pathlib.Path = None, info: DownloadFileInfo = None,
-                        timeout: int = 7 * 24 * 60 * 60):
-    """Uses aiohttp to download an HTTP file.  Performs a speed test when mirrors are found, downloads from the fastest
-    mirror.
-
-    Attempts to resume the file if `output_path` already exists.
-
-    @warning: Timeout default is a week because of large downloads.
-    """
-    info = info or await get_download_info(url, timeout)
-
-    if output_path.is_file() and info.size == output_path.stat().st_size:
-        download_logger.warning(f'Already downloaded {repr(str(url))} to {repr(str(output_path))}')
-        return
-
-    if info.links and (mirror_urls := [i.url for i in info.links if i.rel == 'duplicate']):
-        # Mirrors are available, find the fastest.
-        download_logger.info(f'Performing download speed test on mirrors: {mirror_urls}')
-        url = await get_fastest_mirror(mirror_urls)
-        info = await get_download_info(url, timeout)
-
-    download_logger.debug(f'Final DownloadInfo fetched {info}')
-    total_size = info.size
-
-    download_logger.info(f'Starting download of {url} with {total_size} total bytes')
-    if info.accept_ranges == 'bytes' or not output_path.is_file():
-        with output_path.open('ab') as fh:
-            headers = DEFAULT_HTTP_HEADERS.copy()
-            # Check the position of append, if it is 0 then we do not need to resume.
-            position = fh.tell()
-            if position:
-                headers['Range'] = f'bytes={position}-'
-
-            async with aiohttp_session(timeout=timeout) as session:
-                async with session.get(url, headers=headers) as response:
-                    response: ClientResponse
-                    if response.status == HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE:
-                        download_logger.warning(f'Server responded with 416, file is probably already downloaded')
-                        return
-
-                    if position and response.status != HTTPStatus.PARTIAL_CONTENT:
-                        raise UnrecoverableDownloadError(
-                            f'Tried to resume {repr(str(url))} but got status {response.status}')
-
-                    # May or may not be using Range.  Append each chunk to the output file.
-                    last_report = datetime.now()
-                    bytes_received = 0
-                    async for data in response.content.iter_any():
-                        fh.write(data)
-
-                        bytes_received += len(data)
-                        if (elapsed := (datetime.now() - last_report).total_seconds()) > 10:
-                            # Report download speed every 10 seconds.
-                            bytes_per_second = int(bytes_received // elapsed)
-                            download_logger.debug(f'{bytes_received=} {elapsed=} {bytes_per_second=}')
-                            size = fh.tell()
-                            bytes_remaining = total_size - size
-                            seconds_remaining = bytes_remaining // bytes_per_second
-                            percent = int((size / total_size) * 100)
-                            download_logger.info(
-                                f'Downloading {url} at'
-                                f' rate={human_bandwidth(bytes_per_second)}'
-                                f' estimate={seconds_to_timestamp(seconds_remaining)}')
-                            download_logger.debug(f'Downloading {url} {total_size=} {size=} {percent=}')
-                            last_report = datetime.now()
-                            bytes_received = 0
-
-                        # Sleep to catch cancel.
-                        await asyncio.sleep(0)
-    elif output_path.is_file():
-        # TODO support downloading files that cannot be resumed.
-        raise UnrecoverableDownloadError(f'Cannot resume download {url}')
 
 
 def human_bandwidth(bps: int) -> str:

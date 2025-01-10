@@ -91,6 +91,7 @@ rsync
 smartmontools
 software-properties-common
 sudo
+sysstat
 tar
 tcpdump
 tmux

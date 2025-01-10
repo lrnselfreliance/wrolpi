@@ -9,7 +9,6 @@ import logging
 import multiprocessing
 import pathlib
 import shutil
-import socketserver
 import tempfile
 import threading
 import zipfile
@@ -760,26 +759,51 @@ def make_multipart_form():
 
 
 @pytest.fixture
-def simple_web_server():
-    """Start a simple HTTP server in a background thread and yield its URL."""
-    # Define the handler to serve files from the current directory
-    handler = http.server.SimpleHTTPRequestHandler
+def simple_file_server(test_directory):
+    # Use a random port for testing
+    server_address = ('', 0)  # 0 means pick any available port
 
-    # Set up an HTTP server on a free port
-    with socketserver.TCPServer(("localhost", 0), handler) as httpd:
-        # Get the port where the server is running
-        port = httpd.server_address[1]
-        server_url = f"http://localhost:{port}/"
+    class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            # Pass the directory to the handler
+            self.directory = kwargs['directory']
+            super().__init__(*args, **kwargs)
 
-        # Start the server in a background thread
-        server_thread = threading.Thread(target=httpd.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
+    # Create the server
+    server = http.server.HTTPServer(
+        server_address,
+        # Hack to pass `test_directory` as `self.directory` to `SimpleHTTPRequestHandler`
+        lambda *args, **kwargs:
+        CustomHTTPRequestHandler(*args, directory=str(test_directory), **kwargs))
 
-        # Yield the URL of the running server
-        try:
-            yield httpd, server_url
-        finally:
-            # Stop the server after the test
-            httpd.shutdown()
-            server_thread.join()
+    # Start the server in a background thread
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True  # So the server dies when the main thread dies
+    server_thread.start()
+
+    try:
+        yield server
+    finally:
+        # Cleanup
+        server.shutdown()
+        server.server_close()
+        server_thread.join()
+
+
+@pytest.fixture
+def mock_downloader_download_file():
+    """Mock the Downloader.download_file method."""
+    contents = None
+
+    async def _download_file(self, id_, url, destination):
+        name = url.split('/')[-1]
+        output_path = destination / name
+        output_path.write_bytes(contents or b'')
+        return output_path
+
+    with mock.patch('wrolpi.downloader.Downloader.download_file', _download_file):
+        def set_contents(contents_):
+            nonlocal contents
+            contents = contents_
+
+        yield set_contents

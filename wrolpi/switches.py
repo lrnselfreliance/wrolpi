@@ -146,4 +146,4 @@ async def await_switches(timeout: int = 10):
         # All switches handled.
         break
     else:
-        raise RuntimeError('Timed out waiting for switches')
+        raise RuntimeError('Timed out waiting for switches.  Did you remember to use the `await_switches` fixture?')

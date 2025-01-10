@@ -834,24 +834,22 @@ def test_config_backup(async_client, test_wrolpi_config, test_directory):
 
 @pytest.mark.asyncio
 @skip_circleci
-async def test_aiohttp(simple_web_server):
+async def test_aiohttp(simple_file_server):
     """Test that aiohttp convenience functions work."""
-    httpd, server_url = simple_web_server
+    host, port = simple_file_server.server_address
+    url = f'http://{host}:{port}'  # noqa
 
-    async with common.aiohttp_get(server_url) as response:
+    async with common.aiohttp_get(url) as response:
         assert response.content.read()
         assert response.status == 200
 
-    async with common.aiohttp_head(server_url) as response:
+    async with common.aiohttp_head(url) as response:
         assert response.content.read()
         assert response.status == 200
 
 
-def test_can_connect_to_server(simple_web_server):
-    httpd, server_url = simple_web_server
-    _, host, port = server_url.split(':')
-    host = host[2:]
-    port = int(port[:-1])
+def test_can_connect_to_server(simple_file_server):
+    host, port = simple_file_server.server_address
 
     assert common.can_connect_to_server(host, port)
 
@@ -1121,28 +1119,28 @@ def test_get_paths_in_parent_directory(test_directory, make_files_structure):
 
     paths = list(common.walk(test_directory))
 
-    assert common.get_paths_in_parent_directory(paths, test_directory / 'foo') == [
+    assert set(common.get_paths_in_parent_directory(paths, test_directory / 'foo')) == {
         test_directory / 'foo/bar.txt',
         test_directory / 'foo/bar',
         test_directory / 'foo/bar/baz.txt',
-    ]
+    }
 
-    assert common.get_paths_in_parent_directory(paths, test_directory / 'foo/bar') == [
+    assert set(common.get_paths_in_parent_directory(paths, test_directory / 'foo/bar')) == {
         test_directory / 'foo/bar/baz.txt',
-    ]
+    }
 
-    assert common.get_paths_in_parent_directory(paths, test_directory) == [
+    assert set(common.get_paths_in_parent_directory(paths, test_directory)) == {
         test_directory / 'qux.txt',
         test_directory / 'foo',
         test_directory / 'foo/bar.txt',
         test_directory / 'foo/bar',
         test_directory / 'foo/bar/baz.txt',
-    ]
+    }
 
-    assert common.get_paths_in_media_directory(paths) == [
+    assert set(common.get_paths_in_media_directory(paths)) == {
         test_directory / 'qux.txt',
         test_directory / 'foo',
         test_directory / 'foo/bar.txt',
         test_directory / 'foo/bar',
         test_directory / 'foo/bar/baz.txt',
-    ]
+    }

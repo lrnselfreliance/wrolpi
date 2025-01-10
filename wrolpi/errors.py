@@ -175,3 +175,15 @@ class RefreshConflict(APIError):
     code = 'REFRESH_CONFLICT'
     message = 'Not possible during file refresh'
     status_code = HTTPStatus.CONFLICT
+
+
+class IgnoredDirectoryError(APIError):
+    code = 'IGNORED_DIRECTORY_ERROR'
+    message = 'Directory is being ignored'
+    status_code = HTTPStatus.BAD_REQUEST
+
+
+class DownloadError(APIError):
+    code = 'DOWNLOAD_ERROR'
+    message = 'Unable to complete download'
+    status_code = HTTPStatus.INTERNAL_SERVER_ERROR

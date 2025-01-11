@@ -2,7 +2,7 @@ import React from "react";
 import {Link, NavLink} from "react-router-dom";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
-import {DarkModeToggle, HotspotStatusIcon, isReactChildNull, useLocalStorage} from "./Common";
+import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
@@ -60,15 +60,12 @@ function MenuLink({link}) {
 }
 
 function NavIconWrapper({children}) {
-    // Do not add margins around empty react element to avoid filling up navbar.
-    let emptyChild = false;
-    try {
-        emptyChild = !children || isReactChildNull(children);
-    } catch (e) {
-        console.debug('Failed to get children of react element');
+    if (children) {
+        return <div style={{marginTop: '0.8em', marginLeft: '1.5em'}}>{children}</div>
+    } else {
+        // Do not use navbar space if children is empty.
+        return <React.Fragment/>
     }
-    const style = emptyChild ? {} : {marginTop: '0.8em', marginLeft: '1.5em'};
-    return <div style={style}>{children}</div>
 }
 
 function useNavColorSetting() {

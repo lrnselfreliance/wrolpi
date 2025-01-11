@@ -61,7 +61,12 @@ function MenuLink({link}) {
 
 function NavIconWrapper({children}) {
     // Do not add margins around empty react element to avoid filling up navbar.
-    const emptyChild = !children || isReactChildNull(children);
+    let emptyChild = false;
+    try {
+        emptyChild = !children || isReactChildNull(children);
+    } catch (e) {
+        console.debug('Failed to get children of react element');
+    }
     const style = emptyChild ? {} : {marginTop: '0.8em', marginLeft: '1.5em'};
     return <div style={style}>{children}</div>
 }

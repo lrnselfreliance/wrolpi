@@ -30,6 +30,7 @@ UPTIME_BIN = which('uptime', '/usr/bin/uptime')
 
 warn_once = get_warn_once('Unable to use psutil', logger)
 warn_cpu_once = get_warn_once('Cannot read CPU stats', logger)
+warn_cpu_frequency_once = get_warn_once('Cannot read CPU frequency paths', logger)
 warn_cpu_temperature_once = get_warn_once('Cannot read CPU Temperature stats', logger)
 warn_iostat_once = get_warn_once('Cannot get iostat stats', logger)
 status_worker_warn_once = get_warn_once('Status worker encountered error', logger)
@@ -161,14 +162,19 @@ CUR_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
 TEMPERATURE_PATH = Path('/sys/class/thermal/thermal_zone0/temp')
 TOP_REGEX = re.compile(r'^%Cpu\(s\):\s+(\d+\.\d+)', re.MULTILINE)
 
+CORE_COUNT = multiprocessing.cpu_count()
 
 async def get_cpu_stats() -> CPUInfo:
     """Get core count, max freq, min freq, current freq, cpu temperature."""
     percent = int(psutil.cpu_percent())
 
-    min_frequency = int(MIN_FREQUENCY_PATH.read_text())
-    max_frequency = int(MAX_FREQUENCY_PATH.read_text())
-    cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
+    min_frequency = max_frequency = cur_frequency = None
+    try:
+        min_frequency = int(MIN_FREQUENCY_PATH.read_text())
+        max_frequency = int(MAX_FREQUENCY_PATH.read_text())
+        cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
+    except Exception as e:
+        warn_cpu_frequency_once(e)
 
     # Get temperature using psutil.
     temperature = high_temperature = critical_temperature = None
@@ -192,7 +198,7 @@ async def get_cpu_stats() -> CPUInfo:
         warn_cpu_temperature_once(e)
 
     info = CPUInfo(
-        cores=multiprocessing.cpu_count(),
+        cores=CORE_COUNT,
         critical_temperature=int(critical_temperature) if critical_temperature else None,
         # Current frequency is between minimum and maximum.
         cur_frequency=cur_frequency - min_frequency if cur_frequency else None,

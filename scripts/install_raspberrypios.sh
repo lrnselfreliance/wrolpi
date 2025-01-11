@@ -58,7 +58,7 @@ file permissions if necessary:
 Start the WROLPi services using:
  # sudo systemctl start wrolpi.target
 
-then navigate to:  http://wrolpi.local
+then navigate to:  https://$(hostname).local
 
 Or, join to the Wifi hotspot:
 SSID: WROLPi

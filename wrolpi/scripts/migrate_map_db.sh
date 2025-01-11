@@ -27,6 +27,8 @@ systemctl stop renderd
 
 # Create new cluster for the map.
 pg_createcluster 15 map --port=5433 --start
+# Disable JIT as recommended by mod_tile
+sed -i 's/#jit =.*/jit = off/' /etc/postgresql/15/map/postgresql.conf
 
 # Create user permissions for map user.
 sudo -iu postgres psql -c '\l' --port=5433 | grep gis || (

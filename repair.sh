@@ -116,6 +116,8 @@ grep -q 'port: 5433' /opt/openstreetmap-carto/project.mml || (
   (cd /opt/openstreetmap-carto/ && carto project.mml >mapnik.xml)
 )
 chown -R _renderd:_renderd /opt/openstreetmap-carto
+# Disable JIT as recommended by mod_tile
+sed -i 's/#jit =.*/jit = off/' /etc/postgresql/15/map/postgresql.conf
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.

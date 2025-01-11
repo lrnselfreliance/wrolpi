@@ -27,6 +27,10 @@ set -x
 
 systemctl stop renderd
 
+# Delete old map database, if it exists.
+sudo -iu postgres dropdb --port=5433 gis || :
+sudo -iu postgres dropuser --port=5433 _renderd || :
+# Delete new map database, it will be created again.
 sudo -iu postgres dropdb --port=5433 gis || :
 sudo -iu postgres dropuser --port=5433 _renderd || :
 

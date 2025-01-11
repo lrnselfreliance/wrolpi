@@ -104,7 +104,7 @@ if sudo -i -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
     if [ "$(sudo -i -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout' 2>/dev/null)" -gt 0 ]; then
       echo "OK: WROLPi database has files"
     else
-      echo "FAILED: WROLPi database has no files"
+      echo "FAILED: WROLPi database has no files.  You need to refresh your files: https://$(hostname).local/files"
     fi
   else
     echo "FAILED: WROLPi is not initialized"

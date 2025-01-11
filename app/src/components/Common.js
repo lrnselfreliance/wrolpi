@@ -746,7 +746,7 @@ export function HelpHeader({
                                required = false,
                            }) {
     return <div className='inline-header'>
-        <label for={for_}>
+        <label htmlFor={for_}>
             <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
         </label>
         <span>

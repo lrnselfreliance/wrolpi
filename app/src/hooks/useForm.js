@@ -307,7 +307,7 @@ export function InputForm({
     }
 
     return <>
-        <label for={`${name}_input`}>
+        <label htmlFor={`${name}_input`}>
             <b>{label} {required && <RequiredAsterisk/>}</b>
             {helpContent &&
                 <HelpPopup

@@ -24,7 +24,7 @@ if [[ ! -f ${MAP_DB_BLOB} || ! -s ${MAP_DB_BLOB} ]]; then
 fi
 if [[ -f /opt/wrolpi-blobs/gis-map.dump.gz && -s ${MAP_DB_BLOB} ]]; then
   # Remove old blob now that we have the new one.
-  rm ${MAP_DB_BLOB}
+  rm /opt/wrolpi-blobs/gis-map.dump.gz
 fi
 
 # Migrate map DB if necessary.  Do this before repair because it will reset map if map db is empty.

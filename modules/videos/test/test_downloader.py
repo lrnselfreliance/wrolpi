@@ -283,6 +283,9 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
     # `formats` should be cleaned from info json.
     info_json_path = video_path.with_suffix('.info.json')
     info_json_path.write_text(json.dumps({'duration': 5, 'formats': [1, 2, 3]}))
+    # .part file should be deleted
+    part_path = video_path.with_suffix('.mp4.part')
+    part_path.touch()
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
@@ -302,6 +305,9 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
     video: Video = test_session.query(Video).one()
     assert video.video_path.is_absolute() and video.video_path == video_path, 'Video path is not absolute'
     assert video.video_path.is_absolute() and video.poster_path == poster_path, 'Video poster was not discovered'
+    assert not any([i for i in video.file_group.my_paths() if i.name.endswith('.part')]), \
+        'Part file should not be in group'
+    assert not part_path.exists(), 'Part file should be deleted.'
     # Some info json data is deleted during download.
     assert video.get_info_json(), 'Download should keep info json file'
     assert 'duration' in video.get_info_json(), 'Duration should stay in info json'

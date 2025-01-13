@@ -435,6 +435,12 @@ class VideoDownloader(Downloader, ABC):
                 video_path = preferred_path
                 logger.info(f'Using preferred video file which exists: {preferred_path}')
 
+            if video_path.suffix == '.part':
+                return DownloadResult(
+                    success=False,
+                    error=f'Video file that completed was a .part file: {video_path}',
+                )
+
             if not video_path.is_file():
                 error = f'{stdout}\n\n\n{stderr}\n\n' \
                         f'Video file could not be found!  {video_path}'
@@ -458,6 +464,13 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 # Find any files downloaded with the video (poster, caption, etc.).
                 video_paths = glob_shared_stem(video_path)
+                # Delete any leftover .part files because the video has been verified complete
+                # by `ffmpeg_video_complete`.
+                for part_file in [i for i in video_paths if i.name.endswith(f'{video_path.suffix}.part')]:
+                    logger.warning(f'Deleting leftover .part file: {part_file}')
+                    part_file.unlink()
+                    video_paths.remove(part_file)
+                # Create the Video record.
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
                 video.channel_id = channel_id

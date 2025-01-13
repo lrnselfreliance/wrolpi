@@ -142,6 +142,8 @@ def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
     """
     if not video_path.is_file():
         raise FileNotFoundError(f'Video file not found: {video_path}')
+    if not video_path.stat().st_size:
+        raise RuntimeError(f'Video file is empty: {video_path}')
 
     with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
         path = Path(fh.name)

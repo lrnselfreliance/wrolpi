@@ -26,7 +26,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     partition, cancelable_wrapper, \
     get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
     get_wrolpi_config, \
-    timer, chunks, unique_by_predicate, get_paths_in_media_directory
+    timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.downloader import download_manager
@@ -328,7 +328,11 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
 def get_unique_files_by_stem(files: List[pathlib.Path] | Tuple[pathlib.Path, ...] | Set[pathlib.Path]) \
         -> List[pathlib.Path]:
     """Returns the first of each Path with a unique stem.  Used to detect if a group of files share a stem."""
-    return unique_by_predicate(files, lambda i: split_path_stem_and_suffix(i)[0])
+    results = unique_by_predicate(files, lambda i: split_path_stem_and_suffix(i)[0])
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'get_unique_files_by_stem {files=}')
+        logger.trace(f'get_unique_files_by_stem {results=}')
+    return results
 
 
 refresh_logger = logger.getChild('refresh')

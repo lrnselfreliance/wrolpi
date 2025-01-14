@@ -285,6 +285,8 @@ for six_ in ISO_639_CODES.keys():
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.srt' for i in ISO_3166_CODES}
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.vtt' for i in ISO_3166_CODES}
 
+PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
+
 
 @functools.lru_cache(maxsize=10_000)
 def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = False) -> Tuple[str, str]:
@@ -300,6 +302,14 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
     ('/foo/bar', '.info.json')
     """
     path = pathlib.Path(path) if isinstance(path, str) else path
+
+    if path.suffix == '.part':
+        # yt-dlp uses part files while downloading, include those in a FileGroup.
+        stem, info, format_num, suffix, part = PART_PARSER.match(path.name).groups()
+        info = info or ''
+        format_num = format_num or ''
+        stem = f'{path.parent}/{stem}' if full else stem
+        return stem, f'{info}{format_num}{suffix}{part}'
 
     # May or may not be absolute.  Convert to lowercase so any suffix case can be matched.
     full_ = str(path).lower()
@@ -928,7 +938,7 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     return paths
 
 
-WHITESPACE = re.compile(r'[\s_]')
+WHITESPACE = re.compile(r'[\s_\[\]()]')
 
 
 def split_file_name_words(name: str) -> str:
@@ -954,7 +964,7 @@ def split_file_name_words(name: str) -> str:
         if suffix:
             words.append(suffix.lstrip('.'))
 
-        words = ' '.join(words)
+        words = ' '.join(i for i in words if i)
         return words
     except Exception as e:
         logger.error(f'Failed to split filename into words: {name}', exc_info=e)

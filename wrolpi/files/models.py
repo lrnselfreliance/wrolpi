@@ -305,7 +305,7 @@ class FileGroup(ModelHelper, Base):
 
         unique_stems = get_unique_files_by_stem(paths)
         if len(unique_stems) > 1:
-            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
+            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem: {paths[0]}')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
         logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')

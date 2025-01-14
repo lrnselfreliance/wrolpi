@@ -4,6 +4,7 @@ import json
 import logging
 import os.path
 import pathlib
+import re
 import traceback
 from abc import ABC
 from datetime import timedelta
@@ -464,12 +465,8 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 # Find any files downloaded with the video (poster, caption, etc.).
                 video_paths = glob_shared_stem(video_path)
-                # Delete any leftover .part files because the video has been verified complete
-                # by `ffmpeg_video_complete`.
-                for part_file in [i for i in video_paths if i.name.endswith(f'{video_path.suffix}.part')]:
-                    logger.warning(f'Deleting leftover .part file: {part_file}')
-                    part_file.unlink()
-                    video_paths.remove(part_file)
+                # Delete any leftover part files now that we have verified the video is complete.
+                video_paths = self._delete_part_files(video_path, video_paths)
                 # Create the Video record.
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
@@ -705,6 +702,33 @@ class VideoDownloader(Downloader, ABC):
 
         return DownloadResult(success=True, location=location)
 
+    @staticmethod
+    def _delete_part_files(video_file: pathlib.Path, files: list[pathlib.Path]) -> list[pathlib.Path]:
+        """Delete temporary "part" files that are used by yt-dlp when downloading video (and related) files."""
+        files = list(files)
+
+        video_suffix = video_file.suffix.lstrip('.')
+
+        # Delete any files in this group that end with .part.
+        for part_file in [i for i in files if i.name.endswith('.part')]:
+            logger.warning(f'Deleting leftover .part file: {part_file}')
+            part_file.unlink()
+            files.remove(part_file)
+
+        # Delete any video files that are a temporary file that contain the "format" number.
+        # Example:  The Video Title.f616.mp4
+        video_files = [i for i in files if i != video_file and i.name.endswith(video_suffix)]
+        for part_video in video_files:
+            if VIDEO_FORMAT_PARSER.match(part_video.stem):
+                # Extra yt-dlp format video file that is not the video file, delete it.
+                logger.warning(f'Deleting leftover incomplete video file: {part_video}')
+                part_video.unlink()
+                files.remove(part_video)
+
+        return files
+
+
+VIDEO_FORMAT_PARSER = re.compile(r'^.+?\.f\d{2,4}')
 
 channel_downloader = ChannelDownloader()
 # Videos may match the ChannelDownloader, give it a higher priority.

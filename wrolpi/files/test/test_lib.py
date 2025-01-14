@@ -156,8 +156,12 @@ async def test_delete_nested(test_session, make_files_structure):
         # Case is preserved.
         ('foo.EN.SRT', False, ('foo', '.EN.SRT')),
         ('foo.INFO.JSON', False, ('foo', '.INFO.JSON')),
-    ]
-)
+        # Part files from yt-dlp.
+        ('foo.webm.part', False, ('foo', '.webm.part')),
+        ('foo.f248.webm.part', False, ('foo', '.f248.webm.part')),
+        ('foo.info.json.part', False, ('foo', '.info.json.part')),
+        ('/absolute/foo.webm.part', True, ('/absolute/foo', '.webm.part')),
+    ])
 def test_split_path_stem_and_suffix(path, full, expected):
     assert lib.split_path_stem_and_suffix(Path(path), full) == expected
 
@@ -531,6 +535,8 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     ('this self-reliance_split.txt', 'this self reliance self-reliance split txt'),
     ('-be_split!.txt', '-be split! txt'),
     ('WROLPi-v0.10-aarch64-desktop.img.xz', 'WROLPi v0.10 aarch64 desktop.img WROLPi-v0.10-aarch64-desktop.img xz'),
+    ('some words [but words in braces].txt', 'some words but words in braces txt'),
+    ('some words (but words in parentheses).txt', 'some words but words in parentheses txt'),
 ])
 def test_split_file_name_words(name, expected):
     assert lib.split_file_name_words(name) == expected

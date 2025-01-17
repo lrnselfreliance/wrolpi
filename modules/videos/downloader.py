@@ -41,20 +41,20 @@ from .video.lib import download_video_info_json
 logger = logger.getChild(__name__)
 
 VIDEO_RESOLUTION_MAP = {
-    '360p': ['134+140', 'mp4-360p', 'res:360'],
-    '480p': ['135+140', '135+139', 'mp4-480p', 'res:480'],
+    '360p': ['134+bestaudio', 'mp4-360p', 'res:360'],
+    '480p': ['135+bestaudio', '135+139', 'mp4-480p', 'res:480'],
     '720p': [
-        '298+140',  # 720@60 avc1 + 135k audio
-        '136+140', '22', 'res:720'],
+        '298+bestaudio',  # 720@60 avc1 + best audio
+        '136+bestaudio', '22', 'res:720'],
     '1080p': [
-        '299+140',  # 1080@60 avc1 + 135k audio
-        '137+140', '614+140', 'res:1080'],
+        '299+bestaudio',  # 1080@60 avc1 + best audio
+        '137+bestaudio', '614+bestaudio', 'res:1080'],
     '1440p': [
-        '639+140',  # vp9 + 135k audio
-        '620+140', 'res:1440'],
+        '639+bestaudio',  # vp9 + best audio
+        '620+bestaudio', 'res:1440'],
     '2160p': [
-        '642+140',  # vp9 + 135k audio
-        '625+140', 'res:2160'],
+        '642+bestaudio',  # vp9 + best audio
+        '625+bestaudio', 'res:2160'],
     'maximum': ['bestvideo*+bestaudio/best'],
 }
 

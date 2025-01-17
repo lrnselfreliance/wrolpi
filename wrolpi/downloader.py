@@ -1,10 +1,12 @@
 import asyncio
 import contextlib
+import hashlib
 import inspect
 import logging
 import multiprocessing
 import os
 import pathlib
+import re
 import tempfile
 import traceback
 import xml.etree.ElementTree as ET
@@ -30,7 +32,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name, TRACE_LEVEL
+    get_download_info, trim_file_name
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
@@ -402,63 +404,68 @@ class Downloader:
 
         return None
 
-    async def download_file(self, download_id: int, url: str, destination: pathlib.Path, check_for_meta4: bool = True) \
-            -> pathlib.Path:
+    async def download_file(self, download_id: int, url: str, destination: pathlib.Path, check_for_meta4: bool = True,
+                            check_for_md5: bool = True) -> pathlib.Path:
         from wrolpi.files.lib import glob_shared_stem
 
         if not ARIA2C_PATH:
             raise DownloadError('Cannot find aria2c executable')
 
-        meta4_contents = None
-        if check_for_meta4:
-            meta4_contents = await self.get_meta4_contents(url)
+        # Log download time.
+        with timer('download_file', level='info'):
+            meta4_contents = None
+            if check_for_meta4:
+                meta4_contents = await self.get_meta4_contents(url)
 
-        info = await get_download_info(url)
+            info = await get_download_info(url)
 
-        # TODO verify that this output_path is exclusive.
-        output_path = destination / trim_file_name(info.name)
+            # TODO verify that this output_path is exclusive.
+            output_path = destination / trim_file_name(info.name)
 
-        with tempfile.NamedTemporaryFile(suffix='.meta4') as meta4_path:
-            cmd = (
-                ARIA2C_PATH,
-                '-l', '-',
-                '-j3',  # concurrent downloads
-                '-s3',  # split jobs
-                '-d', destination,
-                url
-            )
-            meta4_path = pathlib.Path(meta4_path.name)
-            if meta4_contents:
-                meta4_path.write_bytes(meta4_contents)
-                cmd = (*cmd,
-                       '-M', meta4_path,
-                       )
+            with tempfile.NamedTemporaryFile(suffix='.meta4') as meta4_path:
+                cmd = (
+                    ARIA2C_PATH,
+                    '-l', '-',
+                    '-c',  # Continue downloading a partially downloaded file.
+                    '-j3',  # concurrent downloads
+                    '-s3',  # split jobs
+                    '-d', destination,
+                    url
+                )
+                meta4_path = pathlib.Path(meta4_path.name)
+                if meta4_contents:
+                    meta4_path.write_bytes(meta4_contents)
+                    cmd = (*cmd,
+                           '-M', meta4_path,
+                           )
 
-            return_code, logs, stdout = await self.process_runner(
-                download_id,
-                url,  # Log the original URL.
-                cmd,
-                destination,
-            )
+                return_code, logs, stdout = await self.process_runner(
+                    download_id,
+                    url,  # Log the original URL.
+                    cmd,
+                    destination,
+                )
 
-            error = logs.get('stderr') or logs.get('stdout')
-            error = error.decode() if error else error
+                error = logs.get('stderr') or logs.get('stdout')
+                error = error.decode() if error else error
 
-            if return_code != 0:
-                raise DownloadError(f'{error}\n\nFileDownloader failed with return code {return_code}')
+                if return_code != 0:
+                    raise DownloadError(f'{error}\n\nFileDownloader failed with return code {return_code}')
 
-            if not output_path.is_file():
-                raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')
+                if not output_path.is_file():
+                    raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')
 
-        # Delete any trailing meta4 files.
-        matching_files = glob_shared_stem(output_path)
-        for file in matching_files:
-            if file.name.endswith('.meta4'):
-                if logger.isEnabledFor(TRACE_LEVEL):
-                    logger.trace(f'Deleting meta4 file: {file}')
-                file.unlink()
+            # Delete any trailing meta4 files.
+            matching_files = glob_shared_stem(output_path)
+            for file in matching_files:
+                if file.name.endswith('.meta4'):
+                    logger.warning(f'Deleting meta4 file: {file}')
+                    file.unlink()
+                if file.name.endswith('.aria2'):
+                    logger.trace(f'Deleting aria2 file: {file}')
+                    file.unlink()
 
-        return output_path
+            return output_path
 
 
 class DownloadManager:

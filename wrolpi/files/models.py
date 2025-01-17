@@ -425,14 +425,8 @@ class FileGroup(ModelHelper, Base):
     @property
     def location(self):
         """Returns the URL that the FileGroup can be previewed."""
-        parent = str(get_relative_to_media_directory(self.primary_path.parent))
-        preview = str(get_relative_to_media_directory(self.primary_path))
-        if parent == '.':
-            # File is in the top of the media directory, App already shows top directory open.
-            query = urllib.parse.urlencode(dict(preview=str(preview)))
-        else:
-            query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
-        return f'/files?{query}'
+        from wrolpi.files.lib import get_file_location_href
+        return get_file_location_href(self.primary_path)
 
     def get_model_class(self) -> Optional[Type[ModelHelper]]:
         """Return the class that is suitable for this FileGroup (usually based on mimetype), if any."""

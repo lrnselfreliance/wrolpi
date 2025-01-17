@@ -1,15 +1,13 @@
 import pathlib
 import pathlib
-import tempfile
 import traceback
 from abc import ABC
 
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, logger, get_download_info, \
-    trim_file_name, TRACE_LEVEL
+from wrolpi.common import get_media_directory, logger, TRACE_LEVEL
 from wrolpi.downloader import Downloader, Download, DownloadResult
-from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.files.lib import upsert_file
+from wrolpi.errors import UnrecoverableDownloadError, IgnoredDirectoryError
+from wrolpi.files.lib import upsert_file, get_file_location_href
 from wrolpi.vars import PYTEST
 
 __all__ = ['FileDownloader', 'file_downloader']
@@ -52,7 +50,7 @@ class FileDownloader(Downloader, ABC):
             raise UnrecoverableDownloadError(f'Cannot download outside media directory!')
         destination.mkdir(parents=True, exist_ok=True)
 
-        error = None
+        output_path = None
         try:
             output_path = await self.download_file(download.id, download.url, destination)
             fg = await upsert_file(output_path, tag_names=download.tag_names)
@@ -61,9 +59,13 @@ class FileDownloader(Downloader, ABC):
                 success=True,
                 location=location,
             )
+        except IgnoredDirectoryError:
+            # `upsert_file` says this is an ignored file, that's fine.
+            return DownloadResult(
+                success=True,
+                location=get_file_location_href(output_path)
+            )
         except Exception as e:
-            if error:
-                logger.error(f'FileDownloader failed with aria2c error:\n{error}')
             logger.error(f'Failed to download {repr(str(download.url))}', exc_info=e)
             if PYTEST:
                 raise

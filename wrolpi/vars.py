@@ -98,7 +98,7 @@ VIDEO_COMMENTS_FETCH_COUNT = int(os.environ.get('VIDEO_COMMENTS_FETCH_COUNT', 80
 YTDLP_CACHE_DIR = os.environ.get('YTDLP_CACHE_DIR', '/tmp/ytdlp_cache')
 VIDEO_INFO_JSON_KEYS_TO_CLEAN = list_var('DELETED_VIDEO_KEYS', 'automatic_captions,formats,thumbnails')
 
-default_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+default_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.3'
 DOWNLOAD_USER_AGENT = os.environ.get('DOWNLOAD_USER_AGENT', default_user_agent)
 
 DEFAULT_HTTP_HEADERS = {

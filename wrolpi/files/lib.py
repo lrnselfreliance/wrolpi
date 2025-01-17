@@ -9,6 +9,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import urllib.parse
 from collections import OrderedDict
 from itertools import zip_longest
 from pathlib import Path
@@ -26,7 +27,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     partition, cancelable_wrapper, \
     get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
     get_wrolpi_config, \
-    timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL
+    timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.downloader import download_manager
@@ -52,7 +53,7 @@ logger = logger.getChild(__name__)
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
-           'move', 'rename', 'delete_directory', 'handle_file_group_search_results']
+           'move', 'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
 
 
 @optional_session
@@ -1608,3 +1609,15 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
 
     file_group.flush()
     return file_group
+
+
+def get_file_location_href(file: pathlib.Path) -> str:
+    """Return the location a file can be viewed at on the UI."""
+    parent = str(get_relative_to_media_directory(file.parent))
+    preview = str(get_relative_to_media_directory(file))
+    if parent == '.':
+        # File is in the top of the media directory, App already shows top directory open.
+        query = urllib.parse.urlencode(dict(preview=str(preview)))
+    else:
+        query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
+    return f'/files?{query}'

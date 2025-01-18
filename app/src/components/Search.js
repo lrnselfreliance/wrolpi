@@ -400,23 +400,37 @@ export function SearchIconButton() {
         prevOpen.current = open;
     }, [open]);
 
+    const inputRef = React.useRef();
+    React.useEffect(() => {
+        // Focus on the Search's <input/> when the modal is opened.
+        if (open) {
+            inputRef.current.focus();
+        }
+    }, [open]);
+
+    let modalContents;
+    if (open) {
+        modalContents = <SearchResultsInput clearable
+                                            searchStr={searchStr}
+                                            onChange={setSearchStr}
+                                            onSubmit={setSearchStr}
+                                            size='large'
+                                            placeholder='Search everywhere...'
+                                            results={suggestionsResults}
+                                            handleResultSelect={localHandleResultSelect}
+                                            resultRenderer={resultRenderer}
+                                            loading={loading}
+                                            inputRef={inputRef}
+        />;
+    }
+
     return <React.Fragment>
         <a className='item' style={{paddingRight: '0.7em'}} onClick={() => setOpen(true)}>
             <Icon name='search'/>
         </a>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
-                <SearchResultsInput clearable
-                                    searchStr={searchStr}
-                                    onChange={setSearchStr}
-                                    onSubmit={setSearchStr}
-                                    size='large'
-                                    placeholder='Search everywhere...'
-                                    results={suggestionsResults}
-                                    handleResultSelect={localHandleResultSelect}
-                                    resultRenderer={resultRenderer}
-                                    loading={loading}
-                />
+                {modalContents}
             </ModalContent>
         </Modal>
     </React.Fragment>

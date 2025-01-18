@@ -64,14 +64,10 @@ function ohmsLawReducer(state, action) {
     let {volts, amps, ohms, watts, lastUpdated} = state;
 
     // Only replace last updated when a different input was updated.
-    let newLastUpdated = lastUpdated;
-    if (lastUpdated.length === 0) {
-        newLastUpdated = [type];
-    } else if (lastUpdated.length === 1 && lastUpdated[0] !== type) {
-        newLastUpdated = [...lastUpdated, type];
-    } else if (lastUpdated.length > 1 && lastUpdated[1] !== type) {
-        newLastUpdated = [lastUpdated[1], type];
-    }
+    let newLastUpdated = lastUpdated || [];
+    newLastUpdated = newLastUpdated.filter(i => i !== type);
+    newLastUpdated = [type, ...newLastUpdated];
+    newLastUpdated = newLastUpdated.slice(0, 2);
 
     // Copy new value into it's respective state.  Do not allow negative numbers.
     if (type === 'amps') {
@@ -125,6 +121,7 @@ export function OhmsLawCalculator({setVolts}) {
         type: 'number',
         labelPosition: 'right',
         onSelect: e => e.target.select(), // Select the contents of the Input when a user selects it.
+        autocomplete: 'off',
     };
 
     React.useEffect(() => {
@@ -282,6 +279,7 @@ const PowerLossCalculator = ({volts, setVolts}) => {
                               type='number'
                               value={volts}
                               onChange={(e, {value}) => setVolts(parseInt(value))}
+                              autocomplete="off"
     />;
 
     const saeToggle = <Toggle
@@ -299,6 +297,7 @@ const PowerLossCalculator = ({volts, setVolts}) => {
                        type='number'
                        value={length}
                        onChange={(e, {value}) => setLength(parseInt(value))}
+                       autocomplete="off"
                 />
             </Grid.Column>
             <Grid.Column mobile={4} tablet={2}>

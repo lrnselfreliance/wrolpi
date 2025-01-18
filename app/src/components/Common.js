@@ -512,11 +512,11 @@ export function SearchResultsInput({
                                        actionIcon,
                                        clearable = false,
                                        clearDisabled = null,
-                                       autoFocus = false,
                                        results = undefined,
                                        handleResultSelect = null,
                                        resultRenderer = undefined,
                                        loading = false,
+                                       inputRef = null,
                                        ...props
                                    }) {
     // A Semantic <Search> input with a Clear button.
@@ -544,7 +544,7 @@ export function SearchResultsInput({
 
     return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
         <Search category
-                input={{fluid: true, icon: icon}}
+                input={{fluid: true, icon: icon, ref: inputRef}}
                 placeholder={placeholder}
                 type='text'
                 onSearchChange={handleChange}

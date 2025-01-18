@@ -97,8 +97,9 @@ export function NavBar() {
 
     // Red/Yellow colors will blend in to some navbar colors, swap the colors for high contrast.
     const conflictingColors = ['red', 'orange', 'yellow', 'olive', 'pink'];
-    const lowWarningColor = conflictingColors.includes(navColor) ? 'white' : 'yellow';
-    const highWarningColor = conflictingColors.includes(navColor) ? 'black' : 'red';
+    const [lowWarningColor, highWarningColor] = conflictingColors.includes(navColor)
+        ? [null, 'black']
+        : ['yellow', 'red'];
 
     // Generic system load, the least important warning.
     const {minute_1, mediumLoad, highLoad} = useLoad();
@@ -172,7 +173,6 @@ export function NavBar() {
             processingLink = '/map/manage';
         }
     }
-
     const processingIcon = processingLink &&
         <Link to={processingLink}>
             <Icon loading name='circle notch' size='large'/>

@@ -6,6 +6,7 @@ import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
 import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
 import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
 import {Link} from "react-router-dom";
+import {RatioCalculators} from "./calculators/RatioCalculator";
 
 export function CalculatorsPage() {
     const {calc, setCalc} = useCalcQuery();
@@ -14,6 +15,7 @@ export function CalculatorsPage() {
         {key: 'electrical', icon: 'lightning', button: 'Electrical', contents: <ElectricalCalculators/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', contents: <DipoleAntennaCalculator/>},
         {key: 'temperature', icon: 'thermometer', button: 'Temperature', contents: <TemperatureCalculator/>},
+        {key: ' ratio', icon: 'th large', button: 'Ratio', contents: <RatioCalculators/>},
     ];
 
     const activeCalculator = calc ?

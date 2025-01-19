@@ -121,7 +121,7 @@ export function OhmsLawCalculator({setVolts}) {
         type: 'number',
         labelPosition: 'right',
         onSelect: e => e.target.select(), // Select the contents of the Input when a user selects it.
-        autocomplete: 'off',
+        autoComplete: 'off',
     };
 
     React.useEffect(() => {
@@ -279,7 +279,7 @@ const PowerLossCalculator = ({volts, setVolts}) => {
                               type='number'
                               value={volts}
                               onChange={(e, {value}) => setVolts(parseInt(value))}
-                              autocomplete="off"
+                              autoComplete="off"
     />;
 
     const saeToggle = <Toggle
@@ -297,7 +297,7 @@ const PowerLossCalculator = ({volts, setVolts}) => {
                        type='number'
                        value={length}
                        onChange={(e, {value}) => setLength(parseInt(value))}
-                       autocomplete="off"
+                       autoComplete="off"
                 />
             </Grid.Column>
             <Grid.Column mobile={4} tablet={2}>

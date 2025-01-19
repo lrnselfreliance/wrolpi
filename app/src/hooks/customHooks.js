@@ -1275,7 +1275,7 @@ export const useDockerized = () => {
 
 export const useCalcQuery = () => {
     const [calc, setCalc] = useOneQuery('calc');
-    return {calc, setCalc}
+    return [calc, setCalc]
 }
 
 export const useSearchChannels = (defaultTagNames) => {

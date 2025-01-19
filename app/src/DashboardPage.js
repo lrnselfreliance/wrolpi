@@ -5,6 +5,7 @@ import {DownloadMenu} from "./components/Download";
 import {
     Button,
     Divider,
+    Form,
     Header,
     Modal,
     ModalContent,
@@ -16,7 +17,7 @@ import {
 import {Link, useNavigate} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
+import {GridColumn, GridRow, Icon, Input, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
@@ -27,6 +28,8 @@ import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useSearchFilter, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
+import {useCalculators} from "./components/Calculators";
+import {evaluate} from "mathjs";
 
 function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
@@ -91,6 +94,84 @@ function FlagsMessages() {
         {kiwixRestartMessage}
         {internetDownMessage}
     </>
+}
+
+function EvaluateForm({defaultEvaluatedValue = 'Enter an equation above.'}) {
+
+    const helpContents = <span>
+        <p>Enter an equation above.</p>
+
+        <h5>Examples:</h5>
+        <pre>2 + 3</pre>
+        <pre>sqrt(15)</pre>
+        <pre>15 km to miles</pre>
+    </span>
+
+    const inputRef = React.useRef();
+    const [showMessage, setShowMessage] = React.useState(false);
+    const [inputValue, setInputValue] = React.useState('');
+    const [evaluatedValue, setEvaluatedValue] = React.useState(helpContents);
+
+    const doEvaluate = () => {
+        setEvaluatedValue(''); // Clear input temporarily so the user can tell something happened.
+        try {
+            setEvaluatedValue(evaluate(inputValue).toString());
+        } catch (error) {
+            console.error(error);
+            setEvaluatedValue('Unable to evaluate.');
+        }
+    }
+
+    return <Form onSubmit={doEvaluate}>
+        <Input fluid
+               ref={inputRef}
+               value={inputValue}
+               label='𝒇'
+               type='text'
+               onFocus={() => setShowMessage(true)}
+               onChange={(e, {value}) => setInputValue(value)}
+               action={<Button type='submit'>Evaluate</Button>}
+        />
+        {showMessage &&
+            <Message>
+                <Message.Header>Result</Message.Header>
+                <Message.Content>
+                    {evaluatedValue}
+                </Message.Content>
+            </Message>
+        }
+    </Form>
+}
+
+function DashboardCalculators() {
+    const [calc, setCalc] = React.useState(null);
+    const {calculatorLinks} = useCalculators();
+
+    return <React.Fragment>
+        <Segment>
+            <Header as='h2'>Calculators</Header>
+            <Grid columns={1}>
+                <Grid.Row>
+                    <Grid.Column>
+                        <EvaluateForm/>
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column>
+                        {calculatorLinks}
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Segment>
+        <Modal closeIcon basic dimmer='blurring'
+               open={!!calc}
+               onClose={() => setCalc(null)}
+        >
+            <ModalHeader>
+                {calc?.contents}
+            </ModalHeader>
+        </Modal>
+    </React.Fragment>
 }
 
 export function Getters() {
@@ -212,6 +293,7 @@ export function DashboardPage() {
         <Getters/>
         <TagsDashboard/>
         <DashboardStatus/>
+        <DashboardCalculators/>
     </React.Fragment>;
     if (searchStr || (activeTags && activeTags.length > 0)) {
         // User has submitted and wants full search.

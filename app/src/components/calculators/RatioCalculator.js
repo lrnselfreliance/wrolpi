@@ -1,16 +1,15 @@
 import {Container, Dropdown} from "semantic-ui-react";
 import {Form, Header} from "../Theme";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {ThemeContext} from "../../contexts/contexts";
 import React from "react";
-import {roundDigits} from "../Common";
+import {roundDigits, useLocalStorage} from "../Common";
 import {createUnit, multiply, unit} from "mathjs";
 
 const nullUnit = createUnit('null');
 
 function ratioReducer(prevState, e) {
     const {value, name} = Object.keys(e).indexOf('target') >= 0 ? e.target : e;
-    let {a, aUnit, b, bUnit, c, cUnit, d, dUnit, base, lastUpdated} = prevState;
+    let {a, aUnit, b, bUnit, c, cUnit, d, dUnit, base, lastUpdated, recentUnits} = prevState;
     console.log('ratioReducer', name, value, lastUpdated);
 
     a = unit(a, aUnit);
@@ -46,17 +45,22 @@ function ratioReducer(prevState, e) {
         dUnit = value;
         d = d.to(value);
     } else if (name === 'a') {
+        recentUnits[base] = aUnit;
         a = unit(value, aUnit);
     } else if (name === 'b') {
+        recentUnits[base] = bUnit;
         b = unit(value, bUnit);
     } else if (name === 'c') {
+        recentUnits[base] = cUnit;
         c = unit(value, cUnit);
     } else if (name === 'd') {
+        recentUnits[base] = dUnit;
         d = unit(value, dUnit);
     } else if (name === 'base') {
         // Base is changing, reset units and values.
         base = value;
-        aUnit = bUnit = cUnit = dUnit = baseToUnitsMap[base][0]['key'];
+        // Get the unit of this base that the user used most recently.
+        aUnit = bUnit = cUnit = dUnit = recentUnits[base];
         a = b = c = d = unit(1, aUnit);
         // Reset last updated.
         newLastUpdated = [];
@@ -86,6 +90,7 @@ function ratioReducer(prevState, e) {
         bUnit,
         cUnit,
         dUnit,
+        recentUnits,
     }
 }
 
@@ -129,13 +134,26 @@ const baseToUnitsMap = {
         {key: 'joule', value: 'joule', text: 'joule'},
         {key: 'Wh', value: 'Wh', text: 'Wh'},
         {key: 'BTU', value: 'BTU', text: 'BTU'},
-    ],
-    'power': [
         {key: 'watt', value: 'watt', text: 'watt'},
         {key: 'hp', value: 'hp', text: 'hp'},
     ],
+};
+
+let unitsToBaseMap = {};
+for (const [base, units] of Object.entries(baseToUnitsMap)) {
+    for (const {key} of units) {
+        unitsToBaseMap[key] = base;
+    }
 }
 
+const defaultUnits = {
+    // These will be replaced using local storage.
+    length: baseToUnitsMap.length[0]['key'],
+    area: baseToUnitsMap.area[0]['key'],
+    volume: baseToUnitsMap.volume[0]['key'],
+    mass: baseToUnitsMap.mass[0]['key'],
+    energy: baseToUnitsMap.energy[0]['key'],
+};
 const initialState = {
     base: null,
     lastUpdated: [],
@@ -147,23 +165,41 @@ const initialState = {
     bUnit: nullUnit,
     cUnit: nullUnit,
     dUnit: nullUnit,
+    recentUnits: defaultUnits,
 };
 
 const RatioCalculator = () => {
-    const {t} = React.useContext(ThemeContext);
-
+    const [recentUnits, setRecentUnits] = useLocalStorage('ratio_calculator_recent_units',
+        initialState.recentUnits);
+    initialState.recentUnits = recentUnits;
     const [state, dispatch] = React.useReducer(ratioReducer, initialState);
+
+    React.useEffect(() => {
+        const key = unitsToBaseMap[state.aUnit];
+        setRecentUnits({...recentUnits, [key]: state.aUnit});
+    }, [state.aUnit]);
+    React.useEffect(() => {
+        const key = unitsToBaseMap[state.bUnit];
+        setRecentUnits({...recentUnits, [key]: state.bUnit});
+    }, [state.bUnit]);
+    React.useEffect(() => {
+        const key = unitsToBaseMap[state.cUnit];
+        setRecentUnits({...recentUnits, [key]: state.cUnit});
+    }, [state.cUnit]);
+    React.useEffect(() => {
+        const key = unitsToBaseMap[state.dUnit];
+        setRecentUnits({...recentUnits, [key]: state.dUnit});
+    }, [state.dUnit]);
 
     const unitOptions = baseToUnitsMap[state.base];
 
     const baseOptions = [
         {key: null, value: null, text: 'None'},
-        {key: 'length', value: 'length', text: 'meter, feet, inch, etc.', label: 'Length'},
-        {key: 'area', value: 'area', text: 'inch², m², etc.', label: 'Area'},
-        {key: 'volume', value: 'volume', text: 'liter, m³, cup, etc.', label: 'Volume'},
-        {key: 'mass', value: 'mass', text: 'gram, pound, etc.', label: 'Mass'},
-        {key: 'energy', value: 'energy', text: 'joule, Wh, BTU', label: 'Energy'},
-        {key: 'power', value: 'power', text: 'watt, horse power', label: 'Power'},
+        {key: 'length', value: 'length', label: 'meter, feet, inch, etc.', text: 'Length'},
+        {key: 'area', value: 'area', label: 'inch², m², etc.', text: 'Area'},
+        {key: 'volume', value: 'volume', label: 'liter, m³, cup, etc.', text: 'Volume'},
+        {key: 'mass', value: 'mass', label: 'gram, pound, etc.', text: 'Mass'},
+        {key: 'energy', value: 'energy', label: 'joule, watt, etc.', text: 'Energy'},
     ];
 
     const unitDropdownOptions = {
@@ -185,9 +221,9 @@ const RatioCalculator = () => {
                 <Grid.Column>
                     <Dropdown selection
                               fluid
-                              placeholder='base'
+                              placeholder='Base Units'
                               options={baseOptions}
-                              value={state.unit}
+                              value={state.base}
                               name='base'
                               onChange={(e, data) => dispatch(data)}
                     />

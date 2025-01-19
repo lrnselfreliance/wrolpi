@@ -724,11 +724,19 @@ export function CardPoster({to, file}) {
     }
 }
 
-export function HelpPopup({icon = 'question', size = null, content, position = 'left center', iconSize = 'small'}) {
+export function HelpPopup({
+                              icon = 'question',
+                              size = null,
+                              content,
+                              position = 'left center',
+                              iconSize = 'small',
+                              header = ''
+                          }) {
     return <Popup
         content={content}
         size={size}
         position={position}
+        header={header || null}
         trigger={<Icon circular link name={icon} size={iconSize}
                        style={{marginLeft: '0.25em', marginRight: '0.25em'}}
         />}

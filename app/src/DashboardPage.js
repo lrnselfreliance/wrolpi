@@ -105,6 +105,7 @@ function EvaluateForm({defaultEvaluatedValue = 'Enter an equation above.'}) {
         <pre>2 + 3</pre>
         <pre>sqrt(15)</pre>
         <pre>15 km to miles</pre>
+        <pre>65 degF to degC</pre>
     </span>
 
     const inputRef = React.useRef();

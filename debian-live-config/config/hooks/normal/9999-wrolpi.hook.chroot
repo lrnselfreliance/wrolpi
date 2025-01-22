@@ -38,7 +38,7 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Create postgres cluster for map.
-pg_createcluster 15 map --port=5433
+pg_createcluster 15 map --port=5433 -e utf8
 
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 git config --global --add safe.directory /opt/openstreetmap-carto

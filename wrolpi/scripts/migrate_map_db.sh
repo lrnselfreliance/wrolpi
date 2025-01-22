@@ -26,7 +26,7 @@ cleanup
 systemctl stop renderd
 
 # Create new cluster for the map.
-pg_createcluster 15 map --port=5433 --start
+pg_createcluster 15 map --port=5433 --start -e utf8
 # Disable JIT as recommended by mod_tile
 sed -i 's/#jit =.*/jit = off/' /etc/postgresql/15/map/postgresql.conf
 

@@ -13,7 +13,7 @@ set -x
 systemctl stop renderd
 
 # Create map database if it does not exist.
-pg_createcluster 15 map --port=5433 --start
+pg_createcluster 15 map --port=5433 --start -e utf8
 
 # Create gis (map) database.
 sudo -iu postgres psql -c '\l' --port=5433 | grep gis || (

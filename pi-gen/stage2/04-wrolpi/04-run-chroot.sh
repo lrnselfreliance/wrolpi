@@ -4,7 +4,7 @@ set -e
 set -x
 
 # Create postgres cluster for map.
-pg_createcluster 15 map --port=5433
+pg_createcluster 15 map --port=5433 -e utf8
 
 # Create mapnik config.
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto

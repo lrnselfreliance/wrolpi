@@ -144,34 +144,23 @@ function EvaluateForm({defaultEvaluatedValue = 'Enter an equation above.'}) {
 }
 
 function DashboardCalculators() {
-    const [calc, setCalc] = React.useState(null);
     const {calculatorLinks} = useCalculators();
 
-    return <React.Fragment>
-        <Segment>
-            <Header as='h2'>Calculators</Header>
-            <Grid columns={1}>
-                <Grid.Row>
-                    <Grid.Column>
-                        <EvaluateForm/>
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column>
-                        {calculatorLinks}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Segment>
-        <Modal closeIcon basic dimmer='blurring'
-               open={!!calc}
-               onClose={() => setCalc(null)}
-        >
-            <ModalHeader>
-                {calc?.contents}
-            </ModalHeader>
-        </Modal>
-    </React.Fragment>
+    return <Segment>
+        <Header as='h2'>Calculators</Header>
+        <Grid columns={1}>
+            <Grid.Row>
+                <Grid.Column>
+                    <EvaluateForm/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    {calculatorLinks}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </Segment>
 }
 
 export function Getters() {

@@ -1,21 +1,18 @@
-import {Container, Dropdown} from "semantic-ui-react";
-import {Form, Header} from "../Theme";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {Dropdown, TableBody, TableCell, TableRow} from "semantic-ui-react";
+import {Form, Header, Table} from "../Theme";
 import React from "react";
 import {roundDigits, useLocalStorage} from "../Common";
 import {createUnit, multiply, unit} from "mathjs";
+import {Media} from "../../contexts/contexts";
 
+// Used to calculate ratios without any units.
 const nullUnit = createUnit('null');
 
 function ratioReducer(prevState, e) {
     const {value, name} = Object.keys(e).indexOf('target') >= 0 ? e.target : e;
     let {a, aUnit, b, bUnit, c, cUnit, d, dUnit, base, lastUpdated, recentUnits} = prevState;
     console.log('ratioReducer', name, value, lastUpdated);
-
-    a = unit(a, aUnit);
-    b = unit(b, bUnit);
-    c = unit(c, cUnit);
-    d = unit(d, dUnit);
+    console.debug('ratioReducer', 'a:', a.toString(), 'b:', b.toString(), 'c:', c.toString(), 'd:', d.toString());
 
     // Keep a stack of which inputs are updated.  Limit it to the 3 most recent inputs.
     let newLastUpdated = lastUpdated || [];
@@ -25,7 +22,7 @@ function ratioReducer(prevState, e) {
         newLastUpdated = newLastUpdated.slice(0, 3);
     }
 
-    console.log('a', a.toString(), 'b', b.toString(), 'c', c.toString(), 'd', d.toString());
+    // TODO handle disconnect and allow app install
 
     const calculateA = () => a = multiply(b, c).divide(d).to(aUnit);
     const calculateB = () => b = multiply(a, d).divide(c).to(bUnit);
@@ -45,36 +42,37 @@ function ratioReducer(prevState, e) {
         dUnit = value;
         d = d.to(value);
     } else if (name === 'a') {
-        recentUnits[base] = aUnit;
+        recentUnits[base] = aUnit.toString(); // Convert to string for local storage.
         a = unit(value, aUnit);
     } else if (name === 'b') {
-        recentUnits[base] = bUnit;
+        recentUnits[base] = bUnit.toString();
         b = unit(value, bUnit);
     } else if (name === 'c') {
-        recentUnits[base] = cUnit;
+        recentUnits[base] = cUnit.toString();
         c = unit(value, cUnit);
     } else if (name === 'd') {
-        recentUnits[base] = dUnit;
+        recentUnits[base] = dUnit.toString();
         d = unit(value, dUnit);
     } else if (name === 'base') {
         // Base is changing, reset units and values.
         base = value;
         // Get the unit of this base that the user used most recently.
-        aUnit = bUnit = cUnit = dUnit = recentUnits[base];
-        a = b = c = d = unit(1, aUnit);
+        aUnit = bUnit = cUnit = dUnit = recentUnits[base] || nullUnit;
+        console.debug('ratioReducer', 'change base:', aUnit, 'value:', value);
+        a = b = c = d = unit('', aUnit);
         // Reset last updated.
         newLastUpdated = [];
     }
 
     // Calculate ratio of the input which hasn't been updated recently.  But only if all other inputs have values.
-    if (lastUpdated.length === 3) {
-        if (!lastUpdated.includes('a')) {
+    if (newLastUpdated.length === 3) {
+        if (!newLastUpdated.includes('a')) {
             calculateA();
-        } else if (!lastUpdated.includes('b')) {
+        } else if (!newLastUpdated.includes('b')) {
             calculateB();
-        } else if (!lastUpdated.includes('c')) {
+        } else if (!newLastUpdated.includes('c')) {
             calculateC();
-        } else if (!lastUpdated.includes('d')) {
+        } else if (!newLastUpdated.includes('d')) {
             calculateD();
         }
     }
@@ -82,10 +80,10 @@ function ratioReducer(prevState, e) {
     return {
         base,
         lastUpdated: newLastUpdated,
-        a: roundDigits(a.toNumber(), 3),
-        b: roundDigits(b.toNumber(), 3),
-        c: roundDigits(c.toNumber(), 3),
-        d: roundDigits(d.toNumber(), 3),
+        a,
+        b,
+        c,
+        d,
         aUnit,
         bUnit,
         cUnit,
@@ -115,7 +113,7 @@ const baseToUnitsMap = {
         {key: 'cc', value: 'cc', text: 'cc'},
         {key: 'cuin', value: 'cuin', text: 'cuin'},
         {key: 'cup', value: 'cup', text: 'cup'},
-        {key: 'fluidounce', value: 'fluidounce', text: 'fluidounce'},
+        {key: 'fluidounce', value: 'fluidounce', text: 'fl.oz'},
         {key: 'gallon', value: 'gallon', text: 'gallon'},
         {key: 'liter', value: 'liter', text: 'liter'},
         {key: 'm3', value: 'm3', text: 'meters³'},
@@ -139,6 +137,7 @@ const baseToUnitsMap = {
     ],
 };
 
+// Used to get from unit like `BTU` back to the base `energy`.
 let unitsToBaseMap = {};
 for (const [base, units] of Object.entries(baseToUnitsMap)) {
     for (const {key} of units) {
@@ -148,19 +147,21 @@ for (const [base, units] of Object.entries(baseToUnitsMap)) {
 
 const defaultUnits = {
     // These will be replaced using local storage.
-    length: baseToUnitsMap.length[0]['key'],
-    area: baseToUnitsMap.area[0]['key'],
-    volume: baseToUnitsMap.volume[0]['key'],
-    mass: baseToUnitsMap.mass[0]['key'],
-    energy: baseToUnitsMap.energy[0]['key'],
+    length: baseToUnitsMap.length[0]['key'], // centimeter
+    area: baseToUnitsMap.area[0]['key'], // m2
+    volume: baseToUnitsMap.volume[0]['key'], // cc
+    mass: baseToUnitsMap.mass[0]['key'], // grain
+    energy: baseToUnitsMap.energy[0]['key'], // joule
+    [null]: null, // nullUnit
 };
+
 const initialState = {
     base: null,
     lastUpdated: [],
-    a: '',
-    b: '',
-    c: '',
-    d: '',
+    a: unit('', nullUnit), // The value displayed to the user.
+    b: unit('', nullUnit),
+    c: unit('', nullUnit),
+    d: unit('', nullUnit),
     aUnit: nullUnit,
     bUnit: nullUnit,
     cUnit: nullUnit,
@@ -168,39 +169,49 @@ const initialState = {
     recentUnits: defaultUnits,
 };
 
+const unitToInputValue = (u) => {
+    const num = u.toNumber();
+    if (num <= 0) {
+        return ''
+    }
+    return roundDigits(num, 3)
+}
+
+const baseOptions = [
+    {key: null, value: null, text: 'None'},
+    {key: 'length', value: 'length', label: 'meter, feet, inch, etc.', text: 'Length'},
+    {key: 'area', value: 'area', label: 'inch², m², etc.', text: 'Area'},
+    {key: 'volume', value: 'volume', label: 'liter, m³, cup, etc.', text: 'Volume'},
+    {key: 'mass', value: 'mass', label: 'gram, pound, etc.', text: 'Mass'},
+    {key: 'energy', value: 'energy', label: 'joule, watt, etc.', text: 'Energy'},
+];
+
 const RatioCalculator = () => {
-    const [recentUnits, setRecentUnits] = useLocalStorage('ratio_calculator_recent_units',
+    // Get the units the user recently used.  These will be set if the user changes the base.
+    const [storageRecentUnits, setStorageRecentUnits] = useLocalStorage('ratio_calculator_recent_units',
         initialState.recentUnits);
-    initialState.recentUnits = recentUnits;
+    initialState.recentUnits = storageRecentUnits;
     const [state, dispatch] = React.useReducer(ratioReducer, initialState);
 
+    // Overwrite the most recently used unit for each base.
     React.useEffect(() => {
         const key = unitsToBaseMap[state.aUnit];
-        setRecentUnits({...recentUnits, [key]: state.aUnit});
+        setStorageRecentUnits({...storageRecentUnits, [key]: state.aUnit});
     }, [state.aUnit]);
     React.useEffect(() => {
         const key = unitsToBaseMap[state.bUnit];
-        setRecentUnits({...recentUnits, [key]: state.bUnit});
+        setStorageRecentUnits({...storageRecentUnits, [key]: state.bUnit});
     }, [state.bUnit]);
     React.useEffect(() => {
         const key = unitsToBaseMap[state.cUnit];
-        setRecentUnits({...recentUnits, [key]: state.cUnit});
+        setStorageRecentUnits({...storageRecentUnits, [key]: state.cUnit});
     }, [state.cUnit]);
     React.useEffect(() => {
         const key = unitsToBaseMap[state.dUnit];
-        setRecentUnits({...recentUnits, [key]: state.dUnit});
+        setStorageRecentUnits({...storageRecentUnits, [key]: state.dUnit});
     }, [state.dUnit]);
 
     const unitOptions = baseToUnitsMap[state.base];
-
-    const baseOptions = [
-        {key: null, value: null, text: 'None'},
-        {key: 'length', value: 'length', label: 'meter, feet, inch, etc.', text: 'Length'},
-        {key: 'area', value: 'area', label: 'inch², m², etc.', text: 'Area'},
-        {key: 'volume', value: 'volume', label: 'liter, m³, cup, etc.', text: 'Volume'},
-        {key: 'mass', value: 'mass', label: 'gram, pound, etc.', text: 'Mass'},
-        {key: 'energy', value: 'energy', label: 'joule, watt, etc.', text: 'Energy'},
-    ];
 
     const unitDropdownOptions = {
         options: unitOptions,
@@ -213,110 +224,118 @@ const RatioCalculator = () => {
     const cColor = state.lastUpdated.indexOf('c') >= 0 ? '' : 'grey';
     const dColor = state.lastUpdated.indexOf('d') >= 0 ? '' : 'grey';
 
+    const baseDropdown = <Dropdown selection
+                                   fluid
+                                   placeholder='Base Units'
+                                   options={baseOptions}
+                                   value={state.base}
+                                   name='base'
+                                   onChange={(e, data) => dispatch(data)}
+                                   style={{marginBottom: '1em'}}
+    />;
+
+    const inputA = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
+        <div className={`ui label ${aColor}`}>A</div>
+        <input
+            id="a"
+            name="a"
+            type="number"
+            value={unitToInputValue(state.a)}
+            onChange={e => dispatch(e)}
+            onFocus={e => e.target.select()}
+        />
+        {state.base &&
+            <Dropdown {...unitDropdownOptions} name='aUnit' value={state.aUnit}/>}
+    </div>;
+
+    const inputB = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
+        <div className={`ui label ${bColor}`}>B</div>
+        <input
+            id="b"
+            name="b"
+            type="number"
+            value={unitToInputValue(state.b)}
+            onChange={e => dispatch(e)}
+            onFocus={e => e.target.select()}
+        />
+        {state.base &&
+            <Dropdown {...unitDropdownOptions} name='bUnit' value={state.bUnit}/>}
+    </div>;
+
+    const inputC = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
+        <div className={`ui label ${cColor}`}>C</div>
+        <input
+            id="c"
+            name="c"
+            type="number"
+            value={unitToInputValue(state.c)}
+            onChange={e => dispatch(e)}
+            onFocus={e => e.target.select()}
+        />
+        {state.base &&
+            <Dropdown {...unitDropdownOptions} name='cUnit' value={state.cUnit}/>}
+    </div>;
+
+    const inputD = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
+        <div className={`ui label ${dColor}`}>D</div>
+        <input
+            id="d"
+            name="d"
+            type="number"
+            value={unitToInputValue(state.d)}
+            onChange={e => dispatch(e)}
+            onFocus={e => e.target.select()}
+        />
+        {state.base &&
+            <Dropdown {...unitDropdownOptions} name='dUnit' value={state.dUnit}/>}
+    </div>;
+
     return <Form>
         <Header as='h1'>Ratio</Header>
+        <Header as='h2'>A : B = C : D</Header>
 
-        <Grid columns={3}>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <Dropdown selection
-                              fluid
-                              placeholder='Base Units'
-                              options={baseOptions}
-                              value={state.base}
-                              name='base'
-                              onChange={(e, data) => dispatch(data)}
-                    />
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <Header as='h2'>A : B = C : D</Header>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column width={8}>
-                    <div className="ui fluid labeled input">
-                        <div className={`ui label ${aColor}`}>A</div>
-                        <input
-                            id="a"
-                            name="a"
-                            type="number"
-                            value={state.a}
-                            onChange={e => dispatch(e)}
-                            onFocus={e => e.target.select()}
-                        />
-                        {state.base &&
-                            <Dropdown {...unitDropdownOptions} name='aUnit' value={state.aUnit}/>}
-                    </div>
-                </Grid.Column>
-                <Grid.Column width={1}/>
-                <Grid.Column width={7}>
-                    <div className="ui fluid labeled input">
-                        <div className={`ui label ${cColor}`}>C</div>
-                        <input
-                            id="c"
-                            name="c"
-                            type="number"
-                            value={state.c}
-                            onChange={e => dispatch(e)}
-                            onFocus={e => e.target.select()}
-                        />
-                        {state.base &&
-                            <Dropdown {...unitDropdownOptions} name='cUnit' value={state.cUnit}/>}
-                    </div>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column width={8}>
-                    <hr/>
-                </Grid.Column>
-                <Grid.Column textAlign='center' width={1}>
-                    <Header as='h1'>=</Header>
-                </Grid.Column>
-                <Grid.Column width={7}>
-                    <hr/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column width={8}>
-                    <div className="ui fluid labeled input">
-                        <div className={`ui label ${bColor}`}>B</div>
-                        <input
-                            id="b"
-                            name="b"
-                            type="number"
-                            value={state.b}
-                            onChange={e => dispatch(e)}
-                            onFocus={e => e.target.select()}
-                        />
-                        {state.base &&
-                            <Dropdown {...unitDropdownOptions} name='bUnit' value={state.bUnit}/>}
-                    </div>
-                </Grid.Column>
-                <Grid.Column width={1}/>
-                <Grid.Column width={7}>
-                    <div className="ui fluid labeled input">
-                        <div className={`ui label ${dColor}`}>D</div>
-                        <input
-                            id="d"
-                            name="d"
-                            type="number"
-                            value={state.d}
-                            onChange={e => dispatch(e)}
-                            onFocus={e => e.target.select()}
-                        />
-                        {state.base &&
-                            <Dropdown {...unitDropdownOptions} name='dUnit' value={state.dUnit}/>}
-                    </div>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
+        {baseDropdown}
+
+        <Media at='mobile'>
+            {inputA}
+            {inputB}
+
+            <hr/>
+
+            {inputC}
+            {inputD}
+        </Media>
+
+        <Media greaterThanOrEqual='tablet'>
+            <Table unstackable className='ratio-table'>
+                <TableBody>
+                    <TableRow>
+                        <TableCell className='equal-width'>{inputA}</TableCell>
+                        <TableCell className='min-width'/>
+                        <TableCell className='equal-width'>{inputC}</TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell className='equal-width'>
+                            <hr/>
+                        </TableCell>
+                        <TableCell textAlign='center' className='min-width'>
+                            <Header as='h1'>=</Header>
+                        </TableCell>
+                        <TableCell className='equal-width'>
+                            <hr/>
+                        </TableCell>
+                    </TableRow>
+                    <TableRow>
+                        <TableCell className='equal-width'>{inputB}</TableCell>
+                        <TableCell className='min-width'/>
+                        <TableCell className='equal-width'>{inputD}</TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+        </Media>
     </Form>
 }
 
 export const RatioCalculators = () => {
-    return <Container>
-        <RatioCalculator/>
-    </Container>
+    return <RatioCalculator/>
 }

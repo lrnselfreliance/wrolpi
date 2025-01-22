@@ -250,3 +250,11 @@ textarea.otp {
     display: block;
     margin: 0 auto; /* Center the video horizontally */
 }
+
+table.ratio-table td.equal-width {
+    width: 48%;
+}
+
+table.ratio-table td.min-width {
+    width: auto;
+}

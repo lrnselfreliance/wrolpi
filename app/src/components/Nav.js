@@ -121,7 +121,7 @@ export function NavBar() {
         const icon = <Link to='/admin/status' color={color}>
             <Icon name='microchip' size='large'/>
         </Link>;
-        memoryIcon = <Popup content={`System Memory: ${memoryPercent}%`} trigger={icon}/>
+        memoryIcon = <Popup content={`System Memory: ${memoryPercent.toFixed()}%`} trigger={icon}/>
     }
 
     // Any disk is busy and processes are waiting.
@@ -130,10 +130,10 @@ export function NavBar() {
     if (percentIOWait >= 50) {
         // Processes are waiting on disk, display a warning icon.
         const color = percentIOWait > 75 ? highWarningColor : lowWarningColor;
-        const icon = <Link to='/admin/status' color={color}>
-            <Icon name='disk' size='large'/>
+        const icon = <Link to='/admin/status'>
+            <Icon name='disk' size='large' color={color}/>
         </Link>;
-        diskWaitIcon = <Popup content={`Processes waiting on disk: ${percentIOWait}`} trigger={icon}/>
+        diskWaitIcon = <Popup content={`Processes waiting on disk: ${percentIOWait.toFixed()}%`} trigger={icon}/>
     }
 
     // CPU temperature.
@@ -145,7 +145,7 @@ export function NavBar() {
         const name = temperature >= criticalTemperature ? 'thermometer' : 'thermometer half';
         const icon = <Icon data-testid='cpuTemperatureIcon' name={name} size='large' color={color}/>
         const link = <Link to='/admin/status'>{icon}</Link>;
-        temperatureIcon = <Popup content={`CPU: ${temperature}°C`} trigger={link}/>;
+        temperatureIcon = <Popup content={`CPU: ${temperature.toFixed()}°C`} trigger={link}/>;
     }
 
     // Power issues, this is always displayed if detected.

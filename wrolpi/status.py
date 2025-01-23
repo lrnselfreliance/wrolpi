@@ -15,7 +15,7 @@ import jc
 
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which
-from wrolpi.common import logger, get_warn_once, unique_by_predicate
+from wrolpi.common import logger, get_warn_once, unique_by_predicate, partition, TRACE_LEVEL
 from wrolpi.dates import now
 
 try:
@@ -85,11 +85,9 @@ class IostatInfo:
 
 
 async def get_iostat_stats() -> IostatInfo:
-    logger.trace(f'get_iostat_stats called')
-
     try:
         proc = await asyncio.create_subprocess_shell(
-            'iostat',
+            'iostat 3 2',  # 3 second interval to gather more data, get 2 count.
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -97,10 +95,14 @@ async def get_iostat_stats() -> IostatInfo:
         if stdout and proc.returncode == 0:
             iostat_stats = jc.parse('iostat', stdout.decode(), quiet=True)
             if iostat_stats:
-                cpu_stats, *_ = iostat_stats
+                cpu_statuses, _ = partition(lambda i: i['type'] == 'cpu', iostat_stats)
+                _, cpu_stats = cpu_statuses  # Use the second status because the first is a lie.
 
-                logger.trace(
-                    f'get_iostat_stats got percent_iowait={cpu_stats["percent_iowait"]} percent_idle={cpu_stats["percent_idle"]}')
+                if logger.isEnabledFor(TRACE_LEVEL):
+                    logger.trace(
+                        f'get_iostat_stats'
+                        f' percent_iowait={cpu_stats["percent_iowait"]}'
+                        f' percent_idle={cpu_stats["percent_idle"]}')
                 # Return only the CPU stats.
                 return IostatInfo(
                     percent_idle=cpu_stats['percent_idle'],
@@ -111,6 +113,8 @@ async def get_iostat_stats() -> IostatInfo:
                     percent_user=cpu_stats['percent_user'],
                 )
     except Exception as e:
+        if logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'get_iostat_stats failed: {e}')
         warn_iostat_once(e)
 
     return IostatInfo()
@@ -163,6 +167,7 @@ TEMPERATURE_PATH = Path('/sys/class/thermal/thermal_zone0/temp')
 TOP_REGEX = re.compile(r'^%Cpu\(s\):\s+(\d+\.\d+)', re.MULTILINE)
 
 CORE_COUNT = multiprocessing.cpu_count()
+
 
 async def get_cpu_stats() -> CPUInfo:
     """Get core count, max freq, min freq, current freq, cpu temperature."""

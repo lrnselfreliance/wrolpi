@@ -96,7 +96,7 @@ function FlagsMessages() {
     </>
 }
 
-function EvaluateForm({defaultEvaluatedValue = 'Enter an equation above.'}) {
+function EvaluateForm() {
 
     const helpContents = <span>
         <p>Enter an equation above.</p>

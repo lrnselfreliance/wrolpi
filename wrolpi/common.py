@@ -227,7 +227,6 @@ __all__ = [
     'Base',
     'ConfigFile',
     'DownloadFileInfo',
-    'DownloadFileInfoLink',
     'LOGGING_CONFIG',
     'ModelHelper',
     'TRACE_LEVEL',

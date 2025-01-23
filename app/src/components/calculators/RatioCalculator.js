@@ -1,7 +1,7 @@
-import {Dropdown, TableBody, TableCell, TableRow} from "semantic-ui-react";
+import {Dropdown, MessageHeader, TableBody, TableCell, TableRow} from "semantic-ui-react";
 import {Form, Header, Table} from "../Theme";
 import React from "react";
-import {roundDigits, useLocalStorage} from "../Common";
+import {HandPointMessage, roundDigits, useLocalStorage} from "../Common";
 import {createUnit, multiply, unit} from "mathjs";
 import {Media} from "../../contexts/contexts";
 
@@ -211,6 +211,11 @@ const RatioCalculator = () => {
         setStorageRecentUnits({...storageRecentUnits, [key]: state.dUnit});
     }, [state.dUnit]);
 
+    const inputARef = React.useRef(null);
+    const inputBRef = React.useRef(null);
+    const inputCRef = React.useRef(null);
+    const inputDRef = React.useRef(null);
+
     const unitOptions = baseToUnitsMap[state.base];
 
     const unitDropdownOptions = {
@@ -234,14 +239,29 @@ const RatioCalculator = () => {
                                    style={{marginBottom: '1em'}}
     />;
 
+    const handleInputChange = (e) => {
+        // Allow the user to switch between inputs using a, b, c, and d keys.
+        if (e?.key === 'a') {
+            inputARef.current.focus();
+        } else if (e?.key === 'b') {
+            inputBRef.current.focus();
+        } else if (e?.key === 'c') {
+            inputCRef.current.focus();
+        } else if (e?.key === 'd') {
+            inputDRef.current.focus();
+        }
+    }
+
     const inputA = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
         <div className={`ui label ${aColor}`}>A</div>
         <input
             id="a"
             name="a"
             type="number"
+            ref={inputARef}
             value={unitToInputValue(state.a)}
             onChange={e => dispatch(e)}
+            onKeyPress={handleInputChange}
             onFocus={e => e.target.select()}
         />
         {state.base &&
@@ -254,8 +274,10 @@ const RatioCalculator = () => {
             id="b"
             name="b"
             type="number"
+            ref={inputBRef}
             value={unitToInputValue(state.b)}
             onChange={e => dispatch(e)}
+            onKeyPress={handleInputChange}
             onFocus={e => e.target.select()}
         />
         {state.base &&
@@ -268,8 +290,10 @@ const RatioCalculator = () => {
             id="c"
             name="c"
             type="number"
+            ref={inputCRef}
             value={unitToInputValue(state.c)}
             onChange={e => dispatch(e)}
+            onKeyPress={handleInputChange}
             onFocus={e => e.target.select()}
         />
         {state.base &&
@@ -282,13 +306,22 @@ const RatioCalculator = () => {
             id="d"
             name="d"
             type="number"
+            ref={inputDRef}
             value={unitToInputValue(state.d)}
             onChange={e => dispatch(e)}
+            onKeyPress={handleInputChange}
             onFocus={e => e.target.select()}
         />
         {state.base &&
             <Dropdown {...unitDropdownOptions} name='dUnit' value={state.dUnit}/>}
     </div>;
+
+    React.useEffect(() => {
+        if (inputARef.current) {
+            // Focus on input A on page load.
+            inputARef.current.focus();
+        }
+    }, []);
 
     return <Form>
         <Header as='h1'>Ratio</Header>
@@ -333,6 +366,10 @@ const RatioCalculator = () => {
                 </TableBody>
             </Table>
         </Media>
+        <HandPointMessage storageName='hint_ratio_calculator'>
+            <MessageHeader>Tip</MessageHeader>
+            You can change inputs using the <b>a</b>, <b>b</b>, <b>c</b>, and <b>d</b> keys.
+        </HandPointMessage>
     </Form>
 }
 

@@ -1547,17 +1547,39 @@ export function APIButton({
     return button;
 }
 
-export function InfoMessage({children, size = null}) {
-    return <Message info icon size={size}>
-        <SIcon name='question'/>
+export const useMessageDismissal = (messageName) => {
+    const [dismissed, setDismissed] = useLocalStorage('dismissed_hints', {});
+
+    return {
+        dismissed: dismissed[messageName] || false, // true or false
+        setDismissed: (value) => setDismissed({...dismissed, [messageName]: value}),
+        clearAll: () => setDismissed({}),
+    }
+}
+
+export function InfoMessage({children, size = null, storageName = null, icon = 'question'}) {
+    const {dismissed, setDismissed} = useMessageDismissal(storageName);
+
+    if (dismissed) {
+        return <React.Fragment/>
+    }
+
+    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
+        <SIcon name={icon}/>
         <Message.Content>
             {children}
         </Message.Content>
     </Message>
 }
 
-export function HandPointMessage({children, size = null}) {
-    return <Message info icon size={size}>
+export function HandPointMessage({children, size = null, storageName = null}) {
+    const {dismissed, setDismissed} = useMessageDismissal(storageName);
+
+    if (dismissed) {
+        return <React.Fragment/>
+    }
+
+    return <Message info icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
         <SIcon name='hand point right'/>
         <Message.Content>
             {children}
@@ -1565,9 +1587,15 @@ export function HandPointMessage({children, size = null}) {
     </Message>
 }
 
-export function WarningMessage({children, size = null, icon = 'exclamation'}) {
+export function WarningMessage({children, size = null, icon = 'exclamation', storageName = null}) {
+    const {dismissed, setDismissed} = useMessageDismissal(storageName);
+
+    if (dismissed) {
+        return <React.Fragment/>
+    }
+
     // Use color='yellow' because "warning" does not work.
-    return <Message color='yellow' icon size={size}>
+    return <Message color='yellow' icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
         <SIcon name={icon}/>
         <Message.Content>
             {children}
@@ -1575,10 +1603,18 @@ export function WarningMessage({children, size = null, icon = 'exclamation'}) {
     </Message>
 }
 
-export function ErrorMessage({children, size = null, icon = 'exclamation'}) {
-    return <Message negative icon size={size}>
+export function ErrorMessage({children, size = null, icon = 'exclamation', storageName = null}) {
+    const {dismissed, setDismissed} = useMessageDismissal(storageName);
+
+    if (dismissed) {
+        return <React.Fragment/>
+    }
+
+    return <Message negative icon size={size} onDismiss={storageName ? () => setDismissed(true) : undefined}>
         <SIcon name={icon}/>
-        <Message.Content>{children}</Message.Content>
+        <Message.Content>
+            {children}
+        </Message.Content>
     </Message>
 }
 
@@ -1788,6 +1824,10 @@ export function useLocalStorage(key, initialValue, decode = JSON.parse, encode =
 
     // Save to localStorage when the value changes
     useEffect(() => {
+        if (key === null || key === undefined) {
+            // key was not defined, do not add this to storage.
+            return
+        }
         try {
             decode(value);
             window.localStorage.setItem(key, value);
@@ -1920,10 +1960,14 @@ export function getDistinctColor(hexColors) {
     return hslToHex(newColor.h, newColor.s, newColor.l);
 }
 
-export const isReactChildNull = (children) => {
-    // Returns `true` if a React element returns `null` as it's child.
-    const nonNullChildren = React.Children.map(children,
-        (child) => React.isValidElement(child) && child.type(child.props)
-    );
-    return nonNullChildren.length === 0;
+export const DismissibleMessage = ({storageName, children}) => {
+    const [dismissed, setDismissed] = useLocalStorage(storageName, false);
+
+    if (dismissed) {
+        return <React.Fragment/>
+    }
+
+    return <Message onDismiss={() => setDismissed(true)}>
+        {children}
+    </Message>
 }

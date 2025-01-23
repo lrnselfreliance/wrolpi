@@ -23,6 +23,7 @@ import {
     HotspotToggle,
     ThrottleToggle,
     Toggle,
+    useMessageDismissal,
     WROLModeMessage
 } from "../Common";
 import QRCode from "react-qr-code";
@@ -177,6 +178,7 @@ export function SettingsPage() {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [ready, setReady] = React.useState(false);
     const [pendingSave, setPendingSave] = React.useState(false);
+    const {clearAll} = useMessageDismissal();
 
     // Get current settings from the API.
     const {settings, saveSettings, fetchSettings} = React.useContext(SettingsContext);
@@ -539,6 +541,11 @@ export function SettingsPage() {
         </Segment>
 
         {configsSegment}
+
+        <Segment>
+            <Header as='h1'>Browser Settings</Header>
+            <APIButton onClick={clearAll}>Show All Hints</APIButton>
+        </Segment>
     </Container>;
 }
 

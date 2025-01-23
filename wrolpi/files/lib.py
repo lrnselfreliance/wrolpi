@@ -1509,15 +1509,11 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
 
     from modules.videos.common import get_videos_directory
     from modules.archive.lib import get_archive_directory
-    from modules.map.lib import get_map_directory
-    from modules.zim.lib import get_zim_directory
     from modules.videos.common import get_no_channel_directory
     special_directories = [
         get_media_directory(),
         get_videos_directory(),
         get_archive_directory(),
-        get_map_directory(),
-        get_zim_directory(),
         get_no_channel_directory(),
     ]
 

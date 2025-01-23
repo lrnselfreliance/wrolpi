@@ -730,16 +730,16 @@ export function HelpPopup({
                               content,
                               position = 'left center',
                               iconSize = 'small',
-                              header = ''
+                              header = '',
+                              iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', border: '1px solid grey'},
                           }) {
+    const trigger = <Icon circular link name={icon} size={iconSize} style={iconStyle}/>;
     return <Popup
         content={content}
         size={size}
         position={position}
         header={header || null}
-        trigger={<Icon circular link name={icon} size={iconSize}
-                       style={{marginLeft: '0.25em', marginRight: '0.25em'}}
-        />}
+        trigger={trigger}
     />
 }
 
@@ -752,8 +752,9 @@ export function HelpHeader({
                                popupPosition = null,
                                for_ = null,
                                required = false,
+                               ...props
                            }) {
-    return <div className='inline-header'>
+    return <div className='inline-header' {...props}>
         <label htmlFor={for_}>
             <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
         </label>

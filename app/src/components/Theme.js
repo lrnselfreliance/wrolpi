@@ -269,8 +269,7 @@ export function Placeholder(props) {
 
 export function Popup(props) {
     const {i} = useContext(ThemeContext);
-    props = {...i, ...props};
-    return <SPopup {...props}/>
+    return <SPopup {...i} style={{border: '1px solid grey'}} {...props}/>
 }
 
 export function Progress(props) {

@@ -39,7 +39,7 @@ for i in {1..100}; do
       --tries=1 \
       --no-check-certificate \
       --timeout 5 -O /dev/null || {
-        echo "Attempt $i failed. Sleeping for 5 seconds..."
+        echo "Waiting for map to come up, sleeping for 5 seconds..."
         sleep 5
         continue
     }

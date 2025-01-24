@@ -178,7 +178,16 @@ export function NavBar() {
             <Icon loading name='circle notch' size='large'/>
         </Link>;
 
+    let apiDownIcon;
+    if (window.apiDown) {
+        apiDownIcon = <Popup
+            content='API is not responding'
+            trigger={<Icon name='plug'/>}
+        />
+    }
+
     const icons = <React.Fragment>
+        <NavIconWrapper>{apiDownIcon}</NavIconWrapper>
         <NavIconWrapper>{processingIcon}</NavIconWrapper>
         <NavIconWrapper>{powerIcon}</NavIconWrapper>
         <NavIconWrapper>{warningIcon}</NavIconWrapper>

@@ -1,5 +1,6 @@
 import React, {useContext, useEffect, useRef, useState} from "react";
 import {
+    ApiDownError,
     createChannel,
     fetchDecoded,
     fetchDomains,
@@ -804,6 +805,9 @@ export const useSettings = () => {
     const [pending, setPending] = useState(false);
 
     const fetchSettings = async () => {
+        if (window.apiDown) {
+            return;
+        }
         setPending(true);
         try {
             setSettings(await getSettings())
@@ -840,15 +844,26 @@ export const useStatus = () => {
 
     const fetchStatus = async () => {
         try {
-            const s = await getStatus();
-            setStatus(s);
+            setStatus(await getStatus());
+            window.apiDown = false;
         } catch (e) {
+            if (e instanceof ApiDownError) {
+                // API is down, do not log this error.
+                window.apiDown = true;
+                setStatus({});
+                return;
+            }
             // Ignore SyntaxError because they happen when the API is down.
             if (!(e instanceof SyntaxError)) {
                 console.error(e);
             }
         }
     }
+
+    useEffect(() => {
+        // Used to tell other hooks to stop fetching intervals.
+        window.apiDown = false;
+    }, []);
 
     return {status, fetchStatus}
 }

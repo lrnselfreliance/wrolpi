@@ -1,5 +1,5 @@
 import React, {useEffect} from "react";
-import {deleteTag, getTags, saveTag} from "./api";
+import {ApiDownError, deleteTag, getTags, saveTag} from "./api";
 import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {
     APIButton,
@@ -48,6 +48,9 @@ export function useTags() {
     const {getLocationStr} = React.useContext(QueryContext);
 
     const fetchTags = async () => {
+        if (window.apiDown) { // apiDown is set in useStatus
+            return;
+        }
         try {
             const t = await getTags();
             setTags(t);
@@ -55,12 +58,23 @@ export function useTags() {
         } catch (e) {
             setTags(undefined);
             setTagNames(undefined);
+            if (e instanceof ApiDownError) {
+                // API is down, do not log this error.
+                return;
+            }
             // Ignore SyntaxError because they happen when the API is down.
             if (!(e instanceof SyntaxError)) {
                 console.error(e);
             }
         }
     }
+
+    React.useEffect(() => {
+        if (!window.apiDown) {
+            // Fetch tags when the API comes back up.
+            fetchTags();
+        }
+    }, [window.apiDown]);
 
     const findTagByName = (name) => {
         if (!tags || tags.length === 0) {

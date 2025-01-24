@@ -13,7 +13,7 @@ import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
-import {Header, Segment, ThemeProvider} from "./components/Theme";
+import {Header, ThemeProvider} from "./components/Theme";
 import {DashboardPage} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
 import {useEventsInterval} from "./Events";
@@ -21,8 +21,6 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
-import {IframeViewer} from "./components/Common";
-import {HELP_VIEWER_URI} from "./components/Vars";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -39,8 +37,12 @@ function Dot() {
 function Footer() {
     const {t} = useContext(ThemeContext);
     const {status} = useContext(StatusContext);
-    let {version} = status;
-    version = version ? `v${version}` : null;
+    let version;
+    try {
+        version = status?.version ? `v${status.version}` : null;
+    } catch (e) {
+        // Not logging because this is not that important.
+    }
     return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em', ...t}}>
         <span {...t}>
             WROLPi {version} <Dot/>

@@ -394,6 +394,8 @@ function DashboardStatus() {
     if (status && status['nic_bandwidth_stats']) {
         bandwidths = Object.entries(status['nic_bandwidth_stats'])
             .map(([name, bandwidth]) => <BandwidthProgressCombined key={name} bandwidth={bandwidth}/>);
+    } else if (window.apiDown) { // apiDown is set in useStatus
+        bandwidths = null;
     }
 
     return <Segment>

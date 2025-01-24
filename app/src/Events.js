@@ -1,7 +1,8 @@
 import React, {useEffect} from 'react';
 import {useRecurringTimeout} from "./hooks/customHooks";
-import {getEvents} from "./api";
+import {ApiDownError, getEvents} from "./api";
 import {toast} from "react-semantic-toasts-2";
+import {StatusContext} from "./contexts/contexts";
 
 const apiEventName = 'apiEvent';
 
@@ -108,12 +109,19 @@ export function useEventsInterval() {
     }
 
     const fetchEvents = async () => {
+        if (window.apiDown) { // apiDown is set in useStatus
+            return;
+        }
         try {
             const response = await getEvents(now.current);
             setNow(response['now']);
             setEvents(response['events']);
         } catch (e) {
             setEvents(null);
+            if (e instanceof ApiDownError) {
+                // API is down, do not log this error.
+                return;
+            }
             // Ignore SyntaxError because they happen when the API is down.
             if (!(e instanceof SyntaxError)) {
                 console.error(e);

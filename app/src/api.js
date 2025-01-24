@@ -20,21 +20,31 @@ function timeoutPromise(ms, promise) {
     })
 }
 
+export class ApiDownError extends Error {
+}
+
+const apiDownError = new ApiDownError('API is down');
+
 async function apiCall(url, method, body, ms = 60_000) {
     let init = {method};
     if (body !== undefined) {
         init.body = JSON.stringify(body);
     }
 
-    // Create a fetch promise, this will be awaited by the timeout.
-    let promise = fetch(url, init);
-
+    let promise;
     try {
+        // Create a fetch promise, this will be awaited by the timeout.
+        promise = fetch(url, init);
+
         // await the response or error.
         const response = await timeoutPromise(ms, promise);
         if (200 <= response.status && response.status < 300) {
             // Request was successful.
             return response;
+        }
+        if (response.status === 502) {
+            // API is down.
+            throw apiDownError;
         }
         // Request encountered an error.
         let copy = response.clone();
@@ -51,6 +61,10 @@ async function apiCall(url, method, body, ms = 60_000) {
         }
         return response;
     } catch (e) {
+        if (e instanceof ApiDownError) {
+            // Throw ApiDownError immediately without logging.
+            throw e;
+        }
         // Ignore SyntaxError because they happen when the API is down.
         if (!(e instanceof SyntaxError)) {
             console.error(e);
@@ -234,15 +248,6 @@ export async function deleteVideos(videoIds) {
 export async function downloadVideoMetadata(videoUrl, destination) {
     const downloadData = {urls: [videoUrl], downloader: Downloaders.Video, destination: destination};
     return await postDownload(downloadData);
-}
-
-export async function getDirectories(search_str) {
-    let form_data = {'search_str': search_str || null};
-    const response = await apiPost(`${API_URI}/files/directories`, form_data);
-    if (response.ok) {
-        return await response.json();
-    }
-    return [];
 }
 
 export async function getStatus() {

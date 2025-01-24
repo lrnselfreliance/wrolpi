@@ -285,6 +285,7 @@ export function StatusPage() {
                 headerSize='h2'
                 headerContent='Drive Bandwidth'
                 popupContent='Inaccurate during startup.  Becomes more accurate as the system is used.'
+                iconSize='large'
                 style={{marginBottom: '1em'}}
             />
             {!_.isEmpty(diskBandwidthStats) ?

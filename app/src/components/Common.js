@@ -725,15 +725,15 @@ export function CardPoster({to, file}) {
 }
 
 export function HelpPopup({
-                              icon = 'question',
+                              icon = 'info circle',
                               size = null,
                               content,
                               position = 'left center',
-                              iconSize = 'small',
+                              iconSize = null,
                               header = '',
-                              iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', border: '1px solid grey'},
+                              iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', marginTop: '-0.5em'},
                           }) {
-    const trigger = <Icon circular link name={icon} size={iconSize} style={iconStyle}/>;
+    const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;
     return <Popup
         content={content}
         size={size}
@@ -759,7 +759,7 @@ export function HelpHeader({
             <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
         </label>
         <span>
-            <HelpPopup content={popupContent} size={iconSize} icon={icon} position={popupPosition}/>
+            <HelpPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}/>
         </span>
     </div>
 }
@@ -1552,12 +1552,12 @@ export const useMessageDismissal = (messageName) => {
 
     return {
         dismissed: dismissed[messageName] || false, // true or false
-        setDismissed: (value) => setDismissed({...dismissed, [messageName]: value}),
+        setDismissed: (value) => setDismissed({...dismissed, [messageName]: !!value}), // force true/false
         clearAll: () => setDismissed({}),
     }
 }
 
-export function InfoMessage({children, size = null, storageName = null, icon = 'question'}) {
+export function InfoMessage({children, size = null, storageName = null, icon = 'info circle'}) {
     const {dismissed, setDismissed} = useMessageDismissal(storageName);
 
     if (dismissed) {

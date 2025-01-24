@@ -50,21 +50,6 @@ function Footer() {
     </Container>
 }
 
-function HelpPage() {
-    const fallback = <Segment>
-        <Header as='h3'>Failed to fetch Help service.</Header>
-        <p>You may need to give permission to access the page: <a href={HELP_VIEWER_URI}>{HELP_VIEWER_URI}</a></p>
-
-        <p>If the above does not work, try starting the service:</p>
-        <pre>sudo systemctl start wrolpi-kiwix</pre>
-
-        <p>Check the logs</p>
-        <pre>journalctl -u wrolpi-kiwix</pre>
-    </Segment>;
-
-    return <IframeViewer title='help' src={HELP_VIEWER_URI} fallback={fallback}/>
-}
-
 function Root() {
     return <QueryProvider>
         <ThemeProvider>
@@ -93,7 +78,6 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path="videos/*" element={<VideosRoute/>}/>
     <Route path="admin/*" element={<AdminRoute/>}/>
-    <Route path="help/*" element={<HelpPage/>}/>
     <Route path="more/*" element={<MoreRoute/>}/>
     <Route path="inventory/*" element={<InventoryRoute/>}/>
     <Route path='archive/*' element={<ArchiveRoute/>}/>

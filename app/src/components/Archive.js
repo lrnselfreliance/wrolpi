@@ -24,7 +24,7 @@ import {
     ExternalCardLink,
     FileIcon,
     findPosterPath,
-    HelpHeader,
+    InfoHeader,
     humanFileSize,
     isoDatetimeToAgoPopup,
     mimetypeColor,
@@ -268,7 +268,7 @@ function ArchivePage() {
         <Tab menu={tabMenu} panes={tabPanes}/>
 
         <Segment>
-            <HelpHeader
+            <InfoHeader
                 headerContent='History'
                 popupContent='Other archives of this URL created at different times.'
             />

@@ -1,6 +1,6 @@
 import {Accordion, Header, Progress, Segment, Statistic, StatisticGroup, Table} from "../Theme";
 import React, {useContext} from "react";
-import {HelpHeader, humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
+import {InfoHeader, humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../../contexts/contexts";
@@ -281,7 +281,7 @@ export function StatusPage() {
         </Media>
 
         <Segment>
-            <HelpHeader
+            <InfoHeader
                 headerSize='h2'
                 headerContent='Drive Bandwidth'
                 popupContent='Inaccurate during startup.  Becomes more accurate as the system is used.'

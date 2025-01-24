@@ -1,6 +1,6 @@
 import React from "react";
 import _ from "lodash";
-import {HelpPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
+import {InfoPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
 import {FormInput, Icon, TextArea} from "../components/Theme";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 
@@ -310,7 +310,7 @@ export function InputForm({
         <label htmlFor={`${name}_input`}>
             <b>{label} {required && <RequiredAsterisk/>}</b>
             {helpContent &&
-                <HelpPopup
+                <InfoPopup
                     content={helpContent}
                     position={helpPosition}
                 />

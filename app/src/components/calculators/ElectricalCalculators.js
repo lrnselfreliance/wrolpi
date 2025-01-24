@@ -1,4 +1,4 @@
-import {HelpPopup, roundDigits, Toggle, useLocalStorage, useLocalStorageInt} from "../Common";
+import {InfoPopup, roundDigits, Toggle, useLocalStorage, useLocalStorageInt} from "../Common";
 import React, {useState} from "react";
 import {Form, Header, Segment, Table} from "../Theme";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -301,7 +301,7 @@ const PowerLossCalculator = ({volts, setVolts}) => {
                 />
             </Grid.Column>
             <Grid.Column mobile={4} tablet={2}>
-                <HelpPopup
+                <InfoPopup
                     content='Length is one way.  This length will be doubled to account for return wire.'/>
             </Grid.Column>
         </Grid.Row>

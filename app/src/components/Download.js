@@ -3,8 +3,8 @@ import {getDownloaders, postDownload, putDownload} from "../api";
 import {
     APIButton,
     DirectorySearch,
-    HelpHeader,
-    HelpPopup,
+    InfoHeader,
+    InfoPopup,
     mergeDeep,
     RequiredAsterisk,
     useLocalStorage
@@ -57,7 +57,7 @@ export function MaximumPagesInputForm({form, required, name = 'max_pages', path 
 
 export function DestinationForm({
                                     form,
-                                    helpContent,
+                                    infoContent,
                                     label = 'Destination',
                                     name = 'destination',
                                     path = 'destination',
@@ -65,9 +65,9 @@ export function DestinationForm({
                                 }) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path, required});
     const {disabled, value, onChange} = inputProps;
-    const helpPopup = helpContent ? <HelpPopup content={helpContent}/> : null;
+    const infoPopup = infoContent ? <InfoPopup content={infoContent}/> : null;
     return <SForm.Field>
-        <label>{label} {required && <RequiredAsterisk/>}{helpPopup}</label>
+        <label>{label} {required && <RequiredAsterisk/>}{infoPopup}</label>
         <DirectorySearch
             required={required}
             value={value}
@@ -157,7 +157,7 @@ export function TitleInclusionInput({form, path = 'settings.title_include'}) {
     });
 
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h4'
             headerContent='Title Match Words'
             popupContent='List of words, separated by commas, that titles must contain to be downloaded.'
@@ -179,7 +179,7 @@ export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
     });
 
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h4'
             headerContent='Title Exclusion Words'
             popupContent='List of words, separated by commas, that may not appear in titles to be downloaded.'
@@ -266,7 +266,7 @@ export function VideoResolutionSelectorForm({form, name = 'video_resolutions', p
     const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
 
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h5'
             headerContent='Video Resolutions'
             popupContent='Videos will be downloaded in the first available resolution from the list you select.'
@@ -288,7 +288,7 @@ function VideoFormatSelectorForm({form, name = 'video_format', path = 'settings.
     });
 
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h5'
             headerContent='Video Format'
             popupContent='Videos will be downloaded in this format, or transcoded if not available.'
@@ -316,7 +316,7 @@ function VideoDurationLimit({form, name, path, label, helpContent, placeholder, 
 
 export function VideoTagsForm({form}) {
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h4'
             headerContent='Videos Tags'
             popupContent='Tag all Videos with these Tags.'
@@ -327,7 +327,7 @@ export function VideoTagsForm({form}) {
 
 export function ChannelTagNameForm({form}) {
     return <>
-        <HelpHeader
+        <InfoHeader
             headerSize='h4'
             headerContent='Channel Tag'
             popupContent='If the Channel is new, apply this Tag.'

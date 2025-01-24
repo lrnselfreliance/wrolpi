@@ -19,7 +19,7 @@ import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Inp
 import {
     APIButton,
     ErrorMessage,
-    HelpPopup,
+    InfoPopup,
     HotspotToggle,
     ThrottleToggle,
     Toggle,
@@ -318,7 +318,7 @@ export function SettingsPage() {
                     <FormInput
                         label={<>
                             <b>Download Timeout</b>
-                            <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
+                            <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
                         </>}
                         value={state.download_timeout}

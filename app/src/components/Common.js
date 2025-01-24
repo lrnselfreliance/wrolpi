@@ -724,7 +724,7 @@ export function CardPoster({to, file}) {
     }
 }
 
-export function HelpPopup({
+export function InfoPopup({
                               icon = 'info circle',
                               size = null,
                               content,
@@ -743,7 +743,7 @@ export function HelpPopup({
     />
 }
 
-export function HelpHeader({
+export function InfoHeader({
                                icon,
                                headerSize = 'h2',
                                iconSize,
@@ -759,7 +759,7 @@ export function HelpHeader({
             <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
         </label>
         <span>
-            <HelpPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}/>
+            <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}/>
         </span>
     </div>
 }
@@ -774,7 +774,7 @@ export function HotspotToggle() {
             checked={on === true}
             onChange={checked => setHotspot(checked)}
         />
-        {disabled && <HelpPopup content='Hotspot is not supported on this server'/>}
+        {disabled && <InfoPopup content='Hotspot is not supported on this server'/>}
     </div>;
 }
 
@@ -788,7 +788,7 @@ export function ThrottleToggle() {
             checked={on === true}
             onChange={checked => setThrottle(checked)}
         />
-        {disabled && <HelpPopup content='CPU Power-save is not supported on this server'/>}
+        {disabled && <InfoPopup content='CPU Power-save is not supported on this server'/>}
     </div>;
 }
 

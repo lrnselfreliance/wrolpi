@@ -3,7 +3,7 @@ import {
     APIButton,
     ErrorMessage,
     HandPointMessage,
-    HelpPopup,
+    InfoPopup,
     humanFileSize,
     IframeViewer,
     InfoMessage,
@@ -245,9 +245,9 @@ class ManageMap extends React.Component {
             </TableRow>
         }
 
-        let spaceHelpPopup = <HelpPopup
+        let spaceInfoPopup = <InfoPopup
             content='Upon importing, a PBF file will consume more disk space than the original file.'/>;
-        let timeHelpPopup = <HelpPopup content='Estimated for a Raspberry Pi 4'/>;
+        let timeInfoPopup = <InfoPopup content='Estimated for a Raspberry Pi 4'/>;
 
         return <PageContainer>
             <WROLModeMessage content='Cannot modify Map'/>
@@ -263,8 +263,8 @@ class ManageMap extends React.Component {
                         <TableHeaderCell>PBF File</TableHeaderCell>
                         <TableHeaderCell>Imported</TableHeaderCell>
                         <TableHeaderCell>Size</TableHeaderCell>
-                        <TableHeaderCell>Space Required {spaceHelpPopup}</TableHeaderCell>
-                        <TableHeaderCell>Time to Import {timeHelpPopup}</TableHeaderCell>
+                        <TableHeaderCell>Space Required {spaceInfoPopup}</TableHeaderCell>
+                        <TableHeaderCell>Time to Import {timeInfoPopup}</TableHeaderCell>
                     </TableRow>
                 </TableHeader>
                 <TableBody>

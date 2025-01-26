@@ -29,6 +29,8 @@ SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file-cli/single
 if not SINGLEFILE_PATH.is_file():
     SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file/cli/single-file')
 if not SINGLEFILE_PATH.is_file():
+    SINGLEFILE_PATH = pathlib.Path('/usr/src/.nvm/versions/node/v18.19.0/bin/single-file')
+if not SINGLEFILE_PATH.is_file():
     raise FileNotFoundError("Can't find single-file executable!")
 
 # Increase response timeout, archiving can take several minutes.
@@ -77,8 +79,6 @@ async def call_single_file(url) -> bytes:
     """
     logger.info(f'archiving {url}')
     cmd = f'{SINGLEFILE_PATH}' \
-          r' --browser-executable-path /usr/bin/chromium-browser' \
-          r' --browser-args [\"--no-sandbox\"]' \
           r' --dump-content ' \
           f' "{url}"'
     logger.debug(f'archive cmd: {cmd}')
@@ -86,7 +86,7 @@ async def call_single_file(url) -> bytes:
     if return_code != 0 or not stdout:
         if stderr:
             for line in stderr.splitlines():
-                logger.error(line)
+                logger.error(line.decode())
         raise RuntimeError(f'Failed to single-file {url} got the following error: {stderr}')
     logger.debug(f'done archiving for {url}')
     return stdout
@@ -112,7 +112,7 @@ async def extract_readability(path: str, url: str) -> dict:
 
 
 async def take_screenshot(url: str) -> bytes:
-    cmd = '/usr/bin/chromium-browser' \
+    cmd = '/usr/bin/google-chrome' \
           ' --headless' \
           ' --disable-gpu' \
           ' --no-sandbox' \
@@ -153,8 +153,15 @@ def prepare_bytes(b: bytes) -> str:
 @app.post('/json')
 async def post_archive(request: Request):
     url = request.json['url']
+
     try:
-        singlefile = await call_single_file(url)
+        # May have been passed the singlefile contents, do the extractions and return.
+        singlefile = request.json.get('singlefile')
+        singlefile = base64.b64decode(singlefile) if singlefile else None
+
+        # Use provided singlefile, or fetch and create from the internet.
+        singlefile = singlefile or await call_single_file(url)
+
         # Use html suffix so chrome screenshot recognizes it as an HTML file.
         with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
             fh.write(singlefile)

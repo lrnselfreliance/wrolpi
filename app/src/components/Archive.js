@@ -5,7 +5,6 @@ import {
     CardHeader,
     CardMeta,
     Container,
-    Dropdown,
     GridColumn,
     GridRow,
     Image,
@@ -24,8 +23,8 @@ import {
     ExternalCardLink,
     FileIcon,
     findPosterPath,
-    InfoHeader,
     humanFileSize,
+    InfoHeader,
     isoDatetimeToAgoPopup,
     mimetypeColor,
     PageContainer,
@@ -39,7 +38,7 @@ import {
 import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
+import {useArchive, useDomains, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
@@ -48,7 +47,7 @@ import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, S
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
-import {Downloaders} from "./Vars";
+import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 
 function archiveFileLink(path, directory = false) {
     if (path) {
@@ -394,29 +393,47 @@ export function DomainsPage() {
     </>;
 }
 
-export function SearchDomain() {
-    // A Dropdown which allows the user to filter by Archive domains.
-    const {domain, domains, setDomain} = useSearchDomain();
+function ArchiveSettingsPage() {
+    const {t} = React.useContext(ThemeContext);
 
-    const handleChange = (e, {value}) => {
-        setDomain(value);
-    }
+    const urlClipboardButton = <APIButton
+        icon='copy'
+        onClick={() => navigator.clipboard.writeText(API_ARCHIVE_UPLOAD_URI)}
+    />;
+    const dataFieldNameClipboardButton = <APIButton
+        icon='copy'
+        onClick={() => navigator.clipboard.writeText('singlefile_contents')}
+    />;
+    const urlFieldNameClipboardButton = <APIButton
+        icon='copy'
+        onClick={() => navigator.clipboard.writeText('url')}
+    />;
 
-    let domainOptions = [];
+    return <PageContainer>
+        <Header as='h1'>SingleFile Browser Extension</Header>
 
-    if (domains && domains.length > 0) {
-        domainOptions = domains.map(i => {
-            return {key: i['domain'], value: i['domain'], text: i['domain']}
-        });
-    }
-    return <>
-        <Dropdown selection search clearable fluid
-                  placeholder='Domains'
-                  options={domainOptions}
-                  onChange={handleChange}
-                  value={domain}
+        <p {...t}>
+            These are the settings necessary to configure the <a
+            href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install">SingleFile Browser
+            Extension</a> to automatically upload to your WROLPi.
+        </p>
+
+        <label {...t}>Upload URL</label>
+        <Input fluid
+               value={API_ARCHIVE_UPLOAD_URI}
+               label={urlClipboardButton}
         />
-    </>
+        <label {...t}>Data Field Name</label>
+        <Input fluid
+               value='singlefile_contents'
+               label={dataFieldNameClipboardButton}
+        />
+        <label {...t}>URL Field Name</label>
+        <Input fluid
+               value='url'
+               label={urlFieldNameClipboardButton}
+        />
+    </PageContainer>
 }
 
 function ArchivesPage() {
@@ -599,12 +616,14 @@ export function ArchiveRoute() {
     const links = [
         {text: 'Archives', to: '/archive', end: true},
         {text: 'Domains', to: '/archive/domains'},
+        {text: 'Settings', to: '/archive/settings'},
     ];
     return <PageContainer>
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' element={<ArchivesPage/>}/>
             <Route path='domains' element={<DomainsPage/>}/>
+            <Route path='settings' element={<ArchiveSettingsPage/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>
     </PageContainer>

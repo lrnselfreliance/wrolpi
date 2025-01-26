@@ -92,6 +92,10 @@ class Events:
     def send_config_save_failed(message: str = None):
         send_event('config_save_failed', message, subject='configs')
 
+    @classmethod
+    def send_archive_uploaded(cls, message: str = None, url: str = None):
+        send_event('upload_archive', message, subject='upload', url=url)
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

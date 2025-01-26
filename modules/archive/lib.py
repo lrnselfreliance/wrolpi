@@ -1,10 +1,15 @@
+import asyncio.subprocess
 import base64
 import gzip
 import json
+import os
 import pathlib
 import re
+import shlex
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
+from json import JSONDecodeError
 from typing import Optional, Tuple, List, Union
 from urllib.parse import urlparse
 
@@ -14,13 +19,14 @@ from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
 from wrolpi import dates
+from wrolpi.cmd import READABILITY_BIN
 from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config
+    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config, html_screenshot
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.tags import tag_append_sub_select_where
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
 
@@ -106,11 +112,11 @@ def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
 ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
 
 
-async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
+async def request_archive(url: str, singlefile: str = None) -> Tuple[str, Optional[dict], Optional[str]]:
     """Send a request to the archive service to archive the URL."""
     logger.info(f'Sending archive request to archive service: {url}')
 
-    data = {'url': url}
+    data = dict(url=url, singlefile=singlefile)
     try:
         async with aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT) as response:
             status = response.status
@@ -229,9 +235,9 @@ def get_or_create_domain(session: Session, url) -> Domain:
 SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')
 
 
-def get_url_from_singlefile(html: bytes) -> str:
+def get_url_from_singlefile(html: bytes | str) -> str:
     """Extract URL from SingleFile contents."""
-    html = html.decode()
+    html = html.decode() if isinstance(html, bytes) else html
     if SINGLEFILE_HEADER not in html:
         raise RuntimeError(f'Not a singlefile!')
 
@@ -313,7 +319,7 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
         except json.decoder.JSONDecodeError:
             # Was not valid JSON.
             schema = None
-        if isinstance(schema, dict) and schema.get('@context') in ('https://schema.org', 'http://schema.org'):
+        if isinstance(schema, dict) and '://schema.org' in schema.get('@context'):
             # Found https://schema.org/
             if headline := schema.get('headline'):
                 metadata.title = metadata.title or headline
@@ -339,6 +345,17 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
                 if isinstance(author, list) and len(author) >= 1:
                     # Use the first Author.
                     author = author[0]
+
+                if isinstance(author, dict):
+                    author = author.get('name') or author
+
+                if isinstance(author, str):
+                    metadata.author = author
+                else:
+                    logger.warning(f'Unable to parse author schema: {author}')
+            elif authors := schema.get('authors'):
+                # Use the first Author.
+                author = authors[0]
 
                 if isinstance(author, dict):
                     author = author.get('name') or author
@@ -535,3 +552,104 @@ async def search_domains_by_name(name: str, limit: int = 5, session: Session = N
         .limit(limit) \
         .all()
     return domains
+
+
+async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
+    """Extract the readability dict from the provided HTML."""
+    with tempfile.NamedTemporaryFile('wb', suffix='.html') as singlefile_file, \
+            tempfile.NamedTemporaryFile() as stdout_file, \
+            tempfile.NamedTemporaryFile() as stderr_file:
+        stdout_file, stderr_file = pathlib.Path(stdout_file.name), pathlib.Path(stderr_file.name)
+        with stdout_file.open('wb') as stdout_fh, stderr_file.open('wb') as stderr_fh:
+            singlefile_file.write(html.encode() if isinstance(html, str) else html)
+            singlefile_file.flush()
+            os.fsync(singlefile_file.fileno())
+
+            # Docker containers may not have this directory. But, this directory is necessary on RPi.
+            cwd = '/home/wrolpi' if os.path.isdir('/home/wrolpi') else None
+
+            cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
+                   READABILITY_BIN, singlefile_file.name, shlex.quote(url))
+            cmd = ' '.join(str(i) for i in cmd)
+            proc = await asyncio.subprocess.create_subprocess_shell(
+                cmd,
+                stdout=stdout_fh,  # Use stdout/stderr files to avoid buffer filling up.
+                stderr=stderr_fh,
+                cwd=cwd,
+            )
+
+            start = now()
+            while True:
+                elapsed = int((now() - start).total_seconds())
+                logger.debug(f'{elapsed} seconds elapsed')
+                if elapsed > timeout:
+                    proc.kill()
+                    await proc.wait()
+                    break
+
+                try:
+                    # Wait for the process to finish.
+                    await asyncio.wait_for(proc.wait(), timeout=1)
+                    logger.debug(f'finished waiting')
+                    break
+                except TimeoutError:
+                    continue
+
+            logger.debug(f'readability for {url} exited with {proc.returncode}')
+            return_code = proc.returncode
+            stdout, stderr = stdout_file.read_bytes(), stderr_file.read_bytes()
+            if return_code == 0:
+                if not stdout:
+                    raise RuntimeError('readability stdout was empty')
+                try:
+                    readability = json.loads(stdout)
+                except TypeError or JSONDecodeError:
+                    # JSON was invalid.
+                    e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
+                    if stderr:
+                        e = ChildProcessError(stderr.decode())
+                    raise RuntimeError(f'Failed to extract readability from {url}') from e
+                logger.debug(f'done readability for {url}')
+                return readability
+            else:
+                logger.error(f'Failed to extract readability for {url}')
+                e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
+                if stderr:
+                    e = ChildProcessError(stderr.decode())
+                raise RuntimeError(f'Failed to extract readability for {url} got {return_code}') from e
+
+
+async def singlefile_to_archive(singlefile: bytes) -> Archive:
+    """
+    Convert a SingleFile to an Archive.
+
+    This is done by extracting readability, creating a screenshot, then attaching them to an Archive/FileGroup.
+    """
+    # Get URL first because it does some simple checking of `singlefile`
+    url = get_url_from_singlefile(singlefile)
+    singlefile = singlefile.encode() if isinstance(singlefile, str) else singlefile
+
+    if DOCKERIZED:
+        # Perform the archive in the Archive docker container.  (Typically in the development environment).
+        singlefile = base64.b64encode(singlefile).decode()
+        logger.debug(f'singlefile_to_archive sending to archive service: {url}')
+        singlefile, readability, screenshot = await request_archive(url, singlefile=singlefile)
+    else:
+        # JSON from readability-extractor
+        readability = dict()
+        try:
+            logger.debug(f'singlefile_to_archive extracting readability: {url}')
+            readability = await html_to_readability(singlefile, url)
+        except RuntimeError as e:
+            logger.error(f'Failed to extract readability from: {url}', exc_info=e)
+
+        screenshot = None
+        try:
+            logger.debug(f'singlefile_to_archive creating screenshot: {url}')
+            screenshot = html_screenshot(singlefile)
+        except Exception as e:
+            logger.error(f'Failed to extract screenshot from: {url}', exc_info=e)
+
+    logger.trace(f'singlefile_to_archive modeling: {url}')
+    archive: Archive = await model_archive_result(url, singlefile, readability, screenshot)
+    return archive

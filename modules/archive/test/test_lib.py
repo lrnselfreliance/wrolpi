@@ -1,7 +1,7 @@
 import json
 import pathlib
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from http import HTTPStatus
 
 import pytest
@@ -558,6 +558,35 @@ async def test_refresh_archives_index(test_session, make_files_structure):
     assert archive.file_group.a_text == 'the title'  # from readability json
     assert archive.file_group.b_text == 'The article description'  # From application/ld+json
     assert archive.file_group.d_text == 'article text contents'  # from readability txt
+    assert archive.file_group.indexed is True
+
+
+@pytest.mark.asyncio
+async def test_archive_meta(async_client, test_session, make_files_structure):
+    # The start of a typical singlefile html file.
+    singlefile_contents = '''<!DOCTYPE html> <html lang="en">
+<script data-vue-meta="ssr" type="application/ld+json">
+   {"@context":"https://schema.org/","@type":"NewsArticle","headline":"The Headline","description":"The Description","authors":[{"name":"A.B.C.","@type":"Person"}],"datePublished":"2021-06-20T10:00"}
+  </script>
+</html>'''
+
+    singlefile, *_ = make_files_structure({
+        'archive/example.com/2021-10-05-16-20-10_NA.html': singlefile_contents,
+        'archive/example.com/2021-10-05-16-20-10_NA.png': None,
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.txt': 'article text contents',
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
+    })
+
+    await files_lib.refresh_files()
+
+    archive: Archive = test_session.query(Archive).one()
+    assert archive.singlefile_path == singlefile
+
+    assert archive.file_group.author == 'A.B.C.'
+    assert archive.file_group.published_datetime == datetime(2021, 6, 20, 10, 0, tzinfo=pytz.utc)
+
+    assert archive.file_group.title == 'The Headline'
+    assert archive.file_group.b_text == 'The Description'
     assert archive.file_group.indexed is True
 
 

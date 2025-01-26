@@ -1985,7 +1985,7 @@ def format_json_file(file: pathlib.Path, indent: int = 2):
     replace_file(file, content)
 
 
-def format_html_string(html: str) -> str:
+def format_html_string(html: str | bytes) -> str:
     if not html.strip():
         raise RuntimeError('Refusing to format empty HTMl string.')
 

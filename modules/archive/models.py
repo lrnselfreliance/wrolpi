@@ -318,6 +318,11 @@ class Archive(Base, ModelHelper):
     def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
         return self.file_group.add_tag(tag_id_or_name, session)
 
+    @property
+    def location(self):
+        """The location where this Archive can be viewed in the UI."""
+        return f'/archive/{self.id}'
+
 
 class Domain(Base, ModelHelper):
     __tablename__ = 'domains'  # plural to avoid conflict

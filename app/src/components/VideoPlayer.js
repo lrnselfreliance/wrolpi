@@ -18,7 +18,7 @@ import {
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
-import {useChannel} from "../hooks/customHooks";
+import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";
@@ -192,6 +192,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     // Get the Video's channel, fallback to the URL's channel id.
     const {channelId} = useParams();
     const {channel} = useChannel(video && video.channel_id ? video.channel_id : channelId);
+    const {comments, captions} = useVideoExtras(videoFile?.video?.id);
 
     if (videoFile === null) {
         return <VideoPlaceholder/>;
@@ -236,11 +237,11 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
     const captionsPane = {
         menuItem: 'Captions', render: () => <TabPane>
-            <pre>{video.caption || 'No captions available.'}</pre>
+            <pre>{captions || 'No captions available.'}</pre>
         </TabPane>
     };
 
-    const {poster_file, info_json_file, comments} = video;
+    const {poster_file, info_json_file} = video;
     const filesPane = {
         menuItem: 'Files', render: () => <TabPane>
             <h3>Video File</h3>

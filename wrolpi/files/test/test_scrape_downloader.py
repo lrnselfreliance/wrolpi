@@ -30,7 +30,8 @@ async def fake_file_do_download(*a, **kwargs):
     return DownloadResult(success=True)
 
 
-async def test_scrape_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls, await_switches):
+async def test_scrape_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls,
+                                      await_switches):
     """User can scrape for PDF files."""
     test_download_manager.register_downloader(ScrapeHTMLDownloader())
     test_download_manager.register_downloader(FileDownloader())

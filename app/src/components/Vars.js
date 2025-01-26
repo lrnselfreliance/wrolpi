@@ -12,6 +12,7 @@ export const FILES_MEDIA_URI = `https://${window.location.hostname}:${port}/medi
 export const MAP_VIEWER_URI = `https://${window.location.hostname}:8084`;
 export const ZIM_VIEWER_URI = `https://${window.location.hostname}:8085`;
 export const HELP_VIEWER_URI = `https://${window.location.hostname}:8086`;
+export const API_ARCHIVE_UPLOAD_URI = `http://${window.location.hostname}:8081/api/archive/upload`;
 
 export let defaultFileOrder = '-published_datetime'; // Most recently published files first.
 export let defaultSearchOrder = 'rank'; // Most relevant files first.

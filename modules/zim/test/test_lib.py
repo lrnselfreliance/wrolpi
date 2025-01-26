@@ -12,6 +12,7 @@ from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
+from wrolpi.test.common import skip_circleci
 
 
 @pytest.mark.asyncio
@@ -182,6 +183,7 @@ def test_zim_all_entries(test_session, test_zim):
     assert len(entries) == 12
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_zim_download(test_session, kiwix_download_zim, test_directory, test_zim_bytes, flags_lock,
                             await_switches):

@@ -45,6 +45,9 @@ async def get_file(_: Request, body: schema.FileRequest):
         file = lib.get_file_dict(body.file)
     except FileNotFoundError:
         raise InvalidFile()
+
+    # TODO ensure that this is being called during file previews and preview on page load
+    background_task(lib.set_file_viewed(get_media_directory() / body.file))
     return json_response({'file': file})
 
 
@@ -102,7 +105,7 @@ async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     with timer('Searching all files', 'info', logger__=logger):
         file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
                                               body.tag_names, body.headline, body.months, body.from_year, body.to_year,
-                                              body.any_tag)
+                                              body.any_tag, body.order)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 

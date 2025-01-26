@@ -16,7 +16,7 @@ def assert_map_file_status(test_client, expected, status_code=HTTPStatus.OK):
 
 @mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
 @mock.patch('modules.map.lib.is_dump_file', lambda i: True)
-def test_status_and_import(test_client, test_session, make_files_structure, mock_create_subprocess_shell):
+def test_status_and_import(test_client, test_session, make_files_structure, mock_run_command):
     """PBF files can be imported, and the status of the import can be monitored."""
     pbf1, pbf2, dump1 = make_files_structure([
         'map/pbf/some-country.osm.pbf',
@@ -32,11 +32,9 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
     ]
     assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        body = {'files': [str(pbf1), ], }
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    body = {'files': [str(pbf1), ], }
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
@@ -45,11 +43,9 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
     ]
     assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        body = {'files': [str(pbf1), str(pbf2)]}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    body = {'files': [str(pbf1), str(pbf2)]}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
@@ -58,11 +54,9 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
     ]
     assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        body = {'files': [str(dump1), ]}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    body = {'files': [str(dump1), ]}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     expected = [
         {'imported': True, 'path': 'map/dump/dumpy.dump'},
@@ -74,7 +68,7 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
 
 @mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
 @mock.patch('modules.map.lib.is_dump_file', lambda i: True)
-def test_multiple_import(test_client, test_session, test_directory, make_files_structure, mock_create_subprocess_shell):
+def test_multiple_import(test_client, test_session, test_directory, make_files_structure, mock_run_command):
     """Multiple PBFs can be imported.  Importing a second time overwrites the previous imports."""
     pbf1, pbf2, pbf3, dump = make_files_structure([
         'map/pbf/country1.osm.pbf',
@@ -83,11 +77,9 @@ def test_multiple_import(test_client, test_session, test_directory, make_files_s
         'map/dumpy.dump',
     ])
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        body = {'files': [str(pbf2), str(pbf1)]}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    body = {'files': [str(pbf2), str(pbf1)]}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Two PBFs can be merged and imported.
     expected = [
@@ -98,11 +90,9 @@ def test_multiple_import(test_client, test_session, test_directory, make_files_s
     ]
     assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        body = {'files': [str(pbf3), ]}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    body = {'files': [str(pbf3), ]}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     # New imports overwrite old imports.
     expected = [
@@ -113,12 +103,10 @@ def test_multiple_import(test_client, test_session, test_directory, make_files_s
     ]
     assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
-        # Can't mix PBF and dump.
-        body = {'files': [str(dump), ]}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.NO_CONTENT
+    # Can't mix PBF and dump.
+    body = {'files': [str(dump), ]}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Dump does not overwrite.
     expected = [

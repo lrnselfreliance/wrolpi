@@ -9,7 +9,6 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger, wrol_mode_check, get_media_directory, get_relative_to_media_directory
-from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST

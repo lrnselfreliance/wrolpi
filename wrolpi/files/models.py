@@ -1,7 +1,6 @@
 import copy
 import pathlib
 import shutil
-import urllib.parse
 from datetime import datetime
 from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
@@ -11,7 +10,7 @@ from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    get_relative_to_media_directory, unique_by_predicate
+    unique_by_predicate, TRACE_LEVEL
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
 from wrolpi.downloader import Download
@@ -141,8 +140,13 @@ class FileGroup(ModelHelper, Base):
             return self.title
         return self.primary_path.name
 
-    def set_viewed(self):
-        self.viewed = now()
+    def set_viewed(self, viewed: datetime = None) -> datetime:
+        """
+        :param viewed: Used only for testing!
+        :return: The datetime that was set.
+        """
+        self.viewed = viewed or now()
+        return self.viewed
 
     @optional_session
     def set_tags(self, tag_names_or_ids: Iterable[str | int], session: Session = None):
@@ -308,7 +312,6 @@ class FileGroup(ModelHelper, Base):
             raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem: {paths[0]}')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
-        logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
@@ -336,7 +339,8 @@ class FileGroup(ModelHelper, Base):
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
-        logger.debug(f'FileGroup.from_paths: {file_group}')
+        if logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'FileGroup.from_paths: {file_group}')
 
         return file_group
 
@@ -351,6 +355,14 @@ class FileGroup(ModelHelper, Base):
     @optional_session
     def get_by_path(path, session) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
+        return file_group
+
+    @staticmethod
+    @optional_session
+    def find_by_path(path, session) -> 'FileGroup':
+        file_group = FileGroup.get_by_path(path, session)
+        if not file_group:
+            raise UnknownFile(f'Unable to find FileGroup with path {path}')
         return file_group
 
     @property

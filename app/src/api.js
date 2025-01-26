@@ -222,6 +222,22 @@ export async function getVideo(video_id) {
     return [data['file_group'], data['prev'], data['next']];
 }
 
+export async function getVideoComments(videoId) {
+    const response = await apiGet(`${VIDEOS_API}/video/${videoId}/comments`);
+    let data = await response.json();
+    return {
+        comments: data.comments,
+    }
+}
+
+export async function getVideoCaptions(videoId) {
+    const response = await apiGet(`${VIDEOS_API}/video/${videoId}/captions`);
+    let data = await response.json();
+    return {
+        captions: data.captions,
+    }
+}
+
 export async function deleteVideos(videoIds) {
     if (!videoIds || videoIds.length === 0) {
         toast({
@@ -827,7 +843,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
@@ -849,6 +865,9 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
     if (toYear) {
         body['to_year'] = toYear;
+    }
+    if (order) {
+        body['order'] = order;
     }
     console.info('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);
@@ -1168,20 +1187,6 @@ export async function deleteTag(id, name) {
         console.error('Failed to delete tag');
         const message = await getErrorMessage(response, `Unable to delete tag: ${name}`);
         toast({type: 'error', title: 'Tag Error', description: message, time: 5000});
-    }
-}
-
-export async function fetchFile(path) {
-    const uri = `${API_URI}/files/file`;
-    const body = {file: path};
-    const response = await apiPost(uri, body);
-    if (response.ok) {
-        const content = await response.json();
-        return content['file'];
-    } else {
-        console.error('Unable to fetch file dict!  See client logs.');
-        const message = await getErrorMessage(response, 'Unable to get File');
-        toast({type: 'error', title: 'File Error', description: message, time: 5000});
     }
 }
 

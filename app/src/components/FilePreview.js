@@ -4,7 +4,7 @@ import {Grid, Header as SHeader, Image,} from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
-import {fetchFile, getFile, tagFileGroup, untagFileGroup} from "../api";
+import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
@@ -200,7 +200,7 @@ export function FilePreviewProvider({children}) {
         // Get the file again with its Tags.
         const {path, primary_path} = previewFile;
         try {
-            const file = await fetchFile(primary_path ?? path);
+            const file = await getFile(primary_path ?? path);
             setPreviewFile(file);
         } finally {
             await handleCallbacks();
@@ -310,6 +310,7 @@ export function FilePreviewProvider({children}) {
             const lowerPath = path.toLowerCase();
             const url = getMediaPathURL(previewFile);
             const downloadURL = getDownloadPathURL(previewFile);
+
             if (mimetype.startsWith('text/') && size > MAXIMUM_TEXT_SIZE) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
@@ -335,6 +336,14 @@ export function FilePreviewProvider({children}) {
             } else {
                 // No special handler for this file type, just open it.
                 setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path, taggable);
+            }
+
+            // Fetch the file so `FileGroup.viewed` is set.
+            try {
+                getFile(path);
+            } catch (e) {
+                console.error(e);
+                console.error('Failed to get file to set FileGroup.viewed');
             }
         }
     }, [previewFile]);

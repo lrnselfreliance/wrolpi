@@ -1,12 +1,10 @@
 import asyncio
 import contextlib
-import hashlib
 import inspect
 import logging
 import multiprocessing
 import os
 import pathlib
-import re
 import tempfile
 import traceback
 import xml.etree.ElementTree as ET
@@ -29,10 +27,10 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
-from wrolpi.cmd import which
+from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
-    wrol_mode_enabled, background_task, get_wrolpi_config, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name
+    wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
+    get_download_info, trim_file_name, get_wrolpi_config
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
@@ -300,61 +298,19 @@ class Downloader:
     def already_downloaded(self, *urls: List[str], session: Session = None):
         raise NotImplementedError()
 
-    async def process_runner(self, download_id: int, url: str, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
-                             timeout: int = None, **kwargs) -> Tuple[int, dict, bytes]:
+    async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
+                             timeout: int = None) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
         """
-        str_cmd = " ".join([str(i) for i in cmd])
-        logger.info(f'{self} launching download process with args: {str_cmd}')
-        start = now()
-        # Use temporary files to prevent truncating of stdout/stderr.
-        with tempfile.NamedTemporaryFile() as stdout_file, tempfile.NamedTemporaryFile() as stderr_file:
-            stdout_file, stderr_file = pathlib.Path(stdout_file.name), pathlib.Path(stderr_file.name)
-            with stdout_file.open('wb') as stdout_fh, stderr_file.open('wb') as stderr_fh:
-                # stdout/stderr is written to real files.
-                proc = await asyncio.create_subprocess_exec(*cmd,
-                                                            stdout=stdout_fh,
-                                                            stderr=stderr_fh,
-                                                            cwd=cwd,
-                                                            **kwargs)
-                pid = proc.pid
+        if cwd and not cwd.is_dir():
+            raise RuntimeError('cwd directory does not exist')
 
-                # Timeout can be any positive integer.  Global download timeout takes precedence, unless it is 0.
-                # A timeout of 0 means the download will never be killed.
-                timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
-                logger.debug(f'{self} launched download process {pid=} {timeout=} for {url}')
-
-                while True:
-                    # Calculate the seconds since the process started.
-                    elapsed = int((now() - start).total_seconds())
-
-                    # Check if the cancel event is set or if the timeout is reached
-                    if download_manager.download_is_killed(download_id):
-                        logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed.')
-                        proc.kill()
-                        await proc.wait()
-                        break
-                    if timeout and elapsed > timeout:
-                        # TODO this logic should be handled by the Download Manager.
-                        download_manager.kill_download(download_id)
-                        continue
-
-                    try:
-                        # Wait for the process to finish.
-                        await asyncio.wait_for(proc.wait(), timeout=1)
-                        break
-                    except TimeoutError:
-                        # Subprocess has not yet finished, loop again and wait for it to finish.
-                        continue
-
-            # Read stdout/stderr files.
-            stdout, stderr = stdout_file.read_bytes(), stderr_file.read_bytes()
-            stdout_len, stderr_len = len(stdout) if stdout else 0, len(stderr) if stderr else 0
-            logger.debug(f'Download exited with {proc.returncode} and stdout={stdout_len} stderr={stderr_len}')
-            return proc.returncode, dict(stdout=stdout, stderr=stderr), stdout
+        timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
+        coro = run_command(cmd, cwd=cwd, timeout=timeout)
+        return await self.cancel_wrapper(coro, download)
 
     @staticmethod
     async def cancel_wrapper(coro: Coroutine, download: Download):
@@ -404,8 +360,8 @@ class Downloader:
 
         return None
 
-    async def download_file(self, download_id: int, url: str, destination: pathlib.Path, check_for_meta4: bool = True,
-                            check_for_md5: bool = True) -> pathlib.Path:
+    async def download_file(self, download: Download, url: str, destination: pathlib.Path, check_for_meta4: bool = True) \
+            -> pathlib.Path:
         from wrolpi.files.lib import glob_shared_stem
 
         if not ARIA2C_PATH:
@@ -439,18 +395,11 @@ class Downloader:
                            '-M', meta4_path,
                            )
 
-                return_code, logs, stdout = await self.process_runner(
-                    download_id,
-                    url,  # Log the original URL.
-                    cmd,
-                    destination,
-                )
+                result = await self.process_runner(download, cmd, destination)
+                error = result.stderr.decode()
 
-                error = logs.get('stderr') or logs.get('stdout')
-                error = error.decode() if error else error
-
-                if return_code != 0:
-                    raise DownloadError(f'{error}\n\nFileDownloader failed with return code {return_code}')
+                if result.return_code != 0:
+                    raise DownloadError(f'{error}\n\nFileDownloader failed with return code {result.return_code}')
 
                 if not output_path.is_file():
                     raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')

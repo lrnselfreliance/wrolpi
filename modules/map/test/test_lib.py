@@ -22,7 +22,7 @@ def test_get_map_paths(test_directory, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_run_import_command(test_directory, mock_create_subprocess_shell):
+async def test_run_import_command(test_directory, mock_run_command, run_command_bad_result):
     """
     Import map files.  Files to import are checked for validity before importing.  Any errors returned by
     asyncio.create_subprocess_shell are caught and reported.
@@ -38,22 +38,14 @@ async def test_run_import_command(test_directory, mock_create_subprocess_shell):
     dump_file = test_directory / 'dumpy.dump'
     dump_file.touch()
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio, \
-            mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
+    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
         # Run the import, it succeeds.
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(
-            communicate_return=(b'out', b'error')
-        )
         mock_is_pbf_file.return_value = True
         await lib.run_import_command(pbf_file)
 
-    with mock.patch('modules.map.lib.asyncio') as mock_asyncio, \
-            mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
+    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
         # Run the import, it fails.
-        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(
-            communicate_return=(b'out', b'error'),
-            return_code=1,
-        )
+        mock_run_command(run_command_bad_result)
         mock_is_pbf_file.return_value = True
         with pytest.raises(ValueError):
             await lib.run_import_command(pbf_file)
@@ -102,7 +94,7 @@ def test_seconds_to_import_rpi5(size, expected):
     assert lib.seconds_to_import(size, True) == expected
 
 
-def test_get_custom_map_directory(test_directory, test_wrolpi_config):
+def test_get_custom_map_directory(async_client, test_directory, test_wrolpi_config):
     """Custom directory can be used for map directory."""
     # Default location.
     assert lib.get_map_directory() == (test_directory / 'map')

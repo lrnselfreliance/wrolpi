@@ -1,5 +1,4 @@
 import pathlib
-import pathlib
 import traceback
 from abc import ABC
 
@@ -52,7 +51,7 @@ class FileDownloader(Downloader, ABC):
 
         output_path = None
         try:
-            output_path = await self.download_file(download.id, download.url, destination)
+            output_path = await self.download_file(download, download.url, destination)
             fg = await upsert_file(output_path, tag_names=download.tag_names)
             location = fg.location
             return DownloadResult(

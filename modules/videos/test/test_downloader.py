@@ -296,10 +296,10 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
         await video_download_manager.wait_for_all_downloads()
 
         mock_video_process_runner.assert_called_once()
-        download_id, video_url, _, out_dir = mock_video_process_runner.call_args[0]
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     download: Download = test_session.query(Download).one()
-    assert video_url == download.url
+    assert download.url in cmd
     assert test_session.query(Channel).one()
 
     video: Video = test_session.query(Video).one()

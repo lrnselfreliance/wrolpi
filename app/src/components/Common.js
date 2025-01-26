@@ -10,6 +10,8 @@ import {
     Container,
     Dimmer,
     DimmerDimmable,
+    GridColumn,
+    GridRow,
     Icon as SIcon,
     IconGroup,
     Input,
@@ -48,6 +50,7 @@ import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads} from "../api";
 import {allFrequencyOptions, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
     const handlePageChange = (e, {activePage}) => {
@@ -1960,14 +1963,22 @@ export function getDistinctColor(hexColors) {
     return hslToHex(newColor.h, newColor.s, newColor.l);
 }
 
-export const DismissibleMessage = ({storageName, children}) => {
-    const [dismissed, setDismissed] = useLocalStorage(storageName, false);
-
-    if (dismissed) {
-        return <React.Fragment/>
+export const RefreshHeader = ({header, headerSize = 'h2', onRefresh, popupContents}) => {
+    const refreshButton = <APIButton icon='refresh' onClick={onRefresh}/>;
+    let popup;
+    if (popupContents) {
+        popup = <Popup
+            content={popupContents}
+            on='hover'
+            trigger={refreshButton}
+        />;
     }
-
-    return <Message onDismiss={() => setDismissed(true)}>
-        {children}
-    </Message>
+    return <Grid columns={2}>
+        <GridRow>
+            <GridColumn>
+                <Header as={headerSize}>{header}</Header>
+            </GridColumn>
+            <GridColumn textAlign='right'>{popup || refreshButton}</GridColumn>
+        </GridRow>
+    </Grid>
 }

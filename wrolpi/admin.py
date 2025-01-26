@@ -2,7 +2,7 @@ import asyncio
 import enum
 import subprocess
 
-from wrolpi.cmd import NMCLI_BIN, CPUFREQ_INFO_BIN, SUDO_BIN, CPUFREQ_SET_BIN
+from wrolpi.cmd import NMCLI_BIN, CPUFREQ_INFO_BIN, SUDO_BIN, CPUFREQ_SET_BIN, run_command
 from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once, background_task
 from wrolpi.errors import ShutdownFailed
 from wrolpi.events import Events
@@ -203,10 +203,8 @@ async def shutdown(reboot: bool = False, delay: int = 10):
 
         try:
             # Call shutdown (or reboot) with no delay now that we have slept.
-            cmd = f'{SUDO_BIN} shutdown {reboot} 0'
-            proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
-                                                         stdout=asyncio.subprocess.PIPE)
-            stdout, stderr = await proc.communicate()
+            cmd = [SUDO_BIN, 'shutdown', 'reboot', '0']
+            result = await run_command(cmd)
         except subprocess.CalledProcessError as e:
             if reboot:
                 Events.send_shutdown_failed('Reboot failed')
@@ -214,12 +212,12 @@ async def shutdown(reboot: bool = False, delay: int = 10):
                 Events.send_shutdown_failed('Shutdown failed')
             raise ShutdownFailed() from e
 
-        if proc.returncode != 0:
+        if result.return_code != 0:
             if reboot:
                 Events.send_shutdown_failed('Reboot failed')
             else:
                 Events.send_shutdown_failed('Shutdown failed')
-            raise ShutdownFailed(f'Got return code {proc.returncode}')
+            raise ShutdownFailed(f'Got return code {result.return_code}')
 
     background_task(_())
     if reboot:

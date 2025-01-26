@@ -1,9 +1,7 @@
-import asyncio
 import json
 import os
 import pathlib
 import re
-import shlex
 import subprocess
 import tempfile
 from datetime import timedelta
@@ -16,7 +14,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from wrolpi.captions import FFMPEG_BIN
-from wrolpi.cmd import FFPROBE_BIN
+from wrolpi.cmd import FFPROBE_BIN, run_command
 from wrolpi.common import logger, get_media_directory
 from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
@@ -213,28 +211,23 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
         ],
     }
     """
-    cmd = f'{FFPROBE_BIN}' \
-          f' -print_format json' \
-          f' -loglevel quiet' \
-          f' -show_streams' \
-          f' -show_format' \
-          f' -show_chapters' \
-          f' {shlex.quote(str(video_path.absolute()))}'
+    cmd = (FFPROBE_BIN,
+           '-print_format', 'json',
+           '-loglevel', 'quiet',
+           '-show_streams',
+           '-show_format',
+           '-show_chapters',
+           video_path.absolute())
+
+    result = await run_command(cmd, timeout=60)
+
+    if result.return_code != 0:
+        raise RuntimeError(f'Got non-zero exit code: {result.return_code}')
 
     try:
-        proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = await proc.communicate()
+        content = json.loads(result.stdout.decode().strip())
     except Exception as e:
-        logger.error(f'Failed to run ffprobe json', exc_info=e)
-        raise
-
-    if proc.returncode != 0:
-        raise RuntimeError(f'Got non-zero exit code: {proc.returncode}')
-
-    try:
-        content = json.loads(stdout.decode().strip())
-    except Exception as e:
-        logger.debug(stdout.decode())
+        logger.debug(result.stdout.decode())
         logger.error(f'Failed to load ffprobe json', exc_info=e)
         raise
 

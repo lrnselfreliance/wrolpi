@@ -18,6 +18,8 @@ import {
     getStatistics,
     getStatus,
     getVideo,
+    getVideoCaptions,
+    getVideoComments,
     getVideosStatistics,
     postDumpConfig,
     postImportConfig,
@@ -423,6 +425,42 @@ export const useVideo = (videoId) => {
     return {videoFile, prevFile, nextFile, fetchVideo};
 }
 
+export const useVideoExtras = (videoId) => {
+    // Fetches extra data to display on a Video's page.
+    const [comments, setComments] = useState(null);
+    const [captions, setCaptions] = useState(null);
+
+    const fetchComments = async () => {
+        try {
+            const result = await getVideoComments(videoId);
+            setComments(result.comments);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    const fetchCaptions = async () => {
+        try {
+            const result = await getVideoCaptions(videoId);
+            setCaptions(result.captions);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        if (videoId) {
+            fetchComments();
+            fetchCaptions();
+        } else {
+            setComments(null);
+            setCaptions(null);
+        }
+    }, [videoId]);
+
+    return {comments, captions}
+}
+
 export const useChannel = (channel_id) => {
     const emptyChannel = {
         name: '',
@@ -498,6 +536,37 @@ export const useChannels = () => {
     }, []);
 
     return {channels, fetchChannels}
+}
+
+export const useSearchRecentFiles = () => {
+    const [searchFiles, setSearchFiles] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const localSearchFiles = async () => {
+        setLoading(true);
+        try {
+            let [file_groups, total] = await filesSearch(
+                null, 12, null, null, null, [], false,
+                null, null, null, false, 'viewed');
+            setSearchFiles(file_groups);
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get recent files',
+                time: 5000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    React.useEffect(() => {
+        localSearchFiles();
+    }, []);
+
+    return {searchFiles, loading, fetchFiles: localSearchFiles};
 }
 
 export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) => {

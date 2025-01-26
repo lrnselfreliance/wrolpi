@@ -1,5 +1,5 @@
-import asyncio
 import subprocess
+from datetime import timedelta
 from pathlib import Path
 from typing import List
 
@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 from modules.map.models import MapFile
 from wrolpi import flags
 from wrolpi.api_utils import api_app
-from wrolpi.cmd import SUDO_BIN
+from wrolpi.cmd import SUDO_BIN, run_command
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
-from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
+from wrolpi.dates import timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
 from wrolpi.vars import PROJECT_DIR, IS_RPI5
@@ -37,7 +37,7 @@ def is_pbf_file(pbf: Path) -> bool:
 
 
 def is_dump_file(path: Path) -> bool:
-    """Uses file command to check type of a file.  Returns True if a file is a Postgresql dump file."""
+    """Uses file command to check the type of file.  Returns True if a file is a Postgresql dump file."""
     cmd = ('/usr/bin/file', path)
     try:
         output = subprocess.check_output(cmd)
@@ -188,24 +188,22 @@ async def run_import_command(*paths: Path) -> int:
 
     paths = ' '.join(str(i) for i in paths)
     # Run with sudo so renderd can be restarted.
-    cmd = f'{SUDO_BIN} {PROJECT_DIR}/scripts/import_map.sh {paths}'
+    cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', paths)
     import_logger.warning(f'Running map import command: {cmd}')
-    start = now()
-    proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+    result = await run_command(cmd, debug=True)
 
-    stdout, stderr = await proc.communicate()
-    elapsed = now() - start
-    success = 'Successful' if proc.returncode == 0 else 'Unsuccessful'
-    import_logger.info(f'{success} import of {repr(paths)} took {timedelta_to_timestamp(elapsed)}')
-    if proc.returncode != 0:
+    success = 'Successful' if result.return_code == 0 else 'Unsuccessful'
+    import_logger.info(
+        f'{success} import of {repr(paths)} took {timedelta_to_timestamp(timedelta(seconds=result.elapsed))}')
+    if result.return_code != 0:
         # Log all lines.  Truncate long lines.
-        for line in stdout.decode().splitlines():
+        for line in result.stdout.decode().splitlines():
             import_logger.debug(line[:500])
-        for line in stderr.decode().splitlines():
+        for line in result.stderr.decode().splitlines():
             import_logger.error(line[:500])
-        raise ValueError(f'Importing map file failed with return code {proc.returncode}')
+        raise ValueError(f'Importing map file failed with return code {result.return_code}')
 
-    return int(elapsed.total_seconds())
+    return result.elapsed
 
 
 @optional_session

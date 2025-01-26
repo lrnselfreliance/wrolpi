@@ -14,7 +14,7 @@ from wrolpi.errors import APIError, ValidationError, RefreshConflict
 from wrolpi.vars import PYTEST
 from .. import schema
 from ..common import check_for_channel_conflicts
-from ..errors import UnknownChannel, ChannelDirectoryConflict
+from ..errors import UnknownChannel
 from ..lib import save_channels_config
 from ..models import Channel, Video
 

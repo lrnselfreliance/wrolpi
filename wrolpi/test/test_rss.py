@@ -104,7 +104,7 @@ async def test_rss_downloader_filter_titles(test_session):
     rss_downloader = RSSDownloader()
 
     entries = [
-        dict(link='https://example.com/a', title='A'), # Case should be ignored.
+        dict(link='https://example.com/a', title='A'),  # Case should be ignored.
         dict(link='https://example.com/b', title='b'),
         dict(link='https://example.com/c', title='c'),
     ]

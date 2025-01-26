@@ -2,7 +2,6 @@ import json
 import pathlib
 import shutil
 from http import HTTPStatus
-from itertools import zip_longest
 from typing import List
 from uuid import uuid4
 
@@ -14,6 +13,7 @@ from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config, format_videos_destination
 from modules.videos.models import Channel, Video
 from wrolpi.api_utils import api_app
+from wrolpi.cmd import CommandResult
 from wrolpi.downloader import DownloadFrequency, DownloadManager
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.vars import PROJECT_DIR
@@ -208,20 +208,9 @@ def mock_video_prepare_filename():
 @pytest.fixture
 def mock_video_process_runner():
     with mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-        mock_process_runner.return_value = (0, {'stdout': None, 'stderr': None}, None)
+        mock_process_runner.return_value = \
+            CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=0)
         yield mock_process_runner
-
-
-@pytest.fixture
-def assert_video_ids(test_session):
-    """Check that only the expected Videos are in the DB."""
-
-    def checker(expected_video_ids: List[int]):
-        video_ids = [i.id for i in test_session.query(Video).order_by(Video.id)]
-        for id_, expected in zip_longest(video_ids, expected_video_ids):
-            assert id_ == expected, f'Video ids were not as expected: {expected_video_ids=} != {video_ids=}'
-
-    return checker
 
 
 @pytest.fixture

@@ -7,7 +7,9 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
+from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
+from wrolpi.switches import register_switch_handler
 from . import lib, schema
 
 NAME = 'archive'
@@ -29,7 +31,7 @@ async def get_archive(_: Request, archive_id: int):
 
 @archive_bp.delete('/<archive_ids:int>', name='archive_delete_one')
 @archive_bp.delete('/<archive_ids:[0-9,]+>', name='archive_delete_many')
-@openapi.description('Delete an individual archive')
+@openapi.description('Delete Archives')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 async def delete_archive(_: Request, archive_ids: str):
@@ -70,3 +72,38 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
                                              body.headline)
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)
+
+
+@register_switch_handler('singlefile_upload_switch_handler')
+async def singlefile_upload_switch_handler(singlefile):
+    archive = await lib.singlefile_to_archive(singlefile)
+    logger.info(f'Created Archive from upload: {archive}')
+    name = archive.file_group.title or archive.file_group.url
+    Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
+
+
+@archive_bp.get('/upload')
+@openapi.definition(
+    summary='A message to confirm to the user that they have the correct upload URL.'
+)
+async def get_upload_singlefile(request: Request):
+    return response.text('This is the URL to upload files using the SingleFile browser extension.'
+                         ' This requires a POST request.')
+
+
+@archive_bp.post('/upload')
+@openapi.definition(
+    summary='Upload SingleFile from SingleFile browser extension and convert it to an Archive.'
+)
+async def post_upload_singlefile(request: Request):
+    url = request.form['url'][0]
+    singlefile = request.files['singlefile_contents'][0].body
+    logger.info(f'Got Archive upload of {len(singlefile)} bytes for URL: {url}')
+
+    # Get the URL to ensure that the singlefile is valid.
+    lib.get_url_from_singlefile(singlefile)
+
+    # Send processing to background task so the extension can continue.
+    singlefile_upload_switch_handler.activate_switch(dict(singlefile=singlefile))
+    # Return empty json response because SingleFile extension expects a JSON response.
+    return json_response(dict(), status=HTTPStatus.OK)

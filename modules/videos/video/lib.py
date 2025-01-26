@@ -1,14 +1,14 @@
 import asyncio
 import random
 from datetime import timedelta
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, Optional, List
 
 import yt_dlp
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
-from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check
+from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, optional_session
 from wrolpi.downloader import download_manager
@@ -17,7 +17,6 @@ from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
 from ..errors import UnknownVideo
-from ..lib import save_channels_config
 
 logger.getChild(__name__)
 
@@ -36,6 +35,15 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         next_video = next_video.__json__() if next_video and next_video.file_group else None
 
     return video, previous_video, next_video
+
+
+def get_video(video_id: int) -> Video:
+    """
+    Get a Video, with it's prev/next videos.  Mark the Video as viewed.
+    """
+    with get_db_session() as session:
+        video = Video.find_by_id(video_id, session=session)
+        return video
 
 
 VIDEO_ORDERS = {

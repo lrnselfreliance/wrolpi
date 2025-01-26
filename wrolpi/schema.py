@@ -370,4 +370,3 @@ class SearchFileEstimateRequest:
 @dataclass
 class SearchOtherEstimateRequest:
     tag_names: List[str] = field(default_factory=list)
-

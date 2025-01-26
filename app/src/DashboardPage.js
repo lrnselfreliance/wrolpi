@@ -1,4 +1,11 @@
-import {ErrorMessage, LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
+import {
+    ErrorMessage,
+    LoadStatistic,
+    PageContainer,
+    RefreshHeader,
+    SearchResultsInput,
+    useTitle
+} from "./components/Common";
 import React, {useContext, useState} from "react";
 import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
@@ -25,8 +32,8 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
-import {useSearchFilter, useWROLMode} from "./hooks/customHooks";
-import {FileSearchFilterButton} from "./components/Files";
+import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
+import {FileCards, FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 import {useCalculators} from "./components/Calculators";
 import {evaluate} from "mathjs";
@@ -234,6 +241,72 @@ export function Getters() {
     </>
 }
 
+
+function DashboardStatus() {
+    const {status} = useContext(StatusContext);
+
+    let percent = 0;
+    let load = {};
+    let cores = 0;
+    let pending_downloads = '?';
+    if (status && status['cpu_stats']) {
+        percent = status['cpu_stats']['percent'];
+        load = status['load_stats'];
+        cores = status['cpu_stats']['cores'];
+    }
+
+    const {downloads} = status;
+    if (!_.isEmpty(downloads)) {
+        pending_downloads = downloads && downloads['disabled'] ? 'x' : downloads['pending'];
+    }
+
+    let bandwidths = <ProgressPlaceholder/>;
+    if (status && status['nic_bandwidth_stats']) {
+        bandwidths = Object.entries(status['nic_bandwidth_stats'])
+            .map(([name, bandwidth]) => <BandwidthProgressCombined key={name} bandwidth={bandwidth}/>);
+    } else if (window.apiDown) { // apiDown is set in useStatus
+        bandwidths = null;
+    }
+
+    return <Segment>
+        <Link to='/admin/status'>
+            <Header as='h2'>Status</Header>
+            <CPUUsageProgress value={percent} label='CPU Usage'/>
+
+            <StatisticGroup size='mini'>
+                <LoadStatistic label='1 Min. Load' value={load['minute_1']} cores={cores}/>
+                <LoadStatistic label='5 Min. Load' value={load['minute_5']} cores={cores}/>
+                <LoadStatistic label='15 Min. Load' value={load['minute_15']} cores={cores}/>
+            </StatisticGroup>
+
+            <Header as='h3'>Bandwidth</Header>
+            {bandwidths}
+        </Link>
+
+        <Divider style={{marginTop: '3em'}}/>
+
+        <Link to='/admin'>
+            <StatisticGroup size='mini'>
+                <Statistic label='Downloading' value={pending_downloads}/>
+            </StatisticGroup>
+        </Link>
+
+    </Segment>;
+}
+
+function DashboardRecentFiles() {
+    const {searchFiles, loading, fetchFiles} = useSearchRecentFiles();
+
+    return <Segment>
+        <RefreshHeader
+            header='Recently Viewed Files'
+            popupContents='Fetch the most recent files again'
+            onRefresh={fetchFiles}
+        />
+        <FileCards files={searchFiles} loading={loading}/>
+    </Segment>
+}
+
 export function DashboardPage() {
     const navigate = useNavigate();
 
@@ -284,6 +357,7 @@ export function DashboardPage() {
         <TagsDashboard/>
         <DashboardStatus/>
         <DashboardCalculators/>
+        <DashboardRecentFiles/>
     </React.Fragment>;
     if (searchStr || (activeTags && activeTags.length > 0)) {
         // User has submitted and wants full search.
@@ -370,56 +444,4 @@ export function DashboardPage() {
         {!searchStr && <FlagsMessages/>}
         {body}
     </PageContainer>
-}
-
-function DashboardStatus() {
-    const {status} = useContext(StatusContext);
-
-    let percent = 0;
-    let load = {};
-    let cores = 0;
-    let pending_downloads = '?';
-    if (status && status['cpu_stats']) {
-        percent = status['cpu_stats']['percent'];
-        load = status['load_stats'];
-        cores = status['cpu_stats']['cores'];
-    }
-
-    const {downloads} = status;
-    if (!_.isEmpty(downloads)) {
-        pending_downloads = downloads && downloads['disabled'] ? 'x' : downloads['pending'];
-    }
-
-    let bandwidths = <ProgressPlaceholder/>;
-    if (status && status['nic_bandwidth_stats']) {
-        bandwidths = Object.entries(status['nic_bandwidth_stats'])
-            .map(([name, bandwidth]) => <BandwidthProgressCombined key={name} bandwidth={bandwidth}/>);
-    } else if (window.apiDown) { // apiDown is set in useStatus
-        bandwidths = null;
-    }
-
-    return <Segment>
-        <Link to='/admin/status'>
-            <Header as='h2'>Status</Header>
-            <CPUUsageProgress value={percent} label='CPU Usage'/>
-
-            <StatisticGroup size='mini'>
-                <LoadStatistic label='1 Min. Load' value={load['minute_1']} cores={cores}/>
-                <LoadStatistic label='5 Min. Load' value={load['minute_5']} cores={cores}/>
-                <LoadStatistic label='15 Min. Load' value={load['minute_15']} cores={cores}/>
-            </StatisticGroup>
-
-            <Header as='h3'>Bandwidth</Header>
-            {bandwidths}
-        </Link>
-
-        <Divider style={{marginTop: '3em'}}/>
-
-        <Link to='/admin'>
-            <StatisticGroup size='mini'>
-                <Statistic label='Downloading' value={pending_downloads}/>
-            </StatisticGroup>
-        </Link>
-
-    </Segment>;
 }

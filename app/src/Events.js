@@ -92,6 +92,15 @@ function handleEvents(events) {
             eventToast('Config Save Failed', message, 'error');
         }
 
+        if (event === 'upload_archive') {
+            eventToast(
+                'Archive Uploaded',
+                message,
+                'success',
+                5000,
+                () => window.open(url, '_self'));
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

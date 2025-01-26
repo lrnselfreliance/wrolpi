@@ -15,6 +15,7 @@ from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
+from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
     register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate
 from wrolpi.db import get_db_session, optional_session, get_db_curs
@@ -471,13 +472,12 @@ async def check_zim(path: pathlib.Path) -> int:
 
     @warning: Only performs the checksum check!
     """
-    cmd = f'zimcheck -C {path.absolute()}'
-    proc = await asyncio.create_subprocess_shell(cmd)
-    stdout, stderr = await proc.communicate()
-    logger.debug(f'zimcheck returned {proc.returncode}')
-    if proc.returncode != 0 and stderr:
-        logger.debug(stderr)
-    return proc.returncode
+    cmd = ['zimcheck', '-C', path.absolute()]
+    result = await run_command(cmd)
+    logger.debug(f'zimcheck returned {result.return_code}')
+    if result.return_code != 0 and result.stderr:
+        logger.debug(result.stderr)
+    return result.return_code
 
 
 ZIM_NAME_PARSER = re.compile(r'(.+?)_(\d{4}-\d{2}).zim')
@@ -566,10 +566,9 @@ async def restart_kiwix():
 
     logger.info('Restarting Kiwix serve')
 
-    cmd = f'sudo /usr/bin/systemctl restart wrolpi-kiwix.service'
-    proc = await asyncio.create_subprocess_shell(cmd)
-    stdout, stderr = await proc.communicate()
-    logger.debug(f'systemctl returned {proc.returncode}')
-    if proc.returncode != 0 and stderr:
-        logger.debug(stderr)
-    return proc.returncode
+    cmd = ('sudo', '/usr/bin/systemctl', 'restart' 'wrolpi-kiwix.service')
+    result = await run_command(cmd)
+    logger.debug(f'systemctl returned {result.return_code}')
+    if result.return_code != 0 and result.stderr:
+        logger.debug(result.stderr)
+    return result.return_code

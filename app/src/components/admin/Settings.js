@@ -12,15 +12,15 @@ import {
     Modal,
     ModalContent,
     ModalHeader,
-    Popup,
     Segment
 } from "../Theme";
 import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
 import {
     APIButton,
     ErrorMessage,
-    InfoPopup,
     HotspotToggle,
+    InfoPopup,
+    RefreshHeader,
     ThrottleToggle,
     Toggle,
     useMessageDismissal,
@@ -489,16 +489,6 @@ export function SettingsPage() {
         body = <ErrorMessage>Unable to fetch settings</ErrorMessage>
     }
 
-    const refreshButton = <APIButton
-        icon='refresh'
-        onClick={fetchConfigs}
-    />;
-    const refreshPopupButton = <Popup
-        content='Check if configs are valid'
-        on='hover'
-        trigger={refreshButton}
-    />;
-
     const controlSegment = <Segment>
         <Header as='h3'>Control WROLPi</Header>
         <HotspotToggle/>
@@ -509,14 +499,11 @@ export function SettingsPage() {
     </Segment>;
 
     const configsSegment = <Segment>
-        <Grid columns={2}>
-            <GridRow>
-                <GridColumn>
-                    <Header as='h2'>Configs</Header>
-                </GridColumn>
-                <GridColumn textAlign='right'>{refreshPopupButton}</GridColumn>
-            </GridRow>
-        </Grid>
+        <RefreshHeader
+            header='Refresh'
+            popupContents='Check if configs are valid'
+            onRefresh={fetchConfigs}
+        />
 
         <p>These configs control this WROLPi; they are the source of truth. Any changes to configs will be applied to
             the database when imported (typically at startup).</p>

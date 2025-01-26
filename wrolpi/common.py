@@ -1732,6 +1732,15 @@ async def cancel_background_tasks():
             await asyncio.gather(*BACKGROUND_TASKS)
 
 
+async def await_background_tasks():
+    """Awaits all background tasks, used only for testing."""
+    if not PYTEST:
+        raise RuntimeError('await_background_tasks should only be used for testing')
+
+    for background_task in BACKGROUND_TASKS.copy():
+        await background_task
+
+
 def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
     """Create a function that will report an error only once.
 
@@ -1985,7 +1994,7 @@ def format_json_file(file: pathlib.Path, indent: int = 2):
     replace_file(file, content)
 
 
-def format_html_string(html: str) -> str:
+def format_html_string(html: str | bytes) -> str:
     if not html.strip():
         raise RuntimeError('Refusing to format empty HTMl string.')
 

@@ -74,7 +74,7 @@ class KiwixZimDownloader(Downloader):
         zim_directory = lib.get_zim_directory()
         zim_directory.mkdir(parents=True, exist_ok=True)
 
-        output_path = await self.download_file(download.id, download.url, zim_directory)
+        output_path = await self.download_file(download, download.url, zim_directory)
 
         # Notify the maintainer if outdated Zim files are lying around.
         lib.flag_outdated_zim_files()

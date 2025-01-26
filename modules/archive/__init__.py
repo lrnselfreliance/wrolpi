@@ -1,18 +1,15 @@
 import asyncio
 import json
 import pathlib
-import tempfile
 from abc import ABC
-from json import JSONDecodeError
 from typing import List, Tuple, Iterable
 
-from selenium import webdriver
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import READABILITY_BIN, SINGLE_FILE_BIN, CHROMIUM
+from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
-    slow_logger, html_screenshot, get_title_from_html
+    slow_logger, get_title_from_html
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -38,6 +35,11 @@ class ArchiveDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<ArchiveDownloader>'
 
+    @optional_session
+    def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
+        file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
+        return file_groups
+
     async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
@@ -45,12 +47,13 @@ class ArchiveDownloader(Downloader, ABC):
         if DOCKERIZED or PYTEST:
             # Perform the archive in the Archive docker container.  (Typically in the development environment).
             singlefile, readability, screenshot = await request_archive(download.url)
+            archive: Archive = await lib.model_archive_result(download.url, singlefile, readability, screenshot)
+            archive_id = archive.id
         else:
             # Perform the archive using locally installed executables.
-            singlefile, readability, screenshot = await self.do_archive(download)
-
-        archive: Archive = await lib.model_archive_result(download.url, singlefile, readability, screenshot)
-        archive_id = archive.id
+            singlefile = await self.do_singlefile(download)
+            archive = await lib.singlefile_to_archive(singlefile)
+            archive_id = archive.id
 
         with get_db_session() as session:
             archive = Archive.find_by_id(archive_id, session)
@@ -67,12 +70,7 @@ class ArchiveDownloader(Downloader, ABC):
 
             return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
-    @optional_session
-    def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
-        file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
-        return file_groups
-
-    async def do_singlefile(self, download: Download) -> Tuple[bytes, dict]:
+    async def do_singlefile(self, download: Download) -> bytes:
         """Create a Singlefile from the archive's URL."""
         cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
                str(SINGLE_FILE_BIN),
@@ -83,115 +81,26 @@ class ArchiveDownloader(Downloader, ABC):
                '--load-deferred-images-dispatch-scroll-event',
                download.url,
                )
-        return_code, logs, stdout = await self.process_runner(
-            download.id,
-            download.url,
-            cmd,
-            pathlib.Path('/home/wrolpi'),
-        )
+        cwd = pathlib.Path('/home/wrolpi')
+        cwd = cwd if cwd.is_dir() else None
+        result = await self.process_runner(download, cmd, cwd)
 
-        stderr = logs['stderr'].decode()
-        log_output = stderr or stdout.decode() or 'No stderr or stdout!'
+        stderr = result.stderr.decode()
+        log_output = stderr or result.stdout.decode() or 'No stderr or stdout!'
 
-        if return_code != 0:
+        if result.return_code != 0:
             e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'singlefile exited with {return_code}') from e
+            raise RuntimeError(f'singlefile exited with {result.return_code}') from e
 
-        if not stdout:
+        if not result.stdout:
             e = ChildProcessError(log_output[:1000])
             raise RuntimeError(f'Singlefile created was empty: {download.url}') from e
 
-        if SINGLEFILE_HEADER.encode() not in stdout:
+        if SINGLEFILE_HEADER.encode() not in result.stdout:
             e = ChildProcessError(log_output[:1000])
             raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
 
-        return stdout, logs
-
-    async def do_readability(self, download: Download, html: bytes) -> dict:
-        """Extract the readability dict from the provided HTML."""
-        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
-            fh.write(html)
-
-            cmd = (READABILITY_BIN, fh.name, download.url)
-            logger.debug(f'readability cmd: {cmd}')
-            return_code, logs, stdout = await self.process_runner(
-                download.id,
-                download.url,
-                cmd,
-                pathlib.Path('/home/wrolpi'),
-            )
-            if return_code == 0:
-                if not stdout:
-                    raise RuntimeError('readability stdout was empty')
-                try:
-                    readability = json.loads(stdout)
-                except TypeError or JSONDecodeError:
-                    # JSON was invalid.
-                    e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
-                    if logs and (stderr := logs.get('stderr')):
-                        e = ChildProcessError(stderr.decode())
-                    raise RuntimeError(f'Failed to extract readability from {download.url}') from e
-                logger.debug(f'done readability for {download.url}')
-                return readability
-            else:
-                logger.error(f'Failed to extract readability for {download.url}')
-                e = ChildProcessError(stdout.decode() if stdout else 'No stdout')
-                if logs and (stderr := logs.get('stderr')):
-                    e = ChildProcessError(stderr.decode())
-                raise RuntimeError(f'Failed to extract readability for {download.url} got {return_code}') from e
-
-    @staticmethod
-    async def do_screenshot_url(download: Download) -> bytes:
-        """Use Chromium to get a screenshot of the Download's URL."""
-        # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of
-        # the page.
-        options = webdriver.ChromeOptions()
-        options.add_argument('headless')
-        options.add_argument('disable-gpu')
-        options.add_argument('window-size=1280x720')
-
-        driver = webdriver.Chrome(chrome_options=options)
-        driver.get(download.url)
-        screenshot = driver.get_screenshot_as_png()
-        return screenshot
-
-    async def do_archive(self, download: Download) -> Tuple[bytes, dict, bytes]:
-        """Use locally installed executables to create an Archive.
-
-        Creates a Singlefile, readability file, and screenshot file.
-
-        @warning: Will not raise errors if readability or screenshot cannot be extracted.
-        """
-        singlefile, logs = await self.do_singlefile(download)
-
-        # Extract Readability from the Singlefile.
-        try:
-            readability = await self.do_readability(download, singlefile)
-        except RuntimeError:
-            # Readability is not required.
-            readability = None
-
-        screenshot = b''
-        try:
-            # Screenshot the Singlefile first.
-            screenshot = html_screenshot(singlefile)
-        except Exception as e:
-            logger.error(f'Failed to screenshot file for {download.url}', exc_info=e)
-
-        if not screenshot:
-            # Screenshot of singlefile failed.  Download the URL again.
-            try:
-                screenshot = await self.do_screenshot_url(download)
-            except Exception as e:
-                # Screenshot failed.
-                logger.error(f'Failed to screenshot {download.url}', exc_info=e)
-
-        singlefile_len = len(singlefile) if singlefile else None
-        readability_len = len(readability) if readability else None
-        screenshot_len = len(screenshot) if screenshot else None
-        logger.debug(f'do_archive of {download.url} finished: {singlefile_len=} {readability_len=} {screenshot_len=}')
-
-        return singlefile, readability, screenshot
+        return result.stdout
 
 
 archive_downloader = ArchiveDownloader()
@@ -258,7 +167,7 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         archive.validate()
         archive.flush()
 
-        file_group.title = file_group.a_text = title
+        file_group.title = file_group.a_text = title or archive.file_group.title
         file_group.d_text = contents
         file_group.data = {
             'id': archive.id,

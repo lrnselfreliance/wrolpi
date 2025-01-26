@@ -1,10 +1,16 @@
 """Paths for third-party commands that WROLPi may require."""
+import asyncio
+import dataclasses
 import os
+import pathlib
 import shutil
+import tempfile
+from asyncio import CancelledError
 from pathlib import Path
+from time import time
 from typing import Optional
 
-from wrolpi.common import logger
+from wrolpi.common import logger, TRACE_LEVEL
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -86,3 +92,86 @@ YT_DLP_BIN = which(
 FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe')
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')
 JC_BIN = which('jc', '/usr/bin/jc')
+
+
+@dataclasses.dataclass
+class CommandResult:
+    return_code: int
+    cancelled: bool
+    stdout: bytes
+    stderr: bytes
+    elapsed: int
+    pid: int = None
+
+
+TESTING_RUN_COMMAND_RESULT = None
+
+
+async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
+                      timeout: int = 600, debug: bool = False) -> CommandResult:
+    """Run a shell command, return the results (stdout/stderr/return code).
+
+    :param debug: Enable debug logging (disabled by default because this is used by very frequent commands).
+    """
+    if not isinstance(cmd, (list, tuple)):
+        raise RuntimeError('Command must be a list or tuple')
+
+    if PYTEST and TESTING_RUN_COMMAND_RESULT:
+        logger.debug('run_command: returning mock result')
+        return TESTING_RUN_COMMAND_RESULT()  # call the mock
+
+    with tempfile.NamedTemporaryFile() as stdout_fh, tempfile.NamedTemporaryFile() as stderr_fh:
+        stdout_file, stderr_file = pathlib.Path(stdout_fh.name), pathlib.Path(stderr_fh.name)
+        cmd = tuple(str(i) for i in cmd)
+        if debug:
+            logger.debug(f'run_command: running ({timeout=}): {cmd=}')
+        elif logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'run_command: running ({timeout=}): {cmd=}')
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=stdout_fh,  # Use stdout/stderr files to avoid buffer filling up.
+            stderr=stderr_fh,
+            cwd=cwd,
+        )
+        pid = proc.pid
+
+        cancelled = False
+        start = time()
+        try:
+            while True:
+                elapsed = int(time() - start)
+                if timeout and elapsed >= timeout:
+                    logger.warning(f'run_command: timeout exceeded, killing... {cmd=}')
+                    proc.kill()
+                    await proc.wait()
+                    break
+
+                try:
+                    # Wait for the process to finish.
+                    await asyncio.wait_for(proc.wait(), timeout=1)
+                    break
+                except asyncio.TimeoutError:
+                    # Task is not done, keep waiting...
+                    continue
+        except CancelledError as e:
+            logger.warning(f'run_command: cancelled, killing... {cmd=}', exc_info=e)
+            cancelled = True
+            proc.kill()
+            await proc.wait()
+
+        elapsed = int(time() - start)
+        stdout = stdout_file.read_bytes() or b''
+        stderr = stderr_file.read_bytes() or b''
+        # Logs details of the call, but only if it took a long time or TRACE is enabled.
+        if debug:
+            logger.debug(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd=}')
+        elif logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd=}')
+        return CommandResult(
+            return_code=proc.returncode,
+            cancelled=cancelled,
+            stdout=stdout,
+            stderr=stderr,
+            elapsed=elapsed,
+            pid=pid,
+        )

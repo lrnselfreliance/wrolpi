@@ -1,7 +1,6 @@
 import asyncio
 import json
 import pathlib
-import tempfile
 from abc import ABC
 from datetime import datetime
 from http import HTTPStatus
@@ -303,26 +302,26 @@ async def test_process_runner_timeout(async_client, test_session, test_directory
 
     # Sleep for 8 seconds really takes 8 seconds.
     start = datetime.now()
-    await downloader.process_runner(1, 'https://example.com', ('sleep', '8'), test_directory, timeout=10)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory, timeout=10)
     elapsed = datetime.now() - start
     assert elapsed.total_seconds() >= 8
 
-    # Default timeout is obeyed.
+    # Download.timeout is obeyed.
     start = datetime.now()
-    await downloader.process_runner(1, 'https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 3 < elapsed.total_seconds() < 5
 
     # One-off timeout is obeyed.
     start = datetime.now()
-    await downloader.process_runner(2, 'https://example.com', ('sleep', '8'), test_directory, timeout=1)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory, timeout=1)
     elapsed = datetime.now() - start
     assert 1 < elapsed.total_seconds() < 3
 
     # Global timeout is obeyed.
     get_wrolpi_config().download_timeout = 3
     start = datetime.now()
-    await downloader.process_runner(3, 'https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 5
 
@@ -341,34 +340,30 @@ exit 123
 
 @pytest.mark.asyncio
 async def test_process_runner_output(async_client, test_directory, test_downloader):
-    with tempfile.TemporaryDirectory() as directory:
-        directory = pathlib.Path(directory)
-        script = directory / 'echo_script.sh'
-        script.write_text(GOOD_SCRIPT)
-        cmd = ('/bin/bash', script)
-        return_code, logs, stdout = await test_downloader.process_runner(
-            1,
-            'https://example.com',
-            cmd,
-            directory,
-            timeout=1
-        )
-        assert return_code == 0
-        assert logs['stdout'] == b'standard output\n'
-        assert logs['stderr'] == b'standard error\n'
+    script = test_directory / 'echo_script.sh'
+    script.write_text(GOOD_SCRIPT)
+    cmd = ('/bin/bash', script)
+    result = await test_downloader.process_runner(
+        Download(),
+        cmd,
+        test_directory,
+        timeout=1
+    )
+    assert result.return_code == 0
+    assert result.stdout == b'standard output\n'
+    assert result.stderr == b'standard error\n'
 
-        script.write_text(BAD_SCRIPT)
-        cmd = ('/bin/bash', script)
-        return_code, logs, stdout = await test_downloader.process_runner(
-            1,
-            'https://example.com',
-            cmd,
-            directory,
-            timeout=1
-        )
-        assert return_code == 123
-        assert logs['stdout'] == b'bad standard output\n'
-        assert logs['stderr'] == b'bad standard error\n'
+    script.write_text(BAD_SCRIPT)
+    cmd = ('/bin/bash', script)
+    result = await test_downloader.process_runner(
+        Download(),
+        cmd,
+        test_directory,
+        timeout=1
+    )
+    assert result.return_code == 123
+    assert result.stdout == b'bad standard output\n'
+    assert result.stderr == b'bad standard error\n'
 
 
 @pytest.mark.asyncio

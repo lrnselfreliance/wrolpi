@@ -90,6 +90,18 @@ def get_file_dict(file: str) -> Dict:
     return _get_file_dict(media_directory / file)
 
 
+@optional_session
+async def set_file_viewed(file: pathlib.Path, session: Session = None):
+    """Change FileGroup.viewed to the current datetime."""
+    try:
+        fg = FileGroup.find_by_path(file, session)
+    except UnknownFile:
+        fg = FileGroup.from_paths(session, file)
+        fg.do_model(session)
+    fg.set_viewed()
+    session.commit()
+
+
 @cachetools.func.ttl_cache(10_000, 30.0)
 def _get_directory_dict(directory: pathlib.Path,
                         directories_cache: str,  # Used to cache by requested directories.
@@ -774,7 +786,7 @@ async def search_directories_by_name(name: str, excluded: List[str] = None, limi
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
-                 from_year: int = None, to_year: int = None, any_tag: bool = False) -> \
+                 from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -792,6 +804,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param tag_names: A list of tag names.
     @param headline: Includes Postgresql headline if True.
     @param months: A list of integers representing the index of the month of the year, starting at 1.
+    @param order: Used to change results from most relevant to recently viewed.
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -822,6 +835,15 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
            ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
     else:
         headline = ''
+
+    if order == 'viewed':
+        order_by = 'viewed DESC NULLS LAST, 1 ASC'
+    elif order == '-viewed':
+        order_by = 'viewed ASC NULLS LAST, 1 ASC'
+
+    if order and not search_str:
+        # Only filter out unviewed files if search_str is not provided.
+        wheres.append('viewed IS NOT NULL')
 
     wheres = '\n AND '.join(wheres)
     selects = f"{', '.join(selects)}, " if selects else ""

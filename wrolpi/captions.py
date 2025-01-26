@@ -60,7 +60,7 @@ def read_captions(caption_path: Path):
     logger.debug(f'Failed to parse caption file {caption_path}')
 
 
-def extract_captions(path: pathlib.Path) -> Optional[str]:
+def extract_captions(path: pathlib.Path) -> str | None:
     """Extract captions that are embedded in a video file."""
     with tempfile.TemporaryDirectory() as directory:
         directory = pathlib.Path(directory)
@@ -80,4 +80,4 @@ def extract_captions(path: pathlib.Path) -> Optional[str]:
             return captions
 
     # No captions could be extracted.
-    return
+    return None

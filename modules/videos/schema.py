@@ -156,6 +156,16 @@ class VideoResponse:
 
 
 @dataclass
+class VideoCommentsResponse:
+    comments: list[dict]
+
+
+@dataclass
+class VideoCaptionsResponse:
+    captions: str
+
+
+@dataclass
 class VideoSearchRequest:
     search_str: Optional[str] = None
     tags: List[str] = field(default_factory=list)

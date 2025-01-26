@@ -34,8 +34,9 @@ from sqlalchemy.orm import Session, sessionmaker
 import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
+from wrolpi.cmd import CommandResult
 from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL
-from wrolpi.common import logger
+from wrolpi.common import logger, await_background_tasks as await_background_tasks_
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
@@ -200,6 +201,13 @@ async def await_switches(async_client):
     """Returns the `switches.await_switches` function, but primes the Sanic App to actually handle signals."""
     await async_client.get('/api')
     return await_switches_
+
+
+@pytest.fixture
+async def await_background_tasks(async_client):
+    """Returns the `switches.await_switches` function, but primes the Sanic App to actually handle signals."""
+    await async_client.get('/api')
+    return await_background_tasks_
 
 
 @pytest.fixture
@@ -494,6 +502,32 @@ def mock_create_subprocess_shell() -> Callable:
         return create_subprocess_shell
 
     return mocker
+
+
+@pytest.fixture
+def mock_run_command():
+    """Mock wrolpi.cmd's `run_command` using `TESTING_RUN_COMMAND_RESULT`."""
+    default = CommandResult(
+        return_code=0,
+        cancelled=False,
+        stdout=b'mock_run_command fixture stdout',
+        stderr=b'mock_run_command fixture stderr',
+        elapsed=0,
+        pid=123,
+    )
+
+    with mock.patch('wrolpi.cmd.TESTING_RUN_COMMAND_RESULT') as mock_TESTING_RUN_COMMAND_RESULT:
+        mock_TESTING_RUN_COMMAND_RESULT.return_value = default
+
+        def do_mock(new_result):
+            mock_TESTING_RUN_COMMAND_RESULT.return_value = new_result
+
+        yield do_mock
+
+
+@pytest.fixture
+def run_command_bad_result() -> CommandResult:
+    return CommandResult(1, False, b'run_command_bad_result stdout', b'run_command_bad_result stderr', 0, 123)
 
 
 @pytest.fixture

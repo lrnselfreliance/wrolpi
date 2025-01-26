@@ -28,6 +28,24 @@ def video_get(_: Request, video_id: int):
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 
+@video_bp.get('/video/<video_id:int>/comments')
+@openapi.description('Get Video comments')
+@openapi.response(HTTPStatus.OK, schema.VideoCommentsResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+def video_get_comments(_: Request, video_id: int):
+    video = lib.get_video(video_id)
+    return json_response({'comments': video.get_comments()})
+
+
+@video_bp.get('/video/<video_id:int>/captions')
+@openapi.description('Get Video captions')
+@openapi.response(HTTPStatus.OK, schema.VideoCaptionsResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+def video_get_captions(_: Request, video_id: int):
+    video = lib.get_video(video_id)
+    return json_response({'captions': video.file_group.d_text})
+
+
 @video_bp.post('/search')
 @openapi.definition(
     summary='Search Video titles and captions',

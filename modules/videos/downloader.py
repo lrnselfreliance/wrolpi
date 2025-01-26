@@ -416,13 +416,12 @@ class VideoDownloader(Downloader, ABC):
                 '-o', video_path,
                 url,
             )
-            return_code, logs, _ = await self.process_runner(download_id, url, cmd, out_dir)
+            result = await self.process_runner(download, cmd, out_dir)
+            stdout = result.stdout.decode()
+            stderr = result.stderr.decode()
 
-            stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
-            stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']
-
-            if return_code != 0:
-                error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {return_code}'
+            if result.return_code != 0:
+                error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {result.return_code}'
                 return DownloadResult(
                     success=False,
                     error=error,

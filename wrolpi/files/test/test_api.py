@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, timezone
 from http import HTTPStatus
 from unittest import mock
 
@@ -158,6 +159,42 @@ async def test_delete_wrol_mode(async_client, wrol_mode_fixture):
     request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert response.json['code'] == 'WROL_MODE_ENABLED'
+
+
+@pytest.mark.asyncio
+async def test_files_search_recent(test_session, test_directory, async_client, video_file_factory):
+    """File search can return the most recently viewed files."""
+    video_file_factory(test_directory / 'foo.mp4'), video_file_factory(test_directory / 'bar.mp4')
+    baz = (test_directory / 'baz.txt')
+    baz.write_text('baz contents')
+    await lib.refresh_files()
+
+    # baz is most recently viewed, foo has not been viewed.
+    bar, baz, foo = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    bar.set_viewed(datetime(2000, 1, 1, 1, 1, 1, tzinfo=timezone.utc))
+    baz.set_viewed(datetime(2000, 1, 1, 1, 1, 2, tzinfo=timezone.utc))
+    test_session.commit()
+
+    # Results match the viewed order.  foo is not viewed.
+    body = dict(order='viewed')
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'], response.json
+    assert [i['name'] for i in response.json['file_groups']] == ['baz.txt', 'bar.mp4']
+
+    # Results match the reverse viewed order.  foo is not viewed.
+    body = dict(order='-viewed')
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'], response.json
+    assert [i['name'] for i in response.json['file_groups']] == ['bar.mp4', 'baz.txt']
+
+    # foo is included because `search_str` has a value.
+    body = dict(search_str='foo', order='viewed')
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'], response.json
+    assert [i['name'] for i in response.json['file_groups']] == ['foo.mp4']
 
 
 def test_files_search(test_session, test_client, make_files_structure, assert_files_search):
@@ -757,7 +794,7 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, async_client, test_directory, make_files_structure):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()
@@ -767,6 +804,13 @@ async def test_get_file(test_session, async_client, test_directory, make_files_s
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']
     assert response.json['file']['path'] == 'foo/bar.txt'
+
+    # Wait for `viewed` to be set in background task.
+    await await_background_tasks()
+
+    fg, = test_session.query(FileGroup).all()
+    assert fg.primary_path == test_directory / 'foo/bar.txt'
+    assert isinstance(fg.viewed, datetime)
 
 
 @pytest.mark.asyncio

@@ -57,7 +57,8 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
 
 
 @pytest.mark.asyncio
-async def test_channel_no_download_frequency(async_client, test_session, test_directory, simple_channel, test_download_manager):
+async def test_channel_no_download_frequency(async_client, test_session, test_directory, simple_channel,
+                                             test_download_manager):
     """A channel does not require a download frequency."""
     # No downloads are scheduled.
     assert len(test_download_manager.get_downloads(test_session)) == 0
@@ -465,7 +466,7 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
     # Create recurring download which uses the Channel's directory.
     download = test_download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
-                                                   destination=str(test_directory / 'videos/Channel Name'))
+                                                        destination=str(test_directory / 'videos/Channel Name'))
     test_session.commit()
     save_channels_config()
     assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Channel Name')

@@ -1,4 +1,3 @@
-import wrolpi
 from wrolpi.db import get_db_session
 from .api import inventory_bp
 from .inventory import logger, DEFAULT_CATEGORIES, DEFAULT_INVENTORIES

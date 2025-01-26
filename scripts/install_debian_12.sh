@@ -14,7 +14,7 @@ node -v
 npm -v
 
 # Install serve, and archiving tools.
-single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@1.1.54 readability-extractor@0.0.6 carto@1.2.0
+single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1.2.0
 
 # Build React app in background job.
 cd /opt/wrolpi/app || exit 5

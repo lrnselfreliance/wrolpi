@@ -14,7 +14,7 @@ from typing import List, Optional, Dict
 import jc
 
 from wrolpi.api_utils import api_app, perpetual_signal
-from wrolpi.cmd import which
+from wrolpi.cmd import which, run_command
 from wrolpi.common import logger, get_warn_once, unique_by_predicate, partition, TRACE_LEVEL
 from wrolpi.dates import now
 
@@ -86,14 +86,11 @@ class IostatInfo:
 
 async def get_iostat_stats() -> IostatInfo:
     try:
-        proc = await asyncio.create_subprocess_shell(
-            'iostat 3 2',  # 3 second interval to gather more data, get 2 count.
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+        result = await run_command(
+            ('iostat', '3', '2'),  # 3 second interval to gather more data, get 2 count.
         )
-        stdout, stderr = await proc.communicate()
-        if stdout and proc.returncode == 0:
-            iostat_stats = jc.parse('iostat', stdout.decode(), quiet=True)
+        if result.stdout and result.return_code == 0:
+            iostat_stats = jc.parse('iostat', result.stdout.decode(), quiet=True)
             if iostat_stats:
                 cpu_statuses, _ = partition(lambda i: i['type'] == 'cpu', iostat_stats)
                 _, cpu_stats = cpu_statuses  # Use the second status because the first is a lie.
@@ -216,21 +213,16 @@ async def get_cpu_stats() -> CPUInfo:
     return info
 
 
-PS_CMD = 'ps aux --sort=-%cpu --cols=512'
-IGNORED_PROCESS_COMMANDS = {PS_CMD, '<defunct>'}
+PS_CMD = ('ps', 'aux', '--sort=-%cpu', '--cols=512')
+IGNORED_PROCESS_COMMANDS = {' '.join(PS_CMD), '<defunct>'}
 
 
 async def get_processes_stats() -> List[ProcessInfo]:
-    proc = await asyncio.create_subprocess_shell(
-        PS_CMD,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+    result = await run_command(PS_CMD)
     # Do not include `ps` in the top processes.
-    ps_pid = proc.pid
-    stdout, stderr = await proc.communicate()
+    ps_pid = result.pid
 
-    ps_info = jc.parse('ps', stdout.decode(), quiet=True)
+    ps_info = jc.parse('ps', result.stdout.decode(), quiet=True)
     processes = sorted(ps_info, key=lambda i: i['cpu_percent'], reverse=True)
     processes = [i for i in processes if i['pid'] != ps_pid
                  and i['cpu_percent'] > 1
@@ -553,15 +545,11 @@ async def get_power_stats() -> PowerStats:
     logger.trace(f'get_power_stats called')
 
     try:
-        proc = await asyncio.create_subprocess_shell(
-            'dmesg',
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if stdout and proc.returncode == 0:
-            under_voltage = b' Undervoltage detected' in stdout
-            over_current = b' over-current change ' in stdout
+        cmd = ('dmesg',)
+        result = await run_command(cmd)
+        if result.stdout and result.return_code == 0:
+            under_voltage = b' Undervoltage detected' in result.stdout
+            over_current = b' over-current change ' in result.stdout
             return PowerStats(
                 under_voltage=under_voltage,
                 over_current=over_current,

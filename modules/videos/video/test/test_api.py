@@ -187,3 +187,23 @@ async def test_wrol_mode(async_client, simple_channel, simple_video, wrol_mode_f
 
     await wrol_mode_fixture(False)
     assert not test_download_manager.stopped.is_set()
+
+
+@pytest.mark.asyncio
+async def test_api_video_extras(async_client, simple_channel, video_factory):
+    """Can fetch extra data about a video (comments/captions)."""
+    info_json = {'duration': 5, 'epoch': 12345, 'comments': [{'some': 'comments'}]}
+    video = video_factory(simple_channel.id, with_info_json=info_json, with_caption_file=True)
+
+    request, response = await async_client.get(f'/api/videos/video/{video.id}/captions')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json.get('captions')
+
+    request, response = await async_client.get(f'/api/videos/video/{video.id}/comments')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json.get('comments')
+
+    request, response = await async_client.get('/api/videos/video/123/captions')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    request, response = await async_client.get('/api/videos/video/123/comments')
+    assert response.status_code == HTTPStatus.NOT_FOUND

@@ -1333,6 +1333,14 @@ export async function zimUnsubscribe(id) {
     return response.status === 204;
 }
 
+export async function setZimAutoSearch(id, auto_search) {
+    const body = {auto_search};
+    const response = await apiPost(`${API_URI}/zim/${id}/auto_search`, body);
+    if (response.status !== 204) {
+        throw new Error('Failed to set Zim auto search');
+    }
+}
+
 export async function fetchDecoded(vinNumber) {
     const body = {vin_number: vinNumber};
     const response = await apiPost(`${API_URI}/vin_number_decoder`, body);

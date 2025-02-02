@@ -43,6 +43,18 @@ async def delete_zims(_: Request, zim_ids: str):
     return response.empty()
 
 
+@zim_bp.post('/<zim_id:[0-9]+>/auto_search')
+@openapi.definition(
+    summary='Change if a Zim file will be searched by default.',
+    body=schema.ZimAutoSearchRequest,
+)
+@validate(schema.ZimAutoSearchRequest)
+async def post_set_zim_auto_search(_: Request, zim_id: int, body: schema.ZimAutoSearchRequest):
+    zim_id = int(zim_id)
+    lib.set_zim_auto_search(zim_id, body.auto_search)
+    return response.empty()
+
+
 @zim_bp.post('/search/<zim_id:[0-9]+>')
 @openapi.definition(
     summary='Search all entries of a Zim',

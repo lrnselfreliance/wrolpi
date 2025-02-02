@@ -113,6 +113,7 @@ function EvaluateForm() {
         <pre>sqrt(15)</pre>
         <pre>15 km to miles</pre>
         <pre>65 degF to degC</pre>
+        <pre>7 * 750 Mb</pre>
     </span>
 
     const inputRef = React.useRef();

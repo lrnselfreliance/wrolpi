@@ -241,3 +241,40 @@ async def test_search_estimates(test_session, async_client, zim_factory):
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['zims_estimates']) == 1
     assert response.json['zims_estimates'][0]['estimate'] == 2
+
+
+@pytest.mark.asyncio
+async def test_zim_auto_search(test_session, async_client, zim_factory):
+    """The auto-searching of any Zim file can be toggled."""
+    zim = zim_factory('test_zim_auto_search.zim')
+    assert zim.auto_search is True, 'Zim should be searched by default.'
+
+    # Zim is estimated by default.
+    body = dict(search_str='one')
+    request, response = await async_client.post('/api/zim/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['zims_estimates']) == 1
+
+    # Change auto_search so Zim is not estimated by default.
+    body = dict(auto_search=False)
+    request, response = await async_client.post(f'/api/zim/{zim.id}/auto_search', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert zim.auto_search is False
+
+    # Estimates are empty because the only Zim was filtered out.
+    body = dict(search_str='one')
+    request, response = await async_client.post('/api/zim/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['zims_estimates']) == 0
+
+    # Change auto_search so Zim is now estimated again.
+    body = dict(auto_search=True)
+    request, response = await async_client.post(f'/api/zim/{zim.id}/auto_search', json=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert zim.auto_search is True
+
+    # Zim is estimated by default.
+    body = dict(search_str='one')
+    request, response = await async_client.post('/api/zim/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['zims_estimates']) == 1

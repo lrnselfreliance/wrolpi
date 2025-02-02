@@ -795,14 +795,11 @@ export function ThrottleToggle() {
     </div>;
 }
 
-export function Toggle({label, checked, disabled, onChange, icon}) {
+export function Toggle({label, checked, disabled, onChange, icon, popupContent = null}) {
     // Custom toggle because Semantic UI does not handle inverted labels correctly.
     const {t, inverted} = useContext(ThemeContext);
 
-    let style = {marginLeft: '1em'};
-    if (t && t.style) {
-        style = {...t.style, ...style};
-    }
+    const style = {...(t?.style || {}), marginLeft: '1em'};
 
     disabled = disabled === true ? 'disabled' : '';
 
@@ -833,7 +830,7 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
         icon = <Icon name={icon}/>
     }
 
-    return <>
+    const body = <div>
         <div className='toggle' onMouseUp={onMouseUp}>
             <input type="checkbox" className={inputClassName} checked={checked} onChange={onMouseUp}
                    data-testid='toggle'/>
@@ -843,7 +840,12 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
             {icon}
             {label}
         </span>
-    </>
+    </div>
+
+    if (popupContent) {
+        return <Popup on='hover' trigger={body} content={popupContent}/>
+    }
+    return body
 }
 
 export function DisableDownloadsToggle() {

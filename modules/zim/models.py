@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional, Set
 
 from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
-from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry
+from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import Base, logger, get_relative_to_media_directory
 from wrolpi.dates import TZDateTime
@@ -72,6 +72,7 @@ class Zim(Base):
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
     file_group: FileGroup = relationship('FileGroup')
+    auto_search = Column(Boolean, nullable=False, default=True)
 
     def __repr__(self):
         return f'<Zim id={self.id} file_group_id={self.file_group_id} path={self.path}>'
@@ -83,6 +84,7 @@ class Zim(Base):
             file_group_id=self.file_group_id,
             metadata=self.zim_metadata,
             size=self.file_group.size,
+            auto_search=self.auto_search,
         )
         return d
 
@@ -92,6 +94,37 @@ class Zim(Base):
         zim = Zim(path=file_group.primary_path, file_group=file_group)
         session.add(zim)
         session.flush([file_group, zim])
+        return zim
+
+    @staticmethod
+    @optional_session
+    def get_by_path(path: pathlib.Path, session: Session = None) -> Optional['Zim']:
+        zim = session.query(Zim).filter_by(path=path).one_or_none()
+        if not zim and path.is_file():
+            zim = Zim.from_paths(session, path)
+            session.commit()
+        return zim
+
+    @staticmethod
+    @optional_session
+    def find_by_path(path: pathlib.Path, session: Session = None) -> 'Zim':
+        zim = Zim.get_by_path(path, session=session)
+        if not zim:
+            raise UnknownZim(f'Cannot find zim at path')
+        return zim
+
+    @staticmethod
+    @optional_session
+    def get_by_id(zim_id: int, session: Session = None) -> Optional['Zim']:
+        zim = session.query(Zim).filter_by(id=zim_id).one_or_none()
+        return zim
+
+    @staticmethod
+    @optional_session
+    def find_by_id(zim_id: int, session: Session = None) -> 'Zim':
+        zim = Zim.get_by_id(zim_id, session=session)
+        if not zim:
+            raise UnknownZim(f'Cannot find zim with ID {zim_id}')
         return zim
 
     def get_zim(self) -> Archive:
@@ -295,7 +328,8 @@ class Zims:
         zims = cls.get_all(session=session)
         results = OrderedDict()
         for zim in zims:
-            results[zim] = zim.estimate(search_str)
+            if zim.auto_search:
+                results[zim] = zim.estimate(search_str)
         return results
 
     @classmethod

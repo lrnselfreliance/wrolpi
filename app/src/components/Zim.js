@@ -42,6 +42,7 @@ import {
     Paginator,
     TabLinks,
     TagIcon,
+    Toggle,
     useTitle,
     WarningMessage
 } from "./Common";
@@ -53,6 +54,7 @@ import {
     fetchZimSubscriptions,
     refreshFiles,
     saveSettings,
+    setZimAutoSearch,
     tagZimEntry,
     untagZimEntry,
     zimSubscribe,
@@ -343,9 +345,9 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
     const subscription = name in subscriptions ? subscriptions[name] : null;
     const subscriptionLanguage = subscription ? subscription['language'] : 'en';
 
-    const [langauge, setLanguage] = useState(subscriptionLanguage);
+    const [language, setLanguage] = useState(subscriptionLanguage);
     const [pending, setPending] = useState(false);
-    const languageChange = subscription ? langauge !== subscription['language'] : false;
+    const languageChange = subscription ? language !== subscription['language'] : false;
 
     const wrolModeEnabled = useWROLMode();
 
@@ -356,7 +358,7 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
             if (subscription && !languageChange) {
                 success = await zimUnsubscribe(subscription['id']);
             } else {
-                success = await zimSubscribe(name, langauge);
+                success = await zimSubscribe(name, language);
             }
         } catch (e) {
             console.error(e);
@@ -387,7 +389,7 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
     const languageDropdown = <Dropdown fluid search selection
                                        placeholder='Language'
                                        options={languageOptions}
-                                       value={langauge}
+                                       value={language}
                                        disabled={wrolModeEnabled}
                                        onChange={handleLanguageChange}
     />;
@@ -445,12 +447,28 @@ class ManageZim extends React.Component {
         }
     }
 
-    zimFileTableRow = (zim, sortData) => {
-        const {path, size} = zim;
+    zimFileTableRow = (zim, sortData, localFetchZims) => {
+        const {id, path, size, auto_search} = zim;
+
+        const toggleZimAutoSearch = async () => {
+            try {
+                await setZimAutoSearch(id, !auto_search);
+            } catch (e) {
+                throw e;
+            } finally {
+                await localFetchZims();
+            }
+        }
+        const toggle = <Toggle
+            checked={auto_search}
+            onChange={toggleZimAutoSearch}
+            popupContent='Enable/Disable searching this Zim file in the Global Search.'
+        />
 
         return <TableRow key={path}>
             <TableCell>{path}</TableCell>
             <TableCell>{humanFileSize(size)}</TableCell>
+            <TableCell>{toggle}</TableCell>
         </TableRow>
     }
 
@@ -460,6 +478,7 @@ class ManageZim extends React.Component {
         const zimFilesHeaders = [
             {key: 'path', text: 'Path', sortBy: 'path', width: 14},
             {key: 'size', text: 'Size', sortBy: 'size', width: 2},
+            {key: 'search', text: 'Search', sortBy: 'auto_search', width: 2},
         ];
         let zimFilesBody = <Placeholder>
             <PlaceholderHeader>
@@ -469,8 +488,9 @@ class ManageZim extends React.Component {
         </Placeholder>;
         if (zims && zims.length >= 1) {
             zimFilesBody = <SortableTable
+                tableProps={{striped: true}}
                 data={zims}
-                rowFunc={this.zimFileTableRow}
+                rowFunc={(i, sortData) => this.zimFileTableRow(i, sortData, this.fetchZims.bind(this))}
                 rowKey='path'
                 tableHeaders={zimFilesHeaders}
             />;

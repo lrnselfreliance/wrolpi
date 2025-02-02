@@ -74,14 +74,6 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     return json_response(ret)
 
 
-@register_switch_handler('singlefile_upload_switch_handler')
-async def singlefile_upload_switch_handler(singlefile):
-    archive = await lib.singlefile_to_archive(singlefile)
-    logger.info(f'Created Archive from upload: {archive}')
-    name = archive.file_group.title or archive.file_group.url
-    Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
-
-
 @archive_bp.get('/upload')
 @openapi.definition(
     summary='A message to confirm to the user that they have the correct upload URL.'
@@ -89,6 +81,23 @@ async def singlefile_upload_switch_handler(singlefile):
 async def get_upload_singlefile(request: Request):
     return response.text('This is the URL to upload files using the SingleFile browser extension.'
                          ' This requires a POST request.')
+
+
+@register_switch_handler('singlefile_upload_switch_handler')
+async def singlefile_upload_switch_handler(singlefile):
+    """Used by `post_upload_singlefile` to upload a single file"""
+    from wrolpi.downloader import download_manager, Download
+    from . import ArchiveDownloader
+
+    archive = await lib.singlefile_to_archive(singlefile)
+    logger.info(f'Created Archive from upload: {archive}')
+    name = archive.file_group.title or archive.file_group.url
+    Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
+    url = archive.file_group.url
+    if url and (download := Download.get_by_url(url)):
+        if download.is_failed and download.downloader == ArchiveDownloader.name:
+            # Download was attempted and failed, user manually archived the URL.
+            download_manager.delete_download(download.id)
 
 
 @archive_bp.post('/upload')

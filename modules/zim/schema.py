@@ -11,6 +11,11 @@ class ZimSearchRequest:
 
 
 @dataclass
+class ZimAutoSearchRequest:
+    auto_search: bool
+
+
+@dataclass
 class ZimMetadata:
     path: str
     creator: str

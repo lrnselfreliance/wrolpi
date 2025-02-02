@@ -572,3 +572,10 @@ async def restart_kiwix():
     if result.return_code != 0 and result.stderr:
         logger.debug(result.stderr)
     return result.return_code
+
+
+@optional_session
+def set_zim_auto_search(zim_id: int, auto_search: bool, session: Session = None):
+    zim = Zim.find_by_id(zim_id, session)
+    zim.auto_search = auto_search
+    session.commit()

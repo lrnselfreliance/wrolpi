@@ -549,8 +549,7 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
 
 @pytest.mark.asyncio
 async def test_post_upload(test_session, async_client, test_directory, make_files_structure, make_multipart_form,
-                           tag_factory,
-                           video_bytes):
+                           tag_factory, video_bytes):
     """A file can be uploaded in chunks directly to the destination."""
     make_files_structure(['uploads/'])
     tag1, tag2 = await tag_factory(), await tag_factory()
@@ -598,6 +597,77 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.mimetype == 'video/mp4'
     assert set(file_group.tag_names) == {tag1.name, tag2.name}, 'Two tags should be applied.'
+    assert file_group.indexed, 'File should be indexed after upload.'
+    assert file_group.model, 'File should be modeled'
+    # Video was modeled, but has no Channel.
+    video: Video = test_session.query(Video).one()
+    assert video.video_path
+    assert not video.info_json_path
+    assert not video.channel and not video.channel_id
+
+    # Can't upload again because the file already exists.
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='video.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=1_000_000),
+        dict(name='chunk', value=part1, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.BAD_REQUEST, response.content.decode()
+    assert response.json['error'] == 'File already exists!'
+
+    # FileGroup was not deleted.
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group
+
+    # Remove Tag so file can be uploaded again.
+    file_group.set_tags([], test_session)
+
+    # An existing file can be overwritten.
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='video.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=1_000_000),
+        dict(name='chunk', value=part1, filename='chunk'),
+        dict(name='overwrite', value=True),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.OK, response.content.decode()
+
+    file_group: FileGroup = test_session.query(FileGroup).one_or_none()
+    assert not file_group, 'Old FileGroup should be deleted when new upload starts.'
+
+    # Upload the second part of the file again.
+    forms = [
+        dict(name='chunkNumber', value='1'),
+        dict(name='filename', value='video.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=56318),
+        dict(name='chunk', value=part2, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, response.content.decode()
+
+    # Make the same checks as those done above because the file was uploaded again.
+    assert output.is_file()
+    assert get_mimetype(output) == 'video/mp4'
+    assert output.stat().st_size == len(video_bytes)
+    assert output.read_bytes() == video_bytes
+    assert hashlib.md5(output.read_bytes()).hexdigest() == '2738c53bd7c01b01d408da11a55bfa36'
+
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group.mimetype == 'video/mp4'
+    assert not file_group.tag_names, 'No tags this time.'
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'
     # Video was modeled, but has no Channel.

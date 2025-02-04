@@ -1153,6 +1153,7 @@ export const useUploadFile = () => {
     const [progresses, setProgresses] = useState({});
     const [destination, setDestination] = useState('');
     const [tagNames, setTagNames] = React.useState([]);
+    const [overwrite, setOverwrite] = React.useState(false);
 
     const handleProgress = (name, chunk, totalChunks, status, type) => {
         const percent = Math.round((100 * chunk) / totalChunks);
@@ -1184,6 +1185,9 @@ export const useUploadFile = () => {
         formData.append('filename', file.path);
         formData.append('totalChunks', totalChunks.toString());
         formData.append('destination', destination);
+        if (overwrite) {
+            formData.append('overwrite', 'true');
+        }
         // Send the size that we're actually sending.
         formData.append('chunkSize', chunk.size.toString());
         formData.append('chunk', chunk);
@@ -1262,15 +1266,15 @@ export const useUploadFile = () => {
     const tagsSelector = <TagsSelector selectedTagNames={tagNames} onChange={(i,) => setTagNames(i)}/>;
 
     return {
-        destination,
+        destination, setDestination,
         doClear,
         doUpload,
         files,
         progresses,
-        setDestination,
         setFiles: handleFilesChange,
         tagNames,
         tagsSelector,
+        overwrite, setOverwrite,
     }
 }
 

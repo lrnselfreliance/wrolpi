@@ -95,7 +95,7 @@ async def singlefile_upload_switch_handler(singlefile):
     Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
     url = archive.file_group.url
     if url and (download := Download.get_by_url(url)):
-        if download.is_failed and download.downloader == ArchiveDownloader.name:
+        if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
             # Download was attempted and failed, user manually archived the URL.
             download_manager.delete_download(download.id)
 

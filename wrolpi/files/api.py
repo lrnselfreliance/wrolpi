@@ -342,6 +342,16 @@ async def post_upload(request: Request):
     except Exception:
         raise FileUploadFailed('totalChunks integer is required')
 
+    try:
+        overwrite = request.form['overwrite'][0]
+        if overwrite.lower().strip() == 'true':
+            overwrite = True
+        else:
+            overwrite = False
+    except Exception:
+        overwrite = False
+
+    print(f'{overwrite=} {type(overwrite)=}')
     tag_names = request.form.getlist('tagNames')
     if tag_names:
         if not isinstance(tag_names, list):
@@ -375,13 +385,23 @@ async def post_upload(request: Request):
         # Respond with a request for the correct chunk number.
         return json_response({'expected_chunk': expected_chunk_num}, HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
 
-    if chunk_num == 0 and output.is_file():
-        # Do not overwrite files that already exist.
+    if chunk_num == 0 and output.is_file() and not overwrite:
+        # Do not overwrite files that already exist, unless explicitly requested.
         raise FileUploadFailed('File already exists!')
     if output.is_dir():
         raise FileUploadFailed('File already exists as a directory!')
 
     if chunk_num == 0:
+        try:
+            # Delete any conflicting FileGroups if the user is overwriting.
+            await lib.delete(output)
+        except InvalidFile:
+            # No conflicting files, good.
+            pass
+        except Exception as e:
+            logger.error('Failed to delete conflicting upload file', exc_info=e)
+            raise
+
         try:
             output.touch()
         except FileNotFoundError:

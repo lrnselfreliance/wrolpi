@@ -1,7 +1,7 @@
 import React from "react";
 import {useDropzone} from "react-dropzone";
 import {Form, Header, Icon, Progress, Segment} from "./Theme";
-import {DirectorySearch, mimetypeIconName} from "./Common";
+import {DirectorySearch, mimetypeIconName, Toggle} from "./Common";
 import {useUploadFile} from "../hooks/customHooks";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
@@ -11,7 +11,16 @@ import {Form as SForm} from "semantic-ui-react";
 export function Upload({disabled}) {
     const {t} = React.useContext(ThemeContext);
 
-    const {setFiles, progresses, destination, setDestination, doClear, tagsSelector} = useUploadFile();
+    const {
+        setFiles,
+        progresses,
+        destination,
+        setDestination,
+        doClear,
+        tagsSelector,
+        overwrite,
+        setOverwrite
+    } = useUploadFile();
 
     const onDrop = React.useCallback(async (acceptedFiles) => {
         if (acceptedFiles && acceptedFiles.length > 0) {
@@ -73,6 +82,8 @@ export function Upload({disabled}) {
                 />
                 {tagsSelector}
             </SForm.Field>
+
+            <Toggle checked={overwrite} label='Overwrite' onChange={() => setOverwrite(!overwrite)}/>
         </Form>
 
         {destination ?

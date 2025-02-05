@@ -442,12 +442,12 @@ def get_domains():
 
 
 ARCHIVE_ORDERS = {
-    'published_datetime': (date := 'COALESCE(fg.published_datetime, fg.download_datetime) ASC'),
+    'published_datetime': (date := 'COALESCE(fg.published_datetime, fg.download_datetime) ASC NULLS LAST'),
     '-published_datetime': (_date := 'COALESCE(fg.published_datetime, fg.download_datetime) DESC NULLS LAST'),
     'published_modified_datetime': f'fg.published_modified_datetime ASC NULLS LAST, {date}',
-    '-published_modified_datetime': f'fg.published_modified_datetime DESC, {_date}',
-    'download_datetime': 'fg.download_datetime ASC',
-    '-download_datetime': 'fg.download_datetime DESC',
+    '-published_modified_datetime': f'fg.published_modified_datetime DESC NULLS LAST, {_date}',
+    'download_datetime': 'fg.download_datetime ASC NULLS LAST',
+    '-download_datetime': 'fg.download_datetime DESC NULLS LAST',
     'rank': f'2 DESC, {_date}',
     '-rank': f'2 ASC, {date}',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',

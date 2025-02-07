@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from time import time
 from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
@@ -153,7 +154,7 @@ def perpetual_signal(event: str = None, sleep: int | float = 1):
         async def worker(*args, **kwargs):
             logger.trace(f'perpetual_signal {event_}')
             cancelled = False
-            start = datetime.now()
+            start = time()
             try:
                 await func(*args, **kwargs)
             except CancelledError:
@@ -163,7 +164,7 @@ def perpetual_signal(event: str = None, sleep: int | float = 1):
                 logger.error(f'Perpetual worker {event_} had error', exc_info=e)
             finally:
                 if logger.isEnabledFor(TRACE_LEVEL):
-                    elapsed = (datetime.now() - start).total_seconds()
+                    elapsed = int(time() - start)
                     logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
                 if not cancelled:
                     await asyncio.sleep(sleep)

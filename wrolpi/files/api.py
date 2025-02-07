@@ -7,7 +7,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
-    background_task, walk, timer
+    background_task, walk, timer, TRACE_LEVEL
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
 from ..api_utils import json_response, api_app
@@ -144,24 +144,32 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         })
 
     path = get_media_directory() / body.path
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'post_search_directories: {path=}')
 
     try:
         matching_directories = lib.get_matching_directories(str(path))
         matching_directories = list(map(pathlib.Path, matching_directories))
     except FileNotFoundError:
         matching_directories = []
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'post_search_directories: {matching_directories=}')
 
     # Search Channels by name.
     from modules.videos.channel.lib import search_channels_by_name
     channels = await search_channels_by_name(name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'post_search_directories: {channel_paths=}')
 
     # Search Domains by name.
     from modules.archive.lib import search_domains_by_name
     domains = await search_domains_by_name(name=body.path)
     domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'post_search_directories: {domain_paths=}')
 
     # Get all Directory that match but do not contain the above directories.
     excluded = [str(i) for i in channel_paths + domain_paths + matching_directories]
@@ -171,6 +179,10 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
     directories = [i.__json__() for i in directories]
     directories.extend([{'path': i, 'name': i.name} for i in matching_directories])
     directories = list(sorted(directories, key=lambda i: i['path']))[:20]
+
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'post_search_directories: {excluded=}')
+        logger.trace(f'post_search_directories: {directories=}')
 
     body = {
         'is_dir': path.is_dir(),
@@ -317,12 +329,21 @@ async def post_upload(request: Request):
     Will not overwrite an existing file, unless a previous upload did not complete."""
 
     try:
+        mkdir = request.form['mkdir'][0]
+        mkdir = True if mkdir.strip().lower() == 'true' else False
+    except Exception as e:
+        logger.error('Failed to parse mkdir form data', exc_info=e)
+        mkdir = False
+
+    try:
         destination_str = request.form['destination'][0]
     except Exception as e:
         logger.error(f'Failed to get upload destination', exc_info=e)
         raise UnknownDirectory('Must provide destination') from e
 
     destination = get_media_directory() / destination_str
+    if mkdir:
+        destination.mkdir(exist_ok=True)
     if destination_str.startswith('/') or destination_str.startswith('.') or not destination.is_dir():
         msg = f'Destination must be a relative directory that is already in the media directory: {destination}'
         raise UnknownDirectory(msg)
@@ -351,7 +372,6 @@ async def post_upload(request: Request):
     except Exception:
         overwrite = False
 
-    print(f'{overwrite=} {type(overwrite)=}')
     tag_names = request.form.getlist('tagNames')
     if tag_names:
         if not isinstance(tag_names, list):

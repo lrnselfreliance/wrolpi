@@ -305,11 +305,7 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype, get_unique_files_by_stem
-
-        unique_stems = get_unique_files_by_stem(paths)
-        if len(unique_stems) > 1:
-            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem: {paths[0]}')
+        from wrolpi.files.lib import get_primary_file, get_mimetype
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
         if len(existing_groups) == 0:

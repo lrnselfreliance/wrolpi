@@ -516,3 +516,33 @@ def test_preview_filename(test_directory, fake_now):
 
     with pytest.raises(RuntimeError):
         preview_filename('%(upload_date)s_%(title)s.asdf')
+
+
+def test_normalize_video_file_names(test_directory, video_download_manager):
+    """VideoDownloader renames caption files that do not share the video file's stem."""
+    downloader = VideoDownloader()
+
+    mp4 = test_directory / 'video.mp4'
+    info_json = test_directory / 'video.info.json'
+
+    # Minimal video files.
+    vtt = test_directory / 'video.vtt'
+    assert set(downloader.normalize_video_file_names(mp4, [mp4, vtt, info_json])) == {mp4, vtt, info_json}
+
+    # Normal video files.
+    vtt = test_directory / 'video.en.vtt'
+    assert set(downloader.normalize_video_file_names(mp4, [mp4, vtt, info_json])) == {mp4, vtt, info_json}
+
+    # Rare -auto file.
+    vtt = test_directory / 'video.en-auto.vtt'
+    assert set(downloader.normalize_video_file_names(mp4, [mp4, vtt, info_json])) == {mp4, vtt, info_json}
+
+    # Extra characters get removed from the vtt file.
+    vtt = test_directory / 'video.en-uYU-mmqFLq8.vtt'
+    vtt.touch()  # must exist so it can be renamed.
+    assert set(downloader.normalize_video_file_names(mp4, [mp4, vtt, info_json])) == {
+        mp4,
+        (test_directory / 'video.en.vtt'),
+        info_json,
+    }
+    assert not vtt.exists()

@@ -345,12 +345,14 @@ class Downloader:
     async def get_meta4_contents(url: str) -> bytes | None:
         try:
             meta4_url = f'{url}.meta4'
-            async with aiohttp_get(meta4_url, timeout=5) as response:
+            async with aiohttp_get(meta4_url, timeout=60) as response:
                 if response.status == HTTPStatus.OK:
                     contents = await response.content.read()
                     try:
                         root = ET.fromstring(contents)
                         if root.tag == '{urn:ietf:params:xml:ns:metalink4}metalink':
+                            return contents
+                        if root.tag == '{urn:ietf:params:xml:ns:metalink}metalink':
                             return contents
                         logger.debug(f'meta4 file was not a metalink file: {meta4_url}')
                     except Exception as e:

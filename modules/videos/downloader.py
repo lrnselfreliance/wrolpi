@@ -466,6 +466,8 @@ class VideoDownloader(Downloader, ABC):
                 video_paths = glob_shared_stem(video_path)
                 # Delete any leftover part files now that we have verified the video is complete.
                 video_paths = self._delete_part_files(video_path, video_paths)
+                # Rename any special files that do not match the stem.
+                video_paths = self.normalize_video_file_names(video_path, video_paths)
                 # Create the Video record.
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
@@ -726,6 +728,28 @@ class VideoDownloader(Downloader, ABC):
 
         return files
 
+    @staticmethod
+    def normalize_video_file_names(video_path: pathlib.Path, files: List[pathlib.Path]) -> List[pathlib.Path]:
+        """Video files can have unpredictable names, rename any video files as necessary to make them share the same
+        stem."""
+        video_stem, _ = split_path_stem_and_suffix(video_path.name)
+        new_files = []
+        for file in files:
+            suffix = file.name[len(video_stem):]
+            if suffix.endswith('.vtt'):
+                _, normal_suffix = split_path_stem_and_suffix(file.name)
+                if suffix != normal_suffix:
+                    # Video captions file has extra characters in the suffix from yt-dlp.
+                    # Example:  .en-uYU-mmqFLq8.vtt -> .en.vtt
+                    lang, _, suffix = VTT_SUFFIX_PARSER.match(suffix.strip()).groups()
+                    suffix = f'.{lang}.{suffix}'
+                    file = file.rename(video_path.with_suffix(suffix))
+            new_files.append(file)
+
+        return new_files
+
+
+VTT_SUFFIX_PARSER = re.compile(r'^\.([a-z]{2,3})-(.+?)\.(vtt|srt)$', re.IGNORECASE)
 
 VIDEO_FORMAT_PARSER = re.compile(r'^.+?\.f\d{2,4}')
 

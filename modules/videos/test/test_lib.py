@@ -18,12 +18,15 @@ from wrolpi.vars import PROJECT_DIR
 @pytest.mark.parametrize('file_name,expected', [
     ('channel_20000101_12345678910_ some title.mp4', ('channel', '20000101', '12345678910', 'some title')),
     ('channel name_NA_12345678910_ some title.mp4', ('channel name', None, '12345678910', 'some title')),
+    ('channel name_NA_12345678910_ some title.MP4', ('channel name', None, '12345678910', 'some title')),
     ('20000101 foo.mp4', (None, None, None, '20000101 foo')),
     ('20000101foo.mp4', (None, None, None, '20000101foo')),
     ('something 20000101 foo.mp4', (None, None, None, 'something 20000101 foo')),
     ('something_20000101_foo.mp4', ('something', '20000101', None, 'foo')),
     ('foo .mp4', (None, None, None, 'foo')),  # Has trailing whitespace.
     ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', (None, '20000303', 'vp91w5', 'Bob&apos;s Pancakes')),
+    ('NA_20000303_Bob&apos;s Pancakes.mp4', (None, '20000303', None, 'Bob&apos;s Pancakes')),
+    ('20000303_Bob&apos;s Pancakes.mp4', (None, '20000303', None, 'Bob&apos;s Pancakes')),
     ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', (None, None, 'vp91w5', 'Bob&apos;s Pancakes')),
     ('Learning Self-Reliance_20170529_p_MzsCFkUPU_Beekeeping 2017 Part 6 - Merging Hives.mp4',
      ('Learning Self-Reliance', '20170529', 'p_MzsCFkUPU', 'Beekeeping 2017 Part 6 - Merging Hives')),

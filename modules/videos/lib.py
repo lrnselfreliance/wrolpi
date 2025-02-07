@@ -667,8 +667,10 @@ async def get_statistics():
     return ret
 
 
-NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{5,25})_)?(.*)\.'
-                         r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
+NAME_PARSER = re.compile(
+    r'(?:(.*?)_)?((?:\d+?)|(?:NA))_(?:(.{5,25})_)?(.*)'
+    r'\.(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)',  # the file suffix
+    re.IGNORECASE)
 
 
 def parse_video_file_name(video_path: pathlib.Path) -> \
@@ -676,7 +678,14 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     """
     A Video's file name can have data in it, this attempts to extract what may be there.
 
-    Example: {channel_name}_{published_datetime}_{source_id}_title{ext}
+    {published_date} is assumed to always be %Y%m%d
+
+    Examples:
+        NA_{published_date}_{source_id}_{title}{ext}
+        {channel_name}_NA_{source_id}_{title}{ext}
+        {channel_name}_{published_date}_{source_id}_{title}{ext}  # Typical name format from WROLPi.
+        {published_date}_{title}{ext}
+        {title}{ext}
     """
     video_str = str(video_path)
     if match := NAME_PARSER.match(video_str):
@@ -692,8 +701,8 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
             return channel, date, source_id, title
 
     # Return the stem as a last resort
-    title = split_path_stem_and_suffix(video_path)[0].strip()
-    return None, None, None, title
+    title, _ = split_path_stem_and_suffix(video_path)
+    return None, None, None, title.strip()
 
 
 def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path, None, None]:

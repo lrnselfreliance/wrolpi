@@ -1185,6 +1185,7 @@ export const useUploadFile = () => {
         formData.append('filename', file.path);
         formData.append('totalChunks', totalChunks.toString());
         formData.append('destination', destination);
+        formData.append('mkdir', 'true');
         if (overwrite) {
             formData.append('overwrite', 'true');
         }

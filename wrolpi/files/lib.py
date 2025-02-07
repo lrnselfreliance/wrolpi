@@ -297,6 +297,8 @@ EXTRA_SUFFIXES = set()
 for six_ in ISO_639_CODES.keys():
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.srt' for i in ISO_3166_CODES}
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.vtt' for i in ISO_3166_CODES}
+    EXTRA_SUFFIXES |= {f'.{i}-auto.srt' for i in ISO_639_CODES}
+    EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
 
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
 

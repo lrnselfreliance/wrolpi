@@ -151,6 +151,8 @@ async def test_delete_nested(test_session, make_files_structure):
         ('foo.en-US.srt', False, ('foo', '.en-US.srt')),
         ('foo.en-US.vtt', False, ('foo', '.en-US.vtt')),
         ('foo.en-us.vtt', False, ('foo', '.en-us.vtt')),
+        ('foo.en-AUTO.srt', False, ('foo', '.en-AUTO.srt')),
+        ('foo.en-auto.vtt', False, ('foo', '.en-auto.vtt')),
         # Absolute path can be returned.
         ('/absolute//foo.bar', True, ('/absolute/foo', '.bar')),
         # Case is preserved.
@@ -371,7 +373,7 @@ async def test_refresh_discover_paths_groups(test_session, make_files_structure,
 
 
 @pytest.mark.asyncio
-async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory):
+async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches):
     """A FileGroup can be tagged."""
     make_files_structure(['foo.mp4'])
     await lib.refresh_discover_paths([test_directory, ], now())

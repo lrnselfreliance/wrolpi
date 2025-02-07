@@ -369,12 +369,13 @@ async def test_file_group_tag_by_primary_path(test_session, async_client, test_d
     assert test_session.query(TagFile).count() == 0
 
 
-def test_file_group_tag(test_client):
-    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(tag_id=1)))
+@pytest.mark.asyncio
+async def test_file_group_tag(async_client):
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(dict(tag_id=1)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'file_group_id' in response.json['error']
 
-    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
+    request, response = await async_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'tag_id' in response.json['error']
 
@@ -700,6 +701,34 @@ def test_post_upload_text(test_session, test_client, test_directory, make_files_
     assert file_group.size == 5
     assert file_group.a_text == 'the title txt'
     assert file_group.d_text == 'hello'
+
+
+@pytest.mark.asyncio
+async def test_post_upload_new_directory(test_session, async_client, test_directory, make_files_structure,
+                                         make_multipart_form,
+                                         tag_factory, video_bytes):
+    """User can create a new directory when uploading."""
+    tag1, tag2 = await tag_factory(), await tag_factory()
+
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='video.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='some new directory'),
+        dict(name='mkdir', value=True),
+        dict(name='chunkSize', value=len(video_bytes)),
+        dict(name='tagNames', value=tag1.name),
+        dict(name='tagNames', value=tag2.name),
+        dict(name='chunk', value=video_bytes, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.OK, response.content.decode()
+
+    assert (test_directory / 'some new directory').is_dir()
+    assert (test_directory / 'some new directory/video.mp4').is_file()
+    assert (test_directory / 'some new directory/video.mp4').read_bytes() == video_bytes
 
 
 @pytest.mark.asyncio

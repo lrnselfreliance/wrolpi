@@ -7,6 +7,7 @@ import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
 import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
 import {Link} from "react-router-dom";
 import {RatioCalculators} from "./calculators/RatioCalculator";
+import {QRCodeCalculator} from "./calculators/QRCodeCalculator";
 
 export const useCalculators = () => {
     const [calc, setCalc] = useCalcQuery();
@@ -16,6 +17,7 @@ export const useCalculators = () => {
         {key: 'electrical', icon: 'lightning', button: 'Electrical', contents: <ElectricalCalculators/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', contents: <DipoleAntennaCalculator/>},
         {key: 'temperature', icon: 'thermometer', button: 'Temperature', contents: <TemperatureCalculator/>},
+        {key: 'qrCode', icon: 'qrcode', button: 'QR Code', contents: <QRCodeCalculator/>},
     ];
 
     const activeCalculator = calc ? calculators.find(i => i.key === calc) : null;

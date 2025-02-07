@@ -101,7 +101,7 @@ def test_session() -> Session:
 
 @pytest.fixture(autouse=True)
 def test_debug_logger(request):
-    """Tests use debug logging by default.  Use pytest's verbosity level if set."""
+    """The tests use debug logging by default.  Use pytest's verbosity level if set."""
     level = logging.INFO
     verbose = request.config.option.verbose
     if verbose == 2:

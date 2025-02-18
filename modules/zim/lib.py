@@ -472,7 +472,9 @@ async def check_zim(path: pathlib.Path) -> int:
 
     @warning: Only performs the checksum check!
     """
-    cmd = ['zimcheck', '-C', path.absolute()]
+    cmd = ('zimcheck', '-C', path.absolute())
+    cmd_str = " ".join(str(i) for i in cmd)
+    logger.debug(f'check_zim: {cmd_str}')
     result = await run_command(cmd)
     logger.debug(f'zimcheck returned {result.return_code}')
     if result.return_code != 0 and result.stderr:

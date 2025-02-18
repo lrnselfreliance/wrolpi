@@ -7,7 +7,7 @@ from wrolpi.downloader import Downloader, Download, DownloadResult
 
 __all__ = ['KiwixCatalogDownloader', 'KiwixZimDownloader', 'kiwix_zim_downloader', 'kiwix_catalog_downloader']
 
-from wrolpi.files.lib import refresh_files
+from wrolpi.files.lib import refresh_files, upsert_file
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -79,17 +79,16 @@ class KiwixZimDownloader(Downloader):
         # Notify the maintainer if outdated Zim files are lying around.
         lib.flag_outdated_zim_files()
 
-        return_code = await lib.check_zim(output_path)
-        if return_code == 127:
+        try:
+            return_code = await lib.check_zim(output_path)
+            if return_code > 0:
+                # zimcheck ran, but the file is invalid.
+                return DownloadResult(success=False, error=f'Zim file is invalid')
+        except FileNotFoundError:
             logger.warning(f'Not validating {output_path} because zimcheck is not installed')
-        elif return_code > 0:
-            return DownloadResult(success=False, error=f'Zim file is invalid')
 
         # Add the new Zim to the FileGroups, model it.
-        if PYTEST:
-            await refresh_files([output_path, ])
-        else:
-            background_task(refresh_files([output_path, ]))
+        await upsert_file(output_path)
 
         # Restart Kiwix serve, so it finds the new zim file.
         return_code = await lib.restart_kiwix()

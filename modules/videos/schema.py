@@ -10,6 +10,7 @@ class ChannelPostRequest:
     name: str
     directory: str
     calculate_duration: Optional[bool] = None
+    download_missing_data: Optional[bool] = True
     generate_posters: Optional[bool] = None
     source_id: Optional[str] = None
     tag_name: Optional[str] = None
@@ -26,6 +27,7 @@ class ChannelPostRequest:
 class ChannelPutRequest:
     calculate_duration: Optional[bool] = None
     directory: Optional[str] = None
+    download_missing_data: Optional[bool] = True
     generate_posters: Optional[bool] = None
     mkdir: Optional[bool] = None
     name: Optional[str] = None

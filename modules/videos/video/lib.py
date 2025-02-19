@@ -7,7 +7,7 @@ import yt_dlp
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from modules.videos.models import Video
+from modules.videos.models import Video, Channel
 from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, optional_session
@@ -209,7 +209,13 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 one_month_ago > FileGroup.published_datetime,
                 FileGroup.published_datetime == None,
             ),
+            # Do not download a Videos with a Channel and Channel.download_missing_data is False.
+            or_(
+                Channel.download_missing_data == True,
+                Channel.id == None,
+            )
         ).join(FileGroup) \
+            .outerjoin(Channel) \
             .order_by(FileGroup.published_datetime.nullsfirst()) \
             .limit(limit)
         video_urls = [i.file_group.url for i in videos]

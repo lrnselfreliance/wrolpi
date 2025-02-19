@@ -289,6 +289,25 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
 
 
 @pytest.mark.asyncio
+async def test_import_channel_download_comments(await_switches, test_session, channel_factory,
+                                                test_channels_config):
+    channel = channel_factory()
+    assert channel.download_missing_data is True
+
+    # download_missing_data is saved to the config.
+    save_channels_config()
+    await await_switches()
+    assert 'download_missing_data: true' in test_channels_config.read_text()
+
+    # change download_missing_data to False, channel should be updated on import.
+    contents = test_channels_config.read_text()
+    contents = contents.replace('download_missing_data: true', 'download_missing_data: false')
+    test_channels_config.write_text(contents)
+    import_channels_config()
+    assert channel.download_missing_data is False
+
+
+@pytest.mark.asyncio
 async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
     content = await common.ffprobe_json(video_file)
     assert not content['chapters']

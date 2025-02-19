@@ -127,10 +127,10 @@ async def test_channel_conflicts(async_client, test_session, test_directory):
     request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_NAME_CONFLICT',
-                                       'error': 'The channel name is already taken.',
+                                       'error': 'Bad Request',
                                        'message': 'The channel name is already taken.'},
                              'code': 'VALIDATION_ERROR',
-                             'error': 'Could not validate the contents of the request',
+                             'error': 'Bad Request',
                              'message': 'Could not validate the contents of the request'}
 
     # Directory was already used
@@ -141,10 +141,10 @@ async def test_channel_conflicts(async_client, test_session, test_directory):
     request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_DIRECTORY_CONFLICT',
-                                       'error': 'The directory is already used by another channel.',
+                                       'error': 'Bad Request',
                                        'message': 'The directory is already used by another channel.'},
                              'code': 'VALIDATION_ERROR',
-                             'error': 'Could not validate the contents of the request',
+                             'error': 'Bad Request',
                              'message': 'Could not validate the contents of the request'}
 
     # URL is already used
@@ -158,10 +158,10 @@ async def test_channel_conflicts(async_client, test_session, test_directory):
     request, response = await _post_channel(new_channel)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'cause': {'code': 'CHANNEL_URL_CONFLICT',
-                                       'error': 'The URL is already used by another channel.',
+                                       'error': 'Bad Request',
                                        'message': 'The URL is already used by another channel.'},
                              'code': 'VALIDATION_ERROR',
-                             'error': 'Could not validate the contents of the request',
+                             'error': 'Bad Request',
                              'message': 'Could not validate the contents of the request'}
 
 
@@ -170,21 +170,15 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
     channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory).mkdir()
 
-    new_channel = {
-        'name': 'Fooz',
-        'directory': channel_directory,
-    }
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    new_channel = dict(name='Fooz', directory=channel_directory)
+    request, response = test_client.post('/api/videos/channels', json=new_channel)
     assert response.status_code == HTTPStatus.CREATED, response.json
     location = response.headers['Location']
 
     channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory2).mkdir()
-    new_channel = {
-        'name': 'Barz',
-        'directory': channel_directory2,
-    }
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    new_channel = dict(name='Barz', directory=channel_directory2)
+    request, response = test_client.post('/api/videos/channels', json=new_channel)
     assert response.status_code == HTTPStatus.CREATED, response.json
     assert location != response.headers['Location']
 

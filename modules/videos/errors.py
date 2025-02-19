@@ -5,47 +5,47 @@ from wrolpi.errors import APIError
 
 class UnknownVideo(APIError):
     code = 'UNKNOWN_VIDEO'
-    message = 'The video could not be found.'
+    summary = 'The video could not be found.'
     status_code = HTTPStatus.NOT_FOUND
 
 
 class UnknownChannel(APIError):
     code = 'UNKNOWN_CHANNEL'
-    message = 'The channel could not be found.'
+    summary = 'The channel could not be found.'
     status_code = HTTPStatus.NOT_FOUND
 
 
 class InvalidChannel(APIError):
     code = 'INVALID_CHANNEL'
-    message = 'The channel is not supported'
+    summary = 'The channel is not supported'
     status_code = HTTPStatus.BAD_REQUEST
 
 
 class ChannelNameConflict(APIError):
     code = 'CHANNEL_NAME_CONFLICT'
-    message = 'The channel name is already taken.'
+    summary = 'The channel name is already taken.'
     status_code = HTTPStatus.BAD_REQUEST
 
 
 class ChannelURLConflict(APIError):
     code = 'CHANNEL_URL_CONFLICT'
-    message = 'The URL is already used by another channel.'
+    summary = 'The URL is already used by another channel.'
     status_code = HTTPStatus.BAD_REQUEST
 
 
 class ChannelDirectoryConflict(APIError):
     code = 'CHANNEL_DIRECTORY_CONFLICT'
-    message = 'The directory is already used by another channel.'
+    summary = 'The directory is already used by another channel.'
     status_code = HTTPStatus.BAD_REQUEST
 
 
 class ChannelSourceIdConflict(APIError):
     code = 'CHANNEL_SOURCE_ID_CONFLICT'
-    message = 'Search is empty, search_str must have content.'
+    summary = 'Search is empty, search_str must have content.'
     status_code = HTTPStatus.BAD_REQUEST
 
 
 class ChannelURLEmpty(APIError):
     code = 'CHANNEL_URL_EMPTY'
-    message = 'This channel has no URL'
+    summary = 'This channel has no URL'
     status_code = HTTPStatus.BAD_REQUEST

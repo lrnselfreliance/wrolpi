@@ -297,7 +297,7 @@ class ChannelsConfig(ConfigFile):
 
                     if not channel.source_id and channel.url and flags.have_internet.is_set():
                         # If we can download from a channel, we must have its source_id.
-                        if download_manager.can_download:
+                        if download_manager.can_download and channel.download_missing_data:
                             logger.info(f'Fetching channel source id for {channel}')
                             background_task(fetch_channel_source_id(channel.id))
 

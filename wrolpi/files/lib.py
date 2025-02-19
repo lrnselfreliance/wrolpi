@@ -1615,7 +1615,7 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
     if url and download_manager.is_skipped(url):
         download_manager.remove_from_skip_list(url)
 
-    upsert_directories(file.parents, [])
+    upsert_directories([], file.parents)
 
     session.commit()
 

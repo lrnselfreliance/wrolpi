@@ -528,6 +528,7 @@ class Channel(ModelHelper, Base):
     directory: pathlib.Path = Column(MediaPathType)
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)  # use ffmpeg to extract duration (slower than info json).
+    download_missing_data = Column(Boolean, default=True)  # fetch missing data like `source_id` and video comments.
     source_id = Column(String)  # the ID from the source website.
     refreshed = Column(Boolean, default=False)  # The files in the Channel have been refreshed.
 
@@ -633,6 +634,7 @@ class Channel(ModelHelper, Base):
         config = dict(
             calculate_duration=self.calculate_duration,
             directory=str(self.directory),
+            download_missing_data=self.download_missing_data,
             downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads],
             generate_posters=self.generate_posters,
             name=self.name,

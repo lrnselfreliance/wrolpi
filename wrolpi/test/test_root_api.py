@@ -261,7 +261,7 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
         request, response = test_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
-                                 'error': 'Hotspot password must be at least 8 characters',
+                                 'error': 'Bad Request',
                                  'message': 'Hotspot password must be at least 8 characters'
                                  }
 
@@ -714,7 +714,7 @@ def test_recursive_errors():
         try:
             two()
         except Exception as e2:
-            raise ValidationError('A broad error') from e2
+            raise ValidationError() from e2
 
     try:
         three()
@@ -722,7 +722,7 @@ def test_recursive_errors():
         response = json_error_handler(None, e)
         assert json.loads(response.body.decode()) == {
             'code': 'VALIDATION_ERROR',
-            'error': 'A broad error',
+            'error': 'Bad Request',  # Fallback when no message is passed on exception creation.
             'message': 'Could not validate the contents of the request',
             'cause': {
                 'code': 'SEARCH_EMPTY',

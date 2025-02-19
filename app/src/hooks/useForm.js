@@ -437,6 +437,7 @@ export function ToggleForm({form, name, label, path, icon = null, iconSize = 'bi
             disabled={form.disabled}
             name={name}
             checked={inputProps.value}
+            onChange={inputProps.onChange}
         />
     </FormInput>
 }

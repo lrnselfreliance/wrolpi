@@ -1,13 +1,13 @@
 import asyncio
 import json
 import logging
-from time import time
 from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
+from time import time
 
 from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
@@ -74,7 +74,7 @@ def get_error_json(exception: BaseException):
     """Return a JSON representation of the Exception instance."""
     if isinstance(exception, APIError):
         # An exception from WROLPi.
-        body = dict(error=str(exception), message=exception.message, code=exception.code)
+        body = dict(error=str(exception), message=exception.summary, code=exception.code)
     elif isinstance(exception, SanicException):
         # An exception from Sanic.
         body = dict(error=str(exception), message=exception.message, code=type(exception).__name__)

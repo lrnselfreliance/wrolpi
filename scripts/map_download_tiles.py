@@ -30,7 +30,7 @@ def longitude_to_tile_x(lon: float, zoom: int) -> int:
 
 
 def get_tile(host: str, zoom: int, x: int, y: int) -> bytes:
-    response = requests.get(f"{host}/tile/{zoom}/{x}/{y}.png", verify=False)
+    response = requests.get(f"{host}/{zoom}/{x}/{y}.png", verify=False, timeout=5 * 60)
     if response.status_code != 200:
         raise RuntimeError(f"Request failed with status code {response.status_code}")
     return response.content
@@ -75,7 +75,7 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download map tiles from WROLPi")
     parser.add_argument('-H', '--host', type=str,
-                        default='https://localhost:8084/',
+                        default='https://localhost:8084/hot',
                         help='The URL of your map tiles server',
                         )
     parser.add_argument('-a', '--zoom-start', type=int, default=0,

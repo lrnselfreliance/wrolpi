@@ -467,6 +467,7 @@ export const useChannel = (channel_id) => {
         directory: '',
         url: '',
         tag_name: null,
+        download_missing_data: null,
     };
 
     const fetchChannel = async () => {
@@ -479,6 +480,7 @@ export const useChannel = (channel_id) => {
         c['url'] = c['url'] || '';
         c['download_frequency'] = c['download_frequency'] || '';
         c['match_regex'] = c['match_regex'] || '';
+        c['download_missing_data'] = c['download_missing_data']  ?? true;
         return c;
     }
 
@@ -487,6 +489,7 @@ export const useChannel = (channel_id) => {
             name: form.formData.name,
             directory: form.formData.directory,
             url: form.formData.url,
+            download_missing_data: form.formData.download_missing_data,
         };
 
         if (channel_id) {

@@ -7,6 +7,7 @@ import {
     ErrorMessage,
     humanFileSize,
     humanNumber,
+    InfoPopup,
     SearchInput,
     secondsToFrequency,
     secondsToFullDuration,
@@ -36,7 +37,7 @@ import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {TagsContext, TagsSelector} from "../Tags";
-import {InputForm} from "../hooks/useForm";
+import {InputForm, ToggleForm} from "../hooks/useForm";
 import {ChannelDownloadForm, DestinationForm, DownloadTagsSelector} from "./Download";
 
 
@@ -123,6 +124,7 @@ export function ChannelPage({create, header}) {
             name: channel.name,
             directory: channel.directory,
             url: channel.url,
+            download_missing_data: channel.download_missing_data,
         };
 
         let response = null;
@@ -184,7 +186,7 @@ export function ChannelPage({create, header}) {
                     'name',
                 );
             } else {
-                setErrorMessage('Invalid channel', 'Unable to save channel.  See logs.');
+                setErrorMessage('Invalid channel', error.message || error.error || 'Unable to save channel.  See logs.');
             }
         } else {
             console.error('Did not get a response for channel!');
@@ -327,6 +329,18 @@ export function ChannelPage({create, header}) {
         </Grid.Row>;
     }
 
+    const downloadMissingDataInfo = 'Automatically download missing comments, etc, in the background.';
+    const downloadMissingDataLabel = <>Download Missing Data<InfoPopup content={downloadMissingDataInfo}/></>;
+    const downloadMissingDataRow = <Grid.Row>
+        <Grid.Column>
+            <ToggleForm
+                form={form}
+                label={downloadMissingDataLabel}
+                path='download_missing_data'
+            />
+        </Grid.Column>
+    </Grid.Row>;
+
     let messageRow;
     if (error || success) {
         messageRow = <Grid.Row columns={1}>
@@ -384,6 +398,7 @@ export function ChannelPage({create, header}) {
                         </Grid.Column>
                     </Grid.Row>
                     {channelTagRow}
+                    {downloadMissingDataRow}
                     {!create && (channel.url || channel.rss_url) &&
                         <SimpleAccordion title='Details'>
                             <Grid>

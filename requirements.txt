@@ -25,6 +25,7 @@ sanic-testing==22.6.0  # 23.6.0 has error with "expandtabs"
 sanic==23.6.0  # This is the latest version of Sanic that avoids this bug: https://github.com/sanic-org/sanic/issues/2921
 selenium==4.9.1
 srt==3.5.3
+tqdm==4.67.1
 vininfo[cli]==1.8.0
 websockets==13.1
 webvtt-py==0.5.1

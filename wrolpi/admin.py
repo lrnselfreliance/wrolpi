@@ -196,14 +196,13 @@ async def shutdown(reboot: bool = False, delay: int = 10):
     if DOCKERIZED:
         raise ShutdownFailed('Cannot Reboot because we are dockerized')
 
-    reboot = '--reboot' if reboot else ''
+    cmd = (SUDO_BIN, 'shutdown', '--reboot', '0') if reboot else (SUDO_BIN, 'shutdown', '0')
 
     async def _():
         await asyncio.sleep(delay)
 
         try:
             # Call shutdown (or reboot) with no delay now that we have slept.
-            cmd = [SUDO_BIN, 'shutdown', 'reboot', '0']
             result = await run_command(cmd)
         except subprocess.CalledProcessError as e:
             if reboot:

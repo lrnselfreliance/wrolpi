@@ -28,6 +28,8 @@ gdal-bin
 git
 git-doc
 gnupg-agent
+gpsd
+gpsd-tools
 hostapd
 iotop
 kiwix

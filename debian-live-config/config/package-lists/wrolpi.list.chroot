@@ -28,6 +28,7 @@ gdal-bin
 git
 git-doc
 gnupg-agent
+gpsd
 hostapd
 htop
 iotop

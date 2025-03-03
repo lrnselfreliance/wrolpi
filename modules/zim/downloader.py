@@ -2,20 +2,38 @@ from http import HTTPStatus
 from typing import List
 
 from modules.zim import lib
-from wrolpi.common import logger, aiohttp_get, background_task, get_html_soup
+from wrolpi.common import logger, aiohttp_get, get_html_soup
 from wrolpi.downloader import Downloader, Download, DownloadResult
 
 __all__ = ['KiwixCatalogDownloader', 'KiwixZimDownloader', 'kiwix_zim_downloader', 'kiwix_catalog_downloader']
 
-from wrolpi.files.lib import refresh_files, upsert_file
-from wrolpi.vars import PYTEST
+from wrolpi.files.lib import upsert_file
+from wrolpi.vars import DOWNLOAD_USER_AGENT
 
 logger = logger.getChild(__name__)
+
+# Headers to use when issuing Kiwix HTTP requests.
+headers = {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'accept-language': 'en-US,en;q=0.9',
+    'dnt': '1',
+    'priority': 'u=0, i',
+    'sec-ch-ua': '"Chromium";v="129", "Not=A?Brand";v="8"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'none',
+    'sec-fetch-user': '?1',
+    'sec-gpc': '1',
+    'upgrade-insecure-requests': '1',
+    'user-agent': DOWNLOAD_USER_AGENT,
+}
 
 
 async def fetch_hrefs(url: str) -> List[str]:
     try:
-        async with aiohttp_get(url, timeout=20) as response:
+        async with aiohttp_get(url, headers=headers, timeout=20) as response:
             status = response.status
             content = await response.content.read()
         if status != HTTPStatus.OK:

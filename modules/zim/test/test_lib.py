@@ -343,6 +343,8 @@ async def test_zim_tag_migration(await_switches, test_session, test_directory, z
          ('WikEm (Global Emergency Medicine Wiki)', 'en')),
         ('https://download.kiwix.org/zim/stack_exchange/health.stackexchange.com_en_all_',
          ('Health (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/other/khanacademy_en_all_',
+         ('Khan Academy', 'en')),
     ]
 )
 def test_zim_download_url_to_name(url, expected):

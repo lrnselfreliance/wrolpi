@@ -38,53 +38,56 @@ WIKIBOOKS_LANGAUGES = ['af', 'ar', 'az', 'ba', 'be', 'bg', 'bn', 'bs', 'ca', 'cs
                        'ms', 'nb', 'ne', 'nl', 'oc', 'pa', 'pl', 'pt', 'ro', 'ru', 'sa', 'si', 'sk', 'sl', 'sq', 'sr',
                        'sv', 'ta', 'te', 'tg', 'th', 'tl', 'tr', 'tt', 'uk', 'ur', 'vi', 'zh']
 
+MB = 1048576
+GB = MB * 1024
+
 KIWIX_CATALOG = [
     {
         'name': 'Wikibooks (with images)',
         'languages': WIKIBOOKS_LANGAUGES,
-        'size': 4.3 * 1073741824,
+        'size': 4.3 * GB,
     },
     {
         'name': 'Wikibooks (no images)',
         'languages': WIKIBOOKS_LANGAUGES,
-        'size': 3.4 * 1073741824,
+        'size': 3.4 * GB,
     },
     {
         'name': 'Wikipedia (with images)',
         'languages': WIKIPEDIA_LANGUAGES,
-        'size': 94 * 1073741824,
+        'size': 102 * GB,
     },
     {
         'name': 'Wikipedia (mini)',
         'languages': WIKIPEDIA_LANGUAGES,
-        'size': 54 * 1073741824,
+        'size': 6.9 * GB,
     },
     {
         'name': 'Wikipedia (no images)',
         'languages': WIKIPEDIA_LANGUAGES,
-        'size': 50 * 1073741824,
+        'size': 53 * GB,
     },
     {
         'name': 'Wikiversity (with images)',
         'languages': ['ar', 'cs', 'de', 'el', 'en', 'es', 'fi', 'fr', 'hi', 'it', 'ja', 'ko', 'pt', 'ru', 'sl', 'sv',
                       'zh'],
-        'size': 2.3 * 1073741824,
+        'size': 2.3 * GB,
     },
     {
         'name': 'Wikiversity (no images)',
         'languages': ['ar', 'cs', 'de', 'el', 'en', 'es', 'fi', 'fr', 'hi', 'it', 'ja', 'ko', 'pt', 'ru', 'sl', 'sv',
                       'zh'],
-        'size': 1.8 * 1073741824,
+        'size': 1.8 * GB,
     },
     {
         'name': 'Wikitionary (no images)',
         'languages': WIKITIONARY_LANGUAGES,
-        'size': 7.3 * 1073741824,
+        'size': 7.3 * GB,
     },
     {
         'name': 'Wikitionary (with images)',
         'languages': WIKITIONARY_LANGUAGES,
-        'size': 8.0 * 1073741824,
+        'size': 8.0 * GB,
     },
     {
         'name': 'Wikisource',
@@ -93,32 +96,32 @@ KIWIX_CATALOG = [
                       'is', 'it', 'ja', 'kn', 'ko', 'la', 'li', 'lt', 'mk', 'ml', 'mr', 'nan', 'nb', 'nl', 'or', 'pa',
                       'pl', 'pms', 'pt', 'ro', 'ru', 'sa', 'sah', 'sk', 'sl', 'sr', 'sv', 'ta', 'te', 'th', 'tr', 'uk',
                       'vec', 'vi', 'yi', 'zh', 'zh-min-nan'],
-        'size': 16 * 1073741824,
+        'size': 16 * GB,
     },
     {
         'name': 'Raspberry Pi (Stack Exchange)',
         'languages': ['en'],
-        'size': 300 * 1048576,
+        'size': 300 * MB,
     },
     {
         'name': 'Vikidia',
         'languages': ['ca', 'en', 'es', 'eu', 'fr', 'it', 'ru', 'scn'],
-        'size': 711 * 1048576,
+        'size': 711 * MB,
     },
     {
         'name': 'Stackoverflow (Stack Exchange)',
         'languages': ['en', 'es', 'ja', 'pt', 'ru'],
-        'size': 76 * 1073741824,
+        'size': 76 * GB,
     },
     {
         'name': 'Superuser (Stack Exchange)',
         'languages': ['en'],
-        'size': 3 * 1073741824,
+        'size': 3 * GB,
     },
     {
         'name': 'iFixit',
         'languages': ['de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'nl', 'pt', 'ru', 'tr', 'zh'],
-        'size': 3 * 1073741824,
+        'size': 3 * GB,
     },
     {
         'name': 'Gutenberg',
@@ -127,83 +130,88 @@ KIWIX_CATALOG = [
                       'grc', 'he', 'hu', 'ia', 'ilo', 'is', 'it', 'iu', 'ja', 'kha', 'kld', 'ko', 'la', 'mi', 'mul',
                       'myn', 'nah', 'nai', 'nap', 'nav', 'nl', 'no', 'oc', 'oji', 'pl', 'pt', 'rmr', 'ro', 'ru', 'sa',
                       'sl', 'sr', 'sv', 'te', 'tl', 'zh'],
-        'size': 70 * 1073741824,
+        'size': 72 * GB,
     },
     {
         'name': 'Amateur Radio (Stack Exchange)',
         'languages': ['en'],
-        'size': 62 * 1048576,
+        'size': 62 * MB,
     },
     {
         'name': 'DIY (Stack Exchange)',
         'languages': ['en'],
-        'size': 930 * 1048576,
+        'size': 930 * MB,
     },
     {
         'name': 'Electronics (Stack Exchange)',
         'languages': ['en'],
-        'size': 1.4 * 1073741824,
+        'size': 1.4 * GB,
     },
     {
         'name': 'Unix (Stack Exchange)',
         'languages': ['en'],
-        'size': 1.1 * 1073741824,
+        'size': 1.1 * GB,
     },
     {
         'name': 'Ask Ubuntu (Stack Exchange)',
         'languages': ['en'],
-        'size': 1.9 * 1073741824,
+        'size': 1.9 * GB,
     },
     {
         'name': 'Bicycles (Stack Exchange)',
         'languages': ['en'],
-        'size': 350 * 1048576,
+        'size': 350 * MB,
     },
     {
         'name': 'Biology (Stack Exchange)',
         'languages': ['en'],
-        'size': 350 * 1048576,
+        'size': 350 * MB,
     },
     {
         'name': 'Arduino (Stack Exchange)',
         'languages': ['en'],
-        'size': 240 * 1048576,
+        'size': 240 * MB,
     },
     {
         'name': '3D Printing (Stack Exchange)',
         'languages': ['en'],
-        'size': 100 * 1048576,
+        'size': 100 * MB,
     },
     {
         'name': 'MD Wiki (Wiki Project Med Foundation)',
         'languages': ['en'],
-        'size': 5.9 * 1073741824,
+        'size': 5.9 * GB,
     },
     {
         'name': 'WikiMed Medical Encyclopedia',
         'languages': ['ar', 'as', 'bn', 'bpy', 'de', 'en', 'es', 'fa', 'fr', 'gu', 'hi', 'it', 'ja', 'kn', 'lo', 'ml',
                       'mr', 'or', 'pa', 'pt', 'ru', 'ta', 'te', 'uk', 'ur', 'zh'],
-        'size': 6.3 * 1073741824,
+        'size': 6.3 * GB,
     },
     {
         'name': 'Post Disaster Resource Library',
         'languages': ['en'],
-        'size': 763 * 1048576,
+        'size': 763 * MB,
     },
     {
         'name': 'Military Medicine',
         'languages': ['en'],
-        'size': 82 * 1048576,
+        'size': 82 * MB,
     },
     {
         'name': 'WikEm (Global Emergency Medicine Wiki)',
         'languages': ['en'],
-        'size': 42 * 1048576,
+        'size': 42 * MB,
     },
     {
         'name': 'Health (Stack Exchange)',
         'languages': ['en'],
-        'size': 57 * 1048576,
+        'size': 57 * MB,
+    },
+    {
+        'name': 'Khan Academy',
+        'languages': ['en', 'es', 'fr'],
+        'size': 168 * GB,
     },
 ]
 

@@ -354,6 +354,8 @@ async def subscribe(name: str, language: str, session: Session = None,
         url = f'https://download.kiwix.org/zim/other/wikem_{language}_all_maxi_'
     elif name == 'Health (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/health.stackexchange.com_{language}_all_'
+    elif name == 'Khan Academy':
+        url = f'https://download.kiwix.org/zim/other/khanacademy_{language}_all_'
     else:
         raise ValueError(f'{name} not a valid Kiwix subscription name!')
 
@@ -452,6 +454,8 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
         name = 'WikEm (Global Emergency Medicine Wiki)'
     elif project == 'health.stackexchange.com' and flavor == '_all_':
         name = 'Health (Stack Exchange)'
+    elif project == 'khanacademy' and flavor == '_all_':
+        name = 'Khan Academy'
     else:
         raise RuntimeError(f'Could not find name for Zim URL: {url} {project=} {flavor=}')
 

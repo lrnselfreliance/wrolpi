@@ -186,9 +186,9 @@ async def run_import_command(*paths: Path) -> int:
                 import_logger.warning(f'Could not import non-pbf file: {path}')
                 raise ValueError('Invalid PBF file')
 
-    paths = ' '.join(str(i) for i in paths)
+    paths = list(map(str, paths))
     # Run with sudo so renderd can be restarted.
-    cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', paths)
+    cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', *paths)
     import_logger.warning(f'Running map import command: {cmd}')
     result = await run_command(cmd, debug=True)
 

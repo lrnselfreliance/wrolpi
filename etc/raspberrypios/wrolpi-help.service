@@ -8,6 +8,8 @@ ExecStart=/bin/bash -c 'source /opt/wrolpi-help/venv/bin/activate && exec mkdocs
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi-help/
+# Below the App, but below the user.
+Nice=1
 
 [Install]
 WantedBy=default.target

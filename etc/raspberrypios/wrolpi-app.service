@@ -9,6 +9,8 @@ ExecStart=/usr/bin/npm run start
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/
+# Below the API so that Sanic worker can start.
+Nice=6
 
 [Install]
 WantedBy=default.target

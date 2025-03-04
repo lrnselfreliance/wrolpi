@@ -11,6 +11,8 @@ Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/
 Restart=on-failure
+# Higher than the App so the API can start.
+Nice=4
 
 [Install]
 WantedBy=default.target

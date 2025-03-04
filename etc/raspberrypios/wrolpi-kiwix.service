@@ -7,6 +7,8 @@ ExecStart=/opt/wrolpi/scripts/start_kiwix_serve.sh
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/
+# Below the API, but above the Map.
+Nice=8
 
 [Install]
 WantedBy=default.target

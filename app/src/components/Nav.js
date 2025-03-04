@@ -182,7 +182,7 @@ export function NavBar() {
     if (window.apiDown) {
         apiDownIcon = <Popup
             content='API is not responding'
-            trigger={<Icon name='plug'/>}
+            trigger={<Icon name='plug' color={highWarningColor}/>}
         />
     }
 

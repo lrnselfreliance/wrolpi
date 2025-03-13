@@ -27,13 +27,14 @@ async def test_run_import_command(test_directory, mock_run_command, run_command_
     Import map files.  Files to import are checked for validity before importing.  Any errors returned by
     asyncio.create_subprocess_shell are caught and reported.
     """
-    pbf_file = test_directory / 'foo.osm.pbf'
+    foo_pbf = test_directory / 'foo.osm.pbf'
+    bar_pbf = test_directory / 'bar.osm.pbf'
     with pytest.raises(ValueError):
-        await lib.run_import_command(pbf_file)
+        await lib.run_import_command(foo_pbf)
 
-    pbf_file.touch()
+    foo_pbf.touch()
     with pytest.raises(ValueError):
-        await lib.run_import_command(pbf_file)
+        await lib.run_import_command(foo_pbf)
 
     dump_file = test_directory / 'dumpy.dump'
     dump_file.touch()
@@ -41,14 +42,19 @@ async def test_run_import_command(test_directory, mock_run_command, run_command_
     with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
         # Run the import, it succeeds.
         mock_is_pbf_file.return_value = True
-        await lib.run_import_command(pbf_file)
+        await lib.run_import_command(foo_pbf)
+
+    # Can import more than one pbf.
+    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
+        mock_is_pbf_file.return_value = True
+        await lib.run_import_command(foo_pbf, bar_pbf)
 
     with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
         # Run the import, it fails.
         mock_run_command(run_command_bad_result)
         mock_is_pbf_file.return_value = True
         with pytest.raises(ValueError):
-            await lib.run_import_command(pbf_file)
+            await lib.run_import_command(foo_pbf)
 
     with pytest.raises(ValueError) as e:
         await lib.run_import_command()

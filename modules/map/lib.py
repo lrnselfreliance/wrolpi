@@ -94,6 +94,11 @@ async def import_files(paths: List[str]):
         any_success = False
         try:
             if pbfs:
+                with get_db_session(commit=True) as session:
+                    # Any previously imported PBFs are no longer imported.
+                    for pbf_file in session.query(MapFile):
+                        pbf_file.imported = False
+
                 success = False
                 try:
                     api_app.shared_ctx.map_importing.update(dict(
@@ -115,8 +120,6 @@ async def import_files(paths: List[str]):
                         for pbf_path in pbfs:
                             pbf_file = get_or_create_map_file(pbf_path, session)
                             pbf_file.imported = True
-                        for pbf_file in session.query(MapFile):
-                            pbf_file.imported = pbf_file.path in pbfs
 
             for path in dumps:
                 # Import each dump individually.

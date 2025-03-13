@@ -9,7 +9,9 @@ def assert_map_file_status(test_client, expected, status_code=HTTPStatus.OK):
     request, response = test_client.get('/api/map/files')
     assert response.status_code == status_code
     for pbf, expected_ in zip_longest(response.json['files'], expected):
-        assert pbf['imported'] == expected_['imported']
+        imported = 'to be imported' if expected_['imported'] else 'to NOT be imported'
+        if not pbf['imported'] == expected_['imported']:
+            raise AssertionError(f'Expected {pbf["path"]} {imported}')
         assert pbf['path'].endswith(expected_['path'])
     assert response.json['pending'] is None
 
@@ -32,24 +34,26 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
     ]
     assert_map_file_status(test_client, expected)
 
-    body = {'files': [str(pbf1), ], }
-    request, response = test_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    expected = [
-        {'imported': False, 'path': 'map/dump/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
-    ]
-    assert_map_file_status(test_client, expected)
-
     body = {'files': [str(pbf1), str(pbf2)]}
     request, response = test_client.post('/api/map/import', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
+    # Can import multiple pbf files.
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
         {'imported': True, 'path': 'map/pbf/other-country.osm.pbf'},
+        {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
+    ]
+    assert_map_file_status(test_client, expected)
+
+    body = {'files': [str(pbf1), ], }
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Importing one pbf resets the import statuses.
+    expected = [
+        {'imported': False, 'path': 'map/dump/dumpy.dump'},
+        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
     assert_map_file_status(test_client, expected)
@@ -58,9 +62,10 @@ def test_status_and_import(test_client, test_session, make_files_structure, mock
     request, response = test_client.post('/api/map/import', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT
 
+    # Importing a dump also resets statuses.
     expected = [
         {'imported': True, 'path': 'map/dump/dumpy.dump'},
-        {'imported': True, 'path': 'map/pbf/other-country.osm.pbf'},
+        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
     assert_map_file_status(test_client, expected)

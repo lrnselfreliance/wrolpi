@@ -107,5 +107,6 @@ fi
 # Clear map tile cache only after successful import.
 yes | /bin/bash /opt/wrolpi/scripts/clear_map_cache.sh
 
-# Use curl to fetch the first few layers of map tiles so the map is ready to use.
-bash /opt/wrolpi/wrolpi/scripts/initialize_map_tiles.sh
+# Use wget to fetch the first few layers of map tiles so the map is ready to use.
+# Failure does not mean the import failed.
+bash /opt/wrolpi/wrolpi/scripts/initialize_map_tiles.sh || :

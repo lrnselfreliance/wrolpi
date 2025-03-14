@@ -4,8 +4,8 @@ Wants=wrolpi-api.service
 PartOf=wrolpi.target
 
 [Service]
-# Use development React app
-ExecStart=/usr/bin/npm run start
+# Use explicit `serve.json` so `epub.html` is not lost.
+ExecStart=/usr/local/bin/serve build -l 3000 -c /opt/wrolpi/app/serve.json
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/

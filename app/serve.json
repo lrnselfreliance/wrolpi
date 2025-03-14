@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/epub/epub.html",
+      "destination": "/epub/epub.html"
+    },
+    {
+      "source": "**",
+      "destination": "/index.html"
+    }
+  ],
+  "cleanUrls": false
+}

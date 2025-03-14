@@ -29,7 +29,7 @@ python3 -m venv /opt/wrolpi/venv
 /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
 # Install webapp.
-(cd /opt/wrolpi/app && npm install)
+(cd /opt/wrolpi/app && npm install && npm run build)
 
 chown -R wrolpi:wrolpi /opt/wrolpi
 

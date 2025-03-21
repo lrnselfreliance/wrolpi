@@ -10,7 +10,7 @@ from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import SUDO_BIN, run_command
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
-from wrolpi.dates import timedelta_to_timestamp, seconds_to_timestamp
+from wrolpi.dates import timedelta_to_timestamp, seconds_to_timestamp, now
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
 from wrolpi.vars import PROJECT_DIR, IS_RPI5
@@ -89,8 +89,7 @@ async def import_files(paths: List[str]):
         dumps = [i for i in paths if i.suffix == '.dump']
         pbfs = [i for i in paths if i.suffix == '.pbf']
 
-        total_elapsed = 0
-
+        start = now()
         any_success = False
         try:
             if pbfs:
@@ -104,7 +103,7 @@ async def import_files(paths: List[str]):
                     api_app.shared_ctx.map_importing.update(dict(
                         pending=list(pbfs),
                     ))
-                    total_elapsed += await run_import_command(*pbfs)
+                    await run_import_command(*pbfs)
                     success = True
                     any_success = True
                 except Exception as e:
@@ -139,7 +138,7 @@ async def import_files(paths: List[str]):
                     api_app.shared_ctx.map_importing.update(dict(
                         pending=str(path),
                     ))
-                    total_elapsed += await run_import_command(path)
+                    await run_import_command(path)
                     success = True
                     any_success = True
                 except Exception as e:
@@ -154,18 +153,18 @@ async def import_files(paths: List[str]):
                         map_file = get_or_create_map_file(path, session)
                         map_file.imported = True
         finally:
+            elapsed = (now() - start).total_seconds()
             if any_success:
-                Events.send_map_import_complete(f'Map import completed; took {seconds_to_timestamp(total_elapsed)}')
+                Events.send_map_import_complete(f'Map import completed; took {seconds_to_timestamp(elapsed)}')
             else:
-                Events.send_map_import_failed(f'Map import failed!  See server logs.')
+                Events.send_map_import_failed(
+                    f'Map import failed; took {seconds_to_timestamp(elapsed)} See server logs.')
 
 
-async def run_import_command(*paths: Path) -> int:
+async def run_import_command(*paths: Path):
     """Run the map import script on the provided paths.
 
     Can only import a single *.dump file, or a list of *.osm.pbf files.  They cannot be mixed.
-
-    @return: The seconds elapsed during import.
     """
     paths = [i.absolute() for i in paths]
     dumps = [i for i in paths if i.suffix == '.dump']
@@ -189,10 +188,14 @@ async def run_import_command(*paths: Path) -> int:
                 import_logger.warning(f'Could not import non-pbf file: {path}')
                 raise ValueError('Invalid PBF file')
 
-    paths = list(map(str, paths))
+    paths = [str(i) for i in paths]
     # Run with sudo so renderd can be restarted.
     cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', *paths)
-    result = await run_command(cmd, debug=True)
+    result = await run_command(
+        cmd,
+        debug=True,
+        timeout=0,  # No timeout, map importing could take days.
+    )
 
     success = 'Successful' if result.return_code == 0 else 'Unsuccessful'
     import_logger.info(
@@ -204,8 +207,6 @@ async def run_import_command(*paths: Path) -> int:
         for line in result.stderr.decode().splitlines():
             import_logger.error(line[:500])
         raise ValueError(f'Importing map file failed with return code {result.return_code}')
-
-    return result.elapsed
 
 
 @optional_session

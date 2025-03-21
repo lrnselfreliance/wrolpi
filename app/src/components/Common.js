@@ -954,6 +954,8 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'file word';
         } else if (mimetype.startsWith('application/x-x509-ca-cert')) {
             return 'certificate';
+        } else if (mimetype.startsWith('application/x-pie-executable')) {
+            return 'linux';
         } else if (mimetype.startsWith('application/octet-stream')) {
             if (lowerPath.endsWith('.mp3')) {
                 return 'file audio';

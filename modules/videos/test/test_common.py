@@ -20,7 +20,11 @@ from ..lib import save_channels_config, get_channels_config, import_channels_con
 
 def test_get_absolute_media_path(test_directory):
     path = get_absolute_media_path('videos')
-    assert str(path).endswith('videos')
+    assert str(path) == f'{test_directory}/videos'
+
+    # An absolute path is not changed.
+    path = get_absolute_media_path(path)
+    assert str(path) == f'{test_directory}/videos'
 
 
 def test_extract_video_duration(test_directory, corrupted_video_file):

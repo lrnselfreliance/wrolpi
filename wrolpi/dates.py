@@ -46,6 +46,9 @@ def strpdate(dt: str) -> datetime:
     """
     Attempt to parse a datetime string.  Tries to find a Timezone, if possible.  DB requires timezone.
     """
+    if not dt or dt in ('undefined', 'null'):
+        InvalidDatetime(f'Unable to parse empty datetime string: {dt}')
+
     try:
         if dt.count('/') == 2:
             # No timezone info.

@@ -145,3 +145,9 @@ def test_invalid_strpdate():
 
     with pytest.raises(InvalidDatetime):
         dates.strpdate('27/04/2024 18:52:55')
+    with pytest.raises(InvalidDatetime):
+        dates.strpdate('undefined')
+    with pytest.raises(InvalidDatetime):
+        dates.strpdate('null')
+    with pytest.raises(InvalidDatetime):
+        dates.strpdate(None)

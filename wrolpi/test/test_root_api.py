@@ -419,7 +419,7 @@ async def test_get_status(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_download_crud(test_session, async_client, test_download_manager_config, tag_factory):
+async def test_download_crud(test_session, async_client, test_download_manager_config, tag_factory, test_directory):
     """Test creating once-downloads and recurring downloads."""
     tag1, tag2 = await tag_factory(), await tag_factory()
 
@@ -432,6 +432,7 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
             urls=['https://example.com/1', ],
             frequency=1_000,
             downloader='archive',
+            destination='archives/example.com',
             tag_names=None,  # tag_names can be a None.
         )
         request, response = await async_client.post('/api/download', content=json.dumps(body))
@@ -452,6 +453,8 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
 
         download1, download2, download3 = test_session.query(Download).order_by(Download.url).all()
         assert not download1.settings
+        # destination is absolute
+        assert download1.destination == test_directory / 'archives/example.com'
         expected_download = dict(download1.__json__()).copy()
 
         # Update a download.
@@ -461,7 +464,8 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
             frequency=1_000,
             tag_names=[tag1.name, tag2.name],
         )
-        expected_download.update({'url': 'https://example.com/1', 'tag_names': [tag1.name, tag2.name]})
+        expected_download.update(
+            {'url': 'https://example.com/1', 'tag_names': [tag1.name, tag2.name], 'destination': None})
         request, response = await async_client.put(f'/api/download/{download1.id}', json=body)
         assert response.status_code == HTTPStatus.NO_CONTENT
         test_session.flush([download2])

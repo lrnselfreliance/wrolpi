@@ -19,7 +19,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    trim_file_name, cached_multiprocessing_result
+    trim_file_name, cached_multiprocessing_result, get_absolute_media_path
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -182,7 +182,8 @@ class ChannelDownloader(Downloader, ABC):
         if channel:
             settings.update(dict(channel_id=channel.id, channel_url=download.url))
         if download.destination:
-            settings['destination'] = str(download.destination)  # Need str for JSON conversion
+            destination = get_absolute_media_path(download.destination)
+            settings['destination'] = str(destination)  # Need str for JSON conversion
         if download.tag_names:
             settings['tag_names'] = download.tag_names
         if video_resolutions := download_settings.get('video_resolutions'):
@@ -370,6 +371,7 @@ class VideoDownloader(Downloader, ABC):
 
         # Make output directory.  (Maybe string from settings)
         out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
+        out_dir = get_absolute_media_path(out_dir)
         out_dir.mkdir(exist_ok=True, parents=True)
 
         if tag_names and logger.isEnabledFor(logging.DEBUG):

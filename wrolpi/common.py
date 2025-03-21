@@ -390,7 +390,7 @@ def set_test_media_directory(path):
 def get_media_directory() -> Path:
     """Get the media directory.
 
-    This will typically be /opt/wrolpi, or something else from the .env.
+    This will typically be /media/wrolpi, or something else from the .env.
 
     During testing, this function returns TEST_MEDIA_DIRECTORY.
     """

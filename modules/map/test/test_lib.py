@@ -69,15 +69,15 @@ async def test_run_import_command(test_directory, mock_run_command, run_command_
 @pytest.mark.parametrize('size,expected', [
     (0, 0),
     (-1, 0),
-    (17737381, 286),
-    (63434267, 1025),
-    (87745484, 1418),
-    (116318111, 1879),
-    (136372996, 2203),
-    (1936075318, 150308),
-    (2676094489, 345922),
-    (3392375001, 610106),
-    (11346305075, 8491840),
+    (17737381, 101),
+    (63434267, 361),
+    (87745484, 500),
+    (116318111, 662),
+    (136372996, 777),
+    (1936075318, 28823),
+    (2676094489, 47839),
+    (3392375001, 70429),
+    (11346305075, 597985),
 ])
 def test_seconds_to_import_rpi4(size, expected):
     assert lib.seconds_to_import(size) == expected
@@ -91,10 +91,10 @@ def test_seconds_to_import_rpi4(size, expected):
     (87745484, 645),
     (116318111, 855),
     (136372996, 1002),
-    (1936075318, 14235),
-    (2676094489, 19676),
-    (3392375001, 24943),
-    (11346305075, 188040),
+    (1936075318, 10873),
+    (2676094489, 18313),
+    (3392375001, 27253),
+    (11346305075, 241574),
 ])
 def test_seconds_to_import_rpi5(size, expected):
     assert lib.seconds_to_import(size, True) == expected

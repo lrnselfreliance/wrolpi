@@ -222,34 +222,27 @@ def get_import_status(session: Session = None) -> List[MapFile]:
 
 
 # Calculated using many tests on a well-cooled RPi4 (4GB).
-RPI4_PBF_BYTES_PER_SECOND = 61879
-RPI4_A = 7.17509261732342e-14
-RPI4_B = 6.6590760410412e-5
-RPI4_C = 10283
+RPI4_PBF_BYTES_PER_SECOND = 175473
+RPI4_COEFFICIENTS = [4.01229956e-15, 7.19038150e-06, -1.36868043e+02]
 # Calculated using many tests on a well-cooled RPi5 (8GB).
 RPI5_PBF_BYTES_PER_SECOND = 136003
-RPI5_A = 1.6681382703586e-15
-RPI5_B = 2.35907824676145e-6
-RPI5_C = 53.727
+RPI5_COEFFICIENTS = [1.66813827e-15, 2.35907825e-06, 5.37276181e+01]
 
 
 def seconds_to_import_rpi4(size_in_bytes: int) -> int:
     if size_in_bytes > 1_000_000_000:
         # Use exponential curve for large files.
-        a = RPI4_A * size_in_bytes ** 2
-        b = RPI4_B * size_in_bytes
-        return int(a - b + RPI4_C)
+        a, b, c = RPI4_COEFFICIENTS
+        return int(a * size_in_bytes ** 2 + b * size_in_bytes + c)
     # Use simpler equation for small files.
     return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)
 
 
 def seconds_to_import_rpi5(size_in_bytes: int) -> int:
-    if size_in_bytes > 5_000_000_000:
+    if size_in_bytes > 1_000_000_000:
         # Use exponential curve for large files.
-        a = RPI5_A * size_in_bytes ** 2
-        b = RPI5_B * size_in_bytes
-        return int(a - b + RPI5_C)
-    # Use simpler equation for small files.
+        a, b, c = RPI5_COEFFICIENTS
+        return int(a * size_in_bytes ** 2 + b * size_in_bytes + c)
     return max(int(size_in_bytes // RPI5_PBF_BYTES_PER_SECOND), 0)
 
 

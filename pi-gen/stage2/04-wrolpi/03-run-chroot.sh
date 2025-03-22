@@ -24,9 +24,11 @@ npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1
 git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 git config --global --add safe.directory /opt/wrolpi
 
-# Install Python requirements.
+# Install Python requirements.  Try multiple times because pypi may stop responding.
 python3 -m venv /opt/wrolpi/venv
-/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
+  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
+  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
 # Install webapp.
 (cd /opt/wrolpi/app && npm install && npm run build)

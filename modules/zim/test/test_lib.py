@@ -200,6 +200,8 @@ async def test_zim_download(test_session, kiwix_download_zim, test_directory, te
     assert (test_directory / 'zims/wikipedia_es_all_maxi_2023-06.zim').is_file()
     assert (test_directory / 'zims/wikipedia_es_all_maxi_2023-06.zim').stat().st_size
     assert once_download.attempts == 1
+    # All files downloaded were indexed and are Zim files.
+    assert all(i.model == 'zim' and i.indexed is True for i in test_session.query(FileGroup))
 
     # Download catalog again, should not re-download the existing file.
     recurring_download.status = 'new'
@@ -243,6 +245,9 @@ async def test_zim_download(test_session, kiwix_download_zim, test_directory, te
     assert test_session.query(FileGroup).count() == 2
     # But old file is now outdated.
     assert flags.outdated_zims.is_set()
+
+    # All files downloaded were indexed and are Zim files.
+    assert all(i.model == 'zim' and i.indexed is True for i in test_session.query(FileGroup))
 
     # Delete the outdated file.
     await lib.remove_outdated_zim_files()
@@ -383,16 +388,19 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_zim_modeler(test_session, zim_factory):
+async def test_zim_modeler(async_client, test_session, zim_factory):
     """Zim modeler sets FileGroup title and a_text."""
-    zim_factory('the_zim_title')
+    zim = zim_factory('the_zim_title.zim')
+    assert zim.file_group.indexed is False
     test_session.commit()
 
     await files_lib.refresh_files()
 
     fg: FileGroup = test_session.query(FileGroup).one()
-    assert fg.title == 'the_zim_title'
-    assert fg.a_text == 'the zim title'
+    assert fg.indexed is True
+    assert fg.title == 'the_zim_title.zim'
+    assert fg.a_text == 'the zim title zim'
+    assert fg.model == 'zim'
 
 
 def test_get_custom_zims_directory(test_directory, test_wrolpi_config):

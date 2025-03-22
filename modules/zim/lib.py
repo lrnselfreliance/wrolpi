@@ -35,9 +35,21 @@ __all__ = [
     'get_unique_paths',
     'get_zim',
     'get_zims',
-    'zim_modeler',
+    'model_zim',
     'zim_download_url_to_name',
+    'zim_modeler',
 ]
+
+
+def model_zim(file_group: FileGroup, session: Session) -> Zim:
+    """Create a Zim record for the provided FileGroup."""
+    zim = Zim(file_group=file_group, path=file_group.primary_path)
+    session.add(zim)
+    file_group.title = file_group.primary_path.name
+    file_group.a_text = split_file_name_words(file_group.primary_path.name)
+    file_group.indexed = True
+    file_group.model = 'zim'
+    return zim
 
 
 @register_modeler
@@ -59,13 +71,14 @@ async def zim_modeler():
                 zim_id = None
                 try:
                     if not zim:
-                        zim = Zim(file_group=file_group, path=file_group.primary_path)
-                        session.add(zim)
-                        session.flush([zim])
-                    zim_id = zim.id
-                    file_group.title = file_group.primary_path.name
-                    file_group.a_text = split_file_name_words(file_group.primary_path.name)
-                    file_group.indexed = True
+                        zim = model_zim(file_group, session)
+                        zim.flush()
+                    else:
+                        zim_id = zim.id
+                        file_group.title = file_group.primary_path.name
+                        file_group.a_text = split_file_name_words(file_group.primary_path.name)
+                        file_group.indexed = True
+                        file_group.model = 'zim'
                 except Exception as e:
                     if PYTEST:
                         raise

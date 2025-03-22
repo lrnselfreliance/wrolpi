@@ -12,7 +12,7 @@ from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
-from wrolpi.common import Base, logger, get_relative_to_media_directory
+from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.downloader import Download, download_manager
@@ -60,7 +60,7 @@ class EntrySummary:
         return d
 
 
-class Zim(Base):
+class Zim(Base, ModelHelper):
     """Records of Zim files.
 
     Zim files stores wiki content (and much more) for offline usage. Zim files are compressed data that can be searched.
@@ -100,9 +100,6 @@ class Zim(Base):
     @optional_session
     def get_by_path(path: pathlib.Path, session: Session = None) -> Optional['Zim']:
         zim = session.query(Zim).filter_by(path=path).one_or_none()
-        if not zim and path.is_file():
-            zim = Zim.from_paths(session, path)
-            session.commit()
         return zim
 
     @staticmethod
@@ -141,6 +138,18 @@ class Zim(Base):
         session: Session = Session.object_session(self)
         self.path.unlink(missing_ok=True)
         session.delete(self)
+
+    @staticmethod
+    def can_model(file_group: FileGroup) -> bool:
+        if file_group.primary_path.suffix.lower() == '.zim':
+            return True
+        return False
+
+    @staticmethod
+    def do_model(file_group: FileGroup, session: Session) -> 'Zim':
+        from modules.zim.lib import model_zim
+        zim = model_zim(file_group, session)
+        return zim
 
     @functools.cached_property
     def zim_metadata(self) -> ZimMetadata:

@@ -441,6 +441,7 @@ class FileGroup(ModelHelper, Base):
         from modules.videos.models import Video
         from modules.archive.models import Archive
         from wrolpi.files.ebooks import EBook
+        from modules.zim.models import Zim
 
         if Video.can_model(self):
             return Video
@@ -448,6 +449,8 @@ class FileGroup(ModelHelper, Base):
             return EBook
         elif Archive.can_model(self):
             return Archive
+        elif Zim.can_model(self):
+            return Zim
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:
         """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""

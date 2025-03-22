@@ -19,6 +19,7 @@ fi
 USER_NAME=$(getent passwd 1000 | cut -d: -f1)
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 usermod -aG wrolpi ${USER_NAME}
+usermod -aG sudo ${USER_NAME}
 
 # Do not run this script again.
 systemctl disable wrolpi-first-startup.service

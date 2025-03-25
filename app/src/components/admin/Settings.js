@@ -500,7 +500,7 @@ export function SettingsPage() {
 
     const configsSegment = <Segment>
         <RefreshHeader
-            header='Refresh'
+            header='Configs'
             popupContents='Check if configs are valid'
             onRefresh={fetchConfigs}
         />

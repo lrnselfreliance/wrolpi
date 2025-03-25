@@ -29,4 +29,4 @@ tqdm==4.67.1
 vininfo[cli]==1.8.0
 websockets==13.1
 webvtt-py==0.5.1
-yt-dlp==2025.01.12
+yt-dlp==2025.03.25

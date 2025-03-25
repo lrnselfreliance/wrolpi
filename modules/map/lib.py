@@ -223,7 +223,7 @@ def get_import_status(session: Session = None) -> List[MapFile]:
 
 # Calculated using many tests on a well-cooled RPi4 (4GB).
 RPI4_PBF_BYTES_PER_SECOND = 175473
-RPI4_COEFFICIENTS = [4.01229956e-15, 7.19038150e-06, -1.36868043e+02]
+RPI4_COEFFICIENTS = [3.25099914e-15, 8.88717664e-06, -3.59754030e+02]
 # Calculated using many tests on a well-cooled RPi5 (8GB).
 RPI5_PBF_BYTES_PER_SECOND = 136003
 RPI5_COEFFICIENTS = [1.66813827e-15, 2.35907825e-06, 5.37276181e+01]

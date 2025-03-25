@@ -74,10 +74,10 @@ async def test_run_import_command(test_directory, mock_run_command, run_command_
     (87745484, 500),
     (116318111, 662),
     (136372996, 777),
-    (1936075318, 28823),
-    (2676094489, 47839),
-    (3392375001, 70429),
-    (11346305075, 597985),
+    (1936075318, 29032),
+    (2676094489, 46705),
+    (3392375001, 67202),
+    (11346305075, 519006),
 ])
 def test_seconds_to_import_rpi4(size, expected):
     assert lib.seconds_to_import(size) == expected

@@ -9,7 +9,7 @@ from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
-from wrolpi.switches import register_switch_handler
+from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from . import lib, schema
 
 NAME = 'archive'
@@ -98,6 +98,9 @@ async def singlefile_upload_switch_handler(singlefile):
         if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
             # Download was attempted and failed, user manually archived the URL.
             download_manager.delete_download(download.id)
+
+
+singlefile_upload_switch_handler: ActivateSwitchMethod
 
 
 @archive_bp.post('/upload')

@@ -91,7 +91,6 @@ YT_DLP_BIN = which(
 )
 FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe')
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')
-JC_BIN = which('jc', '/usr/bin/jc')
 
 
 @dataclasses.dataclass

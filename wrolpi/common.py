@@ -128,6 +128,7 @@ LOGGING_CONFIG = {
             'class': 'logging.StreamHandler',
             'formatter': 'generic',
             'stream': sys.stdout,
+            'filters': ['empty_message_filter'],
         },
         'error_console': {
             'class': 'logging.StreamHandler',
@@ -138,6 +139,7 @@ LOGGING_CONFIG = {
             'class': 'logging.StreamHandler',
             'formatter': 'access',
             'stream': sys.stdout,
+            'filters': ['empty_message_filter'],
         },
     },
     'formatters': {
@@ -154,6 +156,11 @@ LOGGING_CONFIG = {
     'root': {
         'handlers': ['console'],
         'level': logging.DEBUG
+    },
+    'filters': {
+        'empty_message_filter': {
+            '()': 'wrolpi.logging_extra.EmptyMessageFilter',
+        }
     }
 }
 

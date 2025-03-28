@@ -1897,6 +1897,9 @@ export function mergeDeep(target, source) {
 
 export function getDistinctColor(hexColors) {
     function hexToHSL(hex) {
+        if (!hex) {
+            return {h: 0, s: 0, l: 0};
+        }
         let r = parseInt(hex.slice(1, 3), 16) / 255;
         let g = parseInt(hex.slice(3, 5), 16) / 255;
         let b = parseInt(hex.slice(5, 7), 16) / 255;

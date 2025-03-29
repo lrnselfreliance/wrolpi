@@ -1,6 +1,7 @@
 import copy
 import pathlib
 import shutil
+import urllib.parse
 from datetime import datetime
 from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
@@ -10,7 +11,7 @@ from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    unique_by_predicate, TRACE_LEVEL
+    get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
 from wrolpi.downloader import Download
@@ -107,7 +108,17 @@ class FileGroup(ModelHelper, Base):
     def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
         _, suffix = split_path_stem_and_suffix(self.primary_path)
-        tags = sorted([i.tag.name for i in self.tag_files])
+        
+        # Get tag names with error handling
+        tag_names = []
+        for tag_file in self.tag_files:
+            try:
+                if tag_file.tag is not None:
+                    tag_names.append(tag_file.tag.name)
+            except AttributeError:
+                # Log the error but continue processing other tags
+                logger.error(f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+        tags = sorted(tag_names)
         d = dict(
             author=self.author,
             censored=self.censored,
@@ -140,13 +151,8 @@ class FileGroup(ModelHelper, Base):
             return self.title
         return self.primary_path.name
 
-    def set_viewed(self, viewed: datetime = None) -> datetime:
-        """
-        :param viewed: Used only for testing!
-        :return: The datetime that was set.
-        """
-        self.viewed = viewed or now()
-        return self.viewed
+    def set_viewed(self):
+        self.viewed = now()
 
     @optional_session
     def set_tags(self, tag_names_or_ids: Iterable[str | int], session: Session = None):
@@ -305,9 +311,14 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype
+        from wrolpi.files.lib import get_primary_file, get_mimetype, get_unique_files_by_stem
+
+        unique_stems = get_unique_files_by_stem(paths)
+        if len(unique_stems) > 1:
+            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
+        logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
@@ -335,8 +346,7 @@ class FileGroup(ModelHelper, Base):
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
-        if logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(f'FileGroup.from_paths: {file_group}')
+        logger.debug(f'FileGroup.from_paths: {file_group}')
 
         return file_group
 
@@ -353,17 +363,17 @@ class FileGroup(ModelHelper, Base):
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 
-    @staticmethod
-    @optional_session
-    def find_by_path(path, session) -> 'FileGroup':
-        file_group = FileGroup.get_by_path(path, session)
-        if not file_group:
-            raise UnknownFile(f'Unable to find FileGroup with path {path}')
-        return file_group
-
     @property
     def tag_names(self) -> List[str]:
-        return [i.tag.name for i in self.tag_files]
+        result = []
+        for tag_file in self.tag_files:
+            try:
+                if tag_file.tag is not None:
+                    result.append(tag_file.tag.name)
+            except AttributeError:
+                # Log the error but continue processing other tags
+                logger.error(f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+        return result
 
     def merge(self, file_groups: List['FileGroup']):
         """Consume the files and Tags of the provided FileGroups and attach them to this FileGroup.  Delete the provided
@@ -381,7 +391,7 @@ class FileGroup(ModelHelper, Base):
                     collected_files.append(file)
             # Move any applied Tags.
             for tag_file in file_group.tag_files:
-                if tag_file.tag.name not in self.tag_names:
+                if tag_file.tag is not None and tag_file.tag.name not in self.tag_names:
                     # Preserve the created at.
                     self.add_tag(tag_file.tag.id).created_at = tag_file.created_at
             session.delete(file_group)
@@ -433,8 +443,14 @@ class FileGroup(ModelHelper, Base):
     @property
     def location(self):
         """Returns the URL that the FileGroup can be previewed."""
-        from wrolpi.files.lib import get_file_location_href
-        return get_file_location_href(self.primary_path)
+        parent = str(get_relative_to_media_directory(self.primary_path.parent))
+        preview = str(get_relative_to_media_directory(self.primary_path))
+        if parent == '.':
+            # File is in the top of the media directory, App already shows top directory open.
+            query = urllib.parse.urlencode(dict(preview=str(preview)))
+        else:
+            query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
+        return f'/files?{query}'
 
     def get_model_class(self) -> Optional[Type[ModelHelper]]:
         """Return the class that is suitable for this FileGroup (usually based on mimetype), if any."""
@@ -449,7 +465,7 @@ class FileGroup(ModelHelper, Base):
             return EBook
         elif Archive.can_model(self):
             return Archive
-        elif Zim.can_model(self):
+        elif Zim.can.model(self):
             return Zim
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:
@@ -471,14 +487,19 @@ class FileGroup(ModelHelper, Base):
 
     def get_tag_directory_paths_map(self) -> dict[pathlib.Path, str]:
         """Return all links that should exist for this FileGroup in the Tags Directory."""
-        if not self.tag_names:
+        tag_names = self.tag_names
+        if not tag_names:
             raise RuntimeError(f'Did not get any tag names for {self}')
 
-        tag_names = ', '.join(sorted(self.tag_names))
-        files = dict()
-        for file in self.my_paths():
-            files[file] = f'{tag_names}/{file.name}'
-        return files
+        try:
+            tag_names_str = ', '.join(sorted(tag_names))
+            files = dict()
+            for file in self.my_paths():
+                files[file] = f'{tag_names_str}/{file.name}'
+            return files
+        except Exception as e:
+            logger.error(f"Error in get_tag_directory_paths_map for {self}: {e}")
+            raise
 
 
 class Directory(ModelHelper, Base):

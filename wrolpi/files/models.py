@@ -108,7 +108,7 @@ class FileGroup(ModelHelper, Base):
     def __json__(self) -> dict:
         from wrolpi.files.lib import split_path_stem_and_suffix
         _, suffix = split_path_stem_and_suffix(self.primary_path)
-        
+
         # Get tag names with error handling
         tag_names = []
         for tag_file in self.tag_files:
@@ -116,6 +116,8 @@ class FileGroup(ModelHelper, Base):
                 if tag_file.tag is not None:
                     tag_names.append(tag_file.tag.name)
             except AttributeError:
+                if PYTEST:
+                    raise
                 # Log the error but continue processing other tags
                 logger.error(f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         tags = sorted(tag_names)
@@ -151,8 +153,13 @@ class FileGroup(ModelHelper, Base):
             return self.title
         return self.primary_path.name
 
-    def set_viewed(self):
-        self.viewed = now()
+    def set_viewed(self, viewed: datetime = None) -> datetime:
+        """
+        :param viewed: Used only for testing!
+        :return: The datetime that was set.
+        """
+        self.viewed = viewed or now()
+        return self.viewed
 
     @optional_session
     def set_tags(self, tag_names_or_ids: Iterable[str | int], session: Session = None):
@@ -311,14 +318,10 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype, get_unique_files_by_stem
-
-        unique_stems = get_unique_files_by_stem(paths)
-        if len(unique_stems) > 1:
-            raise RuntimeError(f'Refusing to create FileGroup with paths that do not share a stem.')
+        from wrolpi.files.lib import get_primary_file, get_mimetype
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
-        logger.debug(f'FileGroup.from_paths: {len(existing_groups)}')
+        logger.trace(f'FileGroup.from_paths: {len(existing_groups)=}')
         if len(existing_groups) == 0:
             # These paths have not been used previously, create a new FileGroup.
             file_group = FileGroup()
@@ -346,7 +349,7 @@ class FileGroup(ModelHelper, Base):
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
-        logger.debug(f'FileGroup.from_paths: {file_group}')
+        logger.trace(f'FileGroup.from_paths: {file_group}')
 
         return file_group
 
@@ -363,6 +366,14 @@ class FileGroup(ModelHelper, Base):
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 
+    @staticmethod
+    @optional_session
+    def find_by_path(path, session) -> 'FileGroup':
+        file_group = FileGroup.get_by_path(path, session)
+        if not file_group:
+            raise UnknownFile(f'Unable to find FileGroup with path {path}')
+        return file_group
+
     @property
     def tag_names(self) -> List[str]:
         result = []
@@ -371,6 +382,8 @@ class FileGroup(ModelHelper, Base):
                 if tag_file.tag is not None:
                     result.append(tag_file.tag.name)
             except AttributeError:
+                if PYTEST:
+                    raise
                 # Log the error but continue processing other tags
                 logger.error(f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         return result
@@ -465,7 +478,7 @@ class FileGroup(ModelHelper, Base):
             return EBook
         elif Archive.can_model(self):
             return Archive
-        elif Zim.can.model(self):
+        elif Zim.can_model(self):
             return Zim
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:

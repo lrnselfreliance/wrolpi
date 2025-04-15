@@ -421,7 +421,7 @@ def get_media_directory() -> Path:
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
         if not is_tempfile(TEST_MEDIA_DIRECTORY):
             raise RuntimeError(f'Refusing to run test outside tmp directory: {TEST_MEDIA_DIRECTORY}')
-        return TEST_MEDIA_DIRECTORY
+        return TEST_MEDIA_DIRECTORY.resolve()
 
     return MEDIA_DIRECTORY
 

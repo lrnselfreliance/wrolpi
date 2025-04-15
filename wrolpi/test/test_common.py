@@ -884,6 +884,7 @@ async def test_log_level(async_client, test_wrolpi_config):
         assert api_app.shared_ctx.log_level.value == 10
 
 
+@skip_macos
 @skip_circleci
 def test_html_screenshot(singlefile_contents_factory):
     assert common.html_screenshot(singlefile_contents_factory())

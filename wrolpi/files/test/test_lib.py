@@ -22,6 +22,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPr
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
+from wrolpi.test.common import only_macos
 from wrolpi.vars import PROJECT_DIR, IS_MACOS
 
 
@@ -603,19 +604,19 @@ def test_matching_directories(make_files_structure, test_directory):
 
     # Get all directories starting with f
     matches = lib.get_matching_directories(test_directory / 'f')
-    assert matches == [str(test_directory / 'foo')]
+    assert matches == [test_directory / 'foo']
 
     # Get all directories starting with b, ignore case
     matches = lib.get_matching_directories(test_directory / 'b')
-    assert matches == [str(test_directory / 'Bar'), str(test_directory / 'baz')]
+    assert matches == [test_directory / 'Bar', test_directory / 'baz']
 
     # baz matches, but it has no subdirectories
     matches = lib.get_matching_directories(test_directory / 'baz')
-    assert matches == [str(test_directory / 'baz')]
+    assert matches == [test_directory / 'baz']
 
     # foo is an exact match, return subdirectories
     matches = lib.get_matching_directories(test_directory / 'foo')
-    assert matches == [str(test_directory / 'foo/qux')]
+    assert matches == [test_directory / 'foo/qux']
 
 
 def test_get_mimetype(example_epub, example_mobi, example_pdf, image_file, video_file):
@@ -1158,3 +1159,13 @@ async def test_move_many_files(async_client, test_session, test_directory, make_
     assert bar.is_dir()
     assert (bar / 'foo').is_dir()
     assert (bar / 'foo/0.txt').is_file()
+
+
+@only_macos
+def test_get_real_path_name(test_directory):
+    (test_directory / 'foo.txt').touch()
+    assert (test_directory / 'foo.txt').exists()
+    assert lib.get_real_path_name(test_directory / 'foo.txt') == test_directory / 'foo.txt'
+
+    assert (test_directory / 'FOO.TXT').exists()
+    assert lib.get_real_path_name(test_directory / 'FOO.txt') == test_directory / 'foo.txt'

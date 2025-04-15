@@ -1,3 +1,4 @@
+import os.path
 import pathlib
 from http import HTTPStatus
 
@@ -7,7 +8,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
-    background_task, walk, timer, TRACE_LEVEL
+    background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
 from ..api_utils import json_response, api_app
@@ -46,7 +47,6 @@ async def get_file(_: Request, body: schema.FileRequest):
     except FileNotFoundError:
         raise InvalidFile()
 
-    # TODO ensure that this is being called during file previews and preview on page load
     background_task(lib.set_file_viewed(get_media_directory() / body.file))
     return json_response({'file': file})
 
@@ -148,8 +148,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         logger.trace(f'post_search_directories: {path=}')
 
     try:
-        matching_directories = lib.get_matching_directories(str(path))
-        matching_directories = list(map(pathlib.Path, matching_directories))
+        matching_directories = lib.get_matching_directories(path)
     except FileNotFoundError:
         matching_directories = []
     if logger.isEnabledFor(TRACE_LEVEL):
@@ -177,7 +176,10 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
 
     # Return only the top 20 directories.
     directories = [i.__json__() for i in directories]
+    for directory in directories:
+        directory['path'] = get_relative_to_media_directory(directory['path'])
     directories.extend([{'path': i, 'name': i.name} for i in matching_directories])
+    directories = unique_by_predicate(directories, lambda i: i['path'])
     directories = list(sorted(directories, key=lambda i: i['path']))[:20]
 
     if logger.isEnabledFor(TRACE_LEVEL):
@@ -185,7 +187,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         logger.trace(f'post_search_directories: {directories=}')
 
     body = {
-        'is_dir': path.is_dir(),
+        'is_dir': path.is_dir() and lib.get_real_path_name(path) == path,
         'directories': directories,
         'channel_directories': channel_directories,
         'domain_directories': domain_directories

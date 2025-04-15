@@ -893,7 +893,7 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks, await_switches):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()

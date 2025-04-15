@@ -111,5 +111,7 @@ IS_RPI4 = 'Raspberry Pi 4' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONT
 IS_RPI5 = 'Raspberry Pi 5' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONTENTS else False
 IS_RPI = IS_RPI4 or IS_RPI5
 
+IS_MACOS = os.uname()[0] == 'Darwin'
+
 SIMULTANEOUS_DOWNLOAD_DOMAINS = int(os.environ.get('SIMULTANEOUS_DOWNLOAD_DOMAINS',
                                                    2 if IS_RPI else 4))

@@ -370,7 +370,8 @@ URL_CHARS = string.ascii_lowercase + string.digits
 
 
 def find_file(directory: pathlib.Path, name: str, depth=1) -> Optional[pathlib.Path]:
-    """Recursively searches a directory for a file with the provided name."""
+    """Recursively searches a directory for a
+    file with the provided name."""
     if depth == 0:
         return
 
@@ -394,6 +395,17 @@ def set_test_media_directory(path):
         TEST_MEDIA_DIRECTORY = None
 
 
+def is_tempfile(path: pathlib.Path | str) -> bool:
+    path = str(path)
+    if path.startswith('/tmp'):
+        return True
+    elif path.startswith('/var/folders/'):
+        return True
+    elif path.startswith('/private/var/folders/'):
+        return True
+    return False
+
+
 def get_media_directory() -> Path:
     """Get the media directory.
 
@@ -407,8 +419,8 @@ def get_media_directory() -> Path:
         raise RuntimeError('No test media directory set during testing!!')
 
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
-        if not str(TEST_MEDIA_DIRECTORY).startswith('/tmp'):
-            raise RuntimeError('Refusing to run test outside tmp directory!')
+        if not is_tempfile(TEST_MEDIA_DIRECTORY):
+            raise RuntimeError(f'Refusing to run test outside tmp directory: {TEST_MEDIA_DIRECTORY}')
         return TEST_MEDIA_DIRECTORY
 
     return MEDIA_DIRECTORY
@@ -536,7 +548,7 @@ class ConfigFile:
                 raise RuntimeError(f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}')
 
         # Don't overwrite a real config while testing.
-        if PYTEST and not str(file).startswith('/tmp'):
+        if PYTEST and not is_tempfile(file):
             raise ValueError(f'Refusing to save config file while testing: {rel_path}')
 
         logger_.debug(f'Save config called for {rel_path}')
@@ -1132,7 +1144,12 @@ def get_relative_to_media_directory(path: Union[str, Path]) -> Path:
 def get_paths_in_parent_directory(paths: List[Union[str, Path]], parent_directory: pathlib.Path) -> List[Path]:
     """Return only those of the provided paths that are children of the provided parent directory."""
     paths = [i if isinstance(i, Path) else Path(i) for i in paths]
-    return [path for path in paths if parent_directory in path.resolve().parents and path != parent_directory]
+    parent_directory = parent_directory.resolve()
+    new_paths = []
+    for path in paths:
+        if parent_directory in path.resolve().parents and path != parent_directory:
+            new_paths.append(path)
+    return new_paths
 
 
 def get_paths_in_media_directory(paths: List[Union[str, Path]]) -> List[Path]:
@@ -1213,10 +1230,11 @@ def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = Fa
     This also changes the $HOME environment variable to match.
     """
     home_exists = 'HOME' in os.environ
-    home = os.environ.get('HOME')
+    original_home = os.environ.get('HOME')
     cwd = os.getcwd()
     if directory is None:
         with tempfile.TemporaryDirectory() as d:
+            d = os.path.realpath(d)
             try:
                 os.chdir(d)
                 if with_home:
@@ -1225,7 +1243,7 @@ def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = Fa
             finally:
                 os.chdir(cwd)
                 if home_exists:
-                    os.environ['HOME'] = home
+                    os.environ['HOME'] = original_home
                 else:
                     del os.environ['HOME']
             return
@@ -1238,7 +1256,7 @@ def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = Fa
     finally:
         os.chdir(cwd)
         if home_exists:
-            os.environ['HOME'] = home
+            os.environ['HOME'] = original_home
         else:
             del os.environ['HOME']
     return

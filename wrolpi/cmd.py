@@ -92,6 +92,10 @@ YT_DLP_BIN = which(
 FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe')
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')
 
+# Documents
+CATDOC_PATH = which('catdoc')
+TEXTUTIL_PATH = which('textutil')
+
 
 @dataclasses.dataclass
 class CommandResult:

@@ -2,6 +2,7 @@
 import asyncio
 import json
 import multiprocessing
+import os
 import pathlib
 import re
 import statistics
@@ -56,10 +57,13 @@ LOAD_AVG_FILE = pathlib.Path('/proc/loadavg')
 
 async def get_load_stats() -> SystemLoad:
     """Read loadavg file and return the 1, 5, and 15 minute system loads."""
-    # Read load information from proc file.
-    # Example:  0.99 1.06 1.02 1/2305 43879
-    loadavg = LOAD_AVG_FILE.read_text()
-    load_1, load_5, load_15, *_ = loadavg.split(' ')
+    if LOAD_AVG_FILE.exists():
+        # Read load information from proc file.
+        # Example:  0.99 1.06 1.02 1/2305 43879
+        loadavg = LOAD_AVG_FILE.read_text()
+        load_1, load_5, load_15, *_ = loadavg.split(' ')
+    else:
+        load_1, load_5, load_15 = os.getloadavg()
     load = SystemLoad(Decimal(load_1), Decimal(load_5), Decimal(load_15))
     return load
 
@@ -317,7 +321,7 @@ DRIVE_REGEX = re.compile(r'^.+?'  # filesystem
                          r'\s+(.*)',  # mount
                          re.MULTILINE)
 IGNORED_DRIVES = ['/boot', '/etc']
-VALID_FORMATS = {'btrfs', 'ext4', 'ext3', 'ext2', 'vfat', 'exfat'}
+VALID_FORMATS = {'btrfs', 'ext4', 'ext3', 'ext2', 'vfat', 'exfat', 'apfs'}
 
 
 def get_drives_info_psutil() -> List[DriveInfo]:

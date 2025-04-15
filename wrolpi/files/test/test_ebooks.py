@@ -56,7 +56,7 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 
 
 @pytest.mark.asyncio
-async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory):
+async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_switches):
     cover_path = example_epub.with_suffix('.jpg')
     cover_path.write_bytes(image_bytes_factory())
     await refresh_files()
@@ -68,7 +68,7 @@ async def test_discover_local_cover(test_session, test_directory, example_epub, 
 
 
 @pytest.mark.asyncio
-async def test_extract_cover(test_session, test_directory, example_epub):
+async def test_extract_cover(test_session, test_directory, example_epub, await_switches):
     """First image is extracted from the Ebook and used as the cover."""
     await refresh_files()
 

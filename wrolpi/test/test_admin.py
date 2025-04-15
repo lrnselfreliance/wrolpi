@@ -5,10 +5,11 @@ from unittest.mock import call
 from wrolpi import admin
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import WROLPI_CONFIG
-from wrolpi.test.common import skip_circleci
+from wrolpi.test.common import skip_circleci, skip_macos
 
 
 @skip_circleci
+@skip_macos
 def test_hotspot_status():
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
         mock_subprocess.check_output.return_value = b'wlan0: unavailable'
@@ -113,6 +114,7 @@ def test_throttle_off():
 
 
 @skip_circleci
+@skip_macos
 def test_hotspot_device(async_client):
     """Changing the hotspot device changes what device is turned on."""
     from wrolpi.common import WROLPI_CONFIG

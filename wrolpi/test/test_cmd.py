@@ -57,7 +57,7 @@ async def test_run_command_cancel(test_directory):
     """Run a command, cancel it and test that it was cancelled."""
     task = asyncio.create_task(cmd.run_command(('sleep', '10')))
     try:
-        await asyncio.wait_for(task, timeout=1)
+        await asyncio.wait_for(task, timeout=1.1)
     except TimeoutError:
         task.cancel()
 

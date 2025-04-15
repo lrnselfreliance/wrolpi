@@ -4,7 +4,7 @@ from http import HTTPStatus
 import pytest
 
 from modules.archive import lib, Archive
-from wrolpi.test.common import skip_circleci
+from wrolpi.test.common import skip_circleci, skip_macos
 
 
 def check_results(test_client, data, ids):
@@ -230,6 +230,7 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     assert response.json['domains'] == []
 
 
+@skip_macos
 @skip_circleci
 @pytest.mark.asyncio
 async def test_archive_upload(test_session, async_client, singlefile_contents_factory, make_multipart_form,

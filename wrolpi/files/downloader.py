@@ -2,7 +2,6 @@ import pathlib
 import traceback
 from abc import ABC
 
-from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, logger, TRACE_LEVEL
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, IgnoredDirectoryError
@@ -12,8 +11,6 @@ from wrolpi.vars import PYTEST
 __all__ = ['FileDownloader', 'file_downloader']
 
 logger = logger.getChild(__name__)
-
-ARIA2C_PATH = which('aria2c', '/usr/bin/aria2c')
 
 
 class FileDownloader(Downloader, ABC):

@@ -1772,6 +1772,10 @@ def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
     This is used when a function will be called many times, but the error is not important."""
 
     def warn_once(exception: Exception):
+        if PYTEST:
+            # No need to fill pytest logs with these warnings.
+            return
+
         from wrolpi.api_utils import api_app
         if not api_app.shared_ctx.warn_once.get(message):
             logger__.log(level, message, exc_info=exception)

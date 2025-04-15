@@ -11,7 +11,7 @@ from wrolpi.api_utils import json_error_handler
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
-from wrolpi.test.common import skip_circleci, assert_dict_contains
+from wrolpi.test.common import skip_circleci, assert_dict_contains, skip_macos
 
 
 @pytest.mark.asyncio
@@ -266,6 +266,7 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
                                  }
 
 
+@skip_macos
 @skip_circleci
 def test_throttle_toggle(test_session, test_client, test_wrolpi_config):
     get_wrolpi_config().ignored_directories = list()

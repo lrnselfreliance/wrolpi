@@ -37,7 +37,7 @@ from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, IS_MACOS
 
 try:
     import magic
@@ -936,29 +936,30 @@ def glob_shared_stem(path: pathlib.Path) -> List[pathlib.Path]:
     return paths
 
 
-def get_matching_directories(path: Union[str, Path]) -> List[str]:
+def get_matching_directories(path: Union[str, Path]) -> List[pathlib.Path]:
     """
-    Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
+    Return a list of directory strings that start with the provided path. If the path is a directory, return its
     subdirectories, if the directory contains no subdirectories, return the directory.
     """
-    path = str(path)
+    path: pathlib.Path = pathlib.Path(path) if isinstance(path, str) else path
+    path = path.resolve()
 
-    ignored_directories = {}
+    ignored_directories = {pathlib.Path(i).resolve() for i in get_wrolpi_config().ignored_directories}
 
-    if os.path.isdir(path):
+    if path.is_dir():
         # The provided path is a directory, return its subdirectories, or itself if no subdirectories exist
-        paths = [os.path.join(path, i) for i in os.listdir(path)]
-        paths = sorted(i for i in paths if os.path.isdir(i) and i not in ignored_directories)
+        paths = list(path.iterdir())
+        paths = sorted(i for i in paths if i.is_dir() and i not in ignored_directories)
         if len(paths) == 0:
-            return [path]
+            return [get_real_path_name(path.resolve())]
         return paths
 
-    head, tail = os.path.split(path)
-    paths = os.listdir(head)
-    paths = [os.path.join(head, i) for i in paths]
-    pattern = path.lower()
+    paths = path.parent.iterdir()
+    prefix = path.name.lower()
     paths = sorted(
-        i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern) and i not in ignored_directories)
+        i for i in paths if i.is_dir() and i.name.lower().startswith(prefix) and i.resolve() not in ignored_directories
+    )
+    paths = unique_by_predicate(paths, None)
 
     return paths
 
@@ -1641,3 +1642,12 @@ def get_file_location_href(file: pathlib.Path) -> str:
     else:
         query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
     return f'/files?{query}'
+
+
+def get_real_path_name(path: pathlib.Path) -> pathlib.Path:
+    """Return the real path name of a file.  This is used to get the real path of a file on macOS."""
+    if IS_MACOS:
+        for path_ in path.parent.iterdir():
+            if path_.name.lower() == path.name.lower():
+                return path_
+    return path

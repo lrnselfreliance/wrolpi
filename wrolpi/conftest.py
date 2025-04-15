@@ -121,7 +121,7 @@ def test_directory() -> pathlib.Path:
     Overwrite the media directory with a temporary directory.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = pathlib.Path(tmp_dir)
+        tmp_path = pathlib.Path(tmp_dir).resolve()
         tmp_path.chmod(0o40755)
         assert tmp_path.is_dir()
         set_test_media_directory(tmp_path)

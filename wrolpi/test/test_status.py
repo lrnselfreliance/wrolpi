@@ -4,7 +4,8 @@ from unittest import mock
 import pytest
 
 from wrolpi import status
-from wrolpi.test.common import skip_circleci
+from wrolpi.test.common import skip_circleci, skip_macos
+from wrolpi.vars import IS_MACOS
 
 
 @pytest.mark.asyncio
@@ -25,10 +26,12 @@ async def test_get_cpu_stats(async_client):
     info = await status.get_cpu_stats()
     assert isinstance(info, status.CPUInfo)
     assert isinstance(info.percent, int)
-    assert isinstance(info.temperature, int)
+    if not IS_MACOS:
+        assert isinstance(info.temperature, int)
 
 
 @pytest.mark.asyncio
+@skip_macos
 async def test_iostat_stats(async_client):
     info = await status.get_iostat_stats()
     assert isinstance(info, status.IostatInfo)
@@ -44,6 +47,7 @@ async def test_power_stats(async_client):
 
 
 @skip_circleci
+@skip_macos
 @pytest.mark.asyncio
 async def test_get_drives_stats(async_client):
     """Minimum drives info testing because this will fail in docker, etc."""

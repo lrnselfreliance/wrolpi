@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import tempfile
 from contextlib import contextmanager
@@ -13,11 +14,12 @@ from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.common import get_media_directory
 from wrolpi.conftest import test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
-from wrolpi.vars import CIRCLECI
+from wrolpi.vars import CIRCLECI, IS_MACOS
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
 skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in Circle CI')
+skip_macos = pytest.mark.skipif(IS_MACOS, reason='This test is not supported on MacOS')
 
 
 def wrap_test_db(func):

@@ -211,6 +211,9 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
         ],
     }
     """
+    if not FFPROBE_BIN:
+        raise RuntimeError('ffprobe was not found')
+
     cmd = (FFPROBE_BIN,
            '-print_format', 'json',
            '-loglevel', 'quiet',

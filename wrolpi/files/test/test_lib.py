@@ -22,7 +22,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPr
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
-from wrolpi.vars import PROJECT_DIR
+from wrolpi.vars import PROJECT_DIR, IS_MACOS
 
 
 @pytest.mark.asyncio
@@ -1051,7 +1051,10 @@ async def test_doc_indexer(async_client, test_session, example_doc):
     doc = test_session.query(FileGroup).one()
     assert doc.title == 'example word.doc'
     assert doc.a_text == 'example word doc'
-    assert doc.d_text == 'Example Word Document\n\nSecond page\n'
+    if IS_MACOS:
+        assert doc.d_text == 'Example Word Document\nSecond page'
+    else:
+        assert doc.d_text == 'Example Word Document\n\nSecond page\n'
 
 
 @pytest.mark.asyncio

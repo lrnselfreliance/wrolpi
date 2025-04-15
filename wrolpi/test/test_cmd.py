@@ -6,8 +6,11 @@ from wrolpi import cmd
 
 
 def test_which(test_directory):
-    # Default location in Debian Linux.
-    assert cmd.which('ls') == Path('/usr/bin/ls')
+    if os.uname()[0] == "Darwin":
+        assert cmd.which('ls') == Path('/bin/ls')
+    else:
+        # Default location in Debian Linux.
+        assert cmd.which('ls') == Path('/usr/bin/ls')
     # This executable does not exist.
     assert cmd.which('asdf') is None
     # The alternative path does not exist either.

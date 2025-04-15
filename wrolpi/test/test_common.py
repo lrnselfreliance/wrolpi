@@ -19,9 +19,10 @@ import pytz
 
 import wrolpi.vars
 from wrolpi import common
-from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config, TRACE_LEVEL
+from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config, TRACE_LEVEL, \
+    is_tempfile
 from wrolpi.errors import InvalidConfig
-from wrolpi.test.common import build_test_directories, skip_circleci
+from wrolpi.test.common import build_test_directories, skip_circleci, skip_macos
 
 
 def test_build_video_directories(test_directory):
@@ -220,16 +221,17 @@ def test_chdir():
 
     with common.chdir():
         assert os.getcwd() != original
-        assert str(os.getcwd()).startswith('/tmp')
+        assert is_tempfile(os.getcwd())
         assert os.environ['HOME'] != os.getcwd()
     # Replace $HOME
     with common.chdir(with_home=True):
         assert os.getcwd() != original
-        assert str(os.getcwd()).startswith('/tmp')
+        assert is_tempfile(os.getcwd())
         assert os.environ['HOME'] == os.getcwd()
 
     with tempfile.TemporaryDirectory() as d:
         # Without replacing $HOME
+        d = os.path.realpath(d)
         with common.chdir(pathlib.Path(d), with_home=True):
             assert os.getcwd() == d
             assert os.environ['HOME'] == os.getcwd()
@@ -457,8 +459,8 @@ def test_timer():
     with common.timer(name='test_timer'):
         time.sleep(0.1)
 
-
 @pytest.mark.asyncio
+@skip_macos
 async def test_limit_concurrent_async():
     """`limit_concurrent` can throw an error when the limit is reached."""
 
@@ -482,6 +484,7 @@ async def test_limit_concurrent_async():
     assert 'concurrent limit' in str(e)
 
 
+@skip_macos
 def test_limit_concurrent_sync():
     """`limit_concurrent` can throw an error when the limit is reached."""
 

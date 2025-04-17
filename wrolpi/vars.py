@@ -115,3 +115,5 @@ IS_MACOS = os.uname()[0] == 'Darwin'
 
 SIMULTANEOUS_DOWNLOAD_DOMAINS = int(os.environ.get('SIMULTANEOUS_DOWNLOAD_DOMAINS',
                                                    2 if IS_RPI else 4))
+
+WROLPI_HOME = pathlib.Path(os.environ.get('WROLPI_HOME') or '/home/wrolpi')

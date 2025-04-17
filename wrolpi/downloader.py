@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 import feedparser
 import pytz
+from PIL.ImageCms import Flags
 from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
@@ -299,7 +300,7 @@ class Downloader:
         raise NotImplementedError()
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
-                             timeout: int = None) -> CommandResult:
+                             timeout: int = None, debug: bool = False) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
@@ -309,7 +310,7 @@ class Downloader:
             raise RuntimeError('cwd directory does not exist')
 
         timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
-        coro = run_command(cmd, cwd=cwd, timeout=timeout)
+        coro = run_command(cmd, cwd=cwd, timeout=timeout, debug=debug)
         return await self.cancel_wrapper(coro, download)
 
     @staticmethod

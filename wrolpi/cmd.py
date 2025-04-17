@@ -126,10 +126,11 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
     with tempfile.NamedTemporaryFile() as stdout_fh, tempfile.NamedTemporaryFile() as stderr_fh:
         stdout_file, stderr_file = pathlib.Path(stdout_fh.name), pathlib.Path(stderr_fh.name)
         cmd = tuple(str(i) for i in cmd)
+        cmd_str = ' '.join(cmd)
         if debug:
-            logger.debug(f'run_command: running ({timeout=}): {cmd=}')
+            logger.debug(f'run_command: running ({timeout=}): {cmd_str}')
         elif logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(f'run_command: running ({timeout=}): {cmd=}')
+            logger.trace(f'run_command: running ({timeout=}): {cmd_str}')
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=stdout_fh,  # Use stdout/stderr files to avoid buffer filling up.

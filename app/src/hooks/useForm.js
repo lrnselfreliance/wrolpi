@@ -185,7 +185,7 @@ export function useForm({
         }
         const value = _.get(formData, path); // Get a path, separated by .'s
         if (value === undefined) {
-            patchFormData(_.set(formData, path, null));
+            patchFormData(_.set(formData, path, type === 'array' ? [] : null));
         }
         // Allow bypass of `handleInputEvent` which only handles an input event.
         const setValue = newValue => {
@@ -426,7 +426,7 @@ export function UrlsTextarea({name = 'urls', required, form}) {
     </FormInput>
 }
 
-export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big'}) {
+export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big', disabled=false}) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
     const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;
@@ -434,7 +434,7 @@ export function ToggleForm({form, name, label, path, icon = null, iconSize = 'bi
         label={label}>
         {iconElm}
         <Toggle
-            disabled={form.disabled}
+            disabled={disabled || form.disabled}
             name={name}
             checked={inputProps.value}
             onChange={inputProps.onChange}

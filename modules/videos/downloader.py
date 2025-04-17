@@ -32,7 +32,7 @@ from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
 from .errors import UnknownChannel
-from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination
+from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination, browser_profile_to_yt_dlp_arg
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
@@ -45,7 +45,7 @@ VIDEO_RESOLUTION_MAP = {
     '480p': ['135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480'],
     '720p': [
         '298+bestaudio', '232+bestaudio',  # 720@60 avc1 + best audio
-        '136+bestaudio', '22', 'res:720'],
+        '136+bestaudio', '22', '311+bestaudio', 'res:720'],
     '1080p': [
         '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
         '137+bestaudio', '614+bestaudio', 'res:1080'],
@@ -328,7 +328,6 @@ class VideoDownloader(Downloader, ABC):
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
-        download_id = download.id
         url = normalize_video_url(download.url)
 
         # Copy settings into Download (they may be from the ChannelDownloader)
@@ -395,19 +394,13 @@ class VideoDownloader(Downloader, ABC):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
                 return await self.download_info_json(download, video_path)
 
-            # Do the real download.
             cmd = (
                 str(YT_DLP_BIN),
-                '-c',  # Continue downloads
                 '-f', video_resolutions,
                 '--match-filter', '!is_live',  # Do not attempt to download Live videos.
-                '--write-subs',
-                '--write-auto-subs',
                 '--sub-format', DEFAULT_CAPTION_FORMAT,
                 '--convert-subs', DEFAULT_CAPTION_FORMAT,
                 '--convert-thumbnails', DEFAULT_POSTER_FORMAT,
-                '--write-thumbnail',
-                '--write-info-json',
                 '--merge-output-format', video_format,
                 # '--remux-video', video_format,
                 '--no-cache-dir',
@@ -417,10 +410,32 @@ class VideoDownloader(Downloader, ABC):
                 '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
                 # Use experimental feature to merge files.
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
-                '-o', video_path,
-                url,
             )
-            result = await self.process_runner(download, cmd, out_dir)
+            if config.continue_dl:
+                cmd = (*cmd, '--continue')
+            if config.writesubtitles:
+                cmd = (*cmd, '--write-subs', '--write-auto-subs')
+            if config.writethumbnail:
+                cmd = (*cmd, '--write-thumbnail')
+            if config.writeinfojson:
+                cmd = (*cmd, '--write-info-json')
+            if config.yt_dlp_extra_args:
+                cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
+            if config.browser_profile and (config.always_use_browser_profile or settings.get('use_browser_profile')):
+                browser_profile = pathlib.Path(config.browser_profile)
+                if browser_profile.exists():
+                    browser_profile = browser_profile_to_yt_dlp_arg(browser_profile)
+                    cmd = (*cmd, '--cookies-from-browser', browser_profile)
+                else:
+                    logger.error(f'Browser profile {config.browser_profile} does not exist')
+
+            # Add destination and the video's URL to the command.
+            cmd = (*cmd,
+                   '-o', video_path,
+                   url,
+                   )
+            # Do the real download.
+            result = await self.process_runner(download, cmd, out_dir, debug=True)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
 

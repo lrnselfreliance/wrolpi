@@ -924,7 +924,7 @@ async def test_config_lifecycle(await_switches, test_wrolpi_config):
     # Config is not imported, default values are used.
     assert config.successful_import is False
     assert config.wrol_mode is False
-    assert config.is_valid() is False
+    assert config.is_valid() is None
     assert config.version == 0
     assert config.zims_destination
 
@@ -998,7 +998,7 @@ async def test_config_lifecycle(await_switches, test_wrolpi_config):
 async def test_config_valid(async_client, test_wrolpi_config):
     # Config file does not yet exist.
     config = get_wrolpi_config()
-    assert config.is_valid() is False
+    assert config.is_valid() is None
 
     config.dump_config()
     assert config.is_valid() is True

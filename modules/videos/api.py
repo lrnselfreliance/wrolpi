@@ -66,3 +66,9 @@ async def post_file_format(_: Request, body: schema.VideoFileFormatRequest):
             error=str(e),
             video_file_format=body.video_file_format,
         ), status=HTTPStatus.BAD_REQUEST)
+
+
+@content_bp.get('/browser-profiles')
+async def get_browser_profiles(_: Request):
+    browser_profiles = lib.get_browser_profiles()
+    return json_response(browser_profiles)

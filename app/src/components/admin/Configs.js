@@ -1,12 +1,18 @@
 import {APIButton} from "../Common";
-import {Icon, Table} from "../Theme";
+import {Icon, Popup, Table} from "../Theme";
 import React from "react";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {TableRowPlaceholder} from "../Placeholder";
 import {useNavigate} from "react-router-dom";
 
 function WarningIcon({ok}) {
-    return <Icon color={ok ? 'violet' : 'red'} name={ok ? 'check' : 'close'}/>
+    // null is empty, true is valid, false is invalid.
+    const trigger = <Icon
+        color={ok === true ? 'violet' : ok === false ? 'red' : 'grey'}
+        name={ok === true ? 'check' : ok === false ? 'close' : 'check'}
+    />;
+    const content = ok === true ? 'Valid and can be imported.' : ok === false ? 'Invalid, can be overwritten.' : 'Empty config, can be overwritten.';
+    return <Popup trigger={trigger} content={content}/>
 }
 
 function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {

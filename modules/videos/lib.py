@@ -24,7 +24,7 @@ from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
-from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
+from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST, WROLPI_HOME
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, ConfigError, \
     extract_video_duration
@@ -380,6 +380,9 @@ class VideoDownloaderConfigValidator:
     video_resolutions: List[str] = field(default_factory=lambda: ['1080p', '720p', '480p', 'maximum'])
     version: int = None
     yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
+    yt_dlp_extra_args: str = ''
+    always_use_browser_profile: bool = False
+    browser_profile: str = ''
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -405,6 +408,9 @@ class VideoDownloaderConfig(ConfigFile):
             writethumbnail=True,
             youtube_include_dash_manifest=False,
         ),
+        yt_dlp_extra_args='',
+        always_use_browser_profile=False,
+        browser_profile='',
     )
     validator = VideoDownloaderConfigValidator
 
@@ -463,6 +469,30 @@ class VideoDownloaderConfig(ConfigFile):
     @yt_dlp_options.setter
     def yt_dlp_options(self, value: dict):
         self.update({'yt_dlp_options': value})
+
+    @property
+    def yt_dlp_extra_args(self) -> str:
+        return self._config['yt_dlp_extra_args']
+
+    @yt_dlp_extra_args.setter
+    def yt_dlp_extra_args(self, value: str):
+        self.update({**self._config, 'yt_dlp_extra_args': value})
+
+    @property
+    def browser_profile(self) -> str:
+        return self._config['browser_profile']
+
+    @browser_profile.setter
+    def browser_profile(self, value: str):
+        self.update({**self._config, 'browser_profile': value})
+
+    @property
+    def always_use_browser_profile(self) -> bool:
+        return self._config['always_use_browser_profile']
+
+    @always_use_browser_profile.setter
+    def always_use_browser_profile(self, value: bool):
+        self.update({**self._config, 'always_use_browser_profile': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
@@ -595,53 +625,48 @@ def get_channel_source_id(url: str) -> str:
 async def get_statistics():
     with get_db_curs() as curs:
         curs.execute('''
-        SELECT
-            -- total videos
-            COUNT(v.id) AS "videos",
-            -- total videos downloaded over the past week/month/year
-            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 week') AS "week",
-            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 month') AS "month",
-            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 year') AS "year",
-            -- sum of all video lengths in seconds
-            COALESCE(SUM(fg.length), 0) AS "sum_duration",
-            -- sum of all video file sizes
-            COALESCE(SUM(fg.size), 0)::BIGINT AS "sum_size",
-            -- largest video
-            COALESCE(MAX(fg.size), 0) AS "max_size",
-            -- Videos may or may not have comments.
-            COUNT(v.id) FILTER ( WHERE v.have_comments = TRUE ) AS "have_comments",
-            COUNT(v.id) FILTER ( WHERE v.have_comments = FALSE AND v.comments_failed = FALSE
-                and fg.censored = false and fg.url is not null) AS "missing_comments",
-            COUNT(v.id) FILTER ( WHERE v.comments_failed = TRUE ) AS "failed_comments",
-            COUNT(v.id) FILTER ( WHERE fg.censored = TRUE ) as "censored_videos"
-        FROM
-            video v
-            LEFT JOIN file_group fg on v.file_group_id = fg.id
-        ''')
+                     SELECT
+                         -- total videos
+                         COUNT(v.id)                                                                        AS "videos",
+                         -- total videos downloaded over the past week/month/year
+                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 week')  AS "week",
+                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 month') AS "month",
+                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 year')  AS "year",
+                         -- sum of all video lengths in seconds
+                         COALESCE(SUM(fg.length), 0)                                                        AS "sum_duration",
+                         -- sum of all video file sizes
+                         COALESCE(SUM(fg.size), 0)::BIGINT                                                  AS "sum_size",
+                         -- largest video
+                         COALESCE(MAX(fg.size), 0)                                                          AS "max_size",
+                         -- Videos may or may not have comments.
+                         COUNT(v.id) FILTER ( WHERE v.have_comments = TRUE )                                AS "have_comments",
+                         COUNT(v.id) FILTER ( WHERE v.have_comments = FALSE AND v.comments_failed = FALSE
+                             and fg.censored = false and
+                                                    fg.url is not null)                                     AS "missing_comments",
+                         COUNT(v.id) FILTER ( WHERE v.comments_failed = TRUE )                              AS "failed_comments",
+                         COUNT(v.id) FILTER ( WHERE fg.censored = TRUE )                                    as "censored_videos"
+                     FROM video v
+                              LEFT JOIN file_group fg on v.file_group_id = fg.id
+                     ''')
         video_stats = dict(curs.fetchone())
 
         # Get the total videos downloaded every month for the past two years.
         curs.execute('''
-        SELECT
-            DATE_TRUNC('month', months.a),
-            COUNT(video.id)::BIGINT,
-            SUM(size)::BIGINT AS "size"
-        FROM
-            generate_series(
-                date_trunc('month', current_date) - interval '2 years',
-                date_trunc('month', current_date) - interval '1 month',
-                '1 month'::interval) AS months(a),
-            video
-            LEFT JOIN file_group fg on video.file_group_id = fg.id
-        WHERE
-            published_datetime >= date_trunc('month', months.a)
-            AND published_datetime < date_trunc('month', months.a) + interval '1 month'
-            AND published_datetime IS NOT NULL
-        GROUP BY
-            1
-        ORDER BY
-            1
-        ''')
+                     SELECT DATE_TRUNC('month', months.a),
+                            COUNT(video.id)::BIGINT,
+                            SUM(size)::BIGINT AS "size"
+                     FROM generate_series(
+                                  date_trunc('month', current_date) - interval '2 years',
+                                  date_trunc('month', current_date) - interval '1 month',
+                                  '1 month'::interval) AS months(a),
+                          video
+                              LEFT JOIN file_group fg on video.file_group_id = fg.id
+                     WHERE published_datetime >= date_trunc('month', months.a)
+                       AND published_datetime < date_trunc('month', months.a) + interval '1 month'
+                       AND published_datetime IS NOT NULL
+                     GROUP BY 1
+                     ORDER BY 1
+                     ''')
         monthly_videos = [dict(i) for i in curs.fetchall()]
 
         historical_stats = dict(monthly_videos=monthly_videos)
@@ -651,13 +676,11 @@ async def get_statistics():
             if monthly_videos else 0
 
         curs.execute('''
-        SELECT
-            COUNT(c.id) AS "channels",
-            COUNT(c.id) FILTER ( WHERE c.tag_id IS NOT NULL ) AS "tagged_channels"
-        FROM
-            channel c
-            LEFT JOIN public.tag t on t.id = c.tag_id
-        ''')
+                     SELECT COUNT(c.id)                                       AS "channels",
+                            COUNT(c.id) FILTER ( WHERE c.tag_id IS NOT NULL ) AS "tagged_channels"
+                     FROM channel c
+                              LEFT JOIN public.tag t on t.id = c.tag_id
+                     ''')
         channel_stats = dict(curs.fetchone())
     ret = dict(statistics=dict(
         videos=video_stats,
@@ -766,3 +789,41 @@ def format_videos_destination(channel_name: str = None, channel_tag: str = None,
     videos_destination = get_media_directory() / videos_destination.lstrip('/')
 
     return videos_destination
+
+
+def get_browser_profiles(home: pathlib.Path = WROLPI_HOME) -> dict:
+    """Searches the provided home directory for Chromium and Firefox profiles."""
+    logger.debug(f'Searching for browser profiles in {home}')
+
+    profiles = dict(chromium_profiles=[], firefox_profiles=[])
+
+    chromium_directory = home / '.config/chromium'
+    default_chromium_profile = chromium_directory / 'Default'
+
+    if default_chromium_profile.is_dir():
+        profiles['chromium_profiles'].append(default_chromium_profile)
+    chromium_profiles = chromium_directory.glob('Profile *')
+    for chromium_profile in chromium_profiles:
+        if chromium_profile.is_dir():
+            profiles['chromium_profiles'].append(chromium_profile)
+
+    firefox_profiles_directory = home / '.mozilla/firefox'
+    firefox_profiles_file = firefox_profiles_directory / 'profiles.ini'
+    if firefox_profiles_file.is_file():
+        # Read the profile.ini and get the default profile path.
+        firefox_profiles_file = firefox_profiles_file.read_text()
+
+        default_firefox_profile = re.findall(r'Default=(.*)', firefox_profiles_file)
+        if default_firefox_profile:
+            default_firefox_profile = firefox_profiles_directory / default_firefox_profile[0]
+
+            if default_firefox_profile.is_dir():
+                profiles['firefox_profiles'].append(default_firefox_profile)
+
+    return profiles
+
+
+def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
+    """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument."""
+    *_, browser, profile = str(profile).split('/')
+    return f'{browser}:{profile}'

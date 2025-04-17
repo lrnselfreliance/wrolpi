@@ -92,6 +92,7 @@ async def get_iostat_stats() -> IostatInfo:
     try:
         result = await run_command(
             ('iostat', '3', '2'),  # 3 second interval to gather more data, get 2 count.
+            log_command=False,
         )
         if result.stdout and result.return_code == 0:
             iostat_stats = jc.parse('iostat', result.stdout.decode(), quiet=True)
@@ -222,7 +223,7 @@ IGNORED_PROCESS_COMMANDS = {' '.join(PS_CMD), '<defunct>'}
 
 
 async def get_processes_stats() -> List[ProcessInfo]:
-    result = await run_command(PS_CMD)
+    result = await run_command(PS_CMD, log_command=False)
     # Do not include `ps` in the top processes.
     ps_pid = result.pid
 
@@ -550,7 +551,7 @@ async def get_power_stats() -> PowerStats:
 
     try:
         cmd = ('dmesg',)
-        result = await run_command(cmd)
+        result = await run_command(cmd, log_command=False)
         if result.stdout and result.return_code == 0:
             under_voltage = b' Undervoltage detected' in result.stdout
             over_current = b' over-current change ' in result.stdout

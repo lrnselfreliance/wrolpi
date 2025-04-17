@@ -303,3 +303,15 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
     request, response = await async_client.post('/api/config?file_name=videos_downloader.yaml', json=body)
     assert response.status == HTTPStatus.BAD_REQUEST
     assert 'Invalid config' in response.json.get('error')
+
+
+@pytest.mark.parametrize('file_name,expected', [
+    ('/home/wrolpi/.config/chromium/Default', 'chromium:Default'),
+    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', 'firefox:29el0wk0.default-release'),
+])
+def test_browser_profile_to_yt_dlp_arg(file_name, expected):
+    """
+    Test the conversion of a browser profile to yt-dlp arguments.
+    """
+    file_name = pathlib.Path(file_name)
+    assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected

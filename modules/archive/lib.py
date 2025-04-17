@@ -565,7 +565,7 @@ async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
                READABILITY_BIN, singlefile_file.name, shlex.quote(url))
         # Docker containers may not have this directory. But, this directory is necessary on RPi.
         cwd = '/home/wrolpi' if os.path.isdir('/home/wrolpi') else None
-        result = await run_command(cmd, cwd=cwd, timeout=timeout, debug=True)
+        result = await run_command(cmd, cwd=cwd, timeout=timeout)
 
         logger.debug(f'readability for {url} exited with {result.return_code}')
         stdout, stderr = result.stdout.decode(), result.stderr.decode()

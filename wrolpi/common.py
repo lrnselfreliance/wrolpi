@@ -663,13 +663,13 @@ class ConfigFile:
             logger.debug(f'Failed to validate config', exc_info=e)
             return False
 
-    def is_valid(self, file: pathlib.Path = None) -> bool:
+    def is_valid(self, file: pathlib.Path = None) -> bool | None:
         if not self.validator:
             raise NotImplementedError(f'Cannot validate {self.file_name} without validator!')
 
         file = file or self.get_file()
-        if not file.is_file():
-            return False
+        if not file.is_file() or file.stat().st_size == 0:
+            return None
 
         try:
             config_data = self.read_config_file(file)

@@ -324,6 +324,12 @@ else
   echo "FAILED: wget cannot be run"
 fi
 
+if aria2c -h >/dev/null 2>&1; then
+  echo "OK: aria2c can be run"
+else
+  echo "FAILED: aria2c cannot be run"
+fi
+
 if /opt/wrolpi/venv/bin/yt-dlp -h >/dev/null 2>&1; then
   echo "OK: yt-dlp can be run"
 else

@@ -419,6 +419,37 @@ export async function updateVideoDownloaderConfig(config) {
     return await updateConfig('videos_downloader.yaml', config);
 }
 
+export async function fetchBrowserProfiles() {
+    const response = await apiGet(`${API_URI}/videos/browser-profiles`);
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Failed to get browser profiles.');
+        toast({
+            type: 'error',
+            title: 'Fetching Browser Profiles Failed',
+            description: message,
+            time: 5000,
+        });
+        return {}
+    }
+}
+
+export async function updateVideoDownloaderSettings(settings) {
+    const response = await apiPut(`${API_URI}/videos/settings`, settings);
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Failed to save settings.');
+        toast({
+            type: 'error',
+            title: 'Saving Settings Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+}
+
 export async function validateRegex(regex) {
     const response = await apiPost(`${API_URI}/valid_regex`, {regex});
     try {

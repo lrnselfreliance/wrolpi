@@ -193,7 +193,6 @@ async def run_import_command(*paths: Path):
     cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', *paths)
     result = await run_command(
         cmd,
-        debug=True,
         timeout=0,  # No timeout, map importing could take days.
     )
 

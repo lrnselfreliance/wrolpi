@@ -11,6 +11,7 @@ import {
     findPosterPath,
     humanFileSize,
     humanNumber,
+    InfoHeader,
     isoDatetimeToAgoPopup,
     mimetypeColor,
     PageContainer,
@@ -30,6 +31,7 @@ import {
     CardHeader,
     Container,
     Form,
+    FormDropdown,
     Image,
     PlaceholderHeader,
     PlaceholderLine,
@@ -43,7 +45,7 @@ import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
-import {deleteVideos, fetchVideoDownloaderConfig, postVideoFileFormat, updateVideoDownloaderConfig} from "../api";
+import {deleteVideos, fetchBrowserProfiles, fetchVideoDownloaderConfig, postVideoFileFormat, updateVideoDownloaderConfig} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder} from "./Vars";
@@ -257,43 +259,76 @@ function VideosSettings() {
             writesubtitles: true,
             writethumbnail: true,
         },
+        always_use_browser_profile: false,
+        yt_dlp_extra_args: '',
+        browser_profile: '',
     };
 
-    const fetcher = async () => {
-        return await fetchVideoDownloaderConfig();
-    }
+    const configSubmitter = async () => {
+        return await updateVideoDownloaderConfig(configForm.formData);
+    };
 
-    const submitter = async () => {
-        return await updateVideoDownloaderConfig(form.formData);
-    }
-
-    const form = useForm({
-        fetcher,
-        submitter,
+    const configForm = useForm({
+        fetcher: fetchVideoDownloaderConfig,
+        submitter: configSubmitter,
         emptyFormData,
     });
 
+    const emptyProfilesOptions = [{key: null, text: 'No profiles found'}];
+    const loadingProfilesOptions = [{key: null, text: 'Loading profiles, please wait...'}];
+    const [browserProfilesOptions, setBrowserProfilesOptions] = useState(loadingProfilesOptions);
+
+    const localFetchBrowserProfiles = async () => {
+        let tempProfiles = [];
+        let localBrowserProfiles = await fetchBrowserProfiles();
+
+        const chromiumProfiles = localBrowserProfiles['chromium_profiles'];
+        for (const value of Object.values(chromiumProfiles)) {
+            tempProfiles.push({value: value, text: value});
+        }
+        const firefoxProfiles = localBrowserProfiles['firefox_profiles'];
+        for (const value of Object.values(firefoxProfiles)) {
+            tempProfiles.push({value: value, text: value});
+        }
+
+        if (_.isEmpty(tempProfiles)) {
+            tempProfiles = emptyProfilesOptions;
+        }
+        console.debug('VideosSettings: Got browser profiles:', tempProfiles);
+        setBrowserProfilesOptions(tempProfiles);
+    };
+
+    React.useEffect(() => {
+        localFetchBrowserProfiles();
+    }, []);
+
+    const alwaysUseBrowserProfileLabel = <InfoHeader
+        headerSize='h5'
+        headerContent='Always Use Browser Profile'
+        popupContent='Always download videos with the selected browser profile. This is risky, and therefore discouraged.'
+    />;
+
     return <Segment>
-        <Header as='h3'>Video Downloader Settings</Header>
+        <Header as='h3'>Video Downloader Config</Header>
 
         <Form>
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column mobile={16} computer={8}>
                         <VideoResolutionSelectorForm
-                            form={form}
+                            form={configForm}
                             name='video_resolutions'
                             path='video_resolutions'
                         />
                     </Grid.Column>
                     <Grid.Column mobile={16} computer={8}>
-                        <VideoFileNameForm form={form}/>
+                        <VideoFileNameForm form={configForm}/>
                     </Grid.Column>
                 </Grid.Row>
                 <Grid.Row columns={2}>
                     <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
-                            form={form}
+                            form={configForm}
                             label='Do not overwrite existing files'
                             name='nooverwrites'
                             path='yt_dlp_options.nooverwrites'
@@ -302,7 +337,7 @@ function VideosSettings() {
                     </Grid.Column>
                     <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
-                            form={form}
+                            form={configForm}
                             label='Download automatic subtitles'
                             name='writeautomaticsub'
                             path='yt_dlp_options.writeautomaticsub'
@@ -313,7 +348,7 @@ function VideosSettings() {
                 <Grid.Row>
                     <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
-                            form={form}
+                            form={configForm}
                             label='Download subtitles'
                             name='writesubtitles'
                             path='yt_dlp_options.writesubtitles'
@@ -322,7 +357,7 @@ function VideosSettings() {
                     </Grid.Column>
                     <Grid.Column mobile={16} computer={8}>
                         <ToggleForm
-                            form={form}
+                            form={configForm}
                             label='Download thumbnail'
                             name='writethumbnail'
                             path='yt_dlp_options.writethumbnail'
@@ -330,13 +365,41 @@ function VideosSettings() {
                         />
                     </Grid.Column>
                 </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column mobile={16} computer={8}>
+                        <InputForm
+                            form={configForm}
+                            name='yt_dlp_extra_args'
+                            path='yt_dlp_extra_args'
+                            label='Extra yt-dlp Arguments'
+                            placeholder='--cookies-from-browser chromium'
+                            icon='terminal'
+                        />
+                    </Grid.Column>
+                    <Grid.Column mobile={16} computer={8}>
+                        <VideoBrowserCookiesSelector form={configForm} options={browserProfilesOptions}/>
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column mobile={16} computer={8}/>
+                    <Grid.Column mobile={16} computer={8}>
+                        <ToggleForm
+                            form={configForm}
+                            label={alwaysUseBrowserProfileLabel}
+                            name='always_use_browser_profile'
+                            path='always_use_browser_profile'
+                            disabled={!configForm.formData.browser_profile}
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+
                 <Grid.Row columns={1}>
                     <Grid.Column textAlign='right'>
                         <APIButton
-                            disabled={form.disabled || !form.ready}
+                            disabled={configForm.disabled || !configForm.ready}
                             type='submit'
                             style={{marginTop: '0.5em'}}
-                            onClick={form.onSubmit}
+                            onClick={configForm.onSubmit}
                             id='video_settings_save_button'
                         >Save</APIButton>
                     </Grid.Column>
@@ -344,6 +407,39 @@ function VideosSettings() {
             </Grid>
         </Form>
     </Segment>
+}
+
+
+export function VideoBrowserCookiesSelector({
+                                                form,
+                                                options,
+                                                name = 'browser_profile',
+                                                path = 'browser_profile',
+                                            }) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
+
+    const popupContent = <div>
+        Select a browser profile to use for cookies. This is useful for sites that require login to download videos.
+        <br/>
+        <br/>
+        <b>MUST BE FROM THE wrolpi USER!</b>
+    </div>;
+
+    return <>
+        <InfoHeader
+            headerSize='h5'
+            headerContent='Browser Profile'
+            popupContent={popupContent}
+        />
+        <FormDropdown
+            selection
+            placeholder='Select Browser Profile'
+            options={options}
+            name={name}
+            id='browser_profile_dropdown'
+            {...inputProps}
+        />
+    </>
 }
 
 function VideosStatistics() {

@@ -24,7 +24,7 @@ async def test_configs_crud(async_client, test_session, test_tags_config, tag_fa
     assert response.status_code == HTTPStatus.OK
     # WROLPiConfig was not saved.
     assert 'wrolpi.yaml' in response.json['configs']
-    assert response.json['configs']['wrolpi.yaml']['valid'] is False
+    assert response.json['configs']['wrolpi.yaml']['valid'] is None
     assert response.json['configs']['wrolpi.yaml']['successful_import'] is False
     # Tags was saved, and is valid.
     assert 'tags.yaml' in response.json['configs']

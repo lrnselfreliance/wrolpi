@@ -3,12 +3,14 @@ import json
 import shutil
 from copy import copy
 from http import HTTPStatus
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename
+from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
 from wrolpi.downloader import Download, DownloadResult
@@ -546,3 +548,57 @@ def test_normalize_video_file_names(test_directory, video_download_manager):
         info_json,
     }
     assert not vtt.exists()
+
+
+@pytest.mark.asyncio
+async def test_video_download_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
+                                      video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
+    config = get_videos_downloader_config()
+
+    config.browser_profile = str(test_directory / 'some directory')
+    (test_directory / 'some directory').mkdir()
+
+    video_path = test_directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+
+    # Request video download with cookies.
+    settings = {'use_browser_profile': True}
+
+    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    assert '--cookies-from-browser' in cmd
+    assert Path(config.browser_profile) in cmd
+
+
+@pytest.mark.asyncio
+async def test_video_download_always_use_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
+                                                 video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
+    config = get_videos_downloader_config()
+
+    config.always_use_browser_profile = True
+    config.browser_profile = str(test_directory / 'some directory')
+    (test_directory / 'some directory').mkdir()
+
+    video_path = test_directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+
+    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(url, video_downloader.name)
+        await video_download_manager.wait_for_all_downloads()
+
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    assert '--cookies-from-browser' in cmd
+    assert Path(config.browser_profile) in cmd

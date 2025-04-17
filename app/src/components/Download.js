@@ -1,14 +1,6 @@
 import React, {useState} from "react";
-import {getDownloaders, postDownload, putDownload} from "../api";
-import {
-    APIButton,
-    DirectorySearch,
-    InfoHeader,
-    InfoPopup,
-    mergeDeep,
-    RequiredAsterisk,
-    useLocalStorage
-} from "./Common";
+import {fetchVideoDownloaderConfig, getDownloaders, postDownload, putDownload} from "../api";
+import {APIButton, DirectorySearch, InfoHeader, InfoPopup, mergeDeep, RequiredAsterisk, useLocalStorage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Button, Form, FormInput, Header} from "./Theme";
@@ -16,7 +8,7 @@ import {Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {commaSeparatedValidator, InputForm, NumberInputForm, UrlInput, UrlsTextarea, useForm} from "../hooks/useForm";
+import {commaSeparatedValidator, InputForm, NumberInputForm, ToggleForm, UrlInput, UrlsTextarea, useForm} from "../hooks/useForm";
 import {
     channelFrequencyOptions,
     days30Option,
@@ -263,7 +255,7 @@ function VideoDownloadCountLimit({form, name = 'video_count_limit', path = 'sett
 }
 
 export function VideoResolutionSelectorForm({form, name = 'video_resolutions', path = 'settings.video_resolutions'}) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
+    const [inputProps, inputAttrs] = form.getSelectionProps({name, path, type: 'array'});
 
     return <>
         <InfoHeader
@@ -341,6 +333,34 @@ export function ChannelTagNameForm({form}) {
     </>
 }
 
+export function UseBrowserProfile({form}) {
+    const [config, setConfig] = useState(null);
+
+    const localFetchConfig = async () => {
+        const result = await fetchVideoDownloaderConfig();
+        setConfig(result);
+    }
+
+    React.useEffect(() => {
+        localFetchConfig();
+    }, []);
+
+    const popupContent = <>Use the browser profile to download videos.
+        This is useful for downloading videos that require a login. See: <i>Videos > Settings</i></>;
+    const label = <InfoHeader
+        headerSize='h4'
+        headerContent='Use Browser Profile'
+        popupContent={popupContent}
+    />;
+    return <ToggleForm
+        form={form}
+        label={label}
+        disabled={!config?.browser_profile}
+        name='use_browser_profile'
+        path='settings.use_browser_profile'
+    />
+}
+
 export function VideosDownloadForm({singleDownload = true, onCancel}) {
     const [showMessage, setShowMessage] = React.useState(false);
 
@@ -354,8 +374,9 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
         tag_names: [],
         downloader: Downloaders.Video,
         settings: {
-            video_resolutions: defaultVideoResolutions,
+            use_browser_profile: false,
             video_format: defaultVideoFormat,
+            video_resolutions: defaultVideoResolutions,
         }
     }
 
@@ -435,6 +456,11 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
                 </Grid.Column>
                 <Grid.Column width={4}>
                     <VideoFormatSelectorForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <UseBrowserProfile form={form}/>
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={1}>
@@ -527,9 +553,10 @@ export function ChannelDownloadForm({
             minimum_duration: null,
             title_exclude: null,
             title_include: null,
+            use_browser_profile: false,
             video_count_limit: null,
-            video_resolutions: defaultVideoResolutions,
             video_format: defaultVideoFormat,
+            video_resolutions: defaultVideoResolutions,
         },
         sub_downloader: Downloaders.Video,
         tag_names: [],
@@ -620,6 +647,11 @@ export function ChannelDownloadForm({
                 </Grid.Column>
                 <Grid.Column tablet={8} computer={4}>
                     <VideoMaximumDurationForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <UseBrowserProfile form={form}/>
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={1}>

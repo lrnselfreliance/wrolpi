@@ -30,7 +30,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name, get_wrolpi_config
+    get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
@@ -299,7 +299,7 @@ class Downloader:
         raise NotImplementedError()
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
-                             timeout: int = None) -> CommandResult:
+                             timeout: int = None, debug: bool = True) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
@@ -309,8 +309,16 @@ class Downloader:
             raise RuntimeError('cwd directory does not exist')
 
         timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
-        coro = run_command(cmd, cwd=cwd, timeout=timeout)
-        return await self.cancel_wrapper(coro, download)
+        coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug)
+        result = await self.cancel_wrapper(coro, download)
+
+        if logger.isEnabledFor(TRACE_LEVEL):
+            for line in result.stdout.decode().splitlines():
+                logger.trace(line)
+            for line in result.stderr.decode().splitlines():
+                logger.error(line)
+
+        return result
 
     @staticmethod
     async def cancel_wrapper(coro: Coroutine, download: Download):
@@ -978,14 +986,12 @@ class DownloadManager:
             once_downloads = list(map(dict, curs.fetchall()))
 
             stmt = '''
-                SELECT
-                    COUNT(id) FILTER (
-                        WHERE frequency IS NULL
-                        AND (status = 'pending' OR status = 'new')
-                        )
-                FROM
-                    download
-            '''
+                   SELECT COUNT(id) FILTER (
+                       WHERE frequency IS NULL
+                           AND (status = 'pending' OR status = 'new')
+                       )
+                   FROM download \
+                   '''
             curs.execute(stmt)
             pending_once_downloads = curs.fetchone()[0]
 
@@ -1002,11 +1008,10 @@ class DownloadManager:
         """
         with get_db_curs() as curs:
             stmt = """
-                SELECT
-                 COUNT(*) FILTER (WHERE status = 'pending') AS pending_downloads,
-                 COUNT(*) FILTER (WHERE frequency IS NOT NULL) AS recurring_downloads
-                FROM download
-                """
+                   SELECT COUNT(*) FILTER (WHERE status = 'pending')    AS pending_downloads,
+                          COUNT(*) FILTER (WHERE frequency IS NOT NULL) AS recurring_downloads
+                   FROM download \
+                   """
             curs.execute(stmt)
             counts = list(map(dict, curs.fetchall()))[0]
         summary = dict(

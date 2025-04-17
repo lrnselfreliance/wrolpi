@@ -111,10 +111,10 @@ TESTING_RUN_COMMAND_RESULT = None
 
 
 async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
-                      timeout: int = 600, debug: bool = False) -> CommandResult:
+                      timeout: int = 600, log_command: bool = True) -> CommandResult:
     """Run a shell command, return the results (stdout/stderr/return code).
 
-    :param debug: Enable debug logging (disabled by default because this is used by very frequent commands).
+    :param log_command: Enable debug logging.
     """
     if not isinstance(cmd, (list, tuple)):
         raise RuntimeError('Command must be a list or tuple')
@@ -126,10 +126,11 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
     with tempfile.NamedTemporaryFile() as stdout_fh, tempfile.NamedTemporaryFile() as stderr_fh:
         stdout_file, stderr_file = pathlib.Path(stdout_fh.name), pathlib.Path(stderr_fh.name)
         cmd = tuple(str(i) for i in cmd)
-        if debug:
-            logger.debug(f'run_command: running ({timeout=}): {cmd=}')
+        cmd_str = ' '.join(cmd)
+        if log_command:
+            logger.info(f'run_command: running ({timeout=}): {cmd_str}')
         elif logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(f'run_command: running ({timeout=}): {cmd=}')
+            logger.trace(f'run_command: running ({timeout=}): {cmd_str}')
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=stdout_fh,  # Use stdout/stderr files to avoid buffer filling up.
@@ -166,7 +167,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         stdout = stdout_file.read_bytes() or b''
         stderr = stderr_file.read_bytes() or b''
         # Logs details of the call, but only if it took a long time or TRACE is enabled.
-        if debug:
+        if log_command:
             logger.debug(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd=}')
         elif logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd=}')

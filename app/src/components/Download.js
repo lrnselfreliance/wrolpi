@@ -670,11 +670,6 @@ export function ChannelDownloadForm({
                     <VideoMaximumDurationForm form={form}/>
                 </Grid.Column>
             </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <UseBrowserProfile form={form}/>
-                </Grid.Column>
-            </Grid.Row>
             <Grid.Row columns={1}>
                 <Grid.Column>
                     <ChannelTagNameForm form={form}/>

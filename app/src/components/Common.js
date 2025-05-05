@@ -743,6 +743,7 @@ export function InfoPopup({
         position={position}
         header={header || null}
         trigger={trigger}
+        hoverable={true}
     />
 }
 

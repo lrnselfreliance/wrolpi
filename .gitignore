@@ -133,3 +133,5 @@ pg_data
 /debian-live-config/build.log
 /debian-live-config/*.iso
 /pi-gen/*xz
+
+.DS_Store

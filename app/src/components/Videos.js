@@ -48,7 +48,7 @@ import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, St
 import {deleteVideos, fetchBrowserProfiles, fetchVideoDownloaderConfig, postVideoFileFormat, updateVideoDownloaderConfig} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
-import {defaultFileOrder, defaultSearchOrder} from "./Vars";
+import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
 import {VideoResolutionSelectorForm} from "./Download";
 
@@ -372,7 +372,7 @@ function VideosSettings() {
                             name='yt_dlp_extra_args'
                             path='yt_dlp_extra_args'
                             label='Extra yt-dlp Arguments'
-                            placeholder='--cookies-from-browser chromium'
+                            placeholder='--prefer-free-formats'
                             icon='terminal'
                         />
                     </Grid.Column>
@@ -422,7 +422,7 @@ export function VideoBrowserCookiesSelector({
         Select a browser profile to use for cookies. This is useful for sites that require login to download videos.
         <br/>
         <br/>
-        <b>MUST BE FROM THE wrolpi USER!</b>
+        <p><a href={HELP_VIEWER_URI + '/modules/videos/#how-to-use-browser-profiles'}>Help page</a></p>
     </div>;
 
     return <>

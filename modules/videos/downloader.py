@@ -41,14 +41,22 @@ from .video.lib import download_video_info_json
 logger = logger.getChild(__name__)
 
 VIDEO_RESOLUTION_MAP = {
-    '360p': ['134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360'],
-    '480p': ['135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480'],
+    '360p': ['134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360',
+             'hls-175+bestaudio',  # 360p avc1 + best audio
+             ],
+    '480p': ['135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
+             'hls-312+bestaudio',  # 480p avc1 + best audio
+             ],
     '720p': [
         '298+bestaudio', '232+bestaudio',  # 720@60 avc1 + best audio
-        '136+bestaudio', '22', '311+bestaudio', 'res:720'],
+        '136+bestaudio', '22', '311+bestaudio', 'res:720',
+        'hls-517+bestaudio', 'hls-637+bestaudio',  # 720p avc1 + best audio
+    ],
     '1080p': [
         '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
-        '137+bestaudio', '614+bestaudio', 'res:1080'],
+        '137+bestaudio', '614+bestaudio', 'res:1080',
+        'hls-899+bestaudio', 'hls-1271+bestaudio',  # 1080p avc1 + best audio
+    ],
     '1440p': [
         '639+bestaudio',  # vp9, best audio, hdr
         '623+bestaudio',  # vp9, best audio, no hdr

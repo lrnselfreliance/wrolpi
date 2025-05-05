@@ -1,6 +1,14 @@
 import React, {useState} from "react";
 import {fetchVideoDownloaderConfig, getDownloaders, postDownload, putDownload} from "../api";
-import {APIButton, DirectorySearch, InfoHeader, InfoPopup, mergeDeep, RequiredAsterisk, useLocalStorage} from "./Common";
+import {
+    APIButton,
+    DirectorySearch,
+    InfoHeader,
+    InfoPopup,
+    mergeDeep,
+    RequiredAsterisk,
+    useLocalStorage
+} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Button, Form, FormInput, Header} from "./Theme";
@@ -8,7 +16,15 @@ import {Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {commaSeparatedValidator, InputForm, NumberInputForm, ToggleForm, UrlInput, UrlsTextarea, useForm} from "../hooks/useForm";
+import {
+    commaSeparatedValidator,
+    InputForm,
+    NumberInputForm,
+    ToggleForm,
+    UrlInput,
+    UrlsTextarea,
+    useForm
+} from "../hooks/useForm";
 import {
     channelFrequencyOptions,
     days30Option,
@@ -22,6 +38,7 @@ import {
     frequencyOptions,
     weeklyOption
 } from "./Vars";
+import _ from "lodash";
 
 export function DepthInputForm({form, required, name = 'depth', path = 'settings.depth'}) {
     return <NumberInputForm
@@ -339,6 +356,10 @@ export function UseBrowserProfile({form}) {
     const localFetchConfig = async () => {
         const result = await fetchVideoDownloaderConfig();
         setConfig(result);
+        if (result?.always_use_browser_profile === true) {
+            // Enable the toggle if "always_use_browser_profile" is set.
+            form.setValue('settings.use_browser_profile', true);
+        }
     }
 
     React.useEffect(() => {

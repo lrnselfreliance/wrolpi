@@ -429,7 +429,10 @@ class VideoDownloader(Downloader, ABC):
                 cmd = (*cmd, '--write-info-json')
             if config.yt_dlp_extra_args:
                 cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
-            if config.browser_profile and (config.always_use_browser_profile or settings.get('use_browser_profile')):
+            if config.browser_profile and (
+                    (i := settings.get('use_browser_profile')) or (config.always_use_browser_profile and i != False)):
+                # Use the browser profile to get cookies, but only if "always_use_browser_profile" is set and
+                # "use_browser_profile" is not False, or if "use_browser_profile" is set.
                 browser_profile = pathlib.Path(config.browser_profile)
                 if browser_profile.exists():
                     browser_profile = browser_profile_to_yt_dlp_arg(browser_profile)

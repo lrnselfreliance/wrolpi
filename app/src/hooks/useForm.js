@@ -175,6 +175,10 @@ export function useForm({
         }
     }
 
+    const setValue = (path, newValue) => {
+        patchFormData(_.set(formData, path, newValue));
+    }
+
     const getCustomProps = ({name, validator, type = 'text', path, required = false}) => {
         // Props for any other elements.
 
@@ -188,8 +192,8 @@ export function useForm({
             patchFormData(_.set(formData, path, type === 'array' ? [] : null));
         }
         // Allow bypass of `handleInputEvent` which only handles an input event.
-        const setValue = newValue => {
-            patchFormData(_.set(formData, path, newValue));
+        const localSetValue = newValue => {
+            setValue(path, newValue);
             debouncedValidate(path, newValue);
         }
 
@@ -198,14 +202,14 @@ export function useForm({
             type,
             disabled,
             value,
-            onChange: setValue,
+            onChange: (newValue) => {setValue(path, newValue)},
             'data-path': path,
         }
         // Attributes about the input, but should not be passed as properties.
         const inputAttrs = {
             valid: validValues[path],
             path,
-            setValue,
+            localSetValue,
         };
         return [inputProps, inputAttrs]
     }
@@ -259,6 +263,7 @@ export function useForm({
         getInputProps,
         getSelectionProps,
         handleInputEvent,
+        setValue,
         loading,
         onSubmit,
         ready,

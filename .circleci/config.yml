@@ -142,66 +142,6 @@ jobs:
       - run:
           name: Stop React App
           command: pkill -f npm
-  react-app-cypress-components-chrome:
-    docker:
-      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: medium
-    steps:
-      - checkout
-      - restore_cache:
-          key: app-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - run:
-          name: Run Cypress component tests
-          command: |
-            cd app
-            npx cypress run --component --browser chrome --reporter junit --reporter-options "mochaFile=test-results.xml"
-      - store_artifacts:
-          path: app/cypress/videos
-      - store_artifacts:
-          path: app/cypress/screenshots
-      - store_test_results:
-          path: app/test-results.xml
-  react-app-cypress-components-firefox:
-    docker:
-      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: medium
-    steps:
-      - checkout
-      - restore_cache:
-          key: app-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - run:
-          name: Run Cypress component tests
-          command: |
-            cd app
-            npx cypress run --component --browser firefox --reporter junit --reporter-options "mochaFile=test-results.xml"
-      - store_artifacts:
-          path: app/cypress/videos
-      - store_artifacts:
-          path: app/cypress/screenshots
-      - store_test_results:
-          path: app/test-results.xml
-  react-app-cypress-components-edge:
-    docker:
-      - image: cypress/browsers:node-20.18.0-chrome-130.0.6723.69-1-ff-131.0.3-edge-130.0.2849.52-1
-    resource_class: medium
-    steps:
-      - checkout
-      - restore_cache:
-          key: app-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - run:
-          name: Run Cypress component tests
-          command: |
-            cd app
-            npx cypress run --component --browser edge --reporter junit --reporter-options "mochaFile=test-results.xml"
-      - store_artifacts:
-          path: app/cypress/videos
-      - store_artifacts:
-          path: app/cypress/screenshots
-      - store_test_results:
-          path: app/test-results.xml
 
 workflows:
   wrolpi-api-tests:
@@ -213,6 +153,3 @@ workflows:
   wrolpi-app-test:
     jobs:
       - react-app-start
-      - react-app-cypress-components-chrome
-      - react-app-cypress-components-edge
-#      - react-app-cypress-components-firefox

@@ -60,15 +60,20 @@ async def index(_):
     return response.html(index_html)
 
 
-async def check_output(cmd, always_log_stderr: bool = False, cwd=None):
-    proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
-    stdout, stderr = await proc.communicate()
-    if always_log_stderr is True or proc.returncode != 0:
-        # Always log when requested, or when the call failed.
-        for line in stderr.decode().splitlines():
-            logger.error(line)
-
-    return stdout, stderr, proc.returncode
+async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: float = None):
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        if always_log_stderr is True or proc.returncode != 0:
+            # Always log when requested, or when the call failed.
+            for line in stderr.decode().splitlines():
+                logger.error(line)
+        return stdout, stderr, proc.returncode
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()  # Wait for the process to fully terminate
+        raise TimeoutError(f"Command '{cmd}' timed out after {timeout} seconds")
 
 
 async def call_single_file(url) -> bytes:
@@ -82,7 +87,7 @@ async def call_single_file(url) -> bytes:
           r' --dump-content ' \
           f' "{url}"'
     logger.debug(f'archive cmd: {cmd}')
-    stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True)
+    stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
     if return_code != 0 or not stdout:
         if stderr:
             for line in stderr.splitlines():
@@ -101,7 +106,7 @@ async def extract_readability(path: str, url: str) -> dict:
     logger.info(f'readability for {url}')
     cmd = f'readability-extractor {path} "{url}"'
     logger.debug(f'readability cmd: {cmd}')
-    stdout, stderr, return_code = await check_output(cmd)
+    stdout, stderr, return_code = await check_output(cmd, timeout=3 * 60)
     try:
         output = json.loads(stdout)
     except JSONDecodeError as e:
@@ -122,7 +127,7 @@ async def take_screenshot(url: str) -> bytes:
     logger.debug(f'Screenshot cmd: {cmd}')
     with tempfile.TemporaryDirectory() as tmp_dir:
         try:
-            stdout, stderr, return_code = await check_output(cmd, cwd=tmp_dir)
+            stdout, stderr, return_code = await check_output(cmd, cwd=tmp_dir, timeout=1 * 60)
             if return_code != 0:
                 raise ValueError(f'Screenshot failed {return_code=}')
         except Exception as e:

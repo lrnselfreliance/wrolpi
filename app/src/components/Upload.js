@@ -19,7 +19,9 @@ export function Upload({disabled}) {
         doClear,
         tagsSelector,
         overwrite,
-        setOverwrite
+        setOverwrite,
+        overallProgress,
+        inProgress,
     } = useUploadFile();
 
     const onDrop = React.useCallback(async (acceptedFiles) => {
@@ -28,7 +30,7 @@ export function Upload({disabled}) {
         }
     }, [destination]);
 
-    const {getRootProps, getInputProps} = useDropzone({onDrop});
+    const {getRootProps, getInputProps} = useDropzone({onDrop, disabled: inProgress});
 
     React.useEffect(() => {
         if (!destination) {
@@ -77,13 +79,18 @@ export function Upload({disabled}) {
                 <label>Destination</label>
                 <DirectorySearch
                     onSelect={i => setDestination(i)}
-                    disabled={disabled}
+                    disabled={disabled || inProgress}
                     style={{marginBottom: '0.5em'}}
                 />
                 {tagsSelector}
             </SForm.Field>
 
-            <Toggle checked={overwrite} label='Overwrite' onChange={() => setOverwrite(!overwrite)}/>
+            <Toggle
+                checked={overwrite}
+                label='Overwrite'
+                onChange={() => setOverwrite(!overwrite)}
+                disabled={disabled || inProgress}
+            />
         </Form>
 
         {destination ?
@@ -91,8 +98,7 @@ export function Upload({disabled}) {
                 <Grid columns={1}>
                     <Grid.Row>
                         <Grid.Column style={{padding: '1em'}}>
-                            <Form onSubmit={() => {
-                            }}>
+                            <Form>
                                 <div {...getRootProps()}>
                                     <input {...getInputProps()}/>
                                     <Grid textAlign='center'>
@@ -116,6 +122,17 @@ export function Upload({disabled}) {
 
         <br/>
 
+        <Grid>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    {progresses && Object.keys(progresses).length > 1 && <Progress progress
+                                  percent={overallProgress}
+                                  color='blue'
+                                  label='Overall Progress'
+                        />}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
         <Grid columns={2}>
             {progressBars}
         </Grid>

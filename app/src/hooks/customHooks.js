@@ -480,7 +480,7 @@ export const useChannel = (channel_id) => {
         c['url'] = c['url'] || '';
         c['download_frequency'] = c['download_frequency'] || '';
         c['match_regex'] = c['match_regex'] || '';
-        c['download_missing_data'] = c['download_missing_data']  ?? true;
+        c['download_missing_data'] = c['download_missing_data'] ?? true;
         return c;
     }
 
@@ -1157,88 +1157,73 @@ export const useUploadFile = () => {
     const [destination, setDestination] = useState('');
     const [tagNames, setTagNames] = React.useState([]);
     const [overwrite, setOverwrite] = React.useState(false);
+    const [totalSize, setTotalSize] = useState(0);
+    const [uploadedSize, setUploadedSize] = useState(0);
+    const [overallProgress, setOverallProgress] = useState(0);
+    const [inProgress, setInProgress] = useState(false);
 
     const handleProgress = (name, chunk, totalChunks, status, type) => {
         const percent = Math.round((100 * chunk) / totalChunks);
         const newProgress = {[name]: {percent, status, type}};
-        setProgresses(prevState => ({...prevState, ...newProgress}));
+
+        setProgresses(prevState => {
+            const updatedProgresses = {...prevState, ...newProgress};
+
+            // Calculate total uploaded size based on all files' progress
+            let totalUploaded = 0;
+            files.forEach(file => {
+                const fileProgress = updatedProgresses[file.name];
+                if (fileProgress) {
+                    const chunkSize = 10 * 1024 * 1024; // 10MB - same as in doUpload
+                    const fileSize = file.size;
+                    const totalFileChunks = Math.ceil(fileSize / chunkSize);
+
+                    // For completed files, count the full size
+                    if (fileProgress.status === 'complete' || fileProgress.status === 'conflicting') {
+                        totalUploaded += fileSize;
+                    }
+                    // For files in progress, count the completed chunks
+                    else if (fileProgress.percent > 0) {
+                        const completedChunks = Math.floor((fileProgress.percent / 100) * totalFileChunks);
+                        const completedSize = Math.min(completedChunks * chunkSize, fileSize);
+                        totalUploaded += completedSize;
+                    }
+                }
+            });
+
+            setUploadedSize(totalUploaded);
+
+            if (totalSize > 0) {
+                const newOverallProgress = Math.round((totalUploaded / totalSize) * 100);
+                setOverallProgress(newOverallProgress);
+            }
+
+            return updatedProgresses;
+        });
     }
 
     const handleFilesChange = (newFiles) => {
         let newProgresses = {};
-        newFiles.map(i => {
-            newProgresses = {...newProgresses, [i['name']]: {percent: 0, status: 'pending'}};
+        let newTotalSize = 0;
+
+        newFiles.forEach(file => {
+            newProgresses = {...newProgresses, [file.name]: {percent: 0, status: 'pending'}};
+            newTotalSize += file.size;
         });
+
         setProgresses(newProgresses);
         setFiles(newFiles);
+        setTotalSize(newTotalSize);
+        setUploadedSize(0);
+        setOverallProgress(0);
     }
-
-    const uploadChunk = async (file, chunkNum, chunkSize, totalChunks, tries, maxTries) => {
-        if (tries > maxTries) {
-            console.error(`Exceeded max tries ${maxTries}`);
-        }
-
-        const start = chunkNum * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        // The bytes that we will send.
-        const chunk = file.slice(start, end);
-
-        const formData = new FormData();
-        formData.append('chunkNumber', chunkNum.toString());
-        formData.append('filename', file.path);
-        formData.append('totalChunks', totalChunks.toString());
-        formData.append('destination', destination);
-        formData.append('mkdir', 'true');
-        if (overwrite) {
-            formData.append('overwrite', 'true');
-        }
-        // Send the size that we're actually sending.
-        formData.append('chunkSize', chunk.size.toString());
-        formData.append('chunk', chunk);
-        for (let i = 0; i < tagNames.length; i++) {
-            formData.append('tagNames', tagNames[i]);
-        }
-
-        console.debug(`file upload: tries=${tries} chunkNum=${chunkNum} totalChunks=${totalChunks} chunkSize=${chunk.size} destination=${destination} tagNames=${tagNames}`);
-
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/files/upload', true);
-        xhr.onreadystatechange = async () => {
-            if (xhr.readyState === 4) {
-                if (xhr.status === 200 || xhr.status === 416) {
-                    const data = JSON.parse(xhr.responseText);
-                    handleProgress(file.name, chunkNum, totalChunks, 'pending', file.type);
-                    const expectedChunk = data['expected_chunk'];
-                    if (xhr.status === 416) {
-                        console.warn(`Server requested a different chunk ${chunkNum}`);
-                        await uploadChunk(file, expectedChunk, chunkSize, totalChunks, tries + 1, maxTries);
-                    } else {
-                        console.debug(`Uploading of chunk ${chunkNum} succeeded, got request for chunk ${chunkNum}`);
-                        // Success, reset tries.
-                        await uploadChunk(file, expectedChunk, chunkSize, totalChunks, 0, maxTries);
-                    }
-                } else if (xhr.status === 201) {
-                    handleProgress(file.name, totalChunks, totalChunks, 'complete', file.type);
-                    console.info(`Uploading of ${file.path} completed.`);
-                } else if (xhr.status === 400) {
-                    handleProgress(file.name, totalChunks, totalChunks, 'conflicting', file.type);
-                    const data = JSON.parse(xhr.responseText);
-                    if (data['code'] === 'FILE_UPLOAD_FAILED') {
-                        console.error('File already exists. Giving up.');
-                    }
-                } else {
-                    handleProgress(file.name, totalChunks, totalChunks, 'failed', file.type);
-                    console.error(`Failed to upload chunk ${chunkNum}. Giving up.`);
-                }
-            }
-        }
-        await xhr.send(formData);
-    };
 
     const doUpload = async () => {
         if (!files || files.length === 0 || !destination) {
             return;
         }
+
+        setInProgress(true);
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -1250,17 +1235,99 @@ export const useUploadFile = () => {
             const tries = 0;
             const maxTries = 20;
 
-            // Start recursive function to upload the file.
-            await uploadChunk(file, chunkNum, chunkSize, totalChunks, tries, maxTries);
+            // Start recursive function to upload the file and wait for it to complete
+            // before moving to the next file
+            try {
+                await new Promise((resolve, reject) => {
+                    const uploadNextChunk = async (currentChunkNum, currentTries) => {
+                        if (currentTries > maxTries) {
+                            console.error(`Exceeded max tries ${maxTries}`);
+                            reject(new Error(`Exceeded max tries ${maxTries}`));
+                            return;
+                        }
+
+                        const start = currentChunkNum * chunkSize;
+                        const end = Math.min(start + chunkSize, file.size);
+                        const chunk = file.slice(start, end);
+
+                        const formData = new FormData();
+                        formData.append('chunkNumber', currentChunkNum.toString());
+                        formData.append('filename', file.path);
+                        formData.append('totalChunks', totalChunks.toString());
+                        formData.append('destination', destination);
+                        formData.append('mkdir', 'true');
+                        if (overwrite) {
+                            formData.append('overwrite', 'true');
+                        }
+                        formData.append('chunkSize', chunk.size.toString());
+                        formData.append('chunk', chunk);
+                        for (let j = 0; j < tagNames.length; j++) {
+                            formData.append('tagNames', tagNames[j]);
+                        }
+
+                        console.debug(`file upload: tries=${currentTries} chunkNum=${currentChunkNum} totalChunks=${totalChunks} chunkSize=${chunk.size} destination=${destination} tagNames=${tagNames}`);
+
+                        // Create a new XMLHttpRequest for each chunk to avoid InvalidStateError
+                        const chunkXhr = new XMLHttpRequest();
+                        chunkXhr.open('POST', '/api/files/upload', true);
+
+                        chunkXhr.onreadystatechange = async () => {
+                            if (chunkXhr.readyState === 4) {
+                                if (chunkXhr.status === 200 || chunkXhr.status === 416) {
+                                    const data = JSON.parse(chunkXhr.responseText);
+                                    handleProgress(file.name, currentChunkNum, totalChunks, 'pending', file.type);
+                                    const expectedChunk = data['expected_chunk'];
+                                    if (chunkXhr.status === 416) {
+                                        console.warn(`Server requested a different chunk ${currentChunkNum}`);
+                                        uploadNextChunk(expectedChunk, currentTries + 1);
+                                    } else {
+                                        console.debug(`Uploading of chunk ${currentChunkNum} succeeded, got request for chunk ${expectedChunk}`);
+                                        // Success, reset tries.
+                                        uploadNextChunk(expectedChunk, 0);
+                                    }
+                                } else if (chunkXhr.status === 201) {
+                                    handleProgress(file.name, totalChunks, totalChunks, 'complete', file.type);
+                                    console.info(`Uploading of ${file.path} completed.`);
+                                    resolve(); // File upload completed successfully
+                                } else if (chunkXhr.status === 400) {
+                                    handleProgress(file.name, totalChunks, totalChunks, 'conflicting', file.type);
+                                    const data = JSON.parse(chunkXhr.responseText);
+                                    if (data['code'] === 'FILE_UPLOAD_FAILED') {
+                                        console.error('File already exists. Giving up.');
+                                        reject(new Error('File already exists'));
+                                    }
+                                } else {
+                                    handleProgress(file.name, totalChunks, totalChunks, 'failed', file.type);
+                                    console.error(`Failed to upload chunk ${currentChunkNum}. Giving up.`);
+                                    reject(new Error(`Failed to upload chunk ${currentChunkNum}`));
+                                }
+                            }
+                        };
+
+                        chunkXhr.send(formData);
+                    };
+
+                    // Start uploading the first chunk
+                    uploadNextChunk(chunkNum, tries);
+                });
+            } catch (error) {
+                console.error(`Error uploading file ${file.path}:`, error);
+                // Continue with the next file even if this one failed
+            }
         }
 
         // Clear form after upload.
         setFiles([]);
+        setInProgress(false);
     }
 
     const doClear = () => {
         setFiles([]);
         setProgresses({});
+        setTotalSize(0);
+        setUploadedSize(0);
+        setOverallProgress(0);
+        setInProgress(false);
     }
 
     useEffect(() => {
@@ -1279,6 +1346,10 @@ export const useUploadFile = () => {
         tagNames,
         tagsSelector,
         overwrite, setOverwrite,
+        overallProgress,
+        totalSize,
+        uploadedSize,
+        inProgress,
     }
 }
 

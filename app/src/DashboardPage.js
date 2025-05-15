@@ -114,6 +114,7 @@ function EvaluateForm() {
         <pre>15 km to miles</pre>
         <pre>65 degF to degC</pre>
         <pre>7 * 750 Mb</pre>
+        <pre>8 * pi</pre>
     </span>
 
     const inputRef = React.useRef();
@@ -122,12 +123,16 @@ function EvaluateForm() {
     const [evaluatedValue, setEvaluatedValue] = React.useState(helpContents);
 
     const doEvaluate = () => {
+        if (!inputValue) {
+            setEvaluatedValue(helpContents);
+            return;
+        }
         setEvaluatedValue(''); // Clear input temporarily so the user can tell something happened.
         try {
             setEvaluatedValue(evaluate(inputValue).toString());
         } catch (error) {
             console.error(error);
-            setEvaluatedValue('Unable to evaluate.');
+            setEvaluatedValue(`Unable to evaluate: ${error.message}`);
         }
     }
 

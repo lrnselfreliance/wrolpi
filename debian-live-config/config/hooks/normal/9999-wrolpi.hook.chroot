@@ -65,6 +65,9 @@ cp /opt/wrolpi/etc/raspberrypios/motd_first /etc/motd
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager
 
+# Enable iperf3 for speed testing.
+systemctl enable iperf3
+
 set +x
 
 echo

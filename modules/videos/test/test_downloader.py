@@ -3,7 +3,6 @@ import json
 import shutil
 from copy import copy
 from http import HTTPStatus
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -552,10 +551,11 @@ def test_normalize_video_file_names(test_directory, video_download_manager):
 
 @pytest.mark.asyncio
 async def test_video_download_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                      video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
+                                      video_download_manager, mock_video_process_runner, image_file,
+                                      test_videos_downloader_config):
     config = get_videos_downloader_config()
 
-    config.browser_profile = str(test_directory / 'firefox/some directory')
+    config.yt_dlp_options['cookiesfrombrowser'] = str(test_directory / 'firefox/some directory')
     (test_directory / 'firefox/some directory').mkdir(parents=True)
 
     video_path = test_directory / 'a video.mp4'
@@ -570,35 +570,42 @@ async def test_video_download_cookies(test_session, test_directory, mock_video_e
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
         video_download_manager.create_download(url, video_downloader.name, settings=settings)
-        await video_download_manager.wait_for_all_downloads()
+        await await_switches()
 
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     assert '--cookies-from-browser' in cmd
     assert 'firefox:some directory' in cmd
 
-
-@pytest.mark.asyncio
-async def test_video_download_always_use_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                                 video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
-    config = get_videos_downloader_config()
-
-    config.always_use_browser_profile = True
-    config.browser_profile = str(test_directory / 'chromium/some directory')
-    (test_directory / 'chromium/some directory').mkdir(parents=True)
-
-    video_path = test_directory / 'a video.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    # User didn't request cookies, but they are always used.
+    settings = {}
+    config.always_use_cookies_from_browser = True
 
     url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
-        video_download_manager.create_download(url, video_downloader.name)
-        await video_download_manager.wait_for_all_downloads()
+        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        await await_switches()
 
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     assert '--cookies-from-browser' in cmd
-    assert 'chromium:some directory' in cmd
+    assert 'firefox:some directory' in cmd
+
+    # User can override the "always use cookies" setting.
+    settings = {'use_browser_profile': False}
+
+    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        await await_switches()
+
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    assert '--cookies-from-browser' not in cmd
+    assert 'firefox:some directory' not in cmd

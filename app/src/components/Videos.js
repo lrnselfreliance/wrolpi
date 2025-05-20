@@ -253,15 +253,15 @@ function VideosSettings() {
     const emptyFormData = {
         video_resolutions: ['1080p', '720p', '480p', 'maximum'],
         yt_dlp_options: {
+            cookiesfrombrowser: '',
             file_name_format: '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
             nooverwrites: true,
             writeautomaticsub: true,
             writesubtitles: true,
             writethumbnail: true,
         },
-        always_use_browser_profile: false,
+        always_use_cookies_from_browser: false,
         yt_dlp_extra_args: '',
-        browser_profile: '',
     };
 
     const configSubmitter = async () => {
@@ -386,9 +386,9 @@ function VideosSettings() {
                         <ToggleForm
                             form={configForm}
                             label={alwaysUseBrowserProfileLabel}
-                            name='always_use_browser_profile'
-                            path='always_use_browser_profile'
-                            disabled={!configForm.formData.browser_profile}
+                            name='always_use_cookies_from_browser'
+                            path='always_use_cookies_from_browser'
+                            disabled={!configForm.formData?.yt_dlp_options?.cookiesfrombrowser}
                         />
                     </Grid.Column>
                 </Grid.Row>
@@ -413,8 +413,8 @@ function VideosSettings() {
 export function VideoBrowserCookiesSelector({
                                                 form,
                                                 options,
-                                                name = 'browser_profile',
-                                                path = 'browser_profile',
+                                                name = 'cookiesfrombrowser',
+                                                path = 'yt_dlp_options.cookiesfrombrowser',
                                             }) {
     const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
 
@@ -436,7 +436,7 @@ export function VideoBrowserCookiesSelector({
             placeholder='Select Browser Profile'
             options={options}
             name={name}
-            id='browser_profile_dropdown'
+            id='cookiesfrombrowser_dropdown'
             {...inputProps}
         />
     </>

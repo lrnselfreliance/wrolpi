@@ -356,6 +356,7 @@ def set_test_channels_config():
 
 @dataclass
 class VideoDownloaderConfigYtDlpOptionsValidator:
+    cookiesfrombrowser: str
     continue_dl: bool
     file_name_format: str
     nooverwrites: bool
@@ -381,8 +382,7 @@ class VideoDownloaderConfigValidator:
     version: int = None
     yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
     yt_dlp_extra_args: str = ''
-    always_use_browser_profile: bool = False
-    browser_profile: str = ''
+    always_use_cookies_from_browser: bool = False
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -397,6 +397,7 @@ class VideoDownloaderConfig(ConfigFile):
         video_resolutions=['1080p', '720p', '480p', 'maximum'],
         version=0,
         yt_dlp_options=dict(
+            cookiesfrombrowser=None,  # "chromium:Default"
             continue_dl=True,
             file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
             merge_output_format='mp4',
@@ -409,14 +410,17 @@ class VideoDownloaderConfig(ConfigFile):
             youtube_include_dash_manifest=False,
         ),
         yt_dlp_extra_args='',
-        always_use_browser_profile=False,
-        browser_profile='',
+        always_use_cookies_from_browser=False,
     )
     validator = VideoDownloaderConfigValidator
 
     @property
     def continue_dl(self) -> bool:
         return self._config['yt_dlp_options']['continue_dl']
+
+    @property
+    def cookiesfrombrowser(self) -> bool:
+        return self._config['yt_dlp_options']['cookiesfrombrowser']
 
     @property
     def video_resolutions(self) -> List[str]:
@@ -479,20 +483,12 @@ class VideoDownloaderConfig(ConfigFile):
         self.update({**self._config, 'yt_dlp_extra_args': value})
 
     @property
-    def browser_profile(self) -> str:
-        return self._config['browser_profile']
+    def always_use_cookies_from_browser(self) -> bool:
+        return self._config['always_use_cookies_from_browser']
 
-    @browser_profile.setter
-    def browser_profile(self, value: str):
-        self.update({**self._config, 'browser_profile': value})
-
-    @property
-    def always_use_browser_profile(self) -> bool:
-        return self._config['always_use_browser_profile']
-
-    @always_use_browser_profile.setter
-    def always_use_browser_profile(self, value: bool):
-        self.update({**self._config, 'always_use_browser_profile': value})
+    @always_use_cookies_from_browser.setter
+    def always_use_cookies_from_browser(self, value: bool):
+        self.update({**self._config, 'always_use_cookies_from_browser': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
@@ -823,7 +819,7 @@ def get_browser_profiles(home: pathlib.Path = WROLPI_HOME) -> dict:
     return profiles
 
 
-def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
+def browser_profile_to_yt_dlp_arg(profile: pathlib.Path | str) -> str:
     """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument."""
     *_, browser, profile = str(profile).split('/')
     return f'{browser}:{profile}'

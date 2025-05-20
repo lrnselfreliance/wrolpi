@@ -19,7 +19,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    trim_file_name, cached_multiprocessing_result, get_absolute_media_path
+    trim_file_name, cached_multiprocessing_result, get_absolute_media_path, TRACE_LEVEL
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -81,18 +81,39 @@ def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False):
 extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
 
 
+def get_ydl_from_config(filename_format: str = None) -> YoutubeDL:
+    """Get a YoutubeDL instance using the videos downloader config."""
+    options = get_videos_downloader_config().yt_dlp_options
+    if filename_format:
+        # If a filename format is provided, use it.
+        options['outtmpl'] = filename_format
+    if cookiesfrombrowser := options.get('cookiesfrombrowser'):
+        # Ensure that the cookiesfrombrowser option is a tuple which is used by yt-dlp.
+        options['cookiesfrombrowser'] = tuple(browser_profile_to_yt_dlp_arg(cookiesfrombrowser).split(':'))
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'get_ydl_from_config {options=}')
+    ydl = YoutubeDL(copy.deepcopy(options))
+    ydl.params['logger'] = ydl_logger
+    return ydl
+
+
 # Cache results for each URL for a few minutes.
 @cachetools.cached(cache=extract_info_cache, key=extract_info_key)
-def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False) -> dict:
+def extract_info(url: str, ydl: YoutubeDL = None, process: bool = False) -> dict:
     """Get info about a video, channel, or playlist.  Separated for testing."""
     if PYTEST:
         raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
 
-    return ydl.extract_info(url, download=False, process=process)
+    ydl = ydl or get_ydl_from_config()
+    info = ydl.extract_info(url, download=False, process=process)
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'got info for {url=}')
+    return info
 
 
-def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
+def prepare_filename(entry: dict, ydl: YoutubeDL = None) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
+    ydl = ydl or get_ydl_from_config()
     dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
     file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
@@ -107,9 +128,7 @@ def preview_filename(filename_format: str) -> str:
     if not filename_format.endswith('.%(ext)s'):
         raise RuntimeError('Filename must end with .%(ext)s')
 
-    options = get_videos_downloader_config().yt_dlp_options
-    options['outtmpl'] = filename_format
-    ydl = YoutubeDL(copy.deepcopy(options))
+    ydl = get_ydl_from_config(filename_format)
     entry = dict(
         uploader='WROLPi',
         timestamp=int(now().timestamp()),
@@ -387,6 +406,8 @@ class VideoDownloader(Downloader, ABC):
             logger.debug(f'Downloading {url} with {tag_names=}')
 
         config = get_videos_downloader_config()
+        cookies_from_browser = (config.yt_dlp_options or dict()).get('cookiesfrombrowser')
+        cookies_from_browser = pathlib.Path(cookies_from_browser) if cookies_from_browser else None
 
         logs = None  # noqa
         try:
@@ -429,22 +450,21 @@ class VideoDownloader(Downloader, ABC):
                 cmd = (*cmd, '--write-info-json')
             if config.yt_dlp_extra_args:
                 cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
-            if config.browser_profile and (
-                    (i := settings.get('use_browser_profile')) or (config.always_use_browser_profile and i != False)):
-                # Use the browser profile to get cookies, but only if "always_use_browser_profile" is set and
+            if cookies_from_browser and (
+                    (i := settings.get('use_browser_profile')) or (config.always_use_cookies_from_browser and i != False)):
+                # Use the browser profile to get cookies, but only if "always_use_cookies_from_browser" is set and
                 # "use_browser_profile" is not False, or if "use_browser_profile" is set.
-                browser_profile = pathlib.Path(config.browser_profile)
-                if browser_profile.exists():
-                    browser_profile = browser_profile_to_yt_dlp_arg(browser_profile)
-                    cmd = (*cmd, '--cookies-from-browser', browser_profile)
+                if cookies_from_browser.exists():
+                    cmd = (*cmd, '--cookies-from-browser', browser_profile_to_yt_dlp_arg(cookies_from_browser))
                 else:
-                    logger.error(f'Browser profile {config.browser_profile} does not exist')
+                    logger.error(f'Browser profile {cookies_from_browser} does not exist!')
 
             # Add destination and the video's URL to the command.
             cmd = (*cmd,
                    '-o', video_path,
                    url,
                    )
+
             # Do the real download.
             result = await self.process_runner(download, cmd, out_dir, debug=True)
             stdout = result.stdout.decode()
@@ -641,7 +661,7 @@ class VideoDownloader(Downloader, ABC):
 
         # YoutubeDL expects specific options, add onto the default options
         config = get_videos_downloader_config()
-        options = config.yt_dlp_options
+        options = copy.deepcopy(config.yt_dlp_options)
         # yt-dlp expects the absolute path.
         options['outtmpl'] = f'{out_dir}/{config.file_name_format}'
         options['merge_output_format'] = video_format
@@ -649,8 +669,14 @@ class VideoDownloader(Downloader, ABC):
         options['format'] = video_resolutions
         options['cachdir'] = YTDLP_CACHE_DIR
 
+        if cookiesfrombrowser := options.get('cookiesfrombrowser'):
+            # Ensure that the cookiesfrombrowser option is a tuple which is used by yt-dlp.
+            options['cookiesfrombrowser'] = tuple(browser_profile_to_yt_dlp_arg(cookiesfrombrowser).split(':'))
+        if logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'VideoDownloader.prepare_filename {options=}')
+
         # Create a new YoutubeDL for the output directory.
-        ydl = YoutubeDL(copy.deepcopy(options))
+        ydl = YoutubeDL(options)
         ydl.params['logger'] = ydl_logger
         ydl.add_default_info_extractors()
 
@@ -825,7 +851,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
     return channel
 
 
-def update_channel_catalog(channel: Channel, info: dict):
+def update_channel_catalog(channel: Channel, info: dict) -> None:
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 

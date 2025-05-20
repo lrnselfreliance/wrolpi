@@ -20,6 +20,7 @@ npm install || npm install || npm install || npm install # try install multiple 
 MAP_DB_BLOB=/opt/wrolpi-blobs/map-db-gis.dump
 if [[ ! -f ${MAP_DB_BLOB} || ! -s ${MAP_DB_BLOB} ]]; then
   echo "Downloading new map blob (1.2 GB)..."
+  mkdir -p /opt/wrolpi-blobs
   wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/map-db-gis.dump -O ${MAP_DB_BLOB}
 fi
 if [[ -f /opt/wrolpi-blobs/gis-map.dump.gz && -s ${MAP_DB_BLOB} ]]; then

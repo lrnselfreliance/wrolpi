@@ -1585,7 +1585,6 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
 
     for i in range(2):
         # Try multiple times because uploads happen concurrently and may conflict.
-        # TODO convert uploads to synchronous in UI.
         with get_db_session() as session:
             file_group = FileGroup.from_paths(session, *paths)
             # Re-index the contents of the file.
@@ -1598,8 +1597,6 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
                 # Another process inserted this FileGroup.
                 logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
                 continue
-    else:
-        raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
     logger.debug(f'upsert_file: {file_group}')
     try:

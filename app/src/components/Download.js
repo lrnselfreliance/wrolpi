@@ -356,8 +356,8 @@ export function UseBrowserProfile({form}) {
     const localFetchConfig = async () => {
         const result = await fetchVideoDownloaderConfig();
         setConfig(result);
-        if (result?.always_use_browser_profile === true) {
-            // Enable the toggle if "always_use_browser_profile" is set.
+        if (result?.always_use_cookies_from_browser === true) {
+            // Enable the toggle if "always_use_cookies_from_browser" is set.
             form.setValue('settings.use_browser_profile', true);
         }
     }
@@ -376,7 +376,7 @@ export function UseBrowserProfile({form}) {
     return <ToggleForm
         form={form}
         label={label}
-        disabled={!config?.browser_profile}
+        disabled={!config?.yt_dlp_options?.cookiesfrombrowser}
         name='use_browser_profile'
         path='settings.use_browser_profile'
     />

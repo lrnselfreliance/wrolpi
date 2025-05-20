@@ -619,6 +619,8 @@ class ConfigFile:
             new_data, extra_data = dict(new_data), dict(extra_data)
             if extra_data:
                 logger_.warning(f'Ignoring extra config data ({file_str}): {extra_data}')
+            if logger.isEnabledFor(TRACE_LEVEL):
+                logger_.trace(f'Importing config from {file_str}: {new_data}')
             self._config.update(new_data)
             # Import call above this will set successful_import.
             # self.successful_import = True

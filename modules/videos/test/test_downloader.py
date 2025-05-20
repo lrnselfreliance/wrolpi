@@ -598,6 +598,7 @@ async def test_video_download_always_use_cookies(test_session, test_directory, m
         video_download_manager.create_download(url, video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
 
+        mock_video_process_runner.assert_called_once()
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     assert '--cookies-from-browser' in cmd

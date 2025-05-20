@@ -195,6 +195,33 @@ class Download(ModelHelper, Base):  # noqa
     def is_complete(self) -> bool:
         return self.status == DownloadStatus.complete
 
+    @property
+    def use_browser_profile(self) -> bool:
+        """Returns True if the downloader should use a browser profile.  This will return False if the browser profile
+        is not configured.
+
+        @warning: This is only used by the VideoDownloader."""
+        from modules.videos.downloader import VideoDownloader
+        from modules.videos.lib import get_videos_downloader_config
+
+        if self.downloader != VideoDownloader.name:
+            # Only videos currently support browser profiles.
+            raise NotImplementedError('Only videos currently support browser profiles.')
+
+        config = get_videos_downloader_config()
+        if not config.browser_profile:
+            # Can't use a browser profile if it isn't configured.
+            return False
+
+        settings = self.settings or dict()
+        if settings.get('use_browser_profile') is True:
+            return True
+
+        if config.always_use_browser_profile and settings.get('use_browser_profile') is not False:
+            return True
+
+        return False
+
     def get_downloader(self):
         if self.downloader:
             return download_manager.find_downloader_by_name(self.downloader)
@@ -1513,12 +1540,12 @@ class RSSDownloader(Downloader):
             for url in urls:
                 # `fetch_video_duration` is cached so can be called frequently.
                 try:
-                    if maximum_duration and await fetch_video_duration(url) > maximum_duration:
+                    if maximum_duration and await fetch_video_duration(url, use_browser_profile=download.use_browser_profile) > maximum_duration:
                         continue
                 except Exception as e:
                     logger.error(f'Failed to fetch duration: {url}', exc_info=e)
                 try:
-                    if minimum_duration and await fetch_video_duration(url) < minimum_duration:
+                    if minimum_duration and await fetch_video_duration(url, use_browser_profile=download.use_browser_profile) < minimum_duration:
                         continue
                 except Exception as e:
                     logger.error(f'Failed to fetch duration: {url}', exc_info=e)

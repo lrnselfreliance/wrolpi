@@ -14,6 +14,7 @@ import threading
 import zipfile
 from abc import ABC
 from datetime import datetime
+from http import HTTPStatus
 from itertools import zip_longest
 from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
 from typing import Tuple, Set
@@ -627,6 +628,7 @@ def assert_files_search(test_client):
     def _(search_str: str, expected: List[dict]):
         content = json.dumps({'search_str': search_str})
         request, response = test_client.post('/api/files/search', content=content)
+        assert response.status_code == HTTPStatus.OK, response.text
         for file_group, exp in zip_longest(response.json['file_groups'], expected):
             assert_dict_contains(file_group, exp)
 

@@ -74,8 +74,8 @@ DEFAULT_POSTER_FORMAT = 'jpg'
 DEFAULT_CHANNEL_DOWNLOAD_ORDER = 'newest'
 
 
-def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False):
-    return hashkey(url, process=process)
+def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False, use_browser_profile: bool = None):
+    return hashkey(url, process=process, use_prowser_profile=use_browser_profile)
 
 
 extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
@@ -83,12 +83,29 @@ extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5)
 
 # Cache results for each URL for a few minutes.
 @cachetools.cached(cache=extract_info_cache, key=extract_info_key)
-def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False) -> dict:
+def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False, use_browser_profile: bool = None) -> dict:
     """Get info about a video, channel, or playlist.  Separated for testing."""
     if PYTEST:
         raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
 
-    return ydl.extract_info(url, download=False, process=process)
+    logger.info(f'discord extract_info {url=}')
+    logger.info(f'discord extract_info {use_browser_profile=}')
+
+    extra_info = None
+    config = get_videos_downloader_config()
+    if use_browser_profile is True:
+        browser_profile = pathlib.Path(config.browser_profile)
+        if browser_profile.exists():
+            browser_profile = browser_profile_to_yt_dlp_arg(browser_profile)
+            extra_info = dict(cookiesfrombrowser=browser_profile)
+        else:
+            logger.error(f'Browser profile {config.browser_profile} does not exist')
+
+    logger.info(f'discord extract_info {config.browser_profile=}')
+    logger.info(f'discord extract_info {config.always_use_browser_profile=}')
+    logger.info(f'discord extract_info {extra_info=}')
+
+    return ydl.extract_info(url, download=False, process=process, extra_info=extra_info)
 
 
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
@@ -125,7 +142,7 @@ def preview_filename(filename_format: str) -> str:
 
 
 @cached_multiprocessing_result
-async def fetch_video_duration(url: str) -> int:
+async def fetch_video_duration(url: str, use_browser_profile: bool = None) -> int:
     """Get video duration in seconds.  Attempts to get the duration from a Video that has already been downloaded,
     otherwise, fetches the duration using yt-dlp."""
     with get_db_session() as session:
@@ -137,7 +154,7 @@ async def fetch_video_duration(url: str) -> int:
 
     logger.debug(f'Fetching video duration from {url}')
     # Duration can be extracted without processing.
-    info = extract_info(url, process=False)
+    info = extract_info(url, process=False, use_browser_profile=use_browser_profile)
     duration = info['duration']
     logger.info(f'Fetched video duration of {duration} from {url}')
     return duration
@@ -159,7 +176,7 @@ class ChannelDownloader(Downloader, ABC):
 
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
-        info = extract_info(download.url, process=False)
+        info = extract_info(download.url, process=False, use_browser_profile=download.use_browser_profile)
         # Resolve the "entries" generator.
         info: dict = resolve_generators(info)
         entries = info.get('entries')
@@ -233,7 +250,7 @@ class ChannelDownloader(Downloader, ABC):
         logger.debug(f'Preparing {channel} for downloads')
         channel_id = channel.id
 
-        update_channel_catalog(channel, download.info_json)
+        update_channel_catalog(channel, download.info_json, download.use_browser_profile)
 
         with get_db_session() as session:
             channel = get_channel(session, channel_id=channel_id, return_dict=False)
@@ -333,6 +350,7 @@ class VideoDownloader(Downloader, ABC):
         return file_groups
 
     async def do_download(self, download: Download) -> DownloadResult:
+        logger.info(f'discord do_download: {download.url=}')
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
@@ -342,6 +360,7 @@ class VideoDownloader(Downloader, ABC):
         settings = download.settings or dict()
         download.destination = download.destination or settings.get('destination')
         tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
+        logger.info(f'discord do_download: {settings=}')
 
         # Video may have been downloaded previously, get its location for error reporting.
         with get_db_session() as session:
@@ -349,7 +368,7 @@ class VideoDownloader(Downloader, ABC):
             location = video_.location if video_ else None
 
         try:
-            download.info_json = download.info_json or extract_info(url)
+            download.info_json = download.info_json or extract_info(url, use_browser_profile=download.use_browser_profile)
         except yt_dlp.utils.DownloadError as e:
             # Video may be private.
             try:
@@ -396,7 +415,7 @@ class VideoDownloader(Downloader, ABC):
             video_resolutions = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
 
             video_format = settings.get('video_format') or config.merge_output_format
-            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions, video_format)
+            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions, video_format, download.use_browser_profile)
 
             if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
@@ -445,6 +464,8 @@ class VideoDownloader(Downloader, ABC):
                    '-o', video_path,
                    url,
                    )
+
+            logger.info(f'discord do_download: {cmd=}')
             # Do the real download.
             result = await self.process_runner(download, cmd, out_dir, debug=True)
             stdout = result.stdout.decode()
@@ -633,7 +654,7 @@ class VideoDownloader(Downloader, ABC):
         return channel, channel_directory, channel_id, destination, settings
 
     @staticmethod
-    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str) \
+    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str, use_browser_profile: bool) \
             -> Tuple[pathlib.Path, dict]:
         """Get the full path of a video file from its URL using yt-dlp."""
         if not out_dir.is_dir():
@@ -656,7 +677,7 @@ class VideoDownloader(Downloader, ABC):
 
         # Get the path where the video will be saved.
         try:
-            entry = extract_info(url, ydl=ydl, process=True)
+            entry = extract_info(url, ydl=ydl, process=True, use_browser_profile=use_browser_profile)
             final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         except DownloadError as e:
             if ' Cannot write ' in str(e):
@@ -685,7 +706,7 @@ class VideoDownloader(Downloader, ABC):
             ydl = YoutubeDL(copy.deepcopy(options))
             ydl.params['logger'] = ydl_logger
             ydl.add_default_info_extractors()
-            entry = extract_info(url, ydl=ydl, process=True)
+            entry = extract_info(url, ydl=ydl, process=True, use_browser_profile=use_browser_profile)
 
         logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
         return final_filename, entry
@@ -825,7 +846,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
     return channel
 
 
-def update_channel_catalog(channel: Channel, info: dict):
+def update_channel_catalog(channel: Channel, info: dict, use_browser_profile: bool = False) -> None:
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 
@@ -844,7 +865,7 @@ def update_channel_catalog(channel: Channel, info: dict):
         for entry in entries:
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
-                info = extract_info(entry['url'])
+                info = extract_info(entry['url'], use_browser_profile=use_browser_profile)
                 break
 
     with get_db_session(commit=True) as session:

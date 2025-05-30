@@ -205,6 +205,41 @@ class Download(ModelHelper, Base):  # noqa
     def domain(self):
         return urlparse(self.url).netloc
 
+    @property
+    def use_browser_profile(self) -> bool:
+        from modules.videos.downloader import VideoDownloader
+        if not self.downloader == VideoDownloader.name:
+            return False
+
+        use_browser_profile = (self.settings or dict()).get('use_browser_profile')
+        if use_browser_profile:
+            # Always use cookies from browser if the user explicitly requested it.
+            return True
+
+        from modules.videos.lib import get_videos_downloader_config
+        config = get_videos_downloader_config()
+
+        if config.always_use_cookies_from_browser:
+            return True
+
+        return False
+
+    @property
+    def cookies_from_browser(self) -> str | None:
+        """
+        Return the browser profile to use for this Download, if any.
+        """
+        from modules.videos.downloader import VideoDownloader
+        if not self.downloader == VideoDownloader.name:
+            return None
+
+        from modules.videos.lib import get_videos_downloader_config
+        config = get_videos_downloader_config()
+        cookies_from_browser = config.yt_dlp_options.get('cookiesfrombrowser')
+        if cookies_from_browser and not pathlib.Path(cookies_from_browser).exists():
+            logger.warning(f'Cookies file {cookies_from_browser} not found.')
+        return cookies_from_browser
+
     def filter_excluded(self, urls: List[str]) -> List[str]:
         """Return any URLs that do not match my excluded_urls."""
         if self.settings and (excluded_urls := self.settings.get('excluded_urls')):

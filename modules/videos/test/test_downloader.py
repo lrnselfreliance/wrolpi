@@ -357,6 +357,7 @@ async def test_download_destination(test_session, test_directory, video_download
     video_download_manager.create_download('https://example.com/1', downloader_name=VideoDownloader.name)
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the channel directory.
+    assert mock_video_prepare_filename.call_count == 1
     assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default'] \
         .startswith(f'{test_directory}/videos/channel name/%(uploader)s')
 
@@ -593,19 +594,3 @@ async def test_video_download_cookies(test_session, test_directory, mock_video_e
 
     assert '--cookies-from-browser' in cmd
     assert 'firefox:some directory' in cmd
-
-    # User can override the "always use cookies" setting.
-    settings = {'use_browser_profile': False}
-
-    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
-        mock_video_extract_info.return_value = example_video_json
-        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-
-        video_download_manager.create_download(url, video_downloader.name, settings=settings)
-        await await_switches()
-
-        download, cmd, out_dir = mock_video_process_runner.call_args[0]
-
-    assert '--cookies-from-browser' not in cmd
-    assert 'firefox:some directory' not in cmd

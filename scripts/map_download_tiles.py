@@ -5,7 +5,7 @@ Example:  To download all tiles of the US state of Kansas, run the script like s
 
 /opt/wrolpi/venv/bin/python /opt/wrolpi/scripts/map_download_tiles.py 40.011647534727125 -102.06383712982996 37.030883772380065 -94.61534551981345
 
-The script will download zoom levels 6 to 12 by default, this will show most of a US state down to major streets.
+The script will download zoom levels 0 to 12 by default, this will show most of a US state down to major streets.
 
 Changing zoom levels can be exponential!
 """
@@ -30,9 +30,13 @@ def longitude_to_tile_x(lon: float, zoom: int) -> int:
 
 
 def get_tile(host: str, zoom: int, x: int, y: int) -> bytes:
-    response = requests.get(f"{host}/{zoom}/{x}/{y}.png", verify=False, timeout=5 * 60)
-    if response.status_code != 200:
-        raise RuntimeError(f"Request failed with status code {response.status_code}")
+    while True:
+        url = host.format(z=zoom, x=x, y=y)
+        response = requests.get(url, verify=False, timeout=5 * 60)
+        if response.status_code == 200:
+            break
+        if response.status_code != 200:
+            raise RuntimeError(f"Request failed with status code {response.status_code} for {url}")
     return response.content
 
 
@@ -75,8 +79,8 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download map tiles from WROLPi")
     parser.add_argument('-H', '--host', type=str,
-                        default='https://localhost:8084/hot',
-                        help='The URL of your map tiles server',
+                        default='https://localhost:8084/hot/{z}/{x}/{y}.png',
+                        help='The URL of your map tiles server, this will be interpolated with the zoom, x, and y values.  Example: https://localhost:8084/hot/{z}/{x}/{y}.png',
                         )
     parser.add_argument('-a', '--zoom-start', type=int, default=0,
                         help='The highest zoom to download.  0 will display the entire planet, 6 will display display most of a US state.')
@@ -97,7 +101,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(
-        host=args.host,
+        host=args.host.rstrip('/'),
         zoom_start=args.zoom_start,
         zoom_stop=args.zoom_stop,
         west_latitude=args.west_latitude,

@@ -74,46 +74,52 @@ DEFAULT_POSTER_FORMAT = 'jpg'
 DEFAULT_CHANNEL_DOWNLOAD_ORDER = 'newest'
 
 
-def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False):
-    return hashkey(url, process=process)
-
-
-extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
-
-
-def get_ydl_from_config(filename_format: str = None) -> YoutubeDL:
+def get_ydl_from_config(filename_format: str = None, cookies_from_browser: str = None) -> YoutubeDL:
     """Get a YoutubeDL instance using the videos downloader config."""
     options = get_videos_downloader_config().yt_dlp_options
     if filename_format:
         # If a filename format is provided, use it.
         options['outtmpl'] = filename_format
-    if cookiesfrombrowser := options.get('cookiesfrombrowser'):
+
+    if cookies_from_browser:
         # Ensure that the cookiesfrombrowser option is a tuple which is used by yt-dlp.
-        options['cookiesfrombrowser'] = tuple(browser_profile_to_yt_dlp_arg(cookiesfrombrowser).split(':'))
-    if logger.isEnabledFor(TRACE_LEVEL):
-        logger.trace(f'get_ydl_from_config {options=}')
+        options['cookiesfrombrowser'] = tuple(browser_profile_to_yt_dlp_arg(cookies_from_browser).split(':'))
+    else:
+        # Do not use cookies from browser if not specified.
+        options['cookiesfrombrowser'] = None
+
     ydl = YoutubeDL(copy.deepcopy(options))
     ydl.params['logger'] = ydl_logger
     return ydl
 
 
+def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False, cookies_from_browser: str = None):
+    return hashkey(url, process=process, cookies_from_browser=cookies_from_browser)
+
+
+extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
+
+
 # Cache results for each URL for a few minutes.
 @cachetools.cached(cache=extract_info_cache, key=extract_info_key)
-def extract_info(url: str, ydl: YoutubeDL = None, process: bool = False) -> dict:
+def extract_info(url: str, ydl: YoutubeDL = None, process: bool = False, cookies_from_browser: str = None) -> dict:
     """Get info about a video, channel, or playlist.  Separated for testing."""
     if PYTEST:
         raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
 
-    ydl = ydl or get_ydl_from_config()
+    if logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'extract_info {cookies_from_browser=}')
+
+    ydl = ydl or get_ydl_from_config(cookies_from_browser=cookies_from_browser)
     info = ydl.extract_info(url, download=False, process=process)
     if logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'got info for {url=}')
     return info
 
 
-def prepare_filename(entry: dict, ydl: YoutubeDL = None) -> str:
+def prepare_filename(entry: dict, ydl: YoutubeDL = None, cookies_from_browser: str = None) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
-    ydl = ydl or get_ydl_from_config()
+    ydl = ydl or get_ydl_from_config(cookies_from_browser=cookies_from_browser)
     dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
     file_name = escape_file_name(file_name)
     file_name = trim_file_name(file_name)
@@ -178,7 +184,8 @@ class ChannelDownloader(Downloader, ABC):
 
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
-        info = extract_info(download.url, process=False)
+        cookies_from_browser = download.cookies_from_browser if download.use_browser_profile else None
+        info = extract_info(download.url, process=False, cookies_from_browser=cookies_from_browser)
         # Resolve the "entries" generator.
         info: dict = resolve_generators(info)
         entries = info.get('entries')
@@ -351,6 +358,21 @@ class VideoDownloader(Downloader, ABC):
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'video'))
         return file_groups
 
+    @staticmethod
+    def _format_download_traceback(download: Download, e: Exception, cookies_from_browser: str,
+                                   use_browser_profile: bool, error_message: str) -> str:
+        formatted = '\n'.join(traceback.format_exception(e))
+        return f'''Debugging information for {download.url}:
+
+{download.settings=}
+{cookies_from_browser=}
+{use_browser_profile=}
+ 
+Trackback:
+{formatted}
+
+{error_message}'''
+
     async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
@@ -361,6 +383,11 @@ class VideoDownloader(Downloader, ABC):
         settings = download.settings or dict()
         download.destination = download.destination or settings.get('destination')
         tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
+        cookies_from_browser = download.cookies_from_browser
+        use_browser_profile = download.use_browser_profile
+        if logger.isEnabledFor(TRACE_LEVEL):
+            logger.warning(f'VideoDownloader.do_download {cookies_from_browser=}')
+            logger.warning(f'VideoDownloader.do_download {use_browser_profile=}')
 
         # Video may have been downloaded previously, get its location for error reporting.
         with get_db_session() as session:
@@ -368,20 +395,50 @@ class VideoDownloader(Downloader, ABC):
             location = video_.location if video_ else None
 
         try:
-            download.info_json = download.info_json or extract_info(url)
+            download.info_json = download.info_json or \
+                                 extract_info(url,
+                                              cookies_from_browser=cookies_from_browser if use_browser_profile else None)
         except yt_dlp.utils.DownloadError as e:
-            # Video may be private.
-            try:
-                raise RuntimeError('Failed to extract_info') from e
-            except Exception as e:
-                return DownloadResult(
-                    success=False,
-                    location=location,
-                    error='\n'.join(traceback.format_exception(e)),
-                )
+            success = False
+            if 'sign in' in str(e).lower():
+                # Video requires sign-in, try again with browser profile.
+                logger.info(f'Trying to download video {url} again with browser profile: {cookies_from_browser}')
+                try:
+                    download.info_json = extract_info(url, cookies_from_browser=cookies_from_browser)
+                    success = True
+                    use_browser_profile = True
+                except yt_dlp.utils.DownloadError as e:
+                    # Still failed, return error.
+                    logger.error(f'Failed to extract_info {url} with browser profile: {cookies_from_browser}',
+                                 exc_info=e)
+                    return DownloadResult(
+                        success=False,
+                        location=location,
+                        error=self._format_download_traceback(
+                            download, e, cookies_from_browser, use_browser_profile,
+                            f'Failed to extract_info {url} with browser profile: {cookies_from_browser}',
+                        )
+                    )
+            if not success:
+                # Video may be private.
+                try:
+                    raise RuntimeError('Failed to extract_info') from e
+                except Exception as e:
+                    return DownloadResult(
+                        success=False,
+                        location=location,
+                        error=self._format_download_traceback(
+                            download, e, cookies_from_browser, use_browser_profile,
+                            f'Failed to extract_info {url}: {cookies_from_browser}',
+                        )
+                    )
 
         if not download.info_json:
-            raise ValueError(f'Cannot download video with no info_json.')
+            return DownloadResult(
+                success=False,
+                location=location,
+                error=f'Failed to extract info for {url}.  Maybe the video is private or unavailable.',
+            )
 
         channel, channel_directory, channel_id, destination, settings = await self._get_channel(download)
 
@@ -406,7 +463,6 @@ class VideoDownloader(Downloader, ABC):
             logger.debug(f'Downloading {url} with {tag_names=}')
 
         config = get_videos_downloader_config()
-        cookies_from_browser = (config.yt_dlp_options or dict()).get('cookiesfrombrowser')
         cookies_from_browser = pathlib.Path(cookies_from_browser) if cookies_from_browser else None
 
         logs = None  # noqa
@@ -450,14 +506,10 @@ class VideoDownloader(Downloader, ABC):
                 cmd = (*cmd, '--write-info-json')
             if config.yt_dlp_extra_args:
                 cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
-            if cookies_from_browser and (
-                    (i := settings.get('use_browser_profile')) or (config.always_use_cookies_from_browser and i != False)):
-                # Use the browser profile to get cookies, but only if "always_use_cookies_from_browser" is set and
-                # "use_browser_profile" is not False, or if "use_browser_profile" is set.
+            if use_browser_profile and cookies_from_browser:
+                # Cookies are required for this video, or user has requested to use browser profile.
                 if cookies_from_browser.exists():
                     cmd = (*cmd, '--cookies-from-browser', browser_profile_to_yt_dlp_arg(cookies_from_browser))
-                else:
-                    logger.error(f'Browser profile {cookies_from_browser} does not exist!')
 
             # Add destination and the video's URL to the command.
             cmd = (*cmd,
@@ -683,7 +735,9 @@ class VideoDownloader(Downloader, ABC):
         # Get the path where the video will be saved.
         try:
             entry = extract_info(url, ydl=ydl, process=True)
-            final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
+            final_filename = pathlib.Path(
+                prepare_filename(entry, ydl=ydl, cookies_from_browser=cookiesfrombrowser)
+            ).absolute()
         except DownloadError as e:
             if ' Cannot write ' in str(e):
                 # yt-dlp does not handle long file names well, get the name from the error (lol)

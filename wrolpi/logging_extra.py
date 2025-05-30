@@ -6,7 +6,7 @@ class EmptyMessageFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.msg
-        if not message:
+        if not message or not hasattr(message, 'strip'):
             return False
         if not message.strip():
             return False

@@ -21,3 +21,4 @@ python3 -m venv /opt/wrolpi-help/venv
 # Install the systemd service.
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-help.service /etc/systemd/system/
 systemctl enable wrolpi-help.service
+systemctl start wrolpi-help.service

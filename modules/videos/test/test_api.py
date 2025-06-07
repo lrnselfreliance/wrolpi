@@ -309,6 +309,43 @@ async def test_format_videos_description(async_client, test_session, test_direct
 
 
 @pytest.mark.asyncio
+async def test_size_to_duration_sort(test_session, video_factory, assert_video_search):
+    """Test the 'size_to_duration' sort option."""
+    # Create videos with different size-to-duration ratios
+    # All videos will have the same size (from the test file) but different durations
+
+    # Video with 10 second duration (highest ratio)
+    vid1 = video_factory(with_video_file=True, title='vid1', with_info_json={'duration': 10})
+
+    # Video with 20 second duration (medium ratio)
+    vid2 = video_factory(with_video_file=True, title='vid2', with_info_json={'duration': 20})
+
+    # Video with 30 second duration (lowest ratio)
+    vid3 = video_factory(with_video_file=True, title='vid3', with_info_json={'duration': 30})
+
+    test_session.commit()
+
+    # Verify that the videos have the expected size and length values
+    vid1 = test_session.query(Video).filter_by(id=vid1.id).one()
+    vid2 = test_session.query(Video).filter_by(id=vid2.id).one()
+    vid3 = test_session.query(Video).filter_by(id=vid3.id).one()
+
+    # All videos should have the same size
+    assert vid1.file_group.size == vid2.file_group.size == vid3.file_group.size
+
+    # But different lengths
+    assert vid1.file_group.length == 10
+    assert vid2.file_group.length == 20
+    assert vid3.file_group.length == 30
+
+    # Test ascending order (lowest ratio first)
+    await assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='size_to_duration')
+
+    # Test descending order (highest ratio first)
+    await assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id], order_by='-size_to_duration')
+
+
+@pytest.mark.asyncio
 async def test_video_file_format(async_client, test_session, fake_now):
     body = dict(video_file_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s')
     request, response = await async_client.post('/api/videos/file_format', json=body)

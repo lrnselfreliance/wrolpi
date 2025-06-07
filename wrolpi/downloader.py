@@ -689,6 +689,9 @@ class DownloadManager:
         download.sub_downloader = sub_downloader or None
         # Remove Channel relationship, if necessary.
         download.channel_id = (settings or dict()).get('channel_id')
+
+        save_downloads_config.activate_switch()
+
         return download
 
     @wrol_mode_check

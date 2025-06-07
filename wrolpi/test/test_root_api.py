@@ -440,6 +440,12 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
         assert response.status_code == HTTPStatus.CREATED
 
         assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
+        # Assert that the config has been saved
+        config = get_download_manager_config()
+        assert len(config.downloads) == 1
+        assert config.downloads[0]['url'] == 'https://example.com/1'
+        assert config.downloads[0]['frequency'] == 1_000
+        assert config.downloads[0]['downloader'] == 'archive'
 
         # Create two once-downloads.
         body = dict(
@@ -451,6 +457,10 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
         assert response.status_code == HTTPStatus.CREATED
 
         assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
+        # Assert that the config has been saved
+        config = get_download_manager_config()
+        assert len(config.downloads) == 3
+        assert {d['url'] for d in config.downloads} == {f'https://example.com/{i}' for i in range(1, 4)}
 
         download1, download2, download3 = test_session.query(Download).order_by(Download.url).all()
         assert not download1.settings
@@ -473,6 +483,11 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
         download2 = test_session.query(Download).filter_by(id=expected_download['id']).first()
         assert download2.__json__() == expected_download
         assert download2.tag_names == [tag1.name, tag2.name]
+        # Assert that the config has been saved
+        config = get_download_manager_config()
+        assert len(config.downloads) == 3
+        download_config = next(d for d in config.downloads if d['url'] == 'https://example.com/1')
+        assert download_config['tag_names'] == [tag1.name, tag2.name]
 
 
 def test_get_downloaders(test_client):

@@ -56,6 +56,8 @@ VIDEO_ORDERS = {
     '-size': 'fg.size DESC, LOWER(fg.primary_path) DESC',
     'length': 'fg.length ASC, LOWER(fg.primary_path) ASC',
     '-length': 'fg.length DESC, LOWER(fg.primary_path) DESC',
+    'size_to_duration': 'CASE WHEN fg.length > 0 THEN fg.size::float / fg.length ELSE fg.size END ASC, LOWER(fg.primary_path) ASC',
+    '-size_to_duration': 'CASE WHEN fg.length > 0 THEN fg.size::float / fg.length ELSE fg.size END DESC, LOWER(fg.primary_path) DESC',
     'viewed': 'fg.viewed ASC',
     '-viewed': 'fg.viewed DESC',
     'view_count': 'v.view_count ASC',
@@ -70,6 +72,8 @@ NO_NULL_ORDERS = {
     '-length': 'fg.length IS NOT NULL',
     'size': 'fg.size IS NOT NULL',
     '-size': 'fg.size IS NOT NULL',
+    'size_to_duration': 'fg.size IS NOT NULL AND fg.length IS NOT NULL',
+    '-size_to_duration': 'fg.size IS NOT NULL AND fg.length IS NOT NULL',
     'view_count': 'v.view_count IS NOT NULL',
     '-view_count': 'v.view_count IS NOT NULL',
 }

@@ -856,7 +856,6 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         FROM file_group fg
         {join}
         {f"WHERE {wheres}" if wheres else ""}
-        GROUP BY fg.id
         ORDER BY {order_by}
         OFFSET %(offset)s LIMIT %(limit)s
     '''

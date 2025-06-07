@@ -179,7 +179,7 @@ export function useForm({
         patchFormData(_.set(formData, path, newValue));
     }
 
-    const getCustomProps = ({name, validator, type = 'text', path, required = false}) => {
+    const getCustomProps = ({name, validator, type = 'text', path, required = false, afterChange}) => {
         // Props for any other elements.
 
         path = path || name;
@@ -202,7 +202,12 @@ export function useForm({
             type,
             disabled,
             value,
-            onChange: (newValue) => {setValue(path, newValue)},
+            onChange: (newValue) => {
+                setValue(path, newValue);
+                if (afterChange) {
+                    afterChange(newValue);
+                }
+            },
             'data-path': path,
         }
         // Attributes about the input, but should not be passed as properties.
@@ -214,7 +219,15 @@ export function useForm({
         return [inputProps, inputAttrs]
     }
 
-    const getInputProps = ({name, validator, path, required = false, type = 'text', onChange = null}) => {
+    const getInputProps = ({
+                               name,
+                               validator,
+                               path,
+                               required = false,
+                               type = 'text',
+                               onChange = null,
+                               afterChange = null
+                           }) => {
         // Props for <input/>
         path = path || name;
 
@@ -223,7 +236,7 @@ export function useForm({
             validator = validURL;
         }
 
-        const [customProps, inputAttrs] = getCustomProps({name, validator, path, type, required});
+        const [customProps, inputAttrs] = getCustomProps({name, validator, path, type, required, afterChange});
 
         const localHandleInputEvent = async (e) => {
             if (e) e.preventDefault();
@@ -244,12 +257,15 @@ export function useForm({
         return [inputProps, inputAttrs]
     }
 
-    const getSelectionProps = ({name, validator, path, type, required = false}) => {
+    const getSelectionProps = ({name, validator, path, type, required = false, afterChange = null}) => {
         // Props for Dropdowns.
         path = path || name;
-        const [customProps, inputAttrs] = getCustomProps({name, validator, type, path, required});
+        const [customProps, inputAttrs] = getCustomProps({name, validator, type, path, required, afterChange});
         customProps.onChange = (e, {value}) => {
-            patchFormData(_.set(formData, path, value))
+            patchFormData(_.set(formData, path, value));
+            if (afterChange) {
+                afterChange(value);
+            }
         };
         return [customProps, inputAttrs]
     }
@@ -388,50 +404,49 @@ export function UrlInput({form, required = true, name = 'url', path = 'url', dis
 export function UrlsTextarea({name = 'urls', required, form}) {
     required = required !== undefined;
 
-    const validator = (value) => {
-        if (!validURLs(value)) {
-            return 'Invalid URLs';
-        }
-    }
+    // Memoize input props to prevent recomputation during render
+    const [inputProps, inputAttrs] = React.useMemo(() => {
 
-    const [inputProps, inputAttrs] = form.getInputProps({name, validator, required});
+        const validator = (value) => {
+            if (!validURLs(value)) {
+                return 'Invalid URLs';
+            }
+        };
+
+        return form.getInputProps({name, validator, required});
+    }, [form, name, required]);
 
     const handleDrop = (e) => {
         if (e) e.preventDefault();
-        // Handle user dropping multiple URLs into the textarea.  Assume each drop is a URL.  Ensure each URL
-        // is on its own line.
         const droppedUrl = e.dataTransfer.getData('text');
         let urls = (inputProps.value || '').split('\n');
         urls = [...urls, droppedUrl];
         urls = urls.filter(i => !!i).join('\n');
-        // Leave trailing newline for user to type.
-        inputAttrs.setValue(`${urls}\n`)
+        inputAttrs.setValue(`${urls}\n`);
     };
 
     const handleKeyDown = (event) => {
-        // Check if Ctrl (or Cmd for Mac) + Enter are pressed
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-            event.preventDefault(); // Prevents the addition of a new line in textarea if necessary
-            form.onSubmit(); // Call your submit handler
+            event.preventDefault();
+            form.onSubmit();
         }
     };
 
-    return <FormInput required
-                      error={inputProps.error}
-                      label='URLs'
-    >
-        <TextArea
-            id='urls_textarea'
-            placeholder={'Enter one URL per line'}
-            name='urls'
-            onDrop={handleDrop}
-            onKeyDown={handleKeyDown}
-            {...inputProps}
-        />
-    </FormInput>
+    return (
+        <FormInput required error={inputProps.error} label="URLs">
+            <TextArea
+                id="urls_textarea"
+                placeholder="Enter one URL per line"
+                name="urls"
+                onDrop={handleDrop}
+                onKeyDown={handleKeyDown}
+                {...inputProps}
+            />
+        </FormInput>
+    );
 }
 
-export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big', disabled=false}) {
+export function ToggleForm({form, name, label, path, icon = null, iconSize = 'big', disabled = false}) {
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
     const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;

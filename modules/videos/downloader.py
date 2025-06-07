@@ -45,6 +45,7 @@ VIDEO_RESOLUTION_MAP = {
         '134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360',
         'hls-175+bestaudio',  # 360p avc1 + best audio
         '396+bestaudio', '243+bestaudio',  # Vertical
+        'hls-655+bestaudio', 'hls-655',
     ],
     '480p': [
         '135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
@@ -56,12 +57,14 @@ VIDEO_RESOLUTION_MAP = {
         '136+bestaudio', '22', '311+bestaudio', 'res:720',
         'hls-517+bestaudio', 'hls-637+bestaudio',  # 720p avc1 + best audio
         '398+bestaudio', '247+bestaudio',  # Vertical
+        'hls-2890+bestaudio', 'hls-2890',
     ],
     '1080p': [
         '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
         '137+bestaudio', '614+bestaudio', 'res:1080',
         'hls-899+bestaudio', 'hls-1271+bestaudio',  # 1080p avc1 + best audio
         '399+bestaudio', '616+bestaudio',  # Vertical
+        'hls-4026+bestaudio', 'hls-4026',
     ],
     '1440p': [
         '639+bestaudio',  # vp9, best audio, hdr

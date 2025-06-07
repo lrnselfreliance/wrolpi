@@ -93,6 +93,7 @@ function VideosPage() {
         {value: 'published_datetime', text: 'Published Date', short: 'P.Date'},
         {value: 'length', text: 'Length'},
         {value: 'size', text: 'Size'},
+        {value: 'size_to_duration', text: 'Size to Duration', short: 'S/Duration'},
         {value: 'view_count', text: 'Views'},
         {value: 'viewed', text: 'Recently Viewed', short: 'R.Viewed'},
         {value: 'download_datetime', text: 'Download Date', short: 'D.Date'},

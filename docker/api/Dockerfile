@@ -2,22 +2,26 @@ FROM python:3.11-buster
 ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
-# Update dependencies for the services install.
-RUN apt update
-# ffmpeg for Videos
-RUN apt-get install -y ffmpeg catdoc sysstat aria2
-RUN ffmpeg -version
-# yt-dlp needs cache directory
+# Update dependencies and install required packages.
+RUN apt-get update && \
+    apt-get install -y ffmpeg catdoc sysstat aria2 && \
+    ffmpeg -version && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create cache directory for yt-dlp.
 RUN mkdir /.cache && chown -R 1000:1000 /.cache
 
-# Install dependencies.
+# Install Python dependencies.
 COPY requirements.txt /opt/wrolpi/requirements.txt
-RUN pip3 install -r /opt/wrolpi/requirements.txt
+RUN pip3 install --no-cache-dir -r /opt/wrolpi/requirements.txt
 
-# Install WROLPi.
+# Copy WROLPi application files.
 COPY main.py /opt/wrolpi/
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
+COPY alembic /opt/wrolpi/alembic
+COPY alembic.ini /opt/wrolpi/alembic.ini
 
-ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
+ENTRYPOINT ["python3", "-OO", "/opt/wrolpi/main.py"]
 CMD ["-v", "api", "--host", "0.0.0.0"]

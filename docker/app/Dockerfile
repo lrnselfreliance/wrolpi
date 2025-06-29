@@ -1,21 +1,26 @@
-# base image
-FROM node:18-bullseye
-
+# Build stage
+FROM node:18-alpine AS builder
 WORKDIR /app
-ENV PATH /app/node_modules/.bin:$PATH
+ENV PATH=/app/node_modules/.bin:$PATH
 
-# install and cache app dependencies
-USER root
-RUN npm install -g serve
-COPY app/public /app/public
-COPY app/src /app/src
-COPY app/package.json app/package-lock.json /app/
-# "node" user will run the app after build.
-RUN chown -R node:node /app
+# Copy package files and install production dependencies
+COPY app/package.json app/package-lock.json ./
+RUN npm ci --omit=dev
 
-# Install dependencies as "node", this is to avoid changing ownership of many files.
-USER node
-RUN npm install
+# Copy source files and build
+COPY app/public ./public
+COPY app/src ./src
+RUN npm run build
 
-# Run the production build
-CMD ["npm", "run", "start"]
+# Runtime stage
+FROM nginx:alpine
+WORKDIR /usr/share/nginx/html
+
+# Copy static build from builder stage
+COPY --from=builder /app/build ./
+
+# Expose port
+EXPOSE 80
+
+# Run Nginx
+CMD ["nginx", "-g", "daemon off;"]

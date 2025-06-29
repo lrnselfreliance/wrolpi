@@ -1,5 +1,4 @@
 # Development containers, these should only be used if you are developing.
-version: '3'
 services:
   db: # https://github.com/docker-library/docs/tree/master/postgres
     image: postgres:12

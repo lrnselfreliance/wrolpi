@@ -1,21 +1,20 @@
-# base image
-FROM node:18-bullseye
-
+FROM node:18-alpine
 WORKDIR /app
-ENV PATH /app/node_modules/.bin:$PATH
+ENV PATH=/app/node_modules/.bin:$PATH
 
-# install and cache app dependencies
-USER root
-RUN npm install -g serve
-COPY app/public /app/public
-COPY app/src /app/src
-COPY app/package.json app/package-lock.json /app/
-# "node" user will run the app after build.
-RUN chown -R node:node /app
+# Install serve and production dependencies
+RUN npm install -g serve && \
+    npm cache clean --force
 
-# Install dependencies as "node", this is to avoid changing ownership of many files.
-USER node
-RUN npm install
+# Copy package files and install production dependencies
+COPY app/package.json app/package-lock.json ./
+RUN npm ci --omit=dev && \
+    npm cache clean --force
 
-# Run the production build
-CMD ["npm", "run", "start"]
+# Copy source files and build
+COPY app/public ./public
+COPY app/src ./src
+RUN npm run build
+
+# Serve the production build
+CMD ["serve", "-s", "build", "-l", "3000"]

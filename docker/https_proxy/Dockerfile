@@ -1,16 +1,19 @@
-# This Dockerfile is used as a reverse proxy to serve a HTTPS nieve service with HTTPS.
+# docker/https_proxy/Dockerfile
 FROM nginx:latest AS https_proxy
+WORKDIR /etc/nginx
 
-# Create a self-signed cert and key pair for HTTPS.
+ARG UPSTREAM_HOST
+ARG UPSTREAM_PORT=80
+
+# Generate self-signed certificate and key
 RUN openssl genrsa -out /cert.key 2048
-RUN openssl req -new -x509 -nodes -key /cert.key -out /cert.crt -days 3650  \
-    -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=wrolpi.local"
-RUN chmod 777 /cert.key /cert.crt
+RUN openssl req -new -x509 -nodes -key /cert.key -out /cert.crt -days 3650 \
+    -subj "/C=US/ST=State/L=City/O=Org/OU=${UPSTREAM_HOST}/CN=wrolpi.local"
+RUN chmod 600 /cert.key /cert.crt
 
-# Apply docker-compose environment variables to config
-ENV UPSTREAM_HOST=you-must-change-this-in-docker-compose
-ENV UPSTREAM_PORT=80
+# Define downstream host for each *_https container.
 COPY docker/https_proxy/nginx.proxy.conf.template /etc/nginx/nginx.conf
-RUN envsubst < /etc/nginx/nginx.conf > /etc/nginx/nginx.conf
+RUN sed -ie "s/UPSTREAM_HOST/$UPSTREAM_HOST/" nginx.conf && \
+    sed -ie "s/UPSTREAM_PORT/$UPSTREAM_PORT/" nginx.conf
 
 CMD ["nginx", "-g", "daemon off;"]

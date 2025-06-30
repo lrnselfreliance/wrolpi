@@ -277,7 +277,7 @@ def test_get_domains(test_session, archive_factory):
 
 
 @pytest.mark.asyncio
-async def test_new_archive(test_session, fake_now):
+async def test_new_archive(test_session, fake_now, test_directory):
     singlefile, readability, screenshot = make_fake_archive_result()
     fake_now(datetime(2000, 1, 1))
     archive1 = await model_archive_result('https://example.com', singlefile, readability, screenshot)

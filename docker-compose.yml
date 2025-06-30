@@ -27,7 +27,6 @@ services:
       - './test:/opt/wrolpi/test'
       - './test:/media/wrolpi'
       - './alembic:/opt/wrolpi/alembic'
-      - './alembic.ini:/opt/wrolpi/alembic.ini'
     ports:
       - ${REACT_APP_API-0.0.0.0:8081}:8081
     user: '${UID-1000}:${GID-1000}'
@@ -58,7 +57,7 @@ services:
       - './app/src:/app/src'
       - './app/package.json:/app/package.json'
       - '.env:/app/.env'
-    command: 'npm run start'
+    command: 'serve -s build -l 3000'
     stdin_open: true
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]

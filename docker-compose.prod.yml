@@ -48,7 +48,7 @@ services:
     command: 'serve -s build -l 3000'
 
   map:
-    image: lrnselfreliance/wrolpi:wrolpi-map-latest
+    image: overv/openstreetmap-tile-server:v1.6.0
     volumes:
       - openstreetmap_data:/var/lib/postgresql/12/main
       - openstreetmap_rendered_tiles:/var/lib/mod_tile

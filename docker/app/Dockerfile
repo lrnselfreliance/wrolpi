@@ -1,26 +1,20 @@
-# Build stage
-FROM node:18-alpine AS builder
+FROM node:18-alpine
 WORKDIR /app
 ENV PATH=/app/node_modules/.bin:$PATH
 
+# Install serve and production dependencies
+RUN npm install -g serve && \
+    npm cache clean --force
+
 # Copy package files and install production dependencies
 COPY app/package.json app/package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && \
+    npm cache clean --force
 
 # Copy source files and build
 COPY app/public ./public
 COPY app/src ./src
 RUN npm run build
 
-# Runtime stage
-FROM nginx:alpine
-WORKDIR /usr/share/nginx/html
-
-# Copy static build from builder stage
-COPY --from=builder /app/build ./
-
-# Expose port
-EXPOSE 80
-
-# Run Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Serve the production build
+CMD ["serve", "-s", "build", "-l", "3000"]

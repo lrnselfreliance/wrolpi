@@ -9,6 +9,7 @@ IMAGES=(
   "lrnselfreliance/wrolpi:wrolpi-web-latest"
   "lrnselfreliance/wrolpi:wrolpi-zim-latest"
   "lrnselfreliance/wrolpi:wrolpi-help-latest"
+  "lrnselfreliance/wrolpi:wrolpi-map-latest"
   "lrnselfreliance/wrolpi:wrolpi-map_https-latest"
   "lrnselfreliance/wrolpi:wrolpi-zim_https-latest"
   "lrnselfreliance/wrolpi:wrolpi-help_https-latest"

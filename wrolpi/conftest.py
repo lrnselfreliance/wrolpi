@@ -9,6 +9,7 @@ import logging
 import multiprocessing
 import pathlib
 import shutil
+import sys
 import tempfile
 import threading
 import zipfile
@@ -18,7 +19,7 @@ from itertools import zip_longest
 from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
 from typing import Tuple, Set
 from unittest import mock
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid1, uuid4
 
 import pytest
@@ -185,6 +186,7 @@ async def async_client(test_directory) -> SanicASGITestClient:
     try:
         yield client
     finally:
+        api_app.stop()
         logger.debug('Destroying async_client')
 
 
@@ -841,3 +843,10 @@ def mock_downloader_download_file():
             contents = contents_
 
         yield set_contents
+
+
+@pytest.fixture
+def start_status_worker():
+    """Enable the status worker for testing."""
+    with mock.patch('wrolpi.status.DISABLE_STATUS_WORKER', False):
+        yield

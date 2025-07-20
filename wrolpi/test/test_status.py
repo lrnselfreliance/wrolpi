@@ -67,7 +67,7 @@ async def test_get_drives_stats(async_client):
 
 @skip_circleci
 @pytest.mark.asyncio
-async def test_status_worker(async_client):
+async def test_status_worker(async_client, start_status_worker):
     """Status worker calls itself perpetually, but can be limited during testing."""
     from wrolpi.api_utils import api_app
     assert async_client.sanic_app.shared_ctx.status['cpu_stats'] == dict()

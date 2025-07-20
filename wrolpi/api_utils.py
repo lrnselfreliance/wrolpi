@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import multiprocessing
+import sys
 from asyncio import CancelledError
 from datetime import datetime, timezone, date
 from decimal import Decimal
@@ -13,6 +15,7 @@ from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG, TRACE_LEVEL
 from wrolpi.errors import APIError
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -141,11 +144,15 @@ async def start_perpetual_tasks(app: Sanic):
     logger.debug('start_perpetual_tasks completed')
 
 
-def perpetual_signal(event: str = None, sleep: int | float = 1):
+def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testing: bool = False):
     """Use Sanic signals to continually call the wrapped function.  The wrapped function will continually be called,
     even if it has errors.  If the function is long-running, it will only be called again after it has finished."""
 
     def wrapper(func: callable):
+        if PYTEST and not run_while_testing:
+            # Do not run perpetual signal worker while testing, unless explicitly required.
+            return func
+
         # Create a Sanic "signal" for the provided function.
         event_ = event or f'wrolpi.perpetual.{func.__name__}'
 

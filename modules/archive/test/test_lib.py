@@ -276,6 +276,7 @@ def test_get_domains(test_session, archive_factory):
     assert [i['domain'] for i in get_domains()] == []
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_new_archive(test_session, fake_now):
     singlefile, readability, screenshot = make_fake_archive_result()

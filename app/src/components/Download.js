@@ -271,8 +271,13 @@ function VideoDownloadCountLimit({form, name = 'video_count_limit', path = 'sett
     />
 }
 
-export function VideoResolutionSelectorForm({form, name = 'video_resolutions', path = 'settings.video_resolutions'}) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({name, path, type: 'array'});
+export function VideoResolutionSelectorForm({form, name = 'video_resolutions', path = 'settings.video_resolutions', onChange}) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({
+        name,
+        path,
+        type: 'array',
+        afterChange: onChange
+    });
 
     return <>
         <InfoHeader
@@ -382,12 +387,16 @@ export function UseBrowserProfile({form}) {
     />
 }
 
-export function VideosDownloadForm({singleDownload = true, onCancel}) {
+export function VideosDownloadForm({singleDownload = true, onCancel, onSuccess: propOnSuccess, download, submitter: propSubmitter, actions}) {
     const [showMessage, setShowMessage] = React.useState(false);
+    const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
+    const [config, setConfig] = React.useState(null);
 
-    // Keep video settings in session to help user start downloads consistently.
-    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
+    // Keep video format in session to help user start downloads consistently.
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+
+    // Use config video resolutions if available, otherwise use default
+    const configResolutions = config && config.video_resolutions ? config.video_resolutions : defaultVideoResolutionOptions;
 
     const defaultFormData = {
         urls: '', // Textarea, one URL per line.
@@ -397,11 +406,11 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
         settings: {
             use_browser_profile: false,
             video_format: defaultVideoFormat,
-            video_resolutions: defaultVideoResolutions,
+            video_resolutions: configResolutions,
         }
     }
 
-    const submitter = async (formData) => {
+    const submitter = propSubmitter || (async (formData) => {
         const downloadData = {
             destination: formData.destination,
             downloader: formData.downloader,
@@ -410,24 +419,45 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
             urls: formData.urls.split(/r?\n/),
         }
         await postDownload(downloadData);
-    }
+    });
 
     const onSuccess = () => {
         setShowMessage(true);
-        form.reset();
+        if (propOnSuccess) {
+            propOnSuccess();
+        } else {
+            form.reset();
+        }
     }
 
     const form = useForm({
         submitter,
-        defaultFormData,
+        defaultFormData: download ? mergeDeep(defaultFormData, download) : defaultFormData,
         onSuccess,
     });
 
+    // Fetch video downloader config when the modal opens
     React.useEffect(() => {
-        const {video_resolutions, video_format} = form.formData.settings;
-        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
-            setDefaultVideoResolutions(video_resolutions);
-        }
+        const fetchConfig = async () => {
+            try {
+                const result = await fetchVideoDownloaderConfig();
+                setConfig(result);
+
+                // Update form with video resolutions from config only if user hasn't changed them
+                // and if no download object was provided (this is a new download, not an edit)
+                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                }
+            } catch (error) {
+                console.error('Failed to fetch video downloader config:', error);
+            }
+        };
+
+        fetchConfig();
+    }, []);
+
+    React.useEffect(() => {
+        const {video_format} = form.formData.settings;
         if (video_format && video_format !== defaultVideoFormat) {
             setDefaultVideoFormat(video_format);
         }
@@ -473,7 +503,10 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
             </Grid.Row>
             <Grid.Row columns={2}>
                 <Grid.Column width={11}>
-                    <VideoResolutionSelectorForm form={form}/>
+                    <VideoResolutionSelectorForm
+                        form={form}
+                        onChange={() => setUserChangedResolutions(true)}
+                    />
                 </Grid.Column>
                 <Grid.Column width={4}>
                     <VideoFormatSelectorForm form={form}/>
@@ -492,7 +525,7 @@ export function VideosDownloadForm({singleDownload = true, onCancel}) {
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column>
-                    <DownloadFormButtons onCancel={localOnCancel} form={form}/>
+                    {actions ? actions({onCancel: localOnCancel, form}) : <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
                 </Grid.Column>
             </Grid.Row>
         </Grid>
@@ -508,6 +541,40 @@ export function VideoMinimumDurationForm({form}) {
         name='minimum_duration'
         helpContent='Download only Videos this many seconds long, or greater.'
         placeholder='60'
+    />
+}
+
+export function EditVideosDownloadForm({
+    download,
+    onCancel,
+    onSuccess,
+    onDelete,
+    actions = EditDownloadFormButtons,
+}) {
+    const submitter = async (formData) => {
+        // Create a copy of settings without channel_url and channel_id
+        const settings = {...formData.settings};
+        // These settings are created when downloading the video, we can't submit them again.
+        delete settings.channel_url;
+        delete settings.channel_id;
+
+        const downloadData = {
+            destination: formData.destination,
+            downloader: formData.downloader,
+            settings: settings,
+            tag_names: formData.tag_names,
+            urls: formData.urls.split(/r?\n/),
+        }
+        await putDownload(download.id, downloadData);
+    }
+
+    return <VideosDownloadForm
+        singleDownload={true}
+        onCancel={onCancel}
+        onSuccess={onSuccess}
+        download={download}
+        submitter={submitter}
+        actions={(props) => actions({...props, onDelete})}
     />
 }
 
@@ -535,6 +602,9 @@ export function ChannelDownloadForm({
                                         channel_id = null,
                                     }) {
     const [showMessage, setShowMessage] = React.useState(false);
+    const [config, setConfig] = React.useState(null);
+    const [isConfigLoaded, setIsConfigLoaded] = React.useState(false);
+    const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
 
     // May have received submitter from EditChannelDownloadForm.
     submitter = submitter || (async (formData) => {
@@ -557,9 +627,11 @@ export function ChannelDownloadForm({
         }
     }
 
-    // Keep video settings in session to help user start downloads consistently.
-    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
+    // Keep video format in session to help user start downloads consistently.
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+
+    // Use config video resolutions if available, otherwise use default
+    const configResolutions = config && config.video_resolutions ? config.video_resolutions : defaultVideoResolutionOptions;
 
     const emptyFormData = {
         destination: '',
@@ -577,7 +649,7 @@ export function ChannelDownloadForm({
             use_browser_profile: false,
             video_count_limit: null,
             video_format: defaultVideoFormat,
-            video_resolutions: defaultVideoResolutions,
+            video_resolutions: configResolutions,
         },
         sub_downloader: Downloaders.Video,
         tag_names: [],
@@ -591,11 +663,30 @@ export function ChannelDownloadForm({
         clearOnSuccess,
     });
 
+    // Fetch video downloader config when the modal opens
     React.useEffect(() => {
-        const {video_resolutions, video_format} = form.formData.settings;
-        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
-            setDefaultVideoResolutions(video_resolutions);
-        }
+        const fetchConfig = async () => {
+            try {
+                const result = await fetchVideoDownloaderConfig();
+                setConfig(result);
+                setIsConfigLoaded(true);
+
+                // Update form with video resolutions from config only if user hasn't changed them
+                // and if no download object was provided (this is a new download, not an edit)
+                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                }
+            } catch (error) {
+                console.error('Failed to fetch video downloader config:', error);
+                setIsConfigLoaded(true);
+            }
+        };
+
+        fetchConfig();
+    }, []);
+
+    React.useEffect(() => {
+        const {video_format} = form.formData.settings;
         if (video_format && video_format !== defaultVideoFormat) {
             setDefaultVideoFormat(video_format);
         }
@@ -656,7 +747,10 @@ export function ChannelDownloadForm({
             </Grid.Row>
             <Grid.Row columns={2}>
                 <Grid.Column width={11}>
-                    <VideoResolutionSelectorForm form={form}/>
+                    <VideoResolutionSelectorForm
+                        form={form}
+                        onChange={() => setUserChangedResolutions(true)}
+                    />
                 </Grid.Column>
                 <Grid.Column width={4}>
                     <VideoFormatSelectorForm form={form}/>
@@ -730,17 +824,42 @@ function SuccessfulDownloadSubmitMessage() {
     </Grid.Row>
 }
 
-export function ArchiveDownloadForm({download, onCancel}) {
-    const [showMessage, setShowMessage] = React.useState(false);
-
+export function EditArchiveDownloadForm({
+    download,
+    onCancel,
+    onSuccess,
+    onDelete,
+    actions = EditDownloadFormButtons,
+}) {
     const submitter = async (formData) => {
         const downloadData = {
             downloader: formData.downloader,
             tag_names: formData.tag_names,
             urls: formData.urls.split(/\r?\n/),
         }
+        await putDownload(download.id, downloadData);
+    }
+
+    return <ArchiveDownloadForm
+        download={download}
+        onCancel={onCancel}
+        onSuccess={onSuccess}
+        submitter={submitter}
+        actions={(props) => actions({...props, onDelete})}
+    />
+}
+
+export function ArchiveDownloadForm({download, onCancel, onSuccess: propOnSuccess, submitter: propSubmitter, actions}) {
+    const [showMessage, setShowMessage] = React.useState(false);
+
+    const submitter = propSubmitter || (async (formData) => {
+        const downloadData = {
+            downloader: formData.downloader,
+            tag_names: formData.tag_names,
+            urls: formData.urls.split(/\r?\n/),
+        }
         await postDownload(downloadData);
-    };
+    });
 
     const emptyFormData = {
         downloader: Downloaders.Archive,
@@ -748,13 +867,27 @@ export function ArchiveDownloadForm({download, onCancel}) {
         tag_names: [],
     };
 
+    const onSuccess = () => {
+        setShowMessage(true);
+        if (propOnSuccess) {
+            propOnSuccess();
+        }
+    }
+
     const form = useForm({
         submitter,
         defaultFormData: mergeDeep(emptyFormData, download),
         emptyFormData,
-        clearOnSuccess: true,
-        onSuccess: async () => setShowMessage(true),
+        clearOnSuccess: !propOnSuccess,
+        onSuccess,
     });
+
+    const localOnCancel = (e) => {
+        if (e) e.preventDefault();
+        if (onCancel) {
+            onCancel();
+        }
+    }
 
     return <Form>
         <Header as='h3'><Icon name='file text' color='green'/> Archives</Header>
@@ -774,7 +907,7 @@ export function ArchiveDownloadForm({download, onCancel}) {
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
-                    <DownloadFormButtons onCancel={onCancel} form={form}/>
+                    {actions ? actions({onCancel: localOnCancel, form}) : <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
                 </Grid.Column>
             </Grid.Row>
         </Grid>
@@ -783,8 +916,10 @@ export function ArchiveDownloadForm({download, onCancel}) {
 
 export function RSSDownloadForm({download, submitter, onDelete, onCancel, actions, clearOnSuccess = true}) {
     const [showMessage, setShowMessage] = React.useState(false);
+    const [config, setConfig] = React.useState(null);
+    const [isConfigLoaded, setIsConfigLoaded] = React.useState(false);
+    const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
 
-    const [defaultVideoResolutions, setDefaultVideoResolutions] = useLocalStorage('video_resolutions', defaultVideoResolutionOptions);
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
 
     submitter = submitter || (async (formData) => {
@@ -800,6 +935,9 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         await postDownload(downloadData);
     });
 
+    // Use config video resolutions if available, otherwise use default
+    const configResolutions = config && config.video_resolutions ? config.video_resolutions : defaultVideoResolutionOptions;
+
     const emptyFormData = {
         destination: null,
         downloader: Downloaders.RSS,
@@ -809,7 +947,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             excluded_urls: null,
             title_exclude: null,
             title_include: null,
-            video_resolutions: defaultVideoResolutions,
+            video_resolutions: configResolutions,
             video_format: defaultVideoFormat,
         },
         tag_names: [],
@@ -824,11 +962,30 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         onSuccess: async () => setShowMessage(true),
     });
 
+    // Fetch video downloader config when the modal opens
     React.useEffect(() => {
-        const {video_resolutions, video_format} = form.formData.settings;
-        if (video_resolutions && video_resolutions !== defaultVideoResolutions) {
-            setDefaultVideoResolutions(video_resolutions);
-        }
+        const fetchConfig = async () => {
+            try {
+                const result = await fetchVideoDownloaderConfig();
+                setConfig(result);
+                setIsConfigLoaded(true);
+
+                // Update form with video resolutions from config only if user hasn't changed them
+                // and if no download object was provided (this is a new download, not an edit)
+                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                }
+            } catch (error) {
+                console.error('Failed to fetch video downloader config:', error);
+                setIsConfigLoaded(true);
+            }
+        };
+
+        fetchConfig();
+    }, []);
+
+    React.useEffect(() => {
+        const {video_format} = form.formData.settings;
         if (video_format && video_format !== defaultVideoFormat) {
             setDefaultVideoFormat(video_format);
         }
@@ -859,7 +1016,10 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             </Grid.Row>
             <Grid.Row columns={2}>
                 <Grid.Column mobile={16} computer={11}>
-                    <VideoResolutionSelectorForm form={form}/>
+                    <VideoResolutionSelectorForm
+                        form={form}
+                        onChange={() => setUserChangedResolutions(true)}
+                    />
                 </Grid.Column>
                 <Grid.Column mobile={8} computer={3}>
                     <VideoFormatSelectorForm form={form}/>

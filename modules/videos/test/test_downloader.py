@@ -3,7 +3,6 @@ import json
 import shutil
 from copy import copy
 from http import HTTPStatus
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -350,8 +349,6 @@ async def test_download_destination(test_session, test_directory, video_download
     """A Video can be downloaded to a directory other than it's Channel's directory."""
     # yt-dlp would return the video json.
     mock_video_extract_info.return_value = example_video_json
-    # Download process is successful with no logs.
-    mock_video_process_runner.return_value = (0, {'stdout': '', 'stderr': ''})
     # This result will be ignored during the test, we just need some value so the download does not fail.
     mock_video_prepare_filename.return_value = str(test_directory / 'test video.mp4')
 

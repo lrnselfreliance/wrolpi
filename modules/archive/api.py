@@ -1,3 +1,4 @@
+import multiprocessing
 import queue
 from http import HTTPStatus
 from multiprocessing.sharedctypes import SynchronizedArray
@@ -91,18 +92,23 @@ async def singlefile_upload_switch_handler(url=None):
     from wrolpi.downloader import download_manager, Download
     from . import ArchiveDownloader
 
+    q: multiprocessing.Queue = api_app.shared_ctx.archive_singlefiles
+
     trace_enabled = logger.isEnabledFor(TRACE_LEVEL)
     if trace_enabled:
         logger.trace(f'singlefile_upload_switch_handler called for {url}')
     try:
-        singlefile = api_app.shared_ctx.archive_singlefiles.get_nowait()
+        singlefile = q.get_nowait()
     except queue.Empty:
         if trace_enabled:
             logger.trace(f'singlefile_upload_switch_handler called on empty queue')
         return
 
+    q_size = q.qsize()
+    logger.info(f'singlefile_upload_switch_handler queue size: {q_size}')
+
     archive = await lib.singlefile_to_archive(singlefile)
-    logger.info(f'Created Archive from upload: {archive}')
+    logger.info(f'Created Archive from upload ({q_size}): {archive}')
     name = archive.file_group.title or archive.file_group.url
     Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
     url = archive.file_group.url

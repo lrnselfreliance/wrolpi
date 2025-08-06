@@ -319,7 +319,7 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
         except json.decoder.JSONDecodeError:
             # Was not valid JSON.
             schema = None
-        if isinstance(schema, dict) and '://schema.org' in schema.get('@context'):
+        if isinstance(schema, dict) and (context := schema.get('@context')) and '://schema.org' in context:
             # Found https://schema.org/
             if headline := schema.get('headline'):
                 metadata.title = metadata.title or headline

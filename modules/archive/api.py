@@ -1,11 +1,13 @@
+import queue
 from http import HTTPStatus
+from multiprocessing.sharedctypes import SynchronizedArray
 
 from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.api_utils import json_response
-from wrolpi.common import logger, wrol_mode_check, api_param_limiter
+from wrolpi.api_utils import json_response, api_app
+from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
@@ -84,10 +86,20 @@ async def get_upload_singlefile(request: Request):
 
 
 @register_switch_handler('singlefile_upload_switch_handler')
-async def singlefile_upload_switch_handler(singlefile):
+async def singlefile_upload_switch_handler(url=None):
     """Used by `post_upload_singlefile` to upload a single file"""
     from wrolpi.downloader import download_manager, Download
     from . import ArchiveDownloader
+
+    trace_enabled = logger.isEnabledFor(TRACE_LEVEL)
+    if trace_enabled:
+        logger.trace(f'singlefile_upload_switch_handler called for {url}')
+    try:
+        singlefile = api_app.shared_ctx.archive_singlefiles.get_nowait()
+    except queue.Empty:
+        if trace_enabled:
+            logger.trace(f'singlefile_upload_switch_handler called on empty queue')
+        return
 
     archive = await lib.singlefile_to_archive(singlefile)
     logger.info(f'Created Archive from upload: {archive}')
@@ -97,7 +109,12 @@ async def singlefile_upload_switch_handler(singlefile):
     if url and (download := Download.get_by_url(url)):
         if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
             # Download was attempted and failed, user manually archived the URL.
+            if trace_enabled:
+                logger.trace(f'singlefile_upload_switch_handler deleting incomplete download for {url}')
             download_manager.delete_download(download.id)
+
+    # Call this function again so any new singlefiles can be archived.
+    singlefile_upload_switch_handler.activate_switch()
 
 
 singlefile_upload_switch_handler: ActivateSwitchMethod
@@ -112,10 +129,11 @@ async def post_upload_singlefile(request: Request):
     singlefile = request.files['singlefile_contents'][0].body
     logger.info(f'Got Archive upload of {len(singlefile)} bytes for URL: {url}')
 
-    # Get the URL to ensure that the singlefile is valid.
+    # Extract the URL to ensure that the singlefile is valid.
     lib.get_url_from_singlefile(singlefile)
 
     # Send processing to background task so the extension can continue.
-    singlefile_upload_switch_handler.activate_switch(dict(singlefile=singlefile))
+    api_app.shared_ctx.archive_singlefiles.put(singlefile)
+    singlefile_upload_switch_handler.activate_switch(context=dict(url=url))
     # Return empty json response because SingleFile extension expects a JSON response.
     return json_response(dict(), status=HTTPStatus.OK)

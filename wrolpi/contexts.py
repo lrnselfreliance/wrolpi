@@ -1,5 +1,6 @@
 import ctypes
 import multiprocessing
+import queue
 
 from sanic import Sanic
 
@@ -54,6 +55,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.switches = manager.dict()
     app.shared_ctx.switches_lock = multiprocessing.Lock()
     app.shared_ctx.switches_changed = multiprocessing.Event()
+    app.shared_ctx.archive_singlefiles = multiprocessing.Queue()
 
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
@@ -110,6 +112,12 @@ def reset_shared_contexts(app: Sanic):
     # Switches
     app.shared_ctx.switches.clear()
     app.shared_ctx.switches_changed.clear()
+    while True:
+        # Clear out any pending singlefile archive switches.
+        try:
+            app.shared_ctx.archive_singlefiles.get_nowait()
+        except queue.Empty:
+            break
 
     # Events.
     app.shared_ctx.single_tasks_started.clear()

@@ -107,9 +107,15 @@ async def singlefile_upload_switch_handler(url=None):
     q_size = q.qsize()
     logger.info(f'singlefile_upload_switch_handler queue size: {q_size}')
 
-    archive = await lib.singlefile_to_archive(singlefile)
-    logger.info(f'Created Archive from upload ({q_size}): {archive}')
+    try:
+        archive = await lib.singlefile_to_archive(singlefile)
+    except Exception as e:
+        logger.error(f'singlefile_upload_switch_handler failed', exc_info=e)
+        Events.send_upload_archive_failed(f'Failed to convert singlefile to archive: {e}')
+        raise
+
     name = archive.file_group.title or archive.file_group.url
+    logger.info(f'Created Archive from upload ({q_size}): {archive}')
     Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
     url = archive.file_group.url
     if url and (download := Download.get_by_url(url)):

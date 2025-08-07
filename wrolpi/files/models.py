@@ -275,6 +275,14 @@ class FileGroup(ModelHelper, Base):
     def my_mobi_files(self) -> List[dict]:
         return self.my_files('application/x-mobipocket-ebook')
 
+    def my_html_files(self) -> List[dict]:
+        html_files = self.my_files('text/html', 'application/octet-stream')
+        html_files = [i for i in html_files if i['path'].name.endswith('.html')]
+        return html_files
+
+    def my_html_paths(self) -> List[pathlib.Path]:
+        return [i['path'] for i in self.my_html_files()]
+
     def delete(self, add_to_skip_list: bool = True):
         """Delete this FileGroup record, and all of its files.
 

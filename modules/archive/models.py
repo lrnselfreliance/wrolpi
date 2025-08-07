@@ -141,8 +141,7 @@ class Archive(Base, ModelHelper):
     @property
     def singlefile_file(self) -> Optional[dict]:
         from modules.archive.lib import is_singlefile_file
-        files = self.file_group.my_files('text/html')
-        for file in files:
+        for file in self.file_group.my_html_files():
             if is_singlefile_file(file['path']):
                 return file
 

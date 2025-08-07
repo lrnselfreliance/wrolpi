@@ -112,8 +112,8 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         session.flush([file_group])
         file_group_id = file_group.id
 
-    # All Archives have an HTML Singlefile.
-    html_paths = file_group.my_paths('text/html')
+    # All Archives have an HTML Singlefile.  Singlefile may be text HTML, or bytes HTML.
+    html_paths = file_group.my_html_paths()
     if not html_paths:
         logger.error('Query returned a group without an HTML file!')
         raise InvalidArchive('FileGroup does not contain any html files')

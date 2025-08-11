@@ -13,7 +13,7 @@ from sqlalchemy.orm import deferred, relationship, Session
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.db import optional_session
+from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
@@ -119,7 +119,8 @@ class FileGroup(ModelHelper, Base):
                 if PYTEST:
                     raise
                 # Log the error but continue processing other tags
-                logger.error(f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+                logger.error(
+                    f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         tags = sorted(tag_names)
         d = dict(
             author=self.author,
@@ -393,7 +394,8 @@ class FileGroup(ModelHelper, Base):
                 if PYTEST:
                     raise
                 # Log the error but continue processing other tags
-                logger.error(f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+                logger.error(
+                    f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         return result
 
     def merge(self, file_groups: List['FileGroup']):
@@ -464,6 +466,14 @@ class FileGroup(ModelHelper, Base):
     @property
     def location(self):
         """Returns the URL that the FileGroup can be previewed."""
+        klass = self.get_model_class()
+        if klass:
+            # Return the model location when possible.
+            with get_db_session() as session:
+                instance = klass.get_by_path(self.primary_path, session)
+                if instance and hasattr(instance, 'location'):
+                    return instance.location
+
         parent = str(get_relative_to_media_directory(self.primary_path.parent))
         preview = str(get_relative_to_media_directory(self.primary_path))
         if parent == '.':
@@ -488,6 +498,13 @@ class FileGroup(ModelHelper, Base):
             return Archive
         elif Zim.can_model(self):
             return Zim
+
+    def get_model_record(self) -> Optional[ModelHelper]:
+        klass = self.get_model_class()
+        if klass:
+            with get_db_session() as session:
+                return klass.get_by_path(self.primary_path, session)
+        return None
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:
         """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""

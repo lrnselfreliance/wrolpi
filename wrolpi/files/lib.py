@@ -1001,19 +1001,19 @@ def get_file_statistics():
         curs.execute('''
                      SELECT
                          -- All items in file_group.files are real individual files.
-                         SUM(json_array_length(files)) AS                                                                             "total_count",
-                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf') AS                                          "pdf_count",
-                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip') AS                                          "zip_count",
-                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%') AS                                               "video_count",
-                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'image/%') AS                                               "image_count",
-                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'audio/%') AS                                               "audio_count",
+                         SUM(json_array_length(files))                                                                             AS "total_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf')                                          AS "pdf_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip')                                          AS "zip_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%')                                               AS "video_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'image/%')                                               AS "image_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'audio/%')                                               AS "audio_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype = 'application/epub+zip' OR file_group.mimetype =
                                                                                                  'application/x-mobipocket-ebook') AS "ebook_count",
-                         (SELECT COUNT(DISTINCT tag_file.file_group_id) FROM tag_file) AS                                             "tagged_files",
-                         (SELECT COUNT(DISTINCT tag_zim.zim_entry) FROM tag_zim) AS                                                   "tagged_zims",
-                         (SELECT COUNT(*) FROM tag) AS                                                                                "tags_count",
-                         SUM(size)::BIGINT AS                                                                                         "total_size",
-                         (SELECT COUNT(*) FROM archive) AS                                                                            archive_count
+                         (SELECT COUNT(DISTINCT tag_file.file_group_id) FROM tag_file)                                             AS "tagged_files",
+                         (SELECT COUNT(DISTINCT tag_zim.zim_entry) FROM tag_zim)                                                   AS "tagged_zims",
+                         (SELECT COUNT(*) FROM tag)                                                                                AS "tags_count",
+                         SUM(size)::BIGINT                                                                                         AS "total_size",
+                         (SELECT COUNT(*) FROM archive)                                                                            AS archive_count
                      FROM file_group
                      ''')
         statistics = dict(curs.fetchall()[0])
@@ -1610,7 +1610,8 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         if PYTEST:
             raise
 
-    # If user uploads a file, then remove it from the download skip list so comments can be downloaded.
+    # If user uploads a file, then remove it from the download skip list so comments can be downloaded.  Modify the
+    # download (if any) so that the user can click on it and view the uploaded file.
     if url := file_group.url if file_group and file_group.url else None:
         if download_manager.is_skipped(url):
             download_manager.remove_from_skip_list(url)
@@ -1618,7 +1619,9 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
             if download := Download.get_by_url(url, session):
                 # Mark download as completed
                 download.complete()
-                download.location = file_group.location
+                # Link the download to the location of the uploaded file.
+                model = file_group.get_model_record()
+                download.location = model.location if model else file_group.location
                 session.commit()
 
     upsert_directories([], file.parents)

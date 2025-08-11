@@ -107,6 +107,25 @@ archive_downloader = ArchiveDownloader()
 
 
 def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
+    """
+    Models an Archive from a given FileGroup.
+
+    This function takes in a FileGroup and attempts to create an Archive object.
+    It does this by checking for the presence of HTML files within the FileGroup,
+    determining if any of these are SingleFiles, and then extracting relevant data
+    (title, contents) from either the JSON or text readability files.
+
+    Args:
+        file_group: The FileGroup to model as an Archive.
+        session: An optional database session for committing changes.
+
+    Returns:
+        An Archive object representing the modeled archive.
+
+    Raises:
+        InvalidArchive: If no HTML SingleFile is found in the FileGroup, or if
+            any other error occurs during modeling.
+    """
     file_group_id = file_group.id
     if not file_group_id:
         session.flush([file_group])

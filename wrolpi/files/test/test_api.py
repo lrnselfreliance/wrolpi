@@ -671,9 +671,12 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert not file_group.tag_names, 'No tags this time.'
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'
+    assert isinstance(file_group.get_model_record(), Video)
+    assert file_group.location == '/videos/video/2'
     # Video was modeled, but has no Channel.
     video: Video = test_session.query(Video).one()
     assert video.video_path
+    assert video.file_group == file_group
     assert not video.info_json_path
     assert not video.channel and not video.channel_id
 

@@ -1116,11 +1116,13 @@ class DownloadManager:
 
     @staticmethod
     def add_to_skip_list(*urls: str):
-        get_download_manager_config().skip_urls = list(set(get_download_manager_config().skip_urls) | set(urls))
+        get_download_manager_config().skip_urls = sorted(list(set(get_download_manager_config().skip_urls) | set(urls)))
 
     @staticmethod
     def remove_from_skip_list(url: str):
-        get_download_manager_config().skip_urls = [i for i in get_download_manager_config().skip_urls if i != url]
+        skip_urls = get_download_manager_config().skip_urls
+        if url in skip_urls:
+            get_download_manager_config().skip_urls = [i for i in get_download_manager_config().skip_urls if i != url]
 
 
 # The global DownloadManager.  This should be used everywhere!

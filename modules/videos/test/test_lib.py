@@ -315,3 +315,14 @@ def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     """
     file_name = pathlib.Path(file_name)
     assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected
+
+
+def test_video_location(test_session, video_factory, channel_factory):
+    # Video location without a channel, it opens the preview.
+    video1 = video_factory(title='vid1')
+    assert video1.location == '/videos/video/1'
+
+    # Video location with a channel.
+    channel = channel_factory(name='ChannelName')
+    video2 = video_factory(title='vid2', channel_id=channel.id)
+    assert video2.location == '/videos/channel/1/video/2'

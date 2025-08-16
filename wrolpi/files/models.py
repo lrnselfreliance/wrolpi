@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, Computed, BigInteger, Boolean
+from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
@@ -86,6 +86,9 @@ class FileGroup(ModelHelper, Base):
     title = Column(String)  # user-displayable title
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
+
+    # See `update_effective_datetime`
+    effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
 
     tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
@@ -538,6 +541,12 @@ class FileGroup(ModelHelper, Base):
         except Exception as e:
             logger.error(f"Error in get_tag_directory_paths_map for {self}: {e}")
             raise
+
+
+@event.listens_for(FileGroup, 'before_insert')
+@event.listens_for(FileGroup, 'before_update')
+def update_effective_datetime(mapper, connection, target):
+    target.effective_datetime = target.published_datetime or target.download_datetime
 
 
 class Directory(ModelHelper, Base):

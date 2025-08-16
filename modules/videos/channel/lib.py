@@ -29,50 +29,22 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.  Also get the minimum frequency download because this is the
         # one that will consume the most resources.
         stmt = '''
-            SELECT
-                c.id, c.name AS "name", directory, c.url, t.name AS "tag_name",
-                COUNT(v.id) as video_count,
-                SUM(fg.size)::BIGINT AS size,
-                (
-                    select min(d.frequency)
-                    from download d
-                    where d.channel_id = c.id
-                ) AS minimum_frequency
-            FROM
-                channel AS c
-                LEFT JOIN video v on c.id = v.channel_id
-                LEFT JOIN file_group fg on fg.id = v.file_group_id
-                LEFT JOIN tag t ON t.id = c.tag_id
-            GROUP BY 1, 2, 3, 4, 5
-        '''
+               SELECT c.id,
+                      c.name AS "name",
+                      c.directory,
+                      c.url,
+                      t.name AS "tag_name",
+                      c.video_count,
+                      c.total_size,
+                      c.minimum_frequency
+               FROM channel AS c
+                        LEFT JOIN tag t ON t.id = c.tag_id
+               '''
         curs.execute(stmt)
+        logger.debug(stmt)
         channels = sorted([dict(i) for i in curs.fetchall()], key=lambda i: i['name'].lower())
 
     return channels
-
-
-async def get_channels_video_count() -> Dict[int, int]:
-    """
-    Add video counts to all channels
-    """
-    with get_db_curs() as curs:
-        stmt = 'SELECT id FROM channel'
-        curs.execute(stmt)
-        # Get all channel IDs, start them with a count of 0.
-        video_counts = {int(i['id']): 0 for i in curs.fetchall()}
-
-        stmt = '''
-            SELECT
-                c.id, COUNT(v.id) AS video_count
-            FROM
-                channel AS c
-                LEFT JOIN video AS v ON v.channel_id = c.id
-            GROUP BY 1
-        '''
-        curs.execute(stmt)
-        # Replace all the counts of those channels with videos.
-        video_counts.update({int(i['id']): int(i['video_count']) for i in curs.fetchall()})
-        return video_counts
 
 
 COD = Union[dict, Channel]

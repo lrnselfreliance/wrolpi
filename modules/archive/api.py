@@ -1,11 +1,11 @@
 import multiprocessing
 import queue
 from http import HTTPStatus
-from multiprocessing.sharedctypes import SynchronizedArray
 
 from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
+from sqlalchemy.orm import Session
 
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
@@ -89,7 +89,7 @@ async def get_upload_singlefile(request: Request):
 @register_switch_handler('singlefile_upload_switch_handler')
 async def singlefile_upload_switch_handler(url=None):
     """Used by `post_upload_singlefile` to upload a single file"""
-    from wrolpi.downloader import download_manager, Download
+    from wrolpi.downloader import Download
     from . import ArchiveDownloader
 
     q: multiprocessing.Queue = api_app.shared_ctx.archive_singlefiles
@@ -121,9 +121,9 @@ async def singlefile_upload_switch_handler(url=None):
     if url and (download := Download.get_by_url(url)):
         if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
             # Download was attempted and failed, user manually archived the URL.
-            if trace_enabled:
-                logger.trace(f'singlefile_upload_switch_handler deleting incomplete download for {url}')
-            download_manager.delete_download(download.id)
+            download.complete()
+            download.location = archive.location
+            Session.object_session(download).commit()
 
     # Call this function again so any new singlefiles can be archived.
     singlefile_upload_switch_handler.activate_switch()

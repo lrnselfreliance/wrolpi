@@ -1,11 +1,9 @@
-FROM python:3.11-buster
+FROM python:3.11-bookworm
 ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
-RUN apt update
-# ffmpeg for Videos
-RUN apt-get install -y ffmpeg catdoc sysstat aria2
+RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2
 RUN ffmpeg -version
 # yt-dlp needs cache directory
 RUN mkdir /.cache && chown -R 1000:1000 /.cache

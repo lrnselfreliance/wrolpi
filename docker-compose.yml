@@ -86,6 +86,8 @@ services:
   map_https: # HTTPS for map tile server
     depends_on:
       - map
+    environment:
+      - UPSTREAM_HOST=map
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
@@ -130,6 +132,8 @@ services:
   zim_https: # HTTPS for Zim service.
     depends_on:
       - zim
+    environment:
+      - UPSTREAM_HOST=zim
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
@@ -154,6 +158,8 @@ services:
   help_https: # HTTPS for Help service.
     depends_on:
       - help
+    environment:
+      - UPSTREAM_HOST=help
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile

@@ -87,7 +87,8 @@ class FileGroup(ModelHelper, Base):
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
 
-    # See `update_effective_datetime`
+    # Columns updated by triggers.
+    # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
     effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
 
     tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')

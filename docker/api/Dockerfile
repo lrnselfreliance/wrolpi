@@ -3,7 +3,7 @@ ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
-RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2
+RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping
 RUN ffmpeg -version
 # yt-dlp needs cache directory
 RUN mkdir /.cache && chown -R 1000:1000 /.cache

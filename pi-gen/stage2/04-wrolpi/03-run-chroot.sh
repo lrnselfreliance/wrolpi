@@ -53,7 +53,11 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 # Enable first startup script.
 systemctl enable wrolpi-first-startup.service
 
-cp /opt/wrolpi/etc/raspberrypios/motd_first /etc/motd
+# Copy MOTD scripts, delete original.
+cp /opt/wrolpi/etc/raspberrypios/motd/20-wrolpi.motd /etc/update-motd.d/20-wrolpi
+cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi-first.motd /etc/update-motd.d/30-wrolpi
+chmod +x /etc/update-motd.d/*
+truncate -s 0 /etc/motd
 
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager

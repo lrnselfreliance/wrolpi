@@ -1,0 +1,17 @@
+#!/bin/sh
+
+ip_address=$(ip addr show eth0 | grep -oP 'inet \K[\d.]+')
+hostname="$(hostname).local"
+
+echo "Welcome to your new WROLPi!  Follow the steps below to finish the setup:"
+echo ""
+echo "   1. If you have an external drive, mount it to /media/wrolpi"
+echo "   2. Run the repair script: /opt/wrolpi/repair.sh"
+echo "   3. Refresh your files in the UI at https://${hostname} or https://127.0.0.1"
+echo ""
+echo "Run the help script to find potential problems:"
+echo "   /opt/wrolpi/help.sh"
+echo ""
+echo "Help documentation is available:  https://${ip_address}:8086"
+echo "    or in this directory /opt/wrolpi-help/docs"
+echo ""

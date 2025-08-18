@@ -144,7 +144,8 @@ chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to chang
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 # Copy MOTD once the repair has been successful.
-cp /opt/wrolpi/etc/raspberrypios/motd /etc/motd
+cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi.motd /etc/update-motd.d/30-wrolpi
+chmod +x /etc/update-motd.d/*
 
 systemctl restart renderd
 systemctl restart wrolpi-help

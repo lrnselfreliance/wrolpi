@@ -1,5 +1,5 @@
 # This Dockerfile is used as a reverse proxy to serve a HTTPS nieve service with HTTPS.
-FROM nginx:latest as https_proxy
+FROM nginx:latest AS https_proxy
 
 # Create a self-signed cert and key pair for HTTPS.
 RUN openssl genrsa -out /cert.key 2048

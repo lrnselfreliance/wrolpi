@@ -61,8 +61,8 @@ def upgrade():
                    SET total_size = (SELECT COALESCE(SUM(fg.size), 0)::BIGINT
                                      FROM video v
                                               LEFT JOIN file_group fg ON v.file_group_id = fg.id
-                                     WHERE v.channel_id = NEW.channel_id)
-                   WHERE id = NEW.channel_id;
+                                     WHERE v.channel_id = NEW.id)
+                   WHERE id = NEW.id;
                    RETURN NEW;
                END;
                $$ LANGUAGE plpgsql;

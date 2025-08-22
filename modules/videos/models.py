@@ -528,8 +528,8 @@ class Channel(ModelHelper, Base):
     refreshed = Column(Boolean, default=False)  # The files in the Channel have been refreshed.
 
     # Columns updated by triggers
-    video_count = Column(Integer)  # update_channel_video_count
-    total_size = Column(Integer)  # update_channel_size
+    video_count = Column(Integer, default=0)  # update_channel_video_count
+    total_size = Column(Integer, default=0)  # update_channel_size
     minimum_frequency = Column(Integer)  # update_channel_minimum_frequency
 
     info_json = deferred(Column(JSON))

@@ -150,6 +150,7 @@ class DocIndexer(Indexer, ABC):
     def create_index(cls, path: pathlib.Path):
         a = cls.get_title(path)
 
+        text = ''
         if CATDOC_PATH:
             # Use catdoc on Linux
             cmd = (CATDOC_PATH, str(path.absolute()))

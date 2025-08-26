@@ -208,6 +208,10 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
     // The results summarized.
     const [suggestionsSums, setSuggestionsSums] = useState({});
 
+    // Disable selecting a result briefly after new suggestions arrive.
+    const [selectDisabled, setSelectDisabled] = React.useState(false);
+    const selectDisableTimerRef = React.useRef(null);
+
     const noResults = [{title: 'No results'}];
 
     const normalizeSuggestionsResults = (newSuggestions) => {
@@ -303,17 +307,40 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
         });
     }
 
+    const suggestionSelectDelay = 250;
+
     React.useEffect(() => {
         setSuggestionsSums({});
         setSuggestionsResults({});
 
         if (!_.isEmpty(suggestions)) {
+            // Start a brief window where selecting results is disabled to prevent accidental clicks
+            // when the dropdown re-renders with new suggestions.
+            if (selectDisableTimerRef.current) {
+                clearTimeout(selectDisableTimerRef.current);
+            }
+            setSelectDisabled(true);
+            selectDisableTimerRef.current = setTimeout(() => setSelectDisabled(false), suggestionSelectDelay);
+
             normalizeSuggestionsResults(suggestions);
         }
     }, [JSON.stringify(suggestions)]);
 
+    // Clear timer on unmount.
+    React.useEffect(() => {
+        return () => {
+            if (selectDisableTimerRef.current) {
+                clearTimeout(selectDisableTimerRef.current);
+            }
+        };
+    }, []);
+
     // User clicked on a result in the dropdown.
     const handleResultSelect = ({result}) => {
+        if (selectDisabled) {
+            console.debug('Selection temporarily disabled after suggestions update');
+            return;
+        }
         if (result.location) {
             console.info(`useSearchSuggestions Navigating: ${result.location}`)
             navigate(result.location);

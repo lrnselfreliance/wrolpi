@@ -8,6 +8,7 @@
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
     "cypress": "^13.15.2",
+    "js-beautify": "^1.15.4",
     "lodash": "^4.17.21",
     "mathjs": "^14.0.1",
     "query-string": "^8.1.0",
@@ -22,6 +23,7 @@
     "react-stl-viewer": "^2.5.0",
     "semantic-ui-offline": "^2.5.0",
     "semantic-ui-react": "^2.1.4",
+    "single-file-cli": "^1.1.54",
     "three": "^0.154",
     "web-vitals": "^2.1.4"
   },

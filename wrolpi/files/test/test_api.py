@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -197,7 +198,8 @@ async def test_files_search_recent(test_session, test_directory, async_client, v
     assert [i['name'] for i in response.json['file_groups']] == ['foo.mp4']
 
 
-def test_files_search(test_session, test_client, make_files_structure, assert_files_search):
+@pytest.mark.asyncio
+async def test_files_search(test_session, async_client, make_files_structure, assert_files_search):
     # You can search an empty directory.
     assert_files_search('nothing', [])
 
@@ -215,7 +217,7 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     baz2.write_bytes((PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes())
 
     # Refresh so files can be searched.
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
@@ -267,7 +269,9 @@ async def test_files_search_any_tag(async_client, test_session, make_files_struc
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
+@pytest.mark.asyncio
+async def test_refresh_files_list(test_session, async_client, make_files_structure, test_directory, video_bytes,
+                                  await_switches, await_background_tasks):
     """The user can request to refresh specific files."""
     make_files_structure({
         'bar.txt': 'hello',
@@ -276,14 +280,11 @@ def test_refresh_files_list(test_session, test_client, make_files_structure, tes
 
     # Only the single file that was refreshed is discovered.
     content = json.dumps({'paths': ['bar.txt']})
-    request, response = test_client.post('/api/files/refresh', content=content)
+    request, response = await async_client.post('/api/files/refresh', content=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
+    # Process queue
+    await lib.files_refresh_fast_worker()
     assert test_session.query(FileGroup).count() == 1
-    group: FileGroup = test_session.query(FileGroup).one()
-    assert len(group.files) == 1
-
-    request, response = test_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 2
 
@@ -896,7 +897,8 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks, await_switches):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks,
+                        await_switches):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()
@@ -953,3 +955,80 @@ async def test_ignore_directory(test_session, async_client, test_directory, make
     request, response = await async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert len(get_wrolpi_config().ignored_directories) == 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_fast_endpoint(test_session, async_client, test_directory, make_files_structure, video_bytes):
+    """Validate fast refresh endpoint: single file, grouped files, and deletions update DB correctly."""
+    # 1) Single file is found and added as a FileGroup
+    (single_file,) = make_files_structure({'foo/single.txt': 'hello world'})
+
+    req, resp = await async_client.post('/api/files/refresh_fast', content=json.dumps({'paths': ['foo/single.txt']}))
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+
+    # Process queue
+    await lib.files_refresh_fast_worker()
+    # Ensure ORM reflects DB changes done via raw SQL in worker
+    test_session.expire_all()
+
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert len(file_groups) == 1
+    fg_single = file_groups[0]
+    assert fg_single.primary_path == single_file
+    assert isinstance(fg_single.files, list)
+    assert len(fg_single.files) == 1
+    assert fg_single.files[0]['path'] == single_file
+
+    # 2) A group of files with shared stem are found and grouped.
+    bar_mp4 = test_directory / 'foo/bar.mp4'
+    bar_mp4.write_bytes(video_bytes)
+    bar_srt = test_directory / 'foo/bar.en.srt'
+    bar_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nhi\n')
+    bar_info = test_directory / 'foo/bar.info.json'
+    bar_info.write_text('{}')
+
+    # Enqueue the directory so all files inside are queued quickly
+    req, resp = await async_client.post('/api/files/refresh_fast', content=json.dumps({'paths': ['foo']}))
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+
+    await lib.files_refresh_fast_worker()
+    # Ensure ORM reflects DB changes done via raw SQL in worker
+    test_session.expire_all()
+
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    # Expect two groups now: single.txt and bar.*
+    assert len(file_groups) == 2
+
+    # Find the bar group by primary path name
+    fg_bar = next(filter(lambda i: i.primary_path.name == 'bar.mp4', file_groups))
+    paths_in_group = {f['path'] for f in fg_bar.files}
+    assert paths_in_group == {bar_mp4, bar_srt, bar_info}
+
+    # 3) When a file is deleted, the FileGroup is updated
+    bar_srt.unlink()
+    req, resp = await async_client.post('/api/files/refresh_fast', content=json.dumps({'paths': ['foo/bar.en.srt']}))
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+
+    await lib.files_refresh_fast_worker()
+    # Ensure ORM reflects DB changes done via raw SQL in worker
+    test_session.expire_all()
+
+    fg_bar = test_session.query(FileGroup).filter(FileGroup.primary_path == bar_mp4).one()
+    paths_in_group = {f['path'] for f in fg_bar.files}
+    assert paths_in_group == {bar_mp4, bar_info}
+
+    # 4) When the last files in a group are deleted, the FileGroup is removed
+    bar_info.unlink()
+    bar_mp4.unlink()
+
+    req, resp = await async_client.post('/api/files/refresh_fast', content=json.dumps({'paths': ['foo/bar.mp4']}))
+    assert resp.status_code == HTTPStatus.NO_CONTENT
+
+    await lib.files_refresh_fast_worker()
+    # Ensure ORM reflects DB changes done via raw SQL in worker
+    test_session.expire_all()
+
+    # Only the single.txt group should remain
+    remaining = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert len(remaining) == 1
+    assert remaining[0].primary_path.name == 'single.txt'

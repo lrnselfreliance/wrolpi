@@ -45,6 +45,12 @@ class FilesRefreshRequest:
 
 
 @dataclass
+class FilesRefreshFastRequest:
+    paths: List[str]
+    recursive: bool = True
+
+
+@dataclass
 class DirectoriesRequest:
     search_str: Optional[str] = ''
 

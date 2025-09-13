@@ -14,6 +14,7 @@ import {
     TableHeaderCell,
 } from "semantic-ui-react";
 import {
+    APIButton,
     CardGroupCentered,
     CardPoster,
     encodeMediaPath,
@@ -63,7 +64,7 @@ import {
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import {FileBrowser} from "./FileBrowser";
-import {refreshFiles} from "../api";
+import {refreshFiles, refreshFilesFast} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
@@ -642,12 +643,37 @@ const useRefresh = () => {
 export function FilesRefreshButton({paths}) {
     const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
 
-    return <Button icon
-                   labelPosition='left'
-                   loading={loading || refreshing || refreshingDirectory}
-                   onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || loading || refreshing}>
-        <Icon name='refresh'/>
-        Refresh
-    </Button>;
+    return <APIButton
+        icon='refresh'
+        color='white'
+        label='Refresh'
+        loading={loading || refreshing || refreshingDirectory}
+        onClick={() => refreshFiles(paths)}
+        disabled={wrolModeEnabled || loading || refreshing}
+        automaticLabelSize={true}
+    />;
+}
+
+export function FilesFastRefreshButton({paths, recursive = true}) {
+    const wrolModeEnabled = useWROLMode();
+    const [loading, setLoading] = React.useState(false);
+
+    const onClick = async () => {
+        setLoading(true);
+        try {
+            await refreshFilesFast(paths, recursive);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return <APIButton
+        icon='bolt'
+        color='pink'
+        label='Fast Refresh'
+        loading={loading}
+        onClick={onClick}
+        disabled={wrolModeEnabled || loading}
+        automaticLabelSize={true}
+    />;
 }

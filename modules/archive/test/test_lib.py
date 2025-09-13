@@ -168,7 +168,7 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
 
 
 @pytest.mark.asyncio
-async def test_fills_contents_with_refresh(test_session, archive_factory, singlefile_contents_factory):
+async def test_fills_contents_with_refresh(test_session, archive_factory, singlefile_contents_factory, async_client):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')

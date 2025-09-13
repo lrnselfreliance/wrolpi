@@ -2,7 +2,6 @@ import {Button, Header, Icon, Modal, ModalActions, ModalContent, ModalHeader, Pl
 import {
     Checkbox,
     Form,
-    IconGroup,
     Input,
     PlaceholderLine,
     TableBody,
@@ -18,7 +17,7 @@ import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unign
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
-import {FileRowTagIcon, FilesRefreshButton} from "./Files";
+import {FileRowTagIcon, FilesRefreshButton, FilesFastRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {SettingsContext} from "../contexts/contexts";
 
@@ -219,8 +218,11 @@ export function FileBrowser() {
         <TableRow>
             <TableHeaderCell colSpan={3}>
                 <FilesRefreshButton paths={selectedPaths}/>
+                <FilesFastRefreshButton paths={selectedPaths}/>
                 <APIButton
                     icon='trash'
+                    label='Delete'
+                    automaticLabelSize={true}
                     color='red'
                     confirmContent='Are you sure you want to delete these files?'
                     confirmButton='Delete'
@@ -228,10 +230,12 @@ export function FileBrowser() {
                     disabled={selectedPathsCount === 0}
                     obeyWROLMode={true}
                 />
-                <Button icon='text cursor'
-                        color='yellow'
-                        onClick={() => setRenameOpen(true)}
-                        disabled={wrolModeEnabled || selectedPathsCount !== 1}
+                <APIButton icon='text cursor'
+                           label='Rename'
+                           color='yellow'
+                           onClick={() => setRenameOpen(true)}
+                           disabled={wrolModeEnabled || selectedPathsCount !== 1}
+                           automaticLabelSize={true}
                 />
                 {selectedPathsCount === 1 ?
                     <RenameModal
@@ -241,10 +245,12 @@ export function FileBrowser() {
                         path={selectedPaths[0]}
                         onSubmit={reset}
                     /> : null}
-                <Button icon='move'
-                        color='violet'
-                        disabled={wrolModeEnabled || selectedPathsCount === 0}
-                        onClick={() => setMoveOpen(true)}
+                <APIButton icon='move'
+                           color='violet'
+                           disabled={wrolModeEnabled || selectedPathsCount === 0}
+                           onClick={() => setMoveOpen(true)}
+                           label='Move'
+                           automaticLabelSize={true}
                 />
                 {selectedPathsCount > 0 ?
                     <MoveModal open={moveOpen}
@@ -252,26 +258,25 @@ export function FileBrowser() {
                                paths={selectedPaths}
                                onSubmit={reset}
                     /> : null}
-                <Button
+                <APIButton
                     color='blue'
+                    icon='folder'
+                    label='New folder'
+                    automaticLabelSize={true}
                     onClick={() => setMakeDirectoryOpen(true)}
                     disabled={wrolModeEnabled}
-                    style={{paddingLeft: '1em', paddingRight: '0.8em'}}
-                >
-                    <IconGroup>
-                        <Icon name='folder'/>
-                        <Icon corner name='add'/>
-                    </IconGroup>
-                </Button>
+                />
                 <MakeDirectoryModal
                     open={makeDirectoryOpen}
                     onClose={() => setMakeDirectoryOpen(false)}
                     parent={selectedPaths.length ? selectedPaths[0] : null}
                     onSubmit={handleMakeDirectory}
                 />
-                <Button
+                <APIButton
                     color='grey'
                     icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
+                    label={isDirectoryIgnored ? 'Unignore' : 'Ignore'}
+                    automaticLabelSize={true}
                     disabled={!singleDirectorySelected || wrolModeEnabled}
                     onClick={() => setIgnoreDirectoryOpen(true)}
                 />

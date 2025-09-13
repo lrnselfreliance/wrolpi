@@ -942,6 +942,41 @@ export async function refreshFiles(paths) {
     return response;
 }
 
+export async function refreshFilesFast(paths, recursive = true) {
+    // If no selection provided, refresh entire media directory by passing root ''
+    const body = {paths: (Array.isArray(paths) && paths.length > 0) ? paths : [''], recursive};
+    console.info('Fast refreshing', body);
+    const response = await apiPost(`${API_URI}/files/refresh_fast`, body);
+    if (response.ok) {
+        try {
+            const data = await response.json();
+            const queued = data && typeof data.queued !== 'undefined' ? data.queued : undefined;
+            toast({
+                type: 'success',
+                title: 'Fast refresh queued',
+                description: queued !== undefined ? `${queued} item(s) queued` : undefined,
+                time: 3000,
+            });
+        } catch (_) {
+            // No JSON or other response; still consider success
+            toast({
+                type: 'success',
+                title: 'Fast refresh queued',
+                time: 3000,
+            });
+        }
+    } else {
+        const message = await getErrorMessage(response, 'Cannot fast refresh files. See server logs.');
+        toast({
+            type: 'error',
+            title: 'Files Error',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response;
+}
+
 export async function makeDirectory(path) {
     const body = {path: path};
     const response = await apiPost(`${API_URI}/files/directory`, body);

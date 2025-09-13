@@ -15,6 +15,7 @@ services:
       - ./pg_data:/var/lib/postgresql/data
 
   api:
+    image: lrnselfreliance/wrolpi-api:latest
     depends_on:
       - db
     build:
@@ -37,6 +38,7 @@ services:
       interval: 2m
 
   archive: # Python/Sanic wrapper around Singlefile and Readability.
+    image: lrnselfreliance/wrolpi-archive:latest
     build:
       context: .
       dockerfile: docker/archive/Dockerfile
@@ -49,6 +51,7 @@ services:
       interval: 2m
 
   app: # React App
+    image: lrnselfreliance/wrolpi-app:latest
     depends_on:
       - api
     build:
@@ -84,13 +87,14 @@ services:
       interval: 1m
 
   map_https: # HTTPS for map tile server
+    image: lrnselfreliance/wrolpi:wrolpi-map_https-latest
     depends_on:
       - map
-    environment:
-      - UPSTREAM_HOST=map
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
+    environment:
+      - UPSTREAM_HOST=map
     ports:
       - '8084:443'
     volumes:
@@ -100,6 +104,7 @@ services:
       interval: 1m
 
   web:
+    image: lrnselfreliance/wrolpi:wrolpi-web-latest
     depends_on:
       - app
     build:
@@ -119,6 +124,7 @@ services:
       interval: 1m
 
   zim: # kiwix-serve
+    image: lrnselfreliance/wrolpi:wrolpi-zim-latest
     build:
       context: .
       dockerfile: docker/zim/Dockerfile
@@ -130,6 +136,7 @@ services:
       interval: 1m
 
   zim_https: # HTTPS for Zim service.
+    image: lrnselfreliance/wrolpi:wrolpi-zim_https-latest
     depends_on:
       - zim
     environment:
@@ -146,6 +153,7 @@ services:
       interval: 1m
 
   help: # The WROLPi Help documentation.
+    image: lrnselfreliance/wrolpi:wrolpi-help-latest
     build:
       context: .
       dockerfile: docker/help/Dockerfile
@@ -156,6 +164,7 @@ services:
       interval: 1m
 
   help_https: # HTTPS for Help service.
+    image: lrnselfreliance/wrolpi:wrolpi-help_https-latest
     depends_on:
       - help
     environment:

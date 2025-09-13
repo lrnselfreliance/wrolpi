@@ -691,7 +691,7 @@ def test_get_refresh_progress(test_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_no_groups(test_session, test_directory, make_files_structure, zip_file_factory):
+async def test_refresh_files_no_groups(test_session, test_directory, make_files_structure, zip_file_factory, async_client):
     """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
     foo_txt, foo_zip = make_files_structure({
         'foo.txt': 'text',
@@ -709,7 +709,7 @@ async def test_refresh_files_no_groups(test_session, test_directory, make_files_
 
 
 @pytest.mark.asyncio
-async def test_refresh_directories(test_session, test_directory, assert_directories):
+async def test_refresh_directories(test_session, test_directory, assert_directories, async_client):
     """
     Directories are stored when they are discovered.  They are removed when they can no longer be found.
     """

@@ -73,14 +73,24 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
 )
 @wrol_mode_check
 async def refresh(request: Request):
-    paths = None
-    if request.body:
-        media_directory = get_media_directory()
-        if not isinstance(request.json['paths'], list):
-            raise ValueError('Can only refresh a list')
+    # Accept list of paths (relative to media directory or absolute) and a recursive flag.
+    paths = request.json['paths'] if request.json and 'paths' in request.json else []
+    await lib.refresh_fast_enqueue(paths, recursive=True)
+    # Do not count how many have been queued; respond Accepted quickly
+    return response.empty()
 
-        paths = [media_directory / i for i in request.json['paths']]
-    await lib.refresh_files(paths)
+
+@files_bp.post('/refresh_fast', name='refresh_fast')
+@openapi.definition(
+    summary='Fast-refresh: enqueue files or directories to quickly detect new/deleted files grouped by stem.',
+    body=schema.FilesRefreshFastRequest,
+)
+@validate(schema.FilesRefreshFastRequest)
+async def refresh_fast(_: Request, body: schema.FilesRefreshFastRequest):
+    # Accept list of paths (relative to media directory or absolute) and a recursive flag.
+    paths = body.paths or []
+    await lib.refresh_fast_enqueue(paths, recursive=body.recursive)
+    # Do not count how many have been queued; respond Accepted quickly
     return response.empty()
 
 

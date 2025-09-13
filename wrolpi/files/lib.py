@@ -14,6 +14,7 @@ from collections import OrderedDict
 from itertools import zip_longest
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
+import queue
 
 import cachetools.func
 import psycopg2
@@ -679,13 +680,13 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             if send_events:
                 Events.send_global_refresh_modeling_completed()
 
-        # Index the rest of the files that were not indexed by modelers.
+        # Index the rest of the files that modelers did not index.
         with flags.refresh_indexing:
             await apply_indexers()
             if send_events:
                 Events.send_global_refresh_indexing_completed()
 
-        # Cleanup any outdated file data.
+        # Clean up any outdated file data.
         with flags.refresh_cleanup:
             await apply_refresh_cleanup()
 
@@ -700,7 +701,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         refresh_logger.warning('Done refreshing Files')
 
         if refreshing_all_files:
-            # Only set refresh_complete flag if all files have been refreshed.
+            # Only set the refresh_complete flag if all files have been refreshed.
             flags.refresh_complete.set()
         if send_events:
             Events.send_refresh_completed()
@@ -1659,3 +1660,165 @@ def get_real_path_name(path: pathlib.Path) -> pathlib.Path:
             if path_.name.lower() == path.name.lower():
                 return path_
     return path
+
+
+
+# ----- Fast file refresher -----
+from wrolpi.api_utils import api_app, perpetual_signal
+
+
+async def refresh_fast_enqueue(paths: List[pathlib.Path | str], recursive: bool = True) -> None:
+    """Fast enqueue of paths for background refresh. paths may include files or directories (relative to media dir).
+
+    This function enqueues only the top-level paths quickly so the API can respond immediately.
+    Recursion is handled inside the worker.
+    """
+    q = api_app.shared_ctx.files_refresh_fast
+    if not paths:
+        return None
+
+    media_directory = get_media_directory()
+    for p in paths:
+        try:
+            p = pathlib.Path(p)
+            if not p.is_absolute():
+                p = media_directory / p
+            # Put a small JSON blob so worker knows recursion preference
+            q.put(json.dumps({"path": str(p), "recursive": bool(recursive)}))
+        except Exception as e:
+            logger.error(f'Failed to enqueue path for refresh_fast: {p}', exc_info=e)
+    return None
+
+
+@perpetual_signal(event='wrolpi.perpetual.files_refresh_fast', sleep=0.2)
+async def files_refresh_fast_worker():
+    """Background worker that processes enqueued file paths quickly, grouping by stem and
+    inserting/updating or deleting FileGroups as needed.
+    """
+    q = api_app.shared_ctx.files_refresh_fast
+    to_process_files: List[pathlib.Path] = []
+    recursive = True
+    # Drain queue (items are JSON blobs {path, recursive})
+    while True:
+        try:
+            item = q.get_nowait()
+            try:
+                payload = json.loads(item)
+                p = pathlib.Path(payload.get('path'))
+                recursive = bool(payload.get('recursive', True))
+            except Exception:
+                # Backward-compat: treat as plain path string
+                p = pathlib.Path(item)
+                recursive = True
+            # If directory, expand here
+            if p.is_dir():
+                if recursive:
+                    try:
+                        for child in walk(p):
+                            try:
+                                if child.is_file():
+                                    to_process_files.append(child)
+                            except PermissionError:
+                                continue
+                    except Exception as e:
+                        logger.error('Fast worker failed walking directory', exc_info=e)
+                else:
+                    try:
+                        files, _dirs = get_files_and_directories(p)
+                    except (FileNotFoundError, PermissionError):
+                        files = []
+                    for f in files:
+                        if f.is_file():
+                            to_process_files.append(f)
+            else:
+                # File or non-existent path; process directly
+                to_process_files.append(p)
+        except queue.Empty:
+            break
+        except Exception as e:
+            logger.error('files_refresh_fast_worker failed reading queue item', exc_info=e)
+            break
+
+    if not to_process_files:
+        return
+
+    # Sort for deterministic grouping
+    to_process_files.sort(key=lambda p: (str(p.parent), split_path_stem_and_suffix(p)[0], p.name))
+
+    # Process each group
+    idx = 0
+    # Track directories for directory upsert after processing
+    parent_directories: Set[pathlib.Path] = set()
+    found_directories: Set[pathlib.Path] = set()
+
+    while idx < len(to_process_files):
+        p = to_process_files[idx]
+        stem, _ = split_path_stem_and_suffix(p)
+        parent = p.parent
+        # collect parents
+        try:
+            parent_directories.add(parent)
+        except Exception:
+            pass
+        # Collect same group
+        j = idx
+        while j < len(to_process_files):
+            pj = to_process_files[j]
+            stemj, _ = split_path_stem_and_suffix(pj)
+            if pj.parent != parent or stemj != stem:
+                break
+            j += 1
+        representative = p
+        try:
+            # Find all files on disk that share the stem
+            files = [i for i in glob_shared_stem(representative) if i.is_file()]
+            if files:
+                try:
+                    _upsert_files(files, now())
+                except Exception as e:
+                    refresh_logger.error('Fast refresher upsert failed', exc_info=e)
+            else:
+                # No files remain: delete any FileGroup whose primary_path matches this stem
+                stem_full, _ = split_path_stem_and_suffix(representative, full=True)
+                like = f"{stem_full}.%"
+                try:
+                    with get_db_curs(commit=True) as curs:
+                        curs.execute('DELETE FROM file_group WHERE primary_path LIKE %s', (like,))
+                except Exception as e:
+                    refresh_logger.error('Fast refresher delete failed', exc_info=e)
+        except Exception as e:
+            refresh_logger.error('Fast refresher group processing failed', exc_info=e)
+        finally:
+            idx = j
+
+    # After processing all files and groups, apply modelers and indexers, and upsert directories
+    try:
+        await apply_modelers()
+    except Exception as e:
+        refresh_logger.error('Fast refresher apply_modelers failed', exc_info=e)
+    try:
+        await apply_indexers()
+    except Exception as e:
+        refresh_logger.error('Fast refresher apply_indexers failed', exc_info=e)
+
+    try:
+        # Build found_directories by scanning parents for immediate children directories
+        for parent in list(parent_directories):
+            try:
+                _files, _dirs = get_files_and_directories(parent)
+                for d in _dirs:
+                    found_directories.add(d)
+            except Exception:
+                continue
+        from wrolpi.files.models import Directory
+        with get_db_session() as session:
+            # Ensure parents include any Directory rows that match existing parents (paths may be absolute)
+            # Gather only those within media directory
+            media_dir = get_media_directory()
+            parent_dirs_resolved = {p for p in parent_directories if isinstance(p, pathlib.Path)}
+            # Convert to set of existing Directory.path that are among parents (if any)
+            existing_parents = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(parent_dirs_resolved))}
+        upsert_directories(existing_parents or parent_directories, found_directories)
+    except Exception as e:
+        refresh_logger.error('Fast refresher upsert_directories failed', exc_info=e)
+

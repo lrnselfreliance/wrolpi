@@ -1484,9 +1484,24 @@ export function useAPIButton(
 
     let buttonContent = props.children || null;
     if (icon) {
-        // Send Icon as Button properties.
-        buttonContent = null;
-        buttonArgs['icon'] = showSuccess ? 'check' : showFailure ? 'close' : icon;
+        // Support icon-only or icon+label depending on whether children are provided.
+        const desiredIcon = showSuccess ? 'check' : showFailure ? 'close' : icon;
+        if (buttonContent === null || buttonContent === undefined) {
+            // icon-only via Button prop
+            buttonArgs['icon'] = desiredIcon;
+            buttonContent = null;
+        } else {
+            // icon + label: use Semantic UI labeled icon behavior for proper padding
+            if (!('labelPosition' in buttonArgs)) {
+                buttonArgs['labelPosition'] = 'left';
+            }
+            buttonArgs['icon'] = desiredIcon;
+            // keep children as-is so Button renders label with proper spacing
+            buttonContent = <>
+                <Icon name={desiredIcon}/>
+                {buttonContent}
+            </>;
+        }
     } else if (showSuccess || showFailure) {
         // Show ✔ or ✖ overtop the contents after API call has completed.
         buttonContent = <>
@@ -1522,7 +1537,7 @@ export function useAPIButton(
     return {button, ref}
 }
 
-export function APIButton({
+function APIButtonVariant({
                               color,
                               size,
                               floated,
@@ -1536,7 +1551,8 @@ export function APIButton({
                               icon,
                               type = 'button',
                               id = null,
-                              ...props
+                              children,
+                              ...rest
                           }) {
     const {button} = useAPIButton(
         color,
@@ -1552,10 +1568,143 @@ export function APIButton({
         icon,
         type,
         id,
-        props
+        {children, ...rest}
     );
-
     return button;
+}
+
+export function APIButton({
+                              color,
+                              size,
+                              floated,
+                              onClick,
+                              disabled,
+                              confirmContent,
+                              confirmButton,
+                              confirmHeader,
+                              themed,
+                              obeyWROLMode,
+                              icon,
+                              type = 'button',
+                              id = null,
+                              media = null,
+                              automaticLabelSize = false,
+                              label = undefined,
+                              ...props
+                          }) {
+    // Backward compatibility: if no media/automatic sizing requested, render single button as before.
+    const baseChildren = props.children !== undefined ? props.children : (label !== undefined ? label : null);
+
+    const renderOne = (overrides = {}) => {
+        // Build a props object for APIButtonVariant where we can override children and any Button props.
+        const {
+            icon: oIcon,
+            size: oSize,
+            color: oColor,
+            floated: oFloated,
+            label: oLabel,
+            children: oChildren,
+            at: _omitAt,
+            ...rest
+        } = overrides || {};
+
+        const mergedProps = {
+            ...props,
+            ...rest,
+        };
+        // Remove custom props that should not reach the underlying Button
+        delete mergedProps.media;
+        delete mergedProps.automaticLabelSize;
+        delete mergedProps.label;
+        delete mergedProps.at;
+
+        // Determine children text/content for this variant
+        const children = (oChildren !== undefined)
+            ? oChildren
+            : (oLabel !== undefined ? oLabel : baseChildren);
+        if (children !== undefined && children !== null) {
+            mergedProps.children = children;
+        } else {
+            // Ensure children isn't carried over when icon-only
+            delete mergedProps.children;
+        }
+
+        return <APIButtonVariant
+            color={oColor !== undefined ? oColor : color}
+            size={oSize !== undefined ? oSize : size}
+            floated={oFloated !== undefined ? oFloated : floated}
+            onClick={onClick}
+            disabled={disabled}
+            confirmContent={confirmContent}
+            confirmButton={confirmButton}
+            confirmHeader={confirmHeader}
+            themed={themed}
+            obeyWROLMode={obeyWROLMode}
+            icon={oIcon !== undefined ? oIcon : icon}
+            type={type}
+            id={id}
+            {...mergedProps}
+        />;
+    };
+
+    // If neither media nor automaticLabelSize is used, return single.
+    if ((!media || media.length === 0) && !automaticLabelSize) {
+        return renderOne();
+    }
+
+    // Build per-breakpoint variants
+    const byAt = {mobile: {}, tablet: {}, computer: {}};
+    if (Array.isArray(media)) {
+        for (const item of media) {
+            if (!item || !item.at) continue;
+            const at = item.at;
+            if (!byAt[at]) byAt[at] = {};
+            byAt[at] = {...byAt[at], ...item};
+        }
+    }
+
+    // Apply automatic label sizing defaults if requested (only when not explicitly set in media overrides)
+    if (automaticLabelSize) {
+        const l = label !== undefined ? label : baseChildren;
+        // mobile: icon-only
+        if (byAt.mobile.icon === undefined && byAt.mobile.label === undefined && byAt.mobile.children === undefined) {
+            byAt.mobile.icon = icon;
+            byAt.mobile.children = null;
+        }
+        // tablet: label only
+        if (byAt.tablet.icon === undefined && byAt.tablet.label === undefined && byAt.tablet.children === undefined) {
+            byAt.tablet.icon = null;
+            byAt.tablet.label = l;
+        }
+        // computer: icon + label
+        if (byAt.computer.icon === undefined && byAt.computer.label === undefined && byAt.computer.children === undefined) {
+            byAt.computer.icon = icon;
+            byAt.computer.label = l;
+        }
+    } else {
+        // If no automatic sizing and no explicit children in overrides, ensure we propagate base children
+        for (const k of Object.keys(byAt)) {
+            if (byAt[k].children === undefined && byAt[k].label === undefined) {
+                byAt[k].children = baseChildren;
+            }
+            if (byAt[k].icon === undefined) {
+                byAt[k].icon = icon;
+            }
+        }
+    }
+
+    // Render responsive variants
+    return <div style={{display: 'inline-block'}}>
+        <Media at='mobile'>
+            {renderOne(byAt.mobile)}
+        </Media>
+        <Media at='tablet'>
+            {renderOne(byAt.tablet)}
+        </Media>
+        <Media greaterThanOrEqual='computer'>
+            {renderOne(byAt.computer)}
+        </Media>
+    </div>;
 }
 
 export const useMessageDismissal = (messageName) => {

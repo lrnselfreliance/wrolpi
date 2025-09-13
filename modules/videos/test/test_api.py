@@ -9,6 +9,7 @@ from modules.videos.video import lib as video_lib
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download
+from wrolpi.files import lib
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
 
@@ -43,7 +44,8 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
     assert not video.file_group.d_text, 'Video captions were not removed'
 
 
-def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory, video_file_factory,
+@pytest.mark.asyncio
+async def test_refresh_videos(async_client, test_session, test_directory, simple_channel, video_factory, video_file_factory,
                         image_bytes_factory):
     subdir = test_directory / 'subdir'
     subdir.mkdir()
@@ -81,7 +83,8 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
+    await lib.files_refresh_fast_worker()
 
     test_session.expire_all()
 
@@ -104,7 +107,7 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
     # Remove video1's poster, video1 should be updated.
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     video1 = Video.get_by_path(video1_video_path, test_session)
     assert not video1.poster_path
 

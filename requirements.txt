@@ -28,4 +28,4 @@ srt==3.5.3
 tqdm==4.67.1
 vininfo[cli]==1.8.0
 webvtt-py==0.5.1
-yt-dlp==2025.8.27
+yt-dlp==2025.09.05

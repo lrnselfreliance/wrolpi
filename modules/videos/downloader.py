@@ -5,6 +5,7 @@ import logging
 import os.path
 import pathlib
 import re
+import sys
 import traceback
 from abc import ABC
 from datetime import timedelta
@@ -289,9 +290,9 @@ class ChannelDownloader(Downloader, ABC):
         # Filter videos by their length.
         try:
             if minimum_duration := settings.get('minimum_duration'):
-                downloads = [i for i in downloads if int(i['duration']) >= minimum_duration]
+                downloads = [i for i in downloads if (d := i.get('duration')) and int(d) >= minimum_duration]
             if maximum_duration := settings.get('maximum_duration'):
-                downloads = [i for i in downloads if int(i['duration']) <= maximum_duration]
+                downloads = [i for i in downloads if (d := i.get('duration')) and int(d) <= maximum_duration]
         except KeyError as e:
             raise RuntimeError('Unable to filter videos because there is no duration') from e
 

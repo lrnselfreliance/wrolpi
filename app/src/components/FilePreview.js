@@ -193,6 +193,11 @@ export function FilePreviewProvider({children}) {
         // Navigated to a page which has a file preview active, fetch the information about the file, then display it.
         if (previewQuery && !previewFile) {
             initPreviewFile();
+        } else if (!previewQuery && (previewFile || previewModal)) {
+            // User navigated back/forward and preview query is gone, close the preview.
+            // Only close if there's actually a preview open (previewFile or previewModal exists).
+            setPreviewFile(null);
+            setPreviewModal(null);
         }
     }, [previewQuery]);
 

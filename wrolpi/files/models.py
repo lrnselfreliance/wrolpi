@@ -513,13 +513,10 @@ class FileGroup(ModelHelper, Base):
     def do_model(self, session: Session) -> Optional[ModelHelper]:
         """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""
         if model_class := self.get_model_class():
-            if model := model_class.get_by_path(self.primary_path, session):
-                # Already modeled.
-                logger.debug(f'already modeled: {self} {model}')
-                return model
-            # Create new model (Video/Archive/Ebook).
+            # Always call do_model() to ensure FileGroup.data is updated when files change.
+            # The model's do_model() should be idempotent (safe to call multiple times).
             model = model_class.do_model(self, session)
-            logger.debug(f'new model: {self} {model}')
+            logger.debug(f'modeled: {self} {model}')
             return model
 
         # Index the file if no models are available.

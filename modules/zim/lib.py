@@ -43,8 +43,12 @@ __all__ = [
 
 def model_zim(file_group: FileGroup, session: Session) -> Zim:
     """Create a Zim record for the provided FileGroup."""
-    zim = Zim(file_group=file_group, path=file_group.primary_path)
-    session.add(zim)
+    # Check if a Zim already exists for this FileGroup
+    zim = session.query(Zim).filter_by(file_group_id=file_group.id).one_or_none()
+    if not zim:
+        # Create new Zim if it doesn't exist
+        zim = Zim(file_group=file_group, path=file_group.primary_path)
+        session.add(zim)
     file_group.title = file_group.primary_path.name
     file_group.a_text = split_file_name_words(file_group.primary_path.name)
     file_group.indexed = True

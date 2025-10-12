@@ -317,7 +317,7 @@ def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected
 
 
-def test_video_location(test_session, video_factory, channel_factory):
+def test_video_location(test_session, video_factory, channel_factory, async_client):
     # Video location without a channel, it opens the preview.
     video1 = video_factory(title='vid1')
     assert video1.location == '/videos/video/1'

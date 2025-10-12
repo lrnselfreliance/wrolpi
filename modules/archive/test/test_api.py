@@ -4,7 +4,10 @@ from http import HTTPStatus
 import pytest
 
 from modules.archive import lib, Archive
+from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci, skip_macos
+
+from wrolpi.common import get_relative_to_media_directory
 
 
 def check_results(test_client, data, ids):
@@ -202,7 +205,7 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     request, response = test_client.get(f'/api/archive/domains')
     assert response.status_code == HTTPStatus.OK
     assert response.json['domains'][0]['domain'] == 'example.com'
-    assert response.json['domains'][0]['size'] == 116
+    assert response.json['domains'][0]['size'] == 254
 
     # Deleting works.
     request, response = test_client.delete(f'/api/archive/{archive1.id}')
@@ -257,3 +260,107 @@ async def test_archive_upload(test_session, async_client, singlefile_contents_fa
     assert archive.file_group.url == 'https://example.com/single-file-url', 'SingleFile URL should be trusted'
     events = list(events_history)
     assert events and events[0]['event'] == 'upload_archive', 'Event should have been sent.'
+
+
+@pytest.mark.asyncio
+async def test_archive_upload_file_tracking(test_session, async_client, archive_directory, archive_factory,
+                                            await_switches, make_multipart_form, image_bytes_factory):
+    """Test that uploading an info.json and image file via /api/files/upload properly tracks them in Archive and FileGroup."""
+    archive = archive_factory('example.com', 'https://example.com/test-url', 'tracking test', screenshot=False)
+    test_session.commit()
+
+    # Verify Archive and FileGroup are created, but screenshot does not exist.
+    file_group = archive.file_group
+    assert not archive.screenshot_path, 'Screenshot should not exist yet.'
+    assert file_group.files is not None, 'FileGroup should have files array'
+    initial_file_count = len(file_group.files)
+
+    # Upload info.json via /api/files/upload
+    # Extract the prefix from singlefile path (e.g., "2000-01-01-00-00-01_tracking test")
+    singlefile_stem = archive.singlefile_path.stem  # e.g., "2000-01-01-00-00-01_tracking test"
+
+    # Create info.json content
+    info_json_data = {
+        'title': 'test',
+        'url': 'https://example.com/test-url',
+        'custom_field': 'value'
+    }
+    info_json_bytes = json.dumps(info_json_data).encode()
+
+    # Get relative destination directory
+    destination = str(get_relative_to_media_directory(archive.singlefile_path.parent))
+    filename = f'{singlefile_stem}.info.json'
+
+    # POST to /api/files/upload
+    forms = [
+        dict(name='destination', value=destination),
+        dict(name='filename', value=filename),
+        dict(name='chunkNumber', value='0'),
+        dict(name='totalChunks', value='0'),
+        dict(name='chunkSize', value=str(len(info_json_bytes))),
+        dict(name='overwrite', value='false'),
+        dict(name='chunk', value=info_json_bytes, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, f'Upload failed with status {response.status_code}: {response.json}'
+
+    await await_switches()
+
+    # Step 4: Verify info.json is tracked
+    # Refresh the session to get updated data
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+
+    # Assert info.json properties exist
+    assert archive.info_json_path is not None, 'Archive.info_json_path should exist'
+    assert archive.info_json_file is not None, 'Archive.info_json_file should exist'
+
+    # Assert FileGroup has the correct number of files.
+    assert len(archive.file_group.files) == initial_file_count + 1, \
+        f'FileGroup should have {initial_file_count + 1} files after adding info.json'
+    assert archive.file_group.data.get('info_json_path'), \
+        'Archive readability info json should be in FileGroup.data'
+
+    # Upload an image file and verify it's added to the FileGroup.
+    # Store file count before adding image
+    file_count_before_image = len(archive.file_group.files)
+
+    # Create image using factory
+    image_data = image_bytes_factory()
+
+    # Upload image with same stem as the Archive (using .jpg to avoid conflict with factory-created .png)
+    image_filename = f'{singlefile_stem}.jpg'
+    forms = [
+        dict(name='destination', value=destination),
+        dict(name='filename', value=image_filename),
+        dict(name='chunkNumber', value='0'),
+        dict(name='totalChunks', value='0'),
+        dict(name='chunkSize', value=str(len(image_data))),
+        dict(name='overwrite', value='false'),
+        dict(name='chunk', value=image_data, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, f'Image upload failed with status {response.status_code}: {response.json}'
+
+    await await_switches()
+
+    # Refresh session to get updated data
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+
+    # Assert screenshot properties exist
+    assert archive.screenshot_path is not None, 'Archive.screenshot_path should exist'
+    assert archive.screenshot_file is not None, 'Archive.screenshot_file should exist'
+    assert archive.file_group.data.get('screenshot_path') == archive.screenshot_path, 'Archive screenshot should be in FileGroup.data'
+
+    # Assert image is in FileGroup.files
+    file_paths = [f['path'] for f in archive.file_group.files]
+    assert archive.screenshot_path in file_paths, 'Screenshot should be in FileGroup.files'
+
+    # Assert FileGroup has correct number of files
+    assert len(archive.file_group.files) == file_count_before_image + 1, \
+        f'FileGroup should have {file_count_before_image + 1} files after adding image'

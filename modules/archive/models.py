@@ -197,6 +197,18 @@ class Archive(Base, ModelHelper):
         if screenshot_file := self.screenshot_file:
             return screenshot_file['path']
 
+    @property
+    def info_json_file(self) -> Optional[dict]:
+        files = self.file_group.my_files()
+        for file in files:
+            if file['path'].name.endswith('.info.json'):
+                return file
+
+    @property
+    def info_json_path(self) -> Optional[pathlib.Path]:
+        if info_json_file := self.info_json_file:
+            return info_json_file['path']
+
     def apply_readability_data(self):
         """Read the Readability JSON file, apply its contents to this record."""
         readability_json_path = self.readability_json_path

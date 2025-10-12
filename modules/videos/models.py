@@ -100,8 +100,12 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     def do_model(file_group: FileGroup, session: Session) -> 'Video':
-        video = Video(file_group_id=file_group.id, file_group=file_group)
-        session.add(video)
+        # Check if a Video already exists for this FileGroup
+        video = session.query(Video).filter_by(file_group_id=file_group.id).one_or_none()
+        if not video:
+            # Create new Video if it doesn't exist
+            video = Video(file_group_id=file_group.id, file_group=file_group)
+            session.add(video)
         video.validate()
         file_group.indexed = True
         video.flush()
@@ -238,6 +242,15 @@ class Video(ModelHelper, Base):
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
+
+        # Set FileGroup.data with cached file paths for consistency with Archive
+        self.file_group.data = {
+            'id': self.id,
+            'video_path': self.video_path,
+            'info_json_path': self.info_json_path,
+            'poster_path': self.poster_path,
+            'caption_paths': self.caption_paths,
+        }
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':

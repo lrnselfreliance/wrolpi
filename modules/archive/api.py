@@ -104,7 +104,11 @@ async def singlefile_upload_switch_handler(url=None):
             logger.trace(f'singlefile_upload_switch_handler called on empty queue')
         return
 
-    q_size = q.qsize()
+    try:
+        q_size = q.qsize()
+    except NotImplementedError:
+        # qsize() is not implemented on macOS
+        q_size = '?'
     logger.info(f'singlefile_upload_switch_handler queue size: {q_size}')
 
     try:

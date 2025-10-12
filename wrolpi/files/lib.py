@@ -1582,61 +1582,61 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         logger.warning('upsert_file called, but all files are in ignored directories!')
         raise IgnoredDirectoryError(f'all files are in ignored directories: {file}')
 
-    for i in range(2):
-        # Try multiple times because uploads happen concurrently and may conflict.
-        # TODO convert uploads to synchronous in UI.
-        with get_db_session() as session:
-            file_group = FileGroup.from_paths(session, *paths)
-            # Re-index the contents of the file.
+    # Use a single session context for all database operations
+    with get_db_session(commit=True) as session:
+        # Create/update FileGroup with retry logic
+        file_group = None
+        for i in range(2):
             try:
-                session.flush([file_group, ])
-                file_group_id = file_group.id
-                session.commit()
+                file_group = FileGroup.from_paths(session, *paths)
+                session.flush([file_group])
                 break
             except IntegrityError:
                 # Another process inserted this FileGroup.
                 logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
+                session.rollback()
+                if i == 1:
+                    raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
                 continue
-    else:
-        raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
-    logger.debug(f'upsert_file: {file_group}')
-    try:
-        with get_db_session(commit=True) as session:
-            file_group = FileGroup.find_by_id(file_group_id, session)
+        if not file_group:
+            raise RuntimeError(f'upsert_file failed to create FileGroup! {file}')
+
+        logger.debug(f'upsert_file: {file_group}')
+
+        # Model the FileGroup (creates Archive/Video/etc. and sets indexed=True)
+        try:
             file_group.do_model(session)
-    except Exception as e:
-        logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
-        if PYTEST:
-            raise
+        except Exception as e:
+            logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
+            if PYTEST:
+                raise
 
-    # If user uploads a file, then remove it from the download skip list so comments can be downloaded.  Modify the
-    # download (if any) so that the user can click on it and view the uploaded file.
-    if url := file_group.url if file_group and file_group.url else None:
-        if download_manager.is_skipped(url):
-            download_manager.remove_from_skip_list(url)
-        with get_db_session() as session:
-            if download := Download.get_by_url(url, session):
+        # If user uploads a file, then remove it from the download skip list so comments can be downloaded.
+        # Modify the download (if any) so that the user can click on it and view the uploaded file.
+        if file_group.url:
+            if download_manager.is_skipped(file_group.url):
+                download_manager.remove_from_skip_list(file_group.url)
+            if download := Download.get_by_url(file_group.url, session):
                 # Mark download as completed
                 download.complete()
                 # Link the download to the location of the uploaded file.
                 model = file_group.get_model_record()
                 download.location = model.location if model else file_group.location
-                session.commit()
 
-    upsert_directories([], file.parents)
-
-    session.commit()
-
-    if tag_names:
-        with get_db_session(commit=True) as session:
-            file_group = FileGroup.find_by_id(file_group_id, session)
+        # Add tags if provided
+        if tag_names:
             for tag_name in tag_names:
                 if tag_name not in file_group.tag_names:
-                    tag = Tag.get_by_name(tag_name)
-                    file_group.add_tag(tag.id)
+                    tag = Tag.get_by_name(tag_name, session)
+                    file_group.add_tag(tag.id, session=session)
 
-    file_group.flush()
+        # Commit all changes in one transaction
+        session.commit()
+
+    # Upsert directories after FileGroup is committed
+    upsert_directories([], file.parents)
+
     return file_group
 
 

@@ -680,8 +680,8 @@ def example_singlefile(test_directory, singlefile_contents_factory) -> pathlib.P
 
 @pytest.fixture
 def image_bytes_factory():
-    def _() -> bytes:
-        with tempfile.NamedTemporaryFile(suffix='.png') as fh:
+    def _(suffix: str = '.png') -> bytes:
+        with tempfile.NamedTemporaryFile(suffix=suffix) as fh:
             Image.new('RGB', (1, 1), color='grey').save(fh)
             fh.seek(0)
             image = fh.read()

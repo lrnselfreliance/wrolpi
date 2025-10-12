@@ -228,8 +228,12 @@ class EBook(ModelHelper, Base):
 
 def model_ebook(file_group: FileGroup, session: Session) -> EBook:
     """Creates an EBook model based off a File.  Searches for its cover in the provided `files`."""
-    ebook = EBook(file_group=file_group)
-    session.add(ebook)
+    # Check if an EBook already exists for this FileGroup
+    ebook = session.query(EBook).filter_by(file_group_id=file_group.id).one_or_none()
+    if not ebook:
+        # Create new EBook if it doesn't exist
+        ebook = EBook(file_group=file_group)
+        session.add(ebook)
 
     # Multiple formats may be available.
     epub_file = next(iter(ebook.file_group.my_epub_files()), None)

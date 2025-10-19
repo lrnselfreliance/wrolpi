@@ -187,7 +187,7 @@ class Archive(Base, ModelHelper):
             return readability_json_file['path']
 
     @property
-    def screenshot_file(self) -> Optional[dict]:
+    def screenshot_file(self) -> dict | None:
         files = self.file_group.my_files('image/')
         for file in files:
             return file
@@ -196,6 +196,35 @@ class Archive(Base, ModelHelper):
     def screenshot_path(self) -> Optional[pathlib.Path]:
         if screenshot_file := self.screenshot_file:
             return screenshot_file['path']
+
+    def set_screenshot(self, screenshot_path: pathlib.Path) -> None:
+        """Set the screenshot for this Archive.
+
+        Args:
+            screenshot_path: Path to the screenshot file
+
+        Raises:
+            ValueError: If Archive already has a screenshot or path doesn't exist
+        """
+        # Check if screenshot already exists
+        if self.screenshot_path:
+            raise ValueError(f'Archive {self.id} already has a screenshot at {self.screenshot_path}')
+
+        # Validate path exists
+        if not screenshot_path.is_file():
+            raise ValueError(f'Screenshot path does not exist: {screenshot_path}')
+
+        # Add to FileGroup.files
+        self.file_group.append_files(screenshot_path)
+
+        # Update FileGroup.data for quick lookup (similar to ebook cover_path pattern)
+        # Create new dict and reassign (like append_files does) to ensure SQLAlchemy detects the change
+        data = dict(self.file_group.data) if self.file_group.data else {}
+        data['screenshot_path'] = str(screenshot_path)
+        self.file_group.data = data
+
+        # Validate the archive
+        self.validate()
 
     @property
     def info_json_file(self) -> Optional[dict]:

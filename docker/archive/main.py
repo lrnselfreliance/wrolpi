@@ -10,6 +10,7 @@ import logging
 import os.path
 import pathlib
 import subprocess
+import sys
 import tempfile
 import traceback
 from json import JSONDecodeError
@@ -32,6 +33,12 @@ if not SINGLEFILE_PATH.is_file():
     SINGLEFILE_PATH = pathlib.Path('/usr/src/.nvm/versions/node/v18.19.0/bin/single-file')
 if not SINGLEFILE_PATH.is_file():
     raise FileNotFoundError("Can't find single-file executable!")
+
+BROWSER_EXEC = pathlib.Path('/usr/bin/google-chrome')
+if not BROWSER_EXEC.is_file():
+    print('Unable to find browser!', file=sys.stderr)
+    sys.exit(1)
+
 
 # Increase response timeout, archiving can take several minutes.
 RESPONSE_TIMEOUT = 10 * 60
@@ -117,7 +124,7 @@ async def extract_readability(path: str, url: str) -> dict:
 
 
 async def take_screenshot(url: str) -> bytes:
-    cmd = '/usr/bin/google-chrome' \
+    cmd = f'{BROWSER_EXEC}' \
           ' --headless' \
           ' --disable-gpu' \
           ' --no-sandbox' \
@@ -153,6 +160,61 @@ def prepare_bytes(b: bytes) -> str:
     b = base64.b64encode(b)
     b = b.decode()
     return b
+
+
+@app.post('/screenshot')
+async def post_screenshot(request: Request):
+    """Generate a screenshot for the provided singlefile."""
+    url = request.json['url']
+    singlefile = request.json.get('singlefile')
+
+    try:
+        logger.info(f'Generating screenshot for {url}')
+
+        # Decode and decompress the singlefile
+        if singlefile:
+            singlefile = base64.b64decode(singlefile)
+            singlefile = gzip.decompress(singlefile)
+
+        if not singlefile:
+            raise ValueError(f'No singlefile provided for {url}')
+
+        # Write singlefile to temp file and screenshot it
+        # Use html suffix so chrome screenshot recognizes it as an HTML file
+        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
+            fh.write(singlefile)
+            fh.flush()
+
+            screenshot = None
+            try:
+                # Screenshot the local singlefile
+                screenshot = await take_screenshot(f'file://{fh.name}')
+            except Exception as e:
+                logger.error(f'Failed to take screenshot of {fh.name}', exc_info=e)
+
+            # Fall back to URL if local screenshot failed
+            if not screenshot:
+                logger.warning(f'Failed to screenshot local singlefile, attempting to screenshot URL: {url}')
+                try:
+                    screenshot = await take_screenshot(url)
+                except Exception as e:
+                    logger.error(f'Failed to take screenshot of {url}', exc_info=e)
+
+        if not screenshot:
+            raise ValueError(f'Failed to generate screenshot for {url}')
+
+        # Compress for smaller response
+        screenshot = prepare_bytes(screenshot)
+
+        ret = dict(
+            url=url,
+            screenshot=screenshot,
+        )
+        return response.json(ret)
+    except Exception as e:
+        logger.error(f'Failed to generate screenshot for {url}', exc_info=e)
+        error = str(traceback.format_exc())
+        return response.json({'error': f'Failed to generate screenshot for {url} traceback is below... \n\n {error}'})
 
 
 @app.post('/json')

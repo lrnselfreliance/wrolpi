@@ -156,6 +156,42 @@ async def request_archive(url: str, singlefile: str = None) -> Tuple[str, Option
     return singlefile, readability, screenshot
 
 
+async def request_screenshot(url: str, singlefile_path: pathlib.Path) -> Optional[bytes]:
+    """Send a request to the archive service to generate a screenshot from the singlefile."""
+    logger.info(f'Sending screenshot request to archive service: {url}')
+
+    # Read, compress, and encode the singlefile
+    singlefile_contents = singlefile_path.read_bytes()
+    singlefile_compressed = gzip.compress(singlefile_contents)
+    singlefile_b64 = base64.b64encode(singlefile_compressed).decode()
+
+    data = dict(url=url, singlefile=singlefile_b64)
+    try:
+        async with aiohttp_post(f'{ARCHIVE_SERVICE}/screenshot', json_=data, timeout=ARCHIVE_TIMEOUT) as response:
+            status = response.status
+            contents = await response.json()
+        if contents and (error := contents.get('error')):
+            # Report the error from the archive service.
+            raise Exception(f'Received error from archive service: {error}')
+
+        # Compressed base64
+        screenshot = contents.get('screenshot')
+        if not screenshot:
+            logger.warning(f'Failed to get screenshot for {url=}')
+            return None
+
+        logger.debug(f'screenshot request status code {status}')
+    except Exception as e:
+        logger.error('Error when requesting screenshot', exc_info=e)
+        raise
+
+    # Decode and decompress.
+    screenshot = base64.b64decode(screenshot)
+    screenshot = gzip.decompress(screenshot)
+
+    return screenshot
+
+
 async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes) -> Archive:
     """
     Convert results from ArchiveDownloader into real files.  Create Archive record.
@@ -625,3 +661,74 @@ async def singlefile_to_archive(singlefile: bytes) -> Archive:
     logger.trace(f'singlefile_to_archive modeling: {url}')
     archive: Archive = await model_archive_result(url, singlefile, readability, screenshot)
     return archive
+
+
+async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
+    """
+    Generate a screenshot for an existing Archive that doesn't have one.
+    If the Archive already has a screenshot, verify it exists and ensure it's tracked in the FileGroup.
+
+    Returns the path to the generated screenshot.
+
+    Raises:
+        ValueError: If Archive has no singlefile
+        RuntimeError: If screenshot generation fails
+    """
+    from wrolpi.db import get_db_session
+
+    with get_db_session() as session:
+        archive = Archive.find_by_id(archive_id, session=session)
+
+        if not archive.singlefile_path:
+            raise ValueError(f'Cannot generate screenshot for Archive {archive_id}: no singlefile')
+
+        # Check if screenshot already exists
+        if archive.screenshot_path:
+            # Verify the screenshot file actually exists on disk
+            if archive.screenshot_path.is_file():
+                logger.info(f'Archive {archive_id} already has a screenshot, ensuring it is tracked')
+                # Ensure the screenshot is tracked in FileGroup.files and FileGroup.data
+                with get_db_session(commit=True) as tracking_session:
+                    archive = Archive.find_by_id(archive_id, session=tracking_session)
+                    file_group = archive.file_group
+                    # append_files uses unique_by_predicate, so this is safe even if already tracked
+                    file_group.append_files(archive.screenshot_path)
+
+                    # Also update FileGroup.data (same pattern as set_screenshot)
+                    data = dict(file_group.data) if file_group.data else {}
+                    data['screenshot_path'] = str(archive.screenshot_path)
+                    file_group.data = data
+
+                    archive.validate()
+                    tracking_session.flush()
+                return archive.screenshot_path
+            else:
+                logger.warning(f'Archive {archive_id} has screenshot_path but file does not exist, regenerating')
+
+        singlefile_path = archive.singlefile_path
+        url = archive.file_group.url
+
+    # Request screenshot from Archive docker service or generate locally
+    if DOCKERIZED:
+        logger.debug(f'Requesting screenshot from archive service for Archive {archive_id}')
+        screenshot_bytes = await request_screenshot(url, singlefile_path)
+    else:
+        logger.debug(f'Generating screenshot locally for Archive {archive_id}')
+        singlefile_contents = singlefile_path.read_bytes()
+        screenshot_bytes = html_screenshot(singlefile_contents)
+
+    if not screenshot_bytes:
+        raise RuntimeError(f'Failed to generate screenshot for Archive {archive_id}')
+
+    # Save screenshot next to singlefile with same naming pattern
+    screenshot_path = singlefile_path.with_suffix('.png')
+    screenshot_path.write_bytes(screenshot_bytes)
+    logger.info(f'Generated screenshot for Archive {archive_id}: {screenshot_path}')
+
+    # Update the Archive to include the new screenshot file
+    with get_db_session(commit=True) as session:
+        archive = Archive.find_by_id(archive_id, session=session)
+        archive.set_screenshot(screenshot_path)
+        session.flush()
+
+    return screenshot_path

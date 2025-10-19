@@ -100,6 +100,14 @@ class Events:
     def send_upload_archive_failed(cls, message: str = None):
         send_event('upload_archive_failed', message, subject='upload')
 
+    @classmethod
+    def send_screenshot_generated(cls, message: str = None, url: str = None):
+        send_event('screenshot_generated', message, subject='screenshot', url=url)
+
+    @classmethod
+    def send_screenshot_generation_failed(cls, message: str = None):
+        send_event('screenshot_generation_failed', message, subject='screenshot')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

@@ -750,6 +750,28 @@ export async function getArchive(archiveId) {
     }
 }
 
+export async function generateArchiveScreenshot(archiveId) {
+    const response = await apiPost(`${ARCHIVES_API}/${archiveId}/generate_screenshot`);
+    if (response.ok) {
+        toast({
+            type: 'success',
+            title: 'Screenshot Generation Queued',
+            description: 'Screenshot generation has been queued. This may take a moment.',
+            time: 3000,
+        });
+        return true;
+    } else {
+        const message = await getErrorMessage(response, 'Failed to queue screenshot generation.');
+        toast({
+            type: 'error',
+            title: 'Screenshot Generation Error',
+            description: message,
+            time: 5000,
+        });
+        return false;
+    }
+}
+
 export async function postDownload(downloadData) {
     if (!downloadData.downloader) {
         toast({

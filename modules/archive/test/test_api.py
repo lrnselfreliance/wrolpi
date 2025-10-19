@@ -1,5 +1,6 @@
 import json
 from http import HTTPStatus
+from unittest.mock import patch
 
 import pytest
 
@@ -364,3 +365,97 @@ async def test_archive_upload_file_tracking(test_session, async_client, archive_
     # Assert FileGroup has correct number of files
     assert len(archive.file_group.files) == file_count_before_image + 1, \
         f'FileGroup should have {file_count_before_image + 1} files after adding image'
+
+
+@pytest.mark.asyncio
+async def test_archive_generate_screenshot(test_session, async_client, archive_factory, await_switches,
+                                           image_bytes_factory, wrol_mode_fixture):
+    """Test generating a screenshot for an Archive that doesn't have one."""
+    # Mock html_screenshot to avoid Selenium dependency
+    mock_screenshot_bytes = image_bytes_factory()
+
+    with patch('modules.archive.lib.html_screenshot', return_value=mock_screenshot_bytes):
+        # Test success case: Archive without screenshot
+        archive = archive_factory('example.com', 'https://example.com/test', 'Test Archive', screenshot=False)
+        test_session.commit()
+
+        # Verify archive has no screenshot
+        assert archive.screenshot_path is None, 'Archive should not have a screenshot yet'
+        assert archive.singlefile_path is not None, 'Archive should have a singlefile'
+
+        # Request screenshot generation
+        request, response = await async_client.post(f'/api/archive/{archive.id}/generate_screenshot')
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['message'] == 'Screenshot generation queued'
+
+        # Wait for background processing
+        await await_switches()
+
+        # Verify screenshot was generated
+        test_session.expire_all()
+        archive = test_session.query(Archive).filter_by(id=archive.id).one()
+        assert archive.screenshot_path is not None, 'Screenshot should have been generated'
+        assert archive.screenshot_path.is_file(), 'Screenshot file should exist'
+        assert archive.screenshot_file is not None, 'Screenshot file should be tracked'
+
+    # Test error case: Archive not found
+    request, response = await async_client.post('/api/archive/99999/generate_screenshot')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert 'not found' in response.json['error'].lower()
+
+    # Test success case: Archive already has screenshot - should return OK and ensure tracking
+    original_screenshot_path = archive.screenshot_path
+    assert original_screenshot_path is not None, 'Archive should have a screenshot'
+    assert original_screenshot_path.is_file(), 'Screenshot file should exist'
+
+    # Simulate the bug: archive has screenshot file but data['screenshot_path'] is not set
+    # (This could happen if the archive was created before set_screenshot was implemented)
+    if archive.file_group.data and 'screenshot_path' in archive.file_group.data:
+        data = dict(archive.file_group.data)
+        del data['screenshot_path']
+        archive.file_group.data = data
+        test_session.commit()
+        test_session.expire_all()
+        archive = test_session.query(Archive).filter_by(id=archive.id).one()
+        # Verify data was cleared but file still exists
+        assert 'screenshot_path' not in (archive.file_group.data or {}), 'screenshot_path should not be in data yet'
+        assert archive.screenshot_path is not None, 'But screenshot file should still exist'
+
+    request, response = await async_client.post(f'/api/archive/{archive.id}/generate_screenshot')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['message'] == 'Screenshot generation queued'
+
+    # Wait for background processing
+    await await_switches()
+
+    # Verify screenshot is still there and properly tracked
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+    assert archive.screenshot_path == original_screenshot_path, 'Screenshot path should be unchanged'
+    assert archive.screenshot_path.is_file(), 'Screenshot file should still exist'
+    assert archive.screenshot_file is not None, 'Screenshot file should still be tracked'
+    # IMPORTANT: Also verify FileGroup.data was updated (this catches the bug where only files was updated)
+    assert 'screenshot_path' in archive.file_group.data, \
+        'screenshot_path should be in FileGroup.data after ensuring tracking'
+    assert str(archive.file_group.data['screenshot_path']) == str(original_screenshot_path), \
+        'screenshot_path in data should match the file path'
+
+    # Test error case: Archive has no singlefile
+    archive_no_singlefile = archive_factory('example.com', 'https://example.com/no-singlefile', screenshot=False)
+    test_session.commit()
+    # Delete the singlefile to simulate missing file
+    if archive_no_singlefile.singlefile_path and archive_no_singlefile.singlefile_path.is_file():
+        archive_no_singlefile.singlefile_path.unlink()
+
+    request, response = await async_client.post(f'/api/archive/{archive_no_singlefile.id}/generate_screenshot')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'no singlefile' in response.json['error'].lower()
+
+    # Test WROL mode case
+    await wrol_mode_fixture(True)
+    archive_wrol = archive_factory('example.com', 'https://example.com/wrol-test', screenshot=False)
+    test_session.commit()
+
+    request, response = await async_client.post(f'/api/archive/{archive_wrol.id}/generate_screenshot')
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    await wrol_mode_fixture(False)

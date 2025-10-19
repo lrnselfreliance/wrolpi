@@ -35,7 +35,7 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
+import {deleteArchives, generateArchiveScreenshot, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
@@ -122,6 +122,14 @@ function ArchivePage() {
         }
     }
 
+    const localGenerateScreenshot = async () => {
+        const success = await generateArchiveScreenshot(data.id);
+        if (success) {
+            // Refresh the archive data after a short delay to show the new screenshot
+            setTimeout(() => fetchArchive(), 2000);
+        }
+    }
+
     const updateButton = <APIButton
         text='Update'
         color='green'
@@ -143,6 +151,17 @@ function ArchivePage() {
     >
         Delete
     </APIButton>;
+    const generateScreenshotButton = !screenshotUrl ? <APIButton
+        text='Generate Screenshot'
+        color='yellow'
+        confirmContent='Generate a screenshot for this archive?'
+        confirmButton='Generate'
+        onClick={localGenerateScreenshot}
+        obeyWROLMode={true}
+        style={{marginTop: '0.5em'}}
+    >
+        Generate Screenshot
+    </APIButton> : null;
 
     let historyList = <Loader active/>;
     if (history && history.length === 0) {
@@ -254,6 +273,7 @@ function ArchivePage() {
             {readButton}
             {updateButton}
             {deleteButton}
+            {generateScreenshotButton}
         </Segment>
 
         <Segment>

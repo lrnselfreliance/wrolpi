@@ -105,6 +105,19 @@ function handleEvents(events) {
             eventToast('Archive Upload Failed!', message, 'error', 5000);
         }
 
+        if (event === 'screenshot_generated') {
+            eventToast(
+                'Screenshot Generated',
+                message,
+                'success',
+                5000,
+                () => window.open(url, '_self'));
+        }
+
+        if (event === 'screenshot_generation_failed') {
+            eventToast('Screenshot Generation Failed!', message, 'error', 5000);
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

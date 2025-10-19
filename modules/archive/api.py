@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
+from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
+from wrolpi.files.lib import upsert_file
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from . import lib, schema
@@ -136,6 +138,49 @@ async def singlefile_upload_switch_handler(url=None):
 singlefile_upload_switch_handler: ActivateSwitchMethod
 
 
+@register_switch_handler('generate_screenshot_switch_handler')
+async def generate_screenshot_switch_handler(archive_id=None):
+    """Used by `post_generate_screenshot` to generate screenshots in the background"""
+    q: multiprocessing.Queue = api_app.shared_ctx.archive_screenshots
+
+    trace_enabled = logger.isEnabledFor(TRACE_LEVEL)
+    if trace_enabled:
+        logger.trace(f'generate_screenshot_switch_handler called for archive_id={archive_id}')
+    try:
+        archive_id = q.get_nowait()
+    except queue.Empty:
+        if trace_enabled:
+            logger.trace(f'generate_screenshot_switch_handler called on empty queue')
+        return
+
+    try:
+        q_size = q.qsize()
+    except NotImplementedError:
+        # qsize() is not implemented on macOS
+        q_size = '?'
+    logger.info(f'generate_screenshot_switch_handler queue size: {q_size}')
+
+    try:
+        await lib.generate_archive_screenshot(archive_id)
+        # Always send success event since exceptions are raised on failure
+        from modules.archive import Archive
+        archive = lib.get_archive(archive_id=archive_id)
+        location = archive.location
+        name = archive.file_group.title or archive.file_group.url
+        logger.info(f'Generated screenshot for Archive ({q_size}): {archive_id}')
+        Events.send_screenshot_generated(f'Generated screenshot for: {name}', url=location)
+    except Exception as e:
+        logger.error(f'generate_screenshot_switch_handler failed for Archive {archive_id}', exc_info=e)
+        Events.send_screenshot_generation_failed(f'Failed to generate screenshot: {e}')
+        raise
+
+    # Call this function again so any new screenshot requests can be processed.
+    generate_screenshot_switch_handler.activate_switch()
+
+
+generate_screenshot_switch_handler: ActivateSwitchMethod
+
+
 @archive_bp.post('/upload')
 @openapi.definition(
     summary='Upload SingleFile from SingleFile browser extension and convert it to an Archive.'
@@ -153,3 +198,28 @@ async def post_upload_singlefile(request: Request):
     singlefile_upload_switch_handler.activate_switch(context=dict(url=url))
     # Return empty json response because SingleFile extension expects a JSON response.
     return json_response(dict(), status=HTTPStatus.OK)
+
+
+@archive_bp.post('/<archive_id:int>/generate_screenshot')
+@openapi.description('Generate a screenshot for an Archive that does not have one')
+@openapi.response(HTTPStatus.OK, description='Screenshot generation queued')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@wrol_mode_check
+async def post_generate_screenshot(_: Request, archive_id: int):
+    """Queue a screenshot generation request for an Archive."""
+    # Verify archive exists
+    try:
+        archive = lib.get_archive(archive_id=archive_id)
+    except Exception:
+        return json_response({'error': f'Archive {archive_id} not found'}, status=HTTPStatus.NOT_FOUND)
+
+    if not archive.singlefile_path:
+        return json_response({'error': 'Archive has no singlefile'}, status=HTTPStatus.BAD_REQUEST)
+
+    # Queue the screenshot generation request
+    logger.info(f'Queueing screenshot generation for Archive {archive_id}')
+    api_app.shared_ctx.archive_screenshots.put(archive_id)
+    generate_screenshot_switch_handler.activate_switch(context=dict(archive_id=archive_id))
+
+    return json_response({'message': 'Screenshot generation queued'}, status=HTTPStatus.OK)

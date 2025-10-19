@@ -56,6 +56,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.switches_lock = multiprocessing.Lock()
     app.shared_ctx.switches_changed = multiprocessing.Event()
     app.shared_ctx.archive_singlefiles = multiprocessing.Queue()
+    app.shared_ctx.archive_screenshots = multiprocessing.Queue()
 
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
@@ -116,6 +117,12 @@ def reset_shared_contexts(app: Sanic):
         # Clear out any pending singlefile archive switches.
         try:
             app.shared_ctx.archive_singlefiles.get_nowait()
+        except queue.Empty:
+            break
+    while True:
+        # Clear out any pending screenshot generation switches.
+        try:
+            app.shared_ctx.archive_screenshots.get_nowait()
         except queue.Empty:
             break
 

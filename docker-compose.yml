@@ -1,5 +1,4 @@
 # Development containers, these should only be used if you are developing.
-version: '3'
 services:
   db: # https://github.com/docker-library/docs/tree/master/postgres
     image: postgres:12
@@ -15,6 +14,7 @@ services:
       - ./pg_data:/var/lib/postgresql/data
 
   api:
+    image: lrnselfreliance/wrolpi:wrolpi-api-latest
     depends_on:
       - db
     build:
@@ -28,7 +28,6 @@ services:
       - './test:/opt/wrolpi/test'
       - './test:/media/wrolpi'
       - './alembic:/opt/wrolpi/alembic'
-      - './alembic.ini:/opt/wrolpi/alembic.ini'
     ports:
       - ${REACT_APP_API-0.0.0.0:8081}:8081
     user: '${UID-1000}:${GID-1000}'
@@ -37,6 +36,7 @@ services:
       interval: 2m
 
   archive: # Python/Sanic wrapper around Singlefile and Readability.
+    image: lrnselfreliance/wrolpi:wrolpi-archive-latest
     build:
       context: .
       dockerfile: docker/archive/Dockerfile
@@ -49,6 +49,7 @@ services:
       interval: 2m
 
   app: # React App
+    image: lrnselfreliance/wrolpi:wrolpi-app-latest
     depends_on:
       - api
     build:
@@ -59,7 +60,7 @@ services:
       - './app/src:/app/src'
       - './app/package.json:/app/package.json'
       - '.env:/app/.env'
-    command: 'npm run start'
+    command: 'serve -s build -l 3000'
     stdin_open: true
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
@@ -84,17 +85,16 @@ services:
       interval: 1m
 
   map_https: # HTTPS for map tile server
+    image: lrnselfreliance/wrolpi:wrolpi-map_https-latest
     depends_on:
       - map
-    environment:
-      - UPSTREAM_HOST=map
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
+      args:
+        - UPSTREAM_HOST=map
     ports:
       - '8084:443'
-    volumes:
-      - './docker/map/nginx.map.conf:/etc/nginx/nginx.conf'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
       interval: 1m
@@ -102,6 +102,7 @@ services:
   web:
     depends_on:
       - app
+    image: lrnselfreliance/wrolpi:wrolpi-web-latest
     build:
       context: .
       dockerfile: docker/web/Dockerfile
@@ -119,6 +120,7 @@ services:
       interval: 1m
 
   zim: # kiwix-serve
+    image: lrnselfreliance/wrolpi:wrolpi-zim-latest
     build:
       context: .
       dockerfile: docker/zim/Dockerfile
@@ -130,22 +132,22 @@ services:
       interval: 1m
 
   zim_https: # HTTPS for Zim service.
+    image: lrnselfreliance/wrolpi:wrolpi-zim_https-latest
     depends_on:
       - zim
-    environment:
-      - UPSTREAM_HOST=zim
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
+      args:
+        - UPSTREAM_HOST=zim
     ports:
       - '8085:443'
-    volumes:
-      - './docker/zim/nginx.zim.conf:/etc/nginx/nginx.conf'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
       interval: 1m
 
   help: # The WROLPi Help documentation.
+    image: lrnselfreliance/wrolpi:wrolpi-help-latest
     build:
       context: .
       dockerfile: docker/help/Dockerfile
@@ -156,17 +158,17 @@ services:
       interval: 1m
 
   help_https: # HTTPS for Help service.
+    image: lrnselfreliance/wrolpi:wrolpi-help_https-latest
     depends_on:
       - help
-    environment:
-      - UPSTREAM_HOST=help
     build:
       context: .
       dockerfile: docker/https_proxy/Dockerfile
+      args:
+        - UPSTREAM_HOST=help
+        - UPSTREAM_PORT=8086
     ports:
       - '8086:443'
-    volumes:
-      - './docker/help/nginx.help.conf:/etc/nginx/nginx.conf'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:443' ]
       interval: 1m

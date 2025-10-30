@@ -113,10 +113,12 @@ export function useForm({
                 reset();
             }
             await onSuccess();
+        } catch (error) {
+            await onFailure(error);
+            throw error;
         } finally {
             setLoading(false);
             setDisabled(false);
-            await onFailure();
         }
     }
 

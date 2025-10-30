@@ -24,8 +24,9 @@ from functools import wraps
 from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
-from types import GeneratorType, MappingProxyType
-from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
+from types import GeneratorType
+from typing import Optional, List
+from typing import Union, Callable, Tuple, Dict, Iterable, Generator, Any, Set
 from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
@@ -731,6 +732,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if download_manager_config := get_download_manager_config():
         all_configs[download_manager_config.file_name] = download_manager_config
 
+    from modules.archive.lib import get_domains_config
+    if domains_config := get_domains_config():
+        all_configs[domains_config.file_name] = domains_config
+
     return all_configs
 
 
@@ -1173,9 +1178,11 @@ def make_media_directory(path: Union[str, Path]):
 
 def extract_domain(url: str) -> str:
     """
-    Extract the domain from a URL.  Remove leading www.
+    Extract the domain from a URL.  Remove leading www and port.
 
     >>> extract_domain('https://www.example.com/foo')
+    'example.com'
+    >>> extract_domain('https://example.com:443/foo')
     'example.com'
     """
     parsed = urlparse(url)
@@ -1183,6 +1190,9 @@ def extract_domain(url: str) -> str:
     if not domain:
         raise ValueError(f'URL does not have a domain: {url=}')
     domain = domain.decode() if hasattr(domain, 'decode') else domain
+    # Remove port if present
+    if ':' in domain:
+        domain = domain.split(':')[0]
     if domain.startswith('www.'):
         # Remove leading www.
         domain = domain[4:]
@@ -1902,7 +1912,8 @@ def extract_html_text(html: str) -> str:
     for script in soup(["script", "style"]):
         script.extract()  # rip it out
 
-    text = soup.body.get_text()
+    # Use body if it exists, otherwise use the entire soup
+    text = soup.body.get_text() if soup.body else soup.get_text()
 
     # break into lines and remove leading and trailing space on each
     lines = (line.strip() for line in text.splitlines())
@@ -1951,7 +1962,8 @@ async def search_other_estimates(tag_names: List[str]) -> dict:
         stmt = '''
                SELECT COUNT(c.id)
                FROM channel c
-                        LEFT OUTER JOIN public.tag t on t.id = c.tag_id
+                        INNER JOIN collection col ON col.id = c.collection_id
+                        LEFT OUTER JOIN public.tag t on t.id = col.tag_id
                WHERE t.name = %(tag_name)s \
                '''
         # TODO handle multiple tags

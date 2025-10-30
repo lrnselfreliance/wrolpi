@@ -142,6 +142,66 @@ jobs:
       - run:
           name: Stop React App
           command: pkill -f npm
+  jest-tests:
+    docker:
+      - image: cimg/node:20.13
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: app-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run:
+          name: Run Jest Tests
+          command: cd app && CI=true npm test -- --watchAll=false --coverage --coverageReporters=text --coverageReporters=lcov
+      - store_artifacts:
+          path: app/coverage
+          destination: coverage-report
+  cypress-e2e-tests:
+    docker:
+      - image: cimg/node:20.18-browsers
+    resource_class: large
+    steps:
+      - checkout
+      - restore_cache:
+          key: app-browsers-{{ checksum "app/package-lock.json" }}
+      - run:
+          name: Install Dependencies
+          command: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: app-browsers-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run:
+          name: Start React App in Background
+          command: cd app && DISABLE_ESLINT_PLUGIN=true npm start
+          background: true
+      - run:
+          name: Wait for React App
+          command: |
+            for i in {1..60}; do
+              if curl -s http://localhost:3000 > /dev/null; then
+                echo "React app is ready!"
+                exit 0
+              fi
+              echo "Waiting for React app... ($i/60)"
+              sleep 2
+            done
+            echo "React app failed to start"
+            exit 1
+      - run:
+          name: Run Cypress Tests
+          command: cd app && CI=true npx cypress run
+      - store_artifacts:
+          path: app/cypress/videos
+      - store_artifacts:
+          path: app/cypress/screenshots
 
 workflows:
   wrolpi-api-tests:
@@ -153,3 +213,5 @@ workflows:
   wrolpi-app-test:
     jobs:
       - react-app-start
+      - jest-tests
+      - cypress-e2e-tests

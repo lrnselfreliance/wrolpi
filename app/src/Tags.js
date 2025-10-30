@@ -385,6 +385,11 @@ export function AddTagsButton({
     const [loading, setLoading] = React.useState(false);
     const [localTags, setLocalTags] = React.useState(selectedTagNames);
 
+    // Sync localTags with selectedTagNames when it changes from parent
+    React.useEffect(() => {
+        setLocalTags(selectedTagNames);
+    }, [selectedTagNames]);
+
     const active = anyTag || (selectedTagNames && selectedTagNames.length > 0);
 
     const handleOpen = (e) => {

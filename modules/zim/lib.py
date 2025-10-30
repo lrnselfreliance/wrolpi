@@ -111,12 +111,11 @@ def get_all_entries_tags():
             },
         """
     stmt = '''
-        SELECT tz.zim_id, tz.zim_entry, array_agg(t.name)::TEXT[]
-        FROM
-            tag t
-            LEFT JOIN tag_zim tz on t.id = tz.tag_id
-        GROUP BY 1, 2
-    '''
+           SELECT tz.zim_id, tz.zim_entry, array_agg(t.name)::TEXT[]
+           FROM tag t
+                    LEFT JOIN tag_zim tz on t.id = tz.tag_id
+           GROUP BY 1, 2 \
+           '''
     with get_db_curs() as curs:
         curs.execute(stmt)
         entries = dict()

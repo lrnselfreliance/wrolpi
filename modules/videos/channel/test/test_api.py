@@ -21,16 +21,18 @@ from wrolpi.files.models import Directory
 from wrolpi.test.common import assert_dict_contains
 
 
-def test_get_channels(test_directory, channel_factory, test_client):
+@pytest.mark.asyncio
+async def test_get_channels(test_directory, channel_factory, async_client):
     channel_factory()
     channel_factory()
     channel_factory()
-    request, response = test_client.get('/api/videos/channels')
+    request, response = await async_client.get('/api/videos/channels')
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['channels']) == 3
 
 
-def test_get_video(test_client, test_session, simple_channel, video_factory):
+@pytest.mark.asyncio
+async def test_get_video(async_client, test_session, simple_channel, video_factory):
     """Test that you get can information about a video.  Test that video file can be gotten."""
     now_ = now()
     video1 = video_factory(channel_id=simple_channel.id, title='vid1')
@@ -40,14 +42,14 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     test_session.commit()
 
     # Test that a 404 is returned when no video exists
-    _, response = test_client.get('/api/videos/video/10')
+    _, response = await async_client.get('/api/videos/video/10')
     assert response.status_code == HTTPStatus.NOT_FOUND, response.json
     assert response.json == {'code': 'UNKNOWN_VIDEO',
                              'error': 'Cannot find Video with id 10',
                              'message': 'The video could not be found.'}
 
     # Get the video info we inserted
-    _, response = test_client.get('/api/videos/video/1')
+    _, response = await async_client.get('/api/videos/video/1')
     assert response.status_code == HTTPStatus.OK, response.json
     assert_dict_contains(response.json['file_group'], {'title': 'vid1'})
 
@@ -92,9 +94,10 @@ async def test_channel_no_download_frequency(async_client, test_session, test_di
     assert test_session.query(Channel).count() == 1
 
 
-def test_video_file_name(test_session, simple_video, test_client):
+@pytest.mark.asyncio
+async def test_video_file_name(test_session, simple_video, async_client):
     """If a Video has no title, the front-end can use the file name as the title."""
-    _, resp = test_client.get(f'/api/videos/video/{simple_video.id}')
+    _, resp = await async_client.get(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.OK
     assert resp.json['file_group']['video']['video_path'] == 'simple_video.mp4'
     assert resp.json['file_group']['video'].get('stem') == 'simple_video'
@@ -165,20 +168,21 @@ async def test_channel_conflicts(async_client, test_session, test_directory):
                              'message': 'Could not validate the contents of the request'}
 
 
-def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_directory):
+@pytest.mark.asyncio
+async def test_channel_empty_url_doesnt_conflict(async_client, test_session, test_directory):
     """Two channels with empty URLs shouldn't conflict"""
     channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory).mkdir()
 
     new_channel = dict(name='Fooz', directory=channel_directory)
-    request, response = test_client.post('/api/videos/channels', json=new_channel)
+    request, response = await async_client.post('/api/videos/channels', json=new_channel)
     assert response.status_code == HTTPStatus.CREATED, response.json
     location = response.headers['Location']
 
     channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory2).mkdir()
     new_channel = dict(name='Barz', directory=channel_directory2)
-    request, response = test_client.post('/api/videos/channels', json=new_channel)
+    request, response = await async_client.post('/api/videos/channels', json=new_channel)
     assert response.status_code == HTTPStatus.CREATED, response.json
     assert location != response.headers['Location']
 
@@ -235,11 +239,12 @@ async def test_channel_download_requires_refresh(
     assert list(events_history) == []
 
 
-def test_channel_post_directory(test_session, test_client, test_directory):
+@pytest.mark.asyncio
+async def test_channel_post_directory(test_session, async_client, test_directory):
     """A Channel can be created with or without an existing directory."""
     # Channel can be created with a directory which is not on disk.
     data = dict(name='foo', directory='foo')
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
+    request, response = await async_client.post('/api/videos/channels', content=json.dumps(data))
     assert response.status_code == HTTPStatus.CREATED
     directory = test_session.query(Channel).filter_by(id=1).one().directory
     assert (test_directory / 'foo') == directory
@@ -247,8 +252,9 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     assert directory.is_absolute()
 
 
-def test_channel_by_id(test_session, test_client, simple_channel, simple_video):
-    request, response = test_client.get(f'/api/videos/channels/{simple_channel.id}')
+@pytest.mark.asyncio
+async def test_channel_by_id(test_session, async_client, simple_channel, simple_video):
+    request, response = await async_client.get(f'/api/videos/channels/{simple_channel.id}')
     assert response.status_code == HTTPStatus.OK
 
 
@@ -334,10 +340,20 @@ async def test_change_channel_url(async_client, test_session, test_download_mana
     assert channel.url == 'https://example.com/new-url', "Channel's URL was not changed."
 
 
-def test_search_videos_channel(test_client, test_session, video_factory):
+@pytest.mark.asyncio
+async def test_search_videos_channel(async_client, test_session, video_factory, test_directory):
+    from wrolpi.collections import Collection
+
     with get_db_session(commit=True) as session:
-        channel1 = Channel(name='Foo')
-        channel2 = Channel(name='Bar')
+        # Create Collections first
+        collection1 = Collection(name='Foo', kind='channel', directory=test_directory / 'foo')
+        collection2 = Collection(name='Bar', kind='channel', directory=test_directory / 'bar')
+        session.add_all([collection1, collection2])
+        session.flush()
+
+        # Create Channels linked to Collections
+        channel1 = Channel(collection_id=collection1.id)
+        channel2 = Channel(collection_id=collection2.id)
         session.add(channel1)
         session.add(channel2)
         session.flush()
@@ -346,7 +362,7 @@ def test_search_videos_channel(test_client, test_session, video_factory):
 
     # Channels don't have videos yet
     d = dict(channel_id=channel1.id)
-    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    request, response = await async_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['file_groups']) == 0
 
@@ -357,19 +373,19 @@ def test_search_videos_channel(test_client, test_session, video_factory):
         session.add(vid2)
 
     # Videos are gotten by their respective channels
-    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    request, response = await async_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['file_groups']) == 1
     assert response.json['totals']['file_groups'] == 1
     assert_dict_contains(response.json['file_groups'][0],
-                         dict(primary_path='vid2.mp4', video=dict(channel_id=channel1.id)))
+                         dict(primary_path='foo/vid2.mp4', video=dict(channel_id=channel1.id)))
 
     d = dict(channel_id=channel2.id)
-    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    request, response = await async_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['file_groups']) == 1
     assert_dict_contains(response.json['file_groups'][0],
-                         dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
+                         dict(primary_path='bar/vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
 @pytest.mark.asyncio
@@ -413,35 +429,37 @@ async def test_channel_download_id(async_client, test_session, tag_factory, simp
         urls=['https://example.com/channel1'],
         tag_names=[tag.name],
         downloader=test_downloader.name,
-        settings=dict(channel_id=simple_channel.id),
+        settings=dict(),
+        collection_id=simple_channel.collection_id,
         frequency=120,
     )
     request, response = await async_client.post(f'/api/download', json=body)
     assert response.status_code == HTTPStatus.CREATED
     download = test_session.query(Download).one()
     assert download.url == 'https://example.com/channel1'
-    assert download.channel_id == simple_channel.id
+    assert download.collection_id == simple_channel.collection_id
 
-    # A Channel relationship can be removed from a Download.
+    # A Collection relationship can be removed from a Download.
     body = dict(
         urls=['https://example.com/channel1'],
         tag_names=[tag.name],
         downloader=test_downloader.name,
         settings=dict(),
+        collection_id=None,
         frequency=240,
     )
     request, response = await async_client.put(f'/api/download/{download.id}', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
     download = test_session.query(Download).one()
-    assert download.channel_id is None
+    assert download.collection_id is None
     assert download.frequency == 240
 
-    # A once-Download cannot be associated with a Channel.
+    # A once-Download cannot be associated with a Collection.
     body = dict(
         urls=['https://example.com/channel1'],
         tag_names=[tag.name],
         downloader=test_downloader.name,
-        settings=dict(channel_id=simple_channel.id),
+        collection_id=simple_channel.collection_id,
     )
     request, response = await async_client.put(f'/api/download/{download.id}', json=body)
     assert response.status_code == HTTPStatus.BAD_REQUEST

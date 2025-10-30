@@ -1,10 +1,13 @@
 import json
 from http import HTTPStatus
 
+import pytest
 
-def test_encrypt(test_client):
+
+@pytest.mark.asyncio
+async def test_encrypt(async_client):
     body = dict(otp='asdf', plaintext='asdf')
-    request, response = test_client.post('/api/otp/encrypt_otp', content=json.dumps(body))
+    request, response = await async_client.post('/api/otp/encrypt_otp', content=json.dumps(body))
     assert response.status_code == HTTPStatus.OK
     assert response.json == dict(
         ciphertext='AAGK',
@@ -13,9 +16,10 @@ def test_encrypt(test_client):
     )
 
 
-def test_decrypt(test_client):
+@pytest.mark.asyncio
+async def test_decrypt(async_client):
     body = dict(otp='asdf', ciphertext='aagk')
-    request, response = test_client.post('/api/otp/decrypt_otp', content=json.dumps(body))
+    request, response = await async_client.post('/api/otp/decrypt_otp', content=json.dumps(body))
     assert response.status_code == HTTPStatus.OK
     assert response.json == dict(
         ciphertext='AAGK',
@@ -24,6 +28,7 @@ def test_decrypt(test_client):
     )
 
 
-def test_get_html(test_client):
-    request, response = test_client.get('/api/otp/html')
+@pytest.mark.asyncio
+async def test_get_html(async_client):
+    request, response = await async_client.get('/api/otp/html')
     assert response.status_code == HTTPStatus.OK

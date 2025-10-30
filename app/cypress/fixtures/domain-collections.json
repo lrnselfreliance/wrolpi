@@ -1,0 +1,62 @@
+{
+  "collections": [
+    {
+      "id": 1,
+      "domain": "example.com",
+      "archive_count": 42,
+      "size": 1024000,
+      "tag_name": "News",
+      "directory": "archive/example.com",
+      "can_be_tagged": true,
+      "description": "News from Example.com"
+    },
+    {
+      "id": 2,
+      "domain": "test.org",
+      "archive_count": 15,
+      "size": 512000,
+      "tag_name": null,
+      "directory": null,
+      "can_be_tagged": false,
+      "description": "Test archives"
+    },
+    {
+      "id": 3,
+      "domain": "demo.net",
+      "archive_count": 8,
+      "size": 256000,
+      "tag_name": "Tech",
+      "directory": "archive/demo.net",
+      "can_be_tagged": true,
+      "description": "Tech demos"
+    }
+  ],
+  "totals": {
+    "domains": 3
+  },
+  "metadata": {
+    "kind": "domain",
+    "columns": [
+      {"key": "domain", "label": "Domain", "sortable": true},
+      {"key": "archive_count", "label": "URLs", "sortable": true, "align": "right"},
+      {"key": "size", "label": "Size", "sortable": true, "align": "right", "format": "bytes"},
+      {"key": "tag_name", "label": "Tag", "sortable": true},
+      {"key": "actions", "label": "Manage", "sortable": false, "type": "actions"}
+    ],
+    "fields": [
+      {"key": "directory", "label": "Directory", "type": "text", "placeholder": "Optional directory path"},
+      {"key": "tag_name", "label": "Tag", "type": "tag", "placeholder": "Select or create tag", "depends_on": "directory"},
+      {"key": "description", "label": "Description", "type": "textarea", "placeholder": "Optional description"}
+    ],
+    "routes": {
+      "list": "/archive/domains",
+      "edit": "/archive/domain/:id/edit",
+      "search": "/archive",
+      "searchParam": "domain"
+    },
+    "messages": {
+      "no_directory": "Set a directory to enable tagging",
+      "tag_will_move": "Tagging will move files to a new directory"
+    }
+  }
+}

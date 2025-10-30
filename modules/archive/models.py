@@ -4,24 +4,23 @@ import re
 from typing import Iterable, List, Optional
 
 import pytz
-from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
-from sqlalchemy.orm import relationship, Session, validates
-from sqlalchemy.orm.collections import InstrumentedList
+from sqlalchemy import Column, Integer, ForeignKey, BigInteger
+from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
+from wrolpi.collections import Collection
 from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory
 from wrolpi.dates import now
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
-from wrolpi.media_path import MediaPathType
 from wrolpi.tags import TagFile
 from wrolpi.vars import PYTEST
 from .errors import InvalidArchive
 
 logger = logger.getChild(__name__)
 
-__all__ = ['Archive', 'Domain']
+__all__ = ['Archive']
 
 MATCH_URL = re.compile(r'^\s+?url:\s+?(http.*)', re.MULTILINE)
 MATCH_DATE = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
@@ -31,16 +30,32 @@ class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
     id = Column(Integer, primary_key=True)
 
-    domain_id = Column(Integer, ForeignKey('domains.id'))
-    domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')
+    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
+    collection: Collection = relationship('Collection', primaryjoin='Archive.collection_id==Collection.id')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
     file_group: FileGroup = relationship('FileGroup')
 
     def __repr__(self):
-        if self.domain:
+        domain_name = self.domain if self.collection else None
+        if domain_name:
             return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))} ' \
-                   f'domain={self.domain.domain}>'
+                   f'domain={domain_name}>'
         return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))}>'
+
+    @property
+    def domain(self) -> str | None:
+        """
+        Get the domain name for this Archive.
+
+        This property provides backward compatibility by returning the Collection's name
+        (which is the domain string for domain collections).
+
+        Returns:
+            The domain string (e.g., "example.com") or None if no collection
+        """
+        if self.collection and self.collection.kind == 'domain':
+            return self.collection.name
+        return None
 
     @staticmethod
     @optional_session
@@ -116,14 +131,14 @@ class Archive(Base, ModelHelper):
         self.file_group.delete()
 
         session = Session.object_session(self)
+        collection = self.collection
         session.delete(self)
 
-        if self.domain:
-            # Delete a domain if it has no Archives.
-            try:
-                next(i.id for i in self.domain.archives)
-            except StopIteration:
-                self.domain.delete()
+        if collection and collection.kind == 'domain':
+            # Delete a domain collection if it has no Archives.
+            remaining_archives = session.query(Archive).filter_by(collection_id=collection.id).count()
+            if remaining_archives == 0:
+                session.delete(collection)
 
     @property
     def history(self) -> Iterable[Base]:
@@ -299,16 +314,16 @@ class Archive(Base, ModelHelper):
                     logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 
     def apply_domain(self):
-        """Get the domain from the URL."""
-        from modules.archive.lib import get_or_create_domain
-        domain = None
+        """Get the domain collection from the URL."""
+        from modules.archive.lib import get_or_create_domain_collection
+        collection = None
         if self.file_group.url:
             session = Session.object_session(self)
             if not session:
                 raise ValueError('No session found!')
-            domain = get_or_create_domain(session, self.file_group.url)
-        # Clear domain if the URL is missing.
-        self.domain_id = domain.id if domain else None
+            collection = get_or_create_domain_collection(session, self.file_group.url)
+        # Clear collection if the URL is missing.
+        self.collection_id = collection.id if collection else None
 
     def apply_singlefile_title(self):
         """Get the title from the Singlefile, if it's missing."""
@@ -363,39 +378,23 @@ class Archive(Base, ModelHelper):
         """The location where this Archive can be viewed in the UI."""
         return f'/archive/{self.id}'
 
-
-class Domain(Base, ModelHelper):
-    __tablename__ = 'domains'  # plural to avoid conflict
-    id = Column(Integer, primary_key=True)
-
-    domain = Column(String, nullable=False)
-    directory = Column(MediaPathType)
-
-    archives: InstrumentedList = relationship('Archive', primaryjoin='Archive.domain_id==Domain.id')
-
-    def __repr__(self):
-        return f'<Domain id={self.id} domain={self.domain} directory={self.directory}>'
-
-    def delete(self):
-        session = Session.object_session(self)
-        session.execute('DELETE FROM archive WHERE domain_id=:id', dict(id=self.id))
-        session.query(Domain).filter_by(id=self.id).delete()
-
-    @validates('domain')
-    def validate_domain(self, key, value: str):
-        if not isinstance(value, str):
-            raise ValueError('Domain must be a string')
-        if len(value.split('.')) < 2:
-            raise ValueError(f'Domain must contain at least one "." domain={repr(value)}')
-        return value
-
     @property
     def download_directory(self) -> pathlib.Path:
+        """
+        Get the download directory for this Archive based on its domain and date.
+
+        This uses the configured archive_destination template with variables:
+        - domain: the domain name from the Collection
+        - year, month, day: current date
+
+        Returns:
+            Absolute path where new archives for this domain should be downloaded
+        """
         archive_destination = get_wrolpi_config().archive_destination
 
         now_ = now()
         variables = dict(
-            domain=self.domain,
+            domain=self.domain or 'unknown',
             year=now_.year,
             month=now_.month,
             day=now_.day,

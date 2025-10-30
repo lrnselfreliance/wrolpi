@@ -9,7 +9,6 @@ import logging
 import multiprocessing
 import pathlib
 import shutil
-import sys
 import tempfile
 import threading
 import zipfile
@@ -19,14 +18,13 @@ from itertools import zip_longest
 from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
 from typing import Tuple, Set
 from unittest import mock
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from uuid import uuid1, uuid4
 
 import pytest
 import sqlalchemy
 import yaml
 from PIL import Image
-from sanic_testing.reusable import ReusableClient
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -141,31 +139,6 @@ def test_wrolpi_config(test_directory) -> pathlib.Path:
 
 
 ROUTES_ATTACHED = False
-
-
-@pytest.fixture()
-def test_client(test_directory) -> ReusableClient:
-    """Get a Reusable Sanic Test Client with all default routes attached.
-
-    (A non-reusable client would turn on for each request)
-    """
-    attach_shared_contexts(api_app)
-
-    initialize_configs_contexts(api_app)
-
-    for _ in range(5):
-        # Sometimes the Sanic client tries to use a port already in use, try again...
-        try:
-            client = ReusableClient(api_app)
-            with client:
-                yield client
-            break
-        except OSError as e:
-            # Ignore errors where the port was already in use.
-            if 'address already in use' not in str(e):
-                raise
-    else:
-        raise RuntimeError('Test never got unused port')
 
 
 @api_app.on_response
@@ -623,12 +596,12 @@ def assert_file_groups(test_session, test_directory):
 
 
 @pytest.fixture
-def assert_files_search(test_client):
+def assert_files_search(async_client):
     from wrolpi.test.common import assert_dict_contains
 
-    def _(search_str: str, expected: List[dict]):
+    async def _(search_str: str, expected: List[dict]):
         content = json.dumps({'search_str': search_str})
-        request, response = test_client.post('/api/files/search', content=content)
+        request, response = await async_client.post('/api/files/search', content=content)
         for file_group, exp in zip_longest(response.json['file_groups'], expected):
             assert_dict_contains(file_group, exp)
 

@@ -252,7 +252,6 @@ class ChannelsConfig(ConfigFile):
         self.update({'channels': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
-        from modules.videos.channel.lib import get_channel
         super().import_config()
         try:
             channels = self.channels
@@ -268,31 +267,8 @@ class ChannelsConfig(ConfigFile):
                     for option in (i for i in REQUIRED_OPTIONS if i not in data):
                         raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
 
-                    # Try to find Channel by directory because it is unique.
-                    channel = Channel.get_by_path(directory, session)
-                    if not channel:
-                        try:
-                            # Try to find Channel using other attributes before creating new Channel.
-                            channel = get_channel(
-                                session,
-                                source_id=data.get('source_id'),
-                                url=data.get('url'),
-                                directory=str(directory),
-                                return_dict=False,
-                            )
-                        except UnknownChannel:
-                            # Channel not yet in the DB, add it.
-                            channel = Channel(directory=directory)
-                            session.add(channel)
-                            channel.flush()
-                            # TODO refresh the files in the channel.
-                            logger.warning(f'Creating new Channel from config: {directory}')
-
-                    # Copy existing channel data, update all values from the config.  This is necessary to clear out
-                    # values not in the config.
-                    full_data = channel.dict()
-                    full_data.update(data)
-                    channel.update(full_data)
+                    # Create or update Channel from config (handles Collection creation)
+                    channel = Channel.from_config(data, session=session)
                     updated_channel_ids.add(channel.id)
 
                     if not channel.source_id and channel.url and flags.have_internet.is_set():
@@ -519,8 +495,9 @@ def set_test_downloader_config(enabled: bool):
 
 def get_channels_config_from_db(session: Session) -> dict:
     """Create a dictionary that contains all the Channels from the DB."""
-    channels = session.query(Channel).order_by(Channel.directory).all()
-    channels = sorted((i.config_view() for i in channels), key=lambda i: i['directory'])
+    from wrolpi.collections import Collection
+    channels = session.query(Channel).join(Collection).order_by(Collection.directory).all()
+    channels = sorted((i.config_view() for i in channels), key=lambda i: i['directory'] if i['directory'] else '')
     return dict(channels=channels)
 
 
@@ -572,9 +549,12 @@ def import_channels_config():
 
 
 def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel, download_: Type[Base] = Download):
-    """Create any missing Downloads for any Channel.url/Channel.directory that has a Download.  Associate any Download
-    related to a Channel."""
-    # Only Downloads with a frequency can be a Channel Download.
+    """Associate any Download related to a Channel via its Collection.
+
+    Downloads are linked to Collections (via collection_id) rather than directly to Channels.
+    This function finds Channels and links their Downloads to the Channel's Collection.
+    """
+    # Only Downloads with a frequency can be a Collection Download.
     downloads = list(session.query(download_).filter(download_.frequency.isnot(None)).all())
     # Download.url is unique and cannot be null.
     downloads_by_url = {i.url: i for i in downloads}
@@ -586,26 +566,27 @@ def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel,
     for channel in channels:
         directory = str(channel.directory)
         for download in downloads_with_destination:
-            if download.settings['destination'] == directory and not download.channel_id:
-                download.channel_id = channel.id
+            if download.settings['destination'] == directory and not download.collection_id:
+                download.collection_id = channel.collection_id
                 need_commit = True
 
         download = downloads_by_url.get(channel.url)
-        if download and not download.channel_id:
-            download.channel_id = channel.id
+        if download and not download.collection_id:
+            download.collection_id = channel.collection_id
             need_commit = True
 
         # Get any Downloads for a Channel's RSS feed.
         rss_url = channel.get_rss_url()
         if rss_url and (download := downloads_by_url.get(rss_url)):
-            download.channel_id = channel.id
-            need_commit = True
+            if not download.collection_id:
+                download.collection_id = channel.collection_id
+                need_commit = True
 
     # Associate any Download which shares a Channel's URL.
     for download in downloads:
         channel = channel_.get_by_url(download.url, session)
-        if channel and not download.channel_id:
-            download.channel_id = channel.id
+        if channel and not download.collection_id:
+            download.collection_id = channel.collection_id
             need_commit = True
 
     if need_commit:
@@ -676,10 +657,11 @@ async def get_statistics():
             if monthly_videos else 0
 
         curs.execute('''
-                     SELECT COUNT(c.id)                                       AS "channels",
-                            COUNT(c.id) FILTER ( WHERE c.tag_id IS NOT NULL ) AS "tagged_channels"
+                     SELECT COUNT(c.id)                                         AS "channels",
+                            COUNT(c.id) FILTER ( WHERE col.tag_id IS NOT NULL ) AS "tagged_channels"
                      FROM channel c
-                              LEFT JOIN public.tag t on t.id = c.tag_id
+                              LEFT JOIN collection col on col.id = c.collection_id
+                              LEFT JOIN public.tag t on t.id = col.tag_id
                      ''')
         channel_stats = dict(curs.fetchone())
     ret = dict(statistics=dict(

@@ -531,9 +531,8 @@ class Video(ModelHelper, Base):
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    # name and directory are stored in Collection, accessed via properties
     url = Column(String, unique=True)  # will only be downloaded if related Download exists.
-    directory: pathlib.Path = Column(MediaPathType)
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)  # use ffmpeg to extract duration (slower than info json).
     download_missing_data = Column(Boolean, default=True)  # fetch missing data like `source_id` and video comments.
@@ -549,16 +548,65 @@ class Channel(ModelHelper, Base):
     info_date = Column(Date)
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
-    downloads: InstrumentedList = relationship('Download', primaryjoin='Download.channel_id==Channel.id')
-    tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'))
-    tag = relationship('Tag', primaryjoin='Channel.tag_id==Tag.id')
+    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))
+    collection = relationship('Collection', foreign_keys=[collection_id])
+
+    @property
+    def downloads(self) -> InstrumentedList:
+        """Get downloads from associated Collection."""
+        return self.collection.downloads if self.collection else []
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'
 
     @property
+    def name(self) -> str | None:
+        """Delegate name to Collection"""
+        return self.collection.name if self.collection else None
+
+    @name.setter
+    def name(self, value: str):
+        """Set name on Collection"""
+        if self.collection:
+            self.collection.name = value
+
+    @property
+    def directory(self) -> pathlib.Path | None:
+        """Delegate directory to Collection"""
+        return self.collection.directory if self.collection else None
+
+    @directory.setter
+    def directory(self, value: pathlib.Path | str):
+        """Set directory on Collection"""
+        if self.collection:
+            self.collection.directory = value
+
+    @property
+    def tag(self):
+        """Delegate tag to Collection"""
+        return self.collection.tag if self.collection else None
+
+    @tag.setter
+    def tag(self, value):
+        """Set tag on Collection"""
+        if self.collection:
+            self.collection.tag = value
+
+    @property
+    def tag_id(self) -> int | None:
+        """Delegate tag_id to Collection"""
+        return self.collection.tag_id if self.collection else None
+
+    @tag_id.setter
+    def tag_id(self, value: int):
+        """Set tag_id on Collection"""
+        if self.collection:
+            self.collection.tag_id = value
+
+    @property
     def tag_name(self) -> str | None:
-        return self.tag.name if self.tag else None
+        """Delegate tag_name to Collection"""
+        return self.collection.tag_name if self.collection else None
 
     @property
     def location(self) -> str:
@@ -597,7 +645,7 @@ class Channel(ModelHelper, Base):
         data = data.copy()
 
         # URL should not be empty string.
-        url = data.pop('url')
+        url = data.pop('url', None)
         self.url = url or None
 
         session: Session = Session.object_session(self)
@@ -637,7 +685,7 @@ class Channel(ModelHelper, Base):
                 continue
 
             download = self.get_or_create_download(url, frequency, session=session, reset_attempts=True)
-            download.channel_id = channel_id
+            download.collection_id = self.collection_id
             session.add(download)
 
     def config_view(self) -> dict:
@@ -657,13 +705,62 @@ class Channel(ModelHelper, Base):
         )
         return config
 
+    @classmethod
+    def from_config(cls, data: dict, session: Session = None) -> 'Channel':
+        """
+        Create or update a Channel from config data. This also creates/updates the Collection.
+
+        Args:
+            data: Config dict containing channel metadata (name, directory, url, source_id, etc.)
+            session: Database session
+
+        Returns:
+            The created or updated Channel
+        """
+        from wrolpi.collections import Collection
+        from wrolpi.db import get_db_session
+
+        if session is None:
+            session = get_db_session()
+
+        # Ensure this is treated as a channel collection
+        data = data.copy()
+        data['kind'] = 'channel'
+
+        # Create or update the Collection first
+        collection = Collection.from_config(data, session=session)
+
+        # Extract Channel-specific fields
+        url = data.get('url')
+        source_id = data.get('source_id')
+
+        # Find existing Channel by collection_id or create new one
+        channel = session.query(cls).filter_by(collection_id=collection.id).one_or_none()
+
+        if not channel:
+            # Create new Channel
+            channel = cls(
+                collection_id=collection.id,
+                url=url,
+                source_id=source_id,
+            )
+            session.add(channel)
+            session.flush([channel])
+
+        # Use the update() method to handle all fields including downloads
+        channel.update(data)
+
+        return channel
+
     @staticmethod
     def get_by_path(path: pathlib.Path, session: Session) -> Optional['Channel']:
         if not path:
             raise RuntimeError('Must provide path to get Channel')
         path = pathlib.Path(path) if isinstance(path, str) else path
         path = str(path.absolute()) if path.is_absolute() else str(get_media_directory() / path)
-        channel = session.query(Channel).filter_by(directory=path).one_or_none()
+        # Query through Collection relationship since directory is now on Collection
+        from wrolpi.collections import Collection
+        channel = session.query(Channel).join(Collection).filter(Collection.directory == path).one_or_none()
         return channel
 
     def __json__(self) -> dict:
@@ -679,6 +776,8 @@ class Channel(ModelHelper, Base):
 
     def dict(self, with_statistics: bool = False, with_downloads: bool = True) -> dict:
         d = super(Channel, self).dict()
+        # Add Collection-delegated properties
+        d['name'] = self.name
         d['tag_name'] = self.tag_name
         d['rss_url'] = self.get_rss_url()
         d['directory'] = \
@@ -777,26 +876,17 @@ class Channel(ModelHelper, Base):
                                reset_attempts: bool = False) -> Download:
         """Get a Download record, if it does not exist, create it.  Create a Download if necessary
         which goes into this Channel's directory.
-        """
-        if not isinstance(url, str) or not url:
-            raise InvalidDownload(f'Cannot get Download without url')
-        if not frequency:
-            raise InvalidDownload('Download for Channel must have a frequency')
 
+        Delegates to Collection.get_or_create_download() with Channel-specific downloaders.
+        """
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
-        download = Download.get_by_url(url, session=session)
-        if not download:
-            download = download_manager.recurring_download(url, frequency, ChannelDownloader.name, session=session,
-                                                           sub_downloader_name=VideoDownloader.name,
-                                                           destination=self.directory,
-                                                           reset_attempts=reset_attempts,
-                                                           )
-        if reset_attempts:
-            download.attempts = 0
-        download.channel_id = self.id
-
-        return download
+        return self.collection.get_or_create_download(
+            url, frequency, session=session,
+            reset_attempts=reset_attempts,
+            downloader_name=ChannelDownloader.name,
+            sub_downloader_name=VideoDownloader.name
+        )
 
     def get_rss_url(self) -> str | None:
         """Return the RSS Feed URL for this Channel, if any is possible."""

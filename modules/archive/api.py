@@ -9,10 +9,8 @@ from sqlalchemy.orm import Session
 
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
-from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
-from wrolpi.files.lib import upsert_file
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from . import lib, schema
@@ -46,14 +44,6 @@ async def delete_archive(_: Request, archive_ids: str):
         raise ValidationError('Could not parse archive ids')
     lib.delete_archives(*archive_ids)
     return response.empty()
-
-
-@archive_bp.get('/domains')
-@openapi.summary('Get a list of all Domains and their Archive statistics')
-@openapi.response(200, schema.GetDomainsResponse, "The list of domains")
-async def get_domains(_: Request):
-    domains = lib.get_domains()
-    return json_response({'domains': domains, 'totals': {'domains': len(domains)}})
 
 
 archive_limit_limiter = api_param_limiter(100)

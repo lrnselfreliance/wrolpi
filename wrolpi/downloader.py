@@ -117,9 +117,10 @@ class Download(ModelHelper, Base):  # noqa
     status = Column(String, default=DownloadStatus.new)  # `DownloadStatus` enum.
     tag_names = Column(ARRAY(Text))
 
-    # A Download may be associated with a Channel (downloads all Channel videos, or a playlist, etc.).
-    channel_id = Column(Integer, ForeignKey('channel.id'))
-    channel = relationship('Channel', primaryjoin='Download.channel_id==Channel.id', back_populates='downloads')
+    # A Download may be associated with a Collection (downloads for channels, domains, etc.).
+    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='SET NULL'))
+    collection = relationship('Collection', primaryjoin='Download.collection_id==Collection.id',
+                              back_populates='downloads')
 
     def __repr__(self):
         if self.next_download or self.frequency:
@@ -132,7 +133,7 @@ class Download(ModelHelper, Base):  # noqa
     def __json__(self) -> dict:
         d = dict(
             attempts=self.attempts,
-            channel_id=self.channel_id,
+            collection_id=self.collection_id,
             downloader=self.downloader,
             frequency=self.frequency,
             destination=self.destination,
@@ -226,12 +227,24 @@ class Download(ModelHelper, Base):  # noqa
 
         session = Session.object_session(self)
 
+        # Get collection info before deleting
+        collection = self.collection
+        collection_kind = collection.kind if collection else None
+
         session.delete(self)
         session.commit()
-        if self.channel_id:
-            # Save Channels config if this download was associated with a Channel.
+
+        # Save appropriate config based on collection kind
+        if collection_kind == 'channel':
             from modules.videos.lib import save_channels_config
             save_channels_config.activate_switch()
+        elif collection_kind == 'domain':
+            from modules.archive.lib import save_domains_config
+            save_domains_config.activate_switch()
+        elif collection_kind:
+            from wrolpi.collections.config import save_collections_config
+            save_collections_config.activate_switch()
+
         # Save download config again because this download is now removed from the download lists.
         save_downloads_config.activate_switch()
 
@@ -612,9 +625,9 @@ class DownloadManager:
             download.tag_names = tag_names or None
             # Preserve existing settings, unless new settings are provided.
             download.settings = settings if settings is not None else download.settings
-            if download.frequency and download.settings and (channel_id := download.settings.get('channel_id')):
-                # Attach a recurring Channel download to it's Channel.
-                download.channel_id = download.channel_id or channel_id
+            if download.frequency and download.settings and (collection_id := download.settings.get('collection_id')):
+                # Attach a recurring download to its Collection.
+                download.collection_id = download.collection_id or collection_id
 
             downloads.append(download)
 
@@ -647,7 +660,7 @@ class DownloadManager:
     def recurring_download(self, url: str, frequency: int, downloader_name: str, session: Session = None,
                            sub_downloader_name: str = None, reset_attempts: bool = False,
                            destination: str | pathlib.Path = None, tag_names: List[str] = None,
-                           settings: Dict = None) -> Download:
+                           settings: Dict = None, collection_id: int = None) -> Download:
         """Schedule a recurring download."""
         if not frequency or not isinstance(frequency, int):
             raise ValueError('Recurring download must have a frequency!')
@@ -660,11 +673,13 @@ class DownloadManager:
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
                                           destination=destination, tag_names=tag_names, settings=settings)
         download.frequency = frequency
+        if collection_id:
+            download.collection_id = collection_id
 
-        # Only recurring Downloads can be Channel Downloads.
+        # Only recurring Downloads can be Collection Downloads - look up via Channel.
         from modules.videos.models import Channel
         if channel := Channel.get_by_url(url=download.url, session=session):
-            download.channel_id = channel.id
+            download.collection_id = channel.collection_id
 
         session.commit()
 
@@ -674,10 +689,11 @@ class DownloadManager:
     def update_download(self, id_: int, url: str, downloader: str,
                         destination: str | pathlib.Path = None, tag_names: List[str] = None,
                         sub_downloader: str | None = None, frequency: int = None,
-                        settings: Dict = None, session: Session = None) -> Download:
+                        settings: Dict = None, collection_id: int = None,
+                        session: Session = None) -> Download:
         download = Download.find_by_id(id_, session=session)
-        if settings and settings.get('channel_id') and not frequency:
-            raise InvalidDownload(f'A once-download cannot be associated with a Channel')
+        if collection_id and not frequency:
+            raise InvalidDownload(f'A once-download cannot be associated with a Collection')
         download.url = url
         download.downloader = downloader
         download.frequency = frequency
@@ -687,8 +703,8 @@ class DownloadManager:
         download.destination = destination or None
         download.tag_names = tag_names or None
         download.sub_downloader = sub_downloader or None
-        # Remove Channel relationship, if necessary.
-        download.channel_id = (settings or dict()).get('channel_id')
+        # Update Collection relationship
+        download.collection_id = collection_id
 
         save_downloads_config.activate_switch()
 
@@ -939,7 +955,7 @@ class DownloadManager:
         with get_db_curs() as curs:
             stmt = f'''
                 SELECT
-                    channel_id,
+                    collection_id,
                     destination,
                     downloader,
                     error,
@@ -1462,7 +1478,7 @@ class RSSDownloader(Downloader):
 
         # Apply YT channel to the Download, if not already applied.
         if yt_channel_id := feed.get('feed', dict()).get('yt_channelid'):
-            if not (download.location or download.channel_id):
+            if not (download.location or download.collection_id):
                 self.apply_yt_channel(download.id, yt_channel_id)
 
         # Filter entries using Download.settings.
@@ -1562,14 +1578,14 @@ class RSSDownloader(Downloader):
 
     @staticmethod
     def apply_yt_channel(download_id: int, yt_channel_id: str):
-        """Get Channel that matches this Download, apply Channel information to the Download."""
+        """Get Channel that matches this Download, apply Channel/Collection information to the Download."""
         with get_db_session() as session:
             from modules.videos.models import Channel
             channel = Channel.get_by_source_id(session, f'UC{yt_channel_id}')
             if channel:
                 download_ = Download.get_by_id(download_id, session=session)
-                download_.channel = channel
-                download_.channel_id = channel.id
+                download_.collection = channel.collection
+                download_.collection_id = channel.collection_id
                 download_.location = download_.location or channel.location
                 session.commit()
 

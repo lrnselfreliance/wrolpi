@@ -75,18 +75,19 @@ def video_cleanup():
     with get_db_curs(commit=True) as curs:
         # Delete all Videos if the FileModel no longer contains a video.
         curs.execute('''
-            WITH deleted AS
-             (UPDATE file_group SET model=null WHERE model='video' AND mimetype NOT LIKE 'video/%' RETURNING id)
-             DELETE FROM video WHERE file_group_id = ANY(select id from deleted)
-        ''')
+                     WITH deleted AS
+                              (UPDATE file_group SET model = null WHERE model = 'video' AND mimetype NOT LIKE 'video/%' RETURNING id)
+                     DELETE
+                     FROM video
+                     WHERE file_group_id = ANY (select id from deleted)
+                     ''')
         # Claim all Videos in a Channel's directory for that Channel.  But, only if they have not yet been claimed.
         curs.execute('''
-            UPDATE video v
-            SET
-                channel_id = c.id
-            FROM channel c
-                LEFT JOIN file_group fg ON fg.primary_path LIKE c.directory || '/%'::VARCHAR
-            WHERE
-             v.channel_id IS NULL
-             AND fg.id = v.file_group_id
-        ''')
+                     UPDATE video v
+                     SET channel_id = c.id
+                     FROM channel c
+                              INNER JOIN collection col ON col.id = c.collection_id
+                              LEFT JOIN file_group fg ON fg.primary_path LIKE col.directory || '/%'::VARCHAR
+                     WHERE v.channel_id IS NULL
+                       AND fg.id = v.file_group_id
+                     ''')

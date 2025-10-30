@@ -10,10 +10,11 @@ from PIL import Image
 from pytz import utc
 
 from modules.archive import lib
-from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, model_archive_result, \
-    get_domains
-from modules.archive.models import Archive, Domain
+from modules.archive.lib import get_or_create_domain_collection, get_new_archive_files, delete_archives, \
+    model_archive_result, get_domains
+from modules.archive.models import Archive
 from wrolpi.api_utils import CustomJSONEncoder
+from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
 from wrolpi.files import lib as files_lib
@@ -37,7 +38,7 @@ def make_fake_archive_result(readability=True, screenshot=True, title=True):
 
 
 @pytest.mark.asyncio
-async def test_no_screenshot(test_directory, test_session):
+async def test_no_screenshot(async_client, test_directory, test_session):
     singlefile, readability, screenshot = make_fake_archive_result(screenshot=False)
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
     assert isinstance(archive.singlefile_path, pathlib.Path)
@@ -47,7 +48,7 @@ async def test_no_screenshot(test_directory, test_session):
 
 
 @pytest.mark.asyncio
-async def test_no_readability(test_directory, test_session):
+async def test_no_readability(async_client, test_directory, test_session):
     singlefile, readability, screenshot = make_fake_archive_result(readability=False)
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
     assert isinstance(archive.singlefile_path, pathlib.Path)
@@ -58,7 +59,7 @@ async def test_no_readability(test_directory, test_session):
 
 
 @pytest.mark.asyncio
-async def test_dict(test_session):
+async def test_dict(async_client, test_session, test_directory):
     singlefile, readability, screenshot = make_fake_archive_result()
     d = (await model_archive_result('https://example.com', singlefile, readability, screenshot)).dict()
     assert isinstance(d, dict)
@@ -66,17 +67,18 @@ async def test_dict(test_session):
 
 
 @pytest.mark.asyncio
-async def test_relationships(test_session, example_singlefile):
+async def test_relationships(async_client, test_session, example_singlefile):
     with get_db_session(commit=True) as session:
         url = 'https://wrolpi.org:443'
-        domain = get_or_create_domain(session, url)
+        collection = get_or_create_domain_collection(session, url)
         archive = Archive.from_paths(test_session, example_singlefile)
         archive.url = url
-        archive.domain_id = domain.id
+        archive.collection_id = collection.id
         session.add(archive)
         session.flush()
 
-    assert archive.domain == domain
+    assert archive.collection == collection
+    assert archive.domain == 'wrolpi.org'
 
 
 @pytest.mark.asyncio
@@ -119,8 +121,9 @@ async def test_archive_title(async_client, test_session, archive_factory, single
     assert archive1.file_group.title is None
 
 
-def test_archive_refresh_deleted_archive(test_client, test_session, archive_directory, archive_factory):
-    """Archives/Domains should be deleted when archive files are deleted."""
+@pytest.mark.asyncio
+async def test_archive_refresh_deleted_archive(async_client, test_session, archive_directory, archive_factory):
+    """Archives/domain collections should be deleted when archive files are deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
     archive3 = archive_factory('example.com')
@@ -133,29 +136,30 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
 
     def check_counts(archive_count, domain_count):
         assert test_session.query(Archive).count() == archive_count, 'Archive count does not match'
-        assert test_session.query(Domain).count() == domain_count, 'Domain count does not match'
+        assert test_session.query(Collection).filter_by(
+            kind='domain').count() == domain_count, 'domain collection count does not match'
 
     # All 5 archives are already in the DB.
     check_counts(archive_count=5, domain_count=2)
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=5, domain_count=1)
 
     # Delete archive2's files, it's the latest for 'https://example.com/1'
     for path in archive2.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=4, domain_count=1)
 
     # Delete archive1's files, now the URL is empty.
     for path in archive1.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=3, domain_count=0)
 
     # Delete archive3, now there is now example.com domain
     for path in archive3.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=2, domain_count=0)
 
     # Delete all the rest of the archives
@@ -163,12 +167,12 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
         path.unlink()
     for path in archive5.my_paths():
         path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     check_counts(archive_count=0, domain_count=0)
 
 
 @pytest.mark.asyncio
-async def test_fills_contents_with_refresh(test_session, archive_factory, singlefile_contents_factory):
+async def test_fills_contents_with_refresh(async_client, test_session, archive_factory, singlefile_contents_factory):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
@@ -212,7 +216,8 @@ async def test_fills_contents_with_refresh(test_session, archive_factory, single
     assert archive3.file_group.title == 'last title'  # from singlefile HTML
 
 
-def test_delete_archive(test_session, archive_factory):
+@pytest.mark.asyncio
+async def test_delete_archive(async_client, test_session, archive_factory):
     """Archives can be deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
@@ -227,30 +232,35 @@ def test_delete_archive(test_session, archive_factory):
     assert test_session.query(Archive).count() == 3
     assert test_session.query(FileGroup).count() == 3
 
+    # Save paths before deletion (archives become detached after delete)
+    archive1_paths = list(archive1.my_paths())
+    archive2_paths = list(archive2.my_paths())
+    archive3_paths = list(archive3.my_paths())
+
     # Delete the oldest.
     delete_archives(archive1.id, archive3.id)
     assert test_session.query(Archive).count() == 1
     assert test_session.query(FileGroup).count() == 1
     # Files were deleted.
-    assert archive1.my_paths() and not any(i.is_file() for i in archive1.my_paths())
-    assert archive3.my_paths() and not any(i.is_file() for i in archive3.my_paths())
+    assert archive1_paths and not any(i.is_file() for i in archive1_paths)
+    assert archive3_paths and not any(i.is_file() for i in archive3_paths)
     # Archive2 is untouched
-    assert archive2.my_paths() and all(i.is_file() for i in archive2.my_paths())
+    assert archive2_paths and all(i.is_file() for i in archive2_paths)
 
-    # Delete the last archive.  The Domain should also be deleted.
+    # Delete the last archive.  The domain collection should also be deleted.
     delete_archives(archive2.id)
     assert test_session.query(Archive).count() == 0
-    domain = test_session.query(Domain).one_or_none()
+    domain = test_session.query(Collection).filter_by(kind='domain').one_or_none()
     assert domain is None
 
     # All Files were deleted.
     assert test_session.query(FileGroup).count() == 0
-    assert archive2.my_paths() and not any(i.is_file() for i in archive2.my_paths())
+    assert archive2_paths and not any(i.is_file() for i in archive2_paths)
 
 
 def test_get_domains(test_session, archive_factory):
     """
-    `get_domains` gets only Domains with Archives.
+    `get_domains` gets only domain collections with Archives.
     """
     archive1 = archive_factory('example.com')
     archive2 = archive_factory('example.com')
@@ -316,7 +326,7 @@ async def test_new_archive(test_session, test_directory, fake_now):
 
     fake_now(datetime(2000, 1, 2))
     archive2 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
-    # Domain is reused.
+    # domain collection is reused.
     assert archive1.domain == archive2.domain
 
 
@@ -583,7 +593,7 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives_deleted_singlefile(test_session, make_files_structure, singlefile_contents_factory):
+async def test_refresh_archives_deleted_singlefile(async_client, test_session, make_files_structure, singlefile_contents_factory):
     """Removing a Singlefile file from a FileGroup makes that group no longer an Archive."""
     singlefile, readability = make_files_structure({
         '2022-09-04-16-20-11_The Title.html': singlefile_contents_factory(),
@@ -851,3 +861,218 @@ async def test_get_custom_archive_directory(async_client, test_directory, test_w
 
     assert lib.get_archive_directory() == (test_directory / 'custom/archives')
     assert lib.get_domain_directory('https://example.com') == (test_directory / 'custom/archives/example.com')
+
+
+@pytest.mark.asyncio
+async def test_detect_domain_directory_single_archive(async_client, test_directory, test_session, archive_factory):
+    """detect_domain_directory should detect directory when all archives are in same location."""
+    from modules.archive.lib import detect_domain_directory
+
+    # Create an archive using the factory (which creates a domain collection and auto-detects directory)
+    archive = archive_factory(domain='example.com', url='https://example.com/page1')
+    test_session.flush()
+
+    # Get the collection
+    collection = archive.collection
+    assert collection is not None
+    assert collection.name == 'example.com'
+
+    # Directory should have been auto-detected during collection creation
+    assert collection.directory is not None
+    assert 'example.com' in str(collection.directory)
+
+    # Verify detect_domain_directory also returns the same result
+    detected = detect_domain_directory(collection, test_session)
+    assert detected is not None
+    assert str(detected) == 'archive/example.com'
+
+
+@pytest.mark.asyncio
+async def test_detect_domain_directory_multiple_archives(async_client, test_directory, test_session, archive_factory):
+    """detect_domain_directory should detect common directory for multiple archives."""
+    from modules.archive.lib import detect_domain_directory
+
+    # Create multiple archives in the same domain
+    archive1 = archive_factory(domain='test.com', url='https://test.com/page1')
+    archive2 = archive_factory(domain='test.com', url='https://test.com/page2')
+    test_session.flush()
+
+    # Get the collection
+    collection = archive1.collection
+    assert collection is not None
+    assert collection.name == 'test.com'
+
+    # Detect directory
+    detected = detect_domain_directory(collection, test_session)
+    assert detected is not None
+    assert str(detected) == 'archive/test.com'
+
+
+def test_detect_domain_directory_no_archives(test_directory, test_session):
+    """detect_domain_directory should return None when collection has no archives."""
+    from modules.archive.lib import detect_domain_directory
+
+    # Create a domain collection without archives
+    collection = Collection(name='empty.com', kind='domain', directory=None)
+    test_session.add(collection)
+    test_session.flush()
+
+    # Detect directory - should return None
+    detected = detect_domain_directory(collection, test_session)
+    assert detected is None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_domain_collection_auto_detects_directory(async_client, test_directory, test_session, archive_factory):
+    """get_or_create_domain_collection should auto-detect directory for existing archives."""
+    from modules.archive.lib import get_or_create_domain_collection
+
+    # Create an archive first
+    archive = archive_factory(domain='autodetect.com', url='https://autodetect.com/page1')
+    test_session.commit()
+
+    # The collection should have been created with no directory initially
+    # Call get_or_create_domain_collection again - should auto-detect
+    collection = get_or_create_domain_collection(test_session, 'https://autodetect.com/page2')
+    assert collection.directory is not None
+    assert 'autodetect.com' in str(collection.directory)
+
+
+@pytest.mark.asyncio
+async def test_update_domain_directories(async_client, test_directory, test_session, archive_factory):
+    """update_domain_directories should fix existing collections that lost their directory."""
+    from modules.archive.lib import update_domain_directories
+
+    # Create an archive - this creates a collection WITH directory (auto-detected)
+    archive = archive_factory(domain='needsdir.com', url='https://needsdir.com/page1')
+    test_session.commit()
+
+    # Manually clear the directory to simulate legacy data
+    collection = archive.collection
+    collection.directory = None
+    test_session.commit()
+
+    # Verify collection has no directory
+    assert collection.directory is None
+
+    # Run update
+    count = update_domain_directories(test_session)
+    assert count == 1
+
+    # Verify directory was set
+    test_session.expire(collection)
+    assert collection.directory is not None
+    assert 'needsdir.com' in str(collection.directory)
+
+
+def test_collection_unique_name_kind_constraint(test_directory, test_session, archive_factory):
+    """Collections should have unique (name, kind) combinations.
+
+    This prevents duplicate domain collections with the same name.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    # Create an archive which creates a domain collection
+    archive = archive_factory(domain='uniquetest.com')
+    test_session.commit()
+
+    # Get the original collection
+    original_collection = archive.collection
+    assert original_collection is not None
+
+    # Attempting to create a duplicate domain collection should fail
+    duplicate_collection = Collection(name='uniquetest.com', kind='domain', directory=None)
+    test_session.add(duplicate_collection)
+
+    with pytest.raises(IntegrityError) as exc_info:
+        test_session.commit()
+
+    # Verify it's the unique constraint violation
+    assert 'uq_collection_name_kind' in str(exc_info.value)
+    test_session.rollback()
+
+
+def test_search_archives_by_domain(test_directory, test_session, archive_factory):
+    """search_archives should correctly filter by domain collection name."""
+    from modules.archive.lib import search_archives
+
+    # Create archives in different domains
+    archive1 = archive_factory(domain='searchtest.com')
+    archive2 = archive_factory(domain='searchtest.com')
+    archive3 = archive_factory(domain='other.com')
+    test_session.commit()
+
+    # Search for archives in searchtest.com
+    file_groups, total = search_archives(
+        search_str=None,
+        domain='searchtest.com',
+        limit=10,
+        offset=0,
+        order=None,
+        tag_names=None
+    )
+
+    # Should return only archives from searchtest.com
+    assert total == 2
+    assert len(file_groups) == 2
+
+    # Search for other.com
+    file_groups, total = search_archives(
+        search_str=None,
+        domain='other.com',
+        limit=10,
+        offset=0,
+        order=None,
+        tag_names=None
+    )
+
+    assert total == 1
+    assert len(file_groups) == 1
+
+
+def test_link_domain_and_downloads(test_session, test_download_manager):
+    """Test that downloads are linked to domain collections."""
+    from wrolpi.downloader import Download
+    from modules.archive.lib import link_domain_and_downloads
+
+    # Create a domain collection with a directory
+    collection = Collection(name='example.com', kind='domain', directory='archive/example.com')
+    test_session.add(collection)
+    test_session.commit()
+
+    # 1. Download with matching destination directory (exact match)
+    download1 = Download(
+        url='https://other.com/rss',
+        downloader='rss',
+        sub_downloader='archive',
+        frequency=86400,
+        settings={'destination': 'archive/example.com'}
+    )
+    # 2. Download with destination in subdirectory
+    download2 = Download(
+        url='https://other.com/rss2',
+        downloader='rss',
+        sub_downloader='archive',
+        frequency=86400,
+        settings={'destination': 'archive/example.com/2025/01'}
+    )
+    # 3. RSS download with archive sub_downloader (matches by URL domain)
+    download3 = Download(
+        url='https://example.com/feed.xml',
+        downloader='rss',
+        sub_downloader='archive',
+        frequency=86400
+    )
+    # 4. Download without frequency (should NOT be linked)
+    download4 = Download(url='https://example.com/once', downloader='archive')
+    test_session.add_all([download1, download2, download3, download4])
+    test_session.commit()
+
+    assert not any(d.collection_id for d in [download1, download2, download3, download4])
+
+    link_domain_and_downloads(test_session)
+
+    assert download1.collection_id == collection.id  # matched by directory (exact)
+    assert download2.collection_id == collection.id  # matched by subdirectory
+    assert download3.collection_id == collection.id  # matched by URL domain
+    assert download4.collection_id is None           # no frequency = no link

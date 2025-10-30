@@ -43,6 +43,7 @@ cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
 [ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+cp /opt/wrolpi/etc/raspberrypios/maintenance.html /var/www/maintenance.html
 
 # Generate nginx certificate for HTTPS.
 if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then

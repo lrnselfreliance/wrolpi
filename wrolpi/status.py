@@ -18,7 +18,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command
 from wrolpi.common import logger, get_warn_once, unique_by_predicate, partition, TRACE_LEVEL
 from wrolpi.dates import now
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, DOCKERIZED
 
 try:
     import psutil
@@ -595,6 +595,7 @@ async def status_worker(count: int = None, sleep_time: int = 5):
                 asyncio.create_task(get_iostat_stats(), name='get_iostat_stats'),
                 asyncio.create_task(get_power_stats(), name='get_power_stats'),
             )
+        from wrolpi.upgrade import get_current_branch
         shared_status.update({
             'cpu_stats': cpu_stats.__json__(),
             'load_stats': load_stats.__json__(),
@@ -604,6 +605,7 @@ async def status_worker(count: int = None, sleep_time: int = 5):
             'last_status': now().isoformat(),
             'iostat_stats': iostat_stats.__json__(),
             'power_stats': power_stats.__json__(),
+            'git_branch': get_current_branch() if not DOCKERIZED else None,
         })
 
         if 'disk_bandwidth_stats' not in shared_status:

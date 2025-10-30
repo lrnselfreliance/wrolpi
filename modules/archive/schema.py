@@ -16,18 +16,6 @@ class ArchiveDict:
 
 
 @dataclass
-class DomainDict:
-    domain: str
-    url_count: int
-    size: int
-
-
-@dataclass
-class GetDomainsResponse:
-    domains: List[DomainDict]
-
-
-@dataclass
 class ArchiveSearchRequest:
     search_str: Optional[str] = None
     domain: Optional[str] = None

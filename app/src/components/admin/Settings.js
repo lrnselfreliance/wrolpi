@@ -1,5 +1,6 @@
 import React from "react";
-import {postRestart, postShutdown} from "../../api";
+import {ThemeContext} from "../../contexts/contexts";
+import {checkUpgrade, postRestart, postShutdown, triggerUpgrade} from "../../api";
 import {
     Button,
     Divider,
@@ -30,7 +31,7 @@ import QRCode from "react-qr-code";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {SettingsContext} from "../../contexts/contexts";
+import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {ConfigsTable} from "./Configs";
 import {semanticUIColorMap} from "../Vars";
 
@@ -83,6 +84,89 @@ export function ShutdownButton() {
     >
         Shutdown
     </APIButton>
+}
+
+function UpgradeSegment() {
+    const {status, fetchStatus} = React.useContext(StatusContext);
+    const dockerized = useDockerized();
+    const [upgrading, setUpgrading] = React.useState(false);
+    const [checking, setChecking] = React.useState(false);
+
+    const handleCheckUpgrade = async () => {
+        setChecking(true);
+        try {
+            await checkUpgrade(true);  // Force a fresh check
+            toast({
+                type: 'info',
+                title: 'Update Check Complete',
+                description: 'Checked for updates from git remote.',
+                time: 3000,
+            });
+        } finally {
+            setChecking(false);
+            await fetchStatus();
+        }
+    };
+
+    const handleUpgrade = async () => {
+        setUpgrading(true);
+        try {
+            const response = await triggerUpgrade();
+            if (response.ok) {
+                // Redirect to maintenance page
+                window.location.href = '/maintenance.html';
+            }
+        } catch (e) {
+            setUpgrading(false);
+        }
+    };
+
+    // Not available in Docker
+    if (dockerized) {
+        return <Segment>
+            <Header as='h3'>System Upgrade</Header>
+            <p>Upgrades are not available in Docker environments. Please upgrade your Docker images manually.</p>
+        </Segment>;
+    }
+
+    // No update available
+    if (!status?.update_available) {
+        return <Segment>
+            <Header as='h3'>System Upgrade</Header>
+            <p>Your WROLPi is up to date.</p>
+            <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong></p>
+            <APIButton
+                color='blue'
+                onClick={handleCheckUpgrade}
+                disabled={checking}
+            >
+                {checking ? 'Checking...' : 'Check for Updates'}
+            </APIButton>
+        </Segment>;
+    }
+
+    // Update available
+    return <Segment>
+        <Header as='h3'>
+            <Icon name='arrow alternate circle up'/>
+            Upgrade Available
+        </Header>
+        <p>Branch: <strong>{status?.git_branch}</strong></p>
+        <p>Current commit: <strong>{status?.current_commit}</strong></p>
+        <p>Latest commit: <strong>{status?.latest_commit}</strong></p>
+        <p><strong>{status?.commits_behind}</strong> commit(s) behind</p>
+
+        <APIButton
+            color='green'
+            size='big'
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            confirmContent='This will upgrade WROLPi. The system will be temporarily unavailable during the upgrade. Are you sure?'
+            confirmButton='Start Upgrade'
+        >
+            {upgrading ? 'Starting Upgrade...' : 'Upgrade Now'}
+        </APIButton>
+    </Segment>;
 }
 
 export function RestartButton() {
@@ -528,6 +612,8 @@ export function SettingsPage() {
         </Segment>
 
         {configsSegment}
+
+        <UpgradeSegment/>
 
         <Segment>
             <Header as='h1'>Browser Settings</Header>

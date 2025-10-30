@@ -257,6 +257,11 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
     channel1 = channel_factory(source_id='foo')
     channel2 = channel_factory(source_id='bar')
     test_session.commit()
+
+    # Capture directory values before deletion (channels will be detached after deletion)
+    channel1_dir = str(channel1.directory)
+    channel2_dir = str(channel2.directory)
+
     # Write Channels to the config file.
     save_channels_config()
     test_session.delete(channel1)
@@ -267,29 +272,29 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
     # Importing the config creates two Channels.
     import_channels_config()
     assert len(test_session.query(Channel).all()) == 2
-    assert str(channel1.directory) in test_channels_config.read_text()
-    assert str(channel2.directory) in test_channels_config.read_text()
+    assert channel1_dir in test_channels_config.read_text()
+    assert channel2_dir in test_channels_config.read_text()
 
     # Delete channel2 from the config file.
     config = get_channels_config()
     config_dict = config.dict()
-    config_dict['channels'] = [i for i in config.channels if i['directory'] != str(channel2.directory)]
+    config_dict['channels'] = [i for i in config.channels if i['directory'] != channel2_dir]
     config.update(config_dict)
     await await_switches()
-    assert str(channel1.directory) in test_channels_config.read_text()
-    assert str(channel2.directory) not in test_channels_config.read_text()
+    assert channel1_dir in test_channels_config.read_text()
+    assert channel2_dir not in test_channels_config.read_text()
 
     # Importing the config deletes the Channel record.
     import_channels_config()
     assert len(test_session.query(Channel).all()) == 1
-    assert str(channel1.directory) in test_channels_config.read_text()
-    assert str(channel2.directory) not in test_channels_config.read_text()
+    assert channel1_dir in test_channels_config.read_text()
+    assert channel2_dir not in test_channels_config.read_text()
 
     # Saving and importing does not change anything.
     save_channels_config()
     import_channels_config()
-    assert str(channel1.directory) in test_channels_config.read_text()
-    assert str(channel2.directory) not in test_channels_config.read_text()
+    assert channel1_dir in test_channels_config.read_text()
+    assert channel2_dir not in test_channels_config.read_text()
 
 
 @pytest.mark.asyncio

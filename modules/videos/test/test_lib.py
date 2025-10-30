@@ -191,13 +191,13 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
     test_session.add_all([download1, download2, download3])
     test_session.commit()
     assert test_session.query(Download).count() == 3
-    assert not any(i.channel_id for i in test_download_manager.get_downloads(test_session))
+    assert not any(i.collection_id for i in test_download_manager.get_downloads(test_session))
 
-    # `link_channel_and_downloads` creates missing Downloads.
+    # `link_channel_and_downloads` links Downloads to Collections.
     lib.link_channel_and_downloads(session=test_session)
     assert test_session.query(Download).count() == 3
-    assert all(i.channel_id for i in test_download_manager.get_recurring_downloads(test_session))
-    assert not any(i.channel_id for i in test_download_manager.get_once_downloads(test_session))
+    assert all(i.collection_id for i in test_download_manager.get_recurring_downloads(test_session))
+    assert not any(i.collection_id for i in test_download_manager.get_once_downloads(test_session))
 
 
 @pytest.mark.asyncio
@@ -233,13 +233,13 @@ def test_link_channel_and_downloads_migration(async_client, test_session, channe
     assert test_session.query(Download).count() == 4
     d1, d2a, d2b, d2c = test_session.query(Download).order_by(Download.url).all()
     assert d1.url == channel1.url == 'https://example.com/channel1' and d1.frequency == 1
-    assert d1.channel_id
+    assert d1.collection_id == channel1.collection_id
     assert d2a.url == 'https://example.com/channel2' and d2a.frequency == 1
-    assert d2a.channel_id
+    assert d2a.collection_id == channel2.collection_id
     assert d2b.url == 'https://example.com/channel2/rss' and d2b.frequency == 1
-    assert d2b.channel_id
+    assert d2b.collection_id == channel2.collection_id
     assert d2c.url == 'https://example.com/channel2/video/1' and d2c.frequency is None
-    assert not d2c.channel_id
+    assert not d2c.collection_id
 
 
 @pytest.mark.asyncio

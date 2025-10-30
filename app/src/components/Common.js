@@ -303,6 +303,21 @@ export function secondsToTimestamp(seconds) {
 }
 
 export function humanFileSize(bytes, dp = 1) {
+    // Handle null/undefined
+    if (bytes == null) {
+        return '-';
+    }
+
+    // Convert string to number if needed
+    if (typeof bytes === 'string') {
+        bytes = parseFloat(bytes);
+    }
+
+    // Handle invalid numbers
+    if (isNaN(bytes) || !isFinite(bytes)) {
+        return '-';
+    }
+
     const thresh = 1024;
 
     if (Math.abs(bytes) < thresh) {
@@ -317,7 +332,6 @@ export function humanFileSize(bytes, dp = 1) {
         bytes /= thresh;
         ++u;
     } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
-
 
     return bytes.toFixed(dp) + ' ' + units[u];
 }
@@ -596,10 +610,13 @@ export function TabLinks({links}) {
     return <Menu tabular>
         {links.map((link) => <NavLink
             to={getTo(link.to)}
-            className='item'
             style={{padding: '1em'}}
             key={link.to}
             end={link.end === true ? true : null}
+            className={({isActive}) => {
+                const active = link.isActive ? link.isActive() : isActive;
+                return active ? 'item active' : 'item';
+            }}
         >
             {link.text}
         </NavLink>)}
@@ -1224,10 +1241,18 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         }
     }
 
+    const handleBlur = (e) => {
+        // When user leaves the field, commit the typed value to the form
+        if (onSelect && directoryName !== value) {
+            onSelect(directoryName);
+        }
+    }
+
     return <Search category
                    placeholder='Search directory names...'
                    onSearchChange={handleSearchChange}
                    onResultSelect={handleResultSelect}
+                   onBlur={handleBlur}
                    loading={loading}
                    value={directoryName}
                    results={results}

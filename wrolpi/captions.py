@@ -3,7 +3,7 @@ import pathlib
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Generator, Union, Optional
+from typing import Generator, Union
 
 import srt
 import webvtt

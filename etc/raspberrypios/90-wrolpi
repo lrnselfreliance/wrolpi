@@ -12,4 +12,6 @@
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/import_map.sh
+%wrolpi ALL= NOPASSWD:/opt/wrolpi/upgrade.sh *
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-upgrade.service
 %wrolpi ALL= NOPASSWD:/usr/sbin/shutdown

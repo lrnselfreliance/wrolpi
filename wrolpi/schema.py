@@ -263,6 +263,7 @@ class DownloadRequest:
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
     settings: Optional[dict] = field(default_factory=dict)
+    collection_id: Optional[int] = None
 
     def __post_init__(self):
         urls = [j for i in self.urls if (j := i.strip())]

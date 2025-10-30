@@ -118,6 +118,14 @@ function handleEvents(events) {
             eventToast('Screenshot Generation Failed!', message, 'error', 5000);
         }
 
+        if (event === 'upgrade_started') {
+            eventToast('Upgrade Started', message, 'info', 10000);
+            // Redirect to maintenance page after a short delay
+            setTimeout(() => {
+                window.location.href = '/maintenance.html';
+            }, 1000);
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

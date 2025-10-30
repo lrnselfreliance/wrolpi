@@ -2,6 +2,7 @@ import React, {useContext, useEffect, useRef, useState} from "react";
 import {
     ApiDownError,
     createChannel,
+    fetchChannels,
     fetchDecoded,
     fetchDomains,
     fetchFilesProgress,
@@ -10,6 +11,7 @@ import {
     getChannel,
     getChannels,
     getConfigs,
+    getDomain,
     getDownloads,
     getFiles,
     getInventory,
@@ -32,6 +34,7 @@ import {
     setHotspot,
     setThrottle,
     updateChannel,
+    updateDomain,
 } from "../api";
 import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
@@ -191,17 +194,21 @@ export const useAllQuery = (name) => {
 export const useDomains = () => {
     const [domains, setDomains] = useState(null);
     const [total, setTotal] = useState(null);
+    const [metadata, setMetadata] = useState(null);
 
     const _fetchDomains = async () => {
         setDomains(null);
         setTotal(0);
+        setMetadata(null);
         try {
-            let [domains, total] = await fetchDomains();
+            let [domains, total, metadata] = await fetchDomains();
             setDomains(domains);
             setTotal(total);
+            setMetadata(metadata);
         } catch (e) {
             setDomains(undefined); // Display error.
             setTotal(0);
+            setMetadata(undefined);
         }
     }
 
@@ -209,7 +216,86 @@ export const useDomains = () => {
         _fetchDomains();
     }, []);
 
-    return [domains, total];
+    return [domains, total, metadata];
+}
+
+export const useCollectionMetadata = (kind) => {
+    const [metadata, setMetadata] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const fetchMetadata = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            if (kind === 'domain') {
+                const [, , metadata] = await fetchDomains();
+                setMetadata(metadata);
+            } else {
+                // Future: Support channels metadata
+                setMetadata(null);
+            }
+        } catch (e) {
+            console.error(e);
+            setError(e);
+            setMetadata(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchMetadata();
+    }, [kind]);
+
+    return {metadata, loading, error, fetchMetadata};
+}
+
+export const useDomain = (domainId) => {
+    const emptyDomain = {
+        domain: '',
+        directory: '',
+        description: '',
+        tag_name: null,
+    };
+
+    const fetchDomain = async () => {
+        if (!domainId) {
+            console.debug('Not fetching domain because no domainId is provided');
+            return;
+        }
+        const d = await getDomain(domainId);
+        // Prevent controlled to uncontrolled
+        d.directory = d.directory || '';
+        d.description = d.description || '';
+        d.tag_name = d.tag_name || null;
+        return d;
+    };
+
+    const submitDomain = async () => {
+        const body = {
+            directory: form.formData.directory,
+            description: form.formData.description,
+            // Convert null to empty string - backend expects "" to clear tag
+            tag_name: form.formData.tag_name === null ? '' : form.formData.tag_name,
+        };
+        return await updateDomain(domainId, body);
+    };
+
+    const form = useForm({
+        fetcher: fetchDomain,
+        emptyFormData: emptyDomain,
+        clearOnSuccess: false,
+        submitter: submitDomain
+    });
+
+    React.useEffect(() => {
+        form.fetcher();
+    }, [domainId]);
+
+    const domain = form.formData;
+
+    return {domain, form, fetchDomain: form.fetcher};
 }
 
 export const useArchive = (archiveId) => {
@@ -522,23 +608,31 @@ export const useChannel = (channel_id) => {
 
 export const useChannels = () => {
     const [channels, setChannels] = useState(null);
+    const [total, setTotal] = useState(null);
+    const [metadata, setMetadata] = useState(null);
 
-    const fetchChannels = async () => {
+    const _fetchChannels = async () => {
         setChannels(null);
+        setTotal(0);
+        setMetadata(null);
         try {
-            const c = await getChannels();
-            setChannels(c);
+            let [channels, total, metadata] = await fetchChannels();
+            setChannels(channels);
+            setTotal(total);
+            setMetadata(metadata);
         } catch (e) {
             console.error(e);
-            setChannels(undefined); // Could not get Channels, display error.
+            setChannels(undefined); // Display error.
+            setTotal(0);
+            setMetadata(undefined);
         }
     }
 
     useEffect(() => {
-        fetchChannels();
+        _fetchChannels();
     }, []);
 
-    return {channels, fetchChannels}
+    return [channels, total, metadata];
 }
 
 export const useSearchRecentFiles = () => {

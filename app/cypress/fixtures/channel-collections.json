@@ -1,0 +1,63 @@
+{
+  "collections": [
+    {
+      "id": 1,
+      "name": "My Tech Channel",
+      "video_count": 100,
+      "size": 5000000000,
+      "tag_name": "Tech",
+      "directory": "videos/channels/tech",
+      "download_frequency": "daily",
+      "url": "https://youtube.com/c/tech",
+      "rss_url": "https://youtube.com/feeds/tech"
+    },
+    {
+      "id": 2,
+      "name": "News Channel",
+      "video_count": 50,
+      "size": 2500000000,
+      "tag_name": "News",
+      "directory": "videos/channels/news",
+      "download_frequency": "weekly",
+      "url": "https://youtube.com/c/news",
+      "rss_url": null
+    },
+    {
+      "id": 3,
+      "name": "Science Channel",
+      "video_count": 75,
+      "size": 3750000000,
+      "tag_name": null,
+      "directory": "videos/channels/science",
+      "download_frequency": null,
+      "url": null,
+      "rss_url": null
+    }
+  ],
+  "totals": {
+    "channels": 3
+  },
+  "metadata": {
+    "kind": "channel",
+    "columns": [
+      {"key": "name", "label": "Name", "sortable": true},
+      {"key": "tag_name", "label": "Tag", "sortable": true},
+      {"key": "video_count", "label": "Videos", "sortable": true},
+      {"key": "download_frequency", "label": "Download Frequency", "sortable": true},
+      {"key": "size", "label": "Size", "sortable": true, "format": "bytes"},
+      {"key": "actions", "label": "Manage", "sortable": false, "type": "actions"}
+    ],
+    "fields": [
+      {"key": "name", "label": "Channel Name", "type": "text", "required": true},
+      {"key": "directory", "label": "Directory", "type": "path", "required": true},
+      {"key": "url", "label": "URL", "type": "url", "optional": true},
+      {"key": "tag_name", "label": "Tag", "type": "tag", "optional": true},
+      {"key": "download_missing_data", "label": "Download Missing Data", "type": "boolean", "optional": true}
+    ],
+    "routes": {
+      "list": "/videos/channels",
+      "edit": "/videos/channel/:id/edit",
+      "search": "/videos/channel/:id/video"
+    }
+  }
+}

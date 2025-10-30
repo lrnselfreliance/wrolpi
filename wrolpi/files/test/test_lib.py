@@ -673,8 +673,9 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
         assert lib.get_primary_file([foo, bar])
 
 
-def test_get_refresh_progress(test_client, test_session):
-    request, response = test_client.get('/api/files/refresh_progress')
+@pytest.mark.asyncio
+async def test_get_refresh_progress(async_client, test_session):
+    request, response = await async_client.get('/api/files/refresh_progress')
     assert response.status_code == HTTPStatus.OK
     assert 'progress' in response.json
     progress = response.json['progress']
@@ -709,7 +710,7 @@ async def test_refresh_files_no_groups(test_session, test_directory, make_files_
 
 
 @pytest.mark.asyncio
-async def test_refresh_directories(test_session, test_directory, assert_directories):
+async def test_refresh_directories(test_session, test_directory, assert_directories, await_switches):
     """
     Directories are stored when they are discovered.  They are removed when they can no longer be found.
     """

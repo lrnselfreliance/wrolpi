@@ -7,7 +7,7 @@ import pathlib
 import re
 import shlex
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from json import JSONDecodeError
 from typing import Optional, Tuple, List, Union
@@ -17,20 +17,188 @@ import pytz
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
-from modules.archive.models import Domain, Archive
+from modules.archive.models import Archive
 from wrolpi import dates
 from wrolpi.cmd import READABILITY_BIN, run_command
+from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config, html_screenshot
+    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config, html_screenshot, \
+    ConfigFile
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
+from wrolpi.events import Events
+from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
 
+__all__ = ['DomainsConfig', 'domains_config', 'get_domains_config', 'save_domains_config', 'import_domains_config']
+
 ARCHIVE_SERVICE = 'http://archive:8080'
+
+
+@dataclass
+class DomainsConfigValidator:
+    """Validator for domains config file."""
+    version: int = 0
+    collections: List[dict] = field(default_factory=list)
+
+
+class DomainsConfig(ConfigFile):
+    """
+    Config file for Domain Collections.
+
+    This is a specialized config that manages domain collections
+    (Collections with kind='domain'). It maintains a domains.yaml file for
+    backward compatibility and user convenience.
+
+    Format:
+        collections:
+          - name: "example.com"
+            kind: "domain"
+            description: "Archives from example.com"
+          - name: "wikipedia.org"
+            kind: "domain"
+
+    Note: Domain collections can have optional directories for tagging support.
+    Items are managed dynamically when Archives are indexed.
+    """
+    file_name = 'domains.yaml'
+    validator = DomainsConfigValidator
+    default_config = dict(
+        version=0,
+        collections=[],
+    )
+    # Use wider width to accommodate longer paths
+    width = 120
+
+    def __getitem__(self, item):
+        return self._config[item]
+
+    def __setitem__(self, key, value):
+        self._config[key] = value
+
+    @property
+    def collections(self) -> List[dict]:
+        """Get list of collection configs."""
+        return self._config.get('collections', [])
+
+    def import_config(self, file: pathlib.Path = None, send_events=False):
+        """Import domain collections from config file into database."""
+        ConfigFile.import_config(self, file, send_events)
+
+        file_str = str(self.get_relative_file())
+        collections_data = self._config.get('collections', [])
+
+        if not collections_data:
+            logger.info(f'No domain collections to import from {file_str}')
+            self.successful_import = True
+            return
+
+        logger.info(f'Importing {len(collections_data)} domain collections from {file_str}')
+
+        try:
+            with get_db_session(commit=True) as session:
+                # Track imported domain names
+                imported_domains = set()
+
+                # Import each domain collection, forcing kind='domain'
+                for idx, collection_data in enumerate(collections_data):
+                    try:
+                        name = collection_data.get('name')
+                        if not name:
+                            logger.error(f'Domain collection at index {idx} has no name, skipping')
+                            continue
+
+                        # Ensure kind is 'domain'
+                        collection_data = collection_data.copy()
+                        collection_data['kind'] = 'domain'
+
+                        # Warn if tag_name provided without directory
+                        tag_name = collection_data.get('tag_name')
+                        directory = collection_data.get('directory')
+                        if tag_name and not directory:
+                            logger.warning(
+                                f"Domain collection '{name}' has tag_name '{tag_name}' "
+                                f"but no directory - tags require a directory. Tag will be ignored."
+                            )
+                            collection_data.pop('tag_name', None)
+
+                        # Use Collection.from_config to create/update
+                        collection = Collection.from_config(collection_data, session)
+                        imported_domains.add(collection.name)
+
+                    except Exception as e:
+                        logger.error(f'Failed to import domain collection at index {idx}', exc_info=e)
+                        continue
+
+                # Delete domain collections that are no longer in config
+                all_domain_collections = session.query(Collection).filter_by(kind='domain').all()
+                for collection in all_domain_collections:
+                    if collection.name not in imported_domains:
+                        logger.info(f'Deleting domain collection {repr(collection.name)} (no longer in config)')
+                        session.delete(collection)
+
+            logger.info(f'Successfully imported {len(imported_domains)} domain collections from {file_str}')
+            self.successful_import = True
+
+        except Exception as e:
+            self.successful_import = False
+            message = f'Failed to import {file_str} config!'
+            logger.error(message, exc_info=e)
+            if send_events:
+                Events.send_config_import_failed(message)
+            raise
+
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
+        """Dump all domain collections from database to config file."""
+        logger.info('Dumping domain collections to config')
+
+        with get_db_session() as session:
+            # Get only domain collections, ordered by name
+            collections = session.query(Collection).filter_by(kind='domain').order_by(Collection.name).all()
+
+            # Use to_config to export each collection
+            collections_data = [collection.to_config() for collection in collections]
+
+            self._config['collections'] = collections_data
+
+        logger.info(f'Dumping {len(collections_data)} domain collections to config')
+        self.save(file, send_events, overwrite)
+
+
+# Global instance
+domains_config = DomainsConfig()
+
+
+def get_domains_config() -> DomainsConfig:
+    """Get the global domains config instance."""
+    return domains_config
+
+
+# Switch handler for saving domains config
+@register_switch_handler('save_domains_config')
+def save_domains_config():
+    """Save the domains config when the switch is activated."""
+    domains_config.background_dump.activate_switch()
+
+
+# Explicit type for activate_switch helper
+save_domains_config: ActivateSwitchMethod
+
+
+def import_domains_config():
+    """Import domain collections from config file into database."""
+    logger.info('Importing domains config')
+    domains_config.import_config()
+
+    # Link downloads to domain collections after import
+    with get_db_session() as session:
+        link_domain_and_downloads(session)
+
+    logger.info('Importing domains config completed')
 
 
 @dataclass
@@ -72,6 +240,25 @@ def get_domain_directory(url: str) -> pathlib.Path:
 
     directory.mkdir(parents=True, exist_ok=True)
     return directory
+
+
+def get_archive_destination(domain_collection: 'Collection') -> pathlib.Path:
+    """
+    Get the destination directory for archives in a domain collection.
+
+    Args:
+        domain_collection: The domain Collection (kind='domain')
+
+    Returns:
+        Path where archives should be placed. If collection has a directory,
+        returns that directory. Otherwise returns the default archives/<domain>/ path.
+    """
+    if domain_collection.directory:
+        # Restricted collection - use collection directory
+        return get_media_directory() / domain_collection.directory
+    else:
+        # Unrestricted collection - use default archive/<domain>/ path
+        return get_archive_directory() / domain_collection.name
 
 
 # File names include domain and datetime.
@@ -248,24 +435,223 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
         archive = Archive.from_paths(session, *paths)
         archive.file_group.download_datetime = now()
         archive.url = url
-        archive.domain = get_or_create_domain(session, url)
+        archive.collection = get_or_create_domain_collection(session, url)
         archive.flush()
-        archive.domain.flush()
 
     return archive
 
 
-def get_or_create_domain(session: Session, url) -> Domain:
+def detect_domain_directory(collection: Collection, session: Session) -> Optional[pathlib.Path]:
     """
-    Get/create the Domain for this archive.
+    Detect if all archives for a domain collection share a common directory.
+
+    Args:
+        collection: The domain collection to analyze
+        session: Database session
+
+    Returns:
+        Path (relative to media directory) if all archives share a common directory within archive media directory.
+        None if archives are scattered across different directories or if collection has no archives.
     """
-    domain_ = extract_domain(url)
-    domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
-    if not domain:
-        domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
-        session.add(domain)
+    if collection.kind != 'domain':
+        return None
+
+    # Query all archives for this domain collection
+    archives = session.query(Archive).filter_by(collection_id=collection.id).all()
+
+    if not archives:
+        # No archives yet, can't determine directory
+        return None
+
+    # Get all archive file paths
+    paths = []
+    for archive in archives:
+        if archive.file_group and archive.file_group.primary_path:
+            paths.append(pathlib.Path(archive.file_group.primary_path))
+
+    if not paths:
+        return None
+
+    # Find common ancestor directory
+    # Start with the first path's parent directory
+    common_dir = paths[0].parent
+
+    # Check if all other paths are under this directory
+    for path in paths[1:]:
+        try:
+            # Check if path is relative to common_dir
+            path.relative_to(common_dir)
+        except ValueError:
+            # Path is not under common_dir, find the common ancestor
+            # Walk up until we find a common parent
+            while common_dir != common_dir.parent:  # Stop at root
+                try:
+                    path.relative_to(common_dir)
+                    break  # Found common ancestor
+                except ValueError:
+                    common_dir = common_dir.parent
+
+    # Check if common directory is within the media directory
+    media_dir = get_media_directory()
+    try:
+        relative_path = common_dir.relative_to(media_dir)
+    except ValueError:
+        # Common directory is outside media directory
+        return None
+
+    # Check if it's within the archive directory structure
+    archive_base = get_archive_directory()
+    try:
+        archive_base.relative_to(media_dir)  # Verify archive_base is under media_dir
+        common_dir.relative_to(archive_base.parent)  # Verify common_dir is under archive structure
+    except ValueError:
+        # Not in the archive directory structure
+        return None
+
+    logger.debug(f'Detected directory for domain {collection.name}: {relative_path}')
+    return relative_path
+
+
+def update_domain_directories(session: Session = None) -> int:
+    """
+    One-time update to detect and set directories for existing domain collections.
+
+    This should be run once to fix domain collections that were created without directories
+    but have all their archives in a common location.
+
+    Args:
+        session: Database session
+
+    Returns:
+        Number of domain collections updated
+    """
+    if session is None:
+        with get_db_session(commit=True) as session:
+            return update_domain_directories(session)
+
+    # Find all domain collections without directories
+    collections = session.query(Collection).filter_by(kind='domain', directory=None).all()
+
+    updated_count = 0
+    for collection in collections:
+        detected_dir = detect_domain_directory(collection, session)
+        if detected_dir:
+            collection.directory = detected_dir
+            session.flush([collection])
+            updated_count += 1
+            logger.info(f'Updated domain {collection.name} with directory: {detected_dir}')
+
+    session.commit()
+    logger.info(f'Updated {updated_count} domain collection(s) with auto-detected directories')
+    return updated_count
+
+
+def get_or_create_domain_collection(session: Session, url, directory: pathlib.Path = None) -> Collection:
+    """
+    Get or create the domain Collection for this archive.
+
+    Args:
+        session: Database session
+        url: URL of the archive
+        directory: Optional directory to restrict this domain collection.
+                  If None, creates unrestricted collection (default).
+                  If provided, archives will be placed in this directory and collection can be tagged.
+
+    Returns:
+        Collection with kind='domain' for the domain extracted from the URL
+    """
+    domain_name = extract_domain(url)
+
+    # Try to find existing domain collection
+    collection = session.query(Collection).filter_by(
+        name=domain_name,
+        kind='domain'
+    ).one_or_none()
+
+    if not collection:
+        # Create new domain collection
+        collection = Collection(
+            name=domain_name,
+            kind='domain',
+            directory=directory,  # Can be None (unrestricted) or a Path (restricted)
+        )
+        session.add(collection)
         session.flush()
-    return domain
+        # Trigger domain config save for new domain
+        save_domains_config.activate_switch()
+        if directory:
+            logger.info(f'Created domain collection with directory: {domain_name} -> {directory}')
+        else:
+            logger.info(f'Created unrestricted domain collection: {domain_name}')
+
+    # Auto-detect directory if not explicitly set and collection doesn't have one
+    if not directory and not collection.directory:
+        detected_dir = detect_domain_directory(collection, session)
+        if detected_dir:
+            collection.directory = detected_dir
+            session.flush()
+            # Trigger domain config save when directory is auto-detected
+            save_domains_config.activate_switch()
+            logger.info(f'Auto-detected directory for domain {domain_name}: {detected_dir}')
+
+    return collection
+
+
+def link_domain_and_downloads(session: Session):
+    """Associate any Download related to a Domain Collection.
+
+    Downloads are linked to Collections (via collection_id).
+    This function finds Domain Collections and links their Downloads.
+
+    Matching criteria:
+    - Recurring downloads whose destination is within the domain collection's directory (including subdirectories)
+    - RSS downloads with sub_downloader='archive' (matched by URL domain)
+    """
+    from wrolpi.downloader import Download
+    from wrolpi.collections.models import Collection
+
+    # Only Downloads with a frequency can be a Collection Download.
+    downloads = list(session.query(Download).filter(Download.frequency.isnot(None)).all())
+
+    # Get domain collections that have a directory
+    domain_collections = session.query(Collection).filter(
+        Collection.kind == 'domain',
+        Collection.directory.isnot(None)
+    ).all()
+
+    need_commit = False
+
+    # Match downloads by destination directory (including subdirectories)
+    downloads_with_destination = [d for d in downloads if (d.settings or {}).get('destination')]
+    for collection in domain_collections:
+        # Ensure directory ends with / for proper prefix matching
+        directory = str(collection.directory)
+        directory_prefix = directory if directory.endswith('/') else directory + '/'
+        for download in downloads_with_destination:
+            dest = download.settings['destination']
+            # Match if destination equals directory or is a subdirectory
+            if not download.collection_id and (dest == directory or dest.startswith(directory_prefix)):
+                download.collection_id = collection.id
+                need_commit = True
+
+    # Match RSS downloads with archive sub_downloader by URL domain
+    rss_archive_downloads = [
+        d for d in downloads
+        if d.downloader == 'rss' and d.sub_downloader == 'archive' and not d.collection_id
+    ]
+    for download in rss_archive_downloads:
+        # Extract domain from the RSS URL and find matching domain collection
+        domain_name = extract_domain(download.url)
+        collection = session.query(Collection).filter_by(
+            name=domain_name,
+            kind='domain'
+        ).one_or_none()
+        if collection:
+            download.collection_id = collection.id
+            need_commit = True
+
+    if need_commit:
+        session.commit()
 
 
 SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')
@@ -463,18 +849,86 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
 
 
 def get_domains():
+    """
+    Get all domain collections with their archive statistics.
+
+    This is a thin wrapper around Collection queries that adds archive-specific statistics.
+    Returns a list of dicts with collection id, domain name, url_count, and total size.
+    """
+    from sqlalchemy import func, BigInteger
+    from wrolpi.files.models import FileGroup
+
+    with get_db_session() as session:
+        # Query all domain collections with archive statistics in a single query
+        # This uses ORM for better maintainability while keeping performance
+        query = (
+            session.query(
+                Collection.id,
+                Collection.name.label('domain'),
+                func.count(Archive.id).label('url_count'),
+                func.sum(FileGroup.size).cast(BigInteger).label('size')
+            )
+            .outerjoin(Archive, Collection.id == Archive.collection_id)
+            .outerjoin(FileGroup, FileGroup.id == Archive.file_group_id)
+            .filter(Collection.kind == 'domain')
+            .group_by(Collection.id, Collection.name)
+            .order_by(Collection.name)
+        )
+
+        domains = [
+            {
+                'id': row.id,
+                'domain': row.domain,
+                'url_count': row.url_count or 0,
+                'size': row.size or 0,
+            }
+            for row in query.all()
+        ]
+
+        return domains
+
+
+def get_domain(domain_id: int) -> dict:
+    """
+    Get a single domain collection by ID with its archive statistics.
+
+    Returns a dict with collection details including id, domain name, url_count, size,
+    tag_name, directory (relative to media directory), and description.
+
+    Raises UnknownArchive if domain not found.
+    """
+    # Get the collection using find_by_id
+    try:
+        collection = Collection.find_by_id(domain_id)
+    except Exception:
+        # Collection.find_by_id raises UnknownCollection, but we want UnknownArchive
+        raise UnknownArchive(f"Domain collection with ID {domain_id} not found")
+
+    if collection.kind != 'domain':
+        raise UnknownArchive(f"Collection {domain_id} is not a domain")
+
+    # Get base domain data from __json__()
+    domain_data = collection.__json__()
+
+    # Get archive statistics for this domain
     with get_db_curs() as curs:
         stmt = '''
-               SELECT domains.domain AS domain, COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
-               FROM domains
-                        LEFT JOIN archive a on domains.id = a.domain_id
+               SELECT COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
+               FROM archive a
                         LEFT JOIN file_group fg on fg.id = a.file_group_id
-               GROUP BY domains.domain
-               ORDER BY domains.domain \
+               WHERE a.collection_id = %(domain_id)s
                '''
-        curs.execute(stmt)
-        domains = [dict(i) for i in curs.fetchall()]
-        return domains
+        curs.execute(stmt, {'domain_id': domain_id})
+        stats = dict(curs.fetchone())
+
+    # Enhance with archive stats
+    domain_data['url_count'] = stats['url_count'] or 0
+    domain_data['size'] = stats['size'] or 0
+
+    # Use 'domain' key for domain collections instead of 'name'
+    domain_data['domain'] = domain_data.pop('name')
+
+    return domain_data
 
 
 ARCHIVE_ORDERS = {
@@ -556,7 +1010,9 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
     if domain:
         params['domain'] = domain
-        wheres.append('a.domain_id = (select id from domains where domains.domain = %(domain)s)')
+        # Use LIMIT 1 to handle potential duplicate domain collections with the same name
+        wheres.append(
+            "a.collection_id = (select id from collection where collection.name = %(domain)s and collection.kind = 'domain' LIMIT 1)")
 
     select_columns = f", {select_columns}" if select_columns else ""
     wheres = '\n AND '.join(wheres)
@@ -582,13 +1038,38 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
 
 @optional_session
-async def search_domains_by_name(name: str, limit: int = 5, session: Session = None) -> List[Domain]:
-    domains = session.query(Domain) \
-        .filter(Domain.domain.ilike(f'%{name}%')) \
-        .order_by(asc(Domain.domain)) \
+async def search_domains_by_name(name: str, limit: int = 5, session: Session = None) -> List[dict]:
+    """
+    Search for domain collections by name.
+
+    Args:
+        name: Search string to match against collection names
+        limit: Maximum number of results to return
+        session: Database session
+
+    Returns:
+        List of domain dicts matching the search (in old Domain format for backward compatibility)
+    """
+    collections = session.query(Collection) \
+        .filter(Collection.kind == 'domain') \
+        .filter(Collection.name.ilike(f'%{name}%')) \
+        .order_by(asc(Collection.name)) \
         .limit(limit) \
         .all()
-    return domains
+
+    # Convert to old Domain format for backward compatibility
+    from wrolpi.common import get_relative_to_media_directory
+    archive_dir = get_archive_directory()
+    return [
+        {
+            'id': c.id,
+            'domain': c.name,
+            # Domain collections can have explicit directories or use default archive path
+            'directory': get_relative_to_media_directory(c.directory) if c.directory else str(
+                (archive_dir / c.name).relative_to(get_media_directory())),
+        }
+        for c in collections
+    ]
 
 
 async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):

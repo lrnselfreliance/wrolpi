@@ -9,10 +9,7 @@ import {
     GridRow,
     Image,
     Input,
-    PlaceholderHeader,
-    PlaceholderLine,
     TableCell,
-    TableRow
 } from "semantic-ui-react";
 import {
     APIButton,
@@ -35,19 +32,31 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {deleteArchives, generateArchiveScreenshot, postDownload, tagFileGroup, untagFileGroup} from "../api";
-import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
+import {deleteArchives, deleteDomain, generateArchiveScreenshot, getCollectionTagInfo, postDownload, refreshDomain, tagDomain, tagFileGroup, untagFileGroup} from "../api";
+import {CollectionTagModal} from "./collections/CollectionTagModal";
+import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
+import {
+    useArchive,
+    useCollectionMetadata,
+    useDomain,
+    useDomains,
+    useOneQuery,
+    useSearchArchives,
+    useSearchOrder
+} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, Segment, Tab, TabPane} from "./Theme";
 import {SortableTable} from "./SortableTable";
-import {taggedImageLabel, TagsSelector} from "../Tags";
+import {taggedImageLabel, TagsSelector, TagsContext} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
+import {CollectionTable} from "./collections/CollectionTable";
+import {CollectionEditForm} from "./collections/CollectionEditForm";
+import {RecurringDownloadsTable} from "./admin/Downloads";
 
 function archiveFileLink(path, directory = false) {
     if (path) {
@@ -350,66 +359,219 @@ export function ArchiveCard({file}) {
 export function DomainsPage() {
     useTitle('Archive Domains');
 
-    const [domains] = useDomains();
-    const [searchStr, setSearchStr] = useState('');
+    const [domains, total, metadata] = useDomains();
+    const [searchStr, setSearchStr] = useOneQuery('domain');
 
-    if (domains === null) {
-        // Request is pending.
+    // Header section matching ChannelsPage pattern
+    const header = <div style={{marginBottom: '1em'}}>
+        <Grid stackable columns={2}>
+            <Grid.Row>
+                <Grid.Column>
+                    <SearchInput
+                        placeholder='Domain filter...'
+                        size='large'
+                        searchStr={searchStr}
+                        disabled={!Array.isArray(domains) || domains.length === 0}
+                        onClear={() => setSearchStr('')}
+                        onChange={setSearchStr}
+                        onSubmit={null}
+                    />
+                </Grid.Column>
+                <Grid.Column textAlign='right'>
+                    {/* No "New Domain" button - domains are auto-created */}
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    </div>;
+
+    // Empty state
+    if (domains && domains.length === 0) {
         return <>
-            <Placeholder>
-                <PlaceholderHeader>
-                    <PlaceholderLine/>
-                    <PlaceholderLine/>
-                </PlaceholderHeader>
-            </Placeholder>
+            {header}
+            <Message>
+                <Message.Header>No domains yet. Archive some webpages!</Message.Header>
+            </Message>
         </>;
-    } else if (domains === undefined) {
-        return <ErrorMessage>Could not fetch domains</ErrorMessage>
-    } else if (domains && domains.length === 0) {
-        return <Message>
-            <Message.Header>No domains yet.</Message.Header>
-            <Message.Content>Archive some webpages!</Message.Content>
-        </Message>;
     }
 
-    let filteredDomains = domains;
-    if (searchStr) {
-        const re = new RegExp(_.escapeRegExp(searchStr), 'i');
-        filteredDomains = domains.filter(i => re.test(i['domain']));
+    // Error state
+    if (domains === undefined) {
+        return <>
+            {header}
+            <ErrorMessage>Could not fetch Domains</ErrorMessage>
+        </>;
     }
-
-    const domainRow = ({domain, url_count, size}) => {
-        return <TableRow key={domain}>
-            <TableCell>
-                <Link to={`/archive?domain=${domain}`}>
-                    {domain}
-                </Link>
-            </TableCell>
-            <TableCell>{url_count}</TableCell>
-            <TableCell>{humanFileSize(size)}</TableCell>
-        </TableRow>
-    }
-
-    const headers = [
-        {key: 'domain', text: 'Domain', sortBy: 'domain', width: 12},
-        {key: 'archives', text: 'Archives', sortBy: 'url_count', width: 2},
-        {key: 'Size', text: 'Size', sortBy: 'size', width: 2},
-    ];
 
     return <>
-        <Input
-            icon='search'
-            value={searchStr}
-            placeholder='Search...'
-            onChange={(e, {value}) => setSearchStr(value)}
+        {header}
+        <CollectionTable
+            collections={domains}
+            metadata={metadata}
+            searchStr={searchStr}
         />
-        <SortableTable
-            tableProps={{unstackable: true}}
-            data={filteredDomains}
-            rowFunc={(i, sortData) => domainRow(i)}
-            rowKey='domain'
-            tableHeaders={headers}
+    </>;
+}
+
+export function DomainEditPage() {
+    const {domainId} = useParams();
+    const navigate = useNavigate();
+    const {domain, form, fetchDomain} = useDomain(parseInt(domainId));
+    const {metadata} = useCollectionMetadata('domain');
+
+    // Modal state for tagging
+    const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
+
+    // Filter out tag_name field - we use the modal button instead of inline selector
+    const filteredMetadata = React.useMemo(() => {
+        if (!metadata) return metadata;
+        return {
+            ...metadata,
+            fields: metadata.fields.filter(field => field.key !== 'tag_name')
+        };
+    }, [metadata]);
+
+    useTitle(`Edit Domain: ${domain?.domain || '...'}`);
+
+    // Wrap form.onSubmit to add toast and refresh domain data
+    React.useEffect(() => {
+        if (form && form.onSubmit) {
+            const originalOnSubmit = form.onSubmit;
+            form.onSubmit = async () => {
+                try {
+                    await originalOnSubmit();
+                    toast({
+                        type: 'success',
+                        title: 'Domain Updated',
+                        description: 'Domain was successfully updated',
+                        time: 3000,
+                    });
+                    // Refresh domain data to show updated values
+                    await fetchDomain();
+                } catch (e) {
+                    console.error('Failed to update domain:', e);
+                    throw e;
+                }
+            };
+        }
+    }, [form, fetchDomain]);
+
+    // Handler for tag modal save
+    const handleTagSave = async (tagName, directory) => {
+        try {
+            await tagDomain(parseInt(domainId), tagName, directory);
+            toast({
+                type: 'success',
+                title: 'Domain Tagged',
+                description: `Domain "${domain?.domain}" has been tagged with "${tagName}"`,
+                time: 3000,
+            });
+        } catch (e) {
+            console.error('Failed to tag domain', e);
+        } finally {
+            setTimeout(async () => {
+                await fetchDomain();
+            }, 500);
+        }
+    };
+
+    // Handler for fetching tag info
+    const handleGetTagInfo = async (tagName) => {
+        if (domain?.id) {
+            return await getCollectionTagInfo(domain.id, tagName);
+        }
+        return null;
+    };
+
+    const handleRefreshDomain = async (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        await refreshDomain(parseInt(domainId));
+        // Refresh domain data after completion
+        await fetchDomain();
+    };
+
+    if (!form.ready) {
+        return <Loader active>Loading domain...</Loader>;
+    }
+
+    // Handler for domain deletion
+    const handleDelete = async () => {
+        try {
+            let response = await deleteDomain(parseInt(domainId));
+            if (response.status === 204) {
+                navigate('/archive/domains');
+            }
+        } catch (e) {
+            console.error('Failed to delete domain', e);
+        }
+    };
+
+    const deleteButton = <APIButton
+        color='red'
+        size='small'
+        confirmContent='Are you sure you want to delete this domain? No archive files will be deleted, but archives will be orphaned.'
+        confirmButton='Delete'
+        confirmHeader='Delete Domain?'
+        onClick={handleDelete}
+        obeyWROLMode={true}
+        style={{marginTop: '1em'}}
+    >Delete</APIButton>;
+
+    const refreshButton = domain?.directory ? (
+        <APIButton
+            color='blue'
+            size='small'
+            onClick={handleRefreshDomain}
+            obeyWROLMode={true}
+            style={{marginTop: '1em'}}
+        >Refresh</APIButton>
+    ) : null;
+
+    const tagButton = <Button
+        type="button"
+        size='small'
+        onClick={() => setTagEditModalOpen(true)}
+        color='green'
+        style={{marginTop: '1em'}}
+    >Tag</Button>;
+
+    const actionButtons = <>
+        {deleteButton}
+        {refreshButton}
+        {tagButton}
+    </>;
+
+    return <>
+        <BackButton/>
+        <CollectionEditForm
+            form={form}
+            metadata={filteredMetadata}
+            title={`Edit Domain: ${domain?.domain || '...'}`}
+            wrolModeContent='Domain editing is disabled while in WROL Mode.'
+            actionButtons={actionButtons}
+            appliedTagName={domain?.tag_name}
         />
+
+        {/* Tag Modal */}
+        <CollectionTagModal
+            open={tagEditModalOpen}
+            onClose={() => setTagEditModalOpen(false)}
+            currentTagName={domain?.tag_name}
+            originalDirectory={domain?.directory}
+            getTagInfo={handleGetTagInfo}
+            onSave={handleTagSave}
+            collectionName="Domain"
+        />
+
+        {/* Downloads Segment */}
+        <Segment>
+            <Header as='h1'>Downloads</Header>
+            <RecurringDownloadsTable
+                downloads={domain?.downloads}
+                fetchDownloads={fetchDomain}
+            />
+        </Segment>
     </>;
 }
 
@@ -633,9 +795,21 @@ export function ArchiveRowCells({file}) {
 }
 
 export function ArchiveRoute() {
+    const location = useLocation();
+    const path = location.pathname;
+
     const links = [
-        {text: 'Archives', to: '/archive', end: true},
-        {text: 'Domains', to: '/archive/domains'},
+        {
+            text: 'Archives',
+            to: '/archive',
+            end: true,
+            isActive: () => path === '/archive' || /^\/archive\/\d+$/.test(path)
+        },
+        {
+            text: 'Domains',
+            to: '/archive/domains',
+            isActive: () => path.startsWith('/archive/domain')
+        },
         {text: 'Settings', to: '/archive/settings'},
     ];
     return <PageContainer>
@@ -643,6 +817,7 @@ export function ArchiveRoute() {
         <Routes>
             <Route path='/' element={<ArchivesPage/>}/>
             <Route path='domains' element={<DomainsPage/>}/>
+            <Route path='domain/:domainId/edit' element={<DomainEditPage/>}/>
             <Route path='settings' element={<ArchiveSettingsPage/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>

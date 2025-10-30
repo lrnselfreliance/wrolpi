@@ -8,7 +8,7 @@ from modules.videos.models import Video
 from wrolpi.downloader import Download, DownloadFrequency
 
 
-def test_delete_channel_no_url(test_session, test_client, channel_factory):
+def test_delete_channel_no_url(test_session, channel_factory):
     """
     A Channel can be deleted even if it has no URL.
     """
@@ -104,8 +104,16 @@ async def test_channel_download_relationships(test_session, download_channel):
 
 
 def test_channel_info_json(test_session, test_directory):
-    channel = Channel(name='new channel')
+    from wrolpi.collections import Collection
+
+    # Create Collection first without directory
+    collection = Collection(name='new channel', kind='channel')
+    test_session.add(collection)
+    test_session.flush()
+
+    channel = Channel(collection_id=collection.id)
     test_session.add(channel)
+    test_session.flush()
 
     with pytest.raises(FileNotFoundError) as e:
         # Cannot get info json because directory is not defined.

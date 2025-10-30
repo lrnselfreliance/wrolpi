@@ -459,6 +459,7 @@ def test_timer():
     with common.timer(name='test_timer'):
         time.sleep(0.1)
 
+
 @pytest.mark.asyncio
 @skip_macos
 async def test_limit_concurrent_async():

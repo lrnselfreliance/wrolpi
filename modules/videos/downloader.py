@@ -5,7 +5,6 @@ import logging
 import os.path
 import pathlib
 import re
-import sys
 import traceback
 from abc import ABC
 from datetime import timedelta
@@ -208,7 +207,7 @@ class ChannelDownloader(Downloader, ABC):
         # The settings to send to the VideoDownloader.
         settings = dict()
         if channel:
-            settings.update(dict(channel_id=channel.id, channel_url=download.url))
+            settings.update(dict(collection_id=channel.collection_id, channel_url=download.url))
         if download.destination:
             destination = get_absolute_media_path(download.destination)
             settings['destination'] = str(destination)  # Need str for JSON conversion
@@ -622,14 +621,20 @@ class VideoDownloader(Downloader, ABC):
             except UnknownChannel:
                 # Destination must not be a channel.
                 pass
-        channel_id = download.channel_id
+        # Look up Channel via Collection or channel_url from settings
+        collection_id = download.collection_id
         channel_url = settings.get('channel_url')
-        if not channel and (channel_id or channel_url):
+        if not channel and (collection_id or channel_url):
             # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
             logger.info(f'Using download.settings to find channel')
             try:
-                channel = get_channel(channel_id=channel_id, url=channel_url, return_dict=False)
-                logger.debug(f'Found channel with channel url {channel=}')
+                # Find Channel by collection_id or URL
+                if collection_id:
+                    with get_db_session() as session:
+                        channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+                if not channel and channel_url:
+                    channel = get_channel(url=channel_url, return_dict=False)
+                logger.debug(f'Found channel with collection_id or channel url {channel=}')
             except UnknownChannel:
                 # We do not need a Channel if we have a destination directory.
                 if not destination:

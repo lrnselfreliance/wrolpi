@@ -7,7 +7,6 @@ from zipfile import ZipFile
 
 import docx
 
-from wrolpi import cmd
 from wrolpi.cmd import CATDOC_PATH, TEXTUTIL_PATH
 from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
 

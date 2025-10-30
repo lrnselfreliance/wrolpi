@@ -16,7 +16,8 @@ from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_list_files_api(test_session, test_client, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_list_files_api(test_session, async_client, make_files_structure, test_directory):
     files = [
         'archives/bar.txt',
         'archives/baz/bar.txt',
@@ -30,8 +31,8 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
     files = make_files_structure(files)
     files[0].write_text('bar contents')
 
-    def check_get_files(directories, expected_files):
-        request, response = test_client.post('/api/files', content=json.dumps({'directories': directories}))
+    async def check_get_files(directories, expected_files):
+        request, response = await async_client.post('/api/files', content=json.dumps({'directories': directories}))
         assert response.status_code == HTTPStatus.OK
         assert not response.json.get('errors')
         # The first dict is the media directory.
@@ -44,14 +45,14 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files([], expected)
+    await check_get_files([], expected)
     # empty directory is empty
     expected = {
         'archives/': {'path': 'archives/', 'is_empty': False},
         'empty directory/': {'path': 'empty directory/', 'children': {}, 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files(['empty directory'], expected)
+    await check_get_files(['empty directory'], expected)
 
     expected = {
         'archives/': {
@@ -66,7 +67,7 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False}
     }
-    check_get_files(['archives'], expected)
+    await check_get_files(['archives'], expected)
 
     # Sub-directories are supported.
     expected = {
@@ -89,9 +90,9 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
         'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {'path': 'videos/', 'is_empty': False},
     }
-    check_get_files(['archives', 'archives/baz'], expected)
+    await check_get_files(['archives', 'archives/baz'], expected)
     # Requesting only a subdirectory also returns `archives` contents.
-    check_get_files(['archives/baz'], expected)
+    await check_get_files(['archives/baz'], expected)
 
     expected = {
         'archives/': {
@@ -112,41 +113,43 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
             'is_empty': False
         }
     }
-    check_get_files(['archives', 'videos'], expected)
+    await check_get_files(['archives', 'videos'], expected)
     # Order does not matter.
-    check_get_files(['videos', 'archives'], expected)
+    await check_get_files(['videos', 'archives'], expected)
 
 
-def test_delete_file(test_session, test_client, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_delete_file(test_session, async_client, make_files_structure, test_directory):
     files = ['bar.txt', 'baz/', 'foo']
     make_files_structure(files)
 
     # Delete a file.
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bar.txt']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['bar.txt']}))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
     assert (test_directory / 'baz').is_dir()
 
     # Delete a directory.
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['baz']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['baz']}))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
     assert not (test_directory / 'baz').is_dir()
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
+    request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'paths', [
         [],
         ['', ],
     ]
 )
-def test_delete_invalid_file(test_client, paths):
+async def test_delete_invalid_file(async_client, paths):
     """Some paths must be passed."""
     with mock.patch('wrolpi.files.api.lib.delete') as mock_delete_file:
-        request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': paths}))
+        request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': paths}))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         mock_delete_file.assert_not_called()
 
@@ -197,9 +200,10 @@ async def test_files_search_recent(test_session, test_directory, async_client, v
     assert [i['name'] for i in response.json['file_groups']] == ['foo.mp4']
 
 
-def test_files_search(test_session, test_client, make_files_structure, assert_files_search):
+@pytest.mark.asyncio
+async def test_files_search(test_session, async_client, make_files_structure, assert_files_search):
     # You can search an empty directory.
-    assert_files_search('nothing', [])
+    await assert_files_search('nothing', [])
 
     # Create files in the temporary directory.  Add some contents so the mimetype can be tested.
     files = [
@@ -215,14 +219,14 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     baz2.write_bytes((PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes())
 
     # Refresh so files can be searched.
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
-    assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
-    assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
-    assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
-    assert_files_search('nothing', [])
+    await assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
+    await assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
+    await assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
+    await assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
+    await assert_files_search('nothing', [])
 
 
 @pytest.mark.asyncio
@@ -267,7 +271,8 @@ async def test_files_search_any_tag(async_client, test_session, make_files_struc
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
+@pytest.mark.asyncio
+async def test_refresh_files_list(test_session, async_client, make_files_structure, test_directory, video_bytes):
     """The user can request to refresh specific files."""
     make_files_structure({
         'bar.txt': 'hello',
@@ -276,20 +281,21 @@ def test_refresh_files_list(test_session, test_client, make_files_structure, tes
 
     # Only the single file that was refreshed is discovered.
     content = json.dumps({'paths': ['bar.txt']})
-    request, response = test_client.post('/api/files/refresh', content=content)
+    request, response = await async_client.post('/api/files/refresh', content=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(FileGroup).count() == 1
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 1
 
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 2
 
 
-def test_file_statistics(test_session, test_client, test_directory, example_pdf, example_mobi, example_epub,
-                         video_file):
+@pytest.mark.asyncio
+async def test_file_statistics(test_session, async_client, test_directory, example_pdf, example_mobi, example_epub,
+                               video_file):
     """A summary of File statistics can be fetched."""
     # Give each file a unique stem.
     video_file.rename(test_directory / 'video.mp4')
@@ -298,7 +304,7 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
     example_epub.rename(test_directory / 'epub.epub')
 
     # Statistics can be fetched while empty.
-    request, response = test_client.get('/api/statistics')
+    request, response = await async_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_statistics'] == {
         'archive_count': 0,
@@ -315,9 +321,9 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'zip_count': 0,
     }
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
-    request, response = test_client.get('/api/statistics')
+    request, response = await async_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
     stats = response.json['file_statistics']
     stats.pop('total_size')
@@ -475,11 +481,12 @@ async def test_post_search_directories(test_session, async_client, make_files_st
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     from modules.videos.models import Channel
-    channel1 = Channel(directory=channel1_dir, name='Channel Name')
-    channel2 = Channel(directory=channel2_dir, name='OtherChannel')
-    from modules.archive.models import Domain
-    domain = Domain(directory=domain_dir, domain='example.com')
-    test_session.add_all([channel1, channel2, domain])
+    # Use from_config to create channels properly (creates Collection first)
+    channel1 = Channel.from_config({'directory': channel1_dir, 'name': 'Channel Name'}, session=test_session)
+    channel2 = Channel.from_config({'directory': channel2_dir, 'name': 'OtherChannel'}, session=test_session)
+    from wrolpi.collections import Collection
+    domain_collection = Collection(directory=domain_dir, name='example.com', kind='domain')
+    test_session.add(domain_collection)
     test_session.commit()
 
     # All directories contain "di".  The names of the Channel and Directory do not match.
@@ -520,7 +527,9 @@ async def test_post_search_directories(test_session, async_client, make_files_st
     assert response.json['domain_directories'] == [{'domain': 'example.com', 'path': 'dir3'}]
 
 
-def test_post_upload_directory(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+@pytest.mark.asyncio
+async def test_post_upload_directory(test_session, async_client, test_directory, make_files_structure,
+                                     make_multipart_form):
     """A file can be uploaded in a directory in the destination."""
     make_files_structure(['uploads/'])
 
@@ -534,7 +543,7 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED
 
     assert (test_directory / 'uploads/foo/bar.txt').is_file()
@@ -681,7 +690,8 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert not video.channel and not video.channel_id
 
 
-def test_post_upload_text(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+@pytest.mark.asyncio
+async def test_post_upload_text(test_session, async_client, test_directory, make_files_structure, make_multipart_form):
     """A file that cannot be modeled can still be uploaded, and is indexed."""
     make_files_structure(['uploads/'])
 
@@ -696,7 +706,7 @@ def test_post_upload_text(test_session, test_client, test_directory, make_files_
     ]
     body = make_multipart_form(forms)
     headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
-    request, response = test_client.post('/api/files/upload', content=body, headers=headers)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, response.content.decode()
 
     file_group: FileGroup = test_session.query(FileGroup).one()
@@ -896,7 +906,8 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks, await_switches):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks,
+                        await_switches):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()

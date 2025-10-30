@@ -13,6 +13,7 @@ from modules.inventory import init_inventory
 from modules.inventory.common import import_inventories_config
 from modules.videos.lib import import_channels_config, get_videos_downloader_config
 from wrolpi import flags, admin
+from modules.archive.lib import import_domains_config
 from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -244,6 +245,10 @@ async def start_single_tasks(app: Sanic):
             with suppress(Exception):
                 import_channels_config()
                 logger.debug('channels config imported')
+            # Domains config import
+            with suppress(Exception):
+                import_domains_config()
+                logger.debug('domains config imported')
             with suppress(Exception):
                 import_inventories_config()
                 logger.debug('inventories config imported')
@@ -351,6 +356,39 @@ async def perpetual_start_video_missing_comments_download():
         await asyncio.sleep(int(Seconds.hour))
     else:
         logger.debug('Waiting for downloads to be enabled before downloading comments...')
+
+
+@perpetual_signal(sleep=3600)  # Check hourly
+async def perpetual_check_for_updates():
+    """
+    Check git remote for new commits on the current branch.
+
+    Updates shared_ctx with update info for the /api/status endpoint.
+    Only runs on native installs (not Docker).
+    """
+    from wrolpi.upgrade import check_for_update
+
+    # Don't check for updates in Docker environments
+    if DOCKERIZED:
+        return
+
+    # Only check when we have internet
+    if not flags.have_internet.is_set():
+        return
+
+    try:
+        result = check_for_update(fetch=True)
+        # Store in shared_ctx.status (a manager.dict) to share across all workers.
+        api_app.shared_ctx.status['update_available'] = result.get('update_available', False)
+        api_app.shared_ctx.status['latest_commit'] = result.get('latest_commit')
+        api_app.shared_ctx.status['current_commit'] = result.get('current_commit')
+        api_app.shared_ctx.status['commits_behind'] = result.get('commits_behind', 0)
+        api_app.shared_ctx.status['git_branch'] = result.get('branch')
+
+        if result.get('update_available'):
+            logger.info(f"Update available: {result['commits_behind']} commits behind on {result['branch']}")
+    except Exception as e:
+        logger.error('Failed to check for updates', exc_info=e)
 
 
 if __name__ == '__main__':

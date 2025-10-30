@@ -1,9 +1,9 @@
-from datetime import datetime
 import pathlib
+from datetime import datetime
 
 import pytest
 
-from modules.archive import Domain, Archive
+from modules.archive import Archive
 from wrolpi.common import get_wrolpi_config
 
 
@@ -13,23 +13,23 @@ async def test_archive_download_destination(async_client, test_session, test_dir
 
     wrolpi_config = get_wrolpi_config()
 
-    archive_factory(domain='wrolpi.org')
-    domain = test_session.query(Domain).one()
+    archive = archive_factory(domain='wrolpi.org')
+    test_session.commit()
 
     # Test the default download directory.
-    assert str(domain.download_directory) == str(test_directory / 'archive/wrolpi.org')
+    assert str(archive.download_directory) == str(test_directory / 'archive/wrolpi.org')
 
     # Year of download is supported.
     wrolpi_config.archive_destination = 'archives/%(domain)s/%(year)s'
-    assert str(domain.download_directory) == str(test_directory / 'archives/wrolpi.org/2000')
+    assert str(archive.download_directory) == str(test_directory / 'archives/wrolpi.org/2000')
 
     # More download date is supported.
     wrolpi_config.archive_destination = 'archive/%(domain)s/%(year)s/%(month)s/%(day)s'
-    assert str(domain.download_directory) == str(test_directory / 'archive/wrolpi.org/2000/1/2')
+    assert str(archive.download_directory) == str(test_directory / 'archive/wrolpi.org/2000/1/2')
 
 
 @pytest.mark.asyncio
-async def test_set_screenshot(test_session, archive_factory, image_bytes_factory):
+async def test_set_screenshot(async_client, test_session, archive_factory, image_bytes_factory):
     """Test Archive.set_screenshot() method with various scenarios."""
 
     # ========== Test 1: Successfully set screenshot on archive without one ==========
@@ -84,7 +84,8 @@ async def test_set_screenshot(test_session, archive_factory, image_bytes_factory
     assert archive.screenshot_path == original_screenshot
 
     # ========== Test 3: Error when trying to set non-existent screenshot file ==========
-    archive_no_screenshot = archive_factory('example.com', 'https://example.com/test2', 'Test Archive 2', screenshot=False)
+    archive_no_screenshot = archive_factory('example.com', 'https://example.com/test2', 'Test Archive 2',
+                                            screenshot=False)
     test_session.commit()
 
     # Try to set a screenshot that doesn't exist

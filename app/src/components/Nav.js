@@ -186,9 +186,24 @@ export function NavBar() {
         />
     }
 
+    // Upgrade available notification - only show on native (non-Docker) installs
+    let upgradeIcon;
+    if (status?.update_available && !status?.dockerized) {
+        const commitsBehind = status.commits_behind || 0;
+        const branch = status.git_branch || 'unknown';
+        const icon = <Link to='/admin/settings'>
+            <Icon name='arrow alternate circle up' size='large' color='green'/>
+        </Link>;
+        upgradeIcon = <Popup
+            content={`Upgrade available: ${commitsBehind} commit(s) behind on ${branch}`}
+            trigger={icon}
+        />;
+    }
+
     const icons = <React.Fragment>
         <NavIconWrapper>{apiDownIcon}</NavIconWrapper>
         <NavIconWrapper>{processingIcon}</NavIconWrapper>
+        <NavIconWrapper>{upgradeIcon}</NavIconWrapper>
         <NavIconWrapper>{powerIcon}</NavIconWrapper>
         <NavIconWrapper>{warningIcon}</NavIconWrapper>
         <NavIconWrapper><ShareButton/></NavIconWrapper>

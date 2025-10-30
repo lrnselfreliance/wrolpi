@@ -173,7 +173,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
     downloads = video_download_manager.get_once_downloads(test_session)
     assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_2_url'}
     assert downloads[0].settings == {
-        'channel_id': 1,
+        'collection_id': simple_channel.collection_id,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
         'destination': str(test_directory),
     }
@@ -191,7 +191,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
     downloads = video_download_manager.get_once_downloads(test_session)
     assert {i.url for i in downloads} == {'https://youtube.com/watch?v=video_1_url'}
     assert downloads[0].settings == {
-        'channel_id': 1,
+        'collection_id': simple_channel.collection_id,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
         'destination': str(test_directory),
     }
@@ -203,13 +203,23 @@ async def test_get_or_create_channel(async_client, test_session, test_directory,
 
     Attempt to use an existing Channel if we can match it.
     """
+    from wrolpi.collections import Collection
     one, two = await tag_factory(), await tag_factory()
 
-    c1 = Channel(name='foo', source_id='foo', url='https://example.com')
-    c2 = Channel(name='bar', source_id='bar')
-    c3 = Channel(name='baz', source_id='baz', url='https://example.net')
-    c4 = Channel(name='qux')
-    test_session.add_all([c1, c2, c3, c4])
+    # Create Collections for each Channel
+    def create_channel_with_collection(name, source_id=None, url=None):
+        collection = Collection(name=name, kind='channel')
+        test_session.add(collection)
+        test_session.flush([collection])
+        channel = Channel(collection_id=collection.id, source_id=source_id, url=url)
+        test_session.add(channel)
+        test_session.flush([channel])
+        return channel
+
+    c1 = create_channel_with_collection('foo', source_id='foo', url='https://example.com')
+    c2 = create_channel_with_collection('bar', source_id='bar')
+    c3 = create_channel_with_collection('baz', source_id='baz', url='https://example.net')
+    c4 = create_channel_with_collection('qux')
     test_session.commit()
 
     # All existing channels should be used.
@@ -549,7 +559,8 @@ def test_normalize_video_file_names(test_directory, video_download_manager):
 
 @pytest.mark.asyncio
 async def test_video_download_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                      video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
+                                      video_download_manager, mock_video_process_runner, image_file,
+                                      test_videos_downloader_config):
     config = get_videos_downloader_config()
 
     config.browser_profile = str(test_directory / 'firefox/some directory')
@@ -577,7 +588,8 @@ async def test_video_download_cookies(test_session, test_directory, mock_video_e
 
 @pytest.mark.asyncio
 async def test_video_download_always_use_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                                 video_download_manager, mock_video_process_runner, image_file, test_videos_downloader_config):
+                                                 video_download_manager, mock_video_process_runner, image_file,
+                                                 test_videos_downloader_config):
     config = get_videos_downloader_config()
 
     config.always_use_browser_profile = True

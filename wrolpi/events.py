@@ -108,6 +108,10 @@ class Events:
     def send_screenshot_generation_failed(cls, message: str = None):
         send_event('screenshot_generation_failed', message, subject='screenshot')
 
+    @staticmethod
+    def send_upgrade_started(message: str = None):
+        send_event('upgrade_started', message, subject='upgrade')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

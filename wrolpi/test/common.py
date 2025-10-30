@@ -1,5 +1,4 @@
 import json
-import os
 import pathlib
 import tempfile
 from contextlib import contextmanager
@@ -12,7 +11,7 @@ import pytest
 
 from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.common import get_media_directory
-from wrolpi.conftest import test_db, test_client  # noqa
+from wrolpi.conftest import test_db, async_client  # noqa
 from wrolpi.db import postgres_engine
 from wrolpi.vars import CIRCLECI, IS_MACOS
 

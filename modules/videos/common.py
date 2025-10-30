@@ -20,7 +20,6 @@ from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
-from .models import Channel
 
 logger = logger.getChild(__name__)
 
@@ -52,6 +51,8 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
     """
     Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
     """
+    from .models import Channel
+
     if not any([id_, url, name, directory]):
         raise Exception('Cannot search for channel with no arguments')
 
@@ -68,11 +69,13 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
         if list(conflicts):
             raise ChannelURLConflict()
     if name:
-        conflicts = base_where.filter(Channel.name == name)
+        from wrolpi.collections import Collection
+        conflicts = base_where.join(Collection).filter(Collection.name == name)
         if list(conflicts):
             raise ChannelNameConflict()
     if directory:
-        conflicts = base_where.filter(Channel.directory == directory)
+        from wrolpi.collections import Collection
+        conflicts = base_where.join(Collection).filter(Collection.directory == directory)
         if list(conflicts):
             raise ChannelDirectoryConflict()
     if source_id:
@@ -269,6 +272,8 @@ def extract_video_duration(video_path: Path) -> Optional[int]:
 async def update_view_counts_and_censored(channel_id: int):
     """Update view_count for all Videos in a channel using its info_json file.  Also sets FileGroup.censored
     if Video is no longer available on the Channel."""
+    from .models import Channel
+
     with get_db_session() as session:
         channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
         channel_name = channel.name
@@ -284,13 +289,14 @@ async def update_view_counts_and_censored(channel_id: int):
     with get_db_curs(commit=True) as curs:
         # Update the view_count for each video.
         stmt = '''
-            WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count int))
-            UPDATE video
-            SET view_count = s.view_count
-            FROM source as s
-            WHERE source_id=s.id AND channel_id=%s
-            RETURNING video.id AS updated_ids
-        '''
+               WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count int))
+               UPDATE video
+               SET view_count = s.view_count
+               FROM source as s
+               WHERE source_id = s.id
+                 AND channel_id = %s
+               RETURNING video.id AS updated_ids \
+               '''
         curs.execute(stmt, (view_counts_str, channel_id))
         count = len(curs.fetchall())
         logger.info(f'Updated {count} view counts in DB for {channel_name}.')
@@ -299,13 +305,13 @@ async def update_view_counts_and_censored(channel_id: int):
     with get_db_curs(commit=True) as curs:
         # Set FileGroup.censored if the video is no longer on the Channel.
         stmt = '''
-            UPDATE file_group fg
-            SET censored = NOT (v.source_id = ANY(%(source_ids)s))
-            FROM video v
-            WHERE v.file_group_id = fg.id
-                AND v.channel_id = %(channel_id)s
-            RETURNING fg.id, fg.censored
-        '''
+               UPDATE file_group fg
+               SET censored = NOT (v.source_id = ANY (%(source_ids)s))
+               FROM video v
+               WHERE v.file_group_id = fg.id
+                 AND v.channel_id = %(channel_id)s
+               RETURNING fg.id, fg.censored \
+               '''
         curs.execute(stmt, {'channel_id': channel_id, 'source_ids': source_ids})
         censored = len([i for i in curs.fetchall() if i['censored']])
         logger.info(f'Set {censored} censored videos for {channel_name}.')

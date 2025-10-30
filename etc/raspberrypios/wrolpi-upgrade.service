@@ -1,0 +1,11 @@
+[Unit]
+Description=WROLPi Upgrade Service
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/tmp/wrolpi-upgrade.env
+ExecStart=/opt/wrolpi/upgrade.sh -b ${BRANCH}
+User=root
+StandardOutput=journal
+StandardError=journal

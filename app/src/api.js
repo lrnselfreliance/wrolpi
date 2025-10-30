@@ -1,7 +1,7 @@
 import {emptyToNull} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, Downloaders, OTP_API, VIDEOS_API, ZIM_API} from "./components/Vars";
+import {API_URI, ARCHIVES_API, COLLECTIONS_API, DEFAULT_LIMIT, Downloaders, OTP_API, VIDEOS_API, ZIM_API} from "./components/Vars";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return
@@ -719,10 +719,10 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
 }
 
 export async function fetchDomains() {
-    const response = await apiGet(`${ARCHIVES_API}/domains`);
+    const response = await apiGet(`${COLLECTIONS_API}?kind=domain`);
     if (response.ok) {
         let data = await response.json();
-        return [data['domains'], data['totals']['domains']];
+        return [data['collections'], data['totals']['collections'], data['metadata']];
     } else {
         const message = await getErrorMessage(response, 'Unable to fetch Domains.  See server logs.');
         toast({
@@ -732,6 +732,137 @@ export async function fetchDomains() {
             time: 5000,
         });
     }
+}
+
+export async function fetchChannels() {
+    const response = await apiGet(`${COLLECTIONS_API}?kind=channel`);
+    if (response.ok) {
+        let data = await response.json();
+        return [data['collections'], data['totals']['collections'], data['metadata']];
+    } else {
+        const message = await getErrorMessage(response, 'Unable to fetch Channels.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Channels Error',
+            description: message,
+            time: 5000,
+        });
+    }
+}
+
+export async function getDomain(domainId) {
+    const response = await apiGet(`${COLLECTIONS_API}/${domainId}`);
+    if (response.ok) {
+        const data = await response.json();
+        return data['collection'];
+    } else {
+        const message = await getErrorMessage(response, 'Unable to fetch Domain.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Domain Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function updateDomain(domainId, updates) {
+    updates = emptyToNull(updates);
+    const response = await apiPut(`${COLLECTIONS_API}/${domainId}`, updates);
+    if (response.ok) {
+        const data = await response.json();
+        return data['collection'];
+    } else {
+        const message = await getErrorMessage(response, 'Unable to update Domain.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Domain Update Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function getCollectionTagInfo(collectionId, tagName) {
+    const body = {
+        tag_name: tagName,
+    }
+    const response = await apiPost(`${COLLECTIONS_API}/${collectionId}/tag_info`, body);
+    if (response.ok) {
+        const data = await response.json();
+        return data;
+    } else {
+        const message = await getErrorMessage(response, 'Unable to get tag info.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Tag Info Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function tagDomain(domainId, tagName, directory) {
+    const body = {
+        tag_name: tagName,
+    }
+    if (directory) {
+        body['directory'] = directory;
+    }
+    const response = await apiPost(`${COLLECTIONS_API}/${domainId}/tag`, body);
+    if (response.ok) {
+        const data = await response.json();
+        return data;
+    } else {
+        const message = await getErrorMessage(response, 'Unable to tag Domain.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Domain Tag Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function deleteDomain(domainId) {
+    const response = await apiDelete(`${COLLECTIONS_API}/${domainId}`);
+    if (response.status !== 204) {
+        const message = await getErrorMessage(response, 'Failed to delete domain.');
+        toast({
+            type: 'error',
+            title: 'Delete Failed',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+    return response;
+}
+
+export async function refreshDomain(domainId) {
+    let url = `${COLLECTIONS_API}/${domainId}/refresh`;
+    const response = await apiPost(url);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, "Failed to refresh this domain's directory");
+        toast({
+            type: 'error',
+            title: 'Failed to refresh',
+            description: message,
+            time: 5000,
+        });
+    } else {
+        toast({
+            type: 'success',
+            title: 'Domain refresh started',
+            description: 'The domain directory is being refreshed',
+            time: 3000,
+        });
+    }
+    return response;
 }
 
 export async function getArchive(archiveId) {
@@ -1519,4 +1650,27 @@ export async function postRestart() {
 export async function postVideoFileFormat(video_file_format) {
     const body = {video_file_format};
     return await apiPost(`${API_URI}/videos/file_format`, body);
+}
+
+export async function checkUpgrade(force = false) {
+    const url = force ? `${API_URI}/upgrade/check?force=true` : `${API_URI}/upgrade/check`;
+    const response = await apiGet(url);
+    if (response.ok) {
+        return await response.json();
+    }
+    return null;
+}
+
+export async function triggerUpgrade() {
+    const response = await apiPost(`${API_URI}/upgrade/start`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Failed to start upgrade. See server logs.');
+        toast({
+            type: 'error',
+            title: 'Upgrade Error',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response;
 }

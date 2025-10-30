@@ -1,6 +1,7 @@
 import React, {useState} from "react";
-import {Grid, Input, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
+import {Grid, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo, updateChannel} from "../api";
+import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {
     APIButton,
     BackButton,
@@ -12,7 +13,6 @@ import {
     secondsToFrequency,
     secondsToFullDuration,
     SimpleAccordion,
-    Toggle,
     useTitle,
     WROLModeMessage
 } from "./Common";
@@ -26,9 +26,7 @@ import {
     Header,
     Loader,
     Modal,
-    ModalActions,
     ModalContent,
-    ModalHeader,
     Segment,
     Statistic
 } from "./Theme";
@@ -36,9 +34,10 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
-import {TagsContext, TagsSelector} from "../Tags";
+import {TagsContext} from "../Tags";
 import {InputForm, ToggleForm} from "../hooks/useForm";
 import {ChannelDownloadForm, DestinationForm, DownloadTagsSelector} from "./Download";
+import {CollectionTable} from "./collections/CollectionTable";
 
 
 function ChannelStatistics({statistics}) {
@@ -86,19 +85,10 @@ export function ChannelPage({create, header}) {
     const {SingleTag} = React.useContext(TagsContext);
 
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
-    const [newTagName, setNewTagName] = useState(null);
-    const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
-    const [newTagDirectory, setNewTagDirectory] = useState('');
 
     const {channel, form, fetchChannel} = useChannel(channelId);
 
     useTitle(_.isEmpty(channel) ? null : `${channel.name} Channel`);
-
-    React.useEffect(() => {
-        if (channel && channel.tag_name !== newTagName) {
-            setNewTagName(channel.tag_name);
-        }
-    }, [channel]);
 
     if (!create && !form.ready) {
         // Waiting for editing Channel to be fetched.
@@ -223,10 +213,10 @@ export function ChannelPage({create, header}) {
         setDownloadModalOpen(false);
     }
 
-    const handleTagEditChannel = async () => {
+    // Handler for tag modal save
+    const handleTagSave = async (tagName, directory) => {
         try {
-            await tagChannel(channelId, newTagName, moveToTagDirectory ? newTagDirectory : null);
-            setTagEditModalOpen(false);
+            await tagChannel(channelId, tagName, directory);
         } catch (e) {
             console.error('Failed to tag channel', e);
         } finally {
@@ -235,69 +225,25 @@ export function ChannelPage({create, header}) {
                 await fetchChannel();
             }, 500);
         }
-    }
+    };
 
-    const handleTagSelectMoveSuggestion = async (newTagName_) => {
-        setNewTagName(newTagName_);
-        try {
-            // Get suggested Tag directory for this Tag and Channel.
-            const videosDestination = await tagChannelInfo(channelId, newTagName_);
-            setNewTagDirectory(videosDestination);
-        } catch (e) {
-            console.error('Failed to tag channel', e);
-        }
-    }
+    // Handler for fetching tag info
+    const handleGetTagInfo = async (tagName) => {
+        return await tagChannelInfo(channelId, tagName);
+    };
 
     let tagEditModal;
     if (!create) {
         // User is editing the Tag of the Channel.
-        tagEditModal = <Modal
+        tagEditModal = <CollectionTagModal
             open={tagEditModalOpen}
             onClose={() => setTagEditModalOpen(false)}
-            closeIcon
-        >
-            <ModalHeader>{channel.tag_name ? 'Modify Tag' : 'Add Tag'}</ModalHeader>
-            <ModalContent>
-                <Grid columns={1}>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <TagsSelector
-                                limit={1}
-                                selectedTagNames={newTagName ? [newTagName] : []}
-                                onAdd={handleTagSelectMoveSuggestion}
-                                onRemove={() => handleTagSelectMoveSuggestion(null)}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Toggle
-                                label='Move to directory: '
-                                checked={moveToTagDirectory}
-                                onChange={setMoveToTagDirectory}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Input fluid
-                                   value={newTagDirectory}
-                                   onChange={(e, {value}) => setNewTagDirectory(value)}
-                                   disabled={!moveToTagDirectory}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </ModalContent>
-            <ModalActions>
-                <Button onClick={() => setTagEditModalOpen(false)}>Cancel</Button>
-                <APIButton
-                    color='violet'
-                    onClick={handleTagEditChannel}
-                    obeyWROLMode={true}
-                >{moveToTagDirectory ? 'Move' : 'Save'}</APIButton>
-            </ModalActions>
-        </Modal>;
+            currentTagName={channel.tag_name}
+            originalDirectory={channel.directory}
+            getTagInfo={handleGetTagInfo}
+            onSave={handleTagSave}
+            collectionName="Channel"
+        />;
     }
 
     let channelUrlRow;
@@ -502,72 +448,13 @@ export function ChannelNewPage(props) {
     return <ChannelPage header='New Channel' {...props} create/>
 }
 
-function ChannelRow({channel}) {
-    const {SingleTag} = React.useContext(TagsContext);
-
-    const videosTo = `/videos/channel/${channel.id}/video`;
-
-    const {inverted} = React.useContext(ThemeContext);
-    const editTo = `/videos/channel/${channel.id}/edit`;
-    const buttonClass = `ui button secondary ${inverted}`;
-
-    return <TableRow>
-        <TableCell>
-            <Link to={videosTo}>{channel.name}</Link>
-        </TableCell>
-        <TableCell>
-            {channel.tag_name ? <SingleTag name={channel.tag_name}/> : null}
-        </TableCell>
-        <TableCell>
-            {channel.video_count}
-        </TableCell>
-        <TableCell>
-            {channel.url && channel.minimum_frequency ? secondsToFrequency(channel.minimum_frequency) : null}
-        </TableCell>
-        <TableCell>
-            {channel.size ? humanFileSize(channel.size) : null}
-        </TableCell>
-        <TableCell textAlign='right'>
-            <Link className={buttonClass} to={editTo}>Edit</Link>
-        </TableCell>
-    </TableRow>;
-}
-
-function MobileChannelRow({channel}) {
-    const {SingleTag} = React.useContext(TagsContext);
-
-    const editTo = `/videos/channel/${channel.id}/edit`;
-    const videosTo = `/videos/channel/${channel.id}/video`;
-    return <TableRow verticalAlign='top'>
-        <TableCell width={10} colSpan={2}>
-            <Link as='h3' to={videosTo}>
-                <h3>
-                    {channel.name}
-                </h3>
-                {channel.tag_name ? <SingleTag name={channel.tag_name}/> : null}
-            </Link>
-            <p>
-                Videos: {channel.video_count}
-            </p>
-        </TableCell>
-        <TableCell width={6} colSpan={2} textAlign='right'>
-            <p>
-                <Link className="ui button secondary" to={editTo}>Edit</Link>
-            </p>
-        </TableCell>
-    </TableRow>;
-}
-
-
 export function ChannelsPage() {
     useTitle('Channels');
 
-    const {channels} = useChannels();
+    const [channels, total, metadata] = useChannels();
     const [searchStr, setSearchStr] = useOneQuery('name');
-    // Hides Channels with few videos.
-    const [hideSmall, setHideSmall] = React.useState(true);
-    const enoughChannelsToHideSmall = channels && channels.length > 20;
 
+    // Header section matching DomainsPage pattern
     const header = <div style={{marginBottom: '1em'}}>
         <Grid stackable columns={2}>
             <Grid.Row>
@@ -591,25 +478,7 @@ export function ChannelsPage() {
         </Grid>
     </div>;
 
-    const headers = [
-        {key: 'name', text: 'Name', sortBy: [i => i['name'].toLowerCase()], width: 8},
-        {key: 'tag', text: 'Tag', sortBy: [i => i['tag_name'], i => i['name'].toLowerCase()], width: 2},
-        {key: 'video_count', text: 'Videos', sortBy: [i => i['video_count'], i => i['name'].toLowerCase()], width: 2},
-        {
-            key: 'download_frequency',
-            text: 'Download Frequency',
-            sortBy: [i => i['minimum_frequency'], i => i['name'].toLowerCase()],
-            width: 2
-        },
-        {key: 'size', text: 'Size', sortBy: [i => i['size'], i => i['name'].toLowerCase()], width: 2},
-        {key: 'manage', text: 'Manage', width: 2},
-    ];
-    const mobileHeaders = [
-        {key: 'name', text: 'Name', sortBy: [i => i['name'].toLowerCase()]},
-        {key: 'video_count', text: 'Videos', sortBy: [i => i['video_count'], i => i['name'].toLowerCase()]},
-        {key: 'manage', text: 'Manage'},
-    ];
-
+    // Empty state
     if (channels && channels.length === 0) {
         return <>
             {header}
@@ -617,65 +486,23 @@ export function ChannelsPage() {
                 <Message.Header>No channels exist yet!</Message.Header>
                 <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
             </Message>
-        </>
-    } else if (channels === undefined) {
+        </>;
+    }
+
+    // Error state
+    if (channels === undefined) {
         return <>
             {header}
             <ErrorMessage>Could not fetch Channels</ErrorMessage>
-        </>
-    }
-
-    let filteredChannels = channels;
-    if (searchStr && Array.isArray(channels)) {
-        const re = new RegExp(_.escapeRegExp(searchStr), 'i');
-        filteredChannels = channels.filter(i => re.test(i['name']));
-    } else if (channels && hideSmall && enoughChannelsToHideSmall) {
-        // Get the top 80% of Channels.
-        let index80 = Math.floor(channels.length * 0.8);
-        const sortedChannels = channels.sort((a, b) => b.video_count - a.video_count);
-        let percentile = sortedChannels[index80].video_count;
-        filteredChannels = channels.filter(i => {
-            return i.video_count > percentile || i.name.toLowerCase() === 'wrolpi'
-        });
-        if (filteredChannels.length < 21) {
-            // Filtering hid too many Channels, show them all.
-            filteredChannels = channels;
-        }
+        </>;
     }
 
     return <>
         {header}
-        <Media at='mobile'>
-            <SortableTable
-                tableProps={{striped: true, size: 'small', unstackable: true}}
-                data={filteredChannels}
-                tableHeaders={mobileHeaders}
-                defaultSortColumn='name'
-                rowKey='id'
-                rowFunc={(i, sortData) => <MobileChannelRow key={i.id} channel={i} sortData={sortData}/>}
-            />
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <SortableTable
-                tableProps={{striped: true, size: 'large', unstackable: true, compact: true}}
-                data={filteredChannels}
-                tableHeaders={headers}
-                defaultSortColumn='name'
-                rowKey='id'
-                rowFunc={(i, sortData) => <ChannelRow key={i.id} channel={i} sortData={sortData}/>}
-            />
-        </Media>
-        <Grid textAlign='center'>
-            <Grid.Row>
-                <Grid.Column>
-                    <Button
-                        style={{marginTop: '1em'}}
-                        onClick={() => setHideSmall(!hideSmall)}
-                        size='big'
-                        disabled={!enoughChannelsToHideSmall}
-                    >Show {hideSmall ? 'More' : 'Less'}</Button>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </>
+        <CollectionTable
+            collections={channels}
+            metadata={metadata}
+            searchStr={searchStr}
+        />
+    </>;
 }

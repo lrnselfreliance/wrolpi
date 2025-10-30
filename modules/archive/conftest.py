@@ -8,7 +8,8 @@ import pytest
 import pytz
 
 from modules.archive.lib import archive_strftime
-from modules.archive.models import Archive, Domain
+from modules.archive.models import Archive
+from wrolpi.collections import Collection
 
 
 @pytest.fixture
@@ -58,20 +59,26 @@ def archive_factory(test_session, archive_directory, make_files_structure, image
             })
 
         if domain:
-            domain = test_session.query(Domain).filter_by(domain=domain).one_or_none()
+            # Find or create domain collection
+            collection = test_session.query(Collection).filter_by(
+                name=domain,
+                kind='domain'
+            ).one_or_none()
+            if not collection:
+                collection = Collection(
+                    name=domain,
+                    kind='domain',
+                    directory=None,  # Domain collections are unrestricted
+                )
+                test_session.add(collection)
+                test_session.flush([collection])
+        else:
+            collection = None
 
         screenshot_path = None
         if screenshot:
             screenshot_path = domain_dir / f'{timestamp}_{title}.png'
             screenshot_path.write_bytes(image_bytes_factory())
-
-        if not domain and domain_dir.name != 'NA':
-            domain = Domain(
-                domain=domain_dir.name,
-                directory=domain_dir,
-            )
-            test_session.add(domain)
-            test_session.flush([domain])
 
         # Only add files that were created.
         files = (readability_path, readability_json_path, readability_txt_path, screenshot_path, singlefile_path)
@@ -82,7 +89,7 @@ def archive_factory(test_session, archive_directory, make_files_structure, image
         archive.title = title
         archive.file_group.download_datetime = archive.file_group.published_datetime = next(now)
         archive.file_group.modification_datetime = next(now)
-        archive.domain = domain
+        archive.collection = collection
         archive.validate()
 
         for tag_name in tag_names:

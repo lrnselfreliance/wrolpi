@@ -21,6 +21,7 @@ from wrolpi import admin, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_response, api_app
+from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
     set_global_log_level, get_relative_to_media_directory, search_other_estimates
@@ -47,6 +48,7 @@ api_bp = Blueprint('RootAPI', url_prefix='/api')
 # Blueprints order here defines what order they are displayed in OpenAPI Docs.
 api_app.blueprint(api_bp)
 api_app.blueprint(archive_bp)
+api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(inventory_bp)
@@ -280,7 +282,7 @@ async def post_download(_: Request, body: schema.DownloadRequest):
                   destination=body.destination, tag_names=body.tag_names,
                   settings=body.settings)
     if body.frequency:
-        download_manager.recurring_download(body.urls[0], body.frequency, **kwargs)
+        download_manager.recurring_download(body.urls[0], body.frequency, collection_id=body.collection_id, **kwargs)
     else:
         download_manager.create_downloads(body.urls, **kwargs)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
@@ -314,6 +316,7 @@ async def put_download(_: Request, download_id: int, body: schema.DownloadReques
             tag_names=body.tag_names,
             sub_downloader=body.sub_downloader,
             settings=body.settings,
+            collection_id=body.collection_id,
             session=session,
         )
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
@@ -488,7 +491,7 @@ async def get_status(request: Request):
         throttle_status=admin.throttle_status().name,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),
-        # Include all stats from status worker.
+        # Include all stats from status worker (includes upgrade info and git_branch).
         **api_app.shared_ctx.status,
     )
     return json_response(ret)
@@ -612,6 +615,54 @@ async def post_restart(_: Request):
 async def post_shutdown(_: Request):
     await admin.shutdown()
     return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@api_bp.get('/upgrade/check')
+@openapi.definition(description='Check for available WROLPi updates')
+@native_only
+async def get_upgrade_check(request: Request):
+    """
+    Check if an update is available by comparing local git HEAD with origin/{branch}.
+
+    Query params:
+        force: If 'true', force a fresh git fetch before checking.
+    """
+    from wrolpi.upgrade import check_for_update
+
+    force = request.args.get('force', 'false').lower() == 'true'
+    result = check_for_update(fetch=force)
+
+    # Update shared_ctx.status so /api/status returns the latest info.
+    # Using shared_ctx.status (a manager.dict) ensures info is shared across all workers.
+    api_app.shared_ctx.status['update_available'] = result.get('update_available', False)
+    api_app.shared_ctx.status['latest_commit'] = result.get('latest_commit')
+    api_app.shared_ctx.status['current_commit'] = result.get('current_commit')
+    api_app.shared_ctx.status['commits_behind'] = result.get('commits_behind', 0)
+
+    return json_response(result)
+
+
+@api_bp.post('/upgrade/start')
+@openapi.definition(description='Start WROLPi upgrade')
+@native_only
+@wrol_mode_check
+async def post_upgrade_start(_: Request):
+    """
+    Trigger the WROLPi upgrade process.
+
+    This executes /opt/wrolpi/upgrade.sh which will:
+    1. Stop the API and app services
+    2. Fetch latest code from git
+    3. Run upgrade scripts
+    4. Restart services
+
+    The frontend should redirect to the maintenance page after calling this.
+    Returns 202 Accepted as the upgrade runs asynchronously.
+    """
+    from wrolpi.upgrade import start_upgrade
+
+    await start_upgrade()
+    return response.empty(HTTPStatus.ACCEPTED)
 
 
 @api_bp.post('/search_suggestions')

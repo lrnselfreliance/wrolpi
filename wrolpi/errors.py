@@ -187,3 +187,9 @@ class DownloadError(APIError):
     code = 'DOWNLOAD_ERROR'
     summary = 'Unable to complete download'
     status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class UnknownCollection(APIError):
+    code = 'UNKNOWN_COLLECTION'
+    summary = 'Unable to find the collection'
+    status_code = HTTPStatus.NOT_FOUND

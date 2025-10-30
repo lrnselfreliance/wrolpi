@@ -22,11 +22,23 @@ from wrolpi.vars import PROJECT_DIR
 @pytest.fixture
 def simple_channel(test_session, test_directory) -> Channel:
     """Get a Channel with the minimum properties.  This Channel has no download!"""
-    channel = Channel(
-        directory=test_directory,
+    from wrolpi.collections import Collection
+
+    # Create Collection first
+    collection = Collection(
         name='Simple Channel',
+        kind='channel',
+        directory=test_directory,
+    )
+    test_session.add(collection)
+    test_session.flush([collection])
+
+    # Create Channel linked to Collection
+    channel = Channel(
+        collection_id=collection.id,
         url='https://example.com/channel1',
     )
+
     test_session.add(channel)
     test_session.commit()
     return channel
@@ -36,21 +48,32 @@ def simple_channel(test_session, test_directory) -> Channel:
 def channel_factory(test_session, test_directory):
     """Create a random Channel with a directory, and Download."""
     from wrolpi.tags import Tag
+    from wrolpi.collections import Collection
 
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
                 directory: pathlib.Path = None, tag_name: str = None):
         name = name or str(uuid4())
         tag = Tag.find_by_name(tag_name) if tag_name else None
-        channel = Channel(
+        tag_name = tag.name if tag else None
+        directory = directory or format_videos_destination(name, tag_name, url or f'https://example.com/{name}')
+        directory.mkdir(exist_ok=True, parents=True)
+
+        # Create Collection first
+        collection = Collection(
             name=name,
-            url=url or f'https://example.com/{name}',
-            source_id=source_id,
-            tag=tag,
+            kind='channel',
+            directory=directory,
             tag_id=tag.id if tag else None,
         )
-        tag_name = tag.name if tag else None
-        channel.directory = directory or format_videos_destination(name, tag_name, channel.url)
-        channel.directory.mkdir(exist_ok=True, parents=True)
+        test_session.add(collection)
+        test_session.flush([collection])
+
+        # Create Channel linked to Collection
+        channel = Channel(
+            collection_id=collection.id,
+            url=url or f'https://example.com/{name}',
+            source_id=source_id,
+        )
         test_session.add(channel)
         test_session.flush([channel])
         test_session.add(Directory(path=channel.directory, name=channel.directory.name))
@@ -68,11 +91,25 @@ def channel_factory(test_session, test_directory):
 @pytest.fixture
 def download_channel(test_session, test_directory, video_download_manager) -> Channel:
     """Get a test Channel that has a download frequency."""
-    # Add a frequency to the test channel, then give it a download.
-    channel = Channel(directory=test_directory, name='Download Channel', url='https://example.com/channel1',
-                      source_id='channel1')
+    from wrolpi.collections import Collection
+
+    # Create Collection first
+    collection = Collection(
+        name='Download Channel',
+        kind='channel',
+        directory=test_directory,
+    )
+    test_session.add(collection)
+    test_session.flush([collection])
+
+    # Create Channel linked to Collection
+    channel = Channel(
+        collection_id=collection.id,
+        url='https://example.com/channel1',
+        source_id='channel1',
+    )
     test_session.add(channel)
-    test_session.flush([channel, ])
+    test_session.flush([channel])
     assert channel and channel.id and channel.url
     download = channel.get_or_create_download(channel.url, 60, test_session)
     assert download.url == channel.url

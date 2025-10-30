@@ -125,7 +125,7 @@ mapnik.xml
 docker-compose.override.yml
 
 # test directory is used as media directory, we don't want to commit what a user downloads.
-test
+/test
 pg_data
 
 # Directories used to build images
@@ -135,3 +135,5 @@ pg_data
 /pi-gen/*xz
 
 .DS_Store
+app/cypress/screenshots
+app/cypress/videos

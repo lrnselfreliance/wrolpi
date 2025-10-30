@@ -43,8 +43,9 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
     assert not video.file_group.d_text, 'Video captions were not removed'
 
 
-def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory, video_file_factory,
-                        image_bytes_factory):
+@pytest.mark.asyncio
+async def test_refresh_videos(async_client, test_session, test_directory, simple_channel, video_factory,
+                              video_file_factory, image_bytes_factory):
     subdir = test_directory / 'subdir'
     subdir.mkdir()
 
@@ -81,7 +82,7 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
     test_session.expire_all()
 
@@ -104,12 +105,13 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
     # Remove video1's poster, video1 should be updated.
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
     video1 = Video.get_by_path(video1_video_path, test_session)
     assert not video1.poster_path
 
 
-def test_channels_with_videos(test_session, test_client, test_directory, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_channels_with_videos(test_session, async_client, test_directory, channel_factory, video_factory):
     channel1 = channel_factory('channel1', name='channel1')
     channel2 = channel_factory('channel2', name='channel2')
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True)
@@ -132,10 +134,12 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
     assert vid2_path.is_file(), 'Video file was deleted'
     assert vid3_path.is_file(), 'Video file was deleted'
 
-    test_client.post('/api/files/refresh')
+    await async_client.post('/api/files/refresh')
 
     assert test_session.query(Video).count() == 3, 'Did not find correct amount of video files.'
-    assert {i[0] for i in test_session.query(Channel.name)} == {'channel1', 'channel2'}, 'Channels were changed.'
+    from wrolpi.collections import Collection
+    assert {i[0] for i in test_session.query(Collection.name).join(Channel).filter(Collection.kind == 'channel')} == {
+        'channel1', 'channel2'}, 'Channels were changed.'
 
     vid1 = Video.get_by_path(vid1_path)
     vid2 = Video.get_by_path(vid2_path)
@@ -146,11 +150,12 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
     assert vid3.channel is None
 
 
-def test_api_download(test_session, test_client, test_directory):
+@pytest.mark.asyncio
+async def test_api_download(test_session, async_client, test_directory):
     """A video can be downloaded."""
     content = dict(urls=['https://example.com/video1', ], downloader='video', destination='dest',
                    settings=dict(excluded_urls='example.com'))
-    request, response = test_client.post('/api/download', content=json.dumps(content))
+    request, response = await async_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     download = test_session.query(Download).one()
@@ -364,7 +369,8 @@ async def test_video_file_format(async_client, test_session, fake_now):
 
 
 @pytest.mark.asyncio
-async def test_video_upload_file_tracking(test_session, async_client, video_factory, await_switches, make_multipart_form,
+async def test_video_upload_file_tracking(test_session, async_client, video_factory, await_switches,
+                                          make_multipart_form,
                                           image_bytes_factory):
     """Test that uploading info.json, poster, and caption files via /api/files/upload properly tracks them in Video and FileGroup."""
     from wrolpi.common import get_relative_to_media_directory

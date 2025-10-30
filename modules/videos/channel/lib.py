@@ -1,16 +1,18 @@
 import pathlib
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import List, Union
 
 from sqlalchemy import or_, func, desc, asc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from wrolpi import flags
+from wrolpi.collections import Collection
 from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_curs, optional_session, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, RefreshConflict
+from wrolpi.tags import Tag
 from wrolpi.vars import PYTEST
 from .. import schema
 from ..common import check_for_channel_conflicts
@@ -30,15 +32,16 @@ async def get_minimal_channels() -> List[dict]:
         # one that will consume the most resources.
         stmt = '''
                SELECT c.id,
-                      c.name AS "name",
-                      c.directory,
+                      col.name AS "name",
+                      col.directory,
                       c.url,
-                      t.name AS "tag_name",
+                      t.name   AS "tag_name",
                       c.video_count,
                       c.total_size,
                       c.minimum_frequency
                FROM channel AS c
-                        LEFT JOIN tag t ON t.id = c.tag_id
+                        INNER JOIN collection col ON col.id = c.collection_id
+                        LEFT JOIN tag t ON t.id = col.tag_id
                '''
         curs.execute(stmt)
         logger.debug(stmt)
@@ -60,19 +63,22 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
     """
     channel: COD = None  # noqa
     # Try to find the channel by the most reliable methods first.
+    # Always eagerly load Collection to ensure name/directory/tag_id are available
     if channel_id:
-        channel = session.query(Channel).filter_by(id=channel_id).one_or_none()
+        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(id=channel_id).one_or_none()
     if not channel and source_id:
-        channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
+        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
+            source_id=source_id).one_or_none()
     if not channel and url:
-        channel = session.query(Channel).filter_by(url=url).one_or_none()
+        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(url=url).one_or_none()
     if not channel and directory:
         directory = Path(directory)
         if not directory.is_absolute():
             directory = get_media_directory() / directory
-        channel = session.query(Channel).filter_by(directory=directory).one_or_none()
+        channel = session.query(Channel).join(Collection).filter(
+            Collection.directory == str(directory)).one_or_none()
     if not channel and name:
-        channel = session.query(Channel).filter_by(name=name).one_or_none()
+        channel = session.query(Channel).join(Collection).filter(Collection.name == name).one_or_none()
 
     if not channel:
         raise UnknownChannel(f'No channel matches {channel_id=} {source_id=} {url=} {directory=}')
@@ -147,7 +153,17 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
     directory = get_media_directory() / directory if not directory.is_absolute() else directory
     directory.mkdir(parents=True, exist_ok=True)
 
-    channel = Channel()
+    # Create Collection first
+    collection = Collection(
+        name=data.name,
+        kind='channel',
+        directory=directory,
+    )
+    session.add(collection)
+    session.flush([collection])
+
+    # Create Channel linked to Collection
+    channel = Channel(collection_id=collection.id)
     session.add(channel)
     session.flush([channel])
     # Apply the changes now that we've OK'd them
@@ -179,22 +195,24 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
     name_no_spaces = ''.join(name.split(' '))
     if order_by_video_count:
         stmt = session.query(Channel, func.count(Video.id).label('video_count')) \
+            .join(Collection) \
             .filter(or_(
-            Channel.name.ilike(f'%{name}%'),
-            Channel.name.ilike(f'%{name_no_spaces}%'),
+            Collection.name.ilike(f'%{name}%'),
+            Collection.name.ilike(f'%{name_no_spaces}%'),
         )) \
             .outerjoin(Video, Video.channel_id == Channel.id) \
-            .group_by(Channel.id, Channel.name) \
-            .order_by(desc('video_count'), asc(Channel.name)) \
+            .group_by(Channel.id, Collection.id, Collection.name) \
+            .order_by(desc('video_count'), asc(Collection.name)) \
             .limit(limit)
         channels = [i[0] for i in stmt]
     else:
         stmt = session.query(Channel) \
+            .join(Collection) \
             .filter(or_(
-            Channel.name.ilike(f'%{name}%'),
-            Channel.name.ilike(f'%{name_no_spaces}%'),
+            Collection.name.ilike(f'%{name}%'),
+            Collection.name.ilike(f'%{name_no_spaces}%'),
         )) \
-            .order_by(asc(Channel.name)) \
+            .order_by(asc(Collection.name)) \
             .limit(limit)
         channels = stmt.all()
     return channels
@@ -270,6 +288,5 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
 @optional_session
 async def search_channels(tag_names: List[str], session: Session) -> List[Channel]:
     """Search Tagged Channels."""
-    from wrolpi.tags import Tag
-    channels = session.query(Channel).join(Tag).filter(Tag.name.in_(tag_names)).all()
+    channels = session.query(Channel).join(Collection).join(Tag).filter(Tag.name.in_(tag_names)).all()
     return channels

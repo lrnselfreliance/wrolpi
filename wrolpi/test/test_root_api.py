@@ -205,7 +205,8 @@ async def test_echo(async_client):
     assert response.json['args'] == {}
 
 
-def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
+@pytest.mark.asyncio
+async def test_hotspot_settings(test_session, async_client, test_wrolpi_config):
     """
     The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
     """
@@ -215,28 +216,28 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
     with mock.patch('wrolpi.root_api.admin') as mock_admin:
         # Turning on the hotspot succeeds.
         mock_admin.enable_hotspot.return_value = True
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         mock_admin.enable_hotspot.assert_called_once()
         mock_admin.reset_mock()
 
         # Turning on the hotspot fails.
         mock_admin.enable_hotspot.return_value = False
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
         assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.enable_hotspot.assert_called_once()
 
         # Turning off the hotspot succeeds.
         mock_admin.disable_hotspot.return_value = True
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
         mock_admin.disable_hotspot.assert_called_once()
         mock_admin.reset_mock()
 
         # Turning off the hotspot succeeds.
         mock_admin.disable_hotspot.return_value = False
-        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
         assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.disable_hotspot.assert_called_once()
@@ -248,7 +249,7 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
         # Hotspot password can be changed.
         mock_admin.disable_hotspot.return_value = True
         content = {'hotspot_password': 'new password', 'hotspot_ssid': 'new ssid'}
-        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.NO_CONTENT
         assert config.hotspot_password == 'new password'
         assert config.hotspot_ssid == 'new ssid'
@@ -258,7 +259,7 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
         # Hotspot password must be at least 8 characters.
         mock_admin.disable_hotspot.return_value = True
         content = {'hotspot_password': '1234567', 'hotspot_ssid': 'new ssid'}
-        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
                                  'error': 'Bad Request',
@@ -266,9 +267,10 @@ def test_hotspot_settings(test_session, test_client, test_wrolpi_config):
                                  }
 
 
+@pytest.mark.asyncio
 @skip_macos
 @skip_circleci
-def test_throttle_toggle(test_session, test_client, test_wrolpi_config):
+async def test_throttle_toggle(test_session, async_client, test_wrolpi_config):
     get_wrolpi_config().ignored_directories = list()
 
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
@@ -277,7 +279,7 @@ def test_throttle_toggle(test_session, test_client, test_wrolpi_config):
             b'wlan0: unavailable',
             b'The governor "ondemand" may decide ',
         ]
-        request, response = test_client.get('/api/settings')
+        request, response = await async_client.get('/api/settings')
 
     # Throttle is off by default.
     assert response.status_code == HTTPStatus.OK
@@ -490,9 +492,10 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
         assert download_config['tag_names'] == [tag1.name, tag2.name]
 
 
-def test_get_downloaders(test_client):
+@pytest.mark.asyncio
+async def test_get_downloaders(async_client):
     """A list of Downloaders the user can use can be gotten."""
-    request, response = test_client.get('/api/downloaders')
+    request, response = await async_client.get('/api/downloaders')
     assert response.status_code == HTTPStatus.OK
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
@@ -536,8 +539,9 @@ async def test_restart_download(test_session, async_client, test_download_manage
     assert download.is_deferred, download.status
 
 
-def test_get_global_statistics(test_session, test_client):
-    request, response = test_client.get('/api/statistics')
+@pytest.mark.asyncio
+async def test_get_global_statistics(test_session, async_client):
+    request, response = await async_client.get('/api/statistics')
     assert response.json['global_statistics']['db_size'] > 1
 
 
@@ -594,7 +598,7 @@ async def test_search_suggestions(test_session, async_client, channel_factory, a
             {'directory': 'videos/Fool', 'id': 2, 'name': 'Fool', 'url': 'https://example.com/Fool', 'downloads': []},
             {'directory': 'videos/Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo', 'downloads': []},
         ],
-        [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
+        [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 4}],
     )
 
     # Channel name "Fool" is matched because spaces are stripped in addition to only
@@ -610,7 +614,7 @@ async def test_search_suggestions(test_session, async_client, channel_factory, a
         [
             {'directory': 'videos/Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar', 'downloads': []}
         ],
-        [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
+        [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 5}],
     )
 
 

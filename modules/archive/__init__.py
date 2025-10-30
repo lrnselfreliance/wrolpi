@@ -8,6 +8,7 @@ from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
+from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html
 from wrolpi.db import optional_session, get_db_session
@@ -18,8 +19,8 @@ from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT
 from . import lib
 from .api import archive_bp  # noqa
 from .errors import InvalidArchive
-from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER
-from .models import Archive, Domain
+from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER, get_url_from_singlefile
+from .models import Archive
 
 PRETTY_NAME = 'Archive'
 
@@ -186,15 +187,61 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         if not archive:
             # Create new Archive if it doesn't exist
             archive = Archive(file_group_id=file_group_id, file_group=file_group)
+
+            # Set collection_id BEFORE adding to session to avoid autoflush constraint violation
+            from modules.archive.lib import get_or_create_domain_collection
+            if file_group.url:
+                # URL is already set on the FileGroup
+                collection = get_or_create_domain_collection(session, file_group.url)
+                archive.collection_id = collection.id if collection else None
+            else:
+                # No URL - try to extract from singlefile
+                try:
+                    url = get_url_from_singlefile(singlefile_path.read_bytes())
+                    file_group.url = url
+                    collection = get_or_create_domain_collection(session, url)
+                    archive.collection_id = collection.id if collection else None
+                except (RuntimeError, ValueError) as e:
+                    # Could not extract URL from singlefile
+                    if not PYTEST:
+                        # In production, archives must have a URL/collection
+                        raise InvalidArchive(f'Archive has no URL and could not extract from singlefile: {e}') from e
+                    # In tests, allow archives without collections (factory will set it later)
+                    logger.debug(f'Could not extract URL from singlefile (test mode): {e}')
+                    archive.collection_id = None
+
             session.add(archive)
+
         archive.validate()
         archive.flush()
+
+        # Validate that archive path matches domain directory (efficient O(1) check)
+        if archive.collection_id and archive.collection:
+            collection = archive.collection
+            if collection.kind == 'domain' and collection.directory and not collection.tag_id:
+                # Check if archive path is under the domain's directory
+                archive_path = pathlib.Path(file_group.primary_path)
+                from wrolpi.common import get_media_directory
+                media_dir = get_media_directory()
+                collection_abs_dir = media_dir / collection.directory
+
+                try:
+                    # Check if archive is under the collection's directory
+                    archive_path.relative_to(collection_abs_dir)
+                except ValueError:
+                    # Archive is NOT under the domain's directory - clear it
+                    logger.warning(
+                        f'Archive {archive.id} at {archive_path} is not under domain directory {collection.directory}. '
+                        f'Clearing domain directory (domain is not tagged).'
+                    )
+                    collection.directory = None
+                    session.flush([collection])
 
         file_group.title = file_group.a_text = title or archive.file_group.title
         file_group.d_text = contents
         file_group.data = {
             'id': archive.id,
-            'domain': archive.domain.domain if archive.domain else None,
+            'domain': archive.domain,
             'readability_json_path': archive.readability_json_path,
             'readability_path': archive.readability_path,
             'readability_txt_path': archive.readability_txt_path,
@@ -230,26 +277,33 @@ async def archive_modeler():
             processed = 0
             for processed, (file_group, archive) in enumerate(results):
 
-                # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
-                file_group.indexed = True
-
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
                                  logger__=logger):
                     if archive:
                         try:
                             archive_id = archive.id
                             archive.validate()
+                            # Successfully validated, mark as indexed
+                            file_group.indexed = True
                         except Exception:
                             logger.error(f'Unable to validate Archive {archive_id}')
+                            # Don't mark as indexed - will retry later
                             if PYTEST:
                                 raise
                     else:
                         try:
                             model_archive(file_group, session=session)
+                            # Successfully modeled, mark as indexed
+                            file_group.indexed = True
                         except InvalidArchive:
                             # It was not a real Archive.  Many HTML files will not be an Archive.
                             file_group.indexed = False
                             invalid_archives.add(file_group.id)
+                        except Exception as e:
+                            # Some other error occurred during modeling - don't mark as indexed so we can retry
+                            logger.error(f'Failed to model Archive for FileGroup {file_group.id}: {e}')
+                            if PYTEST:
+                                raise
 
             session.commit()
 
@@ -267,11 +321,14 @@ async def archive_modeler():
 @limit_concurrent(1)
 def archive_cleanup():
     with get_db_session(commit=True) as session:
-        # Remove any Domains without any Archives.
-        domain_ids = [i[0] for i in session.execute('SELECT DISTINCT domain_id FROM archive') if i[0]]
-        for domain in session.query(Domain):
-            if domain.id not in domain_ids:
-                session.delete(domain)
+        # Remove any domain Collections without any Archives.
+        # Get all collection_ids that have archives
+        collection_ids = [i[0] for i in session.execute('SELECT DISTINCT collection_id FROM archive') if i[0]]
+        # Find domain collections that have no archives
+        for collection in session.query(Collection).filter_by(kind='domain'):
+            if collection.id not in collection_ids:
+                logger.info(f'Deleting empty domain collection: {collection.name}')
+                session.delete(collection)
 
 
 def get_title(path):

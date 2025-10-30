@@ -169,9 +169,11 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         stderr = stderr_file.read_bytes() or b''
         # Logs details of the call, but only if it took a long time or TRACE is enabled.
         if log_command:
-            logger.debug(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
+            logger.debug(
+                f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
         elif logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
+            logger.trace(
+                f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
         return CommandResult(
             return_code=proc.returncode,
             cancelled=cancelled,

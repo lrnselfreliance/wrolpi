@@ -94,6 +94,12 @@ def reset_shared_contexts(app: Sanic):
         drives_stats=list(),
         processes_stats=list(),
         memory_stats=dict(),
+        # Upgrade info defaults
+        update_available=False,
+        latest_commit=None,
+        current_commit=None,
+        commits_behind=0,
+        git_branch=None,
     ))
     app.shared_ctx.map_importing.clear()
     app.shared_ctx.cache.clear()

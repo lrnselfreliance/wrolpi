@@ -1,4 +1,20 @@
-import os.path
+import pathlib
+from http import HTTPStatus
+
+import sanic.request
+from sanic import response, Request, Blueprint
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
+
+from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
+    background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
+from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
+from . import lib, schema
+from ..api_utils import json_response, api_app
+from ..events import Events
+from ..schema import JSONErrorResponse
+from ..tags import Tag
+from ..vars import PYTEST
 import pathlib
 from http import HTTPStatus
 
@@ -165,7 +181,8 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
     # Search Domains by name.
     from modules.archive.lib import search_domains_by_name
     domains = await search_domains_by_name(name=body.path)
-    domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
+    # search_domains_by_name returns dicts with 'directory' and 'domain' keys
+    domain_directories = [dict(path=i['directory'], domain=i['domain']) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
     if logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {domain_paths=}')

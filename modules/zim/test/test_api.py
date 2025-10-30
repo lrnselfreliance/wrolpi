@@ -133,18 +133,19 @@ async def test_zim_tag_and_untag(async_client, test_session, test_zim, tag_facto
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-def test_zim_subscribe(test_session, test_client):
+@pytest.mark.asyncio
+async def test_zim_subscribe(test_session, async_client):
     """A Kiwix subscription can be scheduled in the API.  The language can be changed."""
     # Subscribe to English.
     content = dict(name='Wikipedia (mini)', language='en')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_mini_'
     assert download.info_json == {'language': 'en', 'name': 'Wikipedia (mini)'}
     assert download.frequency
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {
         'Wikipedia (mini)': {'download_id': 1,
@@ -155,7 +156,7 @@ def test_zim_subscribe(test_session, test_client):
 
     # Change subscription to French.
     content = dict(name='Wikipedia (mini)', language='fr')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(Download).count() == 1
 
@@ -163,7 +164,7 @@ def test_zim_subscribe(test_session, test_client):
     assert download.url == 'https://download.kiwix.org/zim/wikipedia/wikipedia_fr_all_mini_'
     assert download.info_json == {'language': 'fr', 'name': 'Wikipedia (mini)'}
     assert download.frequency
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {
         'Wikipedia (mini)': {'download_id': 1,
@@ -173,9 +174,9 @@ def test_zim_subscribe(test_session, test_client):
                              'name': 'Wikipedia (mini)'}}
 
     # Delete subscription.
-    request, response = test_client.delete('/api/zim/subscribe/1')
+    request, response = await async_client.delete('/api/zim/subscribe/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = test_client.get('/api/zim/subscribe')
+    request, response = await async_client.get('/api/zim/subscribe')
     assert response.status_code == HTTPStatus.OK
     assert response.json['subscriptions'] == {}
     # No subscriptions or downloads.
@@ -184,17 +185,18 @@ def test_zim_subscribe(test_session, test_client):
 
     # English Stack Exchange is special.
     content = dict(name='Stackoverflow (Stack Exchange)', language='en')
-    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://download.kiwix.org/zim/stack_exchange/stackoverflow.com_en_all_'
 
 
-def test_get_zim_entry(test_session, test_client, test_zim):
-    request, response = test_client.get('/api/zim/1/entry/home')
+@pytest.mark.asyncio
+async def test_get_zim_entry(test_session, async_client, test_zim):
+    request, response = await async_client.get('/api/zim/1/entry/home')
     assert response.status_code == HTTPStatus.OK
 
-    request, response = test_client.get('/api/zim/1/entry/does not exist')
+    request, response = await async_client.get('/api/zim/1/entry/does not exist')
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 

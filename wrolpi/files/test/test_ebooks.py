@@ -77,9 +77,10 @@ async def test_extract_cover(test_session, test_directory, example_epub, await_s
     assert ebook.cover_path and ebook.cover_path.stat().st_size == 297099
 
 
-def test_search_ebooks(test_session, test_client, example_epub):
+@pytest.mark.asyncio
+async def test_search_ebooks(test_session, async_client, example_epub):
     """Ebooks are handled in File search results."""
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(EBook).count() == 1
@@ -91,7 +92,7 @@ def test_search_ebooks(test_session, test_client, example_epub):
     assert ebook.file_group.d_text, 'Book was not indexed'
 
     content = dict(mimetypes=['application/epub', 'application/x-mobipocket-ebook'])
-    request, response = test_client.post('/api/files/search', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json
     file_group = response.json['file_groups'][0]
@@ -105,7 +106,7 @@ def test_search_ebooks(test_session, test_client, example_epub):
 
     # No Mobi ebook.
     content = dict(mimetypes=['application/x-mobipocket-ebook'])
-    request, response = test_client.post('/api/files/search', content=json.dumps(content))
+    request, response = await async_client.post('/api/files/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json
     assert len(response.json['file_groups']) == 0

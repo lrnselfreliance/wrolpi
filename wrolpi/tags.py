@@ -77,8 +77,8 @@ class Tag(ModelHelper, Base):
 
     tag_files: List[TagFile] = relationship('TagFile', back_populates='tag', cascade='all')
     tag_zim_entries: List = relationship('TagZimEntry', back_populates='tag', cascade='all')
-    channels: List = relationship('Channel', primaryjoin='Tag.id==Channel.tag_id', back_populates='tag',
-                                  cascade='all')
+
+    # Note: Channel relationship removed - Channels now access Tags through Collection
 
     def __repr__(self):
         name = self.name
@@ -148,8 +148,12 @@ class Tag(ModelHelper, Base):
         raise UnknownTag(f'No Tag with id={id_}')
 
     def has_relations(self) -> bool:
-        """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
-        return bool(any(self.tag_files) or any(self.tag_zim_entries) or any(self.channels))
+        """Returns True if this Tag has been used with any FileGroups, Zim Entries, or Collections."""
+        from wrolpi.collections import Collection
+        session = Session.object_session(self)
+        # Check if tag is used by any collection (domain or channel)
+        has_collections = session.query(Collection).filter(Collection.tag_id == self.id).first() is not None
+        return bool(any(self.tag_files) or any(self.tag_zim_entries) or has_collections)
 
     async def update_tag(self, name: str, color: str | None, session: Session):
         """Change name/color of tag.  Ensures safeness of new values, checks for conflicts."""
@@ -174,7 +178,6 @@ class Tag(ModelHelper, Base):
         if Session.object_session(self):
             self.flush()
 
-        from modules.videos.models import Channel
         from modules.videos.errors import ChannelDirectoryConflict
 
         async def _():
@@ -197,23 +200,32 @@ class Tag(ModelHelper, Base):
                 session.flush(to_flush)
                 save_downloads_config.activate_switch()
 
-            for channel in self.channels:
-                channel: Channel
-                possible_directory = channel.format_directory(old_name)
-                if channel.directory == possible_directory:
-                    # Channel is in this Tag's old directory, move the Channel to the new directory.
-                    new_directory = channel.format_directory(name)
-                    try:
-                        new_directory.mkdir(parents=True)
-                    except FileExistsError:
-                        raise ChannelDirectoryConflict(f'Channel directory already exists: {new_directory}')
+            # Only move channels if tag is being renamed (not created)
+            if old_name:
+                # Get channels through Collections
+                from modules.videos.models import Channel
+                from wrolpi.collections import Collection
+                channels = session.query(Channel).join(Collection).filter(
+                    Collection.tag_id == self.id,
+                    Collection.kind == 'channel'
+                ).all()
+                for channel in channels:
+                    channel: Channel
+                    possible_directory = channel.format_directory(old_name)
+                    if channel.directory == possible_directory:
+                        # Channel is in this Tag's old directory, move the Channel to the new directory.
+                        new_directory = channel.format_directory(name)
+                        try:
+                            new_directory.mkdir(parents=True)
+                        except FileExistsError:
+                            raise ChannelDirectoryConflict(f'Channel directory already exists: {new_directory}')
 
-                    # Move the files of the Channel.
-                    await channel.move_channel(new_directory, session)
-                else:
-                    msg = f"Not moving Channel because it is not in this Tag's old directory:" \
-                          f" {channel} {possible_directory} {self}"
-                    logger.warning(msg)
+                        # Move the files of the Channel.
+                        await channel.move_channel(new_directory, session)
+                    else:
+                        msg = f"Not moving Channel because it is not in this Tag's old directory:" \
+                              f" {channel} {possible_directory} {self}"
+                        logger.warning(msg)
 
         if PYTEST:
             await _()
@@ -639,13 +651,15 @@ def sync_tags_directory():
 def get_tags() -> List[dict]:
     with get_db_curs() as curs:
         curs.execute('''
-            SELECT t.id, t.name, t.color,
-             (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id) AS file_group_count,
-             (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id) AS zim_entry_count
-            FROM tag t
-            GROUP BY t.id, t.name, t.color
-            ORDER BY t.name
-        ''')
+                     SELECT t.id,
+                            t.name,
+                            t.color,
+                            (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id) AS file_group_count,
+                            (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id)  AS zim_entry_count
+                     FROM tag t
+                     GROUP BY t.id, t.name, t.color
+                     ORDER BY t.name
+                     ''')
         tags = list(map(dict, curs.fetchall()))
     return tags
 
@@ -682,15 +696,13 @@ def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tu
 
     # This select gets an array of FileGroup.id's which are tagged with the provided tag names.
     sub_select = '''
-        SELECT
-            tf.file_group_id
-        FROM
-            tag_file tf
-            LEFT JOIN tag t on t.id = tf.tag_id
-        GROUP BY file_group_id
-        -- Match only FileGroups that have at least all the Tag names.
-        HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
-    '''
+                 SELECT tf.file_group_id
+                 FROM tag_file tf
+                          LEFT JOIN tag t on t.id = tf.tag_id
+                 GROUP BY file_group_id
+                 -- Match only FileGroups that have at least all the Tag names.
+                 HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+                 '''
     params['tag_names'] = tag_names
     return sub_select, params
 
@@ -720,27 +732,24 @@ def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tup
     params = dict(tag_names=tag_names)
     if zim_id:
         stmt = '''
-            SELECT
-                tz.zim_id, tz.zim_entry
-            FROM
-                tag_zim tz
-                LEFT JOIN tag t on tz.tag_id = t.id
-            WHERE
-                tz.zim_id = %(zim_id)s
-            GROUP BY tz.zim_id, tz.zim_entry
-            -- Match only TagZimEntries that have all the Tag names.
-            HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
-        '''
+               SELECT tz.zim_id,
+                      tz.zim_entry
+               FROM tag_zim tz
+                        LEFT JOIN tag t on tz.tag_id = t.id
+               WHERE tz.zim_id = %(zim_id)s
+               GROUP BY tz.zim_id, tz.zim_entry
+               -- Match only TagZimEntries that have all the Tag names.
+               HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+               '''
         params['zim_id'] = zim_id
     else:
         stmt = '''
-            SELECT
-                tz.zim_id, tz.zim_entry
-            FROM
-                tag_zim tz
-                LEFT JOIN tag t on tz.tag_id = t.id
-            GROUP BY tz.zim_id, tz.zim_entry
-            -- Match only TagZimEntries that have all the Tag names.
-            HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
-        '''
+               SELECT tz.zim_id,
+                      tz.zim_entry
+               FROM tag_zim tz
+                        LEFT JOIN tag t on tz.tag_id = t.id
+               GROUP BY tz.zim_id, tz.zim_entry
+               -- Match only TagZimEntries that have all the Tag names.
+               HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+               '''
     return stmt, params

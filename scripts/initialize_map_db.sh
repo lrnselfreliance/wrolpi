@@ -19,7 +19,7 @@ pg_createcluster 15 map --port=5433 --start -e utf8
 sudo -iu postgres psql -c '\l' --port=5433 | grep gis || (
   sudo -iu postgres createuser --port=5433 _renderd
   sudo -iu postgres psql --port=5433 -c "alter user _renderd password 'wrolpi'"
-  sudo -iu postgres createdb --port=5433 -E UTF8 -O _renderd gis
+  sudo -iu postgres createdb --port=5433 -E UTF8 -O _renderd --template=template0 gis
   sudo -iu postgres psql -d gis --port=5433 -c 'CREATE EXTENSION postgis'
   sudo -iu postgres psql -d gis --port=5433 -c 'CREATE EXTENSION hstore'
   echo "Created gis database"

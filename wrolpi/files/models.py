@@ -6,14 +6,14 @@ from datetime import datetime
 from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, Computed, BigInteger, Boolean
+from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.db import optional_session
+from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
@@ -87,6 +87,10 @@ class FileGroup(ModelHelper, Base):
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
 
+    # Columns updated by triggers.
+    # `file_group_effective_datetime_trigger` and `update_effective_datetime` event handler
+    effective_datetime = Column(TZDateTime)  # Equivalent to COALESCE(published_datetime, download_datetime)
+
     tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
     a_text = deferred(Column(String))
@@ -119,7 +123,8 @@ class FileGroup(ModelHelper, Base):
                 if PYTEST:
                     raise
                 # Log the error but continue processing other tags
-                logger.error(f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+                logger.error(
+                    f"Found TagFile with problematic tag reference in __json__: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         tags = sorted(tag_names)
         d = dict(
             author=self.author,
@@ -275,6 +280,14 @@ class FileGroup(ModelHelper, Base):
     def my_mobi_files(self) -> List[dict]:
         return self.my_files('application/x-mobipocket-ebook')
 
+    def my_html_files(self) -> List[dict]:
+        html_files = self.my_files('text/html', 'application/octet-stream')
+        html_files = [i for i in html_files if i['path'].name.endswith('.html')]
+        return html_files
+
+    def my_html_paths(self) -> List[pathlib.Path]:
+        return [i['path'] for i in self.my_html_files()]
+
     def delete(self, add_to_skip_list: bool = True):
         """Delete this FileGroup record, and all of its files.
 
@@ -385,7 +398,8 @@ class FileGroup(ModelHelper, Base):
                 if PYTEST:
                     raise
                 # Log the error but continue processing other tags
-                logger.error(f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
+                logger.error(
+                    f"Found TagFile with problematic tag reference: {tag_file.id if hasattr(tag_file, 'id') else 'unknown'}")
         return result
 
     def merge(self, file_groups: List['FileGroup']):
@@ -456,6 +470,14 @@ class FileGroup(ModelHelper, Base):
     @property
     def location(self):
         """Returns the URL that the FileGroup can be previewed."""
+        klass = self.get_model_class()
+        if klass:
+            # Return the model location when possible.
+            with get_db_session() as session:
+                instance = klass.get_by_path(self.primary_path, session)
+                if instance and hasattr(instance, 'location'):
+                    return instance.location
+
         parent = str(get_relative_to_media_directory(self.primary_path.parent))
         preview = str(get_relative_to_media_directory(self.primary_path))
         if parent == '.':
@@ -481,16 +503,20 @@ class FileGroup(ModelHelper, Base):
         elif Zim.can_model(self):
             return Zim
 
+    def get_model_record(self) -> Optional[ModelHelper]:
+        klass = self.get_model_class()
+        if klass:
+            with get_db_session() as session:
+                return klass.get_by_path(self.primary_path, session)
+        return None
+
     def do_model(self, session: Session) -> Optional[ModelHelper]:
         """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""
         if model_class := self.get_model_class():
-            if model := model_class.get_by_path(self.primary_path, session):
-                # Already modeled.
-                logger.debug(f'already modeled: {self} {model}')
-                return model
-            # Create new model (Video/Archive/Ebook).
+            # Always call do_model() to ensure FileGroup.data is updated when files change.
+            # The model's do_model() should be idempotent (safe to call multiple times).
             model = model_class.do_model(self, session)
-            logger.debug(f'new model: {self} {model}')
+            logger.debug(f'modeled: {self} {model}')
             return model
 
         # Index the file if no models are available.
@@ -513,6 +539,12 @@ class FileGroup(ModelHelper, Base):
         except Exception as e:
             logger.error(f"Error in get_tag_directory_paths_map for {self}: {e}")
             raise
+
+
+@event.listens_for(FileGroup, 'before_insert')
+@event.listens_for(FileGroup, 'before_update')
+def update_effective_datetime(mapper, connection, target):
+    target.effective_datetime = target.published_datetime or target.download_datetime
 
 
 class Directory(ModelHelper, Base):

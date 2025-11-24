@@ -202,7 +202,7 @@ async def test_channel_download_requires_refresh(
         assert channel.refreshed == expected
         assert bool(channel.info_json) == expected
 
-    await async_client.sanic_app.dispatch('wrolpi.download.')
+    await async_client.sanic_app.dispatch('wrolpi.download.download')
 
     assert_refreshed(False)
     test_session.commit()
@@ -373,16 +373,14 @@ def test_search_videos_channel(test_client, test_session, video_factory):
 
 
 @pytest.mark.asyncio
-async def test_get_channel_videos_pagination(test_session, simple_channel, video_factory, assert_video_search):
+async def test_get_channel_videos_pagination(test_session, video_factory, assert_video_search, channel_factory):
+    # Create two channels, one with 50 videos...
+    channel1, channel2 = channel_factory(), channel_factory()
     for i in range(50):
-        video_factory(channel_id=simple_channel.id)
-
-    channel2 = Channel(name='Bar')
-    test_session.add(channel2)
-    test_session.flush()
-    test_session.refresh(channel2)
+        video_factory(channel_id=channel1.id)
+    # The other channel only has one video.
     video_factory(channel_id=channel2.id)
-    video_factory(title='vid2', channel_id=channel2.id, with_video_file=True)
+    video_factory(title='vid2', channel_id=channel2.id)
     test_session.commit()
 
     # Get first, second, third, and empty pages of videos.
@@ -395,10 +393,11 @@ async def test_get_channel_videos_pagination(test_session, simple_channel, video
     ]
     last_ids = []
     for offset, video_count in tests:
-        _, response = await assert_video_search(channel_id=simple_channel.id, order_by='published_datetime',
+        _, response = await assert_video_search(channel_id=channel1.id, order_by='published_datetime',
                                                 offset=offset,
                                                 limit=20)
-        assert len(response.json['file_groups']) == video_count, 'Returned videos does not match'
+        assert len(response.json['file_groups']) == video_count, \
+            f'Returned videos does not match for ({offset}, {video_count})'
         current_ids = [i['id'] for i in response.json['file_groups']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
         last_ids = current_ids

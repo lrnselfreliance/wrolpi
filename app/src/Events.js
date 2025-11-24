@@ -101,6 +101,10 @@ function handleEvents(events) {
                 () => window.open(url, '_self'));
         }
 
+        if (event === 'upload_archive_failed') {
+            eventToast('Archive Upload Failed!', message, 'error', 5000);
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

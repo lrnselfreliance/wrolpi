@@ -107,13 +107,32 @@ archive_downloader = ArchiveDownloader()
 
 
 def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
+    """
+    Models an Archive from a given FileGroup.
+
+    This function takes in a FileGroup and attempts to create an Archive object.
+    It does this by checking for the presence of HTML files within the FileGroup,
+    determining if any of these are SingleFiles, and then extracting relevant data
+    (title, contents) from either the JSON or text readability files.
+
+    Args:
+        file_group: The FileGroup to model as an Archive.
+        session: An optional database session for committing changes.
+
+    Returns:
+        An Archive object representing the modeled archive.
+
+    Raises:
+        InvalidArchive: If no HTML SingleFile is found in the FileGroup, or if
+            any other error occurs during modeling.
+    """
     file_group_id = file_group.id
     if not file_group_id:
         session.flush([file_group])
         file_group_id = file_group.id
 
-    # All Archives have an HTML Singlefile.
-    html_paths = file_group.my_paths('text/html')
+    # All Archives have an HTML Singlefile.  Singlefile may be text HTML, or bytes HTML.
+    html_paths = file_group.my_html_paths()
     if not html_paths:
         logger.error('Query returned a group without an HTML file!')
         raise InvalidArchive('FileGroup does not contain any html files')
@@ -162,8 +181,12 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         if readability_txt_path:
             contents = get_article(readability_txt_path)
 
-        archive = Archive(file_group_id=file_group_id, file_group=file_group)
-        session.add(archive)
+        # Check if an Archive already exists for this FileGroup
+        archive = session.query(Archive).filter_by(file_group_id=file_group_id).one_or_none()
+        if not archive:
+            # Create new Archive if it doesn't exist
+            archive = Archive(file_group_id=file_group_id, file_group=file_group)
+            session.add(archive)
         archive.validate()
         archive.flush()
 
@@ -177,6 +200,7 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
             'readability_txt_path': archive.readability_txt_path,
             'screenshot_path': archive.screenshot_path,
             'singlefile_path': archive.singlefile_path,
+            'info_json_path': archive.info_json_path,
         }
 
         return archive

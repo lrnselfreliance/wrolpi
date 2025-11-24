@@ -30,7 +30,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
-from wrolpi.downloader import download_manager
+from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError
 from wrolpi.events import Events
@@ -856,7 +856,6 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         FROM file_group fg
         {join}
         {f"WHERE {wheres}" if wheres else ""}
-        GROUP BY fg.id
         ORDER BY {order_by}
         OFFSET %(offset)s LIMIT %(limit)s
     '''
@@ -1000,23 +999,23 @@ def split_file_name_words(name: str) -> str:
 def get_file_statistics():
     with get_db_curs() as curs:
         curs.execute('''
-        SELECT
-            -- All items in file_group.files are real individual files.
-            SUM(json_array_length(files)) AS "total_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf') AS "pdf_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip') AS "zip_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%') AS "video_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'image/%') AS "image_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'audio/%') AS "audio_count",
-            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/epub+zip' OR file_group.mimetype = 'application/x-mobipocket-ebook') AS "ebook_count",
-            (SELECT COUNT(DISTINCT tag_file.file_group_id) FROM tag_file) AS "tagged_files",
-            (SELECT COUNT(DISTINCT tag_zim.zim_entry) FROM tag_zim) AS "tagged_zims",
-            (SELECT COUNT(*) FROM tag) AS "tags_count",
-            SUM(size)::BIGINT AS "total_size",
-            (SELECT COUNT(*) FROM archive) AS archive_count
-        FROM
-            file_group
-        ''')
+                     SELECT
+                         -- All items in file_group.files are real individual files.
+                         SUM(json_array_length(files))                                                                             AS "total_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf')                                          AS "pdf_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip')                                          AS "zip_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%')                                               AS "video_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'image/%')                                               AS "image_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'audio/%')                                               AS "audio_count",
+                         COUNT(id) FILTER (WHERE file_group.mimetype = 'application/epub+zip' OR file_group.mimetype =
+                                                                                                 'application/x-mobipocket-ebook') AS "ebook_count",
+                         (SELECT COUNT(DISTINCT tag_file.file_group_id) FROM tag_file)                                             AS "tagged_files",
+                         (SELECT COUNT(DISTINCT tag_zim.zim_entry) FROM tag_zim)                                                   AS "tagged_zims",
+                         (SELECT COUNT(*) FROM tag)                                                                                AS "tags_count",
+                         SUM(size)::BIGINT                                                                                         AS "total_size",
+                         (SELECT COUNT(*) FROM archive)                                                                            AS archive_count
+                     FROM file_group
+                     ''')
         statistics = dict(curs.fetchall()[0])
         statistics['total_count'] = statistics['total_count'] or 0
         statistics['total_size'] = statistics['total_size'] or 0
@@ -1137,25 +1136,25 @@ def get_refresh_progress() -> RefreshProgress:
     idempotency = api_app.shared_ctx.refresh.get('idempotency')
     if idempotency:
         stmt = '''
-            SELECT
-                -- Sum all the files in each FileGroup.
-                SUM(json_array_length(files)) FILTER (WHERE idempotency=%(idempotency)s) AS "total_file_groups",
-                COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency=%(idempotency)s) AS "indexed",
-                COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
-                COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency=%(idempotency)s) AS "modeled"
-            FROM file_group
-        '''
+               SELECT
+                   -- Sum all the files in each FileGroup.
+                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)   AS "total_file_groups",
+                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)   AS "indexed",
+                   COUNT(id) FILTER (WHERE indexed IS FALSE)                                    AS "unindexed",
+                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s) AS "modeled"
+               FROM file_group \
+               '''
     else:
         # Idempotency has not yet been declared.
         stmt = '''
-            SELECT
-                -- Sum all the files in each FileGroup.
-                SUM(json_array_length(files)) AS "total_file_groups",
-                COUNT(id) FILTER (WHERE indexed IS TRUE) AS "indexed",
-                COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
-                COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
-            FROM file_group
-        '''
+               SELECT
+                   -- Sum all the files in each FileGroup.
+                   SUM(json_array_length(files))              AS "total_file_groups",
+                   COUNT(id) FILTER (WHERE indexed IS TRUE)   AS "indexed",
+                   COUNT(id) FILTER (WHERE indexed IS FALSE)  AS "unindexed",
+                   COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
+               FROM file_group \
+               '''
 
     with get_db_curs() as curs:
         curs.execute(stmt, dict(idempotency=idempotency))
@@ -1583,52 +1582,61 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         logger.warning('upsert_file called, but all files are in ignored directories!')
         raise IgnoredDirectoryError(f'all files are in ignored directories: {file}')
 
-    for i in range(2):
-        # Try multiple times because uploads happen concurrently and may conflict.
-        # TODO convert uploads to synchronous in UI.
-        with get_db_session() as session:
-            file_group = FileGroup.from_paths(session, *paths)
-            # Re-index the contents of the file.
+    # Use a single session context for all database operations
+    with get_db_session(commit=True) as session:
+        # Create/update FileGroup with retry logic
+        file_group = None
+        for i in range(2):
             try:
-                session.flush([file_group, ])
-                file_group_id = file_group.id
-                session.commit()
+                file_group = FileGroup.from_paths(session, *paths)
+                session.flush([file_group])
                 break
             except IntegrityError:
                 # Another process inserted this FileGroup.
                 logger.error(f'upsert_file failed because FileGroup already exists, trying again... {file}')
+                session.rollback()
+                if i == 1:
+                    raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
                 continue
-    else:
-        raise RuntimeError(f'upsert_file failed to create FileGroup every try! {file}')
 
-    logger.debug(f'upsert_file: {file_group}')
-    try:
-        with get_db_session(commit=True) as session:
-            file_group = FileGroup.find_by_id(file_group_id, session)
+        if not file_group:
+            raise RuntimeError(f'upsert_file failed to create FileGroup! {file}')
+
+        logger.debug(f'upsert_file: {file_group}')
+
+        # Model the FileGroup (creates Archive/Video/etc. and sets indexed=True)
+        try:
             file_group.do_model(session)
-    except Exception as e:
-        logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
-        if PYTEST:
-            raise
+        except Exception as e:
+            logger.error(f'Failed to model FileGroup: {file_group}', exc_info=e)
+            if PYTEST:
+                raise
 
-    # If user uploads a file, then remove it from the skip list so comments can be downloaded.
-    url = file_group.url if file_group and file_group.url else None
-    if url and download_manager.is_skipped(url):
-        download_manager.remove_from_skip_list(url)
+        # If user uploads a file, then remove it from the download skip list so comments can be downloaded.
+        # Modify the download (if any) so that the user can click on it and view the uploaded file.
+        if file_group.url:
+            if download_manager.is_skipped(file_group.url):
+                download_manager.remove_from_skip_list(file_group.url)
+            if download := Download.get_by_url(file_group.url, session):
+                # Mark download as completed
+                download.complete()
+                # Link the download to the location of the uploaded file.
+                model = file_group.get_model_record()
+                download.location = model.location if model else file_group.location
 
-    upsert_directories([], file.parents)
-
-    session.commit()
-
-    if tag_names:
-        with get_db_session(commit=True) as session:
-            file_group = FileGroup.find_by_id(file_group_id, session)
+        # Add tags if provided
+        if tag_names:
             for tag_name in tag_names:
                 if tag_name not in file_group.tag_names:
-                    tag = Tag.get_by_name(tag_name)
-                    file_group.add_tag(tag.id)
+                    tag = Tag.get_by_name(tag_name, session)
+                    file_group.add_tag(tag.id, session=session)
 
-    file_group.flush()
+        # Commit all changes in one transaction
+        session.commit()
+
+    # Upsert directories after FileGroup is committed
+    upsert_directories([], file.parents)
+
     return file_group
 
 

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+ip_address=$(ip addr show eth0 | grep -oP 'inet \K[\d.]+')
+
+echo " Welcome to your WROLPi!"
+echo ""
+echo " Run the help script to find potential problems:"
+echo "   /opt/wrolpi/help.sh"
+echo ""
+echo " Help documentation is available:  https://${ip_address}:8086"
+echo "    or in this directory /opt/wrolpi-help/docs"
+echo ""

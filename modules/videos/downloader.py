@@ -5,6 +5,7 @@ import logging
 import os.path
 import pathlib
 import re
+import sys
 import traceback
 from abc import ABC
 from datetime import timedelta
@@ -41,30 +42,47 @@ from .video.lib import download_video_info_json
 logger = logger.getChild(__name__)
 
 VIDEO_RESOLUTION_MAP = {
-    '360p': ['134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360',
-             'hls-175+bestaudio',  # 360p avc1 + best audio
-             ],
-    '480p': ['135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
-             'hls-312+bestaudio',  # 480p avc1 + best audio
-             ],
+    '360p': [
+        '134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360',
+        'hls-175+bestaudio',  # 360p avc1 + best audio
+        '396+bestaudio', '243+bestaudio',  # Vertical
+        'hls-655+bestaudio', 'hls-655',
+        'bestvideo[height=360]+bestaudio/best[height=360]',
+    ],
+    '480p': [
+        '135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
+        'hls-312+bestaudio',  # 480p avc1 + best audio
+        '788+bestaudio', '780+bestaudio', '397+bestaudio',  # Vertical
+        'bestvideo[height=480]+bestaudio/best[height=480]',
+    ],
     '720p': [
-        '298+bestaudio', '232+bestaudio',  # 720@60 avc1 + best audio
         '136+bestaudio', '22', '311+bestaudio', 'res:720',
+        '298+bestaudio', '232+bestaudio',  # 720@60 avc1 + best audio
         'hls-517+bestaudio', 'hls-637+bestaudio',  # 720p avc1 + best audio
+        '398+bestaudio', '247+bestaudio',  # Vertical
+        'hls-2890+bestaudio', 'hls-2890',
+        'bestvideo[height=720]+bestaudio/best[height=720]',
     ],
     '1080p': [
-        '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
         '137+bestaudio', '614+bestaudio', 'res:1080',
+        '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
         'hls-899+bestaudio', 'hls-1271+bestaudio',  # 1080p avc1 + best audio
+        '399+bestaudio', '616+bestaudio',  # Vertical
+        'hls-4026+bestaudio', 'hls-4026',
+        'bestvideo[height=1080]+bestaudio/best[height=1080]',
     ],
     '1440p': [
         '639+bestaudio',  # vp9, best audio, hdr
         '623+bestaudio',  # vp9, best audio, no hdr
-        '620+bestaudio', 'res:1440'],
+        '620+bestaudio', 'res:1440',
+        'bestvideo[height=1440]+bestaudio/best[height=1440]',
+    ],
     '2160p': [
         '642+bestaudio',  # vp9, best audio, hdr
         '628+bestaudio',  # vp9, best audio, no hdr
-        '625+bestaudio', 'res:2160'],
+        '625+bestaudio', 'res:2160',
+        'bestvideo[height=2160]+bestaudio/best[height=2160]',
+    ],
     'maximum': ['bestvideo*+bestaudio/best'],
 }
 
@@ -272,9 +290,9 @@ class ChannelDownloader(Downloader, ABC):
         # Filter videos by their length.
         try:
             if minimum_duration := settings.get('minimum_duration'):
-                downloads = [i for i in downloads if int(i['duration']) >= minimum_duration]
+                downloads = [i for i in downloads if (d := i.get('duration')) and int(d) >= minimum_duration]
             if maximum_duration := settings.get('maximum_duration'):
-                downloads = [i for i in downloads if int(i['duration']) <= maximum_duration]
+                downloads = [i for i in downloads if (d := i.get('duration')) and int(d) <= maximum_duration]
         except KeyError as e:
             raise RuntimeError('Unable to filter videos because there is no duration') from e
 

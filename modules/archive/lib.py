@@ -319,7 +319,7 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
         except json.decoder.JSONDecodeError:
             # Was not valid JSON.
             schema = None
-        if isinstance(schema, dict) and '://schema.org' in schema.get('@context'):
+        if isinstance(schema, dict) and (context := schema.get('@context')) and '://schema.org' in context:
             # Found https://schema.org/
             if headline := schema.get('headline'):
                 metadata.title = metadata.title or headline
@@ -429,21 +429,22 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
 def get_domains():
     with get_db_curs() as curs:
         stmt = '''
-            SELECT domains.domain AS domain, COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
-            FROM domains
-                LEFT JOIN archive a on domains.id = a.domain_id
-                LEFT JOIN file_group fg on fg.id = a.file_group_id
-            GROUP BY domains.domain
-            ORDER BY domains.domain
-        '''
+               SELECT domains.domain AS domain, COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
+               FROM domains
+                        LEFT JOIN archive a on domains.id = a.domain_id
+                        LEFT JOIN file_group fg on fg.id = a.file_group_id
+               GROUP BY domains.domain
+               ORDER BY domains.domain \
+               '''
         curs.execute(stmt)
         domains = [dict(i) for i in curs.fetchall()]
         return domains
 
 
 ARCHIVE_ORDERS = {
-    'published_datetime': (date := 'COALESCE(fg.published_datetime, fg.download_datetime) ASC NULLS LAST'),
-    '-published_datetime': (_date := 'COALESCE(fg.published_datetime, fg.download_datetime) DESC NULLS LAST'),
+    # Sometimes we don't have a published_datetime.  This is equivalent to COALESCE(fg.published_datetime, fg.download_datetime)
+    'published_datetime': (date := 'fg.effective_datetime ASC NULLS LAST'),
+    '-published_datetime': (_date := 'fg.effective_datetime DESC NULLS LAST'),
     'published_modified_datetime': f'fg.published_modified_datetime ASC NULLS LAST, {date}',
     '-published_modified_datetime': f'fg.published_modified_datetime DESC NULLS LAST, {_date}',
     'download_datetime': 'fg.download_datetime ASC NULLS LAST',
@@ -456,8 +457,8 @@ ARCHIVE_ORDERS = {
     '-viewed': 'fg.viewed DESC',
 }
 ORDER_GROUP_BYS = {
-    'published_datetime': 'fg.published_datetime, fg.download_datetime',
-    '-published_datetime': 'fg.published_datetime, fg.download_datetime',
+    'published_datetime': 'fg.effective_datetime',
+    '-published_datetime': 'fg.effective_datetime',
     'published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
     '-published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
     'download_datetime': 'fg.download_datetime',
@@ -482,7 +483,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
-    group_by = 'fg.published_datetime, fg.download_datetime, a.file_group_id'
+    group_by = 'fg.effective_datetime, a.file_group_id'
 
     params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
     order_by = ARCHIVE_ORDERS['-published_datetime']

@@ -85,7 +85,7 @@ def register_switch_handler(switch_name: str):
 DEBUG_LOGGED = False
 
 
-@perpetual_signal(sleep=0.1)
+@perpetual_signal(sleep=0.1, run_while_testing=True)
 async def switch_worker():
     """Watches `api_app.shared_ctx.switches` for new activated switches, handles each one at a time."""
     global DEBUG_LOGGED

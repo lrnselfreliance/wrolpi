@@ -18,7 +18,7 @@ import {
     WROLModeMessage
 } from "../Common";
 import {
-    Button as SButton,
+    Button as SButton, ButtonGroup,
     Label,
     Loader,
     PlaceholderLine,
@@ -35,7 +35,9 @@ import {
     EditChannelDownloadForm,
     EditRSSDownloadForm,
     EditScrapeFilesDownloadForm,
-    EditZimDownloadForm
+    EditZimDownloadForm,
+    EditVideosDownloadForm,
+    EditArchiveDownloadForm
 } from "../Download";
 import {Downloaders} from "../Vars";
 
@@ -246,6 +248,9 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
 class OnceDownloadRow extends React.Component {
     constructor(props) {
         super(props);
+        this.state = {
+            editModalOpen: false
+        };
     }
 
     handleDelete = async () => {
@@ -272,8 +277,21 @@ class OnceDownloadRow extends React.Component {
         }
     };
 
+    handleEditOpen = () => {
+        this.setState({ editModalOpen: true });
+    };
+
+    handleEditClose = () => {
+        this.setState({ editModalOpen: false });
+    };
+
+    handleEditSuccess = async () => {
+        await this.props.fetchDownloads();
+        this.handleEditClose();
+    };
+
     render() {
-        let {url, last_successful_download, status, location, error} = this.props;
+        let {url, last_successful_download, status, location, error, downloader, settings, id} = this.props;
 
         // Open downloads (/download), or external links in an anchor.
         const link = location && !location.startsWith('/download') ?
@@ -297,6 +315,8 @@ class OnceDownloadRow extends React.Component {
         } else if (status === 'failed' || status === 'deferred') {
             buttonCell = (
                 <TableCell>
+                    <ButtonGroup>
+
                     <APIButton
                         color='red'
                         icon='trash'
@@ -305,6 +325,13 @@ class OnceDownloadRow extends React.Component {
                         confirmButton='Delete'
                         obeyWROLMode={true}
                     />
+                    {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
+                        <Button
+                            icon='edit'
+                            color='blue'
+                            onClick={this.handleEditOpen}
+                        />
+                    )}
                     <APIButton
                         color='green'
                         icon='redo'
@@ -313,6 +340,7 @@ class OnceDownloadRow extends React.Component {
                         onClick={this.handleRestart}
                         obeyWROLMode={true}
                     />
+                    </ButtonGroup>
                 </TableCell>
             );
         } else if (status === 'complete' && location) {
@@ -336,6 +364,55 @@ class OnceDownloadRow extends React.Component {
             )
         }
 
+        // Create edit modal for video or archive downloads
+        let editModal = null;
+
+        if (downloader === Downloaders.Video) {
+            editModal = (
+                <Modal
+                    closeIcon
+                    open={this.state.editModalOpen}
+                    onClose={this.handleEditClose}
+                >
+                    <ModalHeader>Edit Video Download</ModalHeader>
+                    <ModalContent>
+                        <EditVideosDownloadForm
+                            download={{
+                                urls: url,
+                                settings: settings || {},
+                                id: id
+                            }}
+                            onCancel={this.handleEditClose}
+                            onSuccess={this.handleEditSuccess}
+                            onDelete={this.handleDelete}
+                        />
+                    </ModalContent>
+                </Modal>
+            );
+        } else if (downloader === Downloaders.Archive) {
+            editModal = (
+                <Modal
+                    closeIcon
+                    open={this.state.editModalOpen}
+                    onClose={this.handleEditClose}
+                >
+                    <ModalHeader>Edit Archive Download</ModalHeader>
+                    <ModalContent>
+                        <EditArchiveDownloadForm
+                            download={{
+                                urls: url,
+                                tag_names: settings?.tag_names || [],
+                                id: id
+                            }}
+                            onCancel={this.handleEditClose}
+                            onSuccess={this.handleEditSuccess}
+                            onDelete={this.handleDelete}
+                        />
+                    </ModalContent>
+                </Modal>
+            );
+        }
+
         return <TableRow>
             <TableCell className='column-ellipsis'>
                 {link(url)}
@@ -345,6 +422,7 @@ class OnceDownloadRow extends React.Component {
                 {status === 'pending' ? <Loader active inline size='tiny'/> : null}
             </TableCell>
             {buttonCell}
+            {editModal}
         </TableRow>
     }
 }

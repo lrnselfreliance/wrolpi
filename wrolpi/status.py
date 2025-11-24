@@ -18,6 +18,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command
 from wrolpi.common import logger, get_warn_once, unique_by_predicate, partition, TRACE_LEVEL
 from wrolpi.dates import now
+from wrolpi.vars import PYTEST
 
 try:
     import psutil
@@ -565,10 +566,17 @@ async def get_power_stats() -> PowerStats:
     return PowerStats()
 
 
+DISABLE_STATUS_WORKER = bool(PYTEST)  # Do not run status worker while testing, unless explicitly needed.
+
+
 @perpetual_signal(sleep=5)
 async def status_worker(count: int = None, sleep_time: int = 5):
     """A background process which will gather historical data about system statistics."""
     shared_status = api_app.shared_ctx.status
+
+    if PYTEST and DISABLE_STATUS_WORKER:
+        # Tests are running, status worker has not been enabled by `start_status_worker` fixture.
+        return
 
     if count is not None and count <= 0:
         logger.debug('Status worker ran out of count')
@@ -579,13 +587,13 @@ async def status_worker(count: int = None, sleep_time: int = 5):
         # Update global `status` dict with stats that are gathered instantly.
         cpu_stats, load_stats, drives_stats, memory_stats, processes_stats, iostat_stats, power_stats = \
             await asyncio.gather(
-                get_cpu_stats(),
-                get_load_stats(),
-                get_drives_stats(),
-                get_memory_stats(),
-                get_processes_stats(),
-                get_iostat_stats(),
-                get_power_stats(),
+                asyncio.create_task(get_cpu_stats(), name='get_cpu_stats'),
+                asyncio.create_task(get_load_stats(), name='get_load_stats'),
+                asyncio.create_task(get_drives_stats(), name='get_drives_stats'),
+                asyncio.create_task(get_memory_stats(), name='get_memory_stats'),
+                asyncio.create_task(get_processes_stats(), name='get_processes_stats'),
+                asyncio.create_task(get_iostat_stats(), name='get_iostat_stats'),
+                asyncio.create_task(get_power_stats(), name='get_power_stats'),
             )
         shared_status.update({
             'cpu_stats': cpu_stats.__json__(),

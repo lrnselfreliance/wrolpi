@@ -19,7 +19,7 @@ def archive_directory(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def archive_factory(test_session, archive_directory, make_files_structure):
+def archive_factory(test_session, archive_directory, make_files_structure, image_bytes_factory):
     def time_generator():
         timestamp = datetime.datetime(2000, 1, 1, 0, 0, 0).astimezone(pytz.UTC)
         while True:
@@ -29,7 +29,7 @@ def archive_factory(test_session, archive_directory, make_files_structure):
     now = time_generator()
 
     def _(domain: str = None, url: str = None, title: str = 'NA', contents: str = None,
-          singlefile_contents: str = None, tag_names: List[str] = None) -> Archive:
+          singlefile_contents: str = None, tag_names: List[str] = None, screenshot: bool = True) -> Archive:
         if domain:
             assert '/' not in domain
 
@@ -49,10 +49,9 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         if url:
             json_contents['url'] = url
         json_contents = json.dumps(json_contents)
-        singlefile_path, screenshot_path, readability_path, readability_txt_path, readability_json_path = \
+        singlefile_path, readability_path, readability_txt_path, readability_json_path = \
             make_files_structure({
                 str(domain_dir / f'{timestamp}_{title}.html'): singlefile_contents or '<html></html>',
-                str(domain_dir / f'{timestamp}_{title}.png'): None,
                 str(domain_dir / f'{timestamp}_{title}.readability.html'): '<html></html>',
                 str(domain_dir / f'{timestamp}_{title}.readability.txt'): contents,
                 str(domain_dir / f'{timestamp}_{title}.readability.json'): json_contents,
@@ -60,6 +59,11 @@ def archive_factory(test_session, archive_directory, make_files_structure):
 
         if domain:
             domain = test_session.query(Domain).filter_by(domain=domain).one_or_none()
+
+        screenshot_path = None
+        if screenshot:
+            screenshot_path = domain_dir / f'{timestamp}_{title}.png'
+            screenshot_path.write_bytes(image_bytes_factory())
 
         if not domain and domain_dir.name != 'NA':
             domain = Domain(

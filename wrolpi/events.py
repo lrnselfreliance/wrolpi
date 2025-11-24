@@ -96,6 +96,10 @@ class Events:
     def send_archive_uploaded(cls, message: str = None, url: str = None):
         send_event('upload_archive', message, subject='upload', url=url)
 
+    @classmethod
+    def send_upload_archive_failed(cls, message: str = None):
+        send_event('upload_archive_failed', message, subject='upload')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

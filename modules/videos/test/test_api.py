@@ -309,6 +309,43 @@ async def test_format_videos_description(async_client, test_session, test_direct
 
 
 @pytest.mark.asyncio
+async def test_size_to_duration_sort(test_session, video_factory, assert_video_search):
+    """Test the 'size_to_duration' sort option."""
+    # Create videos with different size-to-duration ratios
+    # All videos will have the same size (from the test file) but different durations
+
+    # Video with 10 second duration (highest ratio)
+    vid1 = video_factory(with_video_file=True, title='vid1', with_info_json={'duration': 10})
+
+    # Video with 20 second duration (medium ratio)
+    vid2 = video_factory(with_video_file=True, title='vid2', with_info_json={'duration': 20})
+
+    # Video with 30 second duration (lowest ratio)
+    vid3 = video_factory(with_video_file=True, title='vid3', with_info_json={'duration': 30})
+
+    test_session.commit()
+
+    # Verify that the videos have the expected size and length values
+    vid1 = test_session.query(Video).filter_by(id=vid1.id).one()
+    vid2 = test_session.query(Video).filter_by(id=vid2.id).one()
+    vid3 = test_session.query(Video).filter_by(id=vid3.id).one()
+
+    # All videos should have the same size
+    assert vid1.file_group.size == vid2.file_group.size == vid3.file_group.size
+
+    # But different lengths
+    assert vid1.file_group.length == 10
+    assert vid2.file_group.length == 20
+    assert vid3.file_group.length == 30
+
+    # Test ascending order (lowest ratio first)
+    await assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='size_to_duration')
+
+    # Test descending order (highest ratio first)
+    await assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id], order_by='-size_to_duration')
+
+
+@pytest.mark.asyncio
 async def test_video_file_format(async_client, test_session, fake_now):
     body = dict(video_file_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s')
     request, response = await async_client.post('/api/videos/file_format', json=body)
@@ -324,3 +361,161 @@ async def test_video_file_format(async_client, test_session, fake_now):
     request, response = await async_client.post('/api/videos/file_format', json=body)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['error'] == 'Filename must end with .%(ext)s'
+
+
+@pytest.mark.asyncio
+async def test_video_upload_file_tracking(test_session, async_client, video_factory, await_switches, make_multipart_form,
+                                          image_bytes_factory):
+    """Test that uploading info.json, poster, and caption files via /api/files/upload properly tracks them in Video and FileGroup."""
+    from wrolpi.common import get_relative_to_media_directory
+
+    # Step 1: Create a Video with just a video file (no info.json, poster, or captions)
+    video = video_factory(with_video_file=True, title='file_tracking_test')
+    test_session.commit()
+
+    # Step 2: Verify Video and FileGroup are created, but optional files do not exist
+    file_group = video.file_group
+    assert not video.info_json_path, 'info.json should not exist yet.'
+    assert not video.poster_path, 'Poster should not exist yet.'
+    assert not video.caption_paths, 'Captions should not exist yet.'
+    assert file_group.files is not None, 'FileGroup should have files array'
+    initial_file_count = len(file_group.files)
+
+    # Step 3: Upload info.json via /api/files/upload
+    # Extract the video stem (e.g., "file_tracking_test")
+    video_stem = video.video_path.stem
+
+    # Create info.json content
+    info_json_data = {
+        'title': 'file_tracking_test',
+        'duration': 60,
+        'uploader': 'test_uploader'
+    }
+    info_json_bytes = json.dumps(info_json_data).encode()
+
+    # Get relative destination directory
+    destination = str(get_relative_to_media_directory(video.video_path.parent))
+    filename = f'{video_stem}.info.json'
+
+    # POST to /api/files/upload
+    forms = [
+        dict(name='destination', value=destination),
+        dict(name='filename', value=filename),
+        dict(name='chunkNumber', value='0'),
+        dict(name='totalChunks', value='0'),
+        dict(name='chunkSize', value=str(len(info_json_bytes))),
+        dict(name='overwrite', value='false'),
+        dict(name='chunk', value=info_json_bytes, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, f'Upload failed with status {response.status_code}: {response.json}'
+
+    await await_switches()
+
+    # Step 4: Verify info.json is tracked
+    # Refresh the session to get updated data
+    test_session.expire_all()
+    video = test_session.query(Video).filter_by(id=video.id).one()
+
+    # Assert info.json properties exist
+    assert video.info_json_path is not None, 'Video.info_json_path should exist'
+    assert video.info_json_file is not None, 'Video.info_json_file should exist'
+
+    # Assert FileGroup has the correct number of files
+    assert len(video.file_group.files) == initial_file_count + 1, \
+        f'FileGroup should have {initial_file_count + 1} files after adding info.json'
+    assert video.file_group.data.get('info_json_path'), \
+        'Video info.json should be in FileGroup.data'
+
+    # Step 5: Upload poster image and verify it's added to the FileGroup
+    file_count_before_poster = len(video.file_group.files)
+
+    # Create image using factory
+    image_data = image_bytes_factory()
+
+    # Upload image with same stem as the Video (using .jpg)
+    poster_filename = f'{video_stem}.jpg'
+    forms = [
+        dict(name='destination', value=destination),
+        dict(name='filename', value=poster_filename),
+        dict(name='chunkNumber', value='0'),
+        dict(name='totalChunks', value='0'),
+        dict(name='chunkSize', value=str(len(image_data))),
+        dict(name='overwrite', value='false'),
+        dict(name='chunk', value=image_data, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, f'Poster upload failed with status {response.status_code}: {response.json}'
+
+    await await_switches()
+
+    # Refresh session to get updated data
+    test_session.expire_all()
+    video = test_session.query(Video).filter_by(id=video.id).one()
+
+    # Assert poster properties exist
+    assert video.poster_path is not None, 'Video.poster_path should exist'
+    assert video.poster_file is not None, 'Video.poster_file should exist'
+    assert video.file_group.data.get('poster_path') == video.poster_path, 'Video poster should be in FileGroup.data'
+
+    # Assert poster is in FileGroup.files
+    file_paths = [f['path'] for f in video.file_group.files]
+    assert video.poster_path in file_paths, 'Poster should be in FileGroup.files'
+
+    # Assert FileGroup has correct number of files
+    assert len(video.file_group.files) == file_count_before_poster + 1, \
+        f'FileGroup should have {file_count_before_poster + 1} files after adding poster'
+
+    # Step 6: Upload caption file and verify it's added to the FileGroup
+    file_count_before_caption = len(video.file_group.files)
+
+    # Create caption content
+    caption_content = """WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+This is a test caption.
+
+00:00:02.000 --> 00:00:04.000
+Another line of captions.
+"""
+
+    # Upload caption with same stem as the Video
+    caption_filename = f'{video_stem}.en.vtt'
+    caption_bytes = caption_content.encode()
+    forms = [
+        dict(name='destination', value=destination),
+        dict(name='filename', value=caption_filename),
+        dict(name='chunkNumber', value='0'),
+        dict(name='totalChunks', value='0'),
+        dict(name='chunkSize', value=str(len(caption_bytes))),
+        dict(name='overwrite', value='false'),
+        dict(name='chunk', value=caption_bytes, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED, f'Caption upload failed with status {response.status_code}: {response.json}'
+
+    await await_switches()
+
+    # Refresh session to get updated data
+    test_session.expire_all()
+    video = test_session.query(Video).filter_by(id=video.id).one()
+
+    # Assert caption properties exist
+    assert video.caption_paths, 'Video.caption_paths should exist'
+    assert len(video.caption_paths) == 1, 'Should have exactly one caption file'
+    assert video.caption_files, 'Video.caption_files should exist'
+    assert video.file_group.data.get('caption_paths'), 'Video captions should be in FileGroup.data'
+
+    # Assert caption is in FileGroup.files
+    file_paths = [f['path'] for f in video.file_group.files]
+    assert video.caption_paths[0] in file_paths, 'Caption should be in FileGroup.files'
+
+    # Assert FileGroup has correct number of files
+    assert len(video.file_group.files) == file_count_before_caption + 1, \
+        f'FileGroup should have {file_count_before_caption + 1} files after adding caption'

@@ -141,8 +141,7 @@ class Archive(Base, ModelHelper):
     @property
     def singlefile_file(self) -> Optional[dict]:
         from modules.archive.lib import is_singlefile_file
-        files = self.file_group.my_files('text/html')
-        for file in files:
+        for file in self.file_group.my_html_files():
             if is_singlefile_file(file['path']):
                 return file
 
@@ -197,6 +196,18 @@ class Archive(Base, ModelHelper):
     def screenshot_path(self) -> Optional[pathlib.Path]:
         if screenshot_file := self.screenshot_file:
             return screenshot_file['path']
+
+    @property
+    def info_json_file(self) -> Optional[dict]:
+        files = self.file_group.my_files()
+        for file in files:
+            if file['path'].name.endswith('.info.json'):
+                return file
+
+    @property
+    def info_json_path(self) -> Optional[pathlib.Path]:
+        if info_json_file := self.info_json_file:
+            return info_json_file['path']
 
     def apply_readability_data(self):
         """Read the Readability JSON file, apply its contents to this record."""

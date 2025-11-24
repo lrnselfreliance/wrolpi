@@ -100,8 +100,12 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     def do_model(file_group: FileGroup, session: Session) -> 'Video':
-        video = Video(file_group_id=file_group.id, file_group=file_group)
-        session.add(video)
+        # Check if a Video already exists for this FileGroup
+        video = session.query(Video).filter_by(file_group_id=file_group.id).one_or_none()
+        if not video:
+            # Create new Video if it doesn't exist
+            video = Video(file_group_id=file_group.id, file_group=file_group)
+            session.add(video)
         video.validate()
         file_group.indexed = True
         video.flush()
@@ -152,25 +156,20 @@ class Video(ModelHelper, Base):
             if self.file_group.published_datetime:
                 # Get videos next to this Video's upload date.
                 stmt = '''
-                        WITH numbered_videos AS (
-                            SELECT fg.id AS fg_id, v.id AS v_id,
-                                ROW_NUMBER() OVER (ORDER BY published_datetime ASC) AS row_number
-                            FROM file_group fg
-                            LEFT OUTER JOIN video v on fg.id = v.file_group_id
-                            WHERE
-                                v.channel_id = %(channel_id)s
-                                AND fg.published_datetime IS NOT NULL
-                        )
-                        SELECT v_id
-                        FROM numbered_videos
-                        WHERE row_number IN (
-                            SELECT row_number+i
-                            FROM numbered_videos
-                            CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                            WHERE
-                            fg_id = %(fg_id)s
-                        )
-                '''
+                       WITH numbered_videos AS (SELECT fg.id                                               AS fg_id,
+                                                       v.id                                                AS v_id,
+                                                       ROW_NUMBER() OVER (ORDER BY published_datetime ASC) AS row_number
+                                                FROM file_group fg
+                                                         LEFT OUTER JOIN video v on fg.id = v.file_group_id
+                                                WHERE v.channel_id = %(channel_id)s
+                                                  AND fg.published_datetime IS NOT NULL)
+                       SELECT v_id
+                       FROM numbered_videos
+                       WHERE row_number IN (SELECT row_number + i
+                                            FROM numbered_videos
+                                                     CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                                            WHERE fg_id = %(fg_id)s) \
+                       '''
             else:
                 # No videos near this Video with upload dates, recommend the files next to this Video.
                 # Only recommend videos in the same Channel (or similarly without a Channel).
@@ -243,6 +242,15 @@ class Video(ModelHelper, Base):
         if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
+
+        # Set FileGroup.data with cached file paths for consistency with Archive
+        self.file_group.data = {
+            'id': self.id,
+            'video_path': self.video_path,
+            'info_json_path': self.info_json_path,
+            'poster_path': self.poster_path,
+            'caption_paths': self.caption_paths,
+        }
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
@@ -532,6 +540,11 @@ class Channel(ModelHelper, Base):
     source_id = Column(String)  # the ID from the source website.
     refreshed = Column(Boolean, default=False)  # The files in the Channel have been refreshed.
 
+    # Columns updated by triggers
+    video_count = Column(Integer, default=0)  # update_channel_video_count
+    total_size = Column(Integer, default=0)  # update_channel_size
+    minimum_frequency = Column(Integer)  # update_channel_minimum_frequency
+
     info_json = deferred(Column(JSON))
     info_date = Column(Date)
 
@@ -680,18 +693,17 @@ class Channel(ModelHelper, Base):
         """Get statistics about this channel."""
         with get_db_curs() as curs:
             stmt = '''
-                SELECT
-                    SUM(size) AS "size",
-                    MAX(size) AS "largest_video",
-                    COUNT(video.id) AS "video_count",
-                    SUM(fg.length) AS "length",
-                    -- Videos may use multiple tags.
-                    COUNT(video.id) FILTER ( WHERE tf.file_group_id IS NOT NULL ) AS "video_tags"
-                FROM video
-                LEFT JOIN file_group fg on fg.id = video.file_group_id
-                LEFT JOIN public.tag_file tf on fg.id = tf.file_group_id
-                WHERE channel_id = %(id)s
-            '''
+                   SELECT SUM(size)                                                     AS "size",
+                          MAX(size)                                                     AS "largest_video",
+                          COUNT(video.id)                                               AS "video_count",
+                          SUM(fg.length)                                                AS "length",
+                          -- Videos may use multiple tags.
+                          COUNT(video.id) FILTER ( WHERE tf.file_group_id IS NOT NULL ) AS "video_tags"
+                   FROM video
+                            LEFT JOIN file_group fg on fg.id = video.file_group_id
+                            LEFT JOIN public.tag_file tf on fg.id = tf.file_group_id
+                   WHERE channel_id = %(id)s \
+                   '''
             curs.execute(stmt, dict(id=self.id))
             return dict(curs.fetchone())
 

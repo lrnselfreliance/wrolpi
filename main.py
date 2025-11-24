@@ -224,24 +224,31 @@ async def start_single_tasks(app: Sanic):
     with suppress(Exception):
         get_wrolpi_config().import_config()
         logger.debug('wrolpi config imported')
-    with suppress(Exception):
-        tags.import_tags_config()
-        logger.debug('tags config imported')
-    with suppress(Exception):
-        get_videos_downloader_config().import_config()
-        logger.debug('videos downloader config imported')
-    with suppress(Exception):
-        await import_downloads_config()
-        logger.debug('downloads config imported')
-    # Channels uses both downloads and tags.
-    with suppress(Exception):
-        import_channels_config()
-        logger.debug('channels config imported')
-    with suppress(Exception):
-        import_inventories_config()
-        logger.debug('inventories config imported')
-    with suppress(Exception):
-        init_inventory()
+
+    wrolpi_config = get_wrolpi_config()
+    if wrolpi_config.successful_import:
+        # Only import other configs if WROLPi config was imported, and WROL mode is not enabled.
+        if wrolpi_config.wrol_mode:
+            logger.warning('Refusing to import other configs when WROL mode is enabled!')
+        else:
+            with suppress(Exception):
+                tags.import_tags_config()
+                logger.debug('tags config imported')
+            with suppress(Exception):
+                get_videos_downloader_config().import_config()
+                logger.debug('videos downloader config imported')
+            with suppress(Exception):
+                await import_downloads_config()
+                logger.debug('downloads config imported')
+            # Channels uses both downloads and tags.
+            with suppress(Exception):
+                import_channels_config()
+                logger.debug('channels config imported')
+            with suppress(Exception):
+                import_inventories_config()
+                logger.debug('inventories config imported')
+            with suppress(Exception):
+                init_inventory()
 
     from modules.zim.lib import flag_outdated_zim_files
     try:

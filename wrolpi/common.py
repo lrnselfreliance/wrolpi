@@ -24,7 +24,7 @@ from functools import wraps
 from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
-from types import GeneratorType
+from types import GeneratorType, MappingProxyType
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
 from urllib.parse import urlparse, urlunsplit
 
@@ -445,7 +445,7 @@ class ConfigFile:
         self.width = self.width or 90
 
         # Do not load a global config on import while testing.  A global instance should never be used for testing.
-        self._config = self.default_config.copy()
+        self._config = deepcopy({k: v for k, v in self.default_config.items()})
 
         if self._config['version'] != 0:
             raise RuntimeError('Configs should start at version 0')
@@ -1921,19 +1921,17 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
     source = json.dumps([{'content': i} for i in entries])
     with get_db_curs() as curs:
         stmt = '''
-        WITH vectored AS (
-            -- Convert the "source" json to a recordset.
-            with source as (select * from json_to_recordset(%s::json) AS (content TEXT))
-            select
-                to_tsvector('english'::regconfig, source.content) AS vector,
-                source.content
-            from source
-        )
-        SELECT
-            ts_headline(vectored.content, websearch_to_tsquery(%s), 'MaxFragments=10, MaxWords=8, MinWords=7'),
-            ts_rank(vectored.vector, websearch_to_tsquery(%s))
-        FROM vectored
-        '''
+               WITH vectored AS (
+                   -- Convert the "source" json to a recordset.
+                   with source as (select * from json_to_recordset(%s::json) AS (content TEXT))
+                   select to_tsvector('english'::regconfig, source.content) AS vector,
+                          source.content
+                   from source)
+               SELECT ts_headline(vectored.content, websearch_to_tsquery(%s),
+                                  'MaxFragments=10, MaxWords=8, MinWords=7'),
+                      ts_rank(vectored.vector, websearch_to_tsquery(%s))
+               FROM vectored \
+               '''
         curs.execute(stmt, [source, search_str, search_str])
         headlines = [tuple(i) for i in curs.fetchall()]
 
@@ -1951,12 +1949,11 @@ async def search_other_estimates(tag_names: List[str]) -> dict:
 
     with get_db_curs() as curs:
         stmt = '''
-            SELECT
-                COUNT(c.id)
-            FROM channel c
-            LEFT OUTER JOIN public.tag t on t.id = c.tag_id
-            WHERE t.name = %(tag_name)s
-        '''
+               SELECT COUNT(c.id)
+               FROM channel c
+                        LEFT OUTER JOIN public.tag t on t.id = c.tag_id
+               WHERE t.name = %(tag_name)s \
+               '''
         # TODO handle multiple tags
         params = dict(tag_name=tag_names[0])
         curs.execute(stmt, params)

@@ -4,7 +4,7 @@ import logging
 import pathlib
 from typing import List, Optional, Tuple
 
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, or_, and_
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, or_, and_, Index
 from sqlalchemy.orm import relationship, Session
 
 from wrolpi.common import ModelHelper, Base, register_modeler, get_html_soup
@@ -150,6 +150,9 @@ def discover_calibre_cover(ebook_path: pathlib.Path):
 
 class EBook(ModelHelper, Base):
     __tablename__ = 'ebook'
+    __table_args__ = (
+        Index('ebook_size_idx', 'size'),
+    )
     id = Column(Integer, primary_key=True)
     size: int = Column(Integer)
 

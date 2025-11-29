@@ -161,10 +161,9 @@ async def test_zim_tags_config(async_client, test_session, test_directory, test_
         ['Tag1', test_zim.path.name, 'two', '2000-01-01T00:00:00.000001+00:00'],
     ]
 
-    # Delete all Tags so they are recreated.
-    test_session.query(tags.Tag).delete()
-    # Delete all TagFileEntry(s), import them again.
+    # Delete all TagZimEntry(s) first (due to FK constraint), then Tags so they are recreated.
     test_session.query(TagZimEntry).delete()
+    test_session.query(tags.Tag).delete()
     test_session.commit()
 
     tags.import_tags_config()

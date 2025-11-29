@@ -58,7 +58,11 @@ jobs:
           paths:
             - "venv"
       - run:
+          name: Run Alembic Migrations
           command: ./venv/bin/python ./main.py db upgrade
+      - run:
+          name: Check for Missing Migrations
+          command: ./venv/bin/python ./main.py db check
   api-tests-3-12:
     docker:
       - image: cimg/python:3.12

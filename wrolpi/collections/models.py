@@ -1,7 +1,7 @@
 import pathlib
 from typing import Optional, List
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -67,6 +67,8 @@ class Collection(ModelHelper, Base):
         UniqueConstraint('directory', name='uq_collection_directory'),
         UniqueConstraint('name', 'kind', name='uq_collection_name_kind'),
         Index('idx_collection_kind', 'kind'),
+        Index('idx_collection_item_count', 'item_count'),
+        Index('idx_collection_total_size', 'total_size'),
     )
 
     id = Column(Integer, primary_key=True)
@@ -80,14 +82,14 @@ class Collection(ModelHelper, Base):
     directory: Optional[pathlib.Path] = Column(MediaPathType, nullable=True)
 
     # Optional tag relationship (similar to Channel)
-    tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'))
+    tag_id = Column(Integer, ForeignKey('tag.id'))
     tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id')
 
-    created_date = Column(DateTime, server_default=func.now())
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
 
     # Columns updated by triggers (similar to Channel)
-    item_count = Column(Integer, default=0)
-    total_size = Column(Integer, default=0)
+    item_count = Column(Integer, default=0, nullable=False)
+    total_size = Column(BigInteger, default=0, nullable=False)
 
     # Relationship to items (ordered)
     items: InstrumentedList = relationship(
@@ -790,7 +792,7 @@ class CollectionItem(ModelHelper, Base):
     position = Column(Integer, nullable=False, default=0)
 
     # When this item was added
-    added_date = Column(DateTime, server_default=func.now())
+    added_date = Column(DateTime, server_default=func.now(), nullable=False)
 
     # Relationships
     collection = relationship('Collection', back_populates='items')
@@ -798,8 +800,10 @@ class CollectionItem(ModelHelper, Base):
 
     # Indexes for performance
     __table_args__ = (
+        Index('idx_collection_item_collection_id', 'collection_id'),
         Index('idx_collection_item_collection_position', 'collection_id', 'position'),
-        Index('idx_collection_item_file_group', 'file_group_id'),
+        Index('idx_collection_item_file_group_id', 'file_group_id'),
+        Index('idx_collection_item_position', 'position'),
         UniqueConstraint('collection_id', 'file_group_id', name='uq_collection_file_group'),
     )
 

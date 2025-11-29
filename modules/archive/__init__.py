@@ -190,6 +190,7 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
 
             # Set collection_id BEFORE adding to session to avoid autoflush constraint violation
             from modules.archive.lib import get_or_create_domain_collection
+
             if file_group.url:
                 # URL is already set on the FileGroup
                 collection = get_or_create_domain_collection(session, file_group.url)
@@ -202,12 +203,8 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
                     collection = get_or_create_domain_collection(session, url)
                     archive.collection_id = collection.id if collection else None
                 except (RuntimeError, ValueError) as e:
-                    # Could not extract URL from singlefile
-                    if not PYTEST:
-                        # In production, archives must have a URL/collection
-                        raise InvalidArchive(f'Archive has no URL and could not extract from singlefile: {e}') from e
-                    # In tests, allow archives without collections (factory will set it later)
-                    logger.debug(f'Could not extract URL from singlefile (test mode): {e}')
+                    # Could not extract URL from singlefile - archive will have no collection
+                    logger.debug(f'Could not extract URL from singlefile: {e}')
                     archive.collection_id = None
 
             session.add(archive)

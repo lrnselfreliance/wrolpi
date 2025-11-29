@@ -23,7 +23,7 @@ class Item(Base, ModelHelper):
     subcategory = Column(String)
     unit = Column(String)
 
-    inventory_id = Column(Integer, ForeignKey('inventory.id'))
+    inventory_id = Column(Integer, ForeignKey('inventory.id', ondelete='CASCADE'))
     inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id", back_populates='items')
 
     def __repr__(self):
@@ -35,7 +35,7 @@ class Inventory(Base, ModelHelper):
     __tablename__ = 'inventory'
     id = Column(Integer, primary_key=True)
 
-    name = Column(String, unique=True)
+    name = Column(String, unique=True, nullable=False)
     viewed_at = Column(TZDateTime)
     created_at = Column(TZDateTime, default=now)
     deleted_at = Column(TZDateTime)
@@ -61,6 +61,3 @@ class Inventory(Base, ModelHelper):
         return session.query(Inventory).filter_by(name=name).one()
 
 
-class InventoriesVersion(Base, ModelHelper):
-    __tablename__ = 'inventories_version'
-    version = Column(Integer, primary_key=True)

@@ -15,9 +15,20 @@ fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+from wrolpi.common import Base
+# Import all models so they are registered with the Base metadata
+from wrolpi.files.models import FileGroup, Directory  # noqa: F401
+from wrolpi.files.ebooks import EBook  # noqa: F401
+from wrolpi.tags import Tag  # noqa: F401
+from wrolpi.flags import WROLPiFlag  # noqa: F401
+from wrolpi.downloader import Download  # noqa: F401
+from wrolpi.collections.models import Collection, CollectionItem  # noqa: F401
+from modules.videos.models import Video, Channel  # noqa: F401
+from modules.archive.models import Archive  # noqa: F401
+from modules.zim.models import Zim, TagZimEntry, ZimSubscription  # noqa: F401
+from modules.map.models import MapFile  # noqa: F401
+from modules.inventory.models import Item, Inventory  # noqa: F401
+target_metadata = Base.metadata
 
 
 # other values from the config, defined by the needs of env.py,

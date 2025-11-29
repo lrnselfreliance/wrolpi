@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Tuple, OrderedDict as OrderedDictType, Dict, Optional, Set
 
 from libzim import Archive, Searcher, Query, Entry, SuggestionSearcher
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, Text, tuple_, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
@@ -67,12 +67,15 @@ class Zim(Base, ModelHelper):
     """
 
     __tablename__ = 'zim'
+    __table_args__ = (
+        UniqueConstraint('path', name='zim_path_key'),
+    )
     id = Column(Integer, primary_key=True)
     path: pathlib.Path = Column(MediaPathType, nullable=False)
 
-    file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
+    file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
     file_group: FileGroup = relationship('FileGroup')
-    auto_search = Column(Boolean, nullable=False, default=True)
+    auto_search = Column(Boolean, default=True)
 
     def __repr__(self):
         return f'<Zim id={self.id} file_group_id={self.file_group_id} path={self.path}>'
@@ -353,8 +356,11 @@ class Zims:
 
 class TagZimEntry(Base):
     __tablename__ = 'tag_zim'
+    __table_args__ = (
+        UniqueConstraint('tag_id', 'zim_id', 'zim_entry', name='tag_zim_tag_id_zim_id_zim_entry_key'),
+    )
 
-    tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+    tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
     tag: Tag = relationship('Tag')
     zim_id = Column(Integer, ForeignKey('zim.id', ondelete='CASCADE'), primary_key=True)
     zim: Zim = relationship('Zim')

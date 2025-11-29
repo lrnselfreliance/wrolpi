@@ -10,8 +10,8 @@ class MapFile(Base, ModelHelper):
     __tablename__ = 'map_file'
     id = Column(Integer, primary_key=True)
 
-    path = Column(MediaPathType, unique=True, nullable=False)
-    imported = Column(Boolean, default=False, nullable=False)
+    path = Column(MediaPathType, nullable=False)
+    imported = Column(Boolean, default=False)
     size = Column(BigInteger)
 
     def __repr__(self):

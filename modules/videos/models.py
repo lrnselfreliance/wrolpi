@@ -2,7 +2,7 @@ import json
 import pathlib
 from typing import Optional, Dict, List
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger, Index, text
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -28,6 +28,11 @@ __all__ = ['Video', 'Channel']
 
 class Video(ModelHelper, Base):
     __tablename__ = 'video'
+    __table_args__ = (
+        Index('video_channel_id_idx', 'channel_id'),
+        Index('video_source_id_idx', 'source_id'),
+        Index('video_view_count_idx', 'view_count'),
+    )
     id = Column(Integer, primary_key=True)
 
     source_id = Column(String)  # The id from yt-dlp
@@ -530,9 +535,16 @@ class Video(ModelHelper, Base):
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
+    __table_args__ = (
+        Index('channel_minimum_frequency_idx', 'minimum_frequency'),
+        Index('channel_source_id', 'source_id'),
+        Index('channel_total_size_idx', 'total_size'),
+        Index('channel_video_count_idx', 'video_count'),
+        Index('channel_url_key', 'url', unique=True, postgresql_where=text('url IS NOT NULL')),
+    )
     id = Column(Integer, primary_key=True)
     # name and directory are stored in Collection, accessed via properties
-    url = Column(String, unique=True)  # will only be downloaded if related Download exists.
+    url = Column(String)  # will only be downloaded if related Download exists. Partial unique index on non-NULL values.
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)  # use ffmpeg to extract duration (slower than info json).
     download_missing_data = Column(Boolean, default=True)  # fetch missing data like `source_id` and video comments.
@@ -540,8 +552,8 @@ class Channel(ModelHelper, Base):
     refreshed = Column(Boolean, default=False)  # The files in the Channel have been refreshed.
 
     # Columns updated by triggers
-    video_count = Column(Integer, default=0)  # update_channel_video_count
-    total_size = Column(Integer, default=0)  # update_channel_size
+    video_count = Column(Integer, default=0, nullable=False)  # update_channel_video_count
+    total_size = Column(BigInteger, default=0, nullable=False)  # update_channel_size
     minimum_frequency = Column(Integer)  # update_channel_minimum_frequency
 
     info_json = deferred(Column(JSON))

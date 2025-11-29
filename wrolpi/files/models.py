@@ -6,7 +6,7 @@ from datetime import datetime
 from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event
+from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event, Index
 from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 
@@ -66,15 +66,30 @@ class FancyJSON(types.TypeDecorator):
 
 class FileGroup(ModelHelper, Base):
     __tablename__ = 'file_group'
+    __table_args__ = (
+        Index('file_group_author_idx', 'author'),
+        Index('file_group_download_datetime_idx', 'download_datetime'),
+        Index('file_group_effective_datetime_idx', 'effective_datetime'),
+        Index('file_group_length_idx', 'length'),
+        Index('file_group_mimetype_idx', 'mimetype'),
+        Index('file_group_model_idx', 'model'),
+        Index('file_group_modification_datetime_idx', 'modification_datetime'),
+        Index('file_group_published_datetime_idx', 'published_datetime'),
+        Index('file_group_published_modified_datetime_idx', 'published_modified_datetime'),
+        Index('file_group_size_ix', 'size'),
+        Index('file_group_textsearch_idx', 'textsearch'),
+        Index('file_group_url_idx', 'url'),
+        Index('file_group_viewed_idx', 'viewed'),
+    )
     id: int = Column(BigInteger, primary_key=True)
 
     author = Column(String)  # name of the author, maybe even a URL
     censored = Column(Boolean)  # the file is no longer available for download
     data = Column(FancyJSON)  # populated by the modeler
     download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
-    files = Column(FancyJSON, nullable=False)  # populated during discovery
+    files = Column(FancyJSON)  # populated during discovery
     idempotency = Column(TZDateTime)  # used to track which files need to be deleted during refresh
-    indexed = Column(Boolean, default=lambda: False, nullable=False)  # wrolpi.files.lib.apply_indexers
+    indexed = Column(Boolean, default=lambda: False)  # wrolpi.files.lib.apply_indexers
     length = Column(BigInteger)  # video duration, article words, etc.
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "ebook", etc.
@@ -550,6 +565,9 @@ def update_effective_datetime(mapper, connection, target):
 class Directory(ModelHelper, Base):
     """A representation of a file directory in the media directory."""
     __tablename__ = 'directory'
+    __table_args__ = (
+        Index('directory_name_idx', 'name'),
+    )
 
     path: pathlib.Path = Column(MediaPathType, primary_key=True)
     name: str = Column(String, nullable=False)

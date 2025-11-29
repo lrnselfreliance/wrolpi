@@ -32,7 +32,7 @@ logger = logger.getChild('wrolpi-main')
 
 def db_main(args):
     """
-    Handle database migrations.  This uses Alembic, supported commands are "upgrade" and "downgrade".
+    Handle database migrations.  This uses Alembic, supported commands are "upgrade", "downgrade", and "check".
     """
     from alembic.config import Config
     from alembic import command
@@ -48,6 +48,11 @@ def db_main(args):
         command.upgrade(config, 'head')
     elif args.command == 'downgrade':
         command.downgrade(config, '-1')
+    elif args.command == 'check':
+        command.check(config)
+    elif args.command == 'revision':
+        message = getattr(args, 'message', None) or 'auto migration'
+        command.revision(config, message=message, autogenerate=True)
     else:
         print(f'Unknown DB command: {args.command}')
         return 2
@@ -100,7 +105,8 @@ def main():
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
-    db_parser.add_argument('command', help='Supported commands: upgrade, downgrade')
+    db_parser.add_argument('command', help='Supported commands: upgrade, downgrade, check, revision')
+    db_parser.add_argument('-m', '--message', help='Migration message (for revision command)')
 
     args = parser.parse_args()
 

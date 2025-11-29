@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY, Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import Delete
@@ -100,6 +100,9 @@ class DownloadStatus(str, Enum):
 class Download(ModelHelper, Base):  # noqa
     """Model that is used to schedule downloads."""
     __tablename__ = 'download'  # noqa
+    __table_args__ = (
+        Index('idx_download_collection_id', 'collection_id'),
+    )
     id = Column(Integer, primary_key=True)
     url = Column(String, nullable=False, unique=True)
 

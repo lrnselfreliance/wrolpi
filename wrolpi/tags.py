@@ -6,7 +6,7 @@ from typing import List, Dict, Tuple, Optional
 
 import cachetools
 from cachetools.keys import hashkey
-from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, event
+from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, event, UniqueConstraint
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
@@ -30,9 +30,12 @@ def get_tags_directory() -> pathlib.Path:
 
 class TagFile(ModelHelper, Base):
     __tablename__ = 'tag_file'
+    __table_args__ = (
+        UniqueConstraint('tag_id', 'file_group_id', name='tag_file_tag_id_file_group_id_key'),
+    )
     created_at: datetime = Column(TZDateTime, default=dates.now)
 
-    tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
+    tag_id = Column(Integer, ForeignKey('tag.id'), primary_key=True)
     tag = relationship('Tag', back_populates='tag_files')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')

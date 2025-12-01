@@ -15,7 +15,8 @@ import os
 from typing import Dict, List
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy import text
+from sqlalchemy import text, Column, Integer, String, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
 # revision identifiers, used by Alembic.
@@ -25,6 +26,32 @@ branch_labels = None
 depends_on = None
 
 DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
+
+# Local model definitions for migration stability.
+# These are minimal copies of the Collection and CollectionItem models
+# that contain only the columns needed for this migration.
+# This ensures the migration will work regardless of future changes to the actual models.
+MBase = declarative_base()
+
+
+class MCollection(MBase):
+    """Migration-stable Collection model with minimum required columns."""
+    __tablename__ = 'collection'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    kind = Column(String, nullable=False, server_default='channel', default='channel')
+    directory = Column(String, nullable=True)
+
+
+class MCollectionItem(MBase):
+    """Migration-stable CollectionItem model with minimum required columns."""
+    __tablename__ = 'collection_item'
+
+    id = Column(Integer, primary_key=True)
+    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'), nullable=False)
+    file_group_id = Column(Integer, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
 
 
 class DomainMigrationStats:
@@ -119,9 +146,8 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
     Migrate all Domain records to Collection records.
 
     This function is integrated into the alembic migration.
+    Uses local MCollection and MCollectionItem models for migration stability.
     """
-    from wrolpi.collections import Collection, CollectionItem
-
     stats = DomainMigrationStats()
 
     # Step 1: Fetch all domains
@@ -151,7 +177,7 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             continue
 
         # Check if Collection already exists
-        existing = session.query(Collection).filter_by(
+        existing = session.query(MCollection).filter_by(
             name=domain_name,
             kind='domain'
         ).first()
@@ -163,7 +189,7 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             continue
 
         # Create Collection
-        collection = Collection(
+        collection = MCollection(
             name=domain_name,
             kind='domain',
             directory=None,  # Domains are unrestricted
@@ -235,7 +261,7 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             archive_id = archive['archive_id']
 
             # Check if CollectionItem already exists
-            existing_item = session.query(CollectionItem).filter_by(
+            existing_item = session.query(MCollectionItem).filter_by(
                 collection_id=collection_id,
                 file_group_id=file_group_id
             ).first()
@@ -246,7 +272,7 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
                 continue
 
             # Create CollectionItem
-            item = CollectionItem(
+            item = MCollectionItem(
                 collection_id=collection_id,
                 file_group_id=file_group_id,
                 position=idx

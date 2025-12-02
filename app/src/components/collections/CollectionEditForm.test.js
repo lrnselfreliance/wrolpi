@@ -133,7 +133,7 @@ describe('CollectionEditForm', () => {
             expect(descriptionField.tagName).toBe('TEXTAREA');
         });
 
-        it('renders directory field using DestinationForm', () => {
+        it('renders directory field using DestinationForm for type=directory', () => {
             const form = createTestForm(mockCollection);
 
             render(
@@ -276,6 +276,76 @@ describe('CollectionEditForm', () => {
             // Should show warning about missing metadata
             expect(screen.getByText(/no metadata available/i)).toBeInTheDocument();
         });
+
+        it('displays form-level errors', () => {
+            const form = createTestForm(mockCollection, {
+                overrides: {error: 'Something went wrong'}
+            });
+
+            render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={mockMetadata}
+                />
+            );
+
+            // Should display the error message
+            expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+        });
+    });
+
+    describe('Loading Skeleton', () => {
+        it('shows skeleton when loading with empty form data', () => {
+            const form = createTestForm({}, {
+                overrides: {loading: true}
+            });
+
+            const {container} = render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={mockMetadata}
+                />
+            );
+
+            // Should show skeleton elements
+            expect(container.querySelector('.form-skeleton-label')).toBeInTheDocument();
+            expect(container.querySelector('.form-skeleton-input')).toBeInTheDocument();
+        });
+
+        it('shows form (not skeleton) when loading with existing form data', () => {
+            const form = createTestForm(mockCollection, {
+                overrides: {loading: true}
+            });
+
+            const {container} = render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={mockMetadata}
+                />
+            );
+
+            // Should NOT show skeleton when there's form data
+            expect(container.querySelector('.form-skeleton-label')).not.toBeInTheDocument();
+            // Should show actual form fields
+            expect(screen.getByTestId('directory-search')).toBeInTheDocument();
+        });
+
+        it('renders correct number of skeleton fields based on metadata', () => {
+            const form = createTestForm({}, {
+                overrides: {loading: true}
+            });
+
+            const {container} = render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={mockMetadata}
+                />
+            );
+
+            // Should have skeleton fields equal to metadata.fields.length (3)
+            const skeletonFields = container.querySelectorAll('.form-skeleton-field');
+            expect(skeletonFields).toHaveLength(mockMetadata.fields.length);
+        });
     });
 
     describe('Theme Integration', () => {
@@ -342,6 +412,46 @@ describe('CollectionEditForm', () => {
             expect(segment).toBeInTheDocument();
             // Should not be inverted by default
             expect(hasInvertedStyling(segment)).toBe(false);
+        });
+    });
+
+    describe('CSS Classes', () => {
+        it('uses required-indicator class for required fields', () => {
+            const metadataWithRequired = createMockMetadata('domain', {
+                fields: [
+                    {key: 'name', label: 'Name', type: 'text', required: true},
+                    {key: 'description', label: 'Description', type: 'textarea', required: true},
+                ]
+            });
+
+            const form = createTestForm(mockCollection);
+
+            const {container} = render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={metadataWithRequired}
+                />
+            );
+
+            // Should use CSS class instead of inline style for required indicator
+            const requiredIndicators = container.querySelectorAll('.required-indicator');
+            expect(requiredIndicators.length).toBeGreaterThan(0);
+        });
+
+        it('uses action-button-spacing class for cancel button', () => {
+            const form = createTestForm(mockCollection);
+            const mockOnCancel = jest.fn();
+
+            const {container} = render(
+                <CollectionEditForm
+                    form={form}
+                    metadata={mockMetadata}
+                    onCancel={mockOnCancel}
+                />
+            );
+
+            const cancelButton = screen.getByRole('button', {name: /cancel/i});
+            expect(cancelButton).toHaveClass('action-button-spacing');
         });
     });
 });

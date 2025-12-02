@@ -255,9 +255,17 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
-export function secondsToFrequency(seconds) {
-    const option = allFrequencyOptions[seconds];
-    return option ? option.text : null;
+/**
+ * Format a frequency value (in seconds) to a human-readable string using allFrequencyOptions.
+ * @param {number|null} frequency - Frequency in seconds
+ * @returns {string} Human-readable frequency text or '-' if null/undefined
+ */
+export function formatFrequency(frequency) {
+    if (frequency === null || frequency === undefined) {
+        return '-';
+    }
+    const option = allFrequencyOptions[frequency];
+    return option ? option.text : `${frequency}s`;
 }
 
 const secondsToYears = 31536000;

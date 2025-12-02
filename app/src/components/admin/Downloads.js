@@ -12,13 +12,14 @@ import {
     APIButton,
     DisableDownloadsToggle,
     ErrorMessage,
+    formatFrequency,
     isoDatetimeToElapsedPopup,
-    secondsToFrequency,
     useTitle,
     WROLModeMessage
 } from "../Common";
 import {
-    Button as SButton, ButtonGroup,
+    Button as SButton,
+    ButtonGroup,
     Label,
     Loader,
     PlaceholderLine,
@@ -32,12 +33,12 @@ import {
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import {
+    EditArchiveDownloadForm,
     EditChannelDownloadForm,
     EditRSSDownloadForm,
     EditScrapeFilesDownloadForm,
-    EditZimDownloadForm,
     EditVideosDownloadForm,
-    EditArchiveDownloadForm
+    EditZimDownloadForm
 } from "../Download";
 import {Downloaders} from "../Vars";
 
@@ -230,7 +231,7 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         <TableCell className='column-ellipsis'>
             {link(url)}
         </TableCell>
-        <TableCell>{secondsToFrequency(frequency)}</TableCell>
+        <TableCell>{formatFrequency(frequency)}</TableCell>
         <TableCell>
             {last_successful_download && isoDatetimeToElapsedPopup(last_successful_download)}
             {status === 'pending' && <Loader active inline size='tiny'/>}
@@ -278,11 +279,11 @@ class OnceDownloadRow extends React.Component {
     };
 
     handleEditOpen = () => {
-        this.setState({ editModalOpen: true });
+        this.setState({editModalOpen: true});
     };
 
     handleEditClose = () => {
-        this.setState({ editModalOpen: false });
+        this.setState({editModalOpen: false});
     };
 
     handleEditSuccess = async () => {
@@ -317,29 +318,29 @@ class OnceDownloadRow extends React.Component {
                 <TableCell>
                     <ButtonGroup>
 
-                    <APIButton
-                        color='red'
-                        icon='trash'
-                        onClick={this.handleDelete}
-                        confirmContent='Are you sure you want to delete this download?'
-                        confirmButton='Delete'
-                        obeyWROLMode={true}
-                    />
-                    {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
-                        <Button
-                            icon='edit'
-                            color='blue'
-                            onClick={this.handleEditOpen}
+                        <APIButton
+                            color='red'
+                            icon='trash'
+                            onClick={this.handleDelete}
+                            confirmContent='Are you sure you want to delete this download?'
+                            confirmButton='Delete'
+                            obeyWROLMode={true}
                         />
-                    )}
-                    <APIButton
-                        color='green'
-                        icon='redo'
-                        confirmContent='Are you sure you want to restart this download?'
-                        confirmButton='Start'
-                        onClick={this.handleRestart}
-                        obeyWROLMode={true}
-                    />
+                        {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
+                            <Button
+                                icon='edit'
+                                color='blue'
+                                onClick={this.handleEditOpen}
+                            />
+                        )}
+                        <APIButton
+                            color='green'
+                            icon='redo'
+                            confirmContent='Are you sure you want to restart this download?'
+                            confirmButton='Start'
+                            onClick={this.handleRestart}
+                            obeyWROLMode={true}
+                        />
                     </ButtonGroup>
                 </TableCell>
             );

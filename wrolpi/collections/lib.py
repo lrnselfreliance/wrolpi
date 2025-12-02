@@ -16,7 +16,7 @@ from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.tags import Tag
 from .errors import UnknownCollection
-from .models import Collection
+from .models import Collection, validate_collection_directory
 
 logger = logger.getChild(__name__)
 
@@ -68,6 +68,7 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
         # Add type-specific statistics
         if collection.kind == 'domain':
             # Add archive statistics for domain collections
+            # Local imports to avoid circular import: collections -> archive -> collections
             from modules.archive import Archive
             from wrolpi.files.models import FileGroup
 
@@ -86,6 +87,7 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
 
         elif collection.kind == 'channel':
             # Add video statistics for channel collections
+            # Local imports to avoid circular import: collections -> videos -> collections
             from modules.videos.models import Video, Channel
             from wrolpi.files.models import FileGroup
 
@@ -144,6 +146,7 @@ def get_collection_with_stats(collection_id: int, session: Session = None) -> di
     # This can be extended for different collection types
     if collection.kind == 'domain':
         # Add archive statistics for domain collections
+        # Local imports to avoid circular import: collections -> archive -> collections
         from modules.archive import Archive
         from wrolpi.files.models import FileGroup
 
@@ -162,6 +165,7 @@ def get_collection_with_stats(collection_id: int, session: Session = None) -> di
 
     elif collection.kind == 'channel':
         # Add video statistics for channel collections
+        # Local imports to avoid circular import: collections -> videos -> collections
         from modules.videos.models import Video, Channel
         from wrolpi.files.models import FileGroup
 
@@ -329,7 +333,6 @@ def update_collection(
     if directory is not None:
         if directory:
             # Convert relative path to absolute with validation
-            from .models import validate_collection_directory
             directory_path = validate_collection_directory(directory)
             collection.directory = directory_path
         else:
@@ -362,6 +365,7 @@ def update_collection(
 
     # Trigger domain config save if this is a domain collection
     if collection.kind == 'domain':
+        # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.lib import save_domains_config
         save_domains_config.activate_switch()
 
@@ -380,6 +384,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         UnknownCollection: If collection not found
         ValidationError: If collection has no directory
     """
+    # Local import to avoid circular import: collections -> files -> collections
     from wrolpi.files.lib import refresh_files
 
     with get_db_session() as session:
@@ -439,6 +444,7 @@ def tag_collection(
 
         # Trigger domain config save if this is a domain collection
         if collection.kind == 'domain':
+            # Local import to avoid circular import: collections -> archive -> collections
             from modules.archive.lib import save_domains_config
             save_domains_config.activate_switch()
 
@@ -462,7 +468,6 @@ def tag_collection(
     # Determine target directory
     if directory:
         # User specified a directory - validate it
-        from .models import validate_collection_directory
         target_directory = validate_collection_directory(directory)
     elif collection.directory:
         # Use existing directory
@@ -470,6 +475,7 @@ def tag_collection(
     else:
         # Suggest a directory based on collection type and name
         if collection.kind == 'domain':
+            # Local import to avoid circular import: collections -> archive -> collections
             from modules.archive.lib import get_archive_directory
             base_dir = get_archive_directory()
         else:
@@ -485,6 +491,7 @@ def tag_collection(
 
     # Trigger domain config save if this is a domain collection
     if collection.kind == 'domain':
+        # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.lib import save_domains_config
         save_domains_config.activate_switch()
 
@@ -595,14 +602,15 @@ def delete_collection(
 
     # Orphan child Archives if this is a domain collection
     if collection.kind == 'domain':
+        # Local imports to avoid circular import: collections -> archive -> collections
         from modules.archive.models import Archive
+        from modules.archive.lib import save_domains_config
         archives = session.query(Archive).filter_by(collection_id=collection_id).all()
         for archive in archives:
             archive.collection_id = None
         session.flush()
 
         # Trigger domain config save
-        from modules.archive.lib import save_domains_config
         save_domains_config.activate_switch()
 
     # Delete the collection

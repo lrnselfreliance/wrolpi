@@ -1,5 +1,4 @@
 import base64
-import base64
 import gzip
 import json
 import os
@@ -14,19 +13,21 @@ from typing import Optional, Tuple, List, Union
 from urllib.parse import urlparse
 
 import pytz
-from sqlalchemy import asc
+from sqlalchemy import asc, func, BigInteger
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Archive
 from wrolpi import dates
 from wrolpi.cmd import READABILITY_BIN, run_command
 from wrolpi.collections import Collection
-from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config, html_screenshot, \
-    ConfigFile
+from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
+    escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
+    get_wrolpi_config, html_screenshot, ConfigFile
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
+from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.files.models import FileGroup
 from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import tag_append_sub_select_where
@@ -607,8 +608,8 @@ def link_domain_and_downloads(session: Session):
     - Recurring downloads whose destination is within the domain collection's directory (including subdirectories)
     - RSS downloads with sub_downloader='archive' (matched by URL domain)
     """
+    # Local import to avoid circular import: downloader -> archive -> downloader
     from wrolpi.downloader import Download
-    from wrolpi.collections.models import Collection
 
     # Only Downloads with a frequency can be a Collection Download.
     downloads = list(session.query(Download).filter(Download.frequency.isnot(None)).all())
@@ -855,9 +856,6 @@ def get_domains():
     This is a thin wrapper around Collection queries that adds archive-specific statistics.
     Returns a list of dicts with collection id, domain name, url_count, and total size.
     """
-    from sqlalchemy import func, BigInteger
-    from wrolpi.files.models import FileGroup
-
     with get_db_session() as session:
         # Query all domain collections with archive statistics in a single query
         # This uses ORM for better maintainability while keeping performance
@@ -1032,7 +1030,6 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         '''.strip()
     logger.debug(stmt, params)
 
-    from wrolpi.files.lib import handle_file_group_search_results
     results, total = handle_file_group_search_results(stmt, params)
     return results, total
 
@@ -1058,7 +1055,6 @@ async def search_domains_by_name(name: str, limit: int = 5, session: Session = N
         .all()
 
     # Convert to old Domain format for backward compatibility
-    from wrolpi.common import get_relative_to_media_directory
     archive_dir = get_archive_directory()
     return [
         {
@@ -1155,8 +1151,6 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
         ValueError: If Archive has no singlefile
         RuntimeError: If screenshot generation fails
     """
-    from wrolpi.db import get_db_session
-
     with get_db_session() as session:
         archive = Archive.find_by_id(archive_id, session=session)
 

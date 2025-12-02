@@ -81,6 +81,7 @@ async def get_upload_singlefile(request: Request):
 @register_switch_handler('singlefile_upload_switch_handler')
 async def singlefile_upload_switch_handler(url=None):
     """Used by `post_upload_singlefile` to upload a single file"""
+    # Local imports to avoid circular import: downloader -> archive -> api -> downloader
     from wrolpi.downloader import Download
     from . import ArchiveDownloader
 
@@ -153,7 +154,6 @@ async def generate_screenshot_switch_handler(archive_id=None):
     try:
         await lib.generate_archive_screenshot(archive_id)
         # Always send success event since exceptions are raised on failure
-        from modules.archive import Archive
         archive = lib.get_archive(archive_id=archive_id)
         location = archive.location
         name = archive.file_group.title or archive.file_group.url

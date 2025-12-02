@@ -217,7 +217,7 @@ def get_collection_metadata(kind: str) -> dict:
                 {'key': 'actions', 'label': 'Manage', 'sortable': False, 'type': 'actions'}
             ],
             'fields': [
-                {'key': 'directory', 'label': 'Directory', 'type': 'text',
+                {'key': 'directory', 'label': 'Directory', 'type': 'directory',
                  'placeholder': 'Optional directory path'},
                 {'key': 'tag_name', 'label': 'Tag', 'type': 'tag',
                  'placeholder': 'Select or create tag', 'depends_on': 'directory'},
@@ -249,7 +249,7 @@ def get_collection_metadata(kind: str) -> dict:
             'fields': [
                 {'key': 'name', 'label': 'Name', 'type': 'text', 'required': True},
                 {'key': 'url', 'label': 'URL', 'type': 'text', 'placeholder': 'Channel URL'},
-                {'key': 'directory', 'label': 'Directory', 'type': 'text', 'required': True},
+                {'key': 'directory', 'label': 'Directory', 'type': 'directory', 'required': True},
                 {'key': 'tag_name', 'label': 'Tag', 'type': 'tag',
                  'placeholder': 'Select or create tag'},
                 {'key': 'description', 'label': 'Description', 'type': 'textarea',
@@ -279,7 +279,7 @@ def get_collection_metadata(kind: str) -> dict:
             ],
             'fields': [
                 {'key': 'name', 'label': 'Name', 'type': 'text', 'required': True},
-                {'key': 'directory', 'label': 'Directory', 'type': 'text'},
+                {'key': 'directory', 'label': 'Directory', 'type': 'directory'},
                 {'key': 'tag_name', 'label': 'Tag', 'type': 'tag'},
                 {'key': 'description', 'label': 'Description', 'type': 'textarea'}
             ],

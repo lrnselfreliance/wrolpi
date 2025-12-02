@@ -72,7 +72,7 @@ export function createMockMetadata(kind = 'domain', overrides = {}) {
             {key: 'actions', label: 'Manage', sortable: false, type: 'actions'},
         ],
         fields: [
-            {key: 'directory', label: 'Directory', type: 'text', placeholder: 'Optional directory path'},
+            {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
             {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
             {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'},
         ],

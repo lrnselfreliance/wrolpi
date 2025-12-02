@@ -258,3 +258,73 @@ table.ratio-table td.equal-width {
 table.ratio-table td.min-width {
     width: auto;
 }
+
+/* CollectionEditForm styles */
+.required-indicator {
+    color: red;
+}
+
+.action-button-spacing {
+    margin-top: 1em;
+}
+
+/* Form loading skeleton */
+.form-skeleton-field {
+    margin-bottom: 1.5em;
+}
+
+.form-skeleton-label {
+    height: 14px;
+    width: 80px;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 3px;
+}
+
+.form-skeleton-input {
+    height: 38px;
+    width: 100%;
+    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+.form-skeleton-textarea {
+    height: 80px;
+    width: 100%;
+    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+.form-skeleton-button {
+    height: 42px;
+    width: 100px;
+    background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Dark mode skeleton */
+.inverted .form-skeleton-label,
+.inverted .form-skeleton-input,
+.inverted .form-skeleton-textarea,
+.inverted .form-skeleton-button {
+    background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+}

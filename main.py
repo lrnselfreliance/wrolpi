@@ -372,6 +372,7 @@ async def perpetual_check_for_updates():
     Updates shared_ctx with update info for the /api/status endpoint.
     Only runs on native installs (not Docker).
     """
+    # Local import to avoid loading upgrade module at startup
     from wrolpi.upgrade import check_for_update
 
     # Don't check for updates in Docker environments

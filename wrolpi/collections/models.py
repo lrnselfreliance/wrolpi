@@ -5,8 +5,9 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Inde
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory
 from wrolpi.db import optional_session
+from wrolpi.errors import ValidationError
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag
@@ -30,8 +31,6 @@ def validate_collection_directory(directory: pathlib.Path) -> pathlib.Path:
     Raises:
         ValidationError: If absolute path is outside media directory
     """
-    from wrolpi.errors import ValidationError
-
     media_directory = get_media_directory()
     directory = pathlib.Path(directory)
 
@@ -197,6 +196,7 @@ class Collection(ModelHelper, Base):
         Raises:
             InvalidDownload: If url or frequency is missing
         """
+        # Local imports to avoid circular import: collections -> downloader -> collections
         from wrolpi.downloader import Download, download_manager
         from wrolpi.errors import InvalidDownload
 
@@ -683,8 +683,6 @@ class Collection(ModelHelper, Base):
 
         Returns directory as a string relative to media directory if applicable.
         """
-        from wrolpi.common import get_relative_to_media_directory
-
         # Get directory as string, relative to media directory
         directory_str = None
         if self.directory:
@@ -717,10 +715,12 @@ class Collection(ModelHelper, Base):
         archive/<Tag>/<Domain Name>
         """
         if self.kind == 'channel':
+            # Local import to avoid circular import: collections -> videos -> collections
             from modules.videos.lib import format_videos_destination
             return format_videos_destination(self.name, tag_name, None)
         elif self.kind == 'domain':
             # Use configured archive directory for domain collections
+            # Local import to avoid circular import: collections -> archive -> collections
             from modules.archive.lib import get_archive_directory
             base = get_archive_directory()
             if tag_name:
@@ -737,6 +737,7 @@ class Collection(ModelHelper, Base):
 
         Similar to Channel.move_channel but without download management.
         """
+        # Local imports to avoid circular import: collections -> files/events/flags -> collections
         from wrolpi.files.lib import move as move_files, refresh_files
         from wrolpi.events import Events
         from wrolpi import flags

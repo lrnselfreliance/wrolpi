@@ -91,6 +91,7 @@ class Archive(Base, ModelHelper):
 
     @staticmethod
     def can_model(file_group: FileGroup) -> bool:
+        # Local import to avoid circular import within archive module
         from modules.archive.lib import is_singlefile_file
         if file_group.mimetype.startswith('text') and is_singlefile_file(file_group.primary_path):
             return True
@@ -98,6 +99,7 @@ class Archive(Base, ModelHelper):
 
     @staticmethod
     def do_model(file_group: FileGroup, session: Session) -> 'Archive':
+        # Local import to avoid circular import within archive module
         from modules.archive import model_archive
         archive = model_archive(file_group, session)
         archive.validate()
@@ -155,6 +157,7 @@ class Archive(Base, ModelHelper):
 
     @property
     def singlefile_file(self) -> Optional[dict]:
+        # Local import to avoid circular import within archive module
         from modules.archive.lib import is_singlefile_file
         for file in self.file_group.my_html_files():
             if is_singlefile_file(file['path']):
@@ -315,6 +318,7 @@ class Archive(Base, ModelHelper):
 
     def apply_domain(self):
         """Get the domain collection from the URL."""
+        # Local import to avoid circular import within archive module
         from modules.archive.lib import get_or_create_domain_collection
         collection = None
         if self.file_group.url:
@@ -332,6 +336,7 @@ class Archive(Base, ModelHelper):
 
     def apply_metadata(self):
         """Read and apply <meta> (and more) data from the Singlefile HTML."""
+        # Local import to avoid circular import within archive module
         from modules.archive import lib
         contents = self.singlefile_path.read_bytes()
 
@@ -365,6 +370,7 @@ class Archive(Base, ModelHelper):
         """Create a new Archive and FileGroup from the provided paths.
 
         The files will be read and Archive data extracted."""
+        # Local import to avoid circular import within archive module
         from modules.archive import model_archive
         file_group = FileGroup.from_paths(session, *paths)
         archive = model_archive(file_group, session)

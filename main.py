@@ -393,6 +393,8 @@ async def perpetual_check_for_updates():
 
         if result.get('update_available'):
             logger.info(f"Update available: {result['commits_behind']} commits behind on {result['branch']}")
+    except WROLModeEnabled:
+        logger.debug('Refusing to check for updates when WROL Mode is enabled.')
     except Exception as e:
         logger.error('Failed to check for updates', exc_info=e)
 

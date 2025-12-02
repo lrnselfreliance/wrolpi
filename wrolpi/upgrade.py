@@ -7,7 +7,7 @@ with the remote origin branch, and to trigger the upgrade process.
 import pathlib
 import subprocess
 
-from wrolpi.common import logger
+from wrolpi.common import logger, wrol_mode_check
 from wrolpi.vars import DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild(__name__)
@@ -144,6 +144,7 @@ def get_commits_behind(branch: str) -> int:
     return 0
 
 
+@wrol_mode_check
 def check_for_update(fetch: bool = True) -> dict:
     """
     Check if an update is available by comparing local HEAD with origin/{branch}.

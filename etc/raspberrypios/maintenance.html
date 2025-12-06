@@ -105,6 +105,20 @@
         .hidden {
             display: none;
         }
+
+        .help-link {
+            margin-top: 1.5em;
+            font-size: 1.2em;
+        }
+
+        .help-link a {
+            color: #5829bb;
+            text-decoration: none;
+        }
+
+        .help-link a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -127,6 +141,10 @@
         <div class="warning">
             <strong>Do not power off</strong> your device or close this window during the upgrade.
         </div>
+
+        <p class="help-link">
+            <a id="helpLink" href="#" target="_blank">WROLPi Help</a>
+        </p>
     </div>
 
     <script>
@@ -184,6 +202,9 @@
 
         // Initial check
         checkApiStatus();
+
+        // Set help link to correct hostname
+        document.getElementById('helpLink').href = `https://${window.location.hostname}:8086`;
     </script>
 </body>
 </html>

@@ -29,6 +29,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.channels_config = manager.dict()
     app.shared_ctx.download_manager_config = manager.dict()
     app.shared_ctx.videos_downloader_config = manager.dict()
+    app.shared_ctx.domains_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.refresh = manager.dict()
     app.shared_ctx.uploaded_files = manager.dict()
@@ -84,6 +85,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.channels_config.clear()
     app.shared_ctx.download_manager_config.clear()
     app.shared_ctx.videos_downloader_config.clear()
+    app.shared_ctx.domains_config.clear()
     # Shared dicts.
     app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
@@ -180,3 +182,9 @@ def initialize_configs_contexts(app: Sanic):
         DOWNLOAD_MANAGER_CONFIG.initialize(app.shared_ctx.download_manager_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory download manager config: {e}')
+
+    try:
+        from modules.archive.lib import domains_config
+        domains_config.initialize(app.shared_ctx.domains_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory domains config: {e}')

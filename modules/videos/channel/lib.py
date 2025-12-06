@@ -283,6 +283,8 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
             save_channels_config.activate_switch()
     else:
         logger.info(f'Tagging {channel} with {tag_name}')
+        # Always save config when tag changes, even without directory
+        save_channels_config.activate_switch()
 
 
 @optional_session

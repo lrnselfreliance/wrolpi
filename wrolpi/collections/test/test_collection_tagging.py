@@ -143,3 +143,79 @@ async def test_tagging_unrestricted_collection_updates_config_only(
     entry = next(c for c in dumped if c.get('name') == 'Loose Stuff')
     assert entry.get('tag_name') == 'Favorites'
     assert 'directory' not in entry
+
+
+def test_set_tag_on_directory_less_domain_collection(test_session):
+    """Test that set_tag works on domain collections without a directory."""
+    from wrolpi.tags import Tag
+
+    # Create a domain collection without a directory
+    collection = Collection(name='example.com', kind='domain', directory=None)
+    test_session.add(collection)
+
+    # Create a tag directly
+    tag = Tag(name='TestTag', color='#ff0000')
+    test_session.add(tag)
+    test_session.commit()
+
+    # This should NOT raise ValueError - it should successfully set the tag
+    # (Currently raises: ValueError: Cannot tag domain collection 'example.com' without a directory)
+    collection.set_tag('TestTag')
+    test_session.commit()
+
+    # Verify tag was set
+    assert collection.tag_id == tag.id
+    assert collection.tag_name == 'TestTag'
+    # Directory should still be None
+    assert collection.directory is None
+
+
+@pytest.mark.asyncio
+async def test_tag_collection_removes_tag_and_updates_directory(test_session, test_directory, tag_factory, await_switches):
+    """When removing a tag via tag_collection, the directory should be updated if provided."""
+    from wrolpi.collections.lib import tag_collection
+
+    # Create a domain collection with a tag and tagged directory
+    tagged_dir = test_directory / 'archive' / 'News' / 'example.com'
+    tagged_dir.mkdir(parents=True, exist_ok=True)
+
+    collection = Collection(
+        name='example.com',
+        kind='domain',
+        directory=tagged_dir,
+    )
+    test_session.add(collection)
+
+    # Create tag using factory
+    tag = await tag_factory(name='News')
+    collection.tag = tag
+    test_session.commit()
+
+    # Verify initial state
+    assert collection.tag_name == 'News'
+    assert 'News' in str(collection.directory)
+
+    # New directory without the tag
+    untagged_dir = test_directory / 'archive' / 'example.com'
+    untagged_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove the tag AND update the directory
+    result = tag_collection(
+        collection_id=collection.id,
+        tag_name=None,  # Remove tag
+        directory=str(untagged_dir),  # New directory
+        session=test_session
+    )
+    test_session.commit()
+    await await_switches()
+
+    # Verify tag was removed
+    assert collection.tag_id is None
+    assert collection.tag_name is None
+
+    # Verify directory was updated (THIS IS THE BUG - directory is not updated)
+    assert collection.directory == untagged_dir, \
+        f"Expected directory to be {untagged_dir}, but got {collection.directory}"
+
+    # Verify result contains correct directory
+    assert result['directory'] == str(untagged_dir.relative_to(test_directory))

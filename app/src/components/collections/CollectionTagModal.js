@@ -16,6 +16,8 @@ import {APIButton, Toggle} from '../Common';
  * @param {Function} getTagInfo - Async function to fetch tag info: (tagName) => Promise<{suggested_directory, conflict, conflict_message}>
  * @param {Function} onSave - Async function called when saving: (tagName, directory) => Promise<void>
  * @param {string} collectionName - Name of the collection for toast messages (e.g., "Domain", "Channel")
+ * @param {boolean} hasDirectory - Whether the collection has a directory (default true for backward compatibility)
+ *                                 When false, hides directory toggle and input, always passes null for directory
  */
 export function CollectionTagModal({
     open,
@@ -25,6 +27,7 @@ export function CollectionTagModal({
     getTagInfo,
     onSave,
     collectionName = 'Collection',
+    hasDirectory = true,
 }) {
     const [newTagName, setNewTagName] = useState(currentTagName || null);
     const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
@@ -86,12 +89,15 @@ export function CollectionTagModal({
 
     // Handle save
     const handleSave = useCallback(async () => {
-        await onSave(newTagName, moveToTagDirectory ? newTagDirectory : null);
+        // When hasDirectory is false, always pass null for directory
+        const directoryToSave = hasDirectory && moveToTagDirectory ? newTagDirectory : null;
+        await onSave(newTagName, directoryToSave);
         handleClose();
-    }, [newTagName, moveToTagDirectory, newTagDirectory, onSave, handleClose]);
+    }, [newTagName, hasDirectory, moveToTagDirectory, newTagDirectory, onSave, handleClose]);
 
     const modalTitle = currentTagName ? 'Modify Tag' : 'Add Tag';
-    const saveButtonText = moveToTagDirectory ? 'Move' : 'Save';
+    // Show "Move" button only when hasDirectory is true and move toggle is on
+    const saveButtonText = hasDirectory && moveToTagDirectory ? 'Move' : 'Save';
 
     return (
         <Modal
@@ -112,26 +118,30 @@ export function CollectionTagModal({
                             />
                         </Grid.Column>
                     </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Toggle
-                                label='Move to directory: '
-                                checked={moveToTagDirectory}
-                                onChange={setMoveToTagDirectory}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column>
-                            <Input
-                                fluid
-                                value={newTagDirectory}
-                                onChange={(e, {value}) => setNewTagDirectory(value)}
-                                disabled={!moveToTagDirectory}
-                            />
-                        </Grid.Column>
-                    </Grid.Row>
-                    {conflictMessage && (
+                    {hasDirectory && (
+                        <Grid.Row>
+                            <Grid.Column>
+                                <Toggle
+                                    label='Move to directory: '
+                                    checked={moveToTagDirectory}
+                                    onChange={setMoveToTagDirectory}
+                                />
+                            </Grid.Column>
+                        </Grid.Row>
+                    )}
+                    {hasDirectory && (
+                        <Grid.Row>
+                            <Grid.Column>
+                                <Input
+                                    fluid
+                                    value={newTagDirectory}
+                                    onChange={(e, {value}) => setNewTagDirectory(value)}
+                                    disabled={!moveToTagDirectory}
+                                />
+                            </Grid.Column>
+                        </Grid.Row>
+                    )}
+                    {hasDirectory && conflictMessage && (
                         <Grid.Row>
                             <Grid.Column>
                                 <Message warning>

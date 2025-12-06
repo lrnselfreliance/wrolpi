@@ -597,6 +597,7 @@ export function DomainEditPage() {
             getTagInfo={handleGetTagInfo}
             onSave={handleTagSave}
             collectionName="Domain"
+            hasDirectory={!!domain?.directory}
         />
 
         {/* Downloads Segment */}

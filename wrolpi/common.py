@@ -546,7 +546,9 @@ class ConfigFile:
                 raise RuntimeError(f'Refusing to save config because it was never successfully imported! {rel_path}')
             version = self.read_config_file(file).get('version')
             if version and version > self.version:
-                raise RuntimeError(f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}')
+                message = f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}'
+                Events.send_config_save_failed(message)
+                raise RuntimeError(message)
 
         # Don't overwrite a real config while testing.
         if PYTEST and not is_tempfile(file):

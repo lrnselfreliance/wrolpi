@@ -302,7 +302,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         Events.send_directory_refresh(f'Refreshing: {relative_dir}')
 
 
-@optional_session
+@optional_session(commit=True)
 def tag_collection(
         collection_id: int,
         tag_name: Optional[str] = None,
@@ -333,22 +333,35 @@ def tag_collection(
     # If tag_name is None, remove the tag from the collection
     if tag_name is None:
         collection.tag_id = None
+
+        # Update directory if provided (user may want to move files when removing tag)
+        old_directory = collection.directory
+        if directory:
+            target_directory = validate_collection_directory(directory)
+            collection.directory = target_directory
+        else:
+            target_directory = collection.directory
+
         session.flush()
 
-        # Trigger domain config save if this is a domain collection
+        # Trigger config save based on collection kind
         if collection.kind == 'domain':
             # Local import to avoid circular import: collections -> archive -> collections
             from modules.archive.lib import save_domains_config
             save_domains_config.activate_switch()
+        elif collection.kind == 'channel':
+            # Local import to avoid circular import: collections -> videos -> collections
+            from modules.videos.lib import save_channels_config
+            save_channels_config.activate_switch()
 
         # Return info about the un-tagging operation
-        relative_dir = get_relative_to_media_directory(collection.directory) if collection.directory else None
+        relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
         return {
             'collection_id': collection.id,
             'collection_name': collection.name,
             'tag_name': None,
             'directory': str(relative_dir) if relative_dir else None,
-            'will_move_files': False,
+            'will_move_files': target_directory is not None and old_directory != target_directory,
         }
 
     # Get or create the tag
@@ -366,36 +379,36 @@ def tag_collection(
         # Use existing directory
         target_directory = collection.directory
     else:
-        # Suggest a directory based on collection type and name
-        if collection.kind == 'domain':
-            # Local import to avoid circular import: collections -> archive -> collections
-            from modules.archive.lib import get_archive_directory
-            base_dir = get_archive_directory()
-        else:
-            base_dir = get_media_directory()
-
-        target_directory = base_dir / collection.name
+        # No directory provided and collection has none - keep it that way
+        # Collections can be tagged without a directory for UI search/filtering
+        target_directory = None
 
     # Apply the tag
     collection.tag_id = tag.id
-    collection.directory = target_directory
+    # Only update directory if we have a target (don't auto-generate for directory-less collections)
+    if target_directory is not None:
+        collection.directory = target_directory
 
     session.flush()
 
-    # Trigger domain config save if this is a domain collection
+    # Trigger config save based on collection kind
     if collection.kind == 'domain':
         # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.lib import save_domains_config
         save_domains_config.activate_switch()
+    elif collection.kind == 'channel':
+        # Local import to avoid circular import: collections -> videos -> collections
+        from modules.videos.lib import save_channels_config
+        save_channels_config.activate_switch()
 
     # Return info about the tagging operation
-    relative_dir = get_relative_to_media_directory(target_directory)
+    relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
     return {
         'collection_id': collection.id,
         'collection_name': collection.name,
         'tag_name': tag_name,
-        'directory': str(relative_dir),
-        'will_move_files': collection.directory != target_directory,
+        'directory': str(relative_dir) if relative_dir else None,
+        'will_move_files': target_directory is not None and collection.directory != target_directory,
     }
 
 
@@ -409,6 +422,7 @@ def get_tag_info(
     Get information about tagging a collection with a specific tag.
 
     Returns the suggested directory and checks for conflicts with existing collections.
+    For collections without a directory, returns suggested_directory=None.
 
     Args:
         collection_id: The collection ID
@@ -425,6 +439,14 @@ def get_tag_info(
 
     if not collection:
         raise UnknownCollection(f"Collection with ID {collection_id} not found")
+
+    # For collections without a directory, return None - no directory suggestions needed
+    if collection.directory is None:
+        return {
+            'suggested_directory': None,
+            'conflict': False,
+            'conflict_message': None,
+        }
 
     # Use the collection's format_directory method to get the suggested directory
     suggested_directory = collection.format_directory(tag_name)

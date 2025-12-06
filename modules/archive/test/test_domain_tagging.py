@@ -20,22 +20,6 @@ async def test_create_domain_collection_with_directory(test_session, test_direct
     test_session.commit()
 
     assert collection.directory == domain_dir
-    assert collection.can_be_tagged is True
-
-
-@pytest.mark.asyncio
-async def test_create_unrestricted_domain_collection(test_session):
-    """Unrestricted domain collection (no directory) cannot be tagged."""
-    collection = Collection(
-        name='example.com',
-        kind='domain',
-        directory=None  # Unrestricted
-    )
-    test_session.add(collection)
-    test_session.commit()
-
-    assert collection.directory is None
-    assert collection.can_be_tagged is False
 
 
 @pytest.mark.asyncio
@@ -63,8 +47,8 @@ async def test_tag_domain_collection_with_directory(async_client, test_session, 
 
 
 @pytest.mark.asyncio
-async def test_cannot_tag_unrestricted_domain_collection(async_client, test_session, tag_factory):
-    """Domain collection without directory cannot be tagged."""
+async def test_tag_unrestricted_domain_collection(async_client, test_session, tag_factory):
+    """Domain collection without directory can be tagged for UI searchability."""
     collection = Collection(
         name='example.com',
         kind='domain',
@@ -74,10 +58,14 @@ async def test_cannot_tag_unrestricted_domain_collection(async_client, test_sess
     tag = await tag_factory(name='News')
     test_session.commit()
 
-    assert collection.can_be_tagged is False
+    # Collections can now be tagged even without a directory
+    collection.set_tag('News')
+    test_session.commit()
 
-    with pytest.raises(ValueError, match='Cannot tag domain collection.*without a directory'):
-        collection.set_tag('News')
+    assert collection.tag is not None
+    assert collection.tag.name == 'News'
+    # Directory should still be None
+    assert collection.directory is None
 
 
 @pytest.mark.asyncio
@@ -169,13 +157,11 @@ collections:
     assert 'example.com' in str(collection.directory)
     assert collection.tag is not None
     assert collection.tag.name == 'News'
-    assert collection.can_be_tagged is True
 
 
 @pytest.mark.asyncio
-async def test_domain_config_warns_tag_without_directory(test_session, test_directory, tag_factory, caplog,
-                                                         async_client):
-    """Config warns when tag_name provided without directory."""
+async def test_domain_config_with_tag_without_directory(test_session, test_directory, tag_factory, async_client):
+    """Config can have tag_name without directory - tag enables UI search."""
     from modules.archive.lib import DomainsConfig
 
     # Create config file with tag but no directory
@@ -195,18 +181,16 @@ collections:
     domains_config = DomainsConfig()
     domains_config.import_config(config_file)
 
-    # Verify collection created without tag
+    # Verify collection created with tag but no directory
     collection = test_session.query(Collection).filter_by(
         name='example.com',
         kind='domain'
     ).one()
 
     assert collection.directory is None
-    assert collection.tag is None  # Tag ignored
-    assert collection.can_be_tagged is False
-
-    # Check warning was logged
-    assert "tags require a directory" in caplog.text
+    # Tag is now applied even without directory - enables UI search
+    assert collection.tag is not None
+    assert collection.tag.name == 'News'
 
 
 @pytest.mark.asyncio
@@ -268,7 +252,6 @@ async def test_get_or_create_domain_collection_with_directory(test_session, test
     assert collection.name == 'test.com'
     assert collection.kind == 'domain'
     assert collection.directory == domain_dir
-    assert collection.can_be_tagged is True
 
 
 @pytest.mark.asyncio
@@ -311,3 +294,62 @@ async def test_get_archive_destination_unrestricted(test_session):
     expected = get_archive_directory() / 'example.com'
 
     assert destination == expected
+
+
+@pytest.mark.asyncio
+async def test_tag_domain_without_directory_saves_config(test_session, test_directory, tag_factory, await_switches):
+    """Tagging domain collection without directory should still save config."""
+    from modules.archive.lib import domains_config
+    from wrolpi.collections.lib import tag_collection
+    import yaml
+
+    # Create domain collection without directory
+    collection = Collection(name='example.com', kind='domain', directory=None)
+    test_session.add(collection)
+    await tag_factory(name='News')
+    test_session.commit()
+
+    # Tag using library function (no directory)
+    tag_collection(collection.id, tag_name='News', directory=None, session=test_session)
+    test_session.commit()
+
+    # Wait for switches to process
+    await await_switches()
+
+    # Verify config was saved (file created by switch, just read it)
+    config_file = domains_config.get_file()
+    data = yaml.safe_load(config_file.read_text())
+
+    domain_entry = next((c for c in data.get('collections', []) if c['name'] == 'example.com'), None)
+    assert domain_entry is not None, "Domain collection not found in config"
+    assert domain_entry.get('tag_name') == 'News', "Tag name not saved in config"
+
+
+@pytest.mark.asyncio
+async def test_untag_domain_without_directory_saves_config(test_session, test_directory, tag_factory, await_switches):
+    """Untagging domain collection without directory should still save config."""
+    from modules.archive.lib import domains_config
+    from wrolpi.collections.lib import tag_collection
+    import yaml
+
+    # Create domain collection without directory, already tagged
+    collection = Collection(name='example.com', kind='domain', directory=None)
+    test_session.add(collection)
+    tag = await tag_factory(name='News')
+    collection.tag = tag
+    test_session.commit()
+
+    # Untag using library function (tag_name=None)
+    tag_collection(collection.id, tag_name=None, directory=None, session=test_session)
+    test_session.commit()
+
+    # Wait for switches to process
+    await await_switches()
+
+    # Verify config was saved without tag (file created by switch, just read it)
+    config_file = domains_config.get_file()
+    data = yaml.safe_load(config_file.read_text())
+
+    domain_entry = next((c for c in data.get('collections', []) if c['name'] == 'example.com'), None)
+    assert domain_entry is not None, "Domain collection not found in config"
+    assert domain_entry.get('tag_name') is None, "Tag should be removed from config"

@@ -439,4 +439,239 @@ describe('CollectionTagModal', () => {
             expect(mockOnClose).toHaveBeenCalled();
         });
     });
+
+    describe('hasDirectory prop', () => {
+        it('hides move toggle and directory input when hasDirectory is false', () => {
+            // TDD test - should FAIL initially because hasDirectory prop doesn't exist yet
+            render(
+                <CollectionTagModal
+                    {...defaultProps}
+                    hasDirectory={false}
+                    originalDirectory={null}
+                />
+            );
+
+            // Toggle and directory input should be hidden
+            expect(screen.queryByTestId('toggle')).not.toBeInTheDocument();
+            expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+        });
+
+        it('shows move toggle and directory input when hasDirectory is true', () => {
+            render(
+                <CollectionTagModal
+                    {...defaultProps}
+                    hasDirectory={true}
+                    originalDirectory="/some/directory"
+                />
+            );
+
+            // Toggle and directory input should be visible
+            expect(screen.getByTestId('toggle')).toBeInTheDocument();
+            expect(screen.getByRole('textbox')).toBeInTheDocument();
+        });
+
+        it('defaults hasDirectory to true for backward compatibility', () => {
+            // When hasDirectory is not specified, it should default to true (show directory UI)
+            render(
+                <CollectionTagModal
+                    {...defaultProps}
+                    originalDirectory="/some/directory"
+                />
+            );
+
+            // Toggle and directory input should be visible by default
+            expect(screen.getByTestId('toggle')).toBeInTheDocument();
+            expect(screen.getByRole('textbox')).toBeInTheDocument();
+        });
+
+        it('calls onSave with null directory when hasDirectory is false', async () => {
+            const mockOnClose = jest.fn();
+            const mockOnSave = jest.fn().mockResolvedValue(undefined);
+            const mockGetTagInfo = jest.fn().mockResolvedValue({
+                suggested_directory: null,
+                conflict: false,
+            });
+
+            render(
+                <CollectionTagModal
+                    {...defaultProps}
+                    hasDirectory={false}
+                    originalDirectory={null}
+                    onSave={mockOnSave}
+                    onClose={mockOnClose}
+                    getTagInfo={mockGetTagInfo}
+                />
+            );
+
+            // Add a tag
+            const addTagButton = screen.getByTestId('add-tag');
+            await userEvent.click(addTagButton);
+
+            // Wait for getTagInfo to be called
+            await waitFor(() => {
+                expect(mockGetTagInfo).toHaveBeenCalled();
+            });
+
+            // Click save button
+            await act(async () => {
+                await userEvent.click(screen.getByTestId('api-button-Save'));
+            });
+
+            // Verify onSave was called with null directory
+            expect(mockOnSave).toHaveBeenCalledWith('test-tag', null);
+            expect(mockOnClose).toHaveBeenCalled();
+        });
+    });
+
+    describe('Tag Removal Save Behavior', () => {
+        it('calls onSave with updated directory after removing tag', async () => {
+            const mockOnSave = jest.fn().mockResolvedValue(undefined);
+            const mockOnClose = jest.fn();
+            const mockGetTagInfo = jest.fn().mockResolvedValue({
+                suggested_directory: '/videos/wrolpi.org',  // Untagged directory
+                conflict: false,
+                conflict_message: null,
+            });
+
+            render(
+                <CollectionTagModal
+                    open={true}
+                    onClose={mockOnClose}
+                    currentTagName="WROL"  // Currently has a tag
+                    originalDirectory='/videos/WROL/wrolpi.org'  // Current tagged directory
+                    getTagInfo={mockGetTagInfo}
+                    onSave={mockOnSave}
+                    collectionName="Channel"
+                    hasDirectory={true}
+                />
+            );
+
+            // Remove the tag - this triggers getTagInfo(null) and should update directory
+            await userEvent.click(screen.getByTestId('remove-tag'));
+
+            // Wait for directory to be updated with the untagged directory
+            await waitFor(() => {
+                const input = screen.getByRole('textbox');
+                expect(input).toHaveValue('/videos/wrolpi.org');
+            });
+
+            // Click Move button to save
+            await act(async () => {
+                await userEvent.click(screen.getByTestId('api-button-Move'));
+            });
+
+            // Verify onSave was called with null tag and NEW directory
+            expect(mockOnSave).toHaveBeenCalledWith(null, '/videos/wrolpi.org');
+        });
+
+        it('calls onSave with updated directory even when clicking save quickly after removing tag', async () => {
+            // This test simulates a potential race condition where user clicks save
+            // very quickly after removing the tag, before the async getTagInfo completes
+            const mockOnSave = jest.fn().mockResolvedValue(undefined);
+            const mockOnClose = jest.fn();
+
+            // Simulate a slow API call
+            const mockGetTagInfo = jest.fn().mockImplementation(() => {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        resolve({
+                            suggested_directory: '/videos/wrolpi.org',
+                            conflict: false,
+                            conflict_message: null,
+                        });
+                    }, 100); // 100ms delay
+                });
+            });
+
+            render(
+                <CollectionTagModal
+                    open={true}
+                    onClose={mockOnClose}
+                    currentTagName="WROL"
+                    originalDirectory='/videos/WROL/wrolpi.org'
+                    getTagInfo={mockGetTagInfo}
+                    onSave={mockOnSave}
+                    collectionName="Channel"
+                    hasDirectory={true}
+                />
+            );
+
+            // Remove the tag
+            await userEvent.click(screen.getByTestId('remove-tag'));
+
+            // Wait for the directory to update (ensures async completed)
+            await waitFor(() => {
+                const input = screen.getByRole('textbox');
+                expect(input).toHaveValue('/videos/wrolpi.org');
+            }, { timeout: 500 });
+
+            // Click Move button
+            await act(async () => {
+                await userEvent.click(screen.getByTestId('api-button-Move'));
+            });
+
+            // Verify onSave was called with null tag and NEW directory
+            expect(mockOnSave).toHaveBeenCalledWith(null, '/videos/wrolpi.org');
+        });
+
+        it('does NOT send stale directory if user clicks save before async completes', async () => {
+            // This test checks what happens if user manages to click save BEFORE getTagInfo resolves
+            // This would be the actual bug scenario
+            const mockOnSave = jest.fn().mockResolvedValue(undefined);
+            const mockOnClose = jest.fn();
+
+            // Create a promise that we can control
+            let resolveGetTagInfo;
+            const mockGetTagInfo = jest.fn().mockImplementation(() => {
+                return new Promise(resolve => {
+                    resolveGetTagInfo = resolve;
+                });
+            });
+
+            render(
+                <CollectionTagModal
+                    open={true}
+                    onClose={mockOnClose}
+                    currentTagName="WROL"
+                    originalDirectory='/videos/WROL/wrolpi.org'
+                    getTagInfo={mockGetTagInfo}
+                    onSave={mockOnSave}
+                    collectionName="Channel"
+                    hasDirectory={true}
+                />
+            );
+
+            // Remove the tag - triggers getTagInfo but doesn't resolve yet
+            await userEvent.click(screen.getByTestId('remove-tag'));
+
+            // getTagInfo should have been called
+            expect(mockGetTagInfo).toHaveBeenCalledWith(null);
+
+            // At this point, directory is still the old value
+            const input = screen.getByRole('textbox');
+            expect(input).toHaveValue('/videos/WROL/wrolpi.org');
+
+            // Now resolve the getTagInfo promise
+            await act(async () => {
+                resolveGetTagInfo({
+                    suggested_directory: '/videos/wrolpi.org',
+                    conflict: false,
+                    conflict_message: null,
+                });
+            });
+
+            // Wait for directory to update
+            await waitFor(() => {
+                expect(input).toHaveValue('/videos/wrolpi.org');
+            });
+
+            // NOW click save
+            await act(async () => {
+                await userEvent.click(screen.getByTestId('api-button-Move'));
+            });
+
+            // Verify onSave was called with the CORRECT directory
+            expect(mockOnSave).toHaveBeenCalledWith(null, '/videos/wrolpi.org');
+        });
+    });
 });

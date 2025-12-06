@@ -313,6 +313,145 @@ class Collection(ModelHelper, Base):
 
         return collection
 
+    @staticmethod
+    @optional_session
+    def batch_from_config(data_list: List[dict], session: Session = None) -> List['Collection']:
+        """
+        Create or update multiple Collections from config data in batch.
+        More efficient than calling from_config() in a loop because it pre-fetches
+        existing collections and tags in bulk queries.
+
+        NOTE: This method does NOT call populate_from_directory(). For channel collections,
+        use claim_videos_for_channels() after batch_from_config() to assign videos to channels.
+
+        Args:
+            data_list: List of config dicts containing collection metadata
+            session: Database session
+
+        Returns:
+            List of created or updated Collections
+        """
+        if not data_list:
+            return []
+
+        # Step 1: Validate and prepare directories
+        directories = []
+        for data in data_list:
+            directory = data.get('directory')
+            if directory:
+                directories.append(str(validate_collection_directory(directory)))
+
+        # Step 2: Pre-fetch existing collections by directory in ONE query
+        existing_by_directory = {}
+        if directories:
+            existing = session.query(Collection).filter(
+                Collection.directory.in_(directories)
+            ).all()
+            existing_by_directory = {str(c.directory): c for c in existing}
+
+        # Step 3: Pre-fetch existing collections by (name, kind) for directory-less collections
+        name_kind_pairs = [(d['name'], d.get('kind', 'channel')) for d in data_list if not d.get('directory')]
+        existing_by_name_kind = {}
+        if name_kind_pairs:
+            from sqlalchemy import and_, or_
+            conditions = [
+                and_(Collection.name == name, Collection.kind == kind)
+                for name, kind in name_kind_pairs
+            ]
+            existing = session.query(Collection).filter(or_(*conditions)).all()
+            existing_by_name_kind = {(c.name, c.kind): c for c in existing}
+
+        # Step 4: Pre-fetch all tags in ONE query
+        tag_names = {d['tag_name'] for d in data_list if d.get('tag_name')}
+        tags_by_name = {}
+        if tag_names:
+            tags = session.query(Tag).filter(Tag.name.in_(tag_names)).all()
+            tags_by_name = {t.name: t for t in tags}
+
+        # Step 5: Process collections
+        collections = []
+        new_collections = []
+
+        for data in data_list:
+            name = data.get('name')
+            if not name:
+                raise ValueError('Collection config must have a name')
+
+            description = data.get('description')
+            directory = data.get('directory')
+            tag_name = data.get('tag_name')
+            kind = (data.get('kind') or 'channel').strip()
+
+            # Validate known kinds
+            if kind not in {'channel', 'domain'}:
+                logger.warning(f"Unknown collection kind '{kind}', defaulting to 'channel'")
+                kind = 'channel'
+
+            # Validate collection name using the type registry
+            if not collection_type_registry.validate(kind, name):
+                description_msg = collection_type_registry.get_description(kind) or "Invalid name format"
+                raise ValueError(f'Invalid {kind} name for collection: {repr(name)}. {description_msg}')
+
+            # Convert directory to absolute path if provided
+            if directory:
+                directory = validate_collection_directory(directory)
+                directory_str = str(directory)
+            else:
+                directory_str = None
+
+            # Find existing collection from pre-fetched data
+            collection = None
+            if directory_str:
+                collection = existing_by_directory.get(directory_str)
+            else:
+                collection = existing_by_name_kind.get((name, kind))
+
+            if collection:
+                # Update existing collection
+                logger.debug(f'Updating collection from config: {name}')
+                collection.description = description
+                collection.directory = directory
+                collection.kind = kind
+
+                if tag_name:
+                    tag = tags_by_name.get(tag_name)
+                    if tag:
+                        collection.tag = tag
+                    else:
+                        logger.warning(f'Tag {repr(tag_name)} not found for collection {repr(name)}')
+                        collection.tag = None
+                else:
+                    collection.tag = None
+            else:
+                # Create new collection
+                logger.info(f'Creating new collection from config: {name}')
+                collection = Collection(
+                    name=name,
+                    description=description,
+                    directory=directory,
+                    kind=kind,
+                )
+
+                if tag_name:
+                    tag = tags_by_name.get(tag_name)
+                    if tag:
+                        collection.tag = tag
+                    else:
+                        logger.warning(f'Tag {repr(tag_name)} not found for collection {repr(name)}')
+
+                new_collections.append(collection)
+
+            collections.append(collection)
+
+        # Step 6: Batch add new collections
+        if new_collections:
+            session.add_all(new_collections)
+
+        # Single flush for all collections
+        session.flush()
+
+        return collections
+
     def populate_from_directory(self, session: Session = None):
         """
         Populate this collection with all FileGroups in the collection's directory.

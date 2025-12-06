@@ -759,6 +759,7 @@ class WROLPiConfig(ConfigFile):
         hotspot_on_startup=True,
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
+        check_for_upgrades=True,
         ignore_outdated_zims=False,
         ignored_directories=['config', 'tags'],
         map_destination='map',
@@ -868,6 +869,14 @@ class WROLPiConfig(ConfigFile):
     @ignore_outdated_zims.setter
     def ignore_outdated_zims(self, value: bool):
         self.update({'ignore_outdated_zims': value})
+
+    @property
+    def check_for_upgrades(self) -> bool:
+        return self._config.get('check_for_upgrades', True)
+
+    @check_for_upgrades.setter
+    def check_for_upgrades(self, value: bool):
+        self.update({'check_for_upgrades': value})
 
     @property
     def throttle_on_startup(self) -> bool:

@@ -152,14 +152,29 @@ class InventoriesConfig(ConfigFile):
         super().dump_config(file, send_events, overwrite)
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
+        file = file or self.get_file()
+
+        # If config file doesn't exist, mark import as successful (nothing to import)
+        if not file.is_file():
+            logger.info('No inventories config file, skipping import')
+            self.successful_import = True
+            return
+
         super().import_config(file)
+
+        inventories_data = self.inventories
+        # Empty inventories list = never delete DB records
+        if not inventories_data:
+            logger.info(f'No inventories in config, preserving existing DB inventories')
+            self.successful_import = True
+            return
 
         try:
             with get_db_session(commit=True) as session:
                 db_inventories = session.query(Inventory).all()
                 db_inventories_by_name = {i.name: i for i in db_inventories}
-                config_inventories = [i['name'] for i in self.inventories]
-                for inventory_dict in self.inventories:
+                config_inventories = [i['name'] for i in inventories_data]
+                for inventory_dict in inventories_data:
                     if inventory_dict['name'] not in db_inventories_by_name:
                         inventory = Inventory(
                             name=inventory_dict['name'],
@@ -176,7 +191,7 @@ class InventoriesConfig(ConfigFile):
                     if name not in config_inventories:
                         session.delete(inventory)
 
-                for inventory_dict in self.inventories:
+                for inventory_dict in inventories_data:
                     # Items are complex and do not have useful primary keys.  Delete all items, create new items.
                     session.query(Item).filter(Item.inventory_id == inventory_dict['id']).delete()
                     inventory = db_inventories_by_name[inventory_dict['name']]

@@ -88,13 +88,22 @@ class DomainsConfig(ConfigFile):
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         """Import domain collections from config file into database using batch operations."""
+        file = file or self.get_file()
+        file_str = str(get_relative_to_media_directory(file))
+
+        # If config file doesn't exist, mark import as successful (nothing to import)
+        if not file.is_file():
+            logger.info('No domains config file, skipping import')
+            self.successful_import = True
+            return
+
         ConfigFile.import_config(self, file, send_events)
 
-        file_str = str(self.get_relative_file())
         collections_data = self._config.get('collections', [])
 
+        # Empty collections list = never delete DB records
         if not collections_data:
-            logger.info(f'No domain collections to import from {file_str}')
+            logger.info(f'No domain collections in config, preserving existing DB domain collections')
             self.successful_import = True
             return
 

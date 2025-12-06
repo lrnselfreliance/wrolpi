@@ -1313,7 +1313,23 @@ class DownloadManagerConfig(ConfigFile):
                 Events.send_config_save_failed(message)
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
+        file = file or self.get_file()
+
+        # If config file doesn't exist, mark import as successful (nothing to import)
+        if not file.is_file():
+            logger.info('No downloads config file, skipping import')
+            self.successful_import = True
+            return
+
         super().import_config(file)
+
+        downloads_data = self.downloads
+        # Empty downloads list = never delete DB records
+        if not downloads_data:
+            logger.info(f'No downloads in config, preserving existing DB downloads')
+            self.successful_import = True
+            return
+
         with get_db_session(commit=True) as session:
             from modules.zim.lib import zim_download_url_to_name
             from modules.zim.models import ZimSubscription
@@ -1321,7 +1337,7 @@ class DownloadManagerConfig(ConfigFile):
             try:
                 logger.warning('Importing downloads in config')
 
-                downloads_by_url = {i['url']: i for i in get_download_manager_config().downloads}
+                downloads_by_url = {i['url']: i for i in downloads_data}
                 existing_downloads: List[Download] = list(session.query(Download))
                 for existing in existing_downloads:
                     download = downloads_by_url.pop(existing.url, None)

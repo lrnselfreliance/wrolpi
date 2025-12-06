@@ -263,6 +263,7 @@ export function SettingsPage() {
     const [ready, setReady] = React.useState(false);
     const [pendingSave, setPendingSave] = React.useState(false);
     const {clearAll} = useMessageDismissal();
+    const dockerized = useDockerized();
 
     // Get current settings from the API.
     const {settings, saveSettings, fetchSettings} = React.useContext(SettingsContext);
@@ -402,8 +403,8 @@ export function SettingsPage() {
                 <div style={{margin: '0.5em'}}>
                     <Toggle
                         label='Check for upgrades hourly'
-                        disabled={disabled || state.check_for_upgrades === null}
-                        checked={state.check_for_upgrades === true}
+                        disabled={disabled || dockerized || state.check_for_upgrades === null}
+                        checked={!dockerized && state.check_for_upgrades === true}
                         onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
                     />
                 </div>

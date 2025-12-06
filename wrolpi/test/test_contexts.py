@@ -1,7 +1,5 @@
 """Tests for shared context initialization."""
 
-import pytest
-
 
 def test_domains_config_in_shared_context():
     """Verify domains_config is initialized in shared context.

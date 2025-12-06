@@ -1,7 +1,16 @@
 import {emptyToNull} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
-import {API_URI, ARCHIVES_API, COLLECTIONS_API, DEFAULT_LIMIT, Downloaders, OTP_API, VIDEOS_API, ZIM_API} from "./components/Vars";
+import {
+    API_URI,
+    ARCHIVES_API,
+    COLLECTIONS_API,
+    DEFAULT_LIMIT,
+    Downloaders,
+    OTP_API,
+    VIDEOS_API,
+    ZIM_API
+} from "./components/Vars";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return

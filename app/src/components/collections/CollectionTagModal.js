@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Grid, Input} from 'semantic-ui-react';
 import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
 import {Button, Modal, ModalActions, ModalContent, ModalHeader} from '../Theme';
@@ -20,15 +20,15 @@ import {APIButton, Toggle} from '../Common';
  *                                 When false, hides directory toggle and input, always passes null for directory
  */
 export function CollectionTagModal({
-    open,
-    onClose,
-    currentTagName,
-    originalDirectory,
-    getTagInfo,
-    onSave,
-    collectionName = 'Collection',
-    hasDirectory = true,
-}) {
+                                       open,
+                                       onClose,
+                                       currentTagName,
+                                       originalDirectory,
+                                       getTagInfo,
+                                       onSave,
+                                       collectionName = 'Collection',
+                                       hasDirectory = true,
+                                   }) {
     const [newTagName, setNewTagName] = useState(currentTagName || null);
     const [moveToTagDirectory, setMoveToTagDirectory] = useState(true);
     const [newTagDirectory, setNewTagDirectory] = useState(originalDirectory || '');

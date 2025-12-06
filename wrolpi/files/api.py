@@ -1,3 +1,5 @@
+import sanic.request
+
 import pathlib
 from http import HTTPStatus
 
@@ -18,6 +20,7 @@ from ..vars import PYTEST
 import pathlib
 from http import HTTPStatus
 
+import sanic.request
 import sanic.request
 from sanic import response, Request, Blueprint
 from sanic_ext import validate

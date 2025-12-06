@@ -1,7 +1,14 @@
 import React from 'react';
-import {renderHook, act, waitFor} from '@testing-library/react';
-import {render, screen, fireEvent} from '@testing-library/react';
-import {useForm, commaSeparatedValidator, InputForm, NumberInputForm, UrlInput, ToggleForm, UrlsTextarea} from './useForm';
+import {act, renderHook, screen, waitFor} from '@testing-library/react';
+import {
+    commaSeparatedValidator,
+    InputForm,
+    NumberInputForm,
+    ToggleForm,
+    UrlInput,
+    UrlsTextarea,
+    useForm
+} from './useForm';
 import {renderWithProviders} from '../test-utils';
 
 // Mock lodash debounce to control timing in tests

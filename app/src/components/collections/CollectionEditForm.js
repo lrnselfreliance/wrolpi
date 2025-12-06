@@ -17,15 +17,15 @@ import {WROLModeMessage} from '../Common';
  * @param {React.ReactNode} children - Form fields to render
  */
 export function CollectionEditForm({
-    form,
-    onCancel,
-    onSubmit,
-    title,
-    wrolModeContent,
-    actionButtons,
-    appliedTagName,
-    children
-}) {
+                                       form,
+                                       onCancel,
+                                       onSubmit,
+                                       title,
+                                       wrolModeContent,
+                                       actionButtons,
+                                       appliedTagName,
+                                       children
+                                   }) {
     const {SingleTag} = React.useContext(TagsContext);
 
     const handleSubmit = (e) => {

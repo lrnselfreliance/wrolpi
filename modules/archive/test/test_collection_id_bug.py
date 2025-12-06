@@ -84,7 +84,8 @@ async def test_model_archive_sets_collection_id(async_client, test_session, test
 
 
 @pytest.mark.asyncio
-async def test_model_archive_extracts_url_from_singlefile(async_client, test_session, test_directory, make_files_structure):
+async def test_model_archive_extracts_url_from_singlefile(async_client, test_session, test_directory,
+                                                          make_files_structure):
     """
     Test that model_archive() can extract URL from singlefile when file_group.url is None.
 

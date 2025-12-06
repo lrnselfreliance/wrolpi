@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Grid, StatisticLabel, StatisticValue, TableCell, TableRow,} from "semantic-ui-react";
+import {Grid, StatisticLabel, StatisticValue,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {
@@ -10,7 +10,6 @@ import {
     humanNumber,
     InfoPopup,
     SearchInput,
-    secondsToFrequency,
     secondsToFullDuration,
     SimpleAccordion,
     useTitle,
@@ -20,17 +19,7 @@ import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";
-import {
-    Button,
-    Form,
-    Header,
-    Loader,
-    Modal,
-    ModalContent,
-    Segment,
-    Statistic
-} from "./Theme";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Button, Form, Header, Loader, Modal, ModalContent, Segment, Statistic} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {InputForm, ToggleForm} from "../hooks/useForm";
@@ -43,7 +32,14 @@ const CHANNEL_COLUMNS = [
     {key: 'name', label: 'Name', sortable: true, width: 7},
     {key: 'tag_name', label: 'Tag', sortable: true, width: 2},
     {key: 'video_count', label: 'Videos', sortable: true, align: 'right', width: 2},
-    {key: 'min_download_frequency', label: 'Download Frequency', sortable: true, format: 'frequency', width: 2, hideOnMobile: true},
+    {
+        key: 'min_download_frequency',
+        label: 'Download Frequency',
+        sortable: true,
+        format: 'frequency',
+        width: 2,
+        hideOnMobile: true
+    },
     {key: 'total_size', label: 'Size', sortable: true, align: 'right', format: 'bytes', width: 2, hideOnMobile: true},
     {key: 'actions', label: 'Manage', sortable: false, type: 'actions', width: 1}
 ];

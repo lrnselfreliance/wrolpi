@@ -1,8 +1,7 @@
 import React from 'react';
-import {render, screen, createTestForm} from '../test-utils';
+import {createMockDomain, createTestForm, render, screen} from '../test-utils';
 import {CollectionEditForm} from './collections/CollectionEditForm';
 import {DomainsPage} from './Archive';
-import {createMockDomain} from '../test-utils';
 
 // Mock the TagsContext
 jest.mock('../Tags', () => ({
@@ -66,14 +65,14 @@ jest.mock('./collections/CollectionTable', () => ({
         <div data-testid="collection-table">
             <table>
                 <tbody>
-                    {collections?.map((domain) => (
-                        <tr key={domain.id} data-testid={`domain-row-${domain.id}`}>
-                            <td data-testid={`domain-name-${domain.id}`}>{domain.domain}</td>
-                            <td data-testid={`domain-tag-${domain.id}`}>
-                                {domain.tag_name || 'No tag'}
-                            </td>
-                        </tr>
-                    ))}
+                {collections?.map((domain) => (
+                    <tr key={domain.id} data-testid={`domain-row-${domain.id}`}>
+                        <td data-testid={`domain-name-${domain.id}`}>{domain.domain}</td>
+                        <td data-testid={`domain-tag-${domain.id}`}>
+                            {domain.tag_name || 'No tag'}
+                        </td>
+                    </tr>
+                ))}
                 </tbody>
             </table>
         </div>
@@ -163,7 +162,8 @@ describe('Domain Tagging Logic', () => {
             useTitle.mockReset();
 
             // Re-setup default mocks
-            useTitle.mockImplementation(() => {});
+            useTitle.mockImplementation(() => {
+            });
             mockUseOneQuery.mockReturnValue(['', jest.fn()]);
         });
 
@@ -187,7 +187,7 @@ describe('Domain Tagging Logic', () => {
 
             mockUseDomains.mockReturnValue([mockDomains, 2]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Tagged domain should display its tag
             expect(screen.getByTestId('domain-tag-1')).toHaveTextContent('News');
@@ -223,7 +223,7 @@ describe('Domain Tagging Logic', () => {
 
             mockUseDomains.mockReturnValue([mockDomains, 3]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // All domains should display their respective tags
             expect(screen.getByTestId('domain-tag-1')).toHaveTextContent('News');

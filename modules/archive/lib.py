@@ -26,9 +26,9 @@ from wrolpi.common import get_media_directory, get_relative_to_media_directory, 
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
+from wrolpi.events import Events
 from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
-from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import PYTEST, DOCKERIZED

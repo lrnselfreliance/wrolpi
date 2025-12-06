@@ -12,12 +12,10 @@ from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file, \
     unique_by_predicate
 from wrolpi.db import get_db_curs, get_db_session, optional_session
-from wrolpi.downloader import Download, download_manager, save_downloads_config
-from wrolpi.errors import InvalidDownload
+from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.events import Events
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, move
 from wrolpi.files.models import FileGroup
-from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile, save_tags_config
 from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 

@@ -10,7 +10,7 @@ from typing import List, Optional, Dict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, get_media_directory, get_relative_to_media_directory
+from wrolpi.common import logger, get_relative_to_media_directory
 from wrolpi.db import get_db_session, optional_session
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events

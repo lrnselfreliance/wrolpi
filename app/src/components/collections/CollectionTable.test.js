@@ -1,7 +1,6 @@
 import React from 'react';
-import {render, screen, renderInDarkMode, renderInLightMode, hasInvertedStyling} from '../../test-utils';
+import {createMockDomains, render, screen} from '../../test-utils';
 import {CollectionTable} from './CollectionTable';
-import {createMockDomains} from '../../test-utils';
 
 // Mock the TagsContext
 jest.mock('../../Tags', () => ({
@@ -32,14 +31,14 @@ jest.mock('../SortableTable', () => ({
     SortableTable: ({data, rowFunc, tableHeaders}) => (
         <table data-testid="sortable-table">
             <thead>
-                <tr>
-                    {tableHeaders.map(h => (
-                        <th key={h.key} data-width={h.width}>{h.text}</th>
-                    ))}
-                </tr>
+            <tr>
+                {tableHeaders.map(h => (
+                    <th key={h.key} data-width={h.width}>{h.text}</th>
+                ))}
+            </tr>
             </thead>
             <tbody>
-                {data.map(item => rowFunc(item))}
+            {data.map(item => rowFunc(item))}
             </tbody>
         </table>
     ),

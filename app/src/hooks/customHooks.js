@@ -9,7 +9,6 @@ import {
     filesSearch,
     getArchive,
     getChannel,
-    getChannels,
     getConfigs,
     getDomain,
     getDownloads,

@@ -9,7 +9,7 @@ from modules.zim.errors import UnknownZim, UnknownZimEntry
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo, get_wrolpi_config
-from wrolpi.downloader import Download, import_downloads_config, save_downloads_config, get_download_manager_config
+from wrolpi.downloader import Download, import_downloads_config, get_download_manager_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci

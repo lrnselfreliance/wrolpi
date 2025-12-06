@@ -45,7 +45,13 @@ import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
-import {deleteVideos, fetchBrowserProfiles, fetchVideoDownloaderConfig, postVideoFileFormat, updateVideoDownloaderConfig} from "../api";
+import {
+    deleteVideos,
+    fetchBrowserProfiles,
+    fetchVideoDownloaderConfig,
+    postVideoFileFormat,
+    updateVideoDownloaderConfig
+} from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";

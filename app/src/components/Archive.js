@@ -34,25 +34,27 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {deleteArchives, deleteDomain, generateArchiveScreenshot, getCollectionTagInfo, postDownload, refreshDomain, tagDomain, tagFileGroup, untagFileGroup} from "../api";
+import {
+    deleteArchives,
+    deleteDomain,
+    generateArchiveScreenshot,
+    getCollectionTagInfo,
+    postDownload,
+    refreshDomain,
+    tagDomain,
+    tagFileGroup,
+    untagFileGroup
+} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {
-    useArchive,
-    useDomain,
-    useDomains,
-    useOneQuery,
-    useSearchArchives,
-    useSearchOrder
-} from "../hooks/customHooks";
+import {useArchive, useDomain, useDomains, useOneQuery, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Popup, Segment, Tab, TabPane} from "./Theme";
-import {SortableTable} from "./SortableTable";
-import {taggedImageLabel, TagsSelector, TagsContext} from "../Tags";
+import {Button, Card, CardIcon, darkTheme, Header, Loader, Popup, Segment, Tab, TabPane} from "./Theme";
+import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
@@ -363,7 +365,14 @@ const DOMAIN_COLUMNS = [
     {key: 'domain', label: 'Domain', sortable: true, width: 7},
     {key: 'tag_name', label: 'Tag', sortable: true, width: 2},
     {key: 'archive_count', label: 'Archives', sortable: true, align: 'right', width: 2},
-    {key: 'min_download_frequency', label: 'Download Frequency', sortable: true, format: 'frequency', width: 2, hideOnMobile: true},
+    {
+        key: 'min_download_frequency',
+        label: 'Download Frequency',
+        sortable: true,
+        format: 'frequency',
+        width: 2,
+        hideOnMobile: true
+    },
     {key: 'size', label: 'Size', sortable: true, align: 'right', format: 'bytes', width: 2, hideOnMobile: true},
     {key: 'actions', label: 'Manage', sortable: false, type: 'actions', width: 1}
 ];

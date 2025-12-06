@@ -34,7 +34,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('videos/test');
@@ -46,7 +46,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
 
@@ -66,7 +66,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} required />);
+            render(<DestinationForm form={form} required/>);
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveAttribute('required');
@@ -80,7 +80,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} label="Custom Folder" />);
+            render(<DestinationForm form={form} label="Custom Folder"/>);
 
             expect(screen.getByText(/custom folder/i)).toBeInTheDocument();
         });
@@ -91,7 +91,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             expect(screen.getByText(/destination/i)).toBeInTheDocument();
         });
@@ -140,7 +140,7 @@ describe('DestinationForm', () => {
 
             const getCustomPropsSpy = jest.spyOn(form, 'getCustomProps');
 
-            render(<DestinationForm form={form} required />);
+            render(<DestinationForm form={form} required/>);
 
             expect(getCustomPropsSpy).toHaveBeenCalledWith({
                 name: 'destination',
@@ -155,7 +155,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
 
@@ -196,7 +196,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
 
@@ -220,7 +220,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('');
@@ -232,7 +232,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('');
@@ -244,7 +244,7 @@ describe('DestinationForm', () => {
                 {overrides: {ready: true, loading: false}}
             );
 
-            render(<DestinationForm form={form} />);
+            render(<DestinationForm form={form}/>);
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('');

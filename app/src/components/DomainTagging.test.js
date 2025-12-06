@@ -2,20 +2,10 @@ import React from 'react';
 import {render, screen, createTestForm} from '../test-utils';
 import {CollectionEditForm} from './collections/CollectionEditForm';
 import {DomainsPage} from './Archive';
-import {createMockDomain, createMockDomains} from '../test-utils';
+import {createMockDomain} from '../test-utils';
 
-// Mock the TagsSelector component and TagsContext
+// Mock the TagsContext
 jest.mock('../Tags', () => ({
-    TagsSelector: ({selectedTagNames, onChange, disabled}) => (
-        <div data-testid="tags-selector" data-disabled={disabled}>
-            <input
-                data-testid="tags-input"
-                value={selectedTagNames?.join(',') || ''}
-                onChange={(e) => onChange(e.target.value ? [e.target.value] : [])}
-                disabled={disabled}
-            />
-        </div>
-    ),
     TagsContext: {
         _currentValue: {
             SingleTag: ({name}) => <span data-testid="applied-tag">{name}</span>
@@ -90,99 +80,76 @@ jest.mock('./collections/CollectionTable', () => ({
     ),
 }));
 
-// Test field configurations
-const DOMAIN_FIELDS = [
-    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
-    {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
-    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
-];
-
-const DOMAIN_MESSAGES = {
-    no_directory: 'Set a directory to enable tagging',
-    tag_will_move: 'Tagging will move files to a new directory'
-};
-
 describe('Domain Tagging Logic', () => {
-    describe('Tag Field Dependency on Directory', () => {
-        it('prevents tagging domain without directory', () => {
-            const domainWithoutDirectory = createMockDomain({
-                directory: '',
-                tag_name: null,
-                can_be_tagged: false
+    describe('CollectionEditForm with children', () => {
+        it('renders children and appliedTagName', () => {
+            const mockDomain = createMockDomain({
+                directory: 'archive/example.com',
+                tag_name: 'News',
             });
 
-            const form = createTestForm(domainWithoutDirectory);
+            const form = createTestForm(mockDomain);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                    title="Edit Domain: example.com"
+                    appliedTagName="News"
+                >
+                    <div data-testid="child-content">Child content</div>
+                </CollectionEditForm>
             );
 
-            // Should show dependency warning
-            expect(screen.getByText(/set a directory to enable tagging/i)).toBeInTheDocument();
+            // Should render title
+            expect(screen.getByRole('heading', {level: 1})).toHaveTextContent('Edit Domain: example.com');
 
-            // Tag selector should be disabled
-            const tagSelector = screen.getByTestId('tags-selector');
-            expect(tagSelector).toHaveAttribute('data-disabled', 'true');
+            // Should render children
+            expect(screen.getByTestId('child-content')).toBeInTheDocument();
 
-            const tagInput = screen.getByTestId('tags-input');
-            expect(tagInput).toBeDisabled();
+            // Should render applied tag
+            expect(screen.getByTestId('applied-tag')).toHaveTextContent('News');
+
+            // Should render Save button
+            expect(screen.getByRole('button', {name: /save/i})).toBeInTheDocument();
         });
 
-        it('enables tagging when directory is set', () => {
-            const domainWithDirectory = createMockDomain({
+        it('renders action buttons', () => {
+            const mockDomain = createMockDomain({
                 directory: 'archive/example.com',
-                tag_name: null,
-                can_be_tagged: true
             });
 
-            const form = createTestForm(domainWithDirectory);
+            const form = createTestForm(mockDomain);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                    title="Edit Domain"
+                    actionButtons={<button data-testid="action-button">Action</button>}
+                >
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Dependency warning should not be shown
-            expect(screen.queryByText(/set a directory to enable tagging/i)).not.toBeInTheDocument();
-
-            // Tag selector should be enabled
-            const tagSelector = screen.getByTestId('tags-selector');
-            expect(tagSelector).toHaveAttribute('data-disabled', 'false');
-
-            const tagInput = screen.getByTestId('tags-input');
-            expect(tagInput).not.toBeDisabled();
+            expect(screen.getByTestId('action-button')).toBeInTheDocument();
         });
 
-        it('shows warning when directory is set (enabling tagging)', () => {
-            const domainWithDirectory = createMockDomain({
+        it('does not render appliedTagName when not provided', () => {
+            const mockDomain = createMockDomain({
                 directory: 'archive/example.com',
-                tag_name: null,
-                can_be_tagged: true
             });
 
-            const form = createTestForm(domainWithDirectory);
+            const form = createTestForm(mockDomain);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                    title="Edit Domain"
+                >
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Tag selector should be available (not disabled)
-            const tagSelector = screen.getByTestId('tags-selector');
-            expect(tagSelector).toHaveAttribute('data-disabled', 'false');
-
-            // Dependency message should not appear
-            expect(screen.queryByText(/set a directory to enable tagging/i)).not.toBeInTheDocument();
+            expect(screen.queryByTestId('applied-tag')).not.toBeInTheDocument();
         });
     });
 
@@ -262,50 +229,6 @@ describe('Domain Tagging Logic', () => {
             expect(screen.getByTestId('domain-tag-1')).toHaveTextContent('News');
             expect(screen.getByTestId('domain-tag-2')).toHaveTextContent('Tech');
             expect(screen.getByTestId('domain-tag-3')).toHaveTextContent('Science');
-        });
-    });
-
-    describe('Tag Warning Messages', () => {
-        it('shows "tagging will move files" warning when tag is set', () => {
-            const domainWithTag = createMockDomain({
-                directory: 'archive/example.com',
-                tag_name: 'News',
-                can_be_tagged: true
-            });
-
-            const form = createTestForm(domainWithTag);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should show move warning when tag is present
-            expect(screen.getByText(/tagging will move files/i)).toBeInTheDocument();
-        });
-
-        it('does not show move warning when no tag is set', () => {
-            const domainWithoutTag = createMockDomain({
-                directory: 'archive/example.com',
-                tag_name: null,
-                can_be_tagged: true
-            });
-
-            const form = createTestForm(domainWithoutTag);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should not show move warning when tag is absent
-            expect(screen.queryByText(/tagging will move files/i)).not.toBeInTheDocument();
         });
     });
 

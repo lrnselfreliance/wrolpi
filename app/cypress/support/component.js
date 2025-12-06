@@ -36,6 +36,7 @@ Cypress.Commands.add('mountWithRouter', (component, options) => {
             <QueryProvider>
                 <Routes>
                     <Route path='/videos/channels/new' element={component}/>
+                    <Route path='/videos/channel/:channelId/edit' element={component}/>
                     <Route path='/videos/channels/:channelId' element={component}/>
                     <Route path='*' element={component}/>
                 </Routes>

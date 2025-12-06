@@ -5,11 +5,13 @@ import {
     CardHeader,
     CardMeta,
     Container,
+    Form,
     GridColumn,
     GridRow,
     Image,
     Input,
     TableCell,
+    TextArea,
 } from "semantic-ui-react";
 import {
     APIButton,
@@ -56,6 +58,7 @@ import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
 import {CollectionEditForm} from "./collections/CollectionEditForm";
 import {RecurringDownloadsTable} from "./admin/Downloads";
+import {DestinationForm} from "./Download";
 
 function archiveFileLink(path, directory = false) {
     if (path) {
@@ -429,18 +432,6 @@ export function DomainsPage() {
     </>;
 }
 
-// Domain form field configuration
-const DOMAIN_FIELDS = [
-    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
-    // tag_name field is handled via modal button, not inline in form
-    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
-];
-
-const DOMAIN_MESSAGES = {
-    no_directory: 'Set a directory to enable tagging',
-    tag_will_move: 'Tagging will move files to a new directory'
-};
-
 export function DomainEditPage() {
     const {domainId} = useParams();
     const navigate = useNavigate();
@@ -561,17 +552,41 @@ export function DomainEditPage() {
         {tagButton}
     </>;
 
+    const [descriptionProps] = form.getCustomProps({name: 'description', path: 'description'});
+
     return <>
         <BackButton/>
         <CollectionEditForm
             form={form}
-            fields={DOMAIN_FIELDS}
-            messages={DOMAIN_MESSAGES}
             title={`Edit Domain: ${domain?.domain || '...'}`}
             wrolModeContent='Domain editing is disabled while in WROL Mode.'
             actionButtons={actionButtons}
             appliedTagName={domain?.tag_name}
-        />
+        >
+            <GridRow>
+                <GridColumn>
+                    <DestinationForm
+                        form={form}
+                        label='Directory'
+                        name='directory'
+                        path='directory'
+                    />
+                </GridColumn>
+            </GridRow>
+            <GridRow>
+                <GridColumn>
+                    <Form.Field>
+                        <label>Description</label>
+                        <TextArea
+                            placeholder='Optional description'
+                            {...descriptionProps}
+                            onChange={(e, {value}) => descriptionProps.onChange(value)}
+                            rows={3}
+                        />
+                    </Form.Field>
+                </GridColumn>
+            </GridRow>
+        </CollectionEditForm>
 
         {/* Tag Modal */}
         <CollectionTagModal

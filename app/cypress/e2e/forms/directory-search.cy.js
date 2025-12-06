@@ -67,26 +67,10 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.intercept('GET', '/api/collections?kind=domain', {
-                statusCode: 200,
-                body: {
-                    collections: [],
-                    totals: {collections: 0},
-                    metadata: {
-                        kind: 'domain',
-                        columns: [],
-                        fields: [
-                            {key: 'directory', label: 'Directory', type: 'text', required: false}
-                        ],
-                        routes: {},
-                        messages: {}
-                    }
-                }
-            }).as('getMetadata');
-
             cy.visit('/archive/domain/1/edit');
             cy.wait('@getDomain');
-            cy.wait('@getMetadata');
+            // Wait for initial directory search API call (component makes call on mount)
+            cy.wait('@searchDirectories');
         });
 
         it('types in search box and sees results', () => {
@@ -182,26 +166,10 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.intercept('GET', '/api/collections?kind=domain', {
-                statusCode: 200,
-                body: {
-                    collections: [],
-                    totals: {collections: 0},
-                    metadata: {
-                        kind: 'domain',
-                        columns: [],
-                        fields: [
-                            {key: 'directory', label: 'Directory', type: 'text', required: true}
-                        ],
-                        routes: {},
-                        messages: {}
-                    }
-                }
-            }).as('getMetadata');
-
             cy.visit('/archive/domain/2/edit');
             cy.wait('@getDomain');
-            cy.wait('@getMetadata');
+            // Wait for initial directory search API call (component makes call on mount)
+            cy.wait('@searchDirectories');
         });
 
         it('starts with existing directory value', () => {
@@ -262,26 +230,10 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.intercept('GET', '/api/collections?kind=domain', {
-                statusCode: 200,
-                body: {
-                    collections: [],
-                    totals: {collections: 0},
-                    metadata: {
-                        kind: 'domain',
-                        columns: [],
-                        fields: [
-                            {key: 'directory', label: 'Directory', type: 'text', required: false}
-                        ],
-                        routes: {},
-                        messages: {}
-                    }
-                }
-            }).as('getMetadata');
-
             cy.visit('/archive/domain/3/edit');
             cy.wait('@getDomain');
-            cy.wait('@getMetadata');
+            // Wait for initial directory search API call (component makes call on mount)
+            cy.wait('@searchDirectories');
 
             // Type path that returns empty results
             cy.contains('label', 'Directory')

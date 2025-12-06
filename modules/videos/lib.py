@@ -252,29 +252,97 @@ class ChannelsConfig(ConfigFile):
         self.update({'channels': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
+        """Import channels from config file into database using batch operations."""
         super().import_config()
         try:
             channels = self.channels
+            if not channels:
+                channel_import_logger.info('No channels to import')
+                self.successful_import = True
+                return
+
             channel_directories = [i['directory'] for i in channels]
             if len(channel_directories) != len(set(channel_directories)):
                 raise RuntimeError('Refusing to import channels config because it contains duplicate directories!')
+
+            # Validate all channels have required options
+            for data in channels:
+                directory = get_media_directory() / data['directory']
+                for option in (i for i in REQUIRED_OPTIONS if i not in data):
+                    raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
+
             updated_channel_ids = set()
 
             with get_db_session(commit=True) as session:
+                # Prepare data with kind='channel' for all entries
+                channel_data_list = []
                 for data in channels:
-                    # A Channel's directory is saved (in config) relative to the media directory.
-                    directory = get_media_directory() / data['directory']
-                    for option in (i for i in REQUIRED_OPTIONS if i not in data):
-                        raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
+                    data = data.copy()
+                    data['kind'] = 'channel'
+                    channel_data_list.append(data)
 
-                    # Create or update Channel from config (handles Collection creation)
-                    channel = Channel.from_config(data, session=session)
+                # Batch create/update Collections
+                from wrolpi.collections import Collection
+                collections = Collection.batch_from_config(channel_data_list, session=session)
+
+                # Pre-fetch existing Channels by collection_id in ONE query
+                collection_ids = [c.id for c in collections]
+                existing_channels_list = session.query(Channel).filter(
+                    Channel.collection_id.in_(collection_ids)
+                ).all()
+                existing_channels = {ch.collection_id: ch for ch in existing_channels_list}
+
+                # Pre-fetch all tags for channel update in ONE query
+                tag_names = {d.get('tag_name') for d in channels if d.get('tag_name')}
+                tags_by_name = {}
+                if tag_names:
+                    from wrolpi.tags import Tag
+                    tags = session.query(Tag).filter(Tag.name.in_(tag_names)).all()
+                    tags_by_name = {t.name: t for t in tags}
+
+                # Pre-fetch existing downloads for update in ONE query
+                download_urls = set()
+                for data in channels:
+                    for dl in data.get('downloads', []):
+                        if isinstance(dl, dict):
+                            download_urls.add(dl['url'])
+                existing_downloads = {}
+                if download_urls:
+                    from wrolpi.downloader import Download
+                    downloads = session.query(Download).filter(Download.url.in_(download_urls)).all()
+                    existing_downloads = {d.url: d for d in downloads}
+
+                # Process channels
+                new_channels = []
+                for collection, data in zip(collections, channel_data_list):
+                    channel = existing_channels.get(collection.id)
+
+                    if not channel:
+                        # Create new Channel
+                        channel = Channel(
+                            collection_id=collection.id,
+                            url=data.get('url'),
+                            source_id=data.get('source_id'),
+                        )
+                        new_channels.append(channel)
+                        existing_channels[collection.id] = channel
+
+                # Batch add new channels
+                if new_channels:
+                    session.add_all(new_channels)
+                    session.flush()
+
+                # Now update all channels (both new and existing)
+                for collection, data in zip(collections, channel_data_list):
+                    channel = existing_channels[collection.id]
+                    # Call batch_update with pre-fetched data
+                    channel.batch_update(data, tags_by_name, existing_downloads)
                     updated_channel_ids.add(channel.id)
 
+                    # Background task for missing source_id
                     if not channel.source_id and channel.url and flags.have_internet.is_set():
-                        # If we can download from a channel, we must have its source_id.
                         if download_manager.can_download and channel.download_missing_data:
-                            logger.info(f'Fetching channel source id for {channel}')
+                            channel_import_logger.info(f'Fetching channel source id for {channel}')
                             background_task(fetch_channel_source_id(channel.id))
 
                     channel_import_logger.debug(f'Updated {repr(channel.name)}'
@@ -290,7 +358,11 @@ class ChannelsConfig(ConfigFile):
                         logger.warning(f'Deleting {channel} because it is not in the config.')
                         channel.delete_with_videos()
 
-            # Create any missing Downloads.  Associated Downloads with any necessary Channels.
+            # Assign Videos to Channels using bulk SQL
+            from modules.videos import claim_videos_for_channels
+            claim_videos_for_channels(list(updated_channel_ids))
+
+            # Create any missing Downloads. Associate Downloads with any necessary Channels.
             with get_db_session() as session:
                 link_channel_and_downloads(session)
 

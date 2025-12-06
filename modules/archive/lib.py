@@ -87,7 +87,7 @@ class DomainsConfig(ConfigFile):
         return self._config.get('collections', [])
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
-        """Import domain collections from config file into database."""
+        """Import domain collections from config file into database using batch operations."""
         ConfigFile.import_config(self, file, send_events)
 
         file_str = str(self.get_relative_file())
@@ -102,15 +102,21 @@ class DomainsConfig(ConfigFile):
 
         try:
             with get_db_session(commit=True) as session:
-                # Track imported domain names
-                imported_domains = set()
-
-                # Import each domain collection, forcing kind='domain'
+                # Validate and prepare data first
+                valid_data_list = []
                 for idx, collection_data in enumerate(collections_data):
                     try:
                         name = collection_data.get('name')
                         if not name:
                             logger.error(f'Domain collection at index {idx} has no name, skipping')
+                            continue
+
+                        # Validate domain name format before batching
+                        if not Collection.is_valid_domain_name(name):
+                            logger.error(
+                                f"Domain collection at index {idx} has invalid name '{name}' "
+                                f"(must contain at least one '.' and not start/end with '.'), skipping"
+                            )
                             continue
 
                         # Ensure kind is 'domain'
@@ -127,13 +133,16 @@ class DomainsConfig(ConfigFile):
                             )
                             collection_data.pop('tag_name', None)
 
-                        # Use Collection.from_config to create/update
-                        collection = Collection.from_config(collection_data, session)
-                        imported_domains.add(collection.name)
-
+                        valid_data_list.append(collection_data)
                     except Exception as e:
-                        logger.error(f'Failed to import domain collection at index {idx}', exc_info=e)
+                        logger.error(f'Failed to validate domain collection at index {idx}', exc_info=e)
                         continue
+
+                # Batch create/update collections
+                imported_domains = set()
+                if valid_data_list:
+                    collections = Collection.batch_from_config(valid_data_list, session=session)
+                    imported_domains = {c.name for c in collections}
 
                 # Delete domain collections that are no longer in config
                 all_domain_collections = session.query(Collection).filter_by(kind='domain').all()

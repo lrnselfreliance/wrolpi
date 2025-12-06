@@ -700,6 +700,69 @@ class Channel(ModelHelper, Base):
             download.collection_id = self.collection_id
             session.add(download)
 
+    def batch_update(self, data: dict, tags_by_name: dict = None, existing_downloads: dict = None):
+        """
+        Update the attributes of this Channel using pre-fetched lookup dictionaries.
+        More efficient than update() when processing many channels because it avoids
+        individual database queries for tags and downloads.
+
+        Args:
+            data: Config data dict with channel fields
+            tags_by_name: Pre-fetched {tag_name: Tag} lookup dictionary
+            existing_downloads: Pre-fetched {url: Download} lookup dictionary
+        """
+        data = data.copy()
+        tags_by_name = tags_by_name or {}
+        existing_downloads = existing_downloads or {}
+
+        # URL should not be empty string.
+        url = data.pop('url', None)
+        self.url = url or None
+
+        session: Session = Session.object_session(self)
+        downloads = data.pop('downloads', [])
+
+        # Use pre-fetched tag lookup instead of querying
+        if tag_name := data.pop('tag_name', None):
+            tag = tags_by_name.get(tag_name)
+            if tag:
+                self.tag = tag
+            else:
+                logger.warning(f'Tag {repr(tag_name)} not found for channel')
+
+        for key, value in data.items():
+            setattr(self, key, value)
+
+        # We need an absolute directory.
+        if isinstance(self.directory, pathlib.Path) and not self.directory.is_absolute():
+            self.directory = get_media_directory() / self.directory
+        elif isinstance(self.directory, str) and not pathlib.Path(self.directory).is_absolute():
+            self.directory = get_media_directory() / self.directory
+
+        for download in downloads:
+            url = None
+            frequency = None
+            if isinstance(download, dict):
+                url = download['url']
+                # Use pre-fetched download lookup instead of querying
+                if existing_download := existing_downloads.get(url):
+                    frequency = existing_download.frequency
+                else:
+                    frequency = download.get('frequency')
+            elif isinstance(download, Download):
+                url = download.url
+                frequency = download.frequency
+
+            if not url:
+                raise RuntimeError(f'Unknown download type: {download}')
+            if not frequency:
+                logger.error(f'Refusing to create Download for Channel without frequency: {url}')
+                continue
+
+            download_obj = self.get_or_create_download(url, frequency, session=session, reset_attempts=True)
+            download_obj.collection_id = self.collection_id
+            session.add(download_obj)
+
     def config_view(self) -> dict:
         """
         Retrieve the data about this Channel that should be stored in a config file.

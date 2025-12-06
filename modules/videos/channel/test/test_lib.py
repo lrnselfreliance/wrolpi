@@ -146,3 +146,56 @@ async def test_tag_channel_existing(async_client, test_session, test_directory, 
     with test_channels_config.open() as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
     assert config['channels'][0]['tag_name'] == tag.name
+
+
+@pytest.mark.asyncio
+async def test_tag_channel_without_directory_saves_config(
+        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches
+):
+    """Tagging channel without providing directory should still save config."""
+    channel_directory = test_directory / 'videos' / 'Channel Name'
+    channel = channel_factory(name='Channel Name', directory=channel_directory)
+    test_session.commit()
+    await await_switches()
+
+    tag = await tag_factory(name='Tech')
+
+    # Tag without providing directory (directory=None)
+    await lib.tag_channel(tag.name, None, channel.id, test_session)
+    test_session.commit()
+    await await_switches()
+
+    # Channel's tag should be saved to the config even without directory
+    with test_channels_config.open() as fh:
+        config = yaml.load(fh, Loader=yaml.Loader)
+    channel_entry = next((c for c in config.get('channels', []) if c['name'] == 'Channel Name'), None)
+    assert channel_entry is not None, "Channel not found in config"
+    assert channel_entry.get('tag_name') == 'Tech', "Tag name not saved in config"
+
+
+@pytest.mark.asyncio
+async def test_untag_channel_without_directory_saves_config(
+        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches
+):
+    """Untagging channel without providing directory should still save config."""
+    channel_directory = test_directory / 'videos' / 'Channel Name'
+    channel = channel_factory(name='Channel Name', directory=channel_directory)
+    tag = await tag_factory(name='Tech')
+    channel.set_tag(tag.name)
+    test_session.commit()
+    await await_switches()
+
+    # Verify tag is set
+    assert channel.tag is not None
+
+    # Untag without providing directory (tag_name=None, directory=None)
+    await lib.tag_channel(None, None, channel.id, test_session)
+    test_session.commit()
+    await await_switches()
+
+    # Channel's tag should be removed in the config
+    with test_channels_config.open() as fh:
+        config = yaml.load(fh, Loader=yaml.Loader)
+    channel_entry = next((c for c in config.get('channels', []) if c['name'] == 'Channel Name'), None)
+    assert channel_entry is not None, "Channel not found in config"
+    assert channel_entry.get('tag_name') is None, "Tag should be removed from config"

@@ -427,3 +427,73 @@ class TestCollectionTagging:
         # Verify the tag has been removed
         assert collection.tag_id is None
         assert collection.tag_name is None
+
+    @pytest.mark.asyncio
+    async def test_tag_collection_without_directory(
+            self, async_client, test_session, tag_factory
+    ):
+        """Test that tagging a collection without a directory works."""
+        # Create a tag
+        tag = await tag_factory('TestTag')
+        test_session.flush()
+
+        # Create a domain collection WITHOUT a directory
+        collection = Collection(
+            name='example.com',
+            kind='domain',
+            directory=None  # No directory!
+        )
+        test_session.add(collection)
+        test_session.commit()
+
+        # Verify collection has no directory
+        assert collection.directory is None
+
+        # Send POST request to tag the collection
+        request, response = await async_client.post(
+            f'/api/collections/{collection.id}/tag',
+            json={'tag_name': 'TestTag'}
+        )
+
+        # Check response - should succeed
+        assert response.status_code == HTTPStatus.OK
+
+        # Refresh the collection from database
+        test_session.refresh(collection)
+
+        # Verify the tag was set
+        assert collection.tag_id == tag.id
+        assert collection.tag_name == 'TestTag'
+        # Directory should still be None - not auto-generated
+        assert collection.directory is None
+
+    @pytest.mark.asyncio
+    async def test_get_tag_info_without_directory(
+            self, async_client, test_session
+    ):
+        """Test that get_tag_info returns None for suggested_directory when collection has no directory."""
+        # Create a domain collection WITHOUT a directory
+        collection = Collection(
+            name='example.com',
+            kind='domain',
+            directory=None  # No directory!
+        )
+        test_session.add(collection)
+        test_session.commit()
+
+        # Request tag info
+        request, response = await async_client.post(
+            f'/api/collections/{collection.id}/tag_info',
+            json={'tag_name': 'TestTag'}
+        )
+
+        # Check response
+        assert response.status_code == HTTPStatus.OK
+        data = response.json
+
+        # For collections without a directory, suggested_directory should be None
+        # (Currently it always computes a directory path)
+        assert data['suggested_directory'] is None
+        # No conflict checking needed without a directory
+        assert data['conflict'] is False
+        assert data['conflict_message'] is None

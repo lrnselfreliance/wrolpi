@@ -113,7 +113,8 @@ async def test_search_ebooks(test_session, async_client, example_epub):
 
 
 @pytest.mark.asyncio
-async def test_discover_calibre_cover(test_session, test_directory, example_epub, example_mobi, image_file):
+async def test_discover_calibre_cover(test_session, async_client, test_directory, example_epub, example_mobi,
+                                      image_file):
     """Calibre puts a cover near an ebook file, test if it can be found."""
     # Create a Calibre metadata file.
     metadata = test_directory / 'metadata.opf'

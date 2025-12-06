@@ -123,15 +123,8 @@ class DomainsConfig(ConfigFile):
                         collection_data = collection_data.copy()
                         collection_data['kind'] = 'domain'
 
-                        # Warn if tag_name provided without directory
-                        tag_name = collection_data.get('tag_name')
-                        directory = collection_data.get('directory')
-                        if tag_name and not directory:
-                            logger.warning(
-                                f"Domain collection '{name}' has tag_name '{tag_name}' "
-                                f"but no directory - tags require a directory. Tag will be ignored."
-                            )
-                            collection_data.pop('tag_name', None)
+                        # Note: Collections can now be tagged even without a directory
+                        # Tags enable UI search/filtering for directory-less collections
 
                         valid_data_list.append(collection_data)
                     except Exception as e:

@@ -349,8 +349,9 @@ class Collection(ModelHelper, Base):
             ).all()
             existing_by_directory = {str(c.directory): c for c in existing}
 
-        # Step 3: Pre-fetch existing collections by (name, kind) for directory-less collections
-        name_kind_pairs = [(d['name'], d.get('kind', 'channel')) for d in data_list if not d.get('directory')]
+        # Step 3: Pre-fetch existing collections by (name, kind) for ALL collections
+        # This handles cases where directory changed or directory-less collections
+        name_kind_pairs = [(d['name'], d.get('kind', 'channel')) for d in data_list]
         existing_by_name_kind = {}
         if name_kind_pairs:
             from sqlalchemy import and_, or_
@@ -400,10 +401,12 @@ class Collection(ModelHelper, Base):
                 directory_str = None
 
             # Find existing collection from pre-fetched data
+            # Priority: 1) by directory (if provided), 2) by (name, kind) as fallback
             collection = None
             if directory_str:
                 collection = existing_by_directory.get(directory_str)
-            else:
+            # Always check by (name, kind) as fallback - handles directory changes
+            if not collection:
                 collection = existing_by_name_kind.get((name, kind))
 
             if collection:
@@ -783,16 +786,9 @@ class Collection(ModelHelper, Base):
     def set_tag(self, tag_id_or_name: int | str | None) -> Optional[Tag]:
         """Assign or clear the Tag on this Collection. Mirrors Channel.set_tag semantics.
 
-        Raises:
-            ValueError: If attempting to tag a domain collection without a directory.
+        All collections can be tagged regardless of directory status. Tags enable
+        UI search/filtering even for directory-less collections.
         """
-        # Validate domain collections can only be tagged if they have a directory
-        if self.kind == 'domain' and self.directory is None and tag_id_or_name is not None:
-            raise ValueError(
-                f"Cannot tag domain collection '{self.name}' without a directory. "
-                "Set collection.directory first or use an unrestricted domain collection."
-            )
-
         session = Session.object_session(self)
         if tag_id_or_name is None:
             self.tag = None
@@ -802,20 +798,6 @@ class Collection(ModelHelper, Base):
             self.tag = Tag.find_by_name(tag_id_or_name, session)
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
-
-    @property
-    def can_be_tagged(self) -> bool:
-        """Check if this Collection can be tagged.
-
-        Domain collections require a directory to be tagged.
-        Other collection types can always be tagged.
-
-        Returns:
-            True if this collection can be tagged, False otherwise.
-        """
-        if self.kind == 'domain':
-            return self.directory is not None
-        return True
 
     def __json__(self) -> dict:
         """Return JSON-serializable dict for API responses.
@@ -838,7 +820,6 @@ class Collection(ModelHelper, Base):
             'directory': directory_str,
             'description': self.description,
             'tag_name': self.tag.name if self.tag else None,
-            'can_be_tagged': self.can_be_tagged,
             'item_count': self.item_count,
             'total_size': self.total_size,
             'downloads': self.downloads,

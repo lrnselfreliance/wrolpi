@@ -280,6 +280,7 @@ export function ChannelEditPage() {
             getTagInfo={handleGetTagInfo}
             onSave={handleTagSave}
             collectionName="Channel"
+            hasDirectory={!!channel.directory}
         />
 
         {/* Downloads Segment */}

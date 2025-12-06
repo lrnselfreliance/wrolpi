@@ -157,10 +157,8 @@ def optional_session(commit: Union[callable, bool] = False) -> callable:
             if commit:
                 session.commit()
         else:
-            with get_db_session() as session:
+            with get_db_session(commit=commit) as session:
                 result = func(*args, session=session, **kwargs)
-                if commit:
-                    session.commit()
         return result
 
     def wrapper(*w_args, **w_kwargs):

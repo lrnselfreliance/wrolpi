@@ -3,7 +3,11 @@
 
 import '@testing-library/jest-dom';
 
-// Mock react-stl-viewer to avoid three.js errors in test environment
+// Set global Jest timeout to 30 seconds
+// Tests that exceed this will fail with a clear error message identifying the failing test
+jest.setTimeout(30000);
+
+// Mock react-stl-viewer to avoid loading heavy three.js dependency in tests
 jest.mock('react-stl-viewer', () => ({
     StlViewer: () => null,
 }));

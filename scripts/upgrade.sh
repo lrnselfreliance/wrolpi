@@ -4,6 +4,9 @@
 set -e
 set -x
 
+# Ensure help service is always restarted, even on failure
+trap 'systemctl restart wrolpi-help.service || :' EXIT
+
 # Install any App dependencies.
 cd /opt/wrolpi/app || exit 1
 npm install || npm install || npm install || npm install # try install multiple times  :(

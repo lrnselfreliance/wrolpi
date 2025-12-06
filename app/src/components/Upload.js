@@ -126,10 +126,10 @@ export function Upload({disabled}) {
             <Grid.Row columns={1}>
                 <Grid.Column>
                     {progresses && Object.keys(progresses).length > 1 && <Progress progress
-                                  percent={overallProgress}
-                                  color='blue'
-                                  label='Overall Progress'
-                        />}
+                                                                                   percent={overallProgress}
+                                                                                   color='blue'
+                                                                                   label='Overall Progress'
+                    />}
                 </Grid.Column>
             </Grid.Row>
         </Grid>

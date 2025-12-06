@@ -1,7 +1,14 @@
 import React from 'react';
-import {render, renderInDarkMode, renderInLightMode, hasInvertedStyling, screen, createTestForm} from '../../test-utils';
+import {
+    createMockDomain,
+    createTestForm,
+    hasInvertedStyling,
+    render,
+    renderInDarkMode,
+    renderInLightMode,
+    screen
+} from '../../test-utils';
 import {CollectionEditForm} from './CollectionEditForm';
-import {createMockDomain} from '../../test-utils';
 
 // Mock the TagsContext
 jest.mock('../../Tags', () => ({

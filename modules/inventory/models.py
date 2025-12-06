@@ -59,5 +59,3 @@ class Inventory(Base, ModelHelper):
     @staticmethod
     def find_by_name(session: Session, name: str) -> 'Inventory':
         return session.query(Inventory).filter_by(name=name).one()
-
-

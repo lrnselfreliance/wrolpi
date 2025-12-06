@@ -593,7 +593,8 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives_deleted_singlefile(async_client, test_session, make_files_structure, singlefile_contents_factory):
+async def test_refresh_archives_deleted_singlefile(async_client, test_session, make_files_structure,
+                                                   singlefile_contents_factory):
     """Removing a Singlefile file from a FileGroup makes that group no longer an Archive."""
     singlefile, readability = make_files_structure({
         '2022-09-04-16-20-11_The Title.html': singlefile_contents_factory(),
@@ -923,7 +924,8 @@ def test_detect_domain_directory_no_archives(test_directory, test_session):
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_domain_collection_auto_detects_directory(async_client, test_directory, test_session, archive_factory):
+async def test_get_or_create_domain_collection_auto_detects_directory(async_client, test_directory, test_session,
+                                                                      archive_factory):
     """get_or_create_domain_collection should auto-detect directory for existing archives."""
     from modules.archive.lib import get_or_create_domain_collection
 
@@ -1075,4 +1077,4 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
     assert download1.collection_id == collection.id  # matched by directory (exact)
     assert download2.collection_id == collection.id  # matched by subdirectory
     assert download3.collection_id == collection.id  # matched by URL domain
-    assert download4.collection_id is None           # no frequency = no link
+    assert download4.collection_id is None  # no frequency = no link

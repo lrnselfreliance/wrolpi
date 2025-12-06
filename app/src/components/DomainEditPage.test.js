@@ -1,8 +1,7 @@
 import React from 'react';
-import {render, renderInDarkMode, screen, waitFor, createTestForm} from '../test-utils';
+import {createMockDomain, createTestForm, render, renderInDarkMode, screen, waitFor} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {DomainEditPage} from './Archive';
-import {createMockDomain} from '../test-utils';
 
 // Mock useParams to return domain ID
 jest.mock('react-router-dom', () => ({
@@ -45,9 +44,11 @@ jest.mock('./collections/CollectionTagModal', () => ({
         return (
             <div data-testid="collection-tag-modal">
                 <div data-testid="modal-header">{currentTagName ? 'Modify Tag' : 'Add Tag'}</div>
-                <input type="text" data-testid="directory-input" defaultValue={originalDirectory || ''} />
+                <input type="text" data-testid="directory-input" defaultValue={originalDirectory || ''}/>
                 <button data-testid="cancel-button" onClick={onClose}>Cancel</button>
-                <button data-testid="save-button" onClick={() => onSave && onSave(currentTagName, originalDirectory)}>Save</button>
+                <button data-testid="save-button"
+                        onClick={() => onSave && onSave(currentTagName, originalDirectory)}>Save
+                </button>
             </div>
         );
     },
@@ -79,7 +80,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Should show Semantic UI Loader with text
             expect(screen.getByText(/loading domain/i)).toBeInTheDocument();
@@ -103,7 +104,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Should NOT show loading message
             expect(screen.queryByText(/loading domain/i)).not.toBeInTheDocument();
@@ -128,7 +129,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Should show loading indicator in form (from mocked component)
             // Multiple indicators due to Fresnel rendering for mobile and tablet+
@@ -152,7 +153,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Should show loading screen when not ready
             expect(screen.getByText(/loading domain/i)).toBeInTheDocument();
@@ -177,7 +178,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Should show domain name (form is rendered)
             // Multiple occurrences due to Fresnel rendering for mobile and tablet+
@@ -205,7 +206,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // useTitle should be called with domain name
             expect(useTitle).toHaveBeenCalledWith('Edit Domain: example.com');
@@ -224,7 +225,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // useTitle should be called with placeholder
             expect(useTitle).toHaveBeenCalledWith('Edit Domain: ...');
@@ -248,7 +249,7 @@ describe('DomainEditPage', () => {
             });
 
             // Render in dark mode
-            renderInDarkMode(<DomainEditPage />);
+            renderInDarkMode(<DomainEditPage/>);
 
             // CollectionEditForm should be rendered
             expect(screen.getByTestId('collection-edit-form')).toBeInTheDocument();
@@ -273,7 +274,7 @@ describe('DomainEditPage', () => {
             });
 
             // Default render (light mode)
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // CollectionEditForm should be rendered
             expect(screen.getByTestId('collection-edit-form')).toBeInTheDocument();
@@ -312,7 +313,7 @@ describe('DomainEditPage', () => {
                 conflict_message: null,
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Click the Tag button to open modal
             const tagButton = screen.getByText('Tag');
@@ -352,7 +353,7 @@ describe('DomainEditPage', () => {
                 conflict_message: "A domain collection 'other.com' already uses this directory. Choose a different tag or directory.",
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Open the modal
             const tagButton = screen.getByText('Tag');
@@ -383,7 +384,7 @@ describe('DomainEditPage', () => {
                 fetchDomain: jest.fn(),
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Open modal
             const tagButton = screen.getByText('Tag');
@@ -421,7 +422,7 @@ describe('DomainEditPage', () => {
                 conflict_message: null,
             });
 
-            render(<DomainEditPage />);
+            render(<DomainEditPage/>);
 
             // Open modal
             const tagButton = screen.getByText('Tag');

@@ -131,7 +131,8 @@ export function mockFetchError(error = 'An error occurred', status = 400) {
  */
 export async function waitForLoadingToFinish() {
     const {waitFor} = await import('@testing-library/react');
-    await waitFor(() => {}, {timeout: 100});
+    await waitFor(() => {
+    }, {timeout: 100});
 }
 
 /**

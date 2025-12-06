@@ -1,7 +1,6 @@
 import React from 'react';
-import {render, screen, waitFor} from '../test-utils';
+import {createMockDomains, render, screen} from '../test-utils';
 import {DomainsPage} from './Archive';
-import {createMockDomains} from '../test-utils';
 
 // Mock the custom hooks
 jest.mock('../hooks/customHooks', () => ({
@@ -54,7 +53,8 @@ describe('DomainsPage', () => {
         jest.clearAllMocks();
 
         // Default mock implementations
-        useTitle.mockImplementation(() => {});
+        useTitle.mockImplementation(() => {
+        });
         useOneQuery.mockReturnValue(['', jest.fn()]);
     });
 
@@ -63,7 +63,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(3);
             useDomains.mockReturnValue([mockDomains, 3]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Page should render without crashing
             expect(screen.getByTestId('search-input')).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(2);
             useDomains.mockReturnValue([mockDomains, 2]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             expect(screen.getByTestId('collection-table')).toBeInTheDocument();
             // Should have 6 columns defined in DOMAIN_COLUMNS
@@ -85,7 +85,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(1);
             useDomains.mockReturnValue([mockDomains, 1]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             const searchInput = screen.getByTestId('search-input');
             expect(searchInput).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(5);
             useDomains.mockReturnValue([mockDomains, 5]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Should render all 5 domains
             expect(screen.getByTestId('collection-count')).toHaveTextContent('5');
@@ -116,7 +116,7 @@ describe('DomainsPage', () => {
             ];
             useDomains.mockReturnValue([mockDomains, 3]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             expect(screen.getByTestId('domain-name-1')).toHaveTextContent('example1.com');
             expect(screen.getByTestId('domain-name-2')).toHaveTextContent('example2.com');
@@ -127,7 +127,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(3);
             useDomains.mockReturnValue([mockDomains, 3]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Each domain should have an Edit button
             mockDomains.forEach((domain) => {
@@ -139,7 +139,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(1);
             useDomains.mockReturnValue([mockDomains, 1]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             const editButton = screen.getByTestId('edit-button-1');
             expect(editButton).toHaveClass('ui');
@@ -154,7 +154,7 @@ describe('DomainsPage', () => {
             // Empty array indicates no domains
             useDomains.mockReturnValue([[], 0]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Should show empty state message
             expect(screen.getByText(/no domains yet/i)).toBeInTheDocument();
@@ -168,7 +168,7 @@ describe('DomainsPage', () => {
             // undefined indicates error state
             useDomains.mockReturnValue([undefined, 0]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Should show error message
             expect(screen.getByTestId('error-message')).toBeInTheDocument();
@@ -182,7 +182,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(2);
             useDomains.mockReturnValue([mockDomains, 2]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Domains are auto-created, so there should be no "New" button
             expect(screen.queryByRole('button', {name: /new/i})).not.toBeInTheDocument();
@@ -195,7 +195,7 @@ describe('DomainsPage', () => {
         it('disables search when no domains', () => {
             useDomains.mockReturnValue([[], 0]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             const searchInput = screen.getByTestId('search-input');
             expect(searchInput).toBeDisabled();
@@ -205,7 +205,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(3);
             useDomains.mockReturnValue([mockDomains, 3]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             const searchInput = screen.getByTestId('search-input');
             expect(searchInput).not.toBeDisabled();
@@ -218,7 +218,7 @@ describe('DomainsPage', () => {
             const mockSetSearchStr = jest.fn();
             useOneQuery.mockReturnValue(['example', mockSetSearchStr]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             // Search string should be passed to table
             expect(screen.getByTestId('search-filter')).toHaveTextContent('example');
@@ -230,7 +230,7 @@ describe('DomainsPage', () => {
             const mockDomains = createMockDomains(1);
             useDomains.mockReturnValue([mockDomains, 1]);
 
-            render(<DomainsPage />);
+            render(<DomainsPage/>);
 
             expect(useTitle).toHaveBeenCalledWith('Archive Domains');
         });

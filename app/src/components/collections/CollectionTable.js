@@ -3,8 +3,8 @@ import {Link} from 'react-router-dom';
 import {Message, Placeholder, PlaceholderHeader, PlaceholderLine, Table, TableCell, TableRow} from 'semantic-ui-react';
 import _ from 'lodash';
 import {SortableTable} from '../SortableTable';
-import {humanFileSize, formatFrequency} from '../Common';
-import {ThemeContext, Media} from '../../contexts/contexts';
+import {formatFrequency, humanFileSize} from '../Common';
+import {Media, ThemeContext} from '../../contexts/contexts';
 import {TagsContext} from '../../Tags';
 
 /**
@@ -78,7 +78,7 @@ function renderRow(collection, columns, routes, inverted, SingleTag, onRowClick)
 
         // Special handling for tag_name column - render SingleTag component
         if (col.key === 'tag_name' && value) {
-            value = <SingleTag name={value} />;
+            value = <SingleTag name={value}/>;
         }
 
         // Special handling for the primary column (usually domain/name)
@@ -156,7 +156,14 @@ function MobileCollectionRow({collection, mobileColumns, routes}) {
  * @param {Function} onRowClick - Optional callback when a row is clicked
  * @param {String} emptyMessage - Message to display when there are no collections
  */
-export function CollectionTable({collections, columns, routes = {}, searchStr = '', onRowClick, emptyMessage = 'No items yet'}) {
+export function CollectionTable({
+                                    collections,
+                                    columns,
+                                    routes = {},
+                                    searchStr = '',
+                                    onRowClick,
+                                    emptyMessage = 'No items yet'
+                                }) {
     const {inverted} = useContext(ThemeContext);
     const {SingleTag} = useContext(TagsContext);
 
@@ -238,7 +245,8 @@ export function CollectionTable({collections, columns, routes = {}, searchStr = 
             <SortableTable
                 tableProps={{striped: true, size: 'small', unstackable: true}}
                 data={filteredCollections}
-                rowFunc={(collection) => <MobileCollectionRow key={collection.id} collection={collection} mobileColumns={mobileColumns} routes={routes}/>}
+                rowFunc={(collection) => <MobileCollectionRow key={collection.id} collection={collection}
+                                                              mobileColumns={mobileColumns} routes={routes}/>}
                 rowKey='id'
                 tableHeaders={mobileHeaders}
                 defaultSortColumn={defaultSortColumn}

@@ -18,7 +18,7 @@ import {
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
-import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
+import {useChannel, useVideoExtras} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";

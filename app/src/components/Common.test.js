@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, act} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {DirectorySearch} from './Common';
 
@@ -74,7 +74,7 @@ describe('DirectorySearch', () => {
 
     describe('Rendering', () => {
         it('renders with placeholder text', () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             expect(input).toBeInTheDocument();
@@ -86,14 +86,14 @@ describe('DirectorySearch', () => {
                 directoryName: 'videos/test',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="videos/test" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value="videos/test"/>);
 
             const input = screen.getByDisplayValue('videos/test');
             expect(input).toBeInTheDocument();
         });
 
         it('applies disabled state correctly', () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" disabled />);
+            render(<DirectorySearch onSelect={mockOnSelect} value="" disabled/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             expect(input).toBeDisabled();
@@ -101,7 +101,7 @@ describe('DirectorySearch', () => {
 
         it('displays with required indicator', () => {
             const {container} = render(
-                <DirectorySearch onSelect={mockOnSelect} value="" required />
+                <DirectorySearch onSelect={mockOnSelect} value="" required/>
             );
 
             // Semantic UI doesn't add required attribute to Search input,
@@ -112,7 +112,7 @@ describe('DirectorySearch', () => {
 
     describe('Search Functionality', () => {
         it('triggers setDirectoryName on value change', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.type(input, 'videos');
@@ -130,7 +130,7 @@ describe('DirectorySearch', () => {
                 loading: true,
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const searchContainer = screen.getByPlaceholderText(/search directory names/i)
                 .closest('.ui.search');
@@ -143,7 +143,7 @@ describe('DirectorySearch', () => {
                 loading: false,
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const searchContainer = screen.getByPlaceholderText(/search directory names/i)
                 .closest('.ui.search');
@@ -151,7 +151,7 @@ describe('DirectorySearch', () => {
         });
 
         it('displays categorized results', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             // Click to open dropdown
@@ -174,7 +174,7 @@ describe('DirectorySearch', () => {
                 directoryName: 'new/path',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.click(input);
@@ -193,7 +193,7 @@ describe('DirectorySearch', () => {
                 directoryName: 'videos/nature',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.click(input);
@@ -203,7 +203,7 @@ describe('DirectorySearch', () => {
         });
 
         it('debounces rapid typing (verifies setDirectoryName is called)', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
 
@@ -217,7 +217,7 @@ describe('DirectorySearch', () => {
 
     describe('User Interactions', () => {
         it('calls onSelect when result is clicked', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.click(input);
@@ -242,7 +242,7 @@ describe('DirectorySearch', () => {
             });
 
             // Render with empty value prop (different from directoryName)
-            const {container} = render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            const {container} = render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             // Find the Search component container and trigger blur on it
             const searchComponent = container.querySelector('.ui.search');
@@ -264,7 +264,7 @@ describe('DirectorySearch', () => {
                 directoryName: 'existing/path',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="existing/path" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value="existing/path"/>);
 
             const input = screen.getByDisplayValue('existing/path');
 
@@ -278,7 +278,7 @@ describe('DirectorySearch', () => {
         });
 
         it('disabled state prevents interactions', () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" disabled />);
+            render(<DirectorySearch onSelect={mockOnSelect} value="" disabled/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
 
@@ -287,7 +287,7 @@ describe('DirectorySearch', () => {
         });
 
         it('handles rapid selection changes', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.click(input);
@@ -308,7 +308,7 @@ describe('DirectorySearch', () => {
 
     describe('Hook Integration', () => {
         it('calls setDirectoryName from hook on search change', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.type(input, 'archive');
@@ -317,7 +317,7 @@ describe('DirectorySearch', () => {
         });
 
         it('displays results from hook state', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             await userEvent.click(input);
@@ -344,7 +344,7 @@ describe('DirectorySearch', () => {
             });
 
             // This should not throw an error
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
 
@@ -361,7 +361,7 @@ describe('DirectorySearch', () => {
                 directoryName: '',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value={null} />);
+            render(<DirectorySearch onSelect={mockOnSelect} value={null}/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             expect(input).toHaveValue('');
@@ -376,7 +376,7 @@ describe('DirectorySearch', () => {
                 directoryName: '',
             });
 
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
             expect(input).toHaveValue('');
@@ -389,19 +389,19 @@ describe('DirectorySearch', () => {
             });
 
             const {rerender} = render(
-                <DirectorySearch onSelect={mockOnSelect} value="videos/test" />
+                <DirectorySearch onSelect={mockOnSelect} value="videos/test"/>
             );
 
             expect(screen.getByDisplayValue('videos/test')).toBeInTheDocument();
 
             // Remount with same value
-            rerender(<DirectorySearch onSelect={mockOnSelect} value="videos/test" />);
+            rerender(<DirectorySearch onSelect={mockOnSelect} value="videos/test"/>);
 
             expect(screen.getByDisplayValue('videos/test')).toBeInTheDocument();
         });
 
         it('handles special characters in path', async () => {
-            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+            render(<DirectorySearch onSelect={mockOnSelect} value=""/>);
 
             const input = screen.getByPlaceholderText(/search directory names/i);
 

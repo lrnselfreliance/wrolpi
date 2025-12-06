@@ -10,7 +10,8 @@ from wrolpi.common import get_media_directory
 
 
 @pytest.mark.asyncio
-async def test_collection_lifecycle_end_to_end(async_client, test_session: Session, test_directory: pathlib.Path, video_factory):
+async def test_collection_lifecycle_end_to_end(async_client, test_session: Session, test_directory: pathlib.Path,
+                                               video_factory):
     """
     Lifecycle:
     - Start with no collections

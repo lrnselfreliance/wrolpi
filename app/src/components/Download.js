@@ -38,7 +38,6 @@ import {
     frequencyOptions,
     weeklyOption
 } from "./Vars";
-import _ from "lodash";
 
 export function DepthInputForm({form, required, name = 'depth', path = 'settings.depth'}) {
     return <NumberInputForm
@@ -271,7 +270,12 @@ function VideoDownloadCountLimit({form, name = 'video_count_limit', path = 'sett
     />
 }
 
-export function VideoResolutionSelectorForm({form, name = 'video_resolutions', path = 'settings.video_resolutions', onChange}) {
+export function VideoResolutionSelectorForm({
+                                                form,
+                                                name = 'video_resolutions',
+                                                path = 'settings.video_resolutions',
+                                                onChange
+                                            }) {
     const [inputProps, inputAttrs] = form.getSelectionProps({
         name,
         path,
@@ -387,7 +391,14 @@ export function UseBrowserProfile({form}) {
     />
 }
 
-export function VideosDownloadForm({singleDownload = true, onCancel, onSuccess: propOnSuccess, download, submitter: propSubmitter, actions}) {
+export function VideosDownloadForm({
+                                       singleDownload = true,
+                                       onCancel,
+                                       onSuccess: propOnSuccess,
+                                       download,
+                                       submitter: propSubmitter,
+                                       actions
+                                   }) {
     const [showMessage, setShowMessage] = React.useState(false);
     const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
     const [config, setConfig] = React.useState(null);
@@ -525,7 +536,8 @@ export function VideosDownloadForm({singleDownload = true, onCancel, onSuccess: 
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column>
-                    {actions ? actions({onCancel: localOnCancel, form}) : <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
+                    {actions ? actions({onCancel: localOnCancel, form}) :
+                        <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
                 </Grid.Column>
             </Grid.Row>
         </Grid>
@@ -545,12 +557,12 @@ export function VideoMinimumDurationForm({form}) {
 }
 
 export function EditVideosDownloadForm({
-    download,
-    onCancel,
-    onSuccess,
-    onDelete,
-    actions = EditDownloadFormButtons,
-}) {
+                                           download,
+                                           onCancel,
+                                           onSuccess,
+                                           onDelete,
+                                           actions = EditDownloadFormButtons,
+                                       }) {
     const submitter = async (formData) => {
         // Create a copy of settings without channel_url and channel_id
         const settings = {...formData.settings};
@@ -825,12 +837,12 @@ function SuccessfulDownloadSubmitMessage() {
 }
 
 export function EditArchiveDownloadForm({
-    download,
-    onCancel,
-    onSuccess,
-    onDelete,
-    actions = EditDownloadFormButtons,
-}) {
+                                            download,
+                                            onCancel,
+                                            onSuccess,
+                                            onDelete,
+                                            actions = EditDownloadFormButtons,
+                                        }) {
     const submitter = async (formData) => {
         const downloadData = {
             downloader: formData.downloader,
@@ -907,7 +919,8 @@ export function ArchiveDownloadForm({download, onCancel, onSuccess: propOnSucces
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
-                    {actions ? actions({onCancel: localOnCancel, form}) : <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
+                    {actions ? actions({onCancel: localOnCancel, form}) :
+                        <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
                 </Grid.Column>
             </Grid.Row>
         </Grid>

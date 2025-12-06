@@ -16,7 +16,8 @@ from wrolpi.downloader import Download, get_download_manager_config
 class TestDownloadManagerConfigOnboarding:
     """Tests for new install scenarios where no config file exists."""
 
-    async def test_new_install_no_db_data(self, test_session, test_directory, async_client, test_download_manager_config):
+    async def test_new_install_no_db_data(self, test_session, test_directory, async_client,
+                                          test_download_manager_config):
         """
         New install with empty DB and no config file.
         Should succeed with empty config.
@@ -73,7 +74,7 @@ class TestDownloadManagerConfigUpgrade:
     """Tests for upgrade scenarios where config file exists."""
 
     async def test_upgrade_config_exists_with_data(self, test_session, test_directory, async_client,
-                                                    test_download_manager_config):
+                                                   test_download_manager_config):
         """
         Upgrade with existing config containing download data.
         Should import and sync DB with config.
@@ -123,7 +124,7 @@ class TestDownloadManagerConfigUpgrade:
         assert downloads[0].url == 'https://example.com/download'
 
     async def test_upgrade_config_exists_empty_list(self, test_session, test_directory, async_client,
-                                                     test_download_manager_config):
+                                                    test_download_manager_config):
         """
         Config exists but has empty downloads list.
         Should NOT delete existing DB downloads (never delete on empty).
@@ -159,7 +160,7 @@ class TestDownloadManagerConfigUpgrade:
         assert downloads[0].url == 'https://example.com/preserve'
 
     async def test_upgrade_config_missing_db_has_data(self, test_session, test_directory, async_client,
-                                                       test_download_manager_config):
+                                                      test_download_manager_config):
         """
         Config file missing but DB has downloads.
         Import should succeed (nothing to import), DB data preserved.
@@ -199,7 +200,7 @@ class TestDownloadManagerConfigEdgeCases:
     """Tests for edge cases in config import."""
 
     async def test_config_deletes_removed_items(self, test_session, test_directory, async_client,
-                                                 test_download_manager_config):
+                                                test_download_manager_config):
         """
         Config removes a download that exists in DB.
         Should delete the download from DB.

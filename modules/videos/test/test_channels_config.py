@@ -68,7 +68,7 @@ class TestChannelsConfigUpgrade:
     """Tests for upgrade scenarios where config file exists."""
 
     async def test_upgrade_config_exists_with_data(self, test_session, test_directory, async_client,
-                                                    test_channels_config, channel_factory):
+                                                   test_channels_config, channel_factory):
         """
         Upgrade with existing config containing channel data.
         Should import and sync DB with config.
@@ -94,7 +94,7 @@ class TestChannelsConfigUpgrade:
         assert channels[0].name == 'Config Channel'
 
     async def test_upgrade_config_exists_empty_list(self, test_session, test_directory, async_client,
-                                                     test_channels_config, channel_factory):
+                                                    test_channels_config, channel_factory):
         """
         Config exists but has empty channels list.
         Should NOT delete existing DB channels (never delete on empty).
@@ -123,7 +123,7 @@ class TestChannelsConfigUpgrade:
         assert channels[0].name == 'Should Not Delete'
 
     async def test_upgrade_config_missing_db_has_data(self, test_session, test_directory, async_client,
-                                                       test_channels_config, channel_factory):
+                                                      test_channels_config, channel_factory):
         """
         Config file missing but DB has channels.
         Import should succeed (nothing to import), DB data preserved.
@@ -157,7 +157,7 @@ class TestChannelsConfigEdgeCases:
     """Tests for edge cases in config import."""
 
     async def test_config_deletes_removed_items(self, test_session, test_directory, async_client, test_channels_config,
-                                                 channel_factory):
+                                                channel_factory):
         """
         Config removes a channel that exists in DB.
         Should delete the channel from DB.
@@ -233,7 +233,7 @@ class TestChannelsConfigEdgeCases:
         assert channels[0].url == 'https://example.com/new'
 
     async def test_config_updates_existing_items(self, test_session, test_directory, async_client, test_channels_config,
-                                                  channel_factory):
+                                                 channel_factory):
         """
         Config updates an existing channel's URL.
         Should update the channel in DB.

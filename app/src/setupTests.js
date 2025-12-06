@@ -29,13 +29,21 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock IntersectionObserver (if needed for lazy loading)
 global.IntersectionObserver = class IntersectionObserver {
-    constructor() {}
-    disconnect() {}
-    observe() {}
+    constructor() {
+    }
+
+    disconnect() {
+    }
+
+    observe() {
+    }
+
     takeRecords() {
         return [];
     }
-    unobserve() {}
+
+    unobserve() {
+    }
 };
 
 // Suppress console errors during tests (optional - uncomment if needed)

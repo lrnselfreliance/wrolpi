@@ -1,5 +1,4 @@
 import pathlib
-import pathlib
 
 import pytest
 import yaml
@@ -171,7 +170,8 @@ def test_set_tag_on_directory_less_domain_collection(test_session):
 
 
 @pytest.mark.asyncio
-async def test_tag_collection_removes_tag_and_updates_directory(test_session, test_directory, tag_factory, await_switches):
+async def test_tag_collection_removes_tag_and_updates_directory(test_session, test_directory, tag_factory,
+                                                                await_switches):
     """When removing a tag via tag_collection, the directory should be updated if provided."""
     from wrolpi.collections.lib import tag_collection
 

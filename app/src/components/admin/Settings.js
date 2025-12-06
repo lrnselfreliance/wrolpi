@@ -1,5 +1,5 @@
 import React from "react";
-import {ThemeContext} from "../../contexts/contexts";
+import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {checkUpgrade, postRestart, postShutdown, triggerUpgrade} from "../../api";
 import {
     Button,
@@ -31,7 +31,6 @@ import QRCode from "react-qr-code";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {ConfigsTable} from "./Configs";
 import {semanticUIColorMap} from "../Vars";
 
@@ -134,13 +133,14 @@ function UpgradeSegment() {
         return <Segment>
             <Header as='h3'>System Upgrade</Header>
             <p>Your WROLPi is up to date.</p>
-            <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong></p>
+            <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong>
+            </p>
             <APIButton
                 color='blue'
                 onClick={handleCheckUpgrade}
                 disabled={checking}
             >
-                {checking ? 'Checking...' : 'Check for Updates'}
+                {checking ? 'Checking...' : 'Check for Upgrades'}
             </APIButton>
         </Segment>;
     }

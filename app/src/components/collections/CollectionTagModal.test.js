@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor, act} from '../../test-utils';
+import {act, render, screen, waitFor} from '../../test-utils';
 import userEvent from '@testing-library/user-event';
 import {CollectionTagModal} from './CollectionTagModal';
 
@@ -75,17 +75,17 @@ describe('CollectionTagModal', () => {
         });
 
         it('does not render modal when open is false', () => {
-            render(<CollectionTagModal {...defaultProps} open={false} />);
+            render(<CollectionTagModal {...defaultProps} open={false}/>);
             expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
         });
 
         it('shows "Add Tag" header when no current tag', () => {
-            render(<CollectionTagModal {...defaultProps} currentTagName={null} />);
+            render(<CollectionTagModal {...defaultProps} currentTagName={null}/>);
             expect(screen.getByTestId('modal-header')).toHaveTextContent('Add Tag');
         });
 
         it('shows "Modify Tag" header when there is a current tag', () => {
-            render(<CollectionTagModal {...defaultProps} currentTagName="existing-tag" />);
+            render(<CollectionTagModal {...defaultProps} currentTagName="existing-tag"/>);
             expect(screen.getByTestId('modal-header')).toHaveTextContent('Modify Tag');
         });
     });
@@ -122,7 +122,7 @@ describe('CollectionTagModal', () => {
                 conflict_message: null,
             });
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}/>);
 
             const addTagButton = screen.getByTestId('add-tag');
             await userEvent.click(addTagButton);
@@ -143,7 +143,7 @@ describe('CollectionTagModal', () => {
                 conflict_message: null,
             });
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}/>);
 
             const addTagButton = screen.getByTestId('add-tag');
             await userEvent.click(addTagButton);
@@ -157,7 +157,7 @@ describe('CollectionTagModal', () => {
         it('handles legacy string format from tag info', async () => {
             const mockGetTagInfo = jest.fn().mockResolvedValue('/legacy/directory');
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}/>);
 
             const addTagButton = screen.getByTestId('add-tag');
             await userEvent.click(addTagButton);
@@ -171,7 +171,7 @@ describe('CollectionTagModal', () => {
         it('fetches tag info when tag is removed', async () => {
             const mockGetTagInfo = jest.fn().mockResolvedValue(null);
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} currentTagName="existing-tag" />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} currentTagName="existing-tag"/>);
 
             const removeTagButton = screen.getByTestId('remove-tag');
             await userEvent.click(removeTagButton);
@@ -192,7 +192,7 @@ describe('CollectionTagModal', () => {
                 conflict_message: null,
             });
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} currentTagName="existing-tag" />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} currentTagName="existing-tag"/>);
 
             const removeTagButton = screen.getByTestId('remove-tag');
             await userEvent.click(removeTagButton);
@@ -206,7 +206,8 @@ describe('CollectionTagModal', () => {
         it('resets to original directory when tag is removed and no suggestion', async () => {
             const mockGetTagInfo = jest.fn().mockResolvedValue(null);
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} originalDirectory="/original/path" />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}
+                                       originalDirectory="/original/path"/>);
 
             // First add a tag - wait for async to complete including state updates
             const addTagButton = screen.getByTestId('add-tag');
@@ -244,7 +245,7 @@ describe('CollectionTagModal', () => {
                 conflict_message: 'Directory already in use',
             });
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}/>);
 
             const addTagButton = screen.getByTestId('add-tag');
             await userEvent.click(addTagButton);
@@ -272,7 +273,7 @@ describe('CollectionTagModal', () => {
                     conflict_message: null,
                 });
 
-            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo} />);
+            render(<CollectionTagModal {...defaultProps} getTagInfo={mockGetTagInfo}/>);
 
             // Add first tag - shows conflict
             const addTagButton = screen.getByTestId('add-tag');
@@ -300,7 +301,7 @@ describe('CollectionTagModal', () => {
     describe('Modal Close Behavior', () => {
         it('calls onClose when cancel button is clicked', async () => {
             const mockOnClose = jest.fn();
-            render(<CollectionTagModal {...defaultProps} onClose={mockOnClose} />);
+            render(<CollectionTagModal {...defaultProps} onClose={mockOnClose}/>);
 
             const cancelButton = screen.getByTestId('button-Cancel');
             await userEvent.click(cancelButton);
@@ -603,7 +604,7 @@ describe('CollectionTagModal', () => {
             await waitFor(() => {
                 const input = screen.getByRole('textbox');
                 expect(input).toHaveValue('/videos/wrolpi.org');
-            }, { timeout: 500 });
+            }, {timeout: 500});
 
             // Click Move button
             await act(async () => {

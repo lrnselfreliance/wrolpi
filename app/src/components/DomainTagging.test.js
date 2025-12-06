@@ -2,7 +2,7 @@ import React from 'react';
 import {render, screen, createTestForm} from '../test-utils';
 import {CollectionEditForm} from './collections/CollectionEditForm';
 import {DomainsPage} from './Archive';
-import {createMockDomain, createMockMetadata, createMockDomains} from '../test-utils';
+import {createMockDomain, createMockDomains} from '../test-utils';
 
 // Mock the TagsSelector component and TagsContext
 jest.mock('../Tags', () => ({
@@ -90,9 +90,19 @@ jest.mock('./collections/CollectionTable', () => ({
     ),
 }));
 
-describe('Domain Tagging Logic', () => {
-    const mockMetadata = createMockMetadata();
+// Test field configurations
+const DOMAIN_FIELDS = [
+    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
+    {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
+    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
+];
 
+const DOMAIN_MESSAGES = {
+    no_directory: 'Set a directory to enable tagging',
+    tag_will_move: 'Tagging will move files to a new directory'
+};
+
+describe('Domain Tagging Logic', () => {
     describe('Tag Field Dependency on Directory', () => {
         it('prevents tagging domain without directory', () => {
             const domainWithoutDirectory = createMockDomain({
@@ -106,7 +116,8 @@ describe('Domain Tagging Logic', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -133,7 +144,8 @@ describe('Domain Tagging Logic', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -160,7 +172,8 @@ describe('Domain Tagging Logic', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -205,7 +218,7 @@ describe('Domain Tagging Logic', () => {
                 }),
             ];
 
-            mockUseDomains.mockReturnValue([mockDomains, 2, mockMetadata]);
+            mockUseDomains.mockReturnValue([mockDomains, 2]);
 
             render(<DomainsPage />);
 
@@ -241,7 +254,7 @@ describe('Domain Tagging Logic', () => {
                 }),
             ];
 
-            mockUseDomains.mockReturnValue([mockDomains, 3, mockMetadata]);
+            mockUseDomains.mockReturnValue([mockDomains, 3]);
 
             render(<DomainsPage />);
 
@@ -265,7 +278,8 @@ describe('Domain Tagging Logic', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -285,7 +299,8 @@ describe('Domain Tagging Logic', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 

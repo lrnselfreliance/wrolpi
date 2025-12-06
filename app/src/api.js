@@ -722,7 +722,7 @@ export async function fetchDomains() {
     const response = await apiGet(`${COLLECTIONS_API}?kind=domain`);
     if (response.ok) {
         let data = await response.json();
-        return [data['collections'], data['totals']['collections'], data['metadata']];
+        return [data['collections'], data['totals']['collections']];
     } else {
         const message = await getErrorMessage(response, 'Unable to fetch Domains.  See server logs.');
         toast({
@@ -738,7 +738,7 @@ export async function fetchChannels() {
     const response = await apiGet(`${COLLECTIONS_API}?kind=channel`);
     if (response.ok) {
         let data = await response.json();
-        return [data['collections'], data['totals']['collections'], data['metadata']];
+        return [data['collections'], data['totals']['collections']];
     } else {
         const message = await getErrorMessage(response, 'Unable to fetch Channels.  See server logs.');
         toast({

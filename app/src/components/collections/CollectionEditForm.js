@@ -8,13 +8,12 @@ import {InputForm} from '../../hooks/useForm';
 
 /**
  * Renders a single form field based on field configuration.
- * Extracted outside the component to avoid recreation on every render.
  *
- * @param {Object} field - Field configuration from metadata
+ * @param {Object} field - Field configuration
  * @param {Object} form - Form object from useForm hook
- * @param {Object} metadata - Backend-provided metadata containing messages
+ * @param {Object} messages - Messages for UI hints (optional)
  */
-function renderField(field, form, metadata) {
+function renderField(field, form, messages = {}) {
     const disabled = field.depends_on && !form.formData[field.depends_on];
 
     switch (field.type) {
@@ -59,7 +58,7 @@ function renderField(field, form, metadata) {
                     {field.required && <span className="required-indicator"> *</span>}
                 </label>
                 {disabled && <Message info size='small'>
-                    {metadata.messages?.no_directory || 'Set a directory to enable tagging'}
+                    {messages.no_directory || 'Set a directory to enable tagging'}
                 </Message>}
                 <TagsSelector
                     selectedTagNames={tagProps.value ? [tagProps.value] : []}
@@ -67,8 +66,8 @@ function renderField(field, form, metadata) {
                     single={true}
                     disabled={disabled || tagProps.disabled}
                 />
-                {!disabled && tagProps.value && metadata.messages?.tag_will_move && <Message warning size='small'>
-                    {metadata.messages.tag_will_move}
+                {!disabled && tagProps.value && messages.tag_will_move && <Message warning size='small'>
+                    {messages.tag_will_move}
                 </Message>}
             </Form.Field>;
 
@@ -100,7 +99,8 @@ function FormSkeleton({fieldCount = 3}) {
  * Reusable form component for editing collections (Domains, Channels, etc).
  *
  * @param {Object} form - Form object from useForm hook
- * @param {Object} metadata - Backend-provided metadata containing fields configuration
+ * @param {Array} fields - Array of field configurations
+ * @param {Object} messages - Messages for UI hints (optional)
  * @param {Function} onCancel - Optional callback when cancel is clicked
  * @param {String} title - Page title to display in header
  * @param {String} wrolModeContent - Content to show in WROL mode message (optional)
@@ -109,7 +109,8 @@ function FormSkeleton({fieldCount = 3}) {
  */
 export function CollectionEditForm({
     form,
-    metadata,
+    fields,
+    messages = {},
     onCancel,
     title,
     wrolModeContent,
@@ -118,9 +119,9 @@ export function CollectionEditForm({
 }) {
     const {SingleTag} = React.useContext(TagsContext);
 
-    if (!metadata) {
+    if (!fields || fields.length === 0) {
         return <Message warning>
-            <Message.Header>No metadata available</Message.Header>
+            <Message.Header>No fields configured</Message.Header>
         </Message>;
     }
 
@@ -143,14 +144,14 @@ export function CollectionEditForm({
         </Message>}
 
         {showSkeleton ? (
-            <FormSkeleton fieldCount={metadata.fields.length}/>
+            <FormSkeleton fieldCount={fields.length}/>
         ) : (
             <Form onSubmit={handleSubmit} loading={form.loading} autoComplete="off">
                 <Grid stackable>
-                    {metadata.fields.map(field => (
+                    {fields.map(field => (
                         <Grid.Row key={field.key}>
                             <Grid.Column>
-                                {renderField(field, form, metadata)}
+                                {renderField(field, form, messages)}
                             </Grid.Column>
                         </Grid.Row>
                     ))}

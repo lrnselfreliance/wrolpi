@@ -23,7 +23,6 @@ logger = logger.getChild(__name__)
 __all__ = [
     'get_collections',
     'get_collection_with_stats',
-    'get_collection_metadata',
     'update_collection',
     'refresh_collection',
     'tag_collection',
@@ -191,112 +190,6 @@ def get_collection_with_stats(collection_id: int, session: Session = None) -> di
             data['total_size'] = 0
 
     return data
-
-
-def get_collection_metadata(kind: str) -> dict:
-    """
-    Get metadata for a collection kind.
-
-    Metadata includes:
-    - Column definitions for table display
-    - Field configurations for edit forms
-    - Route information for navigation
-    - User-facing messages
-
-    Args:
-        kind: Collection kind ('domain', 'channel', etc.)
-
-    Returns:
-        Metadata dict with columns, fields, routes, and messages
-    """
-    if kind == 'domain':
-        return {
-            'kind': 'domain',
-            'columns': [
-                {'key': 'domain', 'label': 'Domain', 'sortable': True},
-                {'key': 'tag_name', 'label': 'Tag', 'sortable': True},
-                {'key': 'archive_count', 'label': 'Archives', 'sortable': True, 'align': 'right'},
-                {'key': 'min_download_frequency', 'label': 'Download Frequency', 'sortable': True, 'format': 'frequency'},
-                {'key': 'size', 'label': 'Size', 'sortable': True, 'align': 'right', 'format': 'bytes'},
-                {'key': 'actions', 'label': 'Manage', 'sortable': False, 'type': 'actions'}
-            ],
-            'fields': [
-                {'key': 'directory', 'label': 'Directory', 'type': 'directory',
-                 'placeholder': 'Optional directory path'},
-                {'key': 'tag_name', 'label': 'Tag', 'type': 'tag',
-                 'placeholder': 'Select or create tag', 'depends_on': 'directory'},
-                {'key': 'description', 'label': 'Description', 'type': 'textarea',
-                 'placeholder': 'Optional description'}
-            ],
-            'routes': {
-                'list': '/archive/domains',
-                'edit': '/archive/domain/:id/edit',
-                'search': '/archive',
-                'searchParam': 'domain'
-            },
-            'messages': {
-                'no_directory': 'Set a directory to enable tagging',
-                'tag_will_move': 'Tagging will move files to a new directory'
-            }
-        }
-    elif kind == 'channel':
-        return {
-            'kind': 'channel',
-            'columns': [
-                {'key': 'name', 'label': 'Name', 'sortable': True},
-                {'key': 'tag_name', 'label': 'Tag', 'sortable': True},
-                {'key': 'video_count', 'label': 'Videos', 'sortable': True, 'align': 'right'},
-                {'key': 'min_download_frequency', 'label': 'Download Frequency', 'sortable': True, 'format': 'frequency'},
-                {'key': 'total_size', 'label': 'Size', 'sortable': True, 'align': 'right', 'format': 'bytes'},
-                {'key': 'actions', 'label': 'Manage', 'sortable': False, 'type': 'actions'}
-            ],
-            'fields': [
-                {'key': 'name', 'label': 'Name', 'type': 'text', 'required': True},
-                {'key': 'url', 'label': 'URL', 'type': 'text', 'placeholder': 'Channel URL'},
-                {'key': 'directory', 'label': 'Directory', 'type': 'directory', 'required': True},
-                {'key': 'tag_name', 'label': 'Tag', 'type': 'tag',
-                 'placeholder': 'Select or create tag'},
-                {'key': 'description', 'label': 'Description', 'type': 'textarea',
-                 'placeholder': 'Optional description'}
-            ],
-            'routes': {
-                'list': '/videos/channels',
-                'edit': '/videos/channel/:id/edit',
-                'search': '/videos/channel/:id/video',
-                'id_field': 'channel_id'  # Use channel_id instead of collection id for URLs
-            },
-            'messages': {
-                'no_directory': 'Directory is required for channels',
-                'tag_will_move': 'Tagging will move files to a new directory'
-            }
-        }
-    else:
-        # Generic metadata for unknown kinds
-        return {
-            'kind': kind or 'collection',
-            'columns': [
-                {'key': 'name', 'label': 'Name', 'sortable': True},
-                {'key': 'item_count', 'label': 'Items', 'sortable': True, 'align': 'right'},
-                {'key': 'total_size', 'label': 'Size', 'sortable': True, 'align': 'right', 'format': 'bytes'},
-                {'key': 'tag_name', 'label': 'Tag', 'sortable': True},
-                {'key': 'actions', 'label': 'Manage', 'sortable': False, 'type': 'actions'}
-            ],
-            'fields': [
-                {'key': 'name', 'label': 'Name', 'type': 'text', 'required': True},
-                {'key': 'directory', 'label': 'Directory', 'type': 'directory'},
-                {'key': 'tag_name', 'label': 'Tag', 'type': 'tag'},
-                {'key': 'description', 'label': 'Description', 'type': 'textarea'}
-            ],
-            'routes': {
-                'list': '/collections',
-                'edit': '/collection/:id/edit',
-                'search': '/search'
-            },
-            'messages': {
-                'no_directory': 'Set a directory to enable tagging',
-                'tag_will_move': 'Tagging will move files to a new directory'
-            }
-        }
 
 
 @optional_session

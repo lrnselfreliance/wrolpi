@@ -38,7 +38,6 @@ import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-ro
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useArchive,
-    useCollectionMetadata,
     useDomain,
     useDomains,
     useOneQuery,
@@ -356,10 +355,27 @@ export function ArchiveCard({file}) {
     </Card>
 }
 
+// Domain table column configuration
+const DOMAIN_COLUMNS = [
+    {key: 'domain', label: 'Domain', sortable: true, width: 7},
+    {key: 'tag_name', label: 'Tag', sortable: true, width: 2},
+    {key: 'archive_count', label: 'Archives', sortable: true, align: 'right', width: 2},
+    {key: 'min_download_frequency', label: 'Download Frequency', sortable: true, format: 'frequency', width: 2, hideOnMobile: true},
+    {key: 'size', label: 'Size', sortable: true, align: 'right', format: 'bytes', width: 2, hideOnMobile: true},
+    {key: 'actions', label: 'Manage', sortable: false, type: 'actions', width: 1}
+];
+
+const DOMAIN_ROUTES = {
+    list: '/archive/domains',
+    edit: '/archive/domain/:id/edit',
+    search: '/archive',
+    searchParam: 'domain'
+};
+
 export function DomainsPage() {
     useTitle('Archive Domains');
 
-    const [domains, total, metadata] = useDomains();
+    const [domains] = useDomains();
     const [searchStr, setSearchStr] = useOneQuery('domain');
 
     // Header section matching ChannelsPage pattern
@@ -406,29 +422,32 @@ export function DomainsPage() {
         {header}
         <CollectionTable
             collections={domains}
-            metadata={metadata}
+            columns={DOMAIN_COLUMNS}
+            routes={DOMAIN_ROUTES}
             searchStr={searchStr}
         />
     </>;
 }
 
+// Domain form field configuration
+const DOMAIN_FIELDS = [
+    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
+    // tag_name field is handled via modal button, not inline in form
+    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
+];
+
+const DOMAIN_MESSAGES = {
+    no_directory: 'Set a directory to enable tagging',
+    tag_will_move: 'Tagging will move files to a new directory'
+};
+
 export function DomainEditPage() {
     const {domainId} = useParams();
     const navigate = useNavigate();
     const {domain, form, fetchDomain} = useDomain(parseInt(domainId));
-    const {metadata} = useCollectionMetadata('domain');
 
     // Modal state for tagging
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
-
-    // Filter out tag_name field - we use the modal button instead of inline selector
-    const filteredMetadata = React.useMemo(() => {
-        if (!metadata) return metadata;
-        return {
-            ...metadata,
-            fields: metadata.fields.filter(field => field.key !== 'tag_name')
-        };
-    }, [metadata]);
 
     useTitle(`Edit Domain: ${domain?.domain || '...'}`);
 
@@ -546,7 +565,8 @@ export function DomainEditPage() {
         <BackButton/>
         <CollectionEditForm
             form={form}
-            metadata={filteredMetadata}
+            fields={DOMAIN_FIELDS}
+            messages={DOMAIN_MESSAGES}
             title={`Edit Domain: ${domain?.domain || '...'}`}
             wrolModeContent='Domain editing is disabled while in WROL Mode.'
             actionButtons={actionButtons}

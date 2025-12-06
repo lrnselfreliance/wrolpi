@@ -71,6 +71,45 @@ def upgrade():
     op.drop_column('download', 'channel_id')
     print("Done\n")
 
+    # Step 6: Fix the update_channel_minimum_frequency trigger function
+    # It was referencing channel_id which no longer exists
+    print("Step 6: Updating update_channel_minimum_frequency trigger function...")
+    op.execute("""
+        CREATE OR REPLACE FUNCTION update_channel_minimum_frequency()
+            RETURNS TRIGGER AS
+        $$
+        DECLARE
+            v_channel_id INTEGER;
+        BEGIN
+            -- Handle INSERT and UPDATE: use NEW record
+            IF (TG_OP = 'DELETE') THEN
+                -- For DELETE, we need to find the channel from OLD record
+                IF OLD.collection_id IS NOT NULL THEN
+                    SELECT id INTO v_channel_id FROM channel WHERE collection_id = OLD.collection_id;
+                    IF v_channel_id IS NOT NULL THEN
+                        UPDATE channel
+                        SET minimum_frequency = (SELECT MIN(frequency) FROM download WHERE collection_id = OLD.collection_id)
+                        WHERE id = v_channel_id;
+                    END IF;
+                END IF;
+                RETURN OLD;
+            ELSE
+                -- For INSERT and UPDATE, use NEW record
+                IF NEW.collection_id IS NOT NULL THEN
+                    SELECT id INTO v_channel_id FROM channel WHERE collection_id = NEW.collection_id;
+                    IF v_channel_id IS NOT NULL THEN
+                        UPDATE channel
+                        SET minimum_frequency = (SELECT MIN(frequency) FROM download WHERE collection_id = NEW.collection_id)
+                        WHERE id = v_channel_id;
+                    END IF;
+                END IF;
+                RETURN NEW;
+            END IF;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+    print("Done\n")
+
     print("=" * 60)
     print("Migration Complete")
     print("=" * 60 + "\n")
@@ -82,6 +121,20 @@ def upgrade():
 def downgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
+
+    # Restore the old trigger function that uses channel_id
+    op.execute("""
+        CREATE OR REPLACE FUNCTION update_channel_minimum_frequency()
+            RETURNS TRIGGER AS
+        $$
+        BEGIN
+            UPDATE channel
+            SET minimum_frequency = (SELECT MIN(frequency) FROM download WHERE channel_id = NEW.channel_id)
+            WHERE id = NEW.channel_id;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
 
     # Add back channel_id column
     op.add_column('download', sa.Column('channel_id', sa.Integer(), nullable=True))

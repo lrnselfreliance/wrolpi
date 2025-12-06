@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, waitFor} from '../test-utils';
 import {DomainsPage} from './Archive';
-import {createMockDomains, createMockMetadata} from '../test-utils';
+import {createMockDomains} from '../test-utils';
 
 // Mock the custom hooks
 jest.mock('../hooks/customHooks', () => ({
@@ -12,10 +12,11 @@ jest.mock('../hooks/customHooks', () => ({
 
 // Mock CollectionTable component
 jest.mock('./collections/CollectionTable', () => ({
-    CollectionTable: ({collections, metadata, searchStr}) => (
+    CollectionTable: ({collections, columns, routes, searchStr}) => (
         <div data-testid="collection-table">
             <div data-testid="collection-count">{collections?.length || 0}</div>
             <div data-testid="search-filter">{searchStr}</div>
+            <div data-testid="columns-count">{columns?.length || 0}</div>
             {collections?.map((domain) => (
                 <div key={domain.id} data-testid={`domain-${domain.id}`}>
                     <span data-testid={`domain-name-${domain.id}`}>{domain.domain}</span>
@@ -47,7 +48,6 @@ jest.mock('./Common', () => ({
 describe('DomainsPage', () => {
     const {useDomains, useOneQuery} = require('../hooks/customHooks');
     const {useTitle} = require('./Common');
-    const mockMetadata = createMockMetadata();
 
     beforeEach(() => {
         // Reset mocks before each test
@@ -61,7 +61,7 @@ describe('DomainsPage', () => {
     describe('Page Rendering', () => {
         it('displays domains page without errors', () => {
             const mockDomains = createMockDomains(3);
-            useDomains.mockReturnValue([mockDomains, 3, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 3]);
 
             render(<DomainsPage />);
 
@@ -70,18 +70,20 @@ describe('DomainsPage', () => {
             expect(screen.getByTestId('collection-table')).toBeInTheDocument();
         });
 
-        it('renders CollectionTable component', () => {
+        it('renders CollectionTable component with columns config', () => {
             const mockDomains = createMockDomains(2);
-            useDomains.mockReturnValue([mockDomains, 2, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 2]);
 
             render(<DomainsPage />);
 
             expect(screen.getByTestId('collection-table')).toBeInTheDocument();
+            // Should have 6 columns defined in DOMAIN_COLUMNS
+            expect(screen.getByTestId('columns-count')).toHaveTextContent('6');
         });
 
         it('shows search input', () => {
             const mockDomains = createMockDomains(1);
-            useDomains.mockReturnValue([mockDomains, 1, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 1]);
 
             render(<DomainsPage />);
 
@@ -94,7 +96,7 @@ describe('DomainsPage', () => {
     describe('Domain Display', () => {
         it('shows all domains from API', () => {
             const mockDomains = createMockDomains(5);
-            useDomains.mockReturnValue([mockDomains, 5, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 5]);
 
             render(<DomainsPage />);
 
@@ -112,7 +114,7 @@ describe('DomainsPage', () => {
                 {id: 2, domain: 'example2.com', archive_count: 20, size: 2000},
                 {id: 3, domain: 'example3.com', archive_count: 30, size: 3000},
             ];
-            useDomains.mockReturnValue([mockDomains, 3, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 3]);
 
             render(<DomainsPage />);
 
@@ -123,7 +125,7 @@ describe('DomainsPage', () => {
 
         it('displays Edit buttons in Manage column', () => {
             const mockDomains = createMockDomains(3);
-            useDomains.mockReturnValue([mockDomains, 3, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 3]);
 
             render(<DomainsPage />);
 
@@ -135,7 +137,7 @@ describe('DomainsPage', () => {
 
         it('Edit button has correct styling', () => {
             const mockDomains = createMockDomains(1);
-            useDomains.mockReturnValue([mockDomains, 1, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 1]);
 
             render(<DomainsPage />);
 
@@ -150,7 +152,7 @@ describe('DomainsPage', () => {
     describe('Empty and Error States', () => {
         it('shows "No items yet" message when no domains', () => {
             // Empty array indicates no domains
-            useDomains.mockReturnValue([[], 0, mockMetadata]);
+            useDomains.mockReturnValue([[], 0]);
 
             render(<DomainsPage />);
 
@@ -164,7 +166,7 @@ describe('DomainsPage', () => {
 
         it('shows error message when fetch fails', () => {
             // undefined indicates error state
-            useDomains.mockReturnValue([undefined, 0, mockMetadata]);
+            useDomains.mockReturnValue([undefined, 0]);
 
             render(<DomainsPage />);
 
@@ -178,7 +180,7 @@ describe('DomainsPage', () => {
 
         it('does not show "New Domain" button', () => {
             const mockDomains = createMockDomains(2);
-            useDomains.mockReturnValue([mockDomains, 2, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 2]);
 
             render(<DomainsPage />);
 
@@ -191,7 +193,7 @@ describe('DomainsPage', () => {
 
     describe('Search Integration', () => {
         it('disables search when no domains', () => {
-            useDomains.mockReturnValue([[], 0, mockMetadata]);
+            useDomains.mockReturnValue([[], 0]);
 
             render(<DomainsPage />);
 
@@ -201,7 +203,7 @@ describe('DomainsPage', () => {
 
         it('enables search when domains exist', () => {
             const mockDomains = createMockDomains(3);
-            useDomains.mockReturnValue([mockDomains, 3, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 3]);
 
             render(<DomainsPage />);
 
@@ -211,7 +213,7 @@ describe('DomainsPage', () => {
 
         it('passes search string to CollectionTable', () => {
             const mockDomains = createMockDomains(2);
-            useDomains.mockReturnValue([mockDomains, 2, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 2]);
 
             const mockSetSearchStr = jest.fn();
             useOneQuery.mockReturnValue(['example', mockSetSearchStr]);
@@ -226,7 +228,7 @@ describe('DomainsPage', () => {
     describe('Page Title', () => {
         it('sets page title correctly', () => {
             const mockDomains = createMockDomains(1);
-            useDomains.mockReturnValue([mockDomains, 1, mockMetadata]);
+            useDomains.mockReturnValue([mockDomains, 1]);
 
             render(<DomainsPage />);
 

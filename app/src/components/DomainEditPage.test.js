@@ -2,7 +2,7 @@ import React from 'react';
 import {render, renderInDarkMode, screen, waitFor, createTestForm} from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import {DomainEditPage} from './Archive';
-import {createMockDomain, createMockMetadata} from '../test-utils';
+import {createMockDomain} from '../test-utils';
 
 // Mock useParams to return domain ID
 jest.mock('react-router-dom', () => ({
@@ -13,12 +13,10 @@ jest.mock('react-router-dom', () => ({
 
 // Mock the useDomain hook
 const mockUseDomain = jest.fn();
-const mockUseCollectionMetadata = jest.fn();
 
 jest.mock('../hooks/customHooks', () => ({
     ...jest.requireActual('../hooks/customHooks'),
     useDomain: (...args) => mockUseDomain(...args),
-    useCollectionMetadata: (...args) => mockUseCollectionMetadata(...args),
 }));
 
 // Mock useTitle
@@ -29,12 +27,12 @@ jest.mock('./Common', () => ({
 
 // Mock CollectionEditForm
 jest.mock('./collections/CollectionEditForm', () => ({
-    CollectionEditForm: ({form, metadata, title, actionButtons}) => (
+    CollectionEditForm: ({form, fields, title, actionButtons}) => (
         <div data-testid="collection-edit-form">
             {title && <h1>{title}</h1>}
             {form?.loading && <div data-testid="loading-indicator">Loading...</div>}
             {form?.formData && <div data-testid="collection-data">Collection data loaded</div>}
-            {metadata && <div data-testid="metadata-present">Metadata loaded</div>}
+            {fields && <div data-testid="fields-present">Fields configured</div>}
             {actionButtons && <div data-testid="action-buttons">{actionButtons}</div>}
         </div>
     ),
@@ -64,11 +62,8 @@ jest.mock('../api', () => ({
 }));
 
 describe('DomainEditPage', () => {
-    const mockMetadata = createMockMetadata();
-
     beforeEach(() => {
         jest.clearAllMocks();
-        mockUseCollectionMetadata.mockReturnValue({metadata: mockMetadata});
     });
 
     describe('Loading States', () => {

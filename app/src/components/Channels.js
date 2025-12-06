@@ -39,6 +39,22 @@ import {InputForm, ToggleForm} from "../hooks/useForm";
 import {ChannelDownloadForm, DestinationForm, DownloadTagsSelector} from "./Download";
 import {CollectionTable} from "./collections/CollectionTable";
 
+// Channel table column configuration
+const CHANNEL_COLUMNS = [
+    {key: 'name', label: 'Name', sortable: true, width: 7},
+    {key: 'tag_name', label: 'Tag', sortable: true, width: 2},
+    {key: 'video_count', label: 'Videos', sortable: true, align: 'right', width: 2},
+    {key: 'min_download_frequency', label: 'Download Frequency', sortable: true, format: 'frequency', width: 2, hideOnMobile: true},
+    {key: 'total_size', label: 'Size', sortable: true, align: 'right', format: 'bytes', width: 2, hideOnMobile: true},
+    {key: 'actions', label: 'Manage', sortable: false, type: 'actions', width: 1}
+];
+
+const CHANNEL_ROUTES = {
+    list: '/videos/channel',
+    edit: '/videos/channel/:id/edit',
+    search: '/videos/channel/:id/video',
+    id_field: 'channel_id'
+};
 
 function ChannelStatistics({statistics}) {
     if (!statistics) {
@@ -451,7 +467,7 @@ export function ChannelNewPage(props) {
 export function ChannelsPage() {
     useTitle('Channels');
 
-    const [channels, total, metadata] = useChannels();
+    const [channels] = useChannels();
     const [searchStr, setSearchStr] = useOneQuery('name');
 
     // Header section matching DomainsPage pattern
@@ -501,7 +517,8 @@ export function ChannelsPage() {
         {header}
         <CollectionTable
             collections={channels}
-            metadata={metadata}
+            columns={CHANNEL_COLUMNS}
+            routes={CHANNEL_ROUTES}
             searchStr={searchStr}
         />
     </>;

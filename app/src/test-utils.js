@@ -59,37 +59,6 @@ export function renderWithProviders(
 }
 
 /**
- * Creates a mock collection metadata object for testing
- */
-export function createMockMetadata(kind = 'domain', overrides = {}) {
-    return {
-        kind,
-        columns: [
-            {key: 'domain', label: 'Domain', sortable: true},
-            {key: 'archive_count', label: 'Archives', sortable: true, align: 'right'},
-            {key: 'size', label: 'Size', sortable: true, align: 'right', format: 'bytes'},
-            {key: 'tag_name', label: 'Tag', sortable: true},
-            {key: 'actions', label: 'Manage', sortable: false, type: 'actions'},
-        ],
-        fields: [
-            {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
-            {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
-            {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'},
-        ],
-        routes: {
-            list: '/archive/domains',
-            edit: '/archive/domain/:id/edit',
-            search: '/archive',
-        },
-        messages: {
-            no_directory: 'Set a directory to enable tagging',
-            tag_will_move: 'Tagging will move files to a new directory'
-        },
-        ...overrides
-    };
-}
-
-/**
  * Creates a mock domain collection object for testing
  */
 export function createMockDomain(overrides = {}) {

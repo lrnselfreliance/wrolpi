@@ -3,6 +3,11 @@
 
 import '@testing-library/jest-dom';
 
+// Mock react-stl-viewer to avoid three.js errors in test environment
+jest.mock('react-stl-viewer', () => ({
+    StlViewer: () => null,
+}));
+
 // Mock window.matchMedia (used by Semantic UI Media components)
 Object.defineProperty(window, 'matchMedia', {
     writable: true,

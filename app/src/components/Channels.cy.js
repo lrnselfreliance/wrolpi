@@ -1,5 +1,5 @@
 import React from "react";
-import {ChannelPage} from "./Channels";
+import {ChannelEditPage, ChannelNewPage} from "./Channels";
 
 describe('Channels Page', () => {
     beforeEach(() => {
@@ -15,7 +15,7 @@ describe('Channels Page', () => {
 
     it('New Channel page can be rendered', () => {
         cy.mountWithTags(
-            <ChannelPage create={true}/>,
+            <ChannelNewPage/>,
             {initialEntries: ['/videos/channels/new']}
         );
         cy.get('input[name="name"]').should('be.visible');
@@ -45,8 +45,8 @@ describe('Channels Page', () => {
         }).as('channelFetch');
 
         cy.mountWithTags(
-            <ChannelPage create={false}/>,
-            {initialEntries: ['/videos/channels/1']}
+            <ChannelEditPage/>,
+            {initialEntries: ['/videos/channel/1/edit']}
         );
         cy.wait('@channelFetch');
         cy.wait('@searchDirectories'); // Needed for CircleCi.

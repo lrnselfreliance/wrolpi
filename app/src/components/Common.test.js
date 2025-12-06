@@ -332,6 +332,29 @@ describe('DirectorySearch', () => {
     });
 
     describe('Edge Cases', () => {
+        it('renders without error when directories are null (initial state)', async () => {
+            // Simulate the initial state before API call completes
+            setMockHookState({
+                directories: null,
+                channelDirectories: null,
+                domainDirectories: null,
+                isDir: false,
+                directoryName: '',
+                loading: true,
+            });
+
+            // This should not throw an error
+            render(<DirectorySearch onSelect={mockOnSelect} value="" />);
+
+            const input = screen.getByPlaceholderText(/search directory names/i);
+
+            // Clicking input should not throw "Cannot read properties of null"
+            await userEvent.click(input);
+
+            // Component should still be rendered
+            expect(input).toBeInTheDocument();
+        });
+
         it('handles null/undefined initial value', () => {
             setMockHookState({
                 ...mockSearchResults,

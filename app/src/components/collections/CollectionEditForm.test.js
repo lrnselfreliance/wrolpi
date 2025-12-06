@@ -1,20 +1,10 @@
 import React from 'react';
-import {render, renderInDarkMode, renderInLightMode, hasInvertedStyling, screen, waitFor, createTestForm} from '../../test-utils';
+import {render, renderInDarkMode, renderInLightMode, hasInvertedStyling, screen, createTestForm} from '../../test-utils';
 import {CollectionEditForm} from './CollectionEditForm';
 import {createMockDomain} from '../../test-utils';
 
-// Mock the TagsSelector component and TagsContext
+// Mock the TagsContext
 jest.mock('../../Tags', () => ({
-    TagsSelector: ({selectedTagNames, onChange, disabled}) => (
-        <div data-testid="tags-selector" data-disabled={disabled}>
-            <input
-                data-testid="tags-input"
-                value={selectedTagNames?.join(',') || ''}
-                onChange={(e) => onChange(e.target.value ? [e.target.value] : [])}
-                disabled={disabled}
-            />
-        </div>
-    ),
     TagsContext: {
         _currentValue: {
             SingleTag: ({name}) => <span data-testid="applied-tag">{name}</span>
@@ -25,226 +15,90 @@ jest.mock('../../Tags', () => ({
 // Mock Common components
 jest.mock('../Common', () => ({
     ...jest.requireActual('../Common'),
-    WROLModeMessage: () => <div data-testid="wrol-mode-message" />,
+    WROLModeMessage: ({content}) => <div data-testid="wrol-mode-message">{content}</div>,
 }));
-
-// Mock DestinationForm (used for directory field)
-jest.mock('../Download', () => ({
-    DestinationForm: ({form, label, name}) => (
-        <div data-testid="directory-search">
-            <label>{label}</label>
-            <input
-                value={form.formData[name] || ''}
-                onChange={(e) => form.setValue(name, e.target.value)}
-            />
-        </div>
-    ),
-}));
-
-// Mock InputForm (used for text fields)
-jest.mock('../../hooks/useForm', () => ({
-    ...jest.requireActual('../../hooks/useForm'),
-    InputForm: ({form, label, name}) => (
-        <div data-testid={`input-${name}`}>
-            <label>{label}</label>
-            <input
-                value={form.formData[name] || ''}
-                onChange={(e) => form.setValue(name, e.target.value)}
-            />
-        </div>
-    ),
-}));
-
-// Test field configurations
-const DOMAIN_FIELDS = [
-    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
-    {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
-    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
-];
-
-const DOMAIN_MESSAGES = {
-    no_directory: 'Set a directory to enable tagging',
-    tag_will_move: 'Tagging will move files to a new directory'
-};
 
 describe('CollectionEditForm', () => {
     const mockCollection = createMockDomain();
 
     describe('Form Rendering', () => {
-        it('renders all configured fields', () => {
+        it('renders children and Save button', () => {
             const form = createTestForm(mockCollection);
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div data-testid="child-content">Form fields here</div>
+                </CollectionEditForm>
             );
 
-            // Check that all fields from config are rendered
-            expect(screen.getByTestId('directory-search')).toBeInTheDocument();
-            expect(screen.getByTestId('tags-selector')).toBeInTheDocument();
-            expect(screen.getByPlaceholderText(/optional description/i)).toBeInTheDocument();
-
-            // Verify Save button exists
+            expect(screen.getByTestId('child-content')).toBeInTheDocument();
             expect(screen.getByRole('button', {name: /save/i})).toBeInTheDocument();
         });
 
-        it('loads initial values into form', () => {
-            const collectionWithData = createMockDomain({
-                description: 'Test description',
-                directory: 'archive/example.com'
-            });
-
-            const form = createTestForm(collectionWithData);
+        it('renders title when provided', () => {
+            const form = createTestForm(mockCollection);
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form} title="Edit Domain: example.com">
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Check description is loaded
-            expect(screen.getByPlaceholderText(/optional description/i)).toHaveValue('Test description');
-            // Check directory field is rendered with the value
-            const directoryField = screen.getByTestId('directory-search');
-            expect(directoryField).toBeInTheDocument();
-            // The mocked DestinationForm renders an input inside the container
-            const directoryInput = directoryField.querySelector('input');
-            expect(directoryInput).toHaveValue('archive/example.com');
+            expect(screen.getByRole('heading', {level: 1})).toHaveTextContent('Edit Domain: example.com');
         });
 
-        it('renders without errors when form is provided', () => {
+        it('renders WROL mode message when provided', () => {
             const form = createTestForm(mockCollection);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                    wrolModeContent="Editing disabled in WROL Mode"
+                >
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            expect(screen.getByRole('button', {name: /save/i})).toBeInTheDocument();
+            expect(screen.getByTestId('wrol-mode-message')).toHaveTextContent('Editing disabled in WROL Mode');
         });
-    });
 
-    describe('Field Types', () => {
-        it('renders textarea for description field', () => {
+        it('renders action buttons when provided', () => {
             const form = createTestForm(mockCollection);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                    actionButtons={<button data-testid="delete-button">Delete</button>}
+                >
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            const descriptionField = screen.getByPlaceholderText(/optional description/i);
-            expect(descriptionField.tagName).toBe('TEXTAREA');
+            expect(screen.getByTestId('delete-button')).toBeInTheDocument();
         });
 
-        it('renders directory field using DestinationForm for type=directory', () => {
+        it('renders appliedTagName when provided', () => {
             const form = createTestForm(mockCollection);
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form} appliedTagName="News">
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            expect(screen.getByTestId('directory-search')).toBeInTheDocument();
+            expect(screen.getByTestId('applied-tag')).toHaveTextContent('News');
         });
 
-        it('renders tag selector for tag_name field', () => {
+        it('does not render appliedTagName when not provided', () => {
             const form = createTestForm(mockCollection);
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            expect(screen.getByTestId('tags-selector')).toBeInTheDocument();
-        });
-    });
-
-    describe('Field Dependencies (tag requires directory)', () => {
-        it('disables tag field when directory is empty', () => {
-            const collectionWithoutDirectory = createMockDomain({
-                directory: '',
-                can_be_tagged: false
-            });
-
-            const form = createTestForm(collectionWithoutDirectory);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should show dependency warning
-            expect(screen.getByText(/set a directory to enable tagging/i)).toBeInTheDocument();
-
-            // Tag selector should be disabled
-            const tagSelector = screen.getByTestId('tags-selector');
-            expect(tagSelector).toHaveAttribute('data-disabled', 'true');
-        });
-
-        it('enables tag field when directory is set', () => {
-            const collectionWithDirectory = createMockDomain({
-                directory: 'archive/example.com',
-                can_be_tagged: true
-            });
-
-            const form = createTestForm(collectionWithDirectory);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Dependency warning should not be shown
-            expect(screen.queryByText(/set a directory to enable tagging/i)).not.toBeInTheDocument();
-
-            // Tag selector should not be disabled
-            const tagSelector = screen.getByTestId('tags-selector');
-            expect(tagSelector).toHaveAttribute('data-disabled', 'false');
-        });
-
-        it('shows warning when tag is set with directory', () => {
-            const collectionWithDirectoryAndTag = createMockDomain({
-                directory: 'archive/example.com',
-                tag_name: 'News',
-                can_be_tagged: true
-            });
-
-            const form = createTestForm(collectionWithDirectoryAndTag);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should show tag warning
-            expect(screen.getByText(/tagging will move files/i)).toBeInTheDocument();
+            expect(screen.queryByTestId('applied-tag')).not.toBeInTheDocument();
         });
     });
 
@@ -254,139 +108,97 @@ describe('CollectionEditForm', () => {
             const mockOnCancel = jest.fn();
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                    onCancel={mockOnCancel}
-                />
+                <CollectionEditForm form={form} onCancel={mockOnCancel}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
             expect(screen.getByRole('button', {name: /cancel/i})).toBeInTheDocument();
         });
 
-        it('disables form during loading', () => {
+        it('does not show Cancel button when onCancel not provided', () => {
+            const form = createTestForm(mockCollection);
+
+            render(
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
+            );
+
+            expect(screen.queryByRole('button', {name: /cancel/i})).not.toBeInTheDocument();
+        });
+
+        it('disables Save button when form is disabled', () => {
             const form = createTestForm(mockCollection, {
-                overrides: {loading: true, disabled: true}
+                overrides: {disabled: true}
             });
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Save button should be disabled during loading
-            const saveButton = screen.getByRole('button', {name: /save/i});
-            expect(saveButton).toBeDisabled();
+            expect(screen.getByRole('button', {name: /save/i})).toBeDisabled();
+        });
+
+        it('disables Cancel button when form is disabled', () => {
+            const form = createTestForm(mockCollection, {
+                overrides: {disabled: true}
+            });
+            const mockOnCancel = jest.fn();
+
+            render(
+                <CollectionEditForm form={form} onCancel={mockOnCancel}>
+                    <div>Form content</div>
+                </CollectionEditForm>
+            );
+
+            expect(screen.getByRole('button', {name: /cancel/i})).toBeDisabled();
         });
     });
 
     describe('Error States', () => {
-        it('handles missing fields gracefully', () => {
-            const form = createTestForm(mockCollection);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={null}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should show warning about missing fields
-            expect(screen.getByText(/no fields configured/i)).toBeInTheDocument();
-        });
-
-        it('handles empty fields array gracefully', () => {
-            const form = createTestForm(mockCollection);
-
-            render(
-                <CollectionEditForm
-                    form={form}
-                    fields={[]}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should show warning about missing fields
-            expect(screen.getByText(/no fields configured/i)).toBeInTheDocument();
-        });
-
         it('displays form-level errors', () => {
             const form = createTestForm(mockCollection, {
                 overrides: {error: 'Something went wrong'}
             });
 
             render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Should display the error message
             expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+        });
+
+        it('does not display error message when no error', () => {
+            const form = createTestForm(mockCollection);
+
+            render(
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
+            );
+
+            expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
         });
     });
 
-    describe('Loading Skeleton', () => {
-        it('shows skeleton when loading with empty form data', () => {
-            const form = createTestForm({}, {
-                overrides: {loading: true}
-            });
+    describe('Form Submission', () => {
+        it('calls form.onSubmit when Save button is clicked', () => {
+            const form = createTestForm(mockCollection);
+            form.onSubmit = jest.fn();
 
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+            render(
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Should show skeleton elements
-            expect(container.querySelector('.form-skeleton-label')).toBeInTheDocument();
-            expect(container.querySelector('.form-skeleton-input')).toBeInTheDocument();
-        });
-
-        it('shows form (not skeleton) when loading with existing form data', () => {
-            const form = createTestForm(mockCollection, {
-                overrides: {loading: true}
-            });
-
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should NOT show skeleton when there's form data
-            expect(container.querySelector('.form-skeleton-label')).not.toBeInTheDocument();
-            // Should show actual form fields
-            expect(screen.getByTestId('directory-search')).toBeInTheDocument();
-        });
-
-        it('renders correct number of skeleton fields based on fields config', () => {
-            const form = createTestForm({}, {
-                overrides: {loading: true}
-            });
-
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should have skeleton fields equal to fields.length (3)
-            const skeletonFields = container.querySelectorAll('.form-skeleton-field');
-            expect(skeletonFields).toHaveLength(DOMAIN_FIELDS.length);
+            screen.getByRole('button', {name: /save/i}).click();
+            expect(form.onSubmit).toHaveBeenCalled();
         });
     });
 
@@ -395,14 +207,11 @@ describe('CollectionEditForm', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInDarkMode(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Segment should have inverted class in dark mode
             const segment = container.querySelector('.ui.segment');
             expect(segment).toBeInTheDocument();
             expect(hasInvertedStyling(segment)).toBe(true);
@@ -412,14 +221,11 @@ describe('CollectionEditForm', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInLightMode(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
+                <CollectionEditForm form={form}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Segment should NOT have inverted class in light mode
             const segment = container.querySelector('.ui.segment');
             expect(segment).toBeInTheDocument();
             expect(hasInvertedStyling(segment)).toBe(false);
@@ -429,71 +235,26 @@ describe('CollectionEditForm', () => {
             const form = createTestForm(mockCollection);
 
             const {container} = renderInDarkMode(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                    title="Test Collection"
-                />
+                <CollectionEditForm form={form} title="Test Collection">
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
-            // Header should have dark text color inline style in dark mode
             const header = container.querySelector('.ui.header');
             expect(header).toBeInTheDocument();
             expect(header.style.color).toBe('rgb(238, 238, 238)');  // #eeeeee
         });
-
-        it('uses theme context from provider', () => {
-            const form = createTestForm(mockCollection);
-
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            const segment = container.querySelector('.ui.segment');
-            expect(segment).toBeInTheDocument();
-            // Should not be inverted by default
-            expect(hasInvertedStyling(segment)).toBe(false);
-        });
     });
 
     describe('CSS Classes', () => {
-        it('uses required-indicator class for required fields', () => {
-            const fieldsWithRequired = [
-                {key: 'name', label: 'Name', type: 'text', required: true},
-                {key: 'description', label: 'Description', type: 'textarea', required: true},
-            ];
-
-            const form = createTestForm(mockCollection);
-
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={fieldsWithRequired}
-                    messages={DOMAIN_MESSAGES}
-                />
-            );
-
-            // Should use CSS class instead of inline style for required indicator
-            const requiredIndicators = container.querySelectorAll('.required-indicator');
-            expect(requiredIndicators.length).toBeGreaterThan(0);
-        });
-
         it('uses action-button-spacing class for cancel button', () => {
             const form = createTestForm(mockCollection);
             const mockOnCancel = jest.fn();
 
-            const {container} = render(
-                <CollectionEditForm
-                    form={form}
-                    fields={DOMAIN_FIELDS}
-                    messages={DOMAIN_MESSAGES}
-                    onCancel={mockOnCancel}
-                />
+            render(
+                <CollectionEditForm form={form} onCancel={mockOnCancel}>
+                    <div>Form content</div>
+                </CollectionEditForm>
             );
 
             const cancelButton = screen.getByRole('button', {name: /cancel/i});

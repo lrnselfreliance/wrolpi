@@ -1191,7 +1191,7 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
         isDir,
         loading,
     } = useSearchDirectories(value);
-    const [results, setResults] = useState();
+    const [results, setResults] = useState({});
 
     useEffect(() => {
         if (directories && directories.length >= 0) {

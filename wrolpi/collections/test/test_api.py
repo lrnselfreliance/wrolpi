@@ -10,10 +10,10 @@ class TestCollectionsAPI:
     """Test the GET /api/collections endpoint."""
 
     @pytest.mark.asyncio
-    async def test_get_collections_returns_metadata_for_domains(
+    async def test_get_collections_for_domains(
             self, async_client, test_session
     ):
-        """Test that GET /api/collections?kind=domain returns metadata."""
+        """Test that GET /api/collections?kind=domain returns domain collections."""
         # Create a test domain collection
         collection = Collection(name='example.com', kind='domain')
         test_session.add(collection)
@@ -29,7 +29,6 @@ class TestCollectionsAPI:
         # Check basic response structure
         assert 'collections' in data
         assert 'totals' in data
-        assert 'metadata' in data
 
         # Check collections
         assert len(data['collections']) == 1
@@ -39,48 +38,11 @@ class TestCollectionsAPI:
         # Check totals
         assert data['totals']['collections'] == 1
 
-        # Check metadata structure
-        metadata = data['metadata']
-        assert metadata['kind'] == 'domain'
-        assert 'columns' in metadata
-        assert 'fields' in metadata
-        assert 'routes' in metadata
-        assert 'messages' in metadata
-
-        # Check metadata columns
-        columns = metadata['columns']
-        assert len(columns) > 0
-        column_keys = [col['key'] for col in columns]
-        assert 'domain' in column_keys
-        assert 'archive_count' in column_keys
-        assert 'size' in column_keys
-        assert 'tag_name' in column_keys
-        assert 'actions' in column_keys
-
-        # Check metadata fields
-        fields = metadata['fields']
-        assert len(fields) > 0
-        field_keys = [field['key'] for field in fields]
-        assert 'directory' in field_keys
-        assert 'tag_name' in field_keys
-        assert 'description' in field_keys
-
-        # Check metadata routes
-        routes = metadata['routes']
-        assert routes['list'] == '/archive/domains'
-        assert routes['edit'] == '/archive/domain/:id/edit'
-        assert routes['search'] == '/archive'
-
-        # Check metadata messages
-        messages = metadata['messages']
-        assert 'no_directory' in messages
-        assert 'tag_will_move' in messages
-
     @pytest.mark.asyncio
-    async def test_get_collections_returns_metadata_for_channels(
+    async def test_get_collections_for_channels(
             self, async_client, test_session
     ):
-        """Test that GET /api/collections?kind=channel returns channel metadata."""
+        """Test that GET /api/collections?kind=channel returns channel collections."""
         from pathlib import Path
 
         # Create a test channel collection
@@ -99,27 +61,16 @@ class TestCollectionsAPI:
         assert response.status_code == HTTPStatus.OK
         data = response.json
 
-        # Check metadata structure
-        assert 'metadata' in data
-        metadata = data['metadata']
-        assert metadata['kind'] == 'channel'
-
-        # Check channel-specific metadata
-        column_keys = [col['key'] for col in metadata['columns']]
-        assert 'name' in column_keys
-        assert 'video_count' in column_keys
-        assert 'total_size' in column_keys
-
-        # Check channel routes
-        routes = metadata['routes']
-        assert routes['list'] == '/videos/channels'
-        assert routes['edit'] == '/videos/channel/:id/edit'
+        # Check collections
+        assert len(data['collections']) == 1
+        assert data['collections'][0]['name'] == 'Test Channel'
+        assert data['collections'][0]['kind'] == 'channel'
 
     @pytest.mark.asyncio
-    async def test_get_collections_no_metadata_without_kind(
+    async def test_get_collections_without_kind(
             self, async_client, test_session
     ):
-        """Test that GET /api/collections without kind parameter does not include metadata."""
+        """Test that GET /api/collections without kind parameter returns all collections."""
         # Create test collections of different kinds
         domain = Collection(name='example.com', kind='domain')
         channel = Collection(name='Test Channel', kind='channel')
@@ -137,14 +88,11 @@ class TestCollectionsAPI:
         assert len(data['collections']) == 2
         assert data['totals']['collections'] == 2
 
-        # Should NOT have metadata (since no specific kind was requested)
-        assert 'metadata' not in data
-
     @pytest.mark.asyncio
-    async def test_get_empty_collections_with_metadata(
+    async def test_get_empty_collections(
             self, async_client, test_session
     ):
-        """Test that metadata is returned even when no collections exist."""
+        """Test that GET /api/collections returns empty when no collections exist."""
         # Don't create any collections
 
         # Make the request
@@ -157,10 +105,6 @@ class TestCollectionsAPI:
         # Should have empty collections
         assert len(data['collections']) == 0
         assert data['totals']['collections'] == 0
-
-        # Should still have metadata
-        assert 'metadata' in data
-        assert data['metadata']['kind'] == 'domain'
 
     @pytest.mark.asyncio
     async def test_get_collections_includes_video_count_for_channels(

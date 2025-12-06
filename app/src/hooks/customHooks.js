@@ -194,21 +194,17 @@ export const useAllQuery = (name) => {
 export const useDomains = () => {
     const [domains, setDomains] = useState(null);
     const [total, setTotal] = useState(null);
-    const [metadata, setMetadata] = useState(null);
 
     const _fetchDomains = async () => {
         setDomains(null);
         setTotal(0);
-        setMetadata(null);
         try {
-            let [domains, total, metadata] = await fetchDomains();
+            let [domains, total] = await fetchDomains();
             setDomains(domains);
             setTotal(total);
-            setMetadata(metadata);
         } catch (e) {
             setDomains(undefined); // Display error.
             setTotal(0);
-            setMetadata(undefined);
         }
     }
 
@@ -216,39 +212,7 @@ export const useDomains = () => {
         _fetchDomains();
     }, []);
 
-    return [domains, total, metadata];
-}
-
-export const useCollectionMetadata = (kind) => {
-    const [metadata, setMetadata] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    const fetchMetadata = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            if (kind === 'domain') {
-                const [, , metadata] = await fetchDomains();
-                setMetadata(metadata);
-            } else {
-                // Future: Support channels metadata
-                setMetadata(null);
-            }
-        } catch (e) {
-            console.error(e);
-            setError(e);
-            setMetadata(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchMetadata();
-    }, [kind]);
-
-    return {metadata, loading, error, fetchMetadata};
+    return [domains, total];
 }
 
 export const useDomain = (domainId) => {

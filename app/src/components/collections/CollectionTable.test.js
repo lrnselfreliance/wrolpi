@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, screen, renderInDarkMode, renderInLightMode, hasInvertedStyling} from '../../test-utils';
 import {CollectionTable} from './CollectionTable';
-import {createMockMetadata, createMockDomains} from '../../test-utils';
+import {createMockDomains} from '../../test-utils';
 
 // Mock the TagsContext
 jest.mock('../../Tags', () => ({
@@ -45,8 +45,23 @@ jest.mock('../SortableTable', () => ({
     ),
 }));
 
+// Test column and routes configurations
+const DOMAIN_COLUMNS = [
+    {key: 'domain', label: 'Domain', sortable: true, width: 7},
+    {key: 'archive_count', label: 'Archives', sortable: true, align: 'right', width: 2},
+    {key: 'size', label: 'Size', sortable: true, align: 'right', format: 'bytes', width: 2, hideOnMobile: true},
+    {key: 'tag_name', label: 'Tag', sortable: true, width: 2},
+    {key: 'actions', label: 'Manage', sortable: false, type: 'actions', width: 1}
+];
+
+const DOMAIN_ROUTES = {
+    list: '/archive/domains',
+    edit: '/archive/domain/:id/edit',
+    search: '/archive',
+    searchParam: 'domain'
+};
+
 describe('CollectionTable', () => {
-    const mockMetadata = createMockMetadata();
     const mockCollections = createMockDomains(3);
 
     describe('Loading and Error States', () => {
@@ -54,7 +69,8 @@ describe('CollectionTable', () => {
             const {container} = render(
                 <CollectionTable
                     collections={null}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -65,7 +81,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={undefined}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -76,7 +93,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={[]}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -87,7 +105,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={[]}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     emptyMessage="No domains found"
                 />
             );
@@ -95,15 +114,28 @@ describe('CollectionTable', () => {
             expect(screen.getByText(/no domains found/i)).toBeInTheDocument();
         });
 
-        it('renders warning when metadata is null', () => {
+        it('renders warning when columns is null', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={null}
+                    columns={null}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
-            expect(screen.getByText(/no metadata available/i)).toBeInTheDocument();
+            expect(screen.getByText(/no columns configured/i)).toBeInTheDocument();
+        });
+
+        it('renders warning when columns is empty', () => {
+            render(
+                <CollectionTable
+                    collections={mockCollections}
+                    columns={[]}
+                    routes={DOMAIN_ROUTES}
+                />
+            );
+
+            expect(screen.getByText(/no columns configured/i)).toBeInTheDocument();
         });
     });
 
@@ -112,7 +144,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -124,7 +157,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -138,7 +172,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -153,7 +188,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     searchStr="example1"
                 />
             );
@@ -168,7 +204,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     searchStr=""
                 />
             );
@@ -182,7 +219,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     searchStr="EXAMPLE1"
                 />
             );
@@ -193,77 +231,50 @@ describe('CollectionTable', () => {
         });
     });
 
-    describe('Column Width Calculation', () => {
-        it('calculates widths for 5-column metadata', () => {
+    describe('Column Widths', () => {
+        it('uses explicit widths from column config', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
             const desktopView = screen.getByTestId('desktop-view');
             const headers = desktopView.querySelectorAll('th');
 
-            // Mock metadata has 5 columns: domain, archive_count, size, tag_name, actions
-            // archive_count (right-aligned)=2, size (bytes)=2, tag_name=2, actions=1
-            // Total fixed = 7, remaining = 16 - 7 = 9 for domain
-            expect(headers[0]).toHaveAttribute('data-width', '9');
-
-            // Actions column should be 1
-            const actionsHeader = Array.from(headers).find(h => h.textContent === 'Manage');
-            expect(actionsHeader).toHaveAttribute('data-width', '1');
-        });
-
-        it('calculates widths for 4-column metadata', () => {
-            const fourColumnMetadata = {
-                ...mockMetadata,
-                columns: [
-                    {key: 'name', label: 'Name', sortable: true},
-                    {key: 'count', label: 'Count', sortable: true, align: 'right'},
-                    {key: 'size', label: 'Size', sortable: true, format: 'bytes'},
-                    {key: 'actions', label: 'Manage', type: 'actions'},
-                ]
-            };
-
-            render(
-                <CollectionTable
-                    collections={mockCollections}
-                    metadata={fourColumnMetadata}
-                />
-            );
-
-            const desktopView = screen.getByTestId('desktop-view');
-            const headers = desktopView.querySelectorAll('th');
-
-            // count (right-aligned)=2, size (bytes)=2, actions=1
-            // Total fixed = 5, remaining = 16 - 5 = 11 for name
-            expect(headers[0]).toHaveAttribute('data-width', '11');
-        });
-
-        it('distributes space among multiple grow columns', () => {
-            const twoGrowMetadata = {
-                ...mockMetadata,
-                columns: [
-                    {key: 'name', label: 'Name', sortable: true},
-                    {key: 'description', label: 'Description', sortable: false},
-                    {key: 'actions', label: 'Manage', type: 'actions'},
-                ]
-            };
-
-            render(
-                <CollectionTable
-                    collections={mockCollections}
-                    metadata={twoGrowMetadata}
-                />
-            );
-
-            const desktopView = screen.getByTestId('desktop-view');
-            const headers = desktopView.querySelectorAll('th');
-
-            // actions=1, remaining = 15 / 2 grow columns = 7 each
+            // DOMAIN_COLUMNS has explicit widths: domain=7, archive_count=2, size=2, tag_name=2, actions=1
             expect(headers[0]).toHaveAttribute('data-width', '7');
-            expect(headers[1]).toHaveAttribute('data-width', '7');
+            expect(headers[1]).toHaveAttribute('data-width', '2');
+            expect(headers[2]).toHaveAttribute('data-width', '2');
+            expect(headers[3]).toHaveAttribute('data-width', '2');
+            expect(headers[4]).toHaveAttribute('data-width', '1');
+        });
+
+        it('uses widths from 4-column config', () => {
+            const fourColumns = [
+                {key: 'name', label: 'Name', sortable: true, width: 9},
+                {key: 'count', label: 'Count', sortable: true, align: 'right', width: 2},
+                {key: 'size', label: 'Size', sortable: true, format: 'bytes', width: 2},
+                {key: 'actions', label: 'Manage', type: 'actions', width: 1},
+            ];
+
+            render(
+                <CollectionTable
+                    collections={mockCollections}
+                    columns={fourColumns}
+                    routes={DOMAIN_ROUTES}
+                />
+            );
+
+            const desktopView = screen.getByTestId('desktop-view');
+            const headers = desktopView.querySelectorAll('th');
+
+            expect(headers[0]).toHaveAttribute('data-width', '9');
+            expect(headers[1]).toHaveAttribute('data-width', '2');
+            expect(headers[2]).toHaveAttribute('data-width', '2');
+            expect(headers[3]).toHaveAttribute('data-width', '1');
         });
     });
 
@@ -274,7 +285,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     onRowClick={mockOnRowClick}
                 />
             );
@@ -292,7 +304,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                     onRowClick={mockOnRowClick}
                 />
             );
@@ -306,7 +319,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -328,7 +342,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={collectionsWithSize}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -350,7 +365,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={collectionsWithTag}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -358,20 +374,47 @@ describe('CollectionTable', () => {
         });
     });
 
-    describe('Links', () => {
-        it('renders search link on primary column when searchParam is configured', () => {
-            const metadataWithSearchParam = {
-                ...mockMetadata,
-                routes: {
-                    ...mockMetadata.routes,
-                    searchParam: 'domain'
-                }
-            };
+    describe('Mobile View', () => {
+        it('hides columns with hideOnMobile in mobile view', () => {
+            const collectionsWithData = [{
+                id: 1,
+                domain: 'test.com',
+                archive_count: 5,
+                size: 1048576,
+                tag_name: 'News',
+            }];
 
             render(
                 <CollectionTable
+                    collections={collectionsWithData}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
+                />
+            );
+
+            const mobileView = screen.getByTestId('mobile-view');
+            const mobileHeaders = mobileView.querySelectorAll('th');
+
+            // Mobile uses simplified 2-column layout: primary column + Manage
+            expect(mobileHeaders).toHaveLength(2);
+            expect(mobileHeaders[0]).toHaveTextContent('Domain');
+            expect(mobileHeaders[1]).toHaveTextContent('Manage');
+
+            // Archives should be visible in row content (no hideOnMobile)
+            expect(mobileView).toHaveTextContent('Archives:');
+
+            // Size should be hidden in row content (hideOnMobile: true)
+            expect(mobileView).not.toHaveTextContent('Size:');
+        });
+    });
+
+    describe('Links', () => {
+        it('renders search link on primary column when searchParam is configured', () => {
+            render(
+                <CollectionTable
                     collections={mockCollections}
-                    metadata={metadataWithSearchParam}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 
@@ -385,7 +428,8 @@ describe('CollectionTable', () => {
             render(
                 <CollectionTable
                     collections={mockCollections}
-                    metadata={mockMetadata}
+                    columns={DOMAIN_COLUMNS}
+                    routes={DOMAIN_ROUTES}
                 />
             );
 

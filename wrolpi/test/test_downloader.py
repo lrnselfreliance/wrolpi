@@ -533,3 +533,38 @@ async def test_download_excluded_urls(test_session, test_download_manager, test_
     assert len(downloads) == 3, 'Domain was not ignored'
     assert [i.url for i in downloads] == \
            ['https://example.com/feed', 'https://example.com/a', 'https://example.com/c'], f'Domain was not ignored'
+
+
+@pytest.mark.asyncio
+async def test_download_with_collection_id(test_session, test_download_manager, test_downloader):
+    """Creating a Download with a collection_id should work correctly.
+
+    This test verifies that downloads can be created and associated with collections.
+    Note: The trigger update_channel_minimum_frequency is not tested here because
+    pytest test DBs use Base.metadata.create_all() which doesn't run migrations.
+    The trigger fix is tested by running against a real DB with migrations applied.
+    """
+    from wrolpi.collections import Collection
+
+    # Create a Collection
+    collection = Collection(
+        name='Test Collection',
+        kind='channel',
+        directory='/tmp/test',
+    )
+    test_session.add(collection)
+    test_session.flush([collection])
+
+    # Creating a recurring download with collection_id should work
+    download = test_download_manager.recurring_download(
+        'https://example.com/test',
+        DownloadFrequency.weekly,
+        test_downloader.name,
+        collection_id=collection.id,
+    )
+    test_session.commit()
+
+    # Verify the download was created successfully
+    assert download.id is not None
+    assert download.collection_id == collection.id
+    assert download.frequency == DownloadFrequency.weekly

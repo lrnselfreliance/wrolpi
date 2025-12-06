@@ -1,7 +1,7 @@
 import React from 'react';
 import {render, renderInDarkMode, renderInLightMode, hasInvertedStyling, screen, waitFor, createTestForm} from '../../test-utils';
 import {CollectionEditForm} from './CollectionEditForm';
-import {createMockMetadata, createMockDomain} from '../../test-utils';
+import {createMockDomain} from '../../test-utils';
 
 // Mock the TagsSelector component and TagsContext
 jest.mock('../../Tags', () => ({
@@ -55,8 +55,19 @@ jest.mock('../../hooks/useForm', () => ({
     ),
 }));
 
+// Test field configurations
+const DOMAIN_FIELDS = [
+    {key: 'directory', label: 'Directory', type: 'directory', placeholder: 'Optional directory path'},
+    {key: 'tag_name', label: 'Tag', type: 'tag', placeholder: 'Select or create tag', depends_on: 'directory'},
+    {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
+];
+
+const DOMAIN_MESSAGES = {
+    no_directory: 'Set a directory to enable tagging',
+    tag_will_move: 'Tagging will move files to a new directory'
+};
+
 describe('CollectionEditForm', () => {
-    const mockMetadata = createMockMetadata();
     const mockCollection = createMockDomain();
 
     describe('Form Rendering', () => {
@@ -66,11 +77,12 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
-            // Check that all fields from metadata are rendered
+            // Check that all fields from config are rendered
             expect(screen.getByTestId('directory-search')).toBeInTheDocument();
             expect(screen.getByTestId('tags-selector')).toBeInTheDocument();
             expect(screen.getByPlaceholderText(/optional description/i)).toBeInTheDocument();
@@ -90,7 +102,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -110,7 +123,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -125,7 +139,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -139,7 +154,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -152,7 +168,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -172,7 +189,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -195,7 +213,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -219,7 +238,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -236,7 +256,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                     onCancel={mockOnCancel}
                 />
             );
@@ -252,7 +273,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -263,18 +285,34 @@ describe('CollectionEditForm', () => {
     });
 
     describe('Error States', () => {
-        it('handles missing metadata gracefully', () => {
+        it('handles missing fields gracefully', () => {
             const form = createTestForm(mockCollection);
 
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={null}
+                    fields={null}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
-            // Should show warning about missing metadata
-            expect(screen.getByText(/no metadata available/i)).toBeInTheDocument();
+            // Should show warning about missing fields
+            expect(screen.getByText(/no fields configured/i)).toBeInTheDocument();
+        });
+
+        it('handles empty fields array gracefully', () => {
+            const form = createTestForm(mockCollection);
+
+            render(
+                <CollectionEditForm
+                    form={form}
+                    fields={[]}
+                    messages={DOMAIN_MESSAGES}
+                />
+            );
+
+            // Should show warning about missing fields
+            expect(screen.getByText(/no fields configured/i)).toBeInTheDocument();
         });
 
         it('displays form-level errors', () => {
@@ -285,7 +323,8 @@ describe('CollectionEditForm', () => {
             render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -303,7 +342,8 @@ describe('CollectionEditForm', () => {
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -320,7 +360,8 @@ describe('CollectionEditForm', () => {
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -330,7 +371,7 @@ describe('CollectionEditForm', () => {
             expect(screen.getByTestId('directory-search')).toBeInTheDocument();
         });
 
-        it('renders correct number of skeleton fields based on metadata', () => {
+        it('renders correct number of skeleton fields based on fields config', () => {
             const form = createTestForm({}, {
                 overrides: {loading: true}
             });
@@ -338,13 +379,14 @@ describe('CollectionEditForm', () => {
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
-            // Should have skeleton fields equal to metadata.fields.length (3)
+            // Should have skeleton fields equal to fields.length (3)
             const skeletonFields = container.querySelectorAll('.form-skeleton-field');
-            expect(skeletonFields).toHaveLength(mockMetadata.fields.length);
+            expect(skeletonFields).toHaveLength(DOMAIN_FIELDS.length);
         });
     });
 
@@ -355,7 +397,8 @@ describe('CollectionEditForm', () => {
             const {container} = renderInDarkMode(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -371,7 +414,8 @@ describe('CollectionEditForm', () => {
             const {container} = renderInLightMode(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -387,7 +431,8 @@ describe('CollectionEditForm', () => {
             const {container} = renderInDarkMode(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                     title="Test Collection"
                 />
             );
@@ -404,7 +449,8 @@ describe('CollectionEditForm', () => {
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -417,19 +463,18 @@ describe('CollectionEditForm', () => {
 
     describe('CSS Classes', () => {
         it('uses required-indicator class for required fields', () => {
-            const metadataWithRequired = createMockMetadata('domain', {
-                fields: [
-                    {key: 'name', label: 'Name', type: 'text', required: true},
-                    {key: 'description', label: 'Description', type: 'textarea', required: true},
-                ]
-            });
+            const fieldsWithRequired = [
+                {key: 'name', label: 'Name', type: 'text', required: true},
+                {key: 'description', label: 'Description', type: 'textarea', required: true},
+            ];
 
             const form = createTestForm(mockCollection);
 
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={metadataWithRequired}
+                    fields={fieldsWithRequired}
+                    messages={DOMAIN_MESSAGES}
                 />
             );
 
@@ -445,7 +490,8 @@ describe('CollectionEditForm', () => {
             const {container} = render(
                 <CollectionEditForm
                     form={form}
-                    metadata={mockMetadata}
+                    fields={DOMAIN_FIELDS}
+                    messages={DOMAIN_MESSAGES}
                     onCancel={mockOnCancel}
                 />
             );

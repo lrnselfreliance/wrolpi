@@ -44,14 +44,10 @@ async def get_collections_endpoint(request: Request):
 
     collections = lib.get_collections(kind=kind)
 
-    # Include metadata if a specific kind is requested
     response_data = {
         'collections': collections,
         'totals': {'collections': len(collections)}
     }
-
-    if kind:
-        response_data['metadata'] = lib.get_collection_metadata(kind)
 
     return json_response(response_data)
 

@@ -220,7 +220,7 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
 class ChannelDictValidator:
     name: str
     directory: str
-    download_frequency: int
+    download_frequency: int = 604800  # Default to weekly
     url: str = None
 
 
@@ -253,11 +253,20 @@ class ChannelsConfig(ConfigFile):
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         """Import channels from config file into database using batch operations."""
+        file = file or self.get_file()
+
+        # If config file doesn't exist, mark import as successful (nothing to import)
+        if not file.is_file():
+            channel_import_logger.info('No channels config file, skipping import')
+            self.successful_import = True
+            return
+
         super().import_config()
         try:
             channels = self.channels
+            # Empty channels list = never delete DB records
             if not channels:
-                channel_import_logger.info('No channels to import')
+                channel_import_logger.info('No channels in config, preserving existing DB channels')
                 self.successful_import = True
                 return
 
@@ -374,6 +383,23 @@ class ChannelsConfig(ConfigFile):
                 channel_import_logger.warning(message, exc_info=e)
                 Events.send_config_import_failed(message)
             raise
+
+    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
+        """Dump all channels from database to config file."""
+        from wrolpi.collections import Collection
+        channel_import_logger.info('Dumping channels to config')
+
+        with get_db_session() as session:
+            # Get all channels, ordered by collection name
+            channels = session.query(Channel).join(Collection).order_by(Collection.name).all()
+
+            # Use config_view to export each channel
+            channels_data = [channel.config_view() for channel in channels]
+
+            self._config['channels'] = channels_data
+
+        channel_import_logger.info(f'Dumping {len(channels_data)} channels to config')
+        self.save(file, send_events, overwrite)
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()

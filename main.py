@@ -379,6 +379,10 @@ async def perpetual_check_for_updates():
     if DOCKERIZED:
         return
 
+    # Don't check if setting is disabled
+    if not get_wrolpi_config().check_for_upgrades:
+        return
+
     # Only check when we have internet
     if not flags.have_internet.is_set():
         return

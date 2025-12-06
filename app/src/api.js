@@ -296,6 +296,7 @@ export async function getSettings() {
             hotspot_password: content.hotspot_password,
             hotspot_ssid: content.hotspot_ssid,
             hotspot_status: content.hotspot_status,
+            check_for_upgrades: content.check_for_upgrades,
             ignore_outdated_zims: content.ignore_outdated_zims,
             ignored_directories: content.ignored_directories,
             log_level: content.log_level,

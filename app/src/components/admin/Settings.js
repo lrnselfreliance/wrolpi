@@ -318,6 +318,7 @@ export function SettingsPage() {
             hotspot_on_startup: settings.hotspot_on_startup,
             hotspot_password: settings.hotspot_password,
             hotspot_ssid: settings.hotspot_ssid,
+            check_for_upgrades: settings.check_for_upgrades,
             ignore_outdated_zims: settings.ignore_outdated_zims,
             log_level: fromApiLogLevel(settings.log_level),
             map_destination: settings.map_destination,
@@ -395,6 +396,15 @@ export function SettingsPage() {
                         disabled={disabled || state.ignore_outdated_zims === null}
                         checked={state.ignore_outdated_zims === true}
                         onChange={checked => handleInputChange(null, 'ignore_outdated_zims', checked)}
+                    />
+                </div>
+
+                <div style={{margin: '0.5em'}}>
+                    <Toggle
+                        label='Check for upgrades hourly'
+                        disabled={disabled || state.check_for_upgrades === null}
+                        checked={state.check_for_upgrades === true}
+                        onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
                     />
                 </div>
 

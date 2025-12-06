@@ -163,6 +163,7 @@ def get_settings(_: Request):
         'hotspot_password': wrolpi_config.hotspot_password,
         'hotspot_ssid': wrolpi_config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
+        'check_for_upgrades': wrolpi_config.check_for_upgrades,
         'ignore_outdated_zims': wrolpi_config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
         'log_level': api_app.shared_ctx.log_level.value,

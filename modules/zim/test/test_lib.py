@@ -9,7 +9,7 @@ from modules.zim.errors import UnknownZim, UnknownZimEntry
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo, get_wrolpi_config
-from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
+from wrolpi.downloader import Download, import_downloads_config, save_downloads_config, get_download_manager_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci
@@ -366,8 +366,10 @@ async def test_zim_subscription_download_import(async_client, test_session):
     download = test_session.query(Download).filter(Download.frequency.isnot(None)).one()
     assert download.url == 'https://download.kiwix.org/zim/wikisource/wikisource_en_all_maxi_'
 
-    # Save config file, delete all entries.
-    save_downloads_config()
+    # Save config file synchronously (dump_config() + save()), delete all entries.
+    config = get_download_manager_config()
+    config.dump_config()
+    config.save()
     test_session.query(Download).delete()
     test_session.query(ZimSubscription).delete()
     test_session.commit()

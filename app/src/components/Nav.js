@@ -186,9 +186,9 @@ export function NavBar() {
         />
     }
 
-    // Upgrade available notification - only show on native (non-Docker) installs
+    // Upgrade available notification - only show on native (non-Docker) installs and when WROL Mode is disabled
     let upgradeIcon;
-    if (status?.update_available && !status?.dockerized) {
+    if (status?.update_available && !status?.dockerized && !wrolModeEnabled) {
         const commitsBehind = status.commits_behind || 0;
         const branch = status.git_branch || 'unknown';
         const icon = <Link to='/admin/settings'>

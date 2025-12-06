@@ -63,6 +63,7 @@ class SettingsRequest:
     hotspot_password: Optional[str] = None
     hotspot_ssid: Optional[str] = None
     hotspot_status: Optional[bool] = None
+    check_for_upgrades: Optional[bool] = None
     ignore_outdated_zims: Optional[bool] = None
     log_level: Optional[int] = None
     map_destination: Optional[str] = None

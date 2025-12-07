@@ -491,3 +491,34 @@ async def post_ignore_directory(request: Request, body: schema.Directory):
 async def post_unignore_directory(request: Request, body: schema.Directory):
     lib.remove_ignored_directory(body.path)
     return response.empty(HTTPStatus.OK)
+
+
+@files_bp.post('/bulk_tag/preview')
+@openapi.definition(
+    summary='Get preview information for bulk tagging operation.',
+    body=schema.BulkTagPreviewRequest,
+)
+@validate(schema.BulkTagPreviewRequest)
+async def post_bulk_tag_preview(_: Request, body: schema.BulkTagPreviewRequest):
+    preview = lib.get_bulk_tag_preview(body.paths)
+    return json_response(preview.__json__())
+
+
+@files_bp.post('/bulk_tag/apply')
+@openapi.definition(
+    summary='Queue a bulk tagging operation.',
+    body=schema.BulkTagApplyRequest,
+)
+@validate(schema.BulkTagApplyRequest)
+async def post_bulk_tag_apply(_: Request, body: schema.BulkTagApplyRequest):
+    lib.queue_bulk_tag_job(body.paths, body.add_tag_names, body.remove_tag_names)
+    return response.empty(HTTPStatus.ACCEPTED)
+
+
+@files_bp.get('/bulk_tag/progress')
+@openapi.definition(
+    summary='Get progress of bulk tagging operation.',
+)
+async def get_bulk_tag_progress(_: Request):
+    progress = lib.get_bulk_tag_progress()
+    return json_response(progress.__json__())

@@ -21,6 +21,7 @@ import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHoo
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {SettingsContext} from "../contexts/contexts";
+import {BulkTagModal} from "./BulkTagModal";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -137,6 +138,7 @@ export function FileBrowser() {
     const [moveOpen, setMoveOpen] = React.useState(false);
     const [makeDirectoryOpen, setMakeDirectoryOpen] = React.useState(false);
     const [ignoreDirectoryOpen, setIgnoreDirectoryOpen] = React.useState(false);
+    const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
     const [pending, setPending] = React.useState(false);
     // Only true if only one path is selected, and it is a directory.
     const [singleDirectorySelected, setSingleDirectorySelected] = React.useState(false);
@@ -242,7 +244,7 @@ export function FileBrowser() {
                         onSubmit={reset}
                     /> : null}
                 <Button icon='move'
-                        color='violet'
+                        color='teal'
                         disabled={wrolModeEnabled || selectedPathsCount === 0}
                         onClick={() => setMoveOpen(true)}
                 />
@@ -281,6 +283,18 @@ export function FileBrowser() {
                     onSubmit={onIgnore}
                     directory={selectedPaths.length === 1 ? selectedPaths[0] : null}
                     ignored={isDirectoryIgnored}
+                />
+                <Button
+                    color='violet'
+                    icon='tags'
+                    disabled={selectedPathsCount === 0}
+                    onClick={() => setBulkTagOpen(true)}
+                />
+                <BulkTagModal
+                    open={bulkTagOpen}
+                    onClose={() => setBulkTagOpen(false)}
+                    paths={selectedPaths}
+                    onComplete={reset}
                 />
             </TableHeaderCell>
         </TableRow>

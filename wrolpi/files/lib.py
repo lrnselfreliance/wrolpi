@@ -1658,3 +1658,253 @@ def get_real_path_name(path: pathlib.Path) -> pathlib.Path:
             if path_.name.lower() == path.name.lower():
                 return path_
     return path
+
+
+@dataclasses.dataclass
+class BulkTagPreview:
+    """Preview information for a bulk tagging operation."""
+    file_count: int = 0
+    shared_tag_names: List[str] = dataclasses.field(default_factory=list)
+
+    def __json__(self) -> dict:
+        return dict(
+            file_count=self.file_count,
+            shared_tag_names=self.shared_tag_names,
+        )
+
+
+def get_bulk_tag_preview(paths: List[str]) -> BulkTagPreview:
+    """Get preview information for bulk tagging operation.
+
+    Returns the count of files that will be tagged and the tags that are shared by ALL files.
+    """
+    media_directory = get_media_directory()
+    absolute_paths = [media_directory / p for p in paths]
+
+    # Collect all file paths (expanding directories recursively)
+    all_file_paths: List[pathlib.Path] = []
+    for path in absolute_paths:
+        if path.is_file():
+            all_file_paths.append(path)
+        elif path.is_dir():
+            for file in walk(path):
+                if file.is_file():
+                    all_file_paths.append(file)
+
+    # Remove files in ignored directories
+    all_file_paths = remove_files_in_ignored_directories(all_file_paths)
+
+    if not all_file_paths:
+        return BulkTagPreview(file_count=0, shared_tag_names=[])
+
+    # Get unique files by stem (each FileGroup counted once)
+    unique_files = get_unique_files_by_stem(all_file_paths)
+    file_count = len(unique_files)
+
+    if file_count == 0:
+        return BulkTagPreview(file_count=0, shared_tag_names=[])
+
+    # Find tags shared by ALL files
+    # First, get all FileGroups and their tags
+    with get_db_session() as session:
+        file_groups = session.query(FileGroup).filter(
+            FileGroup.primary_path.in_([str(f) for f in unique_files])
+        ).all()
+
+        if not file_groups:
+            # No FileGroups exist yet, no shared tags
+            return BulkTagPreview(file_count=file_count, shared_tag_names=[])
+
+        # Get tag names for each FileGroup
+        tag_sets = []
+        for fg in file_groups:
+            tag_sets.append(set(fg.tag_names))
+
+        # Find intersection of all tag sets (tags shared by ALL files)
+        if tag_sets:
+            shared_tags = tag_sets[0]
+            for tag_set in tag_sets[1:]:
+                shared_tags = shared_tags.intersection(tag_set)
+            shared_tag_names = sorted(list(shared_tags))
+        else:
+            shared_tag_names = []
+
+    return BulkTagPreview(file_count=file_count, shared_tag_names=shared_tag_names)
+
+
+@dataclasses.dataclass
+class BulkTagProgress:
+    """Progress information for bulk tagging operation."""
+    status: str = 'idle'  # 'idle', 'running'
+    total: int = 0
+    completed: int = 0
+    add_tag_names: List[str] = dataclasses.field(default_factory=list)
+    remove_tag_names: List[str] = dataclasses.field(default_factory=list)
+    error: str = None
+    queued_jobs: int = 0
+
+    def __json__(self) -> dict:
+        return dict(
+            status=self.status,
+            total=self.total,
+            completed=self.completed,
+            add_tag_names=self.add_tag_names,
+            remove_tag_names=self.remove_tag_names,
+            error=self.error,
+            queued_jobs=self.queued_jobs,
+        )
+
+
+def get_bulk_tag_progress() -> BulkTagProgress:
+    """Get the current progress of bulk tagging operations."""
+    from wrolpi.api_utils import api_app
+
+    bulk_tag = api_app.shared_ctx.bulk_tag
+    return BulkTagProgress(
+        status=bulk_tag.get('status', 'idle'),
+        total=bulk_tag.get('total', 0),
+        completed=bulk_tag.get('completed', 0),
+        add_tag_names=list(bulk_tag.get('add_tag_names', [])),
+        remove_tag_names=list(bulk_tag.get('remove_tag_names', [])),
+        error=bulk_tag.get('error'),
+        queued_jobs=bulk_tag.get('queued_jobs', 0),
+    )
+
+
+def queue_bulk_tag_job(paths: List[str], add_tag_names: List[str], remove_tag_names: List[str]):
+    """Add a bulk tagging job to the queue."""
+    from wrolpi.api_utils import api_app
+
+    job = dict(
+        paths=paths,
+        add_tag_names=add_tag_names,
+        remove_tag_names=remove_tag_names,
+    )
+    api_app.shared_ctx.bulk_tag_queue.put(job)
+
+    # Update queued jobs count
+    try:
+        current_queued = api_app.shared_ctx.bulk_tag.get('queued_jobs', 0)
+        api_app.shared_ctx.bulk_tag['queued_jobs'] = current_queued + 1
+    except Exception:
+        pass
+
+
+async def _process_bulk_tag_job(job: dict):
+    """Process a single bulk tagging job."""
+    from wrolpi.api_utils import api_app
+
+    paths = job['paths']
+    add_tag_names = job['add_tag_names']
+    remove_tag_names = job['remove_tag_names']
+
+    media_directory = get_media_directory()
+    absolute_paths = [media_directory / p for p in paths]
+
+    # Collect all file paths (expanding directories recursively)
+    all_file_paths: List[pathlib.Path] = []
+    for path in absolute_paths:
+        if path.is_file():
+            all_file_paths.append(path)
+        elif path.is_dir():
+            for file in walk(path):
+                if file.is_file():
+                    all_file_paths.append(file)
+
+    # Remove files in ignored directories
+    all_file_paths = remove_files_in_ignored_directories(all_file_paths)
+
+    if not all_file_paths:
+        return
+
+    # Get unique files by stem
+    unique_files = get_unique_files_by_stem(all_file_paths)
+
+    # Update progress with total count
+    api_app.shared_ctx.bulk_tag.update(dict(
+        status='running',
+        total=len(unique_files),
+        completed=0,
+        add_tag_names=add_tag_names,
+        remove_tag_names=remove_tag_names,
+        error=None,
+    ))
+
+    completed = 0
+    for file_path in unique_files:
+        try:
+            with get_db_session(commit=True) as session:
+                # Get or create FileGroup
+                file_group = FileGroup.get_by_path(file_path, session=session)
+                if not file_group:
+                    # Create FileGroup for unindexed file
+                    paths_for_group = glob_shared_stem(file_path)
+                    paths_for_group = remove_files_in_ignored_directories(paths_for_group)
+                    if paths_for_group:
+                        try:
+                            file_group = FileGroup.from_paths(session, *paths_for_group)
+                            file_group.do_model(session)
+                        except (NoPrimaryFile, IntegrityError) as e:
+                            logger.warning(f'Could not create FileGroup for {file_path}: {e}')
+                            continue
+
+                if file_group:
+                    # Flush to ensure file_group.id is set before tagging
+                    session.flush([file_group])
+                    # Compute the final desired tags and apply them
+                    current_tags = set(file_group.tag_names)
+                    new_tags = (current_tags | set(add_tag_names)) - set(remove_tag_names)
+                    file_group.set_tags(new_tags, session=session)
+
+        except Exception as e:
+            logger.error(f'Error tagging file {file_path}: {e}', exc_info=e)
+
+        completed += 1
+        api_app.shared_ctx.bulk_tag['completed'] = completed
+
+        # Sleep to allow cancellation and reduce DB pressure
+        await asyncio.sleep(0)
+
+
+DISABLE_BULK_TAG_WORKER = bool(PYTEST)
+
+
+async def bulk_tag_worker():
+    """Background worker that processes bulk tagging jobs from the queue."""
+    import queue
+    from wrolpi.api_utils import api_app, perpetual_signal
+
+    if PYTEST and DISABLE_BULK_TAG_WORKER:
+        return
+
+    bulk_tag_ctx = api_app.shared_ctx.bulk_tag
+    bulk_tag_queue = api_app.shared_ctx.bulk_tag_queue
+
+    try:
+        # Try to get a job from the queue (non-blocking)
+        job = bulk_tag_queue.get_nowait()
+    except queue.Empty:
+        # No jobs in queue, stay idle
+        bulk_tag_ctx['status'] = 'idle'
+        return
+
+    # Decrement queued jobs count
+    try:
+        current_queued = bulk_tag_ctx.get('queued_jobs', 1)
+        bulk_tag_ctx['queued_jobs'] = max(0, current_queued - 1)
+    except Exception:
+        pass
+
+    try:
+        await _process_bulk_tag_job(job)
+    except Exception as e:
+        logger.error(f'Bulk tag worker error: {e}', exc_info=e)
+        bulk_tag_ctx['error'] = str(e)
+    finally:
+        bulk_tag_ctx['status'] = 'idle'
+
+
+# Register the worker as a perpetual signal
+from wrolpi.api_utils import perpetual_signal
+
+bulk_tag_worker = perpetual_signal(sleep=1)(bulk_tag_worker)

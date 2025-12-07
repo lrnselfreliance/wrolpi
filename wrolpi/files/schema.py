@@ -82,3 +82,17 @@ class Move:
 class Rename:
     path: str
     new_name: str
+
+
+@dataclass
+class BulkTagPreviewRequest:
+    """Request to preview bulk tagging operation."""
+    paths: List[str] = field(default_factory=list)
+
+
+@dataclass
+class BulkTagApplyRequest:
+    """Request to apply bulk tagging operation."""
+    paths: List[str] = field(default_factory=list)
+    add_tag_names: List[str] = field(default_factory=list)
+    remove_tag_names: List[str] = field(default_factory=list)

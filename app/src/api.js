@@ -1684,3 +1684,37 @@ export async function triggerUpgrade() {
     }
     return response;
 }
+
+export async function getBulkTagPreview(paths) {
+    const body = {paths};
+    const response = await apiPost(`${API_URI}/files/bulk_tag/preview`, body);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Failed to get bulk tag preview.');
+        toast({type: 'error', title: 'Bulk Tag Error', description: message, time: 5000});
+    }
+}
+
+export async function applyBulkTags(paths, addTagNames, removeTagNames) {
+    const body = {
+        paths,
+        add_tag_names: addTagNames || [],
+        remove_tag_names: removeTagNames || [],
+    };
+    const response = await apiPost(`${API_URI}/files/bulk_tag/apply`, body);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Failed to apply bulk tags.');
+        toast({type: 'error', title: 'Bulk Tag Error', description: message, time: 5000});
+    }
+    return response;
+}
+
+export async function getBulkTagProgress() {
+    const response = await apiGet(`${API_URI}/files/bulk_tag/progress`);
+    if (response.ok) {
+        return await response.json();
+    }
+    // Not toasting because this happens often during polling.
+    return null;
+}

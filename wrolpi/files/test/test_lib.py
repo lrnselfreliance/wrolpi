@@ -1170,3 +1170,138 @@ def test_get_real_path_name(test_directory):
 
     assert (test_directory / 'FOO.TXT').exists()
     assert lib.get_real_path_name(test_directory / 'FOO.txt') == test_directory / 'foo.txt'
+
+
+# --- Bulk Tagging Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_bulk_tag_preview_files(async_client, test_session, make_files_structure, tag_factory):
+    """get_bulk_tag_preview returns correct file count and shared tags for files."""
+    foo, bar, baz = make_files_structure({
+        'foo.txt': 'foo',
+        'bar.txt': 'bar',
+        'baz.txt': 'baz',
+    })
+
+    # Create FileGroups
+    fg_foo = FileGroup.from_paths(test_session, foo)
+    fg_bar = FileGroup.from_paths(test_session, bar)
+    fg_baz = FileGroup.from_paths(test_session, baz)
+    test_session.commit()
+
+    # Add shared and non-shared tags
+    tag1 = await tag_factory('shared')
+    tag2 = await tag_factory('only_foo')
+    fg_foo.add_tag(tag1.id)
+    fg_foo.add_tag(tag2.id)
+    fg_bar.add_tag(tag1.id)
+    fg_baz.add_tag(tag1.id)
+    test_session.commit()
+
+    # Preview for all three files
+    preview = lib.get_bulk_tag_preview(['foo.txt', 'bar.txt', 'baz.txt'])
+    assert preview.file_count == 3
+    assert 'shared' in preview.shared_tag_names
+    assert 'only_foo' not in preview.shared_tag_names  # Not shared by all
+
+
+def test_get_bulk_tag_preview_directory(test_session, make_files_structure, test_directory):
+    """get_bulk_tag_preview recursively finds files in directories."""
+    make_files_structure({
+        'mydir/foo.txt': 'foo',
+        'mydir/bar.txt': 'bar',
+        'mydir/subdir/baz.txt': 'baz',
+    })
+
+    # Preview for the directory - should find all files recursively
+    preview = lib.get_bulk_tag_preview(['mydir/'])
+    assert preview.file_count == 3
+
+
+def test_get_bulk_tag_preview_empty(test_session, test_directory):
+    """get_bulk_tag_preview returns 0 for empty or non-existent paths."""
+    preview = lib.get_bulk_tag_preview([])
+    assert preview.file_count == 0
+    assert preview.shared_tag_names == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('test_case,expected_fg_count', [
+    ('existing_filegroups', 2),
+    ('creates_filegroups', 2),
+    ('recursive_directory', 2),
+    ('multi_file_filegroup', 1),
+])
+async def test_process_bulk_tag_job_add_tags(test_case, expected_fg_count, async_client, test_session,
+                                              make_files_structure, tag_factory, video_bytes, srt_text):
+    """_process_bulk_tag_job adds tags to files in various scenarios."""
+    if test_case == 'existing_filegroups':
+        foo, bar = make_files_structure({'foo.txt': 'foo', 'bar.txt': 'bar'})
+        FileGroup.from_paths(test_session, foo)
+        FileGroup.from_paths(test_session, bar)
+        test_session.commit()
+        job_paths = ['foo.txt', 'bar.txt']
+    elif test_case == 'creates_filegroups':
+        make_files_structure({'foo.txt': 'foo', 'bar.txt': 'bar'})
+        job_paths = ['foo.txt', 'bar.txt']
+    elif test_case == 'recursive_directory':
+        make_files_structure({'mydir/foo.txt': 'foo', 'mydir/subdir/bar.txt': 'bar'})
+        job_paths = ['mydir/']
+    elif test_case == 'multi_file_filegroup':
+        make_files_structure({
+            'video.mp4': video_bytes,
+            'video.srt': srt_text,
+            'video.info.json': '{"title": "Test Video"}',
+        })
+        job_paths = ['video.mp4']
+
+    tag = await tag_factory('new_tag')
+    test_session.commit()
+
+    job = {'paths': job_paths, 'add_tag_names': ['new_tag'], 'remove_tag_names': []}
+    await lib._process_bulk_tag_job(job)
+
+    test_session.expire_all()
+    fgs = test_session.query(FileGroup).all()
+    assert len(fgs) == expected_fg_count
+    for fg in fgs:
+        assert 'new_tag' in fg.tag_names
+
+    # Additional assertion for multi-file FileGroup
+    if test_case == 'multi_file_filegroup':
+        file_paths = {f['path'].name for f in fgs[0].files}
+        assert file_paths == {'video.mp4', 'video.srt', 'video.info.json'}
+
+
+@pytest.mark.asyncio
+async def test_process_bulk_tag_job_remove_tags(async_client, test_session, make_files_structure, tag_factory):
+    """_process_bulk_tag_job removes tags from files."""
+    foo, bar = make_files_structure({
+        'foo.txt': 'foo',
+        'bar.txt': 'bar',
+    })
+
+    # Create FileGroups with a tag
+    fg_foo = FileGroup.from_paths(test_session, foo)
+    fg_bar = FileGroup.from_paths(test_session, bar)
+    test_session.commit()
+
+    tag = await tag_factory('to_remove')
+    fg_foo.add_tag(tag.id)
+    fg_bar.add_tag(tag.id)
+    test_session.commit()
+
+    job = {
+        'paths': ['foo.txt', 'bar.txt'],
+        'add_tag_names': [],
+        'remove_tag_names': ['to_remove'],
+    }
+
+    await lib._process_bulk_tag_job(job)
+
+    # Verify tags were removed
+    test_session.expire_all()
+    fgs = test_session.query(FileGroup).all()
+    for fg in fgs:
+        assert 'to_remove' not in fg.tag_names

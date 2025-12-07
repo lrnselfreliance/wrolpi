@@ -59,6 +59,10 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.archive_singlefiles = multiprocessing.Queue()
     app.shared_ctx.archive_screenshots = multiprocessing.Queue()
 
+    # Bulk tagging
+    app.shared_ctx.bulk_tag = manager.dict()
+    app.shared_ctx.bulk_tag_queue = manager.Queue()
+
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
 
@@ -131,6 +135,23 @@ def reset_shared_contexts(app: Sanic):
         # Clear out any pending screenshot generation switches.
         try:
             app.shared_ctx.archive_screenshots.get_nowait()
+        except queue.Empty:
+            break
+
+    # Bulk tagging
+    app.shared_ctx.bulk_tag.clear()
+    app.shared_ctx.bulk_tag.update(dict(
+        status='idle',  # 'idle', 'running'
+        total=0,
+        completed=0,
+        add_tag_names=[],
+        remove_tag_names=[],
+        error=None,
+    ))
+    while True:
+        # Clear out any pending bulk tag jobs.
+        try:
+            app.shared_ctx.bulk_tag_queue.get_nowait()
         except queue.Empty:
             break
 

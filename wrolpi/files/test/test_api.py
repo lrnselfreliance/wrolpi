@@ -964,3 +964,85 @@ async def test_ignore_directory(test_session, async_client, test_directory, make
     request, response = await async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert len(get_wrolpi_config().ignored_directories) == 0
+
+
+# --- Bulk Tagging API Tests ---
+
+
+@pytest.mark.asyncio
+async def test_bulk_tag_preview_api(test_session, async_client, make_files_structure, tag_factory):
+    """The bulk tag preview endpoint returns file count and shared tags."""
+    foo, bar, baz = make_files_structure({
+        'foo.txt': 'foo',
+        'bar.txt': 'bar',
+        'baz.txt': 'baz',
+    })
+
+    # Create FileGroups
+    fg_foo = FileGroup.from_paths(test_session, foo)
+    fg_bar = FileGroup.from_paths(test_session, bar)
+    fg_baz = FileGroup.from_paths(test_session, baz)
+    test_session.commit()
+
+    # Add shared and non-shared tags
+    tag1 = await tag_factory('shared_tag')
+    tag2 = await tag_factory('only_foo')
+    fg_foo.add_tag(tag1.id)
+    fg_foo.add_tag(tag2.id)
+    fg_bar.add_tag(tag1.id)
+    fg_baz.add_tag(tag1.id)
+    test_session.commit()
+
+    content = {'paths': ['foo.txt', 'bar.txt', 'baz.txt']}
+    request, response = await async_client.post('/api/files/bulk_tag/preview', json=content)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_count'] == 3
+    assert 'shared_tag' in response.json['shared_tag_names']
+    assert 'only_foo' not in response.json['shared_tag_names']
+
+
+@pytest.mark.asyncio
+async def test_bulk_tag_preview_empty(test_session, async_client):
+    """The bulk tag preview endpoint handles empty paths."""
+    content = {'paths': []}
+    request, response = await async_client.post('/api/files/bulk_tag/preview', json=content)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_count'] == 0
+    assert response.json['shared_tag_names'] == []
+
+
+@pytest.mark.asyncio
+async def test_bulk_tag_apply_api(test_session, async_client, make_files_structure, tag_factory):
+    """The bulk tag apply endpoint queues a tagging job."""
+    foo, bar = make_files_structure({
+        'foo.txt': 'foo',
+        'bar.txt': 'bar',
+    })
+
+    # Create FileGroups
+    FileGroup.from_paths(test_session, foo)
+    FileGroup.from_paths(test_session, bar)
+    test_session.commit()
+
+    # Create a tag
+    tag = await tag_factory('api_tag')
+    test_session.commit()
+
+    content = {
+        'paths': ['foo.txt', 'bar.txt'],
+        'add_tag_names': ['api_tag'],
+        'remove_tag_names': [],
+    }
+    request, response = await async_client.post('/api/files/bulk_tag/apply', json=content)
+    assert response.status_code == HTTPStatus.ACCEPTED
+
+
+@pytest.mark.asyncio
+async def test_bulk_tag_progress_api(test_session, async_client):
+    """The bulk tag progress endpoint returns progress information."""
+    request, response = await async_client.get('/api/files/bulk_tag/progress')
+    assert response.status_code == HTTPStatus.OK
+    assert 'status' in response.json
+    assert 'total' in response.json
+    assert 'completed' in response.json
+    assert 'queued_jobs' in response.json

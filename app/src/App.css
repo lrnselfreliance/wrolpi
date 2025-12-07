@@ -328,3 +328,20 @@ table.ratio-table td.min-width {
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.5s infinite;
 }
+
+/* Sticky footer for file browser */
+.sticky-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.5em 1em;
+    background-color: #f9fafb;
+    border-top: 1px solid rgba(34, 36, 38, 0.15);
+    z-index: 100;
+}
+
+.sticky-footer.inverted {
+    background-color: #1b1c1d;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

@@ -7,7 +7,6 @@ import {
     PlaceholderLine,
     TableBody,
     TableCell,
-    TableFooter,
     TableHeader,
     TableHeaderCell,
     TableRow
@@ -20,7 +19,7 @@ import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
-import {SettingsContext} from "../contexts/contexts";
+import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {BulkTagModal} from "./BulkTagModal";
 
 function depthIndentation(path) {
@@ -146,6 +145,7 @@ export function FileBrowser() {
     const [isDirectoryIgnored, setIsDirectoryIgnored] = React.useState(false);
 
     const {settings, fetchSettings} = React.useContext(SettingsContext);
+    const {inverted} = React.useContext(ThemeContext);
 
     const selectedPathsCount = selectedPaths ? selectedPaths.length : 0;
 
@@ -217,88 +217,85 @@ export function FileBrowser() {
         }
     }
 
-    const footer = <TableFooter fullWidth>
-        <TableRow>
-            <TableHeaderCell colSpan={3}>
-                <FilesRefreshButton paths={selectedPaths}/>
-                <APIButton
-                    icon='trash'
-                    color='red'
-                    confirmContent='Are you sure you want to delete these files?'
-                    confirmButton='Delete'
-                    onClick={onDelete}
-                    disabled={selectedPathsCount === 0}
-                    obeyWROLMode={true}
-                />
-                <Button icon='text cursor'
-                        color='yellow'
-                        onClick={() => setRenameOpen(true)}
-                        disabled={wrolModeEnabled || selectedPathsCount !== 1}
-                />
-                {selectedPathsCount === 1 ?
-                    <RenameModal
-                        open={renameOpen}
-                        onClose={() => setRenameOpen(false)}
-                        onPending={setPending}
-                        path={selectedPaths[0]}
-                        onSubmit={reset}
-                    /> : null}
-                <Button icon='move'
-                        color='teal'
-                        disabled={wrolModeEnabled || selectedPathsCount === 0}
-                        onClick={() => setMoveOpen(true)}
-                />
-                {selectedPathsCount > 0 ?
-                    <MoveModal open={moveOpen}
-                               onClose={() => setMoveOpen(false)}
-                               paths={selectedPaths}
-                               onSubmit={reset}
-                    /> : null}
-                <Button
-                    color='blue'
-                    onClick={() => setMakeDirectoryOpen(true)}
-                    disabled={wrolModeEnabled}
-                    style={{paddingLeft: '1em', paddingRight: '0.8em'}}
-                >
-                    <IconGroup>
-                        <Icon name='folder'/>
-                        <Icon corner name='add'/>
-                    </IconGroup>
-                </Button>
-                <MakeDirectoryModal
-                    open={makeDirectoryOpen}
-                    onClose={() => setMakeDirectoryOpen(false)}
-                    parent={selectedPaths.length ? selectedPaths[0] : null}
-                    onSubmit={handleMakeDirectory}
-                />
-                <Button
-                    color='grey'
-                    icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
-                    disabled={!singleDirectorySelected || wrolModeEnabled}
-                    onClick={() => setIgnoreDirectoryOpen(true)}
-                />
-                <IgnoreDirectoryModal
-                    open={ignoreDirectoryOpen}
-                    onClose={onIgnore}
-                    onSubmit={onIgnore}
-                    directory={selectedPaths.length === 1 ? selectedPaths[0] : null}
-                    ignored={isDirectoryIgnored}
-                />
-                <Button
-                    color='violet'
-                    icon='tags'
-                    disabled={selectedPathsCount === 0}
-                    onClick={() => setBulkTagOpen(true)}
-                />
-                <BulkTagModal
-                    open={bulkTagOpen}
-                    onClose={() => setBulkTagOpen(false)}
-                    paths={selectedPaths}
-                    onComplete={reset}
-                />
-            </TableHeaderCell>
-        </TableRow>
-    </TableFooter>;
+    const footerClassName = `sticky-footer ${inverted}`;
+    const footer = <div className={footerClassName}>
+        <FilesRefreshButton paths={selectedPaths}/>
+        <APIButton
+            icon='trash'
+            color='red'
+            confirmContent='Are you sure you want to delete these files?'
+            confirmButton='Delete'
+            onClick={onDelete}
+            disabled={selectedPathsCount === 0}
+            obeyWROLMode={true}
+        />
+        <Button icon='text cursor'
+                color='yellow'
+                onClick={() => setRenameOpen(true)}
+                disabled={wrolModeEnabled || selectedPathsCount !== 1}
+        />
+        {selectedPathsCount === 1 ?
+            <RenameModal
+                open={renameOpen}
+                onClose={() => setRenameOpen(false)}
+                onPending={setPending}
+                path={selectedPaths[0]}
+                onSubmit={reset}
+            /> : null}
+        <Button icon='move'
+                color='teal'
+                disabled={wrolModeEnabled || selectedPathsCount === 0}
+                onClick={() => setMoveOpen(true)}
+        />
+        {selectedPathsCount > 0 ?
+            <MoveModal open={moveOpen}
+                       onClose={() => setMoveOpen(false)}
+                       paths={selectedPaths}
+                       onSubmit={reset}
+            /> : null}
+        <Button
+            color='blue'
+            onClick={() => setMakeDirectoryOpen(true)}
+            disabled={wrolModeEnabled}
+            style={{paddingLeft: '1em', paddingRight: '0.8em'}}
+        >
+            <IconGroup>
+                <Icon name='folder'/>
+                <Icon corner name='add'/>
+            </IconGroup>
+        </Button>
+        <MakeDirectoryModal
+            open={makeDirectoryOpen}
+            onClose={() => setMakeDirectoryOpen(false)}
+            parent={selectedPaths.length ? selectedPaths[0] : null}
+            onSubmit={handleMakeDirectory}
+        />
+        <Button
+            color='grey'
+            icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
+            disabled={!singleDirectorySelected || wrolModeEnabled}
+            onClick={() => setIgnoreDirectoryOpen(true)}
+        />
+        <IgnoreDirectoryModal
+            open={ignoreDirectoryOpen}
+            onClose={onIgnore}
+            onSubmit={onIgnore}
+            directory={selectedPaths.length === 1 ? selectedPaths[0] : null}
+            ignored={isDirectoryIgnored}
+        />
+        <Button
+            color='violet'
+            icon='tags'
+            disabled={selectedPathsCount === 0}
+            onClick={() => setBulkTagOpen(true)}
+        />
+        <BulkTagModal
+            open={bulkTagOpen}
+            onClose={() => setBulkTagOpen(false)}
+            paths={selectedPaths}
+            onComplete={reset}
+        />
+    </div>;
 
     const onFolderClick = async (folder) => {
         let newFolders;
@@ -323,24 +320,26 @@ export function FileBrowser() {
     }
 
     return <>
-        <SortableTable
-            tableProps={{unstackable: true}}
-            data={browseFiles}
-            tableHeaders={headers}
-            defaultSortColumn='path'
-            rowKey='path'
-            rowFunc={(i, sortData) => <Path
-                key={i['key']}
-                path={i}
-                onFolderClick={onFolderClick}
-                onFileClick={(i) => setPreviewFile(i)}
-                sortData={sortData}
-                selectedPaths={selectedPaths}
-                onSelect={onSelect}
-                disabled={pending}
-            />}
-            footer={footer}
-        />
+        <div style={{marginBottom: '4em'}}>
+            <SortableTable
+                tableProps={{unstackable: true}}
+                data={browseFiles}
+                tableHeaders={headers}
+                defaultSortColumn='path'
+                rowKey='path'
+                rowFunc={(i, sortData) => <Path
+                    key={i['key']}
+                    path={i}
+                    onFolderClick={onFolderClick}
+                    onFileClick={(i) => setPreviewFile(i)}
+                    sortData={sortData}
+                    selectedPaths={selectedPaths}
+                    onSelect={onSelect}
+                    disabled={pending}
+                />}
+            />
+        </div>
+        {footer}
     </>
 }
 

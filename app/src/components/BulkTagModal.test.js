@@ -10,10 +10,9 @@ jest.mock('../api', () => ({
     getBulkTagProgress: jest.fn(),
 }));
 
-// Mock Theme components
-jest.mock('./Theme', () => ({
-    ...jest.requireActual('./Theme'),
-    Modal: ({open, onClose, children, closeIcon}) => {
+// Mock Theme components with compound patterns
+jest.mock('./Theme', () => {
+    const MockModal = ({open, onClose, children, closeIcon}) => {
         if (!open) return null;
         return (
             <div data-testid="modal">
@@ -21,25 +20,31 @@ jest.mock('./Theme', () => ({
                 {children}
             </div>
         );
-    },
-    ModalHeader: ({children}) => <div data-testid="modal-header">{children}</div>,
-    ModalContent: ({children}) => <div data-testid="modal-content">{children}</div>,
-    ModalActions: ({children}) => <div data-testid="modal-actions">{children}</div>,
-    Button: ({children, onClick, disabled, color, ...props}) => (
-        <button onClick={onClick} disabled={disabled} data-testid={`button-${children}`} {...props}>{children}</button>
-    ),
-    Header: ({children, as}) => <div data-testid="header">{children}</div>,
-    Divider: () => <hr data-testid="divider"/>,
-    Loader: ({children}) => <div data-testid="loader">{children}</div>,
-    Message: ({children, warning, negative, positive}) => (
-        <div data-testid={`message-${warning ? 'warning' : negative ? 'negative' : positive ? 'positive' : 'info'}`}>
-            {children}
-        </div>
-    ),
-    Progress: ({percent, children}) => (
-        <div data-testid="progress" data-percent={percent}>{children}</div>
-    ),
-}));
+    };
+    MockModal.Header = ({children}) => <div data-testid="modal-header">{children}</div>;
+    MockModal.Content = ({children}) => <div data-testid="modal-content">{children}</div>;
+    MockModal.Actions = ({children}) => <div data-testid="modal-actions">{children}</div>;
+    MockModal.Description = ({children}) => <div data-testid="modal-description">{children}</div>;
+
+    return {
+        ...jest.requireActual('./Theme'),
+        Modal: MockModal,
+        Button: ({children, onClick, disabled, color, ...props}) => (
+            <button onClick={onClick} disabled={disabled} data-testid={`button-${children}`} {...props}>{children}</button>
+        ),
+        Header: ({children, as}) => <div data-testid="header">{children}</div>,
+        Divider: () => <hr data-testid="divider"/>,
+        Loader: ({children}) => <div data-testid="loader">{children}</div>,
+        Message: ({children, warning, negative, positive}) => (
+            <div data-testid={`message-${warning ? 'warning' : negative ? 'negative' : positive ? 'positive' : 'info'}`}>
+                {children}
+            </div>
+        ),
+        Progress: ({percent, children}) => (
+            <div data-testid="progress" data-percent={percent}>{children}</div>
+        ),
+    };
+});
 
 // Import mocked API functions
 import {getBulkTagPreview, applyBulkTags, getBulkTagProgress} from '../api';

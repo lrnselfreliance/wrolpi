@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Grid, Input} from 'semantic-ui-react';
 import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
-import {Button, Modal, ModalActions, ModalContent, ModalHeader} from '../Theme';
+import {Button, Modal} from '../Theme';
 import {TagsSelector} from '../../Tags';
 import {APIButton, Toggle} from '../Common';
 
@@ -105,8 +105,8 @@ export function CollectionTagModal({
             onClose={handleClose}
             closeIcon
         >
-            <ModalHeader>{modalTitle}</ModalHeader>
-            <ModalContent>
+            <Modal.Header>{modalTitle}</Modal.Header>
+            <Modal.Content>
                 <Grid columns={1}>
                     <Grid.Row>
                         <Grid.Column>
@@ -152,15 +152,15 @@ export function CollectionTagModal({
                         </Grid.Row>
                     )}
                 </Grid>
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 <Button onClick={handleClose}>Cancel</Button>
                 <APIButton
                     color='violet'
                     onClick={handleSave}
                     obeyWROLMode={true}
                 >{saveButtonText}</APIButton>
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
     );
 }

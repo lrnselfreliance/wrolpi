@@ -1,6 +1,6 @@
 import React, {useEffect} from "react";
 import {ApiDownError, deleteTag, getTags, saveTag} from "./api";
-import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
+import {Dimmer, Divider, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {
     APIButton,
     contrastingColor,
@@ -11,13 +11,10 @@ import {
 } from "./components/Common";
 import {
     Button,
-    FormInput,
+    Form,
     Header,
     Loader,
     Modal,
-    ModalActions,
-    ModalContent,
-    ModalHeader,
     Segment
 } from "./components/Theme";
 import _ from "lodash";
@@ -294,7 +291,7 @@ function EditTagsModal() {
                onOpen={() => setOpen(true)}
                onClose={localOnClose}
         >
-            <ModalHeader>Edit Tags</ModalHeader>
+            <Modal.Header>Edit Tags</Modal.Header>
             <div className={`content scrolling ${inverted}`} id='editModalContent'>
                 <Label.Group tag>
                     <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
@@ -303,7 +300,7 @@ function EditTagsModal() {
                 </Label.Group>
 
                 <Form autoComplete='off'>
-                    <FormInput required
+                    <Form.Input required
                                label={<b>Tag Name</b>}
                                placeholder='Unique name'
                                value={tagName}
@@ -464,7 +461,7 @@ export function AddTagsButton({
                open={open}
                onOpen={(e) => handleOpen(e)}
                onClose={() => setOpen(false)}>
-            <ModalContent>
+            <Modal.Content>
                 {loading && <Dimmer active><Loader/></Dimmer>}
                 <Header as='h4'>Applied Tags</Header>
 
@@ -473,8 +470,8 @@ export function AddTagsButton({
                 <Divider/>
 
                 {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 <Grid textAlign='left'>
                     <Grid.Row>
                         <Grid.Column width={8}>
@@ -487,7 +484,7 @@ export function AddTagsButton({
                         </Grid.Column>
                     </Grid.Row>
                 </Grid>
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
     </>
 }

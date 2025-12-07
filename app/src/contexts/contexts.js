@@ -1,7 +1,18 @@
 import React from "react";
 import {createMedia} from "@artsy/fresnel";
 
-export const ThemeContext = React.createContext({theme: null, i: {}});
+/** @type {React.Context<import('../types/theme').ThemeContextValue>} */
+export const ThemeContext = React.createContext({
+    theme: 'light',
+    i: {},
+    s: {},
+    t: {},
+    inverted: '',
+    savedTheme: null,
+    setDarkTheme: () => {},
+    setLightTheme: () => {},
+    cycleSavedTheme: () => {},
+});
 
 export const StatusContext = React.createContext({
     status: {},

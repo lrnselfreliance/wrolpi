@@ -22,7 +22,7 @@ import {
     useTitle
 } from "./Common";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Header, Loader, Segment, Statistic, StatisticGroup, Table, TextArea} from "./Theme";
+import {Button, Header, Loader, Segment, Statistic, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
@@ -252,7 +252,7 @@ function StatisticsPage() {
             <Header as='h1'>Statistics</Header>
             <Header as='h2'>Files</Header>
             <Segment>
-                <StatisticGroup>
+                <Statistic.Group>
                     <Statistic>
                         <StatisticValue>{toLocaleString(total_count)}</StatisticValue>
                         <StatisticLabel>All Files</StatisticLabel>
@@ -261,10 +261,10 @@ function StatisticsPage() {
                         <StatisticValue>{humanFileSize(total_size)}</StatisticValue>
                         <StatisticLabel>Total Size</StatisticLabel>
                     </Statistic>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
             <Segment>
-                <StatisticGroup size='small'>
+                <Statistic.Group size='small'>
                     <Link to={'/videos/statistics'}>
                         <Statistic color={mimetypeColor('video/')}>
                             <StatisticValue>{toLocaleString(video_count)}</StatisticValue>
@@ -287,10 +287,10 @@ function StatisticsPage() {
                         <StatisticValue>{toLocaleString(image_count)}</StatisticValue>
                         <StatisticLabel>Images</StatisticLabel>
                     </Statistic>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
             <Segment>
-                <StatisticGroup size='tiny'>
+                <Statistic.Group size='tiny'>
                     <Statistic>
                         <StatisticValue>{toLocaleString(zip_count)}</StatisticValue>
                         <StatisticLabel>ZIP</StatisticLabel>
@@ -299,12 +299,12 @@ function StatisticsPage() {
                         <StatisticValue>{toLocaleString(audio_count)}</StatisticValue>
                         <StatisticLabel>Audio</StatisticLabel>
                     </Statistic>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
 
             <Header as='h2'>Tags</Header>
             <Segment>
-                <StatisticGroup>
+                <Statistic.Group>
                     <Statistic>
                         <StatisticValue>{humanNumber(tags_count)}</StatisticValue>
                         <StatisticLabel>Tags</StatisticLabel>
@@ -317,17 +317,17 @@ function StatisticsPage() {
                         <StatisticValue>{humanNumber(tagged_zims)}</StatisticValue>
                         <StatisticLabel>Tagged Zims</StatisticLabel>
                     </Statistic>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
 
             <Header as='h2'>Database</Header>
             <Segment>
-                <StatisticGroup>
+                <Statistic.Group>
                     <Statistic>
                         <StatisticValue>{humanFileSize(db_size)}</StatisticValue>
                         <StatisticLabel>Size</StatisticLabel>
                     </Statistic>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
         </>;
     }

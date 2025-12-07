@@ -3,10 +3,9 @@ import {act, render, screen, waitFor} from '../../test-utils';
 import userEvent from '@testing-library/user-event';
 import {CollectionTagModal} from './CollectionTagModal';
 
-// Mock Theme components
-jest.mock('../Theme', () => ({
-    ...jest.requireActual('../Theme'),
-    Modal: ({open, onClose, children, closeIcon}) => {
+// Mock Theme components with compound patterns
+jest.mock('../Theme', () => {
+    const MockModal = ({open, onClose, children, closeIcon}) => {
         if (!open) return null;
         return (
             <div data-testid="modal">
@@ -14,14 +13,20 @@ jest.mock('../Theme', () => ({
                 {children}
             </div>
         );
-    },
-    ModalHeader: ({children}) => <div data-testid="modal-header">{children}</div>,
-    ModalContent: ({children}) => <div data-testid="modal-content">{children}</div>,
-    ModalActions: ({children}) => <div data-testid="modal-actions">{children}</div>,
-    Button: ({children, onClick, ...props}) => (
-        <button onClick={onClick} data-testid={`button-${children}`} {...props}>{children}</button>
-    ),
-}));
+    };
+    MockModal.Header = ({children}) => <div data-testid="modal-header">{children}</div>;
+    MockModal.Content = ({children}) => <div data-testid="modal-content">{children}</div>;
+    MockModal.Actions = ({children}) => <div data-testid="modal-actions">{children}</div>;
+    MockModal.Description = ({children}) => <div data-testid="modal-description">{children}</div>;
+
+    return {
+        ...jest.requireActual('../Theme'),
+        Modal: MockModal,
+        Button: ({children, onClick, ...props}) => (
+            <button onClick={onClick} data-testid={`button-${children}`} {...props}>{children}</button>
+        ),
+    };
+});
 
 // Mock Common components
 jest.mock('../Common', () => ({

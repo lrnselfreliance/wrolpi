@@ -1,7 +1,7 @@
 import React from "react";
 import _ from "lodash";
 import {InfoPopup, RequiredAsterisk, Toggle, validURL, validURLs} from "../components/Common";
-import {FormInput, Icon, TextArea} from "../components/Theme";
+import {Form, Icon, TextArea} from "../components/Theme";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 
 
@@ -339,13 +339,13 @@ export function InputForm({
                 />
             }
         </label>
-        <FormInput
+        <Form.Input
             id={`${name}_input`}
             placeholder={placeholder}
             error={inputProps.error}
         >
             <input {...extraInputProps} {...inputProps}/>
-        </FormInput>
+        </Form.Input>
         {messageElm}
     </>
 }
@@ -435,7 +435,7 @@ export function UrlsTextarea({name = 'urls', required, form}) {
     };
 
     return (
-        <FormInput required error={inputProps.error} label="URLs">
+        <Form.Input required error={inputProps.error} label="URLs">
             <TextArea
                 id="urls_textarea"
                 placeholder="Enter one URL per line"
@@ -444,7 +444,7 @@ export function UrlsTextarea({name = 'urls', required, form}) {
                 onKeyDown={handleKeyDown}
                 {...inputProps}
             />
-        </FormInput>
+        </Form.Input>
     );
 }
 
@@ -452,7 +452,7 @@ export function ToggleForm({form, name, label, path, icon = null, iconSize = 'bi
     const [inputProps, inputAttrs] = form.getCustomProps({name, path})
 
     const iconElm = icon ? <Icon size={iconSize} name={icon}/> : null;
-    return <FormInput
+    return <Form.Input
         label={label}>
         {iconElm}
         <Toggle
@@ -461,5 +461,5 @@ export function ToggleForm({form, name, label, path, icon = null, iconSize = 'bi
             checked={inputProps.value}
             onChange={inputProps.onChange}
         />
-    </FormInput>
+    </Form.Input>
 }

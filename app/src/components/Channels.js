@@ -19,7 +19,7 @@ import {Link, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";
-import {Button, Form, Header, Loader, Modal, ModalContent, Segment, Statistic} from "./Theme";
+import {Button, Form, Header, Loader, Modal, Segment, Statistic} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {InputForm, ToggleForm} from "../hooks/useForm";
@@ -296,7 +296,7 @@ export function ChannelEditPage() {
                 </Grid.Row>
             </Grid>
             <Modal open={downloadModalOpen} closeIcon onClose={() => setDownloadModalOpen(false)}>
-                <ModalContent>
+                <Modal.Content>
                     <Header as='h2'>New Channel Download</Header>
                     <ChannelDownloadForm
                         channel_id={channelId}
@@ -304,7 +304,7 @@ export function ChannelEditPage() {
                         onCancel={() => setDownloadModalOpen(false)}
                         onDelete={onDelete}
                     />
-                </ModalContent>
+                </Modal.Content>
             </Modal>
 
             <RecurringDownloadsTable downloads={channel?.downloads} fetchDownloads={fetchChannel} onDelete={onDelete}/>

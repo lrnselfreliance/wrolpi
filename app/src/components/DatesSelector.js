@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Form, FormField, Modal, ModalActions, ModalContent, ModalHeader, Segment} from "./Theme";
+import {Button, Form, Modal, Segment} from "./Theme";
 import {Checkbox, Dropdown} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {monthNames} from "./Common";
@@ -120,7 +120,7 @@ function DateRangeForm({dateRange, setDateRange}) {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column>
-                        <FormField>
+                        <Form.Field>
                             <label>From Year</label>
                             <Dropdown search scrolling fluid
                                       options={yearRange}
@@ -128,10 +128,10 @@ function DateRangeForm({dateRange, setDateRange}) {
                                       onChange={handleFromYear}
                                       error={!!error}
                             />
-                        </FormField>
+                        </Form.Field>
                     </Grid.Column>
                     <Grid.Column>
-                        <FormField>
+                        <Form.Field>
                             <label>To Year</label>
                             <Dropdown search scrolling fluid
                                       options={yearRange.reverse()}
@@ -139,7 +139,7 @@ function DateRangeForm({dateRange, setDateRange}) {
                                       onChange={handleToYear}
                                       error={!!error}
                             />
-                        </FormField>
+                        </Form.Field>
                     </Grid.Column>
                 </Grid.Row>
             </Grid>
@@ -231,19 +231,19 @@ export function DateSelectorButton({
                onClose={handleClose}
                size='tiny'
         >
-            <ModalHeader>Filter by Published Date</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Filter by Published Date</Modal.Header>
+            <Modal.Content>
                 <Segment>
                     <DateRangeForm dateRange={dateRange} setDateRange={localOnSetDateRange}/>
                 </Segment>
                 <Segment>
                     <MonthsForm monthsSelected={monthsSelected} setMonthsSelected={setMonthsSelected}/>
                 </Segment>
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 <Button onClick={handleClear} secondary>Clear</Button>
                 <Button onClick={handleClose}>Close</Button>
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
     </React.Fragment>
 }

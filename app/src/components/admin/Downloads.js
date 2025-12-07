@@ -30,7 +30,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
+import {Button, Header, Modal, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import {
     EditArchiveDownloadForm,
@@ -143,13 +143,13 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         open={errorModalOpen}
         trigger={<Button icon='exclamation circle' color='orange'/>}
     >
-        <ModalHeader>Download Error</ModalHeader>
-        <ModalContent>
+        <Modal.Header>Download Error</Modal.Header>
+        <Modal.Content>
             <pre style={{overflowX: 'scroll'}}>{error}</pre>
-        </ModalContent>
-        <ModalActions>
+        </Modal.Content>
+        <Modal.Actions>
             <SButton onClick={handleEditClose}>Close</SButton>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>;
 
     const editButton = <Button icon='edit' onClick={handleEditOpen}/>;
@@ -221,10 +221,10 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
                              open={editModalOpen}
                              onClose={handleEditClose}
     >
-        <ModalHeader>Edit Download</ModalHeader>
-        <ModalContent>
+        <Modal.Header>Edit Download</Modal.Header>
+        <Modal.Content>
             {editForm}
-        </ModalContent>
+        </Modal.Content>
     </Modal>;
 
     return <TableRow>
@@ -357,10 +357,10 @@ class OnceDownloadRow extends React.Component {
                     closeIcon
                     trigger={<Button icon='exclamation circle' color='red'/>}
                 >
-                    <ModalHeader>Download Error</ModalHeader>
-                    <ModalContent>
+                    <Modal.Header>Download Error</Modal.Header>
+                    <Modal.Content>
                         <pre style={{overflowX: 'scroll'}}>{error}</pre>
-                    </ModalContent>
+                    </Modal.Content>
                 </Modal>
             )
         }
@@ -375,8 +375,8 @@ class OnceDownloadRow extends React.Component {
                     open={this.state.editModalOpen}
                     onClose={this.handleEditClose}
                 >
-                    <ModalHeader>Edit Video Download</ModalHeader>
-                    <ModalContent>
+                    <Modal.Header>Edit Video Download</Modal.Header>
+                    <Modal.Content>
                         <EditVideosDownloadForm
                             download={{
                                 urls: url,
@@ -387,7 +387,7 @@ class OnceDownloadRow extends React.Component {
                             onSuccess={this.handleEditSuccess}
                             onDelete={this.handleDelete}
                         />
-                    </ModalContent>
+                    </Modal.Content>
                 </Modal>
             );
         } else if (downloader === Downloaders.Archive) {
@@ -397,8 +397,8 @@ class OnceDownloadRow extends React.Component {
                     open={this.state.editModalOpen}
                     onClose={this.handleEditClose}
                 >
-                    <ModalHeader>Edit Archive Download</ModalHeader>
-                    <ModalContent>
+                    <Modal.Header>Edit Archive Download</Modal.Header>
+                    <Modal.Content>
                         <EditArchiveDownloadForm
                             download={{
                                 urls: url,
@@ -409,7 +409,7 @@ class OnceDownloadRow extends React.Component {
                             onSuccess={this.handleEditSuccess}
                             onDelete={this.handleDelete}
                         />
-                    </ModalContent>
+                    </Modal.Content>
                 </Modal>
             );
         }

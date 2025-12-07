@@ -49,12 +49,8 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,
-    CardIcon,
     Icon,
     Modal,
-    ModalActions,
-    ModalContent,
-    ModalHeader,
     Placeholder,
     Popup,
     Progress,
@@ -212,7 +208,7 @@ function ImageRowCells({file}) {
 }
 
 export function EbookRowCells({file}) {
-    let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let cover = <Card.Icon><FileIcon file={file}/></Card.Icon>;
     const posterPath = findPosterPath(file);
     if (posterPath) {
         const coverSrc = `/media/${encodeMediaPath(posterPath)}`;
@@ -429,16 +425,16 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
     if (filters && filters.length > 0) {
         return <>
             <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
-                {modalHeader || <ModalHeader>Filter</ModalHeader>}
-                <ModalContent>
+                {modalHeader || <Modal.Header>Filter</Modal.Header>}
+                <Modal.Content>
                     <Form>
                         {filterFields}
                     </Form>
-                </ModalContent>
-                <ModalActions>
+                </Modal.Content>
+                <Modal.Actions>
                     <Button onClick={handleClear} secondary>Clear</Button>
                     <Button onClick={() => setOpen(false)}>Close</Button>
-                </ModalActions>
+                </Modal.Actions>
             </Modal>
             <Button
                 icon='filter'

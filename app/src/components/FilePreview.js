@@ -6,7 +6,7 @@ import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {StlViewer} from "react-stl-viewer";
-import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
+import {Button, Modal} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
@@ -35,7 +35,7 @@ function getEpubViewerURL(previewFile) {
 
 function getIframePreviewModal(previewFile, url) {
     url = url || getMediaPathURL(previewFile);
-    return <ModalContent>
+    return <Modal.Content>
         <div className='full-height'>
             <iframe title='textModal' src={url}
                     style={{
@@ -44,7 +44,7 @@ function getIframePreviewModal(previewFile, url) {
                         backgroundColor: '#ffffff',
                     }}/>
         </div>
-    </ModalContent>
+    </Modal.Content>
 }
 
 function getImagePreviewModal(previewFile) {
@@ -53,14 +53,14 @@ function getImagePreviewModal(previewFile) {
     // Get the file name from the absolute path.
     const name = path.replace(/^.*[\\\/]/, '');
     return <React.Fragment>
-        <ModalHeader>
+        <Modal.Header>
             {name}
-        </ModalHeader>
-        <ModalContent>
+        </Modal.Header>
+        <Modal.Content>
             <a href={url}>
                 <Image src={url}/>
             </a>
-        </ModalContent>
+        </Modal.Content>
     </React.Fragment>
 }
 
@@ -69,10 +69,10 @@ function getVideoPreviewModal(previewFile) {
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
     return <React.Fragment>
-        <ModalHeader>
+        <Modal.Header>
             {name}
-        </ModalHeader>
-        <ModalContent>
+        </Modal.Header>
+        <Modal.Content>
             <SHeader as='h5'>{path['path']}</SHeader>
             <video controls
                    autoPlay={true}
@@ -82,7 +82,7 @@ function getVideoPreviewModal(previewFile) {
             >
                 <source src={url}/>
             </video>
-        </ModalContent>
+        </Modal.Content>
     </React.Fragment>
 }
 
@@ -93,10 +93,10 @@ function getAudioPreviewModal(previewFile) {
     // Some audio files may not have the correct mimetype.  Trust the suffix identifies an audio file.
     const type = previewFile['mimetype'] !== 'application/octet-stream' ? previewFile['mimetype'] : 'audio/mpeg';
     return <React.Fragment>
-        <ModalHeader>
+        <Modal.Header>
             {name}
-        </ModalHeader>
-        <ModalContent>
+        </Modal.Header>
+        <Modal.Content>
             <audio controls
                    autoPlay={true}
                    id="player"
@@ -105,7 +105,7 @@ function getAudioPreviewModal(previewFile) {
             >
                 <source src={url} type={type}/>
             </audio>
-        </ModalContent>
+        </Modal.Content>
     </React.Fragment>
 }
 
@@ -114,14 +114,14 @@ function getSTLPreviewModal(previewFile) {
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
     return <React.Fragment>
-        <ModalHeader>{name}</ModalHeader>
-        <ModalContent>
+        <Modal.Header>{name}</Modal.Header>
+        <Modal.Content>
             <StlViewer orbitControls shadows
                        url={url}
                        style={{height: '80vw', width: '80vw'}}
                        modelProps={{color: '#7353a8'}}
             />
-        </ModalContent>
+        </Modal.Content>
     </React.Fragment>
 }
 
@@ -131,7 +131,7 @@ function getGenericPreviewModal(previewFile) {
     const name = path.replace(/^.*[\\\/]/, '');
 
     return <React.Fragment>
-        <ModalHeader>{name}</ModalHeader>
+        <Modal.Header>{name}</Modal.Header>
     </React.Fragment>
 }
 
@@ -164,11 +164,11 @@ export function FilePreviewProvider({children}) {
                               open={errorModalOpen}
                               onClose={handleErrorModalClose}
     >
-        <ModalHeader>Unknown File</ModalHeader>
-        <ModalContent>Cannot display preview, no such file exists: {previewQuery}</ModalContent>
-        <ModalActions>
+        <Modal.Header>Unknown File</Modal.Header>
+        <Modal.Content>Cannot display preview, no such file exists: {previewQuery}</Modal.Content>
+        <Modal.Actions>
             <Button onClick={handleErrorModalClose}>Close</Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>
 
     React.useEffect(() => {
@@ -254,9 +254,9 @@ export function FilePreviewProvider({children}) {
             : null;
         const directoryURL = path ? `/files?folders=${encodeURIComponent(pathDirectory(path))}` : null;
         const directoryButton = path ? <Button as='a' href={directoryURL} icon='folder'/> : null;
-        const pathContent = path ? <ModalContent>
+        const pathContent = path ? <Modal.Content>
                 <pre>{path}</pre>
-            </ModalContent>
+            </Modal.Content>
             : null;
         console.log('Previewing', path);
         console.log('Preview Download URL', downloadURL);
@@ -268,7 +268,7 @@ export function FilePreviewProvider({children}) {
                                onClose={e => handleClose(e)}
         >
             {pathContent}
-            <ModalActions>
+            <Modal.Actions>
                 <Media at='mobile'>
                     <Grid>
                         <Grid.Row>
@@ -293,7 +293,7 @@ export function FilePreviewProvider({children}) {
                         </Grid.Row>
                     </Grid>
                 </Media>
-            </ModalActions>
+            </Modal.Actions>
             {content}
         </Modal>);
     }

@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import {PageContainer, useTitle} from "./Common";
-import {Button, Header, Modal, ModalContent, ModalHeader, Segment, Table} from "./Theme";
+import {Button, Header, Modal, Segment, Table} from "./Theme";
 import {Icon, TableBody, TableCell, TableRow} from "semantic-ui-react";
 import QRCode from "react-qr-code";
 
@@ -26,12 +26,12 @@ function CoinQRButton({qrCodeValue, header, buttonColor}) {
                onClose={() => setOpen(false)}
                onOpen={() => setOpen(true)}
         >
-            <ModalHeader>{header}</ModalHeader>
-            <ModalContent>
+            <Modal.Header>{header}</Modal.Header>
+            <Modal.Content>
                 <div style={{backgroundColor: '#FFFFFF', display: 'inline-block', padding: '1em'}}>
                     <QRCode value={qrCodeValue} size={300}/>
                 </div>
-            </ModalContent>
+            </Modal.Content>
         </Modal>
     </>
 }

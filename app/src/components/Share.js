@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Header, Icon, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
+import {Button, Header, Icon, Modal} from "./Theme";
 import {IconGroup} from "semantic-ui-react";
 import QRCode from "react-qr-code";
 import {sendNotification} from "../api";
@@ -43,17 +43,17 @@ export const ShareButton = () => {
                open={open}
                onClose={handleClose}
         >
-            <ModalHeader>Share this page</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Share this page</Modal.Header>
+            <Modal.Content>
                 <Header as='h4'>Another user can scan this QR code to view this page</Header>
                 <div style={{padding: '1em', backgroundColor: '#ffffff', display: "inline-block"}}>
                     <QRCode value={window.location.href}/>
                 </div>
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 <ShareEveryoneButton url={window.location.href} onClick={handleClose}/>
                 <Button onClick={handleClose}>Close</Button>
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
         <a href='#' onClick={handleOpen}>
             <IconGroup size='large'>

@@ -8,7 +8,7 @@ import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, Ta
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {AccordionContent, AccordionTitle, Grid, GridColumn, GridRow, Header as SHeader, Label} from "semantic-ui-react";
-import {Accordion, Header, Icon, Loader, Modal, ModalContent, Segment} from "./Theme";
+import {Accordion, Header, Icon, Loader, Modal, Segment} from "./Theme";
 import {QueryContext, ThemeContext} from "../contexts/contexts";
 
 const SUGGESTED_APPS = [
@@ -456,9 +456,9 @@ export function SearchIconButton() {
             <Icon name='search'/>
         </a>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
-            <ModalContent>
+            <Modal.Content>
                 {modalContents}
-            </ModalContent>
+            </Modal.Content>
         </Modal>
     </React.Fragment>
 }

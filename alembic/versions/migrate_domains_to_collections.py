@@ -45,12 +45,17 @@ class MCollection(MBase):
 
 
 class MCollectionItem(MBase):
-    """Migration-stable CollectionItem model with minimum required columns."""
+    """Migration-stable CollectionItem model with minimum required columns.
+
+    Note: ForeignKey constraints are NOT declared here because they reference
+    tables (file_group) that are not in this migration's declarative base.
+    The actual FK constraints exist in the database schema.
+    """
     __tablename__ = 'collection_item'
 
     id = Column(Integer, primary_key=True)
-    collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'), nullable=False)
-    file_group_id = Column(Integer, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
+    collection_id = Column(Integer, nullable=False)
+    file_group_id = Column(Integer, nullable=False)
     position = Column(Integer, nullable=False, default=0)
 
 
@@ -146,7 +151,8 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
     Migrate all Domain records to Collection records.
 
     This function is integrated into the alembic migration.
-    Uses local MCollection and MCollectionItem models for migration stability.
+    Uses local MCollection model for migration stability, and raw SQL for
+    CollectionItem operations to avoid FK resolution issues with file_group.
     """
     stats = DomainMigrationStats()
 
@@ -260,27 +266,24 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             file_group_id = archive['file_group_id']
             archive_id = archive['archive_id']
 
-            # Check if CollectionItem already exists
-            existing_item = session.query(MCollectionItem).filter_by(
-                collection_id=collection_id,
-                file_group_id=file_group_id
-            ).first()
+            # Check if CollectionItem already exists (use raw SQL to avoid FK resolution issues)
+            result = session.execute(
+                text("SELECT id FROM collection_item WHERE collection_id = :collection_id AND file_group_id = :file_group_id"),
+                {'collection_id': collection_id, 'file_group_id': file_group_id}
+            )
+            existing_item = result.first()
 
             if existing_item:
                 if verbose:
                     print(f"    Archive {archive_id} already linked to collection")
                 continue
 
-            # Create CollectionItem
-            item = MCollectionItem(
-                collection_id=collection_id,
-                file_group_id=file_group_id,
-                position=idx
+            # Create CollectionItem (use raw SQL to avoid FK resolution issues)
+            session.execute(
+                text("INSERT INTO collection_item (collection_id, file_group_id, position) VALUES (:collection_id, :file_group_id, :position)"),
+                {'collection_id': collection_id, 'file_group_id': file_group_id, 'position': idx}
             )
-            session.add(item)
             stats.collection_items_created += 1
-
-    session.flush()
     print(f"Created {stats.collection_items_created} CollectionItem records")
 
     # Step 5: Skip config export during migration

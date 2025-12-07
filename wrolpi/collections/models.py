@@ -163,8 +163,7 @@ class Collection(ModelHelper, Base):
             # Store absolute path for consistency with Channel config
             config['directory'] = str(self.directory)
 
-        if self.tag_name:
-            config['tag_name'] = self.tag_name
+        config['tag_name'] = self.tag_name
 
         # Include downloads if any exist
         if self.downloads:

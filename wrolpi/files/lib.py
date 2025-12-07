@@ -35,7 +35,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
-from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config
+from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST, IS_MACOS
 
 try:
@@ -1800,8 +1800,70 @@ def queue_bulk_tag_job(paths: List[str], add_tag_names: List[str], remove_tag_na
         pass
 
 
+BULK_TAG_CHUNK_SIZE = 100  # Files per DB session
+BULK_SQL_CHUNK_SIZE = 1000  # Rows per SQL statement
+
+
+def _bulk_insert_tag_files(tag_files: List[Tuple[int, int]]):
+    """Bulk insert TagFiles, ignoring duplicates.
+
+    Args:
+        tag_files: List of (tag_id, file_group_id) tuples
+    """
+    if not tag_files:
+        return
+
+    now_timestamp = now()
+
+    # Process in chunks to avoid overly large SQL statements
+    for i in range(0, len(tag_files), BULK_SQL_CHUNK_SIZE):
+        chunk = tag_files[i:i + BULK_SQL_CHUNK_SIZE]
+        values = [(tag_id, file_group_id, now_timestamp)
+                  for tag_id, file_group_id in chunk]
+
+        with get_db_curs(commit=True) as curs:
+            values_str = mogrify(curs, values)
+            stmt = f'''
+                INSERT INTO tag_file (tag_id, file_group_id, created_at)
+                VALUES {values_str}
+                ON CONFLICT (tag_id, file_group_id) DO NOTHING
+            '''
+            curs.execute(stmt)
+            logger.debug(f'Bulk inserted {len(chunk)} TagFiles')
+
+
+def _bulk_delete_tag_files(tag_files: List[Tuple[int, int]]):
+    """Bulk delete TagFiles.
+
+    Args:
+        tag_files: List of (tag_id, file_group_id) tuples
+    """
+    if not tag_files:
+        return
+
+    # Process in chunks
+    for i in range(0, len(tag_files), BULK_SQL_CHUNK_SIZE):
+        chunk = tag_files[i:i + BULK_SQL_CHUNK_SIZE]
+        pairs = [(tag_id, file_group_id) for tag_id, file_group_id in chunk]
+
+        with get_db_curs(commit=True) as curs:
+            pairs_str = mogrify(curs, pairs)
+            stmt = f'''
+                DELETE FROM tag_file
+                WHERE (tag_id, file_group_id) IN ({pairs_str})
+            '''
+            curs.execute(stmt)
+            logger.debug(f'Bulk deleted {curs.rowcount} TagFiles')
+
+
 async def _process_bulk_tag_job(job: dict):
-    """Process a single bulk tagging job."""
+    """Process a single bulk tagging job with batched DB operations.
+
+    This function uses a three-phase approach for performance:
+    1. Collection: Gather all files and resolve FileGroups, collecting tag operations
+    2. Bulk DB operations: Execute bulk INSERT and DELETE for TagFiles
+    3. Switch activation: Call save_tags_config and sync_tags_directory once at the end
+    """
     from wrolpi.api_utils import api_app
 
     paths = job['paths']
@@ -1840,40 +1902,87 @@ async def _process_bulk_tag_job(job: dict):
         error=None,
     ))
 
-    completed = 0
-    for file_path in unique_files:
+    # Pre-resolve tag IDs (using cached lookups)
+    add_tag_ids = set()
+    remove_tag_ids = set()
+    for tag_name in add_tag_names:
         try:
-            with get_db_session(commit=True) as session:
-                # Get or create FileGroup
-                file_group = FileGroup.get_by_path(file_path, session=session)
-                if not file_group:
-                    # Create FileGroup for unindexed file
-                    paths_for_group = glob_shared_stem(file_path)
-                    paths_for_group = remove_files_in_ignored_directories(paths_for_group)
-                    if paths_for_group:
-                        try:
-                            file_group = FileGroup.from_paths(session, *paths_for_group)
-                            file_group.do_model(session)
-                        except (NoPrimaryFile, IntegrityError) as e:
-                            logger.warning(f'Could not create FileGroup for {file_path}: {e}')
-                            continue
+            add_tag_ids.add(Tag.get_id_by_name(tag_name))
+        except UnknownTag:
+            logger.warning(f'Unknown tag to add: {tag_name}')
+    for tag_name in remove_tag_names:
+        try:
+            remove_tag_ids.add(Tag.get_id_by_name(tag_name))
+        except UnknownTag:
+            logger.warning(f'Unknown tag to remove: {tag_name}')
 
-                if file_group:
-                    # Flush to ensure file_group.id is set before tagging
-                    session.flush([file_group])
-                    # Compute the final desired tags and apply them
-                    current_tags = set(file_group.tag_names)
-                    new_tags = (current_tags | set(add_tag_names)) - set(remove_tag_names)
-                    file_group.set_tags(new_tags, session=session)
+    if not add_tag_ids and not remove_tag_ids:
+        return
 
-        except Exception as e:
-            logger.error(f'Error tagging file {file_path}: {e}', exc_info=e)
+    # Phase 1: Collect all file_group_ids and required operations
+    tag_files_to_insert: List[Tuple[int, int]] = []  # (tag_id, file_group_id)
+    tag_files_to_delete: List[Tuple[int, int]] = []  # (tag_id, file_group_id)
 
-        completed += 1
-        api_app.shared_ctx.bulk_tag['completed'] = completed
+    completed = 0
 
-        # Sleep to allow cancellation and reduce DB pressure
+    # Process files in chunks to balance memory and DB pressure
+    for chunk_start in range(0, len(unique_files), BULK_TAG_CHUNK_SIZE):
+        chunk = unique_files[chunk_start:chunk_start + BULK_TAG_CHUNK_SIZE]
+
+        with get_db_session(commit=True) as session:
+            for file_path in chunk:
+                try:
+                    # Get or create FileGroup
+                    file_group = FileGroup.get_by_path(file_path, session=session)
+                    if not file_group:
+                        # Create FileGroup for unindexed file
+                        paths_for_group = glob_shared_stem(file_path)
+                        paths_for_group = remove_files_in_ignored_directories(paths_for_group)
+                        if paths_for_group:
+                            try:
+                                file_group = FileGroup.from_paths(session, *paths_for_group)
+                                file_group.do_model(session)
+                                session.flush([file_group])
+                            except (NoPrimaryFile, IntegrityError) as e:
+                                logger.warning(f'Could not create FileGroup for {file_path}: {e}')
+                                completed += 1
+                                api_app.shared_ctx.bulk_tag['completed'] = completed
+                                continue
+
+                    if file_group and file_group.id:
+                        # Flush to ensure file_group.id is set
+                        session.flush([file_group])
+
+                        # Get current tag_ids for this file_group
+                        existing_tag_ids = {tf.tag_id for tf in file_group.tag_files}
+
+                        # Determine tags to add (not already present)
+                        for tag_id in add_tag_ids:
+                            if tag_id not in existing_tag_ids:
+                                tag_files_to_insert.append((tag_id, file_group.id))
+
+                        # Determine tags to remove (currently present)
+                        for tag_id in remove_tag_ids:
+                            if tag_id in existing_tag_ids:
+                                tag_files_to_delete.append((tag_id, file_group.id))
+
+                except Exception as e:
+                    logger.error(f'Error processing file {file_path}: {e}', exc_info=e)
+
+                completed += 1
+                api_app.shared_ctx.bulk_tag['completed'] = completed
+
+        # Allow cancellation between chunks
         await asyncio.sleep(0)
+
+    # Phase 2: Bulk database operations
+    _bulk_insert_tag_files(tag_files_to_insert)
+    _bulk_delete_tag_files(tag_files_to_delete)
+
+    # Phase 3: Activate switches ONCE at the end
+    if tag_files_to_insert or tag_files_to_delete:
+        save_tags_config.activate_switch()
+        sync_tags_directory.activate_switch()
 
 
 DISABLE_BULK_TAG_WORKER = bool(PYTEST)

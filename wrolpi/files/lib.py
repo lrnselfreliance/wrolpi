@@ -1706,9 +1706,13 @@ def get_bulk_tag_preview(paths: List[str]) -> BulkTagPreview:
 
     # Find tags shared by ALL files
     # First, get all FileGroups and their tags
+    # We query by stem prefix because unique_files may contain non-primary files
+    # (e.g., .readability.json) but FileGroups are stored with primary_path (e.g., .html)
     with get_db_session() as session:
+        from sqlalchemy import or_
+        stems = [split_path_stem_and_suffix(f, full=True)[0] for f in unique_files]
         file_groups = session.query(FileGroup).filter(
-            FileGroup.primary_path.in_([str(f) for f in unique_files])
+            or_(*[FileGroup.primary_path.like(f'{stem}%') for stem in stems])
         ).all()
 
         if not file_groups:
@@ -1782,10 +1786,16 @@ def queue_bulk_tag_job(paths: List[str], add_tag_names: List[str], remove_tag_na
     )
     api_app.shared_ctx.bulk_tag_queue.put(job)
 
-    # Update queued jobs count
+    # Reset progress state and update queued jobs count
     try:
         current_queued = api_app.shared_ctx.bulk_tag.get('queued_jobs', 0)
-        api_app.shared_ctx.bulk_tag['queued_jobs'] = current_queued + 1
+        api_app.shared_ctx.bulk_tag.update(dict(
+            status='idle',
+            total=0,
+            completed=0,
+            error=None,
+            queued_jobs=current_queued + 1,
+        ))
     except Exception:
         pass
 

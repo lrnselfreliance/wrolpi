@@ -1206,7 +1206,8 @@ async def test_get_bulk_tag_preview_files(async_client, test_session, make_files
     assert 'only_foo' not in preview.shared_tag_names  # Not shared by all
 
 
-def test_get_bulk_tag_preview_directory(test_session, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_get_bulk_tag_preview_directory(test_session, make_files_structure, test_directory, tag_factory):
     """get_bulk_tag_preview recursively finds files in directories."""
     make_files_structure({
         'mydir/foo.txt': 'foo',
@@ -1217,6 +1218,40 @@ def test_get_bulk_tag_preview_directory(test_session, make_files_structure, test
     # Preview for the directory - should find all files recursively
     preview = lib.get_bulk_tag_preview(['mydir/'])
     assert preview.file_count == 3
+
+
+@pytest.mark.asyncio
+async def test_get_bulk_tag_preview_multi_file_filegroup(async_client, test_session, make_files_structure,
+                                                         test_directory, tag_factory):
+    """get_bulk_tag_preview finds shared tags for multi-file FileGroups.
+
+    This tests a bug where `get_unique_files_by_stem` may return a non-primary file (e.g. .readability.json)
+    but the FileGroup query looks for exact primary_path match (e.g. .html), causing no FileGroup to be found.
+    """
+    # Create a multi-file FileGroup like an Archive (primary is .html, but has .readability.json, etc.)
+    # SingleFile archives are named with the pattern: %Y-%m-%d-%H-%M-%S_title.html
+    html_file, json_file, txt_file = make_files_structure({
+        'archive/2025-01-01-12-00-00_Page Title.html': '<html>content</html>',
+        'archive/2025-01-01-12-00-00_Page Title.readability.json': '{"title": "Page"}',
+        'archive/2025-01-01-12-00-00_Page Title.readability.txt': 'Page content',
+    })
+
+    # Create the FileGroup with .html as the primary path
+    fg = FileGroup.from_paths(test_session, html_file, json_file, txt_file)
+    test_session.commit()
+
+    # Verify the primary_path is the .html file
+    assert fg.primary_path.suffix == '.html', f'Expected primary_path to be .html, got {fg.primary_path}'
+
+    # Add a tag to this FileGroup
+    tag = await tag_factory('my_tag')
+    fg.add_tag(tag.id)
+    test_session.commit()
+
+    # Preview for the directory should find the FileGroup and its tag
+    preview = lib.get_bulk_tag_preview(['archive/'])
+    assert preview.file_count == 1, f'Expected 1 FileGroup, got {preview.file_count}'
+    assert 'my_tag' in preview.shared_tag_names, f'Expected my_tag in shared tags, got {preview.shared_tag_names}'
 
 
 def test_get_bulk_tag_preview_empty(test_session, test_directory):

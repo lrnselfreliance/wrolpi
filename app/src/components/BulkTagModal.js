@@ -185,7 +185,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                             indicating
                             color="blue"
                         >
-                            {progress.completed} / {progress.total} files
+                            <span {...t}>{progress.completed} / {progress.total} files</span>
                         </Progress>
                         {progress.queued_jobs > 0 && (
                             <p {...t}>{progress.queued_jobs} job{progress.queued_jobs !== 1 ? 's' : ''} queued</p>

@@ -122,7 +122,7 @@ function UpgradeSegment() {
 
     // Not available in Docker
     if (dockerized) {
-        return <Segment>
+        return <Segment id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Upgrades are not available in Docker environments. Please upgrade your Docker images manually.</p>
         </Segment>;
@@ -130,7 +130,7 @@ function UpgradeSegment() {
 
     // No update available
     if (!status?.update_available) {
-        return <Segment>
+        return <Segment id='upgrade'>
             <Header as='h3'>System Upgrade</Header>
             <p>Your WROLPi is up to date.</p>
             <p>Version: <strong>v{status?.version}</strong> on branch <strong>{status?.git_branch || 'unknown'}</strong>
@@ -146,7 +146,7 @@ function UpgradeSegment() {
     }
 
     // Update available
-    return <Segment>
+    return <Segment id='upgrade'>
         <Header as='h3'>
             <Icon name='arrow alternate circle up'/>
             Upgrade Available

@@ -191,7 +191,7 @@ export function NavBar() {
     if (status?.update_available && !status?.dockerized && !wrolModeEnabled) {
         const commitsBehind = status.commits_behind || 0;
         const branch = status.git_branch || 'unknown';
-        const icon = <Link to='/admin/settings'>
+        const icon = <Link to='/admin/settings#upgrade'>
             <Icon name='arrow alternate circle up' size='large' color='green'/>
         </Link>;
         upgradeIcon = <Popup

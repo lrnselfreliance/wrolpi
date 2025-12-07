@@ -10,6 +10,7 @@ import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
+import {pathDirectory} from "./FileBrowser";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -249,8 +250,10 @@ export function FilePreviewProvider({children}) {
                           onRemove={localRemoveTag}/>
             : null;
         const downloadButton = downloadURL ?
-            <Button color='yellow' as='a' href={downloadURL} floated='left'>Download</Button>
+            <Button color='yellow' as='a' href={downloadURL} floated='left' icon='download'/>
             : null;
+        const directoryURL = path ? `/files?folders=${encodeURIComponent(pathDirectory(path))}` : null;
+        const directoryButton = path ? <Button as='a' href={directoryURL} icon='folder'/> : null;
         const pathContent = path ? <ModalContent>
                 <pre>{path}</pre>
             </ModalContent>
@@ -264,13 +267,12 @@ export function FilePreviewProvider({children}) {
                                open={true}
                                onClose={e => handleClose(e)}
         >
-            {content}
             {pathContent}
             <ModalActions>
                 <Media at='mobile'>
                     <Grid>
                         <Grid.Row>
-                            <Grid.Column width={6}>{downloadButton}</Grid.Column>
+                            <Grid.Column width={6} textAlign='left'>{downloadButton}{directoryButton}</Grid.Column>
                             <Grid.Column width={5}>{openButton}</Grid.Column>
                             <Grid.Column width={5}>{closeButton}</Grid.Column>
                         </Grid.Row>
@@ -283,7 +285,7 @@ export function FilePreviewProvider({children}) {
                 <Media greaterThanOrEqual='tablet'>
                     <Grid>
                         <Grid.Row>
-                            <Grid.Column width={2}>{downloadButton}</Grid.Column>
+                            <Grid.Column width={2} textAlign='left'>{downloadButton}{directoryButton}</Grid.Column>
                             <Grid.Column width={1} style={{paddingTop: '0.5em'}}><ShareButton/></Grid.Column>
                             <Grid.Column width={9}>{tagsDisplay}</Grid.Column>
                             <Grid.Column width={2}>{openButton}</Grid.Column>
@@ -292,6 +294,7 @@ export function FilePreviewProvider({children}) {
                     </Grid>
                 </Media>
             </ModalActions>
+            {content}
         </Modal>);
     }
 

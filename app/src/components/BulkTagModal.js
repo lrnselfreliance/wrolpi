@@ -3,6 +3,7 @@ import {Button, Divider, Header, Loader, Modal, ModalActions, ModalContent, Moda
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {applyBulkTags, getBulkTagPreview, getBulkTagProgress} from "../api";
 import {TagsContext} from "../Tags";
+import {ThemeContext} from "../contexts/contexts";
 
 const BULK_TAG_WARNING_THRESHOLD = 50;
 const POLL_INTERVAL = 500; // Poll progress every 500ms
@@ -17,6 +18,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
     const [error, setError] = React.useState(null);
 
     const {tagNames, TagsGroup} = React.useContext(TagsContext);
+    const {t} = React.useContext(ThemeContext);
 
     // Fetch preview when modal opens
     React.useEffect(() => {
@@ -140,7 +142,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {error && (
                             <Message negative>
                                 <Message.Header>Error</Message.Header>
-                                <p>{error}</p>
+                                <p {...t}>{error}</p>
                             </Message>
                         )}
 
@@ -151,7 +153,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {showWarning && (
                             <Message warning>
                                 <Message.Header>Warning</Message.Header>
-                                <p>Tagging over {BULK_TAG_WARNING_THRESHOLD} files may make it difficult to find what you are looking for. Are you sure?</p>
+                                <p {...t}>Tagging over {BULK_TAG_WARNING_THRESHOLD} files may make it difficult to find what you are looking for. Are you sure?</p>
                             </Message>
                         )}
 
@@ -161,7 +163,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {localTags.length > 0 ? (
                             <TagsGroup tagNames={localTags} onClick={removeTag}/>
                         ) : (
-                            <p style={{color: 'grey'}}>Add one or more tags below</p>
+                            <p {...t}>Add one or more tags below</p>
                         )}
 
                         <Divider/>
@@ -169,7 +171,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {unusedTags.length > 0 ? (
                             <TagsGroup tagNames={unusedTags} onClick={addTag}/>
                         ) : (
-                            <p style={{color: 'grey'}}>You have no tags</p>
+                            <p {...t}>You have no tags</p>
                         )}
                     </>
                 )}
@@ -186,7 +188,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                             {progress.completed} / {progress.total} files
                         </Progress>
                         {progress.queued_jobs > 0 && (
-                            <p style={{color: 'grey'}}>{progress.queued_jobs} job{progress.queued_jobs !== 1 ? 's' : ''} queued</p>
+                            <p {...t}>{progress.queued_jobs} job{progress.queued_jobs !== 1 ? 's' : ''} queued</p>
                         )}
                         {error && (
                             <Message negative>
@@ -201,12 +203,12 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                     <div style={{padding: '1em'}}>
                         <Message positive>
                             <Message.Header>Complete</Message.Header>
-                            <p>Successfully tagged {progress.total} file{progress.total !== 1 ? 's' : ''}.</p>
+                            <p {...t}>Successfully tagged {progress.total} file{progress.total !== 1 ? 's' : ''}.</p>
                         </Message>
                         {error && (
                             <Message warning>
                                 <Message.Header>Warning</Message.Header>
-                                <p>Some errors occurred: {error}</p>
+                                <p {...t}>Some errors occurred: {error}</p>
                             </Message>
                         )}
                     </div>

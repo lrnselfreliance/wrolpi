@@ -142,7 +142,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {error && (
                             <Message negative>
                                 <Message.Header>Error</Message.Header>
-                                <p {...t}>{error}</p>
+                                <p>{error}</p>
                             </Message>
                         )}
 
@@ -153,7 +153,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         {showWarning && (
                             <Message warning>
                                 <Message.Header>Warning</Message.Header>
-                                <p {...t}>Tagging over {BULK_TAG_WARNING_THRESHOLD} files may make it difficult to find what you are looking for. Are you sure?</p>
+                                <p>Tagging over {BULK_TAG_WARNING_THRESHOLD} files may make it difficult to find what you are looking for. Are you sure?</p>
                             </Message>
                         )}
 
@@ -203,12 +203,12 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                     <div style={{padding: '1em'}}>
                         <Message positive>
                             <Message.Header>Complete</Message.Header>
-                            <p {...t}>Successfully tagged {progress.total} file{progress.total !== 1 ? 's' : ''}.</p>
+                            <p>Successfully tagged {progress.total} file{progress.total !== 1 ? 's' : ''}.</p>
                         </Message>
                         {error && (
                             <Message warning>
                                 <Message.Header>Warning</Message.Header>
-                                <p {...t}>Some errors occurred: {error}</p>
+                                <p>Some errors occurred: {error}</p>
                             </Message>
                         )}
                     </div>

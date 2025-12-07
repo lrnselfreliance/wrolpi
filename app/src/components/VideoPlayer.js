@@ -20,7 +20,7 @@ import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
 import {useChannel, useVideoExtras} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
+import {Button, darkTheme, Header, Icon, Segment, Tab} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {Comment, CommentGroup, Label} from "semantic-ui-react";
@@ -228,22 +228,22 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     }
 
     const descriptionPane = {
-        menuItem: 'Description', render: () => <TabPane>
+        menuItem: 'Description', render: () => <Tab.Pane>
             <pre className="wrap-text">
                 {description}
             </pre>
-        </TabPane>
+        </Tab.Pane>
     };
 
     const captionsPane = {
-        menuItem: 'Captions', render: () => <TabPane>
+        menuItem: 'Captions', render: () => <Tab.Pane>
             <pre>{captions || 'No captions available.'}</pre>
-        </TabPane>
+        </Tab.Pane>
     };
 
     const {poster_file, info_json_file} = video;
     const filesPane = {
-        menuItem: 'Files', render: () => <TabPane>
+        menuItem: 'Files', render: () => <Tab.Pane>
             <h3>Video File</h3>
             {videoFileLink(video['video_path'])}
 
@@ -270,14 +270,14 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
             <h4>Directory</h4>
             {videoFileLink(videoFile['directory'], true)}
-        </TabPane>
+        </Tab.Pane>
     }
 
     const commentsPane = {
-        menuItem: 'Comments', render: () => <TabPane>
+        menuItem: 'Comments', render: () => <Tab.Pane>
             <Header as='h3'>Top Comments</Header>
             <Comments comments={comments} video={videoFile}/>
-        </TabPane>,
+        </Tab.Pane>,
     };
 
     const tabPanes = [commentsPane, descriptionPane, filesPane, captionsPane];

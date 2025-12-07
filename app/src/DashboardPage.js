@@ -15,11 +15,8 @@ import {
     Form,
     Header,
     Modal,
-    ModalContent,
-    ModalHeader,
     Segment,
-    Statistic,
-    StatisticGroup
+    Statistic
 } from "./components/Theme";
 import {Link, useNavigate} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
@@ -219,10 +216,10 @@ export function Getters() {
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}
         >
-            <ModalHeader>Download from the Internet</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Download from the Internet</Modal.Header>
+            <Modal.Content>
                 <DownloadMenu disabled={gettersDisabled}/>
-            </ModalContent>
+            </Modal.Content>
         </Modal>;
     } else if (selectedGetter === 'upload') {
         getterModal = <Modal closeIcon
@@ -230,10 +227,10 @@ export function Getters() {
                              centered={false}
                              onClose={() => handleSetGetter(null, null)}
         >
-            <ModalHeader>Upload from your device</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Upload from your device</Modal.Header>
+            <Modal.Content>
                 <Upload disabled={gettersDisabled}/>
-            </ModalContent>
+            </Modal.Content>
         </Modal>;
     }
 
@@ -279,11 +276,11 @@ function DashboardStatus() {
             <Header as='h2'>Status</Header>
             <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-            <StatisticGroup size='mini'>
+            <Statistic.Group size='mini'>
                 <LoadStatistic label='1 Min. Load' value={load['minute_1']} cores={cores}/>
                 <LoadStatistic label='5 Min. Load' value={load['minute_5']} cores={cores}/>
                 <LoadStatistic label='15 Min. Load' value={load['minute_15']} cores={cores}/>
-            </StatisticGroup>
+            </Statistic.Group>
 
             <Header as='h3'>Bandwidth</Header>
             {bandwidths}
@@ -292,9 +289,9 @@ function DashboardStatus() {
         <Divider style={{marginTop: '3em'}}/>
 
         <Link to='/admin'>
-            <StatisticGroup size='mini'>
+            <Statistic.Group size='mini'>
                 <Statistic label='Downloading' value={pending_downloads}/>
-            </StatisticGroup>
+            </Statistic.Group>
         </Link>
 
     </Segment>;

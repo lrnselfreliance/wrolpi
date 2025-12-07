@@ -1,5 +1,5 @@
 import React from 'react';
-import {Button, Divider, Header, Loader, Modal, ModalActions, ModalContent, ModalHeader, Progress} from "./Theme";
+import {Button, Divider, Header, Loader, Modal, Progress} from "./Theme";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {applyBulkTags, getBulkTagPreview, getBulkTagProgress} from "../api";
 import {TagsContext} from "../Tags";
@@ -129,8 +129,8 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
 
     return (
         <Modal closeIcon open={open} onClose={handleClose} size="small">
-            <ModalHeader>Bulk Tag Files</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Bulk Tag Files</Modal.Header>
+            <Modal.Content>
                 {state === 'loading' && (
                     <div style={{textAlign: 'center', padding: '2em'}}>
                         <Loader active inline="centered">Loading preview...</Loader>
@@ -213,8 +213,8 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         )}
                     </div>
                 )}
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 {state === 'preview' && (
                     <>
                         <Button onClick={handleClose}>Cancel</Button>
@@ -237,7 +237,7 @@ export function BulkTagModal({open, onClose, paths, onComplete}) {
                         Done
                     </Button>
                 )}
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
     );
 }

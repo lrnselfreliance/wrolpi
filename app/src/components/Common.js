@@ -27,9 +27,8 @@ import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/c
 import {
     Accordion,
     Breadcrumb,
-    BreadcrumbDivider,
     Button,
-    CardIcon,
+    Card as ThemedCard,
     darkTheme,
     Form,
     Header,
@@ -38,10 +37,6 @@ import {
     Loader,
     Menu,
     Modal,
-    ModalActions,
-    ModalContent,
-    ModalDescription,
-    ModalHeader,
     Popup,
     Segment,
     Statistic
@@ -735,18 +730,18 @@ export function CardPoster({to, file}) {
         if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {
             // "to" is a downloadable file outside the app, preview the file.
             return <PreviewLink file={file}>
-                <CardIcon>
+                <ThemedCard.Icon>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </CardIcon>
+                </ThemedCard.Icon>
             </PreviewLink>
         } else if (!posterPath && to) {
             // Link to the full page in this App.
             return <Link to={to}>
-                <CardIcon onClick={() => navigate(to)}>
+                <ThemedCard.Icon onClick={() => navigate(to)}>
                     {imageLabel}
                     <FileIcon file={file}/>
-                </CardIcon>
+                </ThemedCard.Icon>
             </Link>
         }
     }
@@ -1066,14 +1061,14 @@ export function UnsupportedModal(header, message, icon) {
             <Icon name={icon || 'exclamation triangle'}/>
             {header || 'Unsupported'}
         </Header>
-        <ModalContent>
-            <ModalDescription>
+        <Modal.Content>
+            <Modal.Description>
                 {message}
-            </ModalDescription>
-        </ModalContent>
-        <ModalActions>
+            </Modal.Description>
+        </Modal.Content>
+        <Modal.Actions>
             <Button basic inverted onClick={onClose}>Ok</Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>;
 
     return {modal, doClose: onClose, doOpen: onOpen};
@@ -1389,10 +1384,10 @@ export function SortButton({sorts = []}) {
                open={open}
                onClose={() => setOpen(false)}
         >
-            <ModalHeader>Sort By</ModalHeader>
-            <ModalContent>
+            <Modal.Header>Sort By</Modal.Header>
+            <Modal.Content>
                 {sortFields}
-            </ModalContent>
+            </Modal.Content>
         </Modal>
         <ButtonGroup icon>
             <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>
@@ -1825,7 +1820,7 @@ export function Breadcrumbs({crumbs, size = undefined}) {
         {crumbs.map((crumb, index) => (
             <React.Fragment key={index}>
                 {getSection(crumb)}
-                {index < crumbs.length - 1 && <BreadcrumbDivider icon='right chevron'/>}
+                {index < crumbs.length - 1 && <Breadcrumb.Divider icon='right chevron'/>}
             </React.Fragment>
         ))}
     </Breadcrumb>

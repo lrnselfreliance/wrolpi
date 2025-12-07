@@ -44,7 +44,7 @@ import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistic
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic} from "./Theme";
 import {
     deleteVideos,
     fetchBrowserProfiles,
@@ -490,7 +490,7 @@ function VideosStatistics() {
     const buildSegment = (title, names, stats) => {
         return <Segment>
             <Header textAlign='center' as='h1'>{title}</Header>
-            <StatisticGroup>
+            <Statistic.Group>
                 {names.map(
                     ({key, label}) =>
                         <Statistic key={key} style={{margin: '2em'}}>
@@ -498,7 +498,7 @@ function VideosStatistics() {
                             <StatisticLabel>{label}</StatisticLabel>
                         </Statistic>
                 )}
-            </StatisticGroup>
+            </Statistic.Group>
         </Segment>
     }
 

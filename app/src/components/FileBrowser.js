@@ -1,4 +1,4 @@
-import {Button, Header, Icon, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Table} from "./Theme";
+import {Button, Header, Icon, Modal, Placeholder, Table} from "./Theme";
 import {
     Checkbox,
     Form,
@@ -380,8 +380,8 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
                   open={open}
                   onClose={onClose}
     >
-        <ModalHeader>Rename: {name}</ModalHeader>
-        <ModalContent>
+        <Modal.Header>Rename: {name}</Modal.Header>
+        <Modal.Content>
             <Form onSubmit={handleSubmit}>
                 <Header as='h4'>New Name</Header>
                 <pre>{parent ? parent + '/' : null}{value}</pre>
@@ -392,8 +392,8 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
                        onChange={handleInputChange}
                 />
             </Form>
-        </ModalContent>
-        <ModalActions>
+        </Modal.Content>
+        <Modal.Actions>
             <Button
                 color='violet'
                 disabled={disabled}
@@ -407,7 +407,7 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
             >
                 Reset
             </Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>
 }
 
@@ -446,8 +446,8 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
                   onClose={onClose}
                   open={open}
     >
-        <ModalHeader>Move Files/Directories</ModalHeader>
-        <ModalContent>
+        <Modal.Header>Move Files/Directories</Modal.Header>
+        <Modal.Content>
             <p>Search for a directory to move your files into:</p>
             <DirectorySearch onSelect={handleDirectory} disabled={pending}/>
 
@@ -462,8 +462,8 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
                     {destinationRows}
                 </TableBody>
             </Table>
-        </ModalContent>
-        <ModalActions>
+        </Modal.Content>
+        <Modal.Actions>
             <Button
                 color='violet'
                 onClick={handleMove}
@@ -474,7 +474,7 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
                 floated='left'
                 disabled={pending}
             >Reset</Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>
 }
 
@@ -508,15 +508,15 @@ export function IgnoreDirectoryModal({open, onClose, onSubmit, directory, ignore
     >{ignored ? 'Un-ignore' : 'Ignore'}</Button>;
 
     return <Modal closeIcon open={open} onClose={onClose}>
-        <ModalHeader>{header}</ModalHeader>
-        <ModalContent>
+        <Modal.Header>{header}</Modal.Header>
+        <Modal.Content>
             {content}
             <pre>{mediaDirectory}/{directory}</pre>
-        </ModalContent>
-        <ModalActions>
+        </Modal.Content>
+        <Modal.Actions>
             {submitButton}
             <Button secondary floated='left' onClick={onClose}>Close</Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>
 }
 
@@ -548,8 +548,8 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
     }
 
     return <Modal closeIcon open={open} onClose={onClose}>
-        <ModalHeader>Make Directory</ModalHeader>
-        <ModalContent>
+        <Modal.Header>Make Directory</Modal.Header>
+        <Modal.Content>
             <Form onSubmit={handleSubmit}>
                 <pre>{mediaDirectory}/{parent}{value}</pre>
                 <Input fluid
@@ -558,9 +558,9 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
                        onChange={handleInputChange}
                 />
             </Form>
-        </ModalContent>
-        <ModalActions>
+        </Modal.Content>
+        <Modal.Actions>
             <Button color='violet' onClick={handleSubmit}>Create</Button>
-        </ModalActions>
+        </Modal.Actions>
     </Modal>
 }

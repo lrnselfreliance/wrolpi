@@ -1,4 +1,4 @@
-import {Accordion, Header, Progress, Segment, Statistic, StatisticGroup, Table} from "../Theme";
+import {Accordion, Header, Progress, Segment, Statistic, Table} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, InfoHeader, LoadStatistic, useTitle} from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
@@ -248,7 +248,7 @@ export function StatusPage() {
             <Segment>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <StatisticGroup>
+                <Statistic.Group>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -258,14 +258,14 @@ export function StatusPage() {
                     <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
                     <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <Segment>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <StatisticGroup size='mini'>
+                <Statistic.Group size='mini'>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -276,7 +276,7 @@ export function StatusPage() {
                     <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
                     <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
-                </StatisticGroup>
+                </Statistic.Group>
             </Segment>
         </Media>
 

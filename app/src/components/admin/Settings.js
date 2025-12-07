@@ -5,14 +5,9 @@ import {
     Button,
     Divider,
     Form,
-    FormField,
-    FormGroup,
-    FormInput,
     Header,
     Loader,
     Modal,
-    ModalContent,
-    ModalHeader,
     Segment
 } from "../Theme";
 import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
@@ -409,8 +404,8 @@ export function SettingsPage() {
                     />
                 </div>
 
-                <FormGroup inline>
-                    <FormInput
+                <Form.Group inline>
+                    <Form.Input
                         label={<>
                             <b>Download Timeout</b>
                             <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
@@ -420,28 +415,28 @@ export function SettingsPage() {
                         disabled={disabled || state.download_timeout === null}
                         onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
                     />
-                </FormGroup>
+                </Form.Group>
 
-                <FormGroup inline>
-                    <FormInput
+                <Form.Group inline>
+                    <Form.Input
                         label='Hotspot SSID'
                         value={state.hotspot_ssid}
                         disabled={disabled || state.hotspot_ssid === null}
                         onChange={(e, i) => setState({...state, hotspot_ssid: i.value})}
                     />
-                    <FormInput
+                    <Form.Input
                         label='Hotspot Password'
                         disabled={disabled || state.hotspot_password === null}
                         value={state.hotspot_password}
                         onChange={(e, i) => setState({...state, hotspot_password: i.value})}
                     />
-                    <FormInput
+                    <Form.Input
                         label='Hotspot Device'
                         disabled={disabled || state.hotspot_password === null}
                         value={state.hotspot_device}
                         onChange={(e, i) => handleInputChange(e, 'hotspot_device', i.value)}
                     />
-                </FormGroup>
+                </Form.Group>
 
                 <Modal closeIcon
                        onClose={() => setQrOpen(false)}
@@ -449,14 +444,14 @@ export function SettingsPage() {
                        open={qrOpen}
                        trigger={qrButton}
                 >
-                    <ModalHeader>
+                    <Modal.Header>
                         Scan this code to join the hotspot
-                    </ModalHeader>
-                    <ModalContent>
+                    </Modal.Header>
+                    <Modal.Content>
                         <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
                             <QRCode value={qrCodeValue} size={300}/>
                         </div>
-                    </ModalContent>
+                    </Modal.Content>
                 </Modal>
 
                 <br/>
@@ -503,7 +498,7 @@ export function SettingsPage() {
                 <Grid stackable>
                     <GridRow columns={2}>
                         <GridColumn>
-                            <FormField>
+                            <Form.Field>
                                 <label>Archive Directory</label>
                                 <Input
                                     label={mediaDirectoryLabel}
@@ -511,10 +506,10 @@ export function SettingsPage() {
                                     disabled={!editSpecialDirectories}
                                     onChange={(e, d) => handleInputChange(e, 'archive_destination', d.value)}
                                 />
-                            </FormField>
+                            </Form.Field>
                         </GridColumn>
                         <GridColumn>
-                            <FormField>
+                            <Form.Field>
                                 <label>Videos Directory</label>
                                 <Input
                                     label={mediaDirectoryLabel}
@@ -522,12 +517,12 @@ export function SettingsPage() {
                                     disabled={!editSpecialDirectories}
                                     onChange={(e, d) => handleInputChange(e, 'videos_destination', d.value)}
                                 />
-                            </FormField>
+                            </Form.Field>
                         </GridColumn>
                     </GridRow>
                     <GridRow columns={2}>
                         <GridColumn>
-                            <FormField>
+                            <Form.Field>
                                 <label>Map Directory</label>
                                 <Input
                                     label={mediaDirectoryLabel}
@@ -535,10 +530,10 @@ export function SettingsPage() {
                                     disabled={!editSpecialDirectories}
                                     onChange={(e, d) => handleInputChange(e, 'map_destination', d.value)}
                                 />
-                            </FormField>
+                            </Form.Field>
                         </GridColumn>
                         <GridColumn>
-                            <FormField>
+                            <Form.Field>
                                 <label>Zims Directory</label>
                                 <Input
                                     label={mediaDirectoryLabel}
@@ -546,7 +541,7 @@ export function SettingsPage() {
                                     disabled={!editSpecialDirectories}
                                     onChange={(e, d) => handleInputChange(e, 'zims_destination', d.value)}
                                 />
-                            </FormField>
+                            </Form.Field>
                         </GridColumn>
                     </GridRow>
                     <GridRow columns={1}>

@@ -53,7 +53,7 @@ import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, darkTheme, Header, Loader, Popup, Segment, Tab, TabPane} from "./Theme";
+import {Button, Card, darkTheme, Header, Loader, Popup, Segment, Tab} from "./Theme";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
@@ -210,7 +210,7 @@ function ArchivePage() {
         : 'unknown';
 
     const aboutPane = {
-        menuItem: 'About', render: () => <TabPane>
+        menuItem: 'About', render: () => <Tab.Pane>
             <Header as={'h3'}>Domain</Header>
             {domainHeader}
 
@@ -222,7 +222,7 @@ function ArchivePage() {
 
             <Header as={'h3'}>Modified Date</Header>
             <p>{modifiedDatetimeString}</p>
-        </TabPane>
+        </Tab.Pane>
     };
 
     const localPreviewPath = (path, mimetype) => {
@@ -234,7 +234,7 @@ function ArchivePage() {
     }
 
     const filesPane = {
-        menuItem: 'Files', render: () => <TabPane>
+        menuItem: 'Files', render: () => <Tab.Pane>
             <Header as={'h3'}>Singlefile File</Header>
             {localPreviewPath(data.singlefile_path, 'text/html')}
 
@@ -254,7 +254,7 @@ function ArchivePage() {
 
             <Header as={'h3'}>Directory</Header>
             {archiveFileLink(archiveFile.directory, true)}
-        </TabPane>
+        </Tab.Pane>
     };
 
     const tabPanes = [aboutPane, filesPane];
@@ -316,7 +316,7 @@ export function ArchiveCard({file}) {
     const imageSrc = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
     const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
 
-    let screenshot = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let screenshot = <Card.Icon><FileIcon file={file}/></Card.Icon>;
     const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;
     if (imageSrc) {
         screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}} label={imageLabel}/>;

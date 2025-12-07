@@ -7,9 +7,6 @@ import {
     Icon,
     Loader,
     Modal,
-    ModalActions,
-    ModalContent,
-    ModalHeader,
     Placeholder,
     Segment
 } from "./Theme";
@@ -134,18 +131,18 @@ export const OutdatedZimsMessage = ({onClick}) => {
                    onClose={onClose}
                    onOpen={onOpen}
             >
-                <ModalHeader>Delete</ModalHeader>
-                <ModalContent>
+                <Modal.Header>Delete</Modal.Header>
+                <Modal.Content>
                     {modalContent}
-                </ModalContent>
-                <ModalActions>
+                </Modal.Content>
+                <Modal.Actions>
                     <APIButton
                         color='red'
                         floated='left'
                         onClick={handleDelete}
                     >Delete</APIButton>
                     <Button onClick={onClose}>Close</Button>
-                </ModalActions>
+                </Modal.Actions>
             </Modal>
 
             <Link to='/files?folders=zims'><SButton>Delete Manually</SButton></Link>
@@ -203,7 +200,7 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
         <Modal closeIcon
                open={open}
                onClose={() => setOpen(false)}>
-            <ModalContent>
+            <Modal.Content>
                 <div className='full-height'>
                     <ZimViewer src={url} style={{
                         height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
@@ -211,8 +208,8 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
                         backgroundColor: '#ffffff',
                     }}/>
                 </div>
-            </ModalContent>
-            <ModalActions>
+            </Modal.Content>
+            <Modal.Actions>
                 <Grid>
                     <Grid.Column mobile={10} tablet={14}>
                         <TagsSelector selectedTagNames={tag_names} onAdd={localAddTag} onRemove={localUntag}/>
@@ -221,7 +218,7 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
                         <Button color='blue' as='a' href={url} target='_blank'>Open</Button>
                     </Grid.Column>
                 </Grid>
-            </ModalActions>
+            </Modal.Actions>
         </Modal>
     </div>
 }

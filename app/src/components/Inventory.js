@@ -28,7 +28,7 @@ import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks, useT
 import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";
 import {useInventory} from "../hooks/customHooks";
-import {Button, FormGroup, FormInput, Header, Segment, Table} from "./Theme";
+import {Button, Form as ThemedForm, Header, Segment, Table} from "./Theme";
 
 function InventorySummary() {
     const {t} = useContext(ThemeContext);
@@ -252,7 +252,7 @@ class InventoryList extends React.Component {
                     />
                 </TableCell>
                 <TableCell>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid
                         name="name"
                         value={editItem.name}
@@ -260,7 +260,7 @@ class InventoryList extends React.Component {
                     />
                 </TableCell>
                 <TableCell>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid
                         name="item_size"
                         value={editItem.item_size}
@@ -268,7 +268,7 @@ class InventoryList extends React.Component {
                     />
                 </TableCell>
                 <TableCell>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid
                         name="unit"
                         value={editItem.unit}
@@ -276,7 +276,7 @@ class InventoryList extends React.Component {
                     />
                 </TableCell>
                 <TableCell>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid
                         name="count"
                         value={editItem.count}
@@ -289,7 +289,7 @@ class InventoryList extends React.Component {
                     category={editItem.category}
                 />
                 <TableCell>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid
                         name="expiration_date"
                         value={editItem.expiration_date}
@@ -460,7 +460,7 @@ class InventoryPortal extends React.Component {
                             <Header>{this.props.header}</Header>
                             <Form onSubmit={this.handleSubmit}>
                                 <label {...s}>Name</label>
-                                <FormInput
+                                <ThemedForm.Input
                                     name='name'
                                     value={this.state.name}
                                     onChange={this.handleInputChange}
@@ -675,7 +675,7 @@ class SuggestionInput extends React.Component {
             {({s}) => (
                 <>
                     <label {...s}>{this.props.label}</label>
-                    <FormInput
+                    <ThemedForm.Input
                         fluid={this.props.fluid !== undefined ? this.props.fluid : false}
                         list={this.props.list}
                         name={this.props.name}
@@ -770,7 +770,7 @@ class CategoryInputs extends React.Component {
                     </Grid.Column>
                     <Grid.Column computer={8} mobile={16}>
                         <label {...s}>Category</label>
-                        <FormInput
+                        <ThemedForm.Input
                             name="category"
                             placeholder="Category"
                             onChange={this.handleInputChange}
@@ -799,7 +799,7 @@ class TableCategoryInputs extends CategoryInputs {
                 />
             </TableCell>
             <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                <FormInput
+                <ThemedForm.Input
                     fluid
                     name="category"
                     placeholder="Category"
@@ -969,7 +969,7 @@ class InventoryAddList extends React.Component {
                 <>
                     <InventorySelector setInventory={this.setInventory}/>
                     <Form onSubmit={this.handleSubmit} style={{marginLeft: '0.5em', marginTop: '1em'}}>
-                        <FormGroup widths='equal'>
+                        <ThemedForm.Group widths='equal'>
                             <Grid>
                                 <Grid.Column computer={2} mobile={16}>
                                     <BrandInput
@@ -980,7 +980,7 @@ class InventoryAddList extends React.Component {
                                 </Grid.Column>
                                 <Grid.Column computer={3} mobile={16}>
                                     <label {...s}>Product Name</label>
-                                    <FormInput
+                                    <ThemedForm.Input
                                         required
                                         name="name"
                                         placeholder="Product Name"
@@ -990,7 +990,7 @@ class InventoryAddList extends React.Component {
                                 </Grid.Column>
                                 <Grid.Column computer={1} mobile={4}>
                                     <label {...s}>Size</label>
-                                    <FormInput
+                                    <ThemedForm.Input
                                         required
                                         name="item_size"
                                         placeholder="Size"
@@ -1000,7 +1000,7 @@ class InventoryAddList extends React.Component {
                                 </Grid.Column>
                                 <Grid.Column computer={1} mobile={4}>
                                     <label {...s}>Unit</label>
-                                    <FormInput
+                                    <ThemedForm.Input
                                         required
                                         name="unit"
                                         placeholder="Unit"
@@ -1010,7 +1010,7 @@ class InventoryAddList extends React.Component {
                                 </Grid.Column>
                                 <Grid.Column computer={1} mobile={4}>
                                     <label {...s}>Count</label>
-                                    <FormInput
+                                    <ThemedForm.Input
                                         required
                                         name="count"
                                         placeholder="Count"
@@ -1026,7 +1026,7 @@ class InventoryAddList extends React.Component {
                                 </Grid.Column>
                                 <Grid.Column computer={2} mobile={16}>
                                     <label {...s}>Expiration Date</label>
-                                    <FormInput
+                                    <ThemedForm.Input
                                         name="expiration_date"
                                         placeholder="Expiration Date"
                                         onChange={this.handleInputChange}
@@ -1037,7 +1037,7 @@ class InventoryAddList extends React.Component {
                                     <Button primary icon='plus' type='submit' style={{marginTop: '1.4em'}}/>
                                 </Grid.Column>
                             </Grid>
-                        </FormGroup>
+                        </ThemedForm.Group>
                     </Form>
                     <Header as='h4'>Items in: {this.state.inventory ? this.state.inventory.name : ''}</Header>
                     <InventoryList

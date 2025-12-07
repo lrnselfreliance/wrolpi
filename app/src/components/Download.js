@@ -11,7 +11,7 @@ import {
 } from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Form, FormInput, Header} from "./Theme";
+import {Button, Form, Header} from "./Theme";
 import {Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
@@ -170,12 +170,12 @@ export function TitleInclusionInput({form, path = 'settings.title_include'}) {
             headerContent='Title Match Words'
             popupContent='List of words, separated by commas, that titles must contain to be downloaded.'
         />
-        <FormInput
+        <Form.Input
             placeholder='Shelter,Solar Power'
             error={inputProps.error}
         >
             <input {...inputProps}/>
-        </FormInput>
+        </Form.Input>
     </>
 }
 
@@ -192,12 +192,12 @@ export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
             headerContent='Title Exclusion Words'
             popupContent='List of words, separated by commas, that may not appear in titles to be downloaded.'
         />
-        <FormInput
+        <Form.Input
             placeholder='Giveaway,Prize'
             error={inputProps.error}
         >
             <input {...inputProps}/>
-        </FormInput>
+        </Form.Input>
     </>
 }
 

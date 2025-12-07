@@ -9,7 +9,7 @@ USER root
 RUN npm install -g serve
 COPY app/public /app/public
 COPY app/src /app/src
-COPY app/package.json app/package-lock.json /app/
+COPY app/package.json app/package-lock.json app/tsconfig.json /app/
 # "node" user will run the app after build.
 RUN chown -R node:node /app
 

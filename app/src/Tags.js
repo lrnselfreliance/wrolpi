@@ -24,7 +24,7 @@ import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {Media, QueryContext, ThemeContext} from "./contexts/contexts";
-import {Link, useNavigate} from "react-router-dom";
+import {Link, useNavigate} from "react-router";
 import {TagPlaceholder} from "./components/Placeholder";
 import {SortableTable} from "./components/SortableTable";
 

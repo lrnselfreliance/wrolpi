@@ -46,7 +46,7 @@ import {
     untagFileGroup
 } from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
-import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router-dom";
+import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomain, useDomains, useOneQuery, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";

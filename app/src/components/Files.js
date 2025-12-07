@@ -41,7 +41,7 @@ import {
     useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
-import {Route, Routes} from "react-router-dom";
+import {Route, Routes} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";

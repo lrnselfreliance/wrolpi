@@ -1,6 +1,6 @@
 import React, {useContext} from 'react';
 import {deleteVideos, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
-import {Link, useNavigate, useParams} from "react-router-dom";
+import {Link, useNavigate, useParams} from "react-router";
 import _ from "lodash";
 import {
     APIButton,

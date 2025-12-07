@@ -23,7 +23,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Route, Routes} from "react-router-dom";
+import {Route, Routes} from "react-router";
 import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks, useTitle} from './Common';
 import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";

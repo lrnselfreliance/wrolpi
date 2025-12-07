@@ -5,7 +5,7 @@ import {useCalcQuery} from "../hooks/customHooks";
 import {TemperatureCalculator} from "./calculators/TemperatureCalculator";
 import {ElectricalCalculators} from "./calculators/ElectricalCalculators";
 import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
-import {Link} from "react-router-dom";
+import {Link} from "react-router";
 import {RatioCalculators} from "./calculators/RatioCalculator";
 import {QRCodeCalculator} from "./calculators/QRCodeCalculator";
 

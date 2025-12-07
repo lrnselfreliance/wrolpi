@@ -5,7 +5,7 @@
 
 import React from 'react';
 import {render} from '@testing-library/react';
-import {BrowserRouter} from 'react-router-dom';
+import {BrowserRouter} from 'react-router';
 import {MediaContextProvider, ThemeContext} from './contexts/contexts';
 
 /**

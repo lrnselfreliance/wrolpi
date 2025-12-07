@@ -1,5 +1,5 @@
 import React from "react";
-import {Link, NavLink} from "react-router-dom";
+import {Link, NavLink} from "react-router";
 import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";

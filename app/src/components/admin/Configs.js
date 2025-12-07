@@ -3,7 +3,7 @@ import {Icon, Popup, Table} from "../Theme";
 import React from "react";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {TableRowPlaceholder} from "../Placeholder";
-import {useNavigate} from "react-router-dom";
+import {useNavigate} from "react-router";
 
 function WarningIcon({ok}) {
     // null is empty, true is valid, false is invalid.

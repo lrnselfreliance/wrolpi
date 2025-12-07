@@ -13,7 +13,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Button, Form, FormInput, Header} from "./Theme";
 import {Form as SForm, FormDropdown} from "semantic-ui-react";
-import {Link} from "react-router-dom";
+import {Link} from "react-router";
 import {TagsSelector} from "../Tags";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {

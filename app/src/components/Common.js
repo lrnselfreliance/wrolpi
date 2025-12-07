@@ -20,7 +20,7 @@ import {
     Search,
     Transition
 } from 'semantic-ui-react';
-import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
+import {Link, NavLink, useNavigate, useSearchParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";

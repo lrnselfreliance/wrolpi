@@ -1,5 +1,5 @@
 import React, {useContext} from 'react';
-import {Link} from 'react-router-dom';
+import {Link} from 'react-router';
 import {Message, Placeholder, PlaceholderHeader, PlaceholderLine, Table, TableCell, TableRow} from 'semantic-ui-react';
 import _ from 'lodash';
 import {SortableTable} from '../SortableTable';

@@ -9,7 +9,7 @@ import {
     TableCell,
     TableRow
 } from "semantic-ui-react";
-import {Link, Route, Routes} from "react-router-dom";
+import {Link, Route, Routes} from "react-router";
 import {decryptOTP, encryptOTP} from "../api";
 import {
     APIButton,

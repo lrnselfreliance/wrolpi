@@ -1,7 +1,7 @@
 import React, {useContext} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
-import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider} from "react-router-dom";
+import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider} from "react-router";
 import {VideosRoute, VideoWrapper} from "./components/Videos";
 import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";

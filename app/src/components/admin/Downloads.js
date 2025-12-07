@@ -7,7 +7,7 @@ import {
     restartDownload,
     retryOnceDownloads
 } from "../../api";
-import {Link} from "react-router-dom";
+import {Link} from "react-router";
 import {
     APIButton,
     DisableDownloadsToggle,

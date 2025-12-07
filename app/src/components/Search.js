@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Link, Route, Routes, useNavigate} from "react-router-dom";
+import {Link, Route, Routes, useNavigate} from "react-router";
 import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";

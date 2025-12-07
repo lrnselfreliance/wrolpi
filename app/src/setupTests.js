@@ -1,6 +1,12 @@
 // Jest setup file for React Testing Library
 // This file is automatically loaded by Create React App before running tests
 
+// Polyfill TextEncoder/TextDecoder for react-router v7 compatibility
+// See: https://github.com/remix-run/react-router/issues/12363
+import { TextDecoder, TextEncoder } from 'util';
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 import '@testing-library/jest-dom';
 
 // Set global Jest timeout to 30 seconds

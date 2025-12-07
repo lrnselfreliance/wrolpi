@@ -3,7 +3,7 @@ import {Image, PlaceholderLine} from "semantic-ui-react";
 import React from "react";
 import {ThemeContext} from "../contexts/contexts";
 import {encodeMediaPath, FileIcon, findPosterPath, PreviewLink} from "./Common";
-import {Link} from "react-router-dom";
+import {Link} from "react-router";
 import _ from "lodash";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {FileRowTagIcon} from "./Files";

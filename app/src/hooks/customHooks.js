@@ -35,7 +35,7 @@ import {
     updateChannel,
     updateDomain,
 } from "../api";
-import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
+import {createSearchParams, useLocation, useSearchParams} from "react-router";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {QueryContext, SettingsContext, StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";

@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import {DomainEditPage} from './Archive';
 
 // Mock useParams to return domain ID
-jest.mock('react-router-dom', () => ({
-    ...jest.requireActual('react-router-dom'),
+jest.mock('react-router', () => ({
+    ...jest.requireActual('react-router'),
     useParams: () => ({domainId: '1'}),
     useNavigate: () => jest.fn(),
 }));

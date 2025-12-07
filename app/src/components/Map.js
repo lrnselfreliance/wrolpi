@@ -12,7 +12,7 @@ import {
     useTitle,
     WROLModeMessage
 } from "./Common";
-import {Route, Routes} from "react-router-dom";
+import {Route, Routes} from "react-router";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
     Checkbox,

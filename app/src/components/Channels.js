@@ -15,7 +15,7 @@ import {
     useTitle,
     WROLModeMessage
 } from "./Common";
-import {Link, useNavigate, useParams} from "react-router-dom";
+import {Link, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";

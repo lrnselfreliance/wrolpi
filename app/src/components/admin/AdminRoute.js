@@ -2,7 +2,7 @@ import React from 'react';
 import {Container} from "semantic-ui-react";
 import {getStatus, saveSettings} from "../../api";
 import {PageContainer, TabLinks, Toggle} from "../Common";
-import {Route, Routes} from "react-router-dom";
+import {Route, Routes} from "react-router";
 import {ThemeContext} from "../../contexts/contexts";
 import {Header, Loader, Segment} from "../Theme";
 import {DownloadsPage} from "./Downloads";

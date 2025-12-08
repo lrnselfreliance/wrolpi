@@ -12,7 +12,8 @@ Create Date: 2025-10-29
 
 """
 import os
-from typing import Dict, List
+import pathlib
+from typing import Dict, List, Optional
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import text, Column, Integer, String, ForeignKey
@@ -64,7 +65,9 @@ class DomainMigrationStats:
     def __init__(self):
         self.domains_found = 0
         self.domains_migrated = 0
+        self.domains_skipped = 0
         self.collections_created = 0
+        self.collections_with_directory = 0
         self.collection_items_created = 0
         self.archives_linked = 0
         self.errors: List[str] = []
@@ -84,11 +87,13 @@ class DomainMigrationStats:
         print(f"\n{'='*60}")
         print(f"Domain → Collection Migration Summary ({mode})")
         print(f"{'='*60}")
-        print(f"Domains found:           {self.domains_found}")
-        print(f"Domains migrated:        {self.domains_migrated}")
-        print(f"Collections created:     {self.collections_created}")
-        print(f"CollectionItems created: {self.collection_items_created}")
-        print(f"Archives linked:         {self.archives_linked}")
+        print(f"Domains found:              {self.domains_found}")
+        print(f"Domains migrated:           {self.domains_migrated}")
+        print(f"Domains skipped (no archives): {self.domains_skipped}")
+        print(f"Collections created:        {self.collections_created}")
+        print(f"Collections with directory: {self.collections_with_directory}")
+        print(f"CollectionItems created:    {self.collection_items_created}")
+        print(f"Archives linked:            {self.archives_linked}")
 
         if self.warnings:
             print(f"\nWarnings: {len(self.warnings)}")
@@ -146,6 +151,53 @@ def validate_domain_name(domain: str) -> bool:
     return '.' in domain
 
 
+def detect_common_directory_from_archives(session: Session, domain_id: int) -> Optional[str]:
+    """
+    Detect the common directory for all archives belonging to a domain.
+
+    Returns the directory path as a string, or None if no common directory exists.
+    """
+    result = session.execute(
+        text("""
+            SELECT fg.primary_path
+            FROM archive a
+            JOIN file_group fg ON a.file_group_id = fg.id
+            WHERE a.domain_id = :domain_id AND fg.primary_path IS NOT NULL
+        """),
+        {'domain_id': domain_id}
+    )
+
+    paths = [pathlib.Path(row[0]) for row in result if row[0]]
+
+    if not paths:
+        return None
+
+    # Find common ancestor directory
+    common_dir = paths[0].parent
+
+    for path in paths[1:]:
+        while common_dir != common_dir.parent:  # Stop at root
+            try:
+                path.relative_to(common_dir)
+                break
+            except ValueError:
+                common_dir = common_dir.parent
+
+        if common_dir == common_dir.parent:
+            return None  # Reached root, no common directory
+
+    return str(common_dir)
+
+
+def check_directory_conflict(session: Session, directory: str) -> bool:
+    """Check if a directory is already used by an existing Collection."""
+    result = session.execute(
+        text("SELECT id FROM collection WHERE directory = :directory"),
+        {'directory': directory}
+    )
+    return result.first() is not None
+
+
 def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMigrationStats:
     """
     Migrate all Domain records to Collection records.
@@ -182,6 +234,14 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             stats.add_error(f"Invalid domain name: {repr(domain_name)} (skipping)")
             continue
 
+        # Skip domains with no archives - don't create empty collections
+        archives = get_archives_for_domain(session, domain_id)
+        if not archives:
+            if verbose:
+                print(f"    Skipping domain {repr(domain_name)} - no archives")
+            stats.domains_skipped += 1
+            continue
+
         # Check if Collection already exists
         existing = session.query(MCollection).filter_by(
             name=domain_name,
@@ -194,11 +254,36 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
             stats.domains_migrated += 1
             continue
 
+        # Determine directory for the collection
+        directory = None
+
+        # Step 1: Check if Domain.directory is set
+        domain_directory = domain.get('directory')
+        if domain_directory:
+            directory = domain_directory
+            if verbose:
+                print(f"    Using Domain.directory: {directory}")
+        else:
+            # Step 2: Detect common directory from archive file paths
+            detected = detect_common_directory_from_archives(session, domain_id)
+            if detected:
+                directory = detected
+                if verbose:
+                    print(f"    Detected directory from archives: {directory}")
+
+        # Step 3: Check for directory conflicts
+        if directory and check_directory_conflict(session, directory):
+            stats.add_warning(
+                f"Directory {repr(directory)} already used by another Collection "
+                f"(domain {repr(domain_name)} will have no directory)"
+            )
+            directory = None
+
         # Create Collection
         collection = MCollection(
             name=domain_name,
             kind='domain',
-            directory=None,  # Domains are unrestricted
+            directory=directory,
         )
         session.add(collection)
         session.flush([collection])
@@ -206,9 +291,14 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
         domain_to_collection[domain_id] = collection.id
         stats.collections_created += 1
         stats.domains_migrated += 1
+        if directory:
+            stats.collections_with_directory += 1
 
         if verbose:
-            print(f"    Created Collection id={collection.id}")
+            if directory:
+                print(f"    Created Collection id={collection.id} with directory={directory}")
+            else:
+                print(f"    Created Collection id={collection.id} (no directory)")
 
     print(f"Created {stats.collections_created} Collection records")
 

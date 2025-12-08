@@ -4,7 +4,7 @@ import re
 from typing import Iterable, List, Optional
 
 import pytz
-from sqlalchemy import Column, Integer, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, ForeignKey, BigInteger, Index
 from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
@@ -28,6 +28,10 @@ MATCH_DATE = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
 
 class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
+    __table_args__ = (
+        Index('idx_archive_collection_id', 'collection_id'),
+    )
+
     id = Column(Integer, primary_key=True)
 
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'))

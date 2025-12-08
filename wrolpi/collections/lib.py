@@ -37,6 +37,9 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
     """
     Get all collections, optionally filtered by kind.
 
+    Uses batch queries to fetch statistics for all collections at once,
+    avoiding the N+1 query problem that occurs with per-collection queries.
+
     Args:
         kind: Optional collection kind to filter by (e.g., 'domain', 'channel')
         session: Database session
@@ -44,6 +47,11 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
     Returns:
         List of collection dicts with statistics for each collection type
     """
+    # Local imports to avoid circular import: collections -> archive/videos -> collections
+    from modules.archive import Archive
+    from modules.videos.models import Video, Channel
+    from wrolpi.files.models import FileGroup
+
     query = session.query(Collection)
 
     if kind:
@@ -51,7 +59,47 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
 
     collections = query.order_by(Collection.name).all()
 
-    # Convert to JSON and add type-specific statistics
+    if not collections:
+        return []
+
+    # Separate collections by kind for batch processing
+    domain_ids = [c.id for c in collections if c.kind == 'domain']
+    channel_ids = [c.id for c in collections if c.kind == 'channel']
+
+    # Batch query: Get archive stats for all domain collections at once
+    domain_stats_map = {}
+    if domain_ids:
+        domain_stats = session.query(
+            Archive.collection_id,
+            func.count(Archive.id).label('archive_count'),
+            func.coalesce(func.sum(FileGroup.size), 0).label('size')
+        ).outerjoin(
+            FileGroup, FileGroup.id == Archive.file_group_id
+        ).filter(
+            Archive.collection_id.in_(domain_ids)
+        ).group_by(Archive.collection_id).all()
+
+        domain_stats_map = {s.collection_id: s for s in domain_stats}
+
+    # Batch query: Get channel info and video stats for all channel collections at once
+    channel_stats_map = {}
+    if channel_ids:
+        channel_stats = session.query(
+            Channel.collection_id,
+            Channel.id.label('channel_id'),
+            func.count(Video.id).label('video_count'),
+            func.coalesce(func.sum(FileGroup.size), 0).label('size')
+        ).outerjoin(
+            Video, Video.channel_id == Channel.id
+        ).outerjoin(
+            FileGroup, FileGroup.id == Video.file_group_id
+        ).filter(
+            Channel.collection_id.in_(channel_ids)
+        ).group_by(Channel.collection_id, Channel.id).all()
+
+        channel_stats_map = {s.collection_id: s for s in channel_stats}
+
+    # Convert to JSON and merge batch statistics
     result = []
     for collection in collections:
         data = collection.__json__()
@@ -64,50 +112,19 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
         else:
             data['min_download_frequency'] = None
 
-        # Add type-specific statistics
+        # Add type-specific statistics from batch query results
         if collection.kind == 'domain':
-            # Add archive statistics for domain collections
-            # Local imports to avoid circular import: collections -> archive -> collections
-            from modules.archive import Archive
-            from wrolpi.files.models import FileGroup
-
-            stats_query = session.query(
-                func.count(Archive.id).label('archive_count'),
-                func.sum(FileGroup.size).label('size')
-            ).outerjoin(
-                FileGroup, FileGroup.id == Archive.file_group_id
-            ).filter(
-                Archive.collection_id == collection.id
-            ).one()
-
-            data['archive_count'] = stats_query.archive_count or 0
-            data['size'] = stats_query.size or 0
+            stats = domain_stats_map.get(collection.id)
+            data['archive_count'] = stats.archive_count if stats else 0
+            data['size'] = int(stats.size) if stats else 0
             data['domain'] = data['name']  # Alias for backward compatibility
 
         elif collection.kind == 'channel':
-            # Add video statistics for channel collections
-            # Local imports to avoid circular import: collections -> videos -> collections
-            from modules.videos.models import Video, Channel
-            from wrolpi.files.models import FileGroup
-
-            # Get the Channel associated with this collection
-            channel = session.query(Channel).filter(
-                Channel.collection_id == collection.id
-            ).one_or_none()
-
-            if channel:
-                stats_query = session.query(
-                    func.count(Video.id).label('video_count'),
-                    func.sum(FileGroup.size).label('size')
-                ).outerjoin(
-                    FileGroup, FileGroup.id == Video.file_group_id
-                ).filter(
-                    Video.channel_id == channel.id
-                ).one()
-
-                data['video_count'] = int(stats_query.video_count or 0)
-                data['total_size'] = int(stats_query.size or 0)
-                data['channel_id'] = channel.id  # Include actual Channel ID for frontend links
+            stats = channel_stats_map.get(collection.id)
+            if stats:
+                data['video_count'] = int(stats.video_count)
+                data['total_size'] = int(stats.size)
+                data['channel_id'] = stats.channel_id
             else:
                 data['video_count'] = 0
                 data['total_size'] = 0

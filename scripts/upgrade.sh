@@ -4,8 +4,13 @@
 set -e
 set -x
 
-# Ensure help service is always restarted, even on failure
-trap 'systemctl restart wrolpi-help.service || :' EXIT
+# Ensure help service is always restarted, but preserve exit code
+cleanup() {
+    local exit_code=$?
+    systemctl restart wrolpi-help.service || :
+    exit $exit_code
+}
+trap cleanup EXIT
 
 # Install any App dependencies.
 cd /opt/wrolpi/app || exit 1

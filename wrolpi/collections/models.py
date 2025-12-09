@@ -5,12 +5,18 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Inde
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory
+from wrolpi import flags
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
+    unique_by_predicate
 from wrolpi.db import optional_session
+from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
+from wrolpi.events import Events
+from wrolpi.files.lib import move as move_files, refresh_files
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag
+from wrolpi.tags import save_tags_config
 from .errors import UnknownCollection
 from .types import collection_type_registry
 
@@ -854,13 +860,8 @@ class Collection(ModelHelper, Base):
     async def move_collection(self, directory: pathlib.Path, session: Session, send_events: bool = False):
         """Move all files under this Collection's directory to a new directory.
 
-        Similar to Channel.move_channel but without download management.
+        Also updates download destinations for downloads associated with this collection.
         """
-        # Local imports to avoid circular import: collections -> files/events/flags -> collections
-        from wrolpi.files.lib import move as move_files, refresh_files
-        from wrolpi.events import Events
-        from wrolpi import flags
-
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
 
@@ -868,12 +869,28 @@ class Collection(ModelHelper, Base):
             raise RuntimeError('Cannot move an unrestricted Collection (no directory set)')
 
         old_directory = self.directory
+
+        def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path):
+            """Update download destinations from one directory to another."""
+            downloads = list(self.downloads)
+            downloads.extend(Download.get_all_by_destination(from_directory, session=session))
+            downloads = unique_by_predicate(downloads, lambda i: i.id)
+            for download in downloads:
+                download.destination = to_directory
+            session.flush(downloads)
+
         self.directory = directory
 
         with flags.refreshing:
+            # Update download destinations before moving files.
+            change_download_destinations(old_directory, directory)
             session.commit()
             # Move the contents of the Collection directory into the destination directory.
             logger.info(f'Moving Collection {repr(self.name)} from {repr(str(old_directory))}')
+            # Save configs before move - move triggers imports of configs.
+            save_downloads_config.activate_switch()
+            save_tags_config.activate_switch()
+
         try:
             if not old_directory.exists():
                 # Old directory does not exist; refresh both
@@ -886,6 +903,8 @@ class Collection(ModelHelper, Base):
                     Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
         except Exception as e:
             logger.error(f'Collection move failed! Reverting changes...', exc_info=e)
+            # Revert download destinations
+            change_download_destinations(directory, old_directory)
             self.directory = old_directory
             self.flush(session)
             if send_events:

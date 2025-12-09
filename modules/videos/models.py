@@ -7,16 +7,13 @@ from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
-from wrolpi import flags
 from wrolpi.captions import read_captions
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file, \
-    unique_by_predicate
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session, optional_session
-from wrolpi.downloader import Download, save_downloads_config
-from wrolpi.events import Events
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix, move
+from wrolpi.downloader import Download
+from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
-from wrolpi.tags import Tag, TagFile, save_tags_config
+from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
 
 logger = logger.getChild(__name__)
@@ -981,66 +978,20 @@ class Channel(ModelHelper, Base):
         return format_videos_destination(self.name, tag_name, self.url)
 
     async def move_channel(self, directory: pathlib.Path, session: Session, send_events: bool = False):
-        """Move the files of this Channel into a new directory."""
+        """Move the files of this Channel into a new directory.
+
+        Delegates to Collection.move_collection which handles file moving and download destinations.
+        This method adds Channel-specific config saves.
+        """
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
 
-        old_directory = self.directory
-        self.directory = directory
+        # Save channel config before move (Collection handles downloads and tags config)
+        from modules.videos.lib import save_channels_config
+        save_channels_config.activate_switch()
 
-        def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path):
-            downloads = list(self.downloads)
-            downloads.extend(Download.get_all_by_destination(from_directory))
-            downloads = unique_by_predicate(downloads, lambda i: i.id)
-            for download in downloads:
-                download.destination = to_directory
-            session.flush(downloads)
-
-        # Only one tag can be moved at a time.
-        with flags.refreshing:
-            # Change destination of all Downloads of this Channel, or any Downloads which download into this Channel's
-            # directory.
-            change_download_destinations(old_directory, directory)
-
-            session.commit()
-
-            # Save configs before move, this is because move imports configs.
-            from modules.videos.lib import save_channels_config
-            save_downloads_config.activate_switch()
-            save_channels_config.activate_switch()
-            save_tags_config.activate_switch()
-
-            # Move the contents of the Channel directory into the destination directory.
-            logger.info(f'Moving {self} from {repr(str(old_directory))}')
-
-        try:
-            if not old_directory.exists():
-                # Old directory does not exist, maintainer must have moved the Channel manually.
-                if PYTEST:
-                    await refresh_files([old_directory, directory])
-                else:
-                    background_task(refresh_files([old_directory, directory]))
-                if send_events:
-                    Events.send_file_move_completed(f'Channel {repr(self.name)} was moved, but Tags were lost')
-            else:
-                # `move` also uses `flags.refreshing`
-                await move(directory, *list(old_directory.iterdir()))
-                if send_events:
-                    Events.send_file_move_completed(f'Channel {repr(self.name)} was moved')
-        except Exception as e:
-            logger.error(f'Channel move failed!  Reverting changes...', exc_info=e)
-            # Downloads must be moved back to the old directory.
-            change_download_destinations(directory, old_directory)
-            self.directory = old_directory
-            self.flush(session)
-            if send_events:
-                Events.send_file_move_failed(f'Moving Channel {self.name} has failed')
-            raise
-        finally:
-            session.commit()
-            if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
-                # Old directory is empty, delete it.
-                old_directory.rmdir()
+        # Delegate to Collection.move_collection which handles file moving and download destinations
+        await self.collection.move_collection(directory, session, send_events=send_events)
 
     @staticmethod
     def get_by_source_id(session: Session, source_id: str) -> Optional['Channel']:

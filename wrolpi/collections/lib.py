@@ -320,7 +320,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
 
 
 @optional_session(commit=True)
-def tag_collection(
+async def tag_collection(
         collection_id: int,
         tag_name: Optional[str] = None,
         directory: Optional[str] = None,
@@ -341,23 +341,38 @@ def tag_collection(
     Raises:
         UnknownCollection: If collection not found
         ValidationError: If tagging requirements not met
+        RefreshConflict: If a file refresh is in progress and directory change is requested
     """
+    from wrolpi import flags
+    from wrolpi.errors import RefreshConflict
+
     collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
 
     if not collection:
         raise UnknownCollection(f"Collection with ID {collection_id} not found")
+
+    # Track old directory before any changes for potential file moving
+    old_directory = collection.directory
 
     # If tag_name is None, remove the tag from the collection
     if tag_name is None:
         collection.tag_id = None
 
         # Update directory if provided (user may want to move files when removing tag)
-        old_directory = collection.directory
         if directory:
             target_directory = validate_collection_directory(directory)
-            collection.directory = target_directory
         else:
             target_directory = collection.directory
+
+        # Check if we need to move files
+        need_to_move = (
+                target_directory is not None and
+                old_directory is not None and
+                target_directory != old_directory
+        )
+
+        if need_to_move and flags.refreshing.is_set():
+            raise RefreshConflict('Refusing to move collection while file refresh is in progress')
 
         session.flush()
 
@@ -371,6 +386,11 @@ def tag_collection(
             from modules.videos.lib import save_channels_config
             save_channels_config.activate_switch()
 
+        # Move files if directory changed
+        if need_to_move:
+            target_directory.mkdir(parents=True, exist_ok=True)
+            await collection.move_collection(target_directory, session, send_events=True)
+
         # Return info about the un-tagging operation
         relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
         return {
@@ -378,7 +398,7 @@ def tag_collection(
             'collection_name': collection.name,
             'tag_name': None,
             'directory': str(relative_dir) if relative_dir else None,
-            'will_move_files': target_directory is not None and old_directory != target_directory,
+            'will_move_files': need_to_move,
         }
 
     # Get or create the tag
@@ -400,10 +420,21 @@ def tag_collection(
         # Collections can be tagged without a directory for UI search/filtering
         target_directory = None
 
+    # Check if we need to move files
+    need_to_move = (
+            target_directory is not None and
+            old_directory is not None and
+            target_directory != old_directory
+    )
+
+    if need_to_move and flags.refreshing.is_set():
+        raise RefreshConflict('Refusing to move collection while file refresh is in progress')
+
     # Apply the tag
     collection.tag_id = tag.id
     # Only update directory if we have a target (don't auto-generate for directory-less collections)
-    if target_directory is not None:
+    # Note: directory update is handled by move_collection if need_to_move, otherwise set directly
+    if target_directory is not None and not need_to_move:
         collection.directory = target_directory
 
     session.flush()
@@ -418,6 +449,11 @@ def tag_collection(
         from modules.videos.lib import save_channels_config
         save_channels_config.activate_switch()
 
+    # Move files if directory changed
+    if need_to_move:
+        target_directory.mkdir(parents=True, exist_ok=True)
+        await collection.move_collection(target_directory, session, send_events=True)
+
     # Return info about the tagging operation
     relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
     return {
@@ -425,7 +461,7 @@ def tag_collection(
         'collection_name': collection.name,
         'tag_name': tag_name,
         'directory': str(relative_dir) if relative_dir else None,
-        'will_move_files': target_directory is not None and collection.directory != target_directory,
+        'will_move_files': need_to_move,
     }
 
 

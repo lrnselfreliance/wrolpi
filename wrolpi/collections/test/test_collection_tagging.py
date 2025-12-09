@@ -200,7 +200,7 @@ async def test_tag_collection_removes_tag_and_updates_directory(test_session, te
     untagged_dir.mkdir(parents=True, exist_ok=True)
 
     # Remove the tag AND update the directory
-    result = tag_collection(
+    result = await tag_collection(
         collection_id=collection.id,
         tag_name=None,  # Remove tag
         directory=str(untagged_dir),  # New directory

@@ -1269,7 +1269,7 @@ def test_get_bulk_tag_preview_empty(test_session, test_directory):
     ('multi_file_filegroup', 1),
 ])
 async def test_process_bulk_tag_job_add_tags(test_case, expected_fg_count, async_client, test_session,
-                                              make_files_structure, tag_factory, video_bytes, srt_text):
+                                             make_files_structure, tag_factory, video_bytes, srt_text):
     """_process_bulk_tag_job adds tags to files in various scenarios."""
     if test_case == 'existing_filegroups':
         foo, bar = make_files_structure({'foo.txt': 'foo', 'bar.txt': 'bar'})

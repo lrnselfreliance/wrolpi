@@ -1991,7 +1991,7 @@ DISABLE_BULK_TAG_WORKER = bool(PYTEST)
 async def bulk_tag_worker():
     """Background worker that processes bulk tagging jobs from the queue."""
     import queue
-    from wrolpi.api_utils import api_app, perpetual_signal
+    from wrolpi.api_utils import api_app
 
     if PYTEST and DISABLE_BULK_TAG_WORKER:
         return

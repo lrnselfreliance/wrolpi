@@ -310,7 +310,7 @@ async def test_tag_domain_without_directory_saves_config(test_session, test_dire
     test_session.commit()
 
     # Tag using library function (no directory)
-    tag_collection(collection.id, tag_name='News', directory=None, session=test_session)
+    await tag_collection(collection.id, tag_name='News', directory=None, session=test_session)
     test_session.commit()
 
     # Wait for switches to process
@@ -340,7 +340,7 @@ async def test_untag_domain_without_directory_saves_config(test_session, test_di
     test_session.commit()
 
     # Untag using library function (tag_name=None)
-    tag_collection(collection.id, tag_name=None, directory=None, session=test_session)
+    await tag_collection(collection.id, tag_name=None, directory=None, session=test_session)
     test_session.commit()
 
     # Wait for switches to process

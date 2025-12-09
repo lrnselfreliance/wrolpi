@@ -70,7 +70,7 @@ def _get_db_session():
     return engine, session
 
 
-def get_db_context() -> Tuple[sqlalchemy.create_engine, Session]:
+def get_db_context() -> Tuple[sqlalchemy.engine.Engine, Session]:
     """
     Get a DB engine and session.
     """
@@ -156,10 +156,23 @@ def optional_session(commit: Union[callable, bool] = False) -> callable:
             result = func(*args, session=session, **kwargs)
             if commit:
                 session.commit()
+            return result
         else:
             with get_db_session(commit=commit) as session:
                 result = func(*args, session=session, **kwargs)
-        return result
+            return result
+
+    async def call_func_async(func, session, args, kwargs):
+        """Async version of call_func that properly awaits the coroutine before committing."""
+        if session:
+            result = await func(*args, session=session, **kwargs)
+            if commit:
+                session.commit()
+            return result
+        else:
+            with get_db_session(commit=commit) as session:
+                result = await func(*args, session=session, **kwargs)
+            return result
 
     def wrapper(*w_args, **w_kwargs):
         if len(w_args) == 1 and len(w_kwargs) == 0 and callable(w_args[0]):
@@ -169,7 +182,7 @@ def optional_session(commit: Union[callable, bool] = False) -> callable:
                 @wraps(func)
                 async def wrapped(*args, session: Session = None, **kwargs):
                     session, args, kwargs = find_session(*args, session=session, **kwargs)
-                    return await call_func(func, session, args, kwargs)
+                    return await call_func_async(func, session, args, kwargs)
             else:
                 @wraps(func)
                 def wrapped(*args, session: Session = None, **kwargs):

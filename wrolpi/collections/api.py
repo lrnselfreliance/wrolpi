@@ -158,7 +158,7 @@ async def tag_collection_endpoint(_: Request, collection_id: int, body: schema.C
     If no directory is specified, the collection must already have one.
     """
     try:
-        result = lib.tag_collection(
+        result = await lib.tag_collection(
             collection_id=collection_id,
             tag_name=body.tag_name,
             directory=body.directory

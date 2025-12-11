@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from modules.videos.models import Video, Channel
 from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
-from wrolpi.db import get_db_session, optional_session
+from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
@@ -26,7 +26,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session(commit=True) as session:
-        video = Video.find_by_id(video_id, session=session)
+        video = Video.find_by_id(session, video_id)
         video.file_group.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
@@ -42,7 +42,7 @@ def get_video(video_id: int) -> Video:
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session() as session:
-        video = Video.find_by_id(video_id, session=session)
+        video = Video.find_by_id(session, video_id)
         return video
 
 
@@ -159,8 +159,7 @@ def search_videos(
     return results, total
 
 
-@optional_session
-def delete_videos(*video_ids: int, session: Session = None):
+def delete_videos(session: Session, *video_ids: int):
     videos = list(session.query(Video).filter(Video.id.in_(video_ids)))
     if not videos:
         raise UnknownVideo('Could not find videos to delete')

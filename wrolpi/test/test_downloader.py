@@ -27,23 +27,23 @@ async def test_delete_old_once_downloads(test_session, test_download_manager, te
         mock_now.return_value = datetime(2020, 6, 5, 0, 0, tzinfo=pytz.UTC)
 
         # Recurring downloads should not be deleted.
-        d1 = test_download_manager.create_download('https://example.com/1', test_downloader.name)
-        d2 = test_download_manager.create_download('https://example.com/2', test_downloader.name)
+        d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+        d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
         d1.frequency = 1
         d2.frequency = 1
         d2.started()
         # Should be deleted.
-        d3 = test_download_manager.create_download('https://example.com/3', test_downloader.name)
-        d4 = test_download_manager.create_download('https://example.com/4', test_downloader.name)
+        d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+        d4 = test_download_manager.create_download(test_session, 'https://example.com/4', test_downloader.name)
         d3.complete()
         d4.complete()
         d3.last_successful_download = datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
         d4.last_successful_download = datetime(2020, 5, 1, 0, 0, 0, tzinfo=pytz.UTC)
         # Not a month old.
-        d5 = test_download_manager.create_download('https://example.com/5', test_downloader.name)
+        d5 = test_download_manager.create_download(test_session, 'https://example.com/5', test_downloader.name)
         d5.last_successful_download = datetime(2020, 6, 1, 0, 0, 0, tzinfo=pytz.UTC)
         # An old, but pending download should not be deleted.
-        d6 = test_download_manager.create_download('https://example.com/6', test_downloader.name)
+        d6 = test_download_manager.create_download(test_session, 'https://example.com/6', test_downloader.name)
         d6.last_successful_download = datetime(2020, 4, 1, 0, 0, 0, tzinfo=pytz.UTC)
         d6.started()
 
@@ -68,17 +68,20 @@ async def test_recreate_download(test_session, test_download_manager, test_downl
     settings = {'tag_names': [tag.name, ]}
 
     # Create download with settings initially.
-    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=settings)
+    test_download_manager.create_downloads(test_session, ['https://example.com/1', ], test_downloader.name,
+                                           settings=settings)
     download: Download = test_session.query(Download).one()
     assert download.settings == settings
 
     # Restarting download does not remove settings.
-    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=None)
+    test_download_manager.create_downloads(test_session, ['https://example.com/1', ], test_downloader.name,
+                                           settings=None)
     download: Download = test_session.query(Download).one()
     assert download.settings == settings
 
     # Settings can be overwritten when not None.
-    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=dict())
+    test_download_manager.create_downloads(test_session, ['https://example.com/1', ], test_downloader.name,
+                                           settings=dict())
     download: Download = test_session.query(Download).one()
     assert download.settings == dict()
 
@@ -90,12 +93,12 @@ async def test_download_rename_tag(async_client, test_session, test_download_man
 
     tag_names = [tag.name, ]
     test_download_manager.create_downloads(
-        ['https://example.com/1', ], test_downloader.name, tag_names=tag_names)
+        test_session, ['https://example.com/1', ], test_downloader.name, tag_names=tag_names)
 
     download = test_session.query(Download).one()
     assert download.tag_names == ['one', ]
 
-    await tag.update_tag('new name', tag.color, test_session)
+    await tag.update_tag(test_session, 'new name', tag.color)
 
     download = test_session.query(Download).one()
     assert download.tag_names == ['new name', ]
@@ -134,11 +137,11 @@ async def test_download_get_downloader(test_session, test_download_manager, test
     """
     A Download can find it's Downloader.
     """
-    download1 = test_download_manager.create_download('https://example.com', test_downloader.name)
+    download1 = test_download_manager.create_download(test_session, 'https://example.com', test_downloader.name)
     assert download1.get_downloader() == test_downloader
 
     with pytest.raises(InvalidDownload):
-        download2 = test_download_manager.create_download('https://example.com', 'bad downloader')
+        download2 = test_download_manager.create_download(test_session, 'https://example.com', 'bad downloader')
 
 
 @pytest.mark.asyncio
@@ -160,7 +163,7 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
     ]
     for attempts, expected in attempts_expected:
         download.attempts = attempts
-        result = test_download_manager.calculate_next_download(download)
+        result = test_download_manager.calculate_next_download(test_session, download)
         assert result == expected, f'{attempts} != {result}'
 
     d1 = Download(url='https://example.com/1', frequency=DownloadFrequency.weekly)
@@ -169,9 +172,9 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
     test_session.add_all([d1, d2, d3])
     test_session.commit()
     # Downloads are ead out over the next week.
-    assert test_download_manager.calculate_next_download(d1) == datetime(2000, 1, 8, tzinfo=pytz.UTC)
-    assert test_download_manager.calculate_next_download(d2) == datetime(2000, 1, 11, 12, tzinfo=pytz.UTC)
-    assert test_download_manager.calculate_next_download(d3) == datetime(2000, 1, 9, 18, tzinfo=pytz.UTC)
+    assert test_download_manager.calculate_next_download(test_session, d1) == datetime(2000, 1, 8, tzinfo=pytz.UTC)
+    assert test_download_manager.calculate_next_download(test_session, d2) == datetime(2000, 1, 11, 12, tzinfo=pytz.UTC)
+    assert test_download_manager.calculate_next_download(test_session, d3) == datetime(2000, 1, 9, 18, tzinfo=pytz.UTC)
 
 
 @pytest.mark.asyncio
@@ -180,7 +183,8 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.set_test_success()
 
     # Download every hour.
-    test_download_manager.recurring_download('https://example.com/recurring', Seconds.hour, test_downloader.name)
+    test_download_manager.recurring_download(test_session, 'https://example.com/recurring', Seconds.hour,
+                                             test_downloader.name)
 
     # One download is scheduled.
     downloads = test_download_manager.get_new_downloads(test_session)
@@ -249,19 +253,19 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
 
     test_downloader.set_test_success()
 
-    test_download_manager.create_download('https://example.com', test_downloader.name)
+    test_download_manager.create_download(test_session, 'https://example.com', test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 1
 
-    test_download_manager.create_download('https://example.com', test_downloader.name)
+    test_download_manager.create_download(test_session, 'https://example.com', test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 2
 
     # There are no further attempts.
     test_downloader.set_test_unrecoverable_exception()
-    test_download_manager.create_download('https://example.com', test_downloader.name)
+    test_download_manager.create_download(test_session, 'https://example.com', test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 3
@@ -277,7 +281,7 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
 
     test_downloader.set_test_success()
 
-    test_download_manager.create_downloads([
+    test_download_manager.create_downloads(test_session, [
         'https://example.com/1',
         'https://example.com/skipme',
         'https://example.com/2',
@@ -286,10 +290,11 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
     assert_download_urls({'https://example.com/1', 'https://example.com/2'})
     assert get_download_manager_config().skip_urls == ['https://example.com/skipme']
 
-    test_download_manager.delete_once()
+    test_download_manager.delete_once(test_session)
 
     # The user can start a download even if the URL is in the skip list.
-    test_download_manager.create_download('https://example.com/skipme', test_downloader.name, reset_attempts=True)
+    test_download_manager.create_download(test_session, 'https://example.com/skipme', test_downloader.name,
+                                          reset_attempts=True)
     assert_download_urls({'https://example.com/skipme'})
     assert get_download_manager_config().skip_urls == []
 
@@ -410,18 +415,18 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):
     # Can import with an empty config.
-    await import_downloads_config()
+    await import_downloads_config(test_session)
     assert_downloads([])
 
     test_downloader.set_test_success()
 
     tag = await tag_factory()
 
-    download1, download2 = test_download_manager.create_downloads([
+    download1, download2 = test_download_manager.create_downloads(test_session, [
         'https://example.com/1',
         'https://example.com/2',
     ], downloader_name=test_downloader.name)
-    test_download_manager.recurring_download('https://example.com/3', frequency=DownloadFrequency.weekly,
+    test_download_manager.recurring_download(test_session, 'https://example.com/3', frequency=DownloadFrequency.weekly,
                                              downloader_name=test_downloader.name)
     download2.next_download = datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC)
     download2.destination = 'some directory'
@@ -474,7 +479,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     get_download_manager_config().initialize()
 
     # Import the saved downloads.
-    await import_downloads_config()
+    await import_downloads_config(test_session)
     expected = [
         dict(
             url='https://example.com/2',
@@ -499,7 +504,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     assert_downloads(expected)
 
     # Import again, no duplicates.
-    await import_downloads_config()
+    await import_downloads_config(test_session)
     assert_downloads(expected)
 
 
@@ -522,8 +527,8 @@ async def test_download_excluded_urls(test_session, test_download_manager, test_
             ]
         )
         settings = dict(excluded_urls='example.org,example.gov')
-        feed_download: Download = test_download_manager.create_download('https://example.com/feed', rss_downloader.name,
-                                                                        test_session,
+        feed_download: Download = test_download_manager.create_download(test_session, 'https://example.com/feed',
+                                                                        rss_downloader.name,
                                                                         sub_downloader_name=test_downloader.name,
                                                                         settings=settings)
         await test_download_manager.wait_for_all_downloads()
@@ -557,6 +562,7 @@ async def test_download_with_collection_id(test_session, test_download_manager, 
 
     # Creating a recurring download with collection_id should work
     download = test_download_manager.recurring_download(
+        test_session,
         'https://example.com/test',
         DownloadFrequency.weekly,
         test_downloader.name,

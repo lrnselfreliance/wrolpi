@@ -27,7 +27,6 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     set_global_log_level, get_relative_to_media_directory, search_other_estimates
 from wrolpi.config_api import config_bp
 from wrolpi.dates import now
-from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, HotspotError, HotspotPasswordTooShort, InvalidConfig, \
     ValidationError
@@ -274,18 +273,20 @@ def valid_regex(_: Request, body: schema.RegexRequest):
     validate=True,
 )
 @wrol_mode_check
-async def post_download(_: Request, body: schema.DownloadRequest):
+async def post_download(request: Request, body: schema.DownloadRequest):
     # Raises an InvalidDownload if the Downloader cannot be found.
     download_manager.find_downloader_by_name(body.downloader)
 
+    session = request.ctx.session
     kwargs = dict(downloader_name=body.downloader,
                   sub_downloader_name=body.sub_downloader, reset_attempts=True,
                   destination=body.destination, tag_names=body.tag_names,
                   settings=body.settings)
     if body.frequency:
-        download_manager.recurring_download(body.urls[0], body.frequency, collection_id=body.collection_id, **kwargs)
+        download_manager.recurring_download(session, body.urls[0], body.frequency, collection_id=body.collection_id,
+                                            **kwargs)
     else:
-        download_manager.create_downloads(body.urls, **kwargs)
+        download_manager.create_downloads(session, body.urls, **kwargs)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -300,26 +301,26 @@ async def post_download(_: Request, body: schema.DownloadRequest):
     validate=True,
 )
 @wrol_mode_check
-async def put_download(_: Request, download_id: int, body: schema.DownloadRequest):
+async def put_download(request: Request, download_id: int, body: schema.DownloadRequest):
     # Raises an InvalidDownload if the Downloader cannot be found.
     download_manager.find_downloader_by_name(body.downloader)
 
     if len(body.urls) != 1:
         raise ValidationError('Only one URL can be specified when updating a Download')
 
-    with get_db_session(commit=True) as session:
-        download_manager.update_download(
-            id_=download_id,
-            url=body.urls[0],
-            downloader=body.downloader,
-            destination=body.destination,
-            frequency=body.frequency,
-            tag_names=body.tag_names,
-            sub_downloader=body.sub_downloader,
-            settings=body.settings,
-            collection_id=body.collection_id,
-            session=session,
-        )
+    session = request.ctx.session
+    download_manager.update_download(
+        session,
+        id_=download_id,
+        url=body.urls[0],
+        downloader=body.downloader,
+        destination=body.destination,
+        frequency=body.frequency,
+        tag_names=body.tag_names,
+        sub_downloader=body.sub_downloader,
+        settings=body.settings,
+        collection_id=body.collection_id,
+    )
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -330,15 +331,17 @@ async def put_download(_: Request, download_id: int, body: schema.DownloadReques
 @api_bp.delete('/download/<download_id:int>')
 @openapi.description('Delete a download')
 @wrol_mode_check
-async def delete_download(_: Request, download_id: int):
-    deleted = download_manager.delete_download(download_id)
+async def delete_download(request: Request, download_id: int):
+    session = request.ctx.session
+    deleted = download_manager.delete_download(session, download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
 @api_bp.post('/download/<download_id:int>/restart')
 @openapi.description('Restart a download.')
-async def restart_download(_: Request, download_id: int):
-    download_manager.restart_download(download_id)
+async def restart_download(request: Request, download_id: int):
+    session = request.ctx.session
+    download_manager.restart_download(session, download_id)
     return response.empty()
 
 
@@ -382,15 +385,17 @@ async def enable_downloads(_: Request):
 
 @api_bp.post('/download/clear_completed')
 @openapi.description('Clear completed downloads')
-async def clear_completed(_: Request):
-    download_manager.delete_completed()
+async def clear_completed(request: Request):
+    session = request.ctx.session
+    download_manager.delete_completed(session)
     return response.empty()
 
 
 @api_bp.post('/download/clear_failed')
 @openapi.description('Clear failed downloads')
-async def clear_failed(_: Request):
-    download_manager.delete_failed()
+async def clear_failed(request: Request):
+    session = request.ctx.session
+    download_manager.delete_failed(session)
     return response.empty()
 
 
@@ -403,8 +408,9 @@ async def retry_once(_: Request):
 
 @api_bp.post('/download/delete_once')
 @openapi.description('Delete all once downloads')
-async def delete_once(_: Request):
-    download_manager.delete_once()
+async def delete_once(request: Request):
+    session = request.ctx.session
+    download_manager.delete_once(session)
     return response.empty()
 
 
@@ -541,8 +547,9 @@ async def get_tags_request(_: Request):
     body=schema.TagRequest,
     validate=True,
 )
-async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
-    await tags.upsert_tag(body.name, body.color, tag_id)
+async def post_tag(request: Request, body: schema.TagRequest, tag_id: int = None):
+    session = request.ctx.session
+    await tags.upsert_tag(session, body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)
     else:
@@ -550,8 +557,9 @@ async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
 
 
 @api_bp.delete('/tag/<tag_id:int>')
-async def delete_tag_request(_: Request, tag_id: int):
-    Tag.find_by_id(tag_id).delete()
+async def delete_tag_request(request: Request, tag_id: int):
+    session = request.ctx.session
+    Tag.find_by_id(session, tag_id).delete()
     return response.empty()
 
 
@@ -672,13 +680,14 @@ async def post_upgrade_start(_: Request):
     body=schema.SearchSuggestionsRequest,
     validate=True,
 )
-async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
+async def post_search_suggestions(request: Request, body: schema.SearchSuggestionsRequest):
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
+    session = request.ctx.session
     channels, domains = await asyncio.gather(
-        search_channels_by_name(body.search_str, order_by_video_count=body.order_by_video_count),
-        search_domains_by_name(body.search_str),
+        search_channels_by_name(session, body.search_str, order_by_video_count=body.order_by_video_count),
+        search_domains_by_name(session, body.search_str),
     )
 
     ret = dict(

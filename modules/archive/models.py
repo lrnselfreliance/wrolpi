@@ -11,7 +11,6 @@ from wrolpi import dates
 from wrolpi.collections import Collection
 from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory
 from wrolpi.dates import now
-from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -62,33 +61,29 @@ class Archive(Base, ModelHelper):
         return None
 
     @staticmethod
-    @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional['Archive']:
+    def get_by_id(session: Session, id_: int) -> Optional['Archive']:
         """Attempt to find an Archive with the provided id.  Returns None if it cannot be found."""
         archive = session.query(Archive).filter_by(id=id_).one_or_none()
         return archive
 
     @staticmethod
-    @optional_session
-    def find_by_id(id_: int, session: Session = None) -> 'Archive':
+    def find_by_id(session: Session, id_: int) -> 'Archive':
         """Find an Archive with the provided id, raises an exception when no Archive is found.
 
         @raise UnknownArchive: if the Archive can not be found"""
-        archive = Archive.get_by_id(id_, session=session)
+        archive = Archive.get_by_id(session, id_)
         if not archive:
             raise UnknownArchive(f'Cannot find Archive with id {id_}')
         return archive
 
     @staticmethod
-    @optional_session
-    def get_by_path(path: pathlib.Path | str, session: Session = None) -> Optional['Archive']:
+    def get_by_path(session: Session, path: pathlib.Path | str) -> Optional['Archive']:
         archive = session.query(Archive).join(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return archive
 
     @staticmethod
-    @optional_session
-    def find_by_path(path: pathlib.Path | str, session: Session = None) -> Optional['Archive']:
-        archive = Archive.get_by_path(path, session)
+    def find_by_path(session: Session, path: pathlib.Path | str) -> Optional['Archive']:
+        archive = Archive.get_by_path(session, path)
         if archive:
             return archive
         raise UnknownArchive(f'Cannot find Archive with path: {path}')
@@ -102,10 +97,10 @@ class Archive(Base, ModelHelper):
         return False
 
     @staticmethod
-    def do_model(file_group: FileGroup, session: Session) -> 'Archive':
+    def do_model(session: Session, file_group: FileGroup) -> 'Archive':
         # Local import to avoid circular import within archive module
         from modules.archive import model_archive
-        archive = model_archive(file_group, session)
+        archive = model_archive(session, file_group)
         archive.validate()
         file_group.indexed = True
         return archive
@@ -377,7 +372,7 @@ class Archive(Base, ModelHelper):
         # Local import to avoid circular import within archive module
         from modules.archive import model_archive
         file_group = FileGroup.from_paths(session, *paths)
-        archive = model_archive(file_group, session)
+        archive = model_archive(session, file_group)
         return archive
 
     def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:

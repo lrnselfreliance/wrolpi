@@ -368,6 +368,7 @@ async def test_tag_domain_comprehensive(
 
     # Create recurring download which uses the domain's directory
     download = test_download_manager.recurring_download(
+        test_session,
         'https://example.com/feed',
         60,
         test_downloader.name,

@@ -24,7 +24,7 @@ from wrolpi.common import get_media_directory, get_relative_to_media_directory, 
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
     get_wrolpi_config, html_screenshot, ConfigFile
 from wrolpi.dates import now, Seconds
-from wrolpi.db import get_db_session, get_db_curs, optional_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
 from wrolpi.files.lib import handle_file_group_search_results
@@ -143,7 +143,7 @@ class DomainsConfig(ConfigFile):
                 # Batch create/update collections
                 imported_domains = set()
                 if valid_data_list:
-                    collections = Collection.batch_from_config(valid_data_list, session=session)
+                    collections = Collection.batch_from_config(session, valid_data_list)
                     imported_domains = {c.name for c in collections}
 
                 # Delete domain collections that are no longer in config
@@ -453,7 +453,7 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
     return archive
 
 
-def detect_domain_directory(collection: Collection, session: Session) -> Optional[pathlib.Path]:
+def detect_domain_directory(session: Session, collection: Collection) -> Optional[pathlib.Path]:
     """
     Detect if all archives for a domain collection share a common directory.
 
@@ -546,7 +546,7 @@ def update_domain_directories(session: Session = None) -> int:
 
     updated_count = 0
     for collection in collections:
-        detected_dir = detect_domain_directory(collection, session)
+        detected_dir = detect_domain_directory(session, collection)
         if detected_dir:
             collection.directory = detected_dir
             session.flush([collection])
@@ -598,7 +598,7 @@ def get_or_create_domain_collection(session: Session, url, directory: pathlib.Pa
 
     # Auto-detect directory if not explicitly set and collection doesn't have one
     if not directory and not collection.directory:
-        detected_dir = detect_domain_directory(collection, session)
+        detected_dir = detect_domain_directory(session, collection)
         if detected_dir:
             collection.directory = detected_dir
             session.flush()
@@ -810,10 +810,9 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     return metadata
 
 
-@optional_session
-def get_archive(session, archive_id: int) -> Archive:
+def get_archive(session: Session, archive_id: int) -> Archive:
     """Get an Archive."""
-    archive = Archive.find_by_id(archive_id, session=session)
+    archive = Archive.find_by_id(session, archive_id)
     archive.file_group.set_viewed()
     return archive
 
@@ -907,17 +906,18 @@ def get_domain(domain_id: int) -> dict:
     Raises UnknownArchive if domain not found.
     """
     # Get the collection using find_by_id
-    try:
-        collection = Collection.find_by_id(domain_id)
-    except Exception:
-        # Collection.find_by_id raises UnknownCollection, but we want UnknownArchive
-        raise UnknownArchive(f"Domain collection with ID {domain_id} not found")
+    with get_db_session() as session:
+        try:
+            collection = Collection.find_by_id(session, domain_id)
+        except Exception:
+            # Collection.find_by_id raises UnknownCollection, but we want UnknownArchive
+            raise UnknownArchive(f"Domain collection with ID {domain_id} not found")
 
-    if collection.kind != 'domain':
-        raise UnknownArchive(f"Collection {domain_id} is not a domain")
+        if collection.kind != 'domain':
+            raise UnknownArchive(f"Collection {domain_id} is not a domain")
 
-    # Get base domain data from __json__()
-    domain_data = collection.__json__()
+        # Get base domain data from __json__()
+        domain_data = collection.__json__()
 
     # Get archive statistics for this domain
     with get_db_curs() as curs:
@@ -1045,15 +1045,14 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     return results, total
 
 
-@optional_session
-async def search_domains_by_name(name: str, limit: int = 5, session: Session = None) -> List[dict]:
+async def search_domains_by_name(session: Session, name: str, limit: int = 5) -> List[dict]:
     """
     Search for domain collections by name.
 
     Args:
+        session: Database session
         name: Search string to match against collection names
         limit: Maximum number of results to return
-        session: Database session
 
     Returns:
         List of domain dicts matching the search (in old Domain format for backward compatibility)
@@ -1163,7 +1162,7 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
         RuntimeError: If screenshot generation fails
     """
     with get_db_session() as session:
-        archive = Archive.find_by_id(archive_id, session=session)
+        archive = Archive.find_by_id(session, archive_id)
 
         if not archive.singlefile_path:
             raise ValueError(f'Cannot generate screenshot for Archive {archive_id}: no singlefile')
@@ -1175,7 +1174,7 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
                 logger.info(f'Archive {archive_id} already has a screenshot, ensuring it is tracked')
                 # Ensure the screenshot is tracked in FileGroup.files and FileGroup.data
                 with get_db_session(commit=True) as tracking_session:
-                    archive = Archive.find_by_id(archive_id, session=tracking_session)
+                    archive = Archive.find_by_id(tracking_session, archive_id)
                     file_group = archive.file_group
                     # append_files uses unique_by_predicate, so this is safe even if already tracked
                     file_group.append_files(archive.screenshot_path)
@@ -1213,7 +1212,7 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
 
     # Update the Archive to include the new screenshot file
     with get_db_session(commit=True) as session:
-        archive = Archive.find_by_id(archive_id, session=session)
+        archive = Archive.find_by_id(session, archive_id)
         archive.set_screenshot(screenshot_path)
         session.flush()
 

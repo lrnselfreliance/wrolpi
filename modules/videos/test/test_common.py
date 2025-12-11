@@ -122,8 +122,10 @@ async def test_update_view_count(test_session, channel_factory, video_factory):
     # An outdated view count will be overwritten.
     vid = test_session.query(Video).filter_by(id=1).one()
     vid.view_count = 8
+    test_session.commit()  # Commit so raw SQL in update_view_counts_and_censored doesn't deadlock
     check_view_counts({'vid1': 8, 'vid2': 11, 'vid3': 13, 'vid4': 14})
     await update_view_counts_and_censored(channel1.id)
+    test_session.expire_all()  # Expire cached values to see raw SQL changes
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 
@@ -192,15 +194,15 @@ async def test_import_channel_downloads(await_switches, test_session, channel_fa
     assert next_download == str(download.next_download)
 
     # Creating Download that matches Channel2's URL means they are related.  Delete it and it should be re-created.
-    channel2.get_or_create_download(channel2.url, 60, test_session)
+    channel2.get_or_create_download(test_session, channel2.url, 60)
     save_channels_config()
-    Download.find_by_url(channel2.url).delete(add_to_skip_list=False)
+    Download.find_by_url(test_session, channel2.url).delete(add_to_skip_list=False)
     test_session.commit()
     await await_switches()
 
     # Missing Download is re-created on import.
     import_channels_config()
-    channel2 = Channel.get_by_id(channel2.id)
+    channel2 = Channel.get_by_id(test_session, channel2.id)
     downloads = test_session.query(Download).all()
     assert len(downloads) == 1, downloads
     assert len(channel1.downloads) == 1
@@ -208,8 +210,8 @@ async def test_import_channel_downloads(await_switches, test_session, channel_fa
     assert downloads[0].downloader == 'video_channel'
 
     # Add a Download to Channel2 which does not match Channel.url.
-    channel2.get_or_create_download('https://example.org', 60, session=test_session)
-    channel2.get_or_create_download('https://example.com/channel2', 60, session=test_session)
+    channel2.get_or_create_download(test_session, 'https://example.org', 60)
+    channel2.get_or_create_download(test_session, 'https://example.com/channel2', 60)
     test_session.commit()
     save_channels_config()
     await await_switches()

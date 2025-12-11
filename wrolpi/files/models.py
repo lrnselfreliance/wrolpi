@@ -3,7 +3,6 @@ import pathlib
 import shutil
 import urllib.parse
 from datetime import datetime
-from functools import singledispatchmethod
 from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event, Index
@@ -13,7 +12,7 @@ from sqlalchemy.orm import deferred, relationship, Session
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
-from wrolpi.db import optional_session, get_db_session
+from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
 from wrolpi.errors import FileGroupIsTagged, UnknownFile
 from wrolpi.files import indexers
@@ -181,12 +180,11 @@ class FileGroup(ModelHelper, Base):
         self.viewed = viewed or now()
         return self.viewed
 
-    @optional_session
-    def set_tags(self, tag_names_or_ids: Iterable[str | int], session: Session = None):
+    def set_tags(self, session: Session, tag_names_or_ids: Iterable[str | int]):
         """Insert or Delete TagFiles as necessary to match the provided tags for this FileGroup."""
         tag_names_or_ids = list(tag_names_or_ids)
         if tag_names_or_ids and isinstance(tag_names_or_ids[0], str):
-            tag_ids = {Tag.get_id_by_name(i) for i in tag_names_or_ids}
+            tag_ids = {Tag.get_id_by_name(session, i) for i in tag_names_or_ids}
         else:
             tag_ids = set(tag_names_or_ids)
 
@@ -202,6 +200,8 @@ class FileGroup(ModelHelper, Base):
                 TagFile.file_group_id == self.id,
                 TagFile.tag_id.in_(deleted_tags),
             ).delete(synchronize_session=False)
+            # Refresh the relationship after deleting
+            session.expire(self, ['tag_files'])
 
         # Save changes to config.
         save_tags_config.activate_switch()
@@ -209,29 +209,21 @@ class FileGroup(ModelHelper, Base):
 
         return self.tag_files
 
-    @singledispatchmethod
-    @optional_session
-    def add_tag(self, tag_id: int | str, session: Session = None) -> TagFile:
+    def add_tag(self, session: Session, tag_id: int | str) -> TagFile:
+        """Add a tag to this FileGroup. `tag_id` can be an int (tag ID) or str (tag name)."""
+        if isinstance(tag_id, str):
+            tag_id = Tag.get_id_by_name(session, tag_id)
         tags = [i.tag_id for i in self.tag_files]
         tags.append(tag_id)
-        tag_files = self.set_tags(tags, session=session)
+        tag_files = self.set_tags(session, tags)
         return next(i for i in tag_files if i.tag_id == tag_id)
 
-    @add_tag.register
-    def _(self, tag_name: str, session: Session = None) -> TagFile:
-        tag_id = Tag.get_id_by_name(tag_name, session=session)
-        return self.add_tag(tag_id, session=session)
-
-    @singledispatchmethod
-    @optional_session
-    def untag(self, tag_id: int | str, session: Session = None):
+    def untag(self, session: Session, tag_id: int | str):
+        """Remove a tag from this FileGroup. `tag_id` can be an int (tag ID) or str (tag name)."""
+        if isinstance(tag_id, str):
+            tag_id = Tag.get_id_by_name(session, tag_id)
         tags = [i.tag_id for i in self.tag_files if i.tag_id != tag_id]
-        self.set_tags(tags, session=session)
-
-    @untag.register
-    def _(self, tag_name: str, session: Session = None) -> TagFile:
-        tag_id = Tag.get_id_by_name(tag_name, session=session)
-        return self.untag(tag_id, session=session)
+        self.set_tags(session, tags)
 
     def append_files(self, *paths: pathlib.Path):
         """Add all `paths` to this FileGroup.files."""
@@ -315,7 +307,7 @@ class FileGroup(ModelHelper, Base):
 
         if session := Session.object_session(self):
             from wrolpi.downloader import download_manager
-            if self.url and (download := Download.get_by_url(self.url, session=session)):
+            if self.url and (download := Download.get_by_url(session, self.url)):
                 download.delete(add_to_skip_list)
             elif self.url and add_to_skip_list is True:
                 download_manager.add_to_skip_list(self.url)
@@ -382,22 +374,20 @@ class FileGroup(ModelHelper, Base):
         return file_group
 
     @staticmethod
-    def find_by_id(id_: int, session: Session = None) -> 'FileGroup':
+    def find_by_id(session: Session, id_: int) -> 'FileGroup':
         fg = session.query(FileGroup).filter(FileGroup.id == id_).one_or_none()
         if not fg:
             raise UnknownFile(f'Unable to find FileGroup with id {id_}')
         return fg
 
     @staticmethod
-    @optional_session
-    def get_by_path(path, session) -> Optional['FileGroup']:
+    def get_by_path(session: Session, path) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 
     @staticmethod
-    @optional_session
-    def find_by_path(path, session) -> 'FileGroup':
-        file_group = FileGroup.get_by_path(path, session)
+    def find_by_path(session: Session, path) -> 'FileGroup':
+        file_group = FileGroup.get_by_path(session, path)
         if not file_group:
             raise UnknownFile(f'Unable to find FileGroup with path {path}')
         return file_group
@@ -435,7 +425,7 @@ class FileGroup(ModelHelper, Base):
             for tag_file in file_group.tag_files:
                 if tag_file.tag is not None and tag_file.tag.name not in self.tag_names:
                     # Preserve the created at.
-                    self.add_tag(tag_file.tag.id).created_at = tag_file.created_at
+                    self.add_tag(session, tag_file.tag.id).created_at = tag_file.created_at
             session.delete(file_group)
 
         self.files = collected_files
@@ -489,7 +479,7 @@ class FileGroup(ModelHelper, Base):
         if klass:
             # Return the model location when possible.
             with get_db_session() as session:
-                instance = klass.get_by_path(self.primary_path, session)
+                instance = klass.get_by_path(session, self.primary_path)
                 if instance and hasattr(instance, 'location'):
                     return instance.location
 
@@ -522,7 +512,7 @@ class FileGroup(ModelHelper, Base):
         klass = self.get_model_class()
         if klass:
             with get_db_session() as session:
-                return klass.get_by_path(self.primary_path, session)
+                return klass.get_by_path(session, self.primary_path)
         return None
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:
@@ -530,7 +520,7 @@ class FileGroup(ModelHelper, Base):
         if model_class := self.get_model_class():
             # Always call do_model() to ensure FileGroup.data is updated when files change.
             # The model's do_model() should be idempotent (safe to call multiple times).
-            model = model_class.do_model(self, session)
+            model = model_class.do_model(session, self)
             logger.debug(f'modeled: {self} {model}')
             return model
 

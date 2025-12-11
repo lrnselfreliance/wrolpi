@@ -81,7 +81,7 @@ class TestInventory(PytestCase):
     def test_get_inventories(self, test_session):
         self.prepare()
 
-        inventories = get_inventories()
+        inventories = get_inventories(test_session)
         dates = extract_items(inventories, {'created_at', 'deleted_at', 'viewed_at'})
         self.assertItemsTruthyOrFalsey(dates, [{'created_at': True, 'deleted_at': False, 'viewed_at': False}])
         self.assertEqual(inventories[0].id, 1)
@@ -290,7 +290,7 @@ async def test_inventories_config(await_switches, test_session, test_directory, 
 
     import_inventories_config()
 
-    inventories = get_inventories()
+    inventories = get_inventories(test_session)
     assert len(inventories) == 1
     # ID has increased because we did not reset the sequence when deleting from the table.
     assert inventories[0].id == 2

@@ -177,7 +177,7 @@ class EBook(ModelHelper, Base):
         return False
 
     @staticmethod
-    def do_model(file_group: FileGroup, session: Session) -> 'EBook':
+    def do_model(session: Session, file_group: FileGroup) -> 'EBook':
         ebook = model_ebook(file_group, session)
         file_group.indexed = True
         return ebook

@@ -476,7 +476,7 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     tag = await tag_factory('Tag Name')
     v1, v2 = video_factory(title='video1', channel_id=channel.id), video_factory(title='video2', channel_id=channel.id)
     # Create recurring download which uses the Channel's directory.
-    download = test_download_manager.recurring_download('https://example.com/1', 60, test_downloader.name,
+    download = test_download_manager.recurring_download(test_session, 'https://example.com/1', 60, test_downloader.name,
                                                         destination=str(test_directory / 'videos/Channel Name'))
     test_session.commit()
     save_channels_config()
@@ -597,7 +597,7 @@ async def test_move_channel(async_client, test_session, test_directory, channel_
     )
     request, response = await async_client.put(f'/api/videos/channels/{channel.id}', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
-    channel = Channel.find_by_id(channel.id)
+    channel = Channel.find_by_id(test_session, channel.id)
     assert str(channel.directory) == str(test_directory / 'videos/New Directory')
     assert str(vid1.video_path).startswith(str(test_directory / 'videos/New Directory/'))
     assert str(vid2.video_path).startswith(str(test_directory / 'videos/New Directory/'))
@@ -625,7 +625,7 @@ async def test_move_channel_after_terminal_move(async_client, test_session, test
     )
     request, response = await async_client.put(f'/api/videos/channels/{channel.id}', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
-    channel = Channel.find_by_id(channel.id)
+    channel = Channel.find_by_id(test_session, channel.id)
     vid1 = test_session.query(Video).one()
     assert str(channel.directory) == str(test_directory / 'videos/New Directory')
     assert str(vid1.video_path).startswith(str(test_directory / 'videos/New Directory/'))

@@ -41,8 +41,9 @@ async def get_collections_endpoint(request: Request):
         - metadata: UI metadata (columns, fields, routes, messages) if kind is specified
     """
     kind = request.args.get('kind')
+    session = request.ctx.session
 
-    collections = lib.get_collections(kind=kind)
+    collections = lib.get_collections(session, kind=kind)
 
     response_data = {
         'collections': collections,
@@ -56,7 +57,7 @@ async def get_collections_endpoint(request: Request):
 @openapi.summary('Get a single collection by ID')
 @openapi.response(HTTPStatus.OK, description="Collection details with statistics")
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_collection_endpoint(_: Request, collection_id: int):
+async def get_collection_endpoint(request: Request, collection_id: int):
     """
     Get details for a single collection including type-specific statistics.
 
@@ -65,8 +66,9 @@ async def get_collection_endpoint(_: Request, collection_id: int):
     - Channel collections: includes video_count and size
     - Other types: includes item_count and total_size
     """
+    session = request.ctx.session
     try:
-        collection_data = lib.get_collection_with_stats(collection_id)
+        collection_data = lib.get_collection_with_stats(session, collection_id)
         return json_response({'collection': collection_data})
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
@@ -82,7 +84,7 @@ async def get_collection_endpoint(_: Request, collection_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-async def put_collection_endpoint(_: Request, collection_id: int, body: schema.CollectionUpdateRequest):
+async def put_collection_endpoint(request: Request, collection_id: int, body: schema.CollectionUpdateRequest):
     """
     Update collection properties (directory, tag, description).
 
@@ -93,8 +95,10 @@ async def put_collection_endpoint(_: Request, collection_id: int, body: schema.C
 
     Note: To clear a field, pass an empty string. To leave unchanged, omit the field.
     """
+    session = request.ctx.session
     try:
         collection = lib.update_collection(
+            session,
             collection_id=collection_id,
             directory=body.directory,
             tag_name=body.tag_name,
@@ -102,7 +106,7 @@ async def put_collection_endpoint(_: Request, collection_id: int, body: schema.C
         )
 
         # Return updated collection data
-        collection_data = lib.get_collection_with_stats(collection_id)
+        collection_data = lib.get_collection_with_stats(session, collection_id)
         return json_response({'collection': collection_data})
 
     except UnknownCollection as e:
@@ -146,7 +150,7 @@ async def refresh_collection_endpoint(_: Request, collection_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-async def tag_collection_endpoint(_: Request, collection_id: int, body: schema.CollectionTagRequest):
+async def tag_collection_endpoint(request: Request, collection_id: int, body: schema.CollectionTagRequest):
     """
     Tag a collection and optionally move its files to a new directory.
 
@@ -157,8 +161,10 @@ async def tag_collection_endpoint(_: Request, collection_id: int, body: schema.C
 
     If no directory is specified, the collection must already have one.
     """
+    session = request.ctx.session
     try:
         result = await lib.tag_collection(
+            session,
             collection_id=collection_id,
             tag_name=body.tag_name,
             directory=body.directory
@@ -179,7 +185,7 @@ async def tag_collection_endpoint(_: Request, collection_id: int, body: schema.C
 )
 @openapi.response(HTTPStatus.OK, schema.CollectionTagInfoResponse, description="Tag info retrieved successfully")
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_tag_info_endpoint(_: Request, collection_id: int, body: schema.CollectionTagInfoRequest):
+async def get_tag_info_endpoint(request: Request, collection_id: int, body: schema.CollectionTagInfoRequest):
     """
     Get information about tagging a collection with a specific tag.
 
@@ -189,8 +195,10 @@ async def get_tag_info_endpoint(_: Request, collection_id: int, body: schema.Col
 
     This is useful for showing users the suggested directory before they commit to tagging.
     """
+    session = request.ctx.session
     try:
         tag_info = lib.get_tag_info(
+            session,
             collection_id=collection_id,
             tag_name=body.tag_name
         )
@@ -207,7 +215,7 @@ async def get_tag_info_endpoint(_: Request, collection_id: int, body: schema.Col
 @openapi.response(HTTPStatus.NO_CONTENT, description="Collection deleted successfully")
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-def delete_collection_endpoint(_: Request, collection_id: int):
+async def delete_collection_endpoint(request: Request, collection_id: int):
     """
     Delete a collection and orphan its child items.
 
@@ -217,8 +225,9 @@ def delete_collection_endpoint(_: Request, collection_id: int):
     - Archives remain in the database but are no longer associated with a domain
     - Triggers domain config save
     """
+    session = request.ctx.session
     try:
-        collection = lib.delete_collection(collection_id=collection_id)
+        collection = lib.delete_collection(session, collection_id=collection_id)
         from wrolpi.events import Events
         Events.send_deleted(f'Deleted {collection["kind"]} collection: {collection["name"]}')
         return response.raw('', HTTPStatus.NO_CONTENT)
@@ -234,7 +243,7 @@ def delete_collection_endpoint(_: Request, collection_id: int):
     validate=True,
 )
 @openapi.response(HTTPStatus.OK, description="Search results")
-async def search_collections_endpoint(_: Request, body: schema.CollectionSearchRequest):
+async def search_collections_endpoint(request: Request, body: schema.CollectionSearchRequest):
     """
     Search collections by kind, tags, and name.
 
@@ -245,7 +254,9 @@ async def search_collections_endpoint(_: Request, body: schema.CollectionSearchR
 
     All filters are optional and can be combined.
     """
+    session = request.ctx.session
     collections = lib.search_collections(
+        session,
         kind=body.kind,
         tag_names=body.tag_names if body.tag_names else None,
         search_str=body.search_str

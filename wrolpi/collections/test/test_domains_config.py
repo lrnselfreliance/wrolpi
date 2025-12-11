@@ -51,9 +51,9 @@ class TestDomainsConfig:
                                                                  test_directory: pathlib.Path, async_client):
         """Test that dumping domains.yaml only exports domain collections."""
         # Create some domain and channel collections
-        domain1 = Collection.from_config({'name': 'example.com', 'kind': 'domain'}, session=test_session)
-        domain2 = Collection.from_config({'name': 'test.org', 'kind': 'domain'}, session=test_session)
-        channel = Collection.from_config({'name': 'My Channel', 'kind': 'channel'}, session=test_session)
+        domain1 = Collection.from_config(test_session, {'name': 'example.com', 'kind': 'domain'})
+        domain2 = Collection.from_config(test_session, {'name': 'test.org', 'kind': 'domain'})
+        channel = Collection.from_config(test_session, {'name': 'My Channel', 'kind': 'channel'})
         test_session.commit()
 
         # Dump to config
@@ -126,8 +126,8 @@ class TestDomainsConfig:
                                                     async_client):
         """Test that domains removed from config are deleted from database."""
         # Create two domain collections
-        domain1 = Collection.from_config({'name': 'example.com', 'kind': 'domain'}, session=test_session)
-        domain2 = Collection.from_config({'name': 'test.org', 'kind': 'domain'}, session=test_session)
+        domain1 = Collection.from_config(test_session, {'name': 'example.com', 'kind': 'domain'})
+        domain2 = Collection.from_config(test_session, {'name': 'test.org', 'kind': 'domain'})
         test_session.commit()
 
         # Import config with only one domain
@@ -152,11 +152,11 @@ class TestDomainsConfig:
                                                     async_client):
         """Test that updating a domain in config updates the existing collection."""
         # Create initial domain
-        domain = Collection.from_config({
+        domain = Collection.from_config(test_session, {
             'name': 'example.com',
             'kind': 'domain',
             'description': 'Original description',
-        }, session=test_session)
+        })
         test_session.commit()
         domain_id = domain.id
 

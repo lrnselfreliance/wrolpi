@@ -37,12 +37,13 @@ async def statistics(_: Request):
     body=schema.ChannelTagInfoRequest,
 )
 @validate(schema.ChannelTagInfoRequest)
-async def channel_tag_info(_: Request, body: schema.ChannelTagInfoRequest):
+async def channel_tag_info(request: Request, body: schema.ChannelTagInfoRequest):
     from wrolpi.tags import Tag
-    channel = Channel.find_by_id(body.channel_id) if body.channel_id else None
+    session = request.ctx.session
+    channel = Channel.find_by_id(session, body.channel_id) if body.channel_id else None
     channel_name = channel.name if channel else None
     channel_url = channel.url if channel else None
-    tag_name = Tag.find_by_name(body.tag_name).name if body.tag_name else None
+    tag_name = Tag.find_by_name(session, body.tag_name).name if body.tag_name else None
     videos_destination = format_videos_destination(channel_name, tag_name, channel_url)
     ret = dict(videos_destination=videos_destination)
     return json_response(ret)

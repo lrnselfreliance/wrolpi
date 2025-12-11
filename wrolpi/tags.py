@@ -14,7 +14,7 @@ from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
 from wrolpi.dates import TZDateTime
-from wrolpi.db import optional_session, get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, RefreshConflict, NoPrimaryFile
 from wrolpi.events import Events
@@ -44,20 +44,18 @@ class TagFile(ModelHelper, Base):
         return f'<TagFile tag={self.tag.name} file_group={self.file_group.primary_path}>'
 
     @staticmethod
-    @optional_session
-    def get_by_primary_keys(file_group_id: int, tag_id: int, session: Session = None) -> Optional['TagFile']:
+    def get_by_primary_keys(session: Session, file_group_id: int, tag_id: int) -> Optional['TagFile']:
         return session.query(TagFile).filter_by(tag_id=tag_id, file_group_id=file_group_id).one_or_none()
 
     @staticmethod
-    @optional_session
-    def get_by_tag_name(file_group_id: int, tag_name: str, session: Session = None) -> Optional['TagFile']:
+    def get_by_tag_name(session: Session, file_group_id: int, tag_name: str) -> Optional['TagFile']:
         return session.query(TagFile).join(Tag) \
             .filter(TagFile.file_group_id == file_group_id, Tag.name == tag_name) \
             .one_or_none()
 
 
 # Tag.get_id_by_name
-def get_id_by_name_key(klass: Base, name: str, session: Session = None):
+def get_id_by_name_key(klass: Base, session: Session, name: str):
     return hashkey(name)
 
 
@@ -65,7 +63,7 @@ get_id_by_name_cache = cachetools.LRUCache(maxsize=1_000)
 
 
 # Tag.get_name_by_id
-def get_name_by_id_key(klass: Base, id_: int, session: Session = None):
+def get_name_by_id_key(klass: Base, session: Session, id_: int):
     return hashkey(id_)
 
 
@@ -97,8 +95,7 @@ class Tag(ModelHelper, Base):
 
     @classmethod
     @cachetools.cached(cache=get_id_by_name_cache, key=get_id_by_name_key)
-    @optional_session
-    def get_id_by_name(cls, name: str, session: Session = None) -> int:
+    def get_id_by_name(cls, session: Session, name: str) -> int:
         """Returns a Tag's ID, if a Tag matches the provided name.
 
         @raise UnknownTag: If no Tag matches the provided name."""
@@ -108,8 +105,7 @@ class Tag(ModelHelper, Base):
 
     @classmethod
     @cachetools.cached(cache=get_name_by_id_cache, key=get_name_by_id_key)
-    @optional_session
-    def get_name_by_id(cls, id_: int, session: Session = None) -> str:
+    def get_name_by_id(cls, session: Session, id_: int) -> str:
         """Returns a Tag's name, if a Tag matches the provided ID.
 
         @raise UnknownTag: If no Tag matches the provided ID."""
@@ -123,29 +119,25 @@ class Tag(ModelHelper, Base):
         get_name_by_id_cache.clear()
 
     @staticmethod
-    @optional_session
-    def get_by_name(name: str, session: Session) -> Optional['Tag']:
+    def get_by_name(session: Session, name: str) -> Optional['Tag']:
         tag = session.query(Tag).filter_by(name=name).one_or_none()
         return tag
 
     @staticmethod
-    @optional_session
-    def find_by_name(name: str, session: Session) -> 'Tag':
-        if tag := Tag.get_by_name(name, session):
+    def find_by_name(session: Session, name: str) -> 'Tag':
+        if tag := Tag.get_by_name(session, name):
             return tag
 
         raise UnknownTag(f'No Tag with name={name}')
 
     @staticmethod
-    @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional['Tag']:
+    def get_by_id(session: Session, id_: int) -> Optional['Tag']:
         tag = session.query(Tag).filter_by(id=id_).one_or_none()
         return tag
 
     @staticmethod
-    @optional_session
-    def find_by_id(id_: int, session: Session = None) -> 'Tag':
-        if tag := Tag.get_by_id(id_, session):
+    def find_by_id(session: Session, id_: int) -> 'Tag':
+        if tag := Tag.get_by_id(session, id_):
             return tag
 
         raise UnknownTag(f'No Tag with id={id_}')
@@ -158,7 +150,7 @@ class Tag(ModelHelper, Base):
         has_collections = session.query(Collection).filter(Collection.tag_id == self.id).first() is not None
         return bool(any(self.tag_files) or any(self.tag_zim_entries) or has_collections)
 
-    async def update_tag(self, name: str, color: str | None, session: Session):
+    async def update_tag(self, session: Session, name: str, color: str | None):
         """Change name/color of tag.  Ensures safeness of new values, checks for conflicts."""
         if ',' in name:
             raise InvalidTag('Tag name cannot have comma')
@@ -169,7 +161,7 @@ class Tag(ModelHelper, Base):
         name = name.replace('/', '⧸')
         name = INVALID_FILE_CHARS.sub('', name)
 
-        if (other := self.get_by_name(name, session)) and other.id != self.id:
+        if (other := self.get_by_name(session, name)) and other.id != self.id:
             raise InvalidTag('Tag name already taken')
 
         if flags.refreshing.is_set():
@@ -667,14 +659,13 @@ def get_tags() -> List[dict]:
     return tags
 
 
-@optional_session
-async def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
+async def upsert_tag(session: Session, name: str, color: str, tag_id: int = None) -> Tag:
     if tag_id:
-        tag = Tag.find_by_id(tag_id, session)
-        await tag.update_tag(name, color, session)
+        tag = Tag.find_by_id(session, tag_id)
+        await tag.update_tag(session, name, color)
     else:
         tag = Tag()
-        await tag.update_tag(name, color, session)
+        await tag.update_tag(session, name, color)
         session.add(tag)
 
     tag.flush()

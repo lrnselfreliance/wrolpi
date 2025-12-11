@@ -324,20 +324,20 @@ class ModelHelper:
         return d
 
     @classmethod
-    def upsert(cls, file, session: Session) -> Base:
+    def upsert(cls, session: Session, file) -> Base:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def get_by_path(path, session) -> Base:
+    def get_by_path(session: Session, path) -> Base:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+    def get_by_id(session: Session, id_: int) -> Optional[Base]:
         """Attempts to get a model instance by its id.  Returns None if no instance can be found."""
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def find_by_id(id_: int, session: Session = None) -> Base:
+    def find_by_id(session: Session, id_: int) -> Base:
         """Get a model instance by its id, raise an error if no instance is found."""
         raise NotImplementedError('This model has not defined this method.')
 
@@ -346,7 +346,7 @@ class ModelHelper:
         raise NotImplementedError('This model has not defined this method.')
 
     @staticmethod
-    def do_model(file_group, session: Session):
+    def do_model(session: Session, file_group):
         raise NotImplementedError('This model has not defined this method.')
 
     def flush(self, session: Session = None):

@@ -30,10 +30,11 @@ logger = logger.getChild(__name__)
     body=schema.FilesRequest,
 )
 @validate(schema.FilesRequest)
-async def get_files(_: Request, body: schema.FilesRequest):
+async def get_files(request: Request, body: schema.FilesRequest):
     directories = body.directories or []
+    session = request.ctx.session
 
-    files = lib.list_directories_contents(directories)
+    files = lib.list_directories_contents(session, directories)
     return json_response({'files': files})
 
 
@@ -43,13 +44,14 @@ async def get_files(_: Request, body: schema.FilesRequest):
     body=schema.FileRequest,
 )
 @validate(schema.FileRequest)
-async def get_file(_: Request, body: schema.FileRequest):
+async def get_file(request: Request, body: schema.FileRequest):
+    session = request.ctx.session
     try:
-        file = lib.get_file_dict(body.file)
+        file = lib.get_file_dict(session, body.file)
     except FileNotFoundError:
         raise InvalidFile()
 
-    background_task(lib.set_file_viewed(get_media_directory() / body.file))
+    background_task(lib.set_file_viewed(session, get_media_directory() / body.file))
     return json_response({'file': file})
 
 
@@ -135,7 +137,7 @@ def post_directories(_, body: schema.DirectoriesRequest):
     body=schema.DirectoriesSearchRequest,
 )
 @validate(schema.DirectoriesSearchRequest)
-async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
+async def post_search_directories(request, body: schema.DirectoriesSearchRequest):
     if len(body.path) <= 1:
         # Need more data before searching.
         return json_response({
@@ -145,6 +147,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
             'domain_directories': [],
         })
 
+    session = request.ctx.session
     path = get_media_directory() / body.path
     if logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {path=}')
@@ -158,7 +161,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
 
     # Search Channels by name.
     from modules.videos.channel.lib import search_channels_by_name
-    channels = await search_channels_by_name(name=body.path)
+    channels = await search_channels_by_name(session, name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
     if logger.isEnabledFor(TRACE_LEVEL):
@@ -166,7 +169,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
 
     # Search Domains by name.
     from modules.archive.lib import search_domains_by_name
-    domains = await search_domains_by_name(name=body.path)
+    domains = await search_domains_by_name(session, name=body.path)
     # search_domains_by_name returns dicts with 'directory' and 'domain' keys
     domain_directories = [dict(path=i['directory'], domain=i['domain']) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
@@ -175,7 +178,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
 
     # Get all Directory that match but do not contain the above directories.
     excluded = [str(i) for i in channel_paths + domain_paths + matching_directories]
-    directories = await lib.search_directories_by_name(name=body.path, excluded=excluded)
+    directories = await lib.search_directories_by_name(session, name=body.path, excluded=excluded)
 
     # Return only the top 20 directories.
     directories = [i.__json__() for i in directories]
@@ -251,7 +254,7 @@ async def post_create_directory(_: Request, body: schema.Directory):
     body=schema.Move,
 )
 @validate(schema.Move)
-async def post_move(_: Request, body: schema.Move):
+async def post_move(request: Request, body: schema.Move):
     destination = get_media_directory() / body.destination
     if not destination.is_dir():
         raise UnknownDirectory(f'Cannot move files into {destination} because it does not exist')
@@ -263,7 +266,7 @@ async def post_move(_: Request, body: schema.Move):
             raise FileConflict(f'Cannot move mounted directory!')
 
     try:
-        await lib.move(destination, *sources)
+        await lib.move(request.ctx.session, destination, *sources)
         Events.send_file_move_completed(f'Moving files to {body.destination} succeeded')
     except Exception as e:
         Events.send_file_move_failed(f'Moving files to {body.destination} failed!')
@@ -278,7 +281,7 @@ async def post_move(_: Request, body: schema.Move):
     body=schema.Rename,
 )
 @validate(schema.Rename)
-async def post_rename(_: Request, body: schema.Rename):
+async def post_rename(request: Request, body: schema.Rename):
     path = get_media_directory() / body.path
     new_path = path.with_name(body.new_name)
     if not path.exists():
@@ -287,7 +290,7 @@ async def post_rename(_: Request, body: schema.Rename):
         raise FileConflict(f'File already exists: {new_path}')
 
     try:
-        await lib.rename(path, body.new_name, send_events=True)
+        await lib.rename(request.ctx.session, path, body.new_name, send_events=True)
     except Exception as e:
         logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
         raise FileConflict(f'Failed to rename {path} to {new_path}') from e
@@ -302,7 +305,7 @@ async def post_rename(_: Request, body: schema.Rename):
 
 @files_bp.post('/tag')
 @validate(schema.TagFileGroupPost)
-async def post_tag_file_group(_, body: schema.TagFileGroupPost):
+async def post_tag_file_group(request: Request, body: schema.TagFileGroupPost):
     if not body.tag_id and not body.tag_name:
         return json_response(
             dict(error='tag_id and tag_name cannot both be empty'),
@@ -314,14 +317,16 @@ async def post_tag_file_group(_, body: schema.TagFileGroupPost):
             HTTPStatus.BAD_REQUEST,
         )
 
-    await lib.add_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
+    await lib.add_file_group_tag(request.ctx.session, body.file_group_id, body.file_group_primary_path, body.tag_name,
+                                 body.tag_id)
     return response.empty(HTTPStatus.CREATED)
 
 
 @files_bp.post('/untag')
 @validate(schema.TagFileGroupPost)
-async def post_untag_file_group(_, body: schema.TagFileGroupPost):
-    await lib.remove_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
+async def post_untag_file_group(request: Request, body: schema.TagFileGroupPost):
+    await lib.remove_file_group_tag(request.ctx.session, body.file_group_id, body.file_group_primary_path,
+                                    body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -382,8 +387,9 @@ async def post_upload(request: Request):
         if not isinstance(tag_names, list):
             raise FileUploadFailed('tag_names must be a list')
         tag_names = [str(i) for i in tag_names]
+        session = request.ctx.session
         for tag_name in tag_names:
-            if not Tag.get_by_name(tag_name):
+            if not Tag.get_by_name(session, tag_name):
                 raise FileUploadFailed(f'Tag does not exist: {tag_name}')
 
     filename = pathlib.Path(filename.lstrip('/'))

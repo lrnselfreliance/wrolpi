@@ -49,11 +49,11 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
         'directory': str(rel_dir),
         'kind': 'channel',
     }
-    coll = Collection.from_config(cfg, session=test_session)
+    coll = Collection.from_config(test_session, cfg)
     test_session.commit()
 
     # After creation, items should be auto-populated from directory
-    items = coll.get_items(session=test_session)
+    items = coll.get_items(test_session)
     fg_ids = {i.file_group_id for i in items}
     assert {v1.file_group_id, v2.file_group_id, v3.file_group_id}.issubset(fg_ids)
 
@@ -74,18 +74,18 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     test_session.commit()
 
     # Populate from directory to pick up new file group
-    coll.populate_from_directory(session=test_session)
+    coll.populate_from_directory(test_session)
     test_session.commit()
 
-    items = coll.get_items(session=test_session)
+    items = coll.get_items(test_session)
     fg_ids = {i.file_group_id for i in items}
     assert v4.file_group_id in fg_ids
 
     # 6) Remove one video from the collection only (do not delete the video)
-    coll.remove_file_group(v2.file_group_id, session=test_session)
+    coll.remove_file_group(test_session, v2.file_group_id)
     test_session.commit()
 
-    items = coll.get_items(session=test_session)
+    items = coll.get_items(test_session)
     fg_ids = {i.file_group_id for i in items}
     assert v2.file_group_id not in fg_ids, 'Removed video should not be visible in collection fetch methods'
     # Files should remain on disk
@@ -100,7 +100,7 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     assert not v3.file_group.primary_path.exists()
 
     # The collection should no longer reference it (FK cascade or absence after populate)
-    items = coll.get_items(session=test_session)
+    items = coll.get_items(test_session)
     fg_ids = {i.file_group_id for i in items}
     assert v3.file_group_id not in fg_ids
 

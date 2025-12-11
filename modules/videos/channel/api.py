@@ -34,8 +34,9 @@ async def get_channels(_: Request):
 @channel_bp.get('/<channel_id:int>')
 @openapi.description('Get a Channel')
 @openapi.response(HTTPStatus.OK, schema.ChannelResponse)
-def channel_get(_: Request, channel_id: int = None):
-    channel = lib.get_channel(channel_id=channel_id, return_dict=True)
+def channel_get(request: Request, channel_id: int = None):
+    session = request.ctx.session
+    channel = lib.get_channel(session, channel_id=channel_id, return_dict=True)
     channel.pop('info_json')
     return json_response({'channel': channel})
 
@@ -49,10 +50,11 @@ def channel_get(_: Request, channel_id: int = None):
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(schema.ChannelPostRequest)
 @wrol_mode_check
-def channel_post(_: Request, body: schema.ChannelPostRequest):
+def channel_post(request: Request, body: schema.ChannelPostRequest):
+    session = request.ctx.session
     body.directory = get_media_directory() / body.directory
 
-    channel = lib.create_channel(data=body, return_dict=False)
+    channel = lib.create_channel(session, data=body, return_dict=False)
 
     # Refresh the videos asynchronously
     if not PYTEST:
@@ -73,9 +75,10 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(schema.ChannelPutRequest)
 @wrol_mode_check
-async def channel_update(_: Request, channel_id: int, body: schema.ChannelPutRequest):
+async def channel_update(request: Request, channel_id: int, body: schema.ChannelPutRequest):
+    session = request.ctx.session
     body.directory = pathlib.Path(body.directory) if body.directory else None
-    channel = await lib.update_channel(data=body, channel_id=channel_id)
+    channel = await lib.update_channel(session, data=body, channel_id=channel_id)
     save_channels_config.activate_switch()
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.id}'})
@@ -85,8 +88,9 @@ async def channel_update(_: Request, channel_id: int, body: schema.ChannelPutReq
 @openapi.description('Delete a Channel')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-def channel_delete(_: Request, channel_id: int):
-    channel = lib.delete_channel(channel_id=channel_id)
+def channel_delete(request: Request, channel_id: int):
+    session = request.ctx.session
+    channel = lib.delete_channel(session, channel_id=channel_id)
     Events.send_deleted(f'Deleted Channel: {channel["name"]}')
     return response.raw('', HTTPStatus.NO_CONTENT)
 
@@ -95,8 +99,9 @@ def channel_delete(_: Request, channel_id: int):
 @openapi.description('Refresh all files in the Channel directory')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-def channel_refresh(_: Request, channel_id: int):
-    channel: Channel = lib.get_channel(channel_id=channel_id, return_dict=False)
+def channel_refresh(request: Request, channel_id: int):
+    session = request.ctx.session
+    channel: Channel = lib.get_channel(session, channel_id=channel_id, return_dict=False)
     if not channel:
         raise UnknownChannel()
 
@@ -115,13 +120,14 @@ def channel_refresh(_: Request, channel_id: int):
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(schema.ChannelTagRequest)
 @wrol_mode_check
-async def channel_tag(_: Request, channel_id: int, body: schema.ChannelTagRequest):
+async def channel_tag(request: Request, channel_id: int, body: schema.ChannelTagRequest):
+    session = request.ctx.session
     directory = None
     if body.directory:
         directory = pathlib.Path(body.directory)
         directory = get_media_directory() / directory
 
-    await lib.tag_channel(body.tag_name, directory, channel_id)
+    await lib.tag_channel(session, body.tag_name, directory, channel_id)
 
     return response.raw('', HTTPStatus.NO_CONTENT)
 
@@ -132,8 +138,9 @@ async def channel_tag(_: Request, channel_id: int, body: schema.ChannelTagReques
     body=schema.ChannelSearchRequest,
 )
 @validate(schema.ChannelSearchRequest)
-async def channel_search(_: Request, body: schema.ChannelSearchRequest):
-    channels = await lib.search_channels(body.tag_names)
+async def channel_search(request: Request, body: schema.ChannelSearchRequest):
+    session = request.ctx.session
+    channels = await lib.search_channels(session, body.tag_names)
     ret = dict(
         channels=channels,
     )

@@ -106,7 +106,7 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
     await async_client.post('/api/files/refresh')
-    video1 = Video.get_by_path(video1_video_path, test_session)
+    video1 = Video.get_by_path(test_session, video1_video_path)
     assert not video1.poster_path
 
 
@@ -141,9 +141,9 @@ async def test_channels_with_videos(test_session, async_client, test_directory, 
     assert {i[0] for i in test_session.query(Collection.name).join(Channel).filter(Collection.kind == 'channel')} == {
         'channel1', 'channel2'}, 'Channels were changed.'
 
-    vid1 = Video.get_by_path(vid1_path)
-    vid2 = Video.get_by_path(vid2_path)
-    vid3 = Video.get_by_path(vid3_path)
+    vid1 = Video.get_by_path(test_session, vid1_path)
+    vid2 = Video.get_by_path(test_session, vid2_path)
+    vid3 = Video.get_by_path(test_session, vid3_path)
 
     assert vid1.channel == channel1
     assert vid2.channel == channel2
@@ -234,13 +234,13 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
     vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = await tag_factory(), await tag_factory()
 
-    vid1.add_tag(tag1.id)
+    vid1.add_tag(test_session, tag1.id)
 
     # vid2 has two tags
-    vid2.add_tag(tag1.id)
-    vid2.add_tag(tag2.id)
+    vid2.add_tag(test_session, tag1.id)
+    vid2.add_tag(test_session, tag2.id)
 
-    vid3.add_tag(tag2.id)
+    vid3.add_tag(test_session, tag2.id)
 
     test_session.commit()
     assert test_session.query(Video).count() == 3

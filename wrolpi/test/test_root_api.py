@@ -519,7 +519,7 @@ async def test_empty_post_download(async_client):
 async def test_restart_download(test_session, async_client, test_download_manager, test_downloader, await_switches):
     """A Download can be restarted."""
     # Create a download, fail it, it should be restarted.
-    download = test_download_manager.create_download('https://example.com', test_downloader.name)
+    download = test_download_manager.create_download(test_session, 'https://example.com', test_downloader.name)
     download.fail()
     test_session.commit()
     await await_switches()

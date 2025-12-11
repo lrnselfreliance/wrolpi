@@ -20,16 +20,16 @@ async def test_tags_file_group_json(async_client, test_session, make_files_struc
     await files_lib.refresh_files()
     file_group: FileGroup = test_session.query(FileGroup).one()
 
-    file_group.add_tag(tag_one.id)
+    file_group.add_tag(test_session, tag_one.id)
     assert file_group.__json__()['tags'] == ['one']
 
-    file_group.add_tag(tag_two.name)
+    file_group.add_tag(test_session, tag_two.name)
     assert file_group.__json__()['tags'] == ['one', 'two']
 
-    file_group.untag(tag_one.id)
+    file_group.untag(test_session, tag_one.id)
     assert file_group.__json__()['tags'] == ['two']
 
-    file_group.untag(tag_two.name)
+    file_group.untag(test_session, tag_two.name)
     assert file_group.__json__()['tags'] == []
 
 
@@ -39,17 +39,17 @@ async def test_tags_model(async_client, test_session, make_files_structure, tag_
     tag1 = await tag_factory()
     assert tag1.__json__()
 
-    assert Tag.find_by_id(tag1.id)
-    assert Tag.find_by_name(tag1.name)
+    assert Tag.find_by_id(test_session, tag1.id)
+    assert Tag.find_by_name(test_session, tag1.name)
 
-    assert Tag.get_by_id(123) is None, '.get should return None with bad id'
-    assert Tag.get_by_name('bad name') is None, '.get should return None with bad name'
-
-    with pytest.raises(UnknownTag):
-        Tag.find_by_id(123)
+    assert Tag.get_by_id(test_session, 123) is None, '.get should return None with bad id'
+    assert Tag.get_by_name(test_session, 'bad name') is None, '.get should return None with bad name'
 
     with pytest.raises(UnknownTag):
-        Tag.find_by_name('bad name')
+        Tag.find_by_id(test_session, 123)
+
+    with pytest.raises(UnknownTag):
+        Tag.find_by_name(test_session, 'bad name')
 
 
 @pytest.mark.asyncio
@@ -65,13 +65,13 @@ async def test_tags_file_group(async_client, test_session, make_files_structure,
     tag_one = await tag_factory()
     assert len(tag_one.tag_files) == 0
 
-    video_group.add_tag(tag_one.id)
+    video_group.add_tag(test_session, tag_one.id)
     test_session.commit()
     assert len(tag_one.tag_files) == 1
     assert sorted([i.tag.name for i in video_group.tag_files]) == ['one', ]
 
     tag_two = await tag_factory()
-    video_group.add_tag(tag_two.id)
+    video_group.add_tag(test_session, tag_two.id)
     test_session.commit()
     assert len(tag_one.tag_files) == 1
     assert len(tag_two.tag_files) == 1
@@ -92,8 +92,8 @@ async def test_tags_config_file(test_session, test_directory, tag_factory, examp
                                 test_tags_config):
     """Test that the config is updated when a FileGroup is tagged."""
     await files_lib.refresh_files()
-    pdf: FileGroup = FileGroup.get_by_path(example_pdf, test_session)
-    video: FileGroup = FileGroup.get_by_path(video_file, test_session)
+    pdf: FileGroup = FileGroup.get_by_path(test_session, example_pdf)
+    video: FileGroup = FileGroup.get_by_path(test_session, video_file)
     tag1 = await tag_factory()
     tag2 = await tag_factory()
     test_session.commit()
@@ -104,31 +104,31 @@ async def test_tags_config_file(test_session, test_directory, tag_factory, examp
     assert tag1.name in test_tags_config.read_text()
     assert tag2.name in test_tags_config.read_text()
 
-    video.add_tag(tag1.id)
+    video.add_tag(test_session, tag1.id)
     await await_switches()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
     # Tag PDF twice.
-    pdf.add_tag(tag1.id)
-    pdf.add_tag(tag2.id)
+    pdf.add_tag(test_session, tag1.id)
+    pdf.add_tag(test_session, tag2.id)
     await await_switches()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) in test_tags_config.read_text()
 
     # One TagFile still exists.
-    pdf.untag(tag1.id)
+    pdf.untag(test_session, tag1.id)
     await await_switches()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) in test_tags_config.read_text()
 
     # PDF is no longer tagged.
-    pdf.untag(tag2.id)
+    pdf.untag(test_session, tag2.id)
     await await_switches()
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
-    video.untag(tag1.id)
+    video.untag(test_session, tag1.id)
     await await_switches()
     assert str(video_file.relative_to(test_directory)) not in test_tags_config.read_text()
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
@@ -138,7 +138,7 @@ async def test_tags_config_file(test_session, test_directory, tag_factory, examp
     assert isinstance(tags_config.tag_files, list) and len(tags_config.tag_files) == 0
 
     # Removing non-existent tag does not error.
-    video.untag(tag1.id)
+    video.untag(test_session, tag1.id)
 
 
 @pytest.mark.asyncio
@@ -166,7 +166,7 @@ async def test_tags_crud(async_client, test_session, example_pdf, assert_tags_co
 
     # Apply the tag to the PDF.
     tag = test_session.query(tags.Tag).one()
-    pdf.add_tag(tag.name, test_session)
+    pdf.add_tag(test_session, tag.name)
     test_session.commit()
 
     # The tag can be updated.
@@ -182,7 +182,7 @@ async def test_tags_crud(async_client, test_session, example_pdf, assert_tags_co
     content = dict(name='ガーデン', color='#ffffff')
     request, response = await async_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
-    assert Tag.find_by_name('ガーデン').color == '#ffffff'
+    assert Tag.find_by_name(test_session, 'ガーデン').color == '#ffffff'
 
     # Conflicting names return an error.
     content = dict(name='ガーデン', color='#111111')
@@ -194,7 +194,7 @@ async def test_tags_crud(async_client, test_session, example_pdf, assert_tags_co
     request, response = await async_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
-    pdf.untag(tag.id, test_session)
+    pdf.untag(test_session, tag.id)
     test_session.commit()
 
     # Can delete unused Tag.
@@ -212,7 +212,7 @@ async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
     tag = await tag_factory()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
-    pdf.add_tag(tag.id)
+    pdf.add_tag(test_session, tag.id)
     test_session.commit()
 
     with pytest.raises(FileGroupIsTagged):
@@ -294,9 +294,9 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     foo, = make_files_structure({'foo': 'text'})
     foo = FileGroup.from_paths(test_session, foo)
     test_session.flush([foo, ])
-    foo.add_tag(tag1.id)
+    foo.add_tag(test_session, tag1.id)
     # use tag4 for Zim entry.
-    await zim_lib.add_tag(tag4.name, test_zim.id, 'home')
+    await zim_lib.add_tag(test_session, tag4.name, test_zim.id, 'home')
     tags.save_tags_config.activate_switch()
     await await_switches()
 
@@ -339,13 +339,13 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
 @pytest.mark.asyncio
 async def test_invalid_tag(async_client, test_session, test_directory):
     with pytest.raises(InvalidTag):
-        await tags.upsert_tag('cannot use comma: ,', '#fff')
+        await tags.upsert_tag(test_session, 'cannot use comma: ,', '#fff')
 
     with pytest.raises(InvalidTag):
-        await tags.upsert_tag('invalid color', 'foo')
+        await tags.upsert_tag(test_session, 'invalid color', 'foo')
 
     with pytest.raises(UnknownTag):
-        await tags.upsert_tag('Tag ID does not exist', '#fff', 1)
+        await tags.upsert_tag(test_session, 'Tag ID does not exist', '#fff', 1)
 
 
 @pytest.mark.asyncio
@@ -382,12 +382,12 @@ async def test_tags_directory(test_session, test_directory, tag_factory, video_f
         assert readme.is_file() and readme.stat().st_size > 0
 
     # Video1 tagged with First Aid and Special/name.
-    vid1.add_tag(tag1.id)
-    vid1.add_tag(tag2.id)
+    vid1.add_tag(test_session, tag1.id)
+    vid1.add_tag(test_session, tag2.id)
     # Video2 tagged with First Aid.
-    vid2.add_tag(tag1.id)
+    vid2.add_tag(test_session, tag1.id)
     # PDF tagged with Special/name.
-    pdf.add_tag(tag2.id)
+    pdf.add_tag(test_session, tag2.id)
     await await_switches()
     assert_tag_links([
         'First Aid, Special⧸name/vid1.en.vtt',
@@ -407,7 +407,7 @@ async def test_tags_directory(test_session, test_directory, tag_factory, video_f
     assert test_session.query(TagFile).count() == 4
 
     # Video1 tagged with First Aid only.
-    vid1.untag(tag2.id)
+    vid1.untag(test_session, tag2.id)
     await await_switches()
     assert_tag_links([
         'First Aid/vid1.en.vtt',
@@ -424,7 +424,7 @@ async def test_tags_directory(test_session, test_directory, tag_factory, video_f
     assert test_session.query(TagFile).count() == 3
 
     # PDF no longer tagged.
-    pdf.untag(tag2.id)
+    pdf.untag(test_session, tag2.id)
     await await_switches()
     assert_tag_links([
         'First Aid/vid1.en.vtt',
@@ -441,8 +441,8 @@ async def test_tags_directory(test_session, test_directory, tag_factory, video_f
     assert test_session.query(TagFile).count() == 2
 
     # No more tagged files.
-    vid1.untag(tag1.id)
-    vid2.untag(tag1.id)
+    vid1.untag(test_session, tag1.id)
+    vid2.untag(test_session, tag1.id)
     await await_switches()
     assert test_session.query(TagFile).count() == 0
     # Readme, and un-deletable file and directory exist.
@@ -471,7 +471,7 @@ async def test_update_tag(test_session, test_directory, video_factory, tag_facto
     assert (test_directory / 'tags/one/video.mp4').is_file()
 
     # Invalid characters are replaced during rename.
-    await tags.upsert_tag('new/name%', tag.color, tag.id)
+    await tags.upsert_tag(test_session, 'new/name%', tag.color, tag.id)
     await await_switches()
 
     # Video file was moved.
@@ -494,7 +494,7 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
     assert (test_directory / 'videos/one/Channel Name').is_dir()
     assert (test_directory / 'videos/one/Channel Name/video.mp4').is_file()
 
-    await tag.update_tag('New Tag Name', None, session=test_session)
+    await tag.update_tag(test_session, 'New Tag Name', None)
 
     assert (test_directory / 'tags').is_dir()
     assert (test_directory / 'videos/New Tag Name/Channel Name').is_dir()

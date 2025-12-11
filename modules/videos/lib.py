@@ -84,7 +84,7 @@ def extract_video_info_json(video: Video) -> VideoInfoJSON:
 EXTRACT_SUBTITLES = False
 
 
-def validate_video(video: Video, channel_generate_poster: bool):
+def validate_video(session: Session, video: Video, channel_generate_poster: bool):
     """
     Validate a single video.
 
@@ -116,6 +116,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
             from modules.videos.channel.lib import get_channel
             try:
                 if channel := get_channel(
+                        session,
                         source_id=video_info_json.channel_source_id,
                         url=video_info_json.channel_url,
                         directory=video.video_path.parent,
@@ -292,7 +293,7 @@ class ChannelsConfig(ConfigFile):
 
                 # Batch create/update Collections
                 from wrolpi.collections import Collection
-                collections = Collection.batch_from_config(channel_data_list, session=session)
+                collections = Collection.batch_from_config(session, channel_data_list)
 
                 # Pre-fetch existing Channels by collection_id in ONE query
                 collection_ids = [c.id for c in collections]
@@ -624,7 +625,7 @@ async def fetch_channel_source_id(channel_id: int):
     try:
         with get_db_session() as session:
             from modules.videos.channel.lib import get_channel
-            channel = Channel.find_by_id(channel_id)
+            channel = Channel.find_by_id(session, channel_id)
             channel.source_id = channel.source_id or get_channel_source_id(channel.url)
             if not channel.source_id:
                 channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
@@ -682,7 +683,7 @@ def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel,
 
     # Associate any Download which shares a Channel's URL.
     for download in downloads:
-        channel = channel_.get_by_url(download.url, session)
+        channel = channel_.get_by_url(session, download.url)
         if channel and not download.collection_id:
             download.collection_id = channel.collection_id
             need_commit = True

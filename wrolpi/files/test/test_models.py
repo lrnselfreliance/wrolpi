@@ -1,7 +1,28 @@
 import pytest
 
+from wrolpi.errors import UnknownFile
 from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
+
+
+def test_file_group_find_by_id(test_session, make_files_structure):
+    """FileGroup.find_by_id should accept session as first argument, id as second."""
+    make_files_structure({'test.txt': 'test contents'})
+
+    # Create a FileGroup from the file
+    from wrolpi.common import get_media_directory
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'test.txt')
+    test_session.add(fg)
+    test_session.flush()
+
+    # Session must be first argument (session-first pattern)
+    found = FileGroup.find_by_id(test_session, fg.id)
+    assert found is not None
+    assert found.id == fg.id
+
+    # Non-existent ID should raise UnknownFile
+    with pytest.raises(UnknownFile):
+        FileGroup.find_by_id(test_session, 99999)
 
 
 @pytest.mark.asyncio
@@ -33,12 +54,12 @@ async def test_add_tag_overload(async_client, test_session, make_files_structure
 
     one, two = await tag_factory(), await tag_factory()
 
-    foo.add_tag(one.name)
+    foo.add_tag(test_session, one.name)
     assert set(foo.tag_names) == {'one'}, 'Tag should have been found by name'
-    foo.add_tag(two.id)
+    foo.add_tag(test_session, two.id)
     assert set(foo.tag_names) == {'one', 'two'}, 'Tag should have been found by ID.'
 
-    foo.untag(one.name)
+    foo.untag(test_session, one.name)
     assert set(foo.tag_names) == {'two'}, 'Tag should have been found by name'
-    foo.untag(two.id)
+    foo.untag(test_session, two.id)
     assert not foo.tag_names, 'Tag should have been found by ID.'

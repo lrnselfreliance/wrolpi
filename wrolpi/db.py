@@ -1,8 +1,6 @@
-import inspect
 import types
 from contextlib import contextmanager
-from functools import wraps
-from typing import ContextManager, Tuple, List, Union, Type, Generator
+from typing import Tuple, List, Union, Type, Generator, Any
 
 import psycopg2
 import psycopg2.extensions
@@ -12,7 +10,7 @@ from psycopg2._psycopg import cursor
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
-from wrolpi.common import logger, Base, partition
+from wrolpi.common import logger, Base
 from wrolpi.vars import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
@@ -81,7 +79,7 @@ def get_db_context() -> Tuple[sqlalchemy.engine.Engine, Session]:
 
 
 @contextmanager
-def get_db_session(commit: bool = False) -> ContextManager[Session]:
+def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
     """
     Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True.
     """
@@ -95,24 +93,38 @@ def get_db_session(commit: bool = False) -> ContextManager[Session]:
         raise
     finally:
         # Rollback only if a transaction hasn't been committed.
-        if session.transaction.is_active:
+        # In tests, the test_session fixture manages the session lifecycle,
+        # so we should not rollback here - that would undo other test operations.
+        if not PYTEST and session.transaction.is_active:
             session.rollback()
 
 
 @contextmanager
 def get_db_conn(isolation_level=psycopg2.extensions.ISOLATION_LEVEL_DEFAULT):
     local_engine, session = get_db_context()
-    connection = local_engine.raw_connection()
-    connection.set_isolation_level(isolation_level)
-    try:
-        yield connection, session
-    except sqlalchemy.exc.DatabaseError:
-        session.rollback()
-        raise
-    finally:
-        # Rollback only if a transaction hasn't been committed.
-        if session.transaction.is_active:
-            connection.rollback()
+    if PYTEST:
+        # During tests, use the session's connection to avoid lock issues.
+        # The test_session is mocked to be shared, so getting a raw_connection would
+        # create a new connection that blocks waiting for locks held by test_session.
+        connection = session.connection().connection
+        try:
+            yield connection, session
+        except sqlalchemy.exc.DatabaseError:
+            session.rollback()
+            raise
+        # Don't rollback in finally during tests - test_session manages this
+    else:
+        connection = local_engine.raw_connection()
+        connection.set_isolation_level(isolation_level)
+        try:
+            yield connection, session
+        except sqlalchemy.exc.DatabaseError:
+            session.rollback()
+            raise
+        finally:
+            # Rollback only if a transaction hasn't been committed.
+            if session.transaction.is_active:
+                connection.rollback()
 
 
 @contextmanager
@@ -124,82 +136,20 @@ def get_db_curs(commit: bool = False, isolation_level=psycopg2.extensions.ISOLAT
         curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         try:
             yield curs
-            if commit:
+            if commit and not PYTEST:
+                # Don't commit during tests - test_session manages the transaction
                 connection.commit()
         except sqlalchemy.exc.DatabaseError:
             session.rollback()
             raise
         finally:
             # Rollback only if a transaction hasn't been committed.
-            if session.transaction.is_active:
+            # Don't rollback during tests - test_session manages the transaction
+            if not PYTEST and session.transaction.is_active:
                 connection.rollback()
 
 
-def optional_session(commit: Union[callable, bool] = False) -> callable:
-    """
-    Wraps a function, if a Session is passed it will be used.  Otherwise, a new session will be
-    created and passed to the function.
-    """
-
-    def find_session(*f_args, session: Session = None, **f_kwargs):
-        session = f_kwargs.get('session', session)
-        if not session:
-            # Find the session in the args.
-            session, new_args = partition(lambda i: isinstance(i, Session), f_args)
-            if session:
-                session = session[0]
-                f_args = tuple(new_args)
-        return session, f_args, f_kwargs
-
-    def call_func(func, session, args, kwargs):
-        if session:
-            result = func(*args, session=session, **kwargs)
-            if commit:
-                session.commit()
-            return result
-        else:
-            with get_db_session(commit=commit) as session:
-                result = func(*args, session=session, **kwargs)
-            return result
-
-    async def call_func_async(func, session, args, kwargs):
-        """Async version of call_func that properly awaits the coroutine before committing."""
-        if session:
-            result = await func(*args, session=session, **kwargs)
-            if commit:
-                session.commit()
-            return result
-        else:
-            with get_db_session(commit=commit) as session:
-                result = await func(*args, session=session, **kwargs)
-            return result
-
-    def wrapper(*w_args, **w_kwargs):
-        if len(w_args) == 1 and len(w_kwargs) == 0 and callable(w_args[0]):
-            func = w_args[0]
-
-            if inspect.iscoroutinefunction(func):
-                @wraps(func)
-                async def wrapped(*args, session: Session = None, **kwargs):
-                    session, args, kwargs = find_session(*args, session=session, **kwargs)
-                    return await call_func_async(func, session, args, kwargs)
-            else:
-                @wraps(func)
-                def wrapped(*args, session: Session = None, **kwargs):
-                    session, args, kwargs = find_session(*args, session=session, **kwargs)
-                    return call_func(func, session, args, kwargs)
-
-            return wrapped
-        else:
-            # No params were passed to this wrapper, `commit` is actually the function we are wrapping.
-            session_, w_args, w_kwargs = find_session(*w_args, **w_kwargs)
-            return call_func(commit, session_, w_args, w_kwargs)
-
-    return wrapper
-
-
-@optional_session
-def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session = None) -> List[Base]:
+def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session) -> List[Base]:
     """Get all objects whose primary keys are in the `ranked_primary_keys`, preserve their order."""
     pkey = sqlalchemy.inspect(model).primary_key[0]
     pkey_name = pkey.name

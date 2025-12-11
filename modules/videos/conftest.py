@@ -53,7 +53,7 @@ def channel_factory(test_session, test_directory):
     def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
                 directory: pathlib.Path = None, tag_name: str = None):
         name = name or str(uuid4())
-        tag = Tag.find_by_name(tag_name) if tag_name else None
+        tag = Tag.find_by_name(test_session, tag_name) if tag_name else None
         tag_name = tag.name if tag else None
         directory = directory or format_videos_destination(name, tag_name, url or f'https://example.com/{name}')
         directory.mkdir(exist_ok=True, parents=True)
@@ -79,7 +79,7 @@ def channel_factory(test_session, test_directory):
         test_session.add(Directory(path=channel.directory, name=channel.directory.name))
         assert channel.id and channel.url
         if download_frequency:
-            download = channel.get_or_create_download(channel.url, download_frequency)
+            download = channel.get_or_create_download(test_session, channel.url, download_frequency)
             assert download.url == channel.url
             assert channel.downloads
         test_session.commit()
@@ -111,7 +111,7 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
     test_session.add(channel)
     test_session.flush([channel])
     assert channel and channel.id and channel.url
-    download = channel.get_or_create_download(channel.url, 60, test_session)
+    download = channel.get_or_create_download(test_session, channel.url, 60)
     assert download.url == channel.url
     download.frequency = DownloadFrequency.weekly
     test_session.commit()
@@ -126,7 +126,7 @@ def simple_video(test_session, test_directory, simple_channel, video_file) -> Vi
     video = Video.from_paths(test_session, video_path)
     video.channel = simple_channel
     test_session.commit()
-    video = Video.find_by_id(video.id, session=test_session)
+    video = Video.find_by_id(test_session, video.id)
     return video
 
 
@@ -145,7 +145,7 @@ def video_factory(test_session, test_directory):
             path = pathlib.Path(with_video_file) if not isinstance(with_video_file, pathlib.Path) else with_video_file
         elif channel_id:
             # Put the video in its Channel's directory.
-            channel = Channel.find_by_id(channel_id)
+            channel = Channel.find_by_id(test_session, channel_id)
             path = (channel.directory or test_directory) / f'{title}.mp4'
             path.parent.mkdir(exist_ok=True, parents=True)
         else:
@@ -182,10 +182,10 @@ def video_factory(test_session, test_directory):
         video.channel_id = channel_id
         video.source_id = source_id or title
         video.file_group.published_datetime = upload_date
-        video.validate()
+        video.validate(test_session)
 
         for tag_name in tag_names:
-            video.add_tag(tag_name)
+            video.add_tag(test_session, tag_name)
 
         return video
 

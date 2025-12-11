@@ -38,11 +38,11 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
         'directory': str(rel_dir),
         'kind': 'channel',
     }
-    coll = Collection.from_config(cfg, session=test_session)
+    coll = Collection.from_config(test_session, cfg)
     test_session.commit()
 
     # Verify it populated
-    assert {i.file_group_id for i in coll.get_items(session=test_session)} == {v1.file_group_id, v2.file_group_id}
+    assert {i.file_group_id for i in coll.get_items(test_session)} == {v1.file_group_id, v2.file_group_id}
 
     # Dump config and verify (config stores absolute paths)
     collections_config.dump_config()
@@ -63,7 +63,7 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Perform the move using the model helper
-    await coll.move_collection(dest_dir, session=test_session)
+    await coll.move_collection(dest_dir, test_session)
     test_session.commit()
 
     # Validate the directory changed and files moved
@@ -105,9 +105,9 @@ async def test_tagging_unrestricted_collection_updates_config_only(
     test_session.commit()
 
     # Create an unrestricted collection and add both files
-    coll = Collection.from_config({'name': 'Loose Stuff', 'kind': 'channel'}, session=test_session)
+    coll = Collection.from_config(test_session, {'name': 'Loose Stuff', 'kind': 'channel'})
     # Unrestricted, so add manually
-    coll.add_file_groups([fg1, fg2], session=test_session)
+    coll.add_file_groups(test_session, [fg1, fg2])
     test_session.commit()
 
     # Dump config and verify directory is absent/None
@@ -201,10 +201,10 @@ async def test_tag_collection_removes_tag_and_updates_directory(test_session, te
 
     # Remove the tag AND update the directory
     result = await tag_collection(
+        test_session,
         collection_id=collection.id,
         tag_name=None,  # Remove tag
         directory=str(untagged_dir),  # New directory
-        session=test_session
     )
     test_session.commit()
     await await_switches()

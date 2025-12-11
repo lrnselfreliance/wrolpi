@@ -93,7 +93,7 @@ def archive_factory(test_session, archive_directory, make_files_structure, image
         archive.validate()
 
         for tag_name in tag_names:
-            archive.add_tag(tag_name, test_session)
+            archive.add_tag(test_session, tag_name)
 
         return archive
 

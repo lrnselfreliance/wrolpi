@@ -34,7 +34,7 @@ async def test_delete_video_with_tag(async_client, test_session, video_factory, 
     """You cannot delete a video with a tag."""
     video = video_factory(with_video_file=True, with_poster_ext='png')
     tag = await tag_factory()
-    video.add_tag(tag.name)
+    video.add_tag(test_session, tag.name)
     test_session.commit()
 
     with pytest.raises(FileGroupIsTagged):
@@ -66,8 +66,8 @@ async def test_video_channel_refresh(async_client, test_session, test_directory,
     assert test_session.query(Video).count() == 2
 
     # The video is associated with `simple_channel` because its file is in the Channel's directory.
-    video1: Video = Video.get_by_path(video1_path, test_session)
-    video2: Video = Video.get_by_path(video2_path, test_session)
+    video1: Video = Video.get_by_path(test_session, video1_path)
+    video2: Video = Video.get_by_path(test_session, video2_path)
     assert video1.channel == channel
     assert not video2.channel
     assert video1.__json__()['video']['channel']

@@ -883,7 +883,7 @@ async def test_detect_domain_directory_single_archive(async_client, test_directo
     assert 'example.com' in str(collection.directory)
 
     # Verify detect_domain_directory also returns the same result
-    detected = detect_domain_directory(collection, test_session)
+    detected = detect_domain_directory(test_session, collection)
     assert detected is not None
     assert str(detected) == 'archive/example.com'
 
@@ -904,7 +904,7 @@ async def test_detect_domain_directory_multiple_archives(async_client, test_dire
     assert collection.name == 'test.com'
 
     # Detect directory
-    detected = detect_domain_directory(collection, test_session)
+    detected = detect_domain_directory(test_session, collection)
     assert detected is not None
     assert str(detected) == 'archive/test.com'
 
@@ -919,7 +919,7 @@ def test_detect_domain_directory_no_archives(test_directory, test_session):
     test_session.flush()
 
     # Detect directory - should return None
-    detected = detect_domain_directory(collection, test_session)
+    detected = detect_domain_directory(test_session, collection)
     assert detected is None
 
 

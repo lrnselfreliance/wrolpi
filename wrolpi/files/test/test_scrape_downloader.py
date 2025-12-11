@@ -42,7 +42,7 @@ async def test_scrape_html_downloader(test_directory, test_session, test_downloa
         'depth': 1,
         'suffix': '.PDF',  # Suffix case is ignored.
     }
-    test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
+    test_download_manager.create_download(test_session, 'https://example.com/dir', 'scrape_html', settings=settings,
                                           sub_downloader_name='file', destination=destination)
     assert_download_urls(['https://example.com/dir', ])
 
@@ -66,7 +66,7 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
     test_download_manager.register_downloader(FileDownloader())
 
     settings = {'suffix': '.html'}
-    test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
+    test_download_manager.create_download(test_session, 'https://example.com/dir', 'scrape_html', settings=settings,
                                           sub_downloader_name='file', destination=test_directory)
     assert_download_urls(['https://example.com/dir', ])
 

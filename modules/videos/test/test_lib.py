@@ -73,7 +73,7 @@ async def test_video_factory(test_session, video_factory, channel_factory):
     assert video.source_id == 'some id'
 
 
-def test_validate_video(test_directory, video_factory, image_bytes_factory, video_file):
+def test_validate_video(test_session, test_directory, video_factory, image_bytes_factory, video_file):
     """A video poster will be generated only if the channel permits."""
     video_file = video_file.rename(test_directory / 'Channel Name_20050607_1234567890_The Title.mp4')
     vid1 = video_factory(with_video_file=video_file, with_info_json=True)
@@ -81,7 +81,7 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     vid1.source_id = None
     assert not vid1.poster_path
 
-    validate_video(vid1, True)
+    validate_video(test_session, vid1, True)
     assert vid1.video_path == video_file
     assert vid1.poster_path, 'Poster was not created'
     assert vid1.poster_path.is_file(), 'Poster path does not exist'
@@ -108,7 +108,7 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
         'view_count': 406
     }
     vid1.replace_info_json(info_json)
-    validate_video(vid1, False)
+    validate_video(test_session, vid1, False)
     assert vid1.file_group.published_datetime and vid1.file_group.published_datetime.year == 2024
     assert vid1.file_group.title == 'The full title'
 
@@ -116,7 +116,7 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     vid2 = video_factory(with_video_file=True, with_poster_ext='.png')
     assert vid2.poster_path and vid2.poster_path.suffix == '.png', 'Poster was not initialized'
     assert {i.suffix for i in vid2.file_group.my_paths()} == {'.png', '.mp4'}
-    validate_video(vid2, True)
+    validate_video(test_session, vid2, True)
     assert vid2.poster_path.is_file(), 'New poster was not generated'
     assert vid2.poster_path.suffix == '.jpg' and vid2.poster_path.stat().st_size > 0
     assert {i.suffix for i in vid2.file_group.my_paths()} == {'.jpg', '.png', '.mp4'}
@@ -194,7 +194,7 @@ def test_link_channel_and_downloads(test_session, channel_factory, test_download
     assert not any(i.collection_id for i in test_download_manager.get_downloads(test_session))
 
     # `link_channel_and_downloads` links Downloads to Collections.
-    lib.link_channel_and_downloads(session=test_session)
+    lib.link_channel_and_downloads(test_session)
     assert test_session.query(Download).count() == 3
     assert all(i.collection_id for i in test_download_manager.get_recurring_downloads(test_session))
     assert not any(i.collection_id for i in test_download_manager.get_once_downloads(test_session))

@@ -28,7 +28,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     get_wrolpi_config, \
     timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
-from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
+from wrolpi.db import get_db_session, get_db_curs, mogrify
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError
@@ -55,8 +55,7 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'move', 'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
 
 
-@optional_session
-def get_file_tag_names(file: pathlib.Path, session: Session = None) -> List[str]:
+def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
     """Returns all Tag names for the provided file path."""
     tags = session.query(Tag) \
         .join(TagFile, Tag.id == TagFile.tag_id) \
@@ -66,7 +65,7 @@ def get_file_tag_names(file: pathlib.Path, session: Session = None) -> List[str]
     return names
 
 
-def _get_file_dict(file: pathlib.Path) -> Dict:
+def _get_file_dict(session: Session, file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     try:
         size = file.stat().st_size
@@ -80,20 +79,19 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
         path=file.relative_to(media_directory),
         size=size,
         mimetype=mimetype,
-        tags=get_file_tag_names(file),
+        tags=get_file_tag_names(session, file),
     )
 
 
-def get_file_dict(file: str) -> Dict:
+def get_file_dict(session: Session, file: str) -> Dict:
     media_directory = get_media_directory()
-    return _get_file_dict(media_directory / file)
+    return _get_file_dict(session, media_directory / file)
 
 
-@optional_session
-async def set_file_viewed(file: pathlib.Path, session: Session = None):
+async def set_file_viewed(session: Session, file: pathlib.Path):
     """Change FileGroup.viewed to the current datetime."""
     try:
-        fg = FileGroup.find_by_path(file, session)
+        fg = FileGroup.find_by_path(session, file)
     except UnknownFile:
         fg = FileGroup.from_paths(session, file)
         fg.do_model(session)
@@ -116,7 +114,7 @@ def _get_directory_dict(directory: pathlib.Path,
     )
 
 
-def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
+def _get_recursive_directory_dict(session: Session, directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
     directories_cache = str(sorted(directories))
     d = _get_directory_dict(directory, directories_cache)
 
@@ -124,11 +122,11 @@ def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pat
         children = dict()
         for path in directory.iterdir():
             if path.is_dir() and path in directories:
-                children[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
+                children[f'{path.name}/'] = _get_recursive_directory_dict(session, path, directories)
             elif path.is_dir():
                 children[f'{path.name}/'] = _get_directory_dict(path, directories_cache)
             else:
-                children[path.name] = _get_file_dict(path)
+                children[path.name] = _get_file_dict(session, path)
         d['children'] = children
     return d
 
@@ -136,7 +134,7 @@ def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pat
 HIDDEN_DIRECTORIES = ('lost+found',)
 
 
-def list_directories_contents(directories_: List[str]) -> Dict:
+def list_directories_contents(session: Session, directories_: List[str]) -> Dict:
     """List all files down to (and within) the directories provided.
 
     This should only be used by the frontend for it's FileBrowser."""
@@ -157,9 +155,9 @@ def list_directories_contents(directories_: List[str]) -> Dict:
             # Never show ignored directories.
             continue
         if path.is_dir():
-            paths[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
+            paths[f'{path.name}/'] = _get_recursive_directory_dict(session, path, directories)
         else:
-            paths[path.name] = _get_file_dict(path)
+            paths[path.name] = _get_file_dict(session, path)
 
     return paths
 
@@ -772,8 +770,7 @@ def upsert_directories(parent_directories, directories):
             curs.execute(stmt, dict(directory=f'{directory.absolute()}%', idempotency=idempotency))
 
 
-@optional_session
-async def search_directories_by_name(name: str, excluded: List[str] = None, limit: int = 20, session: Session = None) \
+async def search_directories_by_name(session: Session, name: str, excluded: List[str] = None, limit: int = 20) \
         -> List[Directory]:
     """Find the Directories whose names contain the `name` string."""
     excluded = excluded or []
@@ -1050,8 +1047,8 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     yield group
 
 
-async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                                  session: Session):
+async def _get_tag_and_file_group(session: Session, file_group_id: int, file_group_primary_path: str, tag_name: str,
+                                  tag_id: int):
     if file_group_id:
         file_group: FileGroup = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
         if not file_group:
@@ -1059,7 +1056,7 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
     elif file_group_primary_path:
         path = get_media_directory() / file_group_primary_path
 
-        file_group = FileGroup.get_by_path(path, session=session)
+        file_group = FileGroup.get_by_path(session, path)
         # Create the FileGroup, if possible.
         if not file_group and path.is_file():
             file_group = FileGroup.from_paths(session, path)
@@ -1074,7 +1071,7 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
         if not tag:
             raise UnknownTag(f'Cannot find Tag with id {tag_id}')
     elif tag_name:
-        tag: Tag = Tag.get_by_name(tag_name, session)
+        tag: Tag = Tag.get_by_name(session, tag_name)
         if not tag:
             raise UnknownTag(f'Cannot find Tag with name {tag_name}')
     else:
@@ -1083,19 +1080,17 @@ async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: s
     return file_group, tag
 
 
-@optional_session(commit=True)
-async def add_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                             session: Session = None) -> TagFile:
-    file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
-    tag_file = file_group.add_tag(tag.id, session)
+async def add_file_group_tag(session: Session, file_group_id: int, file_group_primary_path: str, tag_name: str,
+                             tag_id: int) -> TagFile:
+    file_group, tag = await _get_tag_and_file_group(session, file_group_id, file_group_primary_path, tag_name, tag_id)
+    tag_file = file_group.add_tag(session, tag.id)
     return tag_file
 
 
-@optional_session(commit=True)
-async def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                                session: Session = None):
-    file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
-    file_group.untag(tag.id, session)
+async def remove_file_group_tag(session: Session, file_group_id: int, file_group_primary_path: str, tag_name: str,
+                                tag_id: int):
+    file_group, tag = await _get_tag_and_file_group(session, file_group_id, file_group_primary_path, tag_name, tag_id)
+    file_group.untag(session, tag.id)
 
 
 @dataclasses.dataclass
@@ -1241,7 +1236,7 @@ def add_files_to_refresh_count(count: int):
     api_app.shared_ctx.refresh['counted_files'] = count
 
 
-async def _move(destination: pathlib.Path, *sources: pathlib.Path, session: Session) \
+async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.Path) \
         -> OrderedDict[pathlib.Path, pathlib.Path]:
     media_directory = get_media_directory()
     for source in sources:
@@ -1432,8 +1427,7 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False):
         curs.execute(stmt, (str(directory),))
 
 
-@optional_session
-async def move(destination: pathlib.Path, *sources: pathlib.Path, session: Session = None) \
+async def move(session: Session, destination: pathlib.Path, *sources: pathlib.Path) \
         -> OrderedDict[pathlib.Path, pathlib.Path]:
     """Moves a file or directory (recursively), preserving applied Tags.
 
@@ -1441,8 +1435,6 @@ async def move(destination: pathlib.Path, *sources: pathlib.Path, session: Sessi
 
     Returns an OrderedDict, the key is the file's old location, the value is where the file was moved.
     """
-    if not session:
-        raise RuntimeError('`session` is required')
 
     with flags.refreshing:
         from wrolpi.api_utils import api_app
@@ -1450,7 +1442,7 @@ async def move(destination: pathlib.Path, *sources: pathlib.Path, session: Sessi
 
         # Move the files, if this fails it will revert itself and raise an error.
         with timer('moving files', 'info'):
-            plan = await _move(destination, *sources, session=session)
+            plan = await _move(session, destination, *sources)
             session.commit()
 
         with flags.refresh_indexing:
@@ -1485,12 +1477,9 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
     return new_path
 
 
-async def rename_directory(directory: pathlib.Path, new_name: str, session: Session = None, send_events: bool = False) \
+async def rename_directory(session: Session, directory: pathlib.Path, new_name: str, send_events: bool = False) \
         -> pathlib.Path:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory."""
-    if not session:
-        raise RuntimeError('`session` is required')
-
     new_directory = directory.with_name(new_name)
     if new_directory.exists():
         raise FileConflict(f'Cannot rename {directory} to {new_directory} because it already exists.')
@@ -1498,7 +1487,7 @@ async def rename_directory(directory: pathlib.Path, new_name: str, session: Sess
     # Move all paths into the new directory.
     paths = list(directory.iterdir())
     try:
-        await move(new_directory, *paths, session=session)
+        await move(session, new_directory, *paths)
         if send_events:
             Events.send_file_move_completed(f'Directory has been renamed: {directory}')
     except Exception:
@@ -1511,14 +1500,10 @@ async def rename_directory(directory: pathlib.Path, new_name: str, session: Sess
     return new_directory
 
 
-@optional_session
-async def rename(path: pathlib.Path, new_name: str, session: Session = None, send_events: bool = False) -> pathlib.Path:
+async def rename(session: Session, path: pathlib.Path, new_name: str, send_events: bool = False) -> pathlib.Path:
     """Rename a directory or file.  Preserve any tags."""
-    if not session:
-        raise RuntimeError('`session` is required')
-
     if path.is_dir():
-        return await rename_directory(path, new_name, session=session, send_events=send_events)
+        return await rename_directory(session, path, new_name, send_events=send_events)
 
     return await rename_file(path, new_name)
 
@@ -1616,7 +1601,7 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         if file_group.url:
             if download_manager.is_skipped(file_group.url):
                 download_manager.remove_from_skip_list(file_group.url)
-            if download := Download.get_by_url(file_group.url, session):
+            if download := Download.get_by_url(session, file_group.url):
                 # Mark download as completed
                 download.complete()
                 # Link the download to the location of the uploaded file.
@@ -1627,8 +1612,8 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
         if tag_names:
             for tag_name in tag_names:
                 if tag_name not in file_group.tag_names:
-                    tag = Tag.get_by_name(tag_name, session)
-                    file_group.add_tag(tag.id, session=session)
+                    tag = Tag.get_by_name(session, tag_name)
+                    file_group.add_tag(session, tag.id)
 
         # Commit all changes in one transaction
         session.commit()
@@ -1905,16 +1890,17 @@ async def _process_bulk_tag_job(job: dict):
     # Pre-resolve tag IDs (using cached lookups)
     add_tag_ids = set()
     remove_tag_ids = set()
-    for tag_name in add_tag_names:
-        try:
-            add_tag_ids.add(Tag.get_id_by_name(tag_name))
-        except UnknownTag:
-            logger.warning(f'Unknown tag to add: {tag_name}')
-    for tag_name in remove_tag_names:
-        try:
-            remove_tag_ids.add(Tag.get_id_by_name(tag_name))
-        except UnknownTag:
-            logger.warning(f'Unknown tag to remove: {tag_name}')
+    with get_db_session() as session:
+        for tag_name in add_tag_names:
+            try:
+                add_tag_ids.add(Tag.get_id_by_name(session, tag_name))
+            except UnknownTag:
+                logger.warning(f'Unknown tag to add: {tag_name}')
+        for tag_name in remove_tag_names:
+            try:
+                remove_tag_ids.add(Tag.get_id_by_name(session, tag_name))
+            except UnknownTag:
+                logger.warning(f'Unknown tag to remove: {tag_name}')
 
     if not add_tag_ids and not remove_tag_ids:
         return
@@ -1933,7 +1919,7 @@ async def _process_bulk_tag_job(job: dict):
             for file_path in chunk:
                 try:
                     # Get or create FileGroup
-                    file_group = FileGroup.get_by_path(file_path, session=session)
+                    file_group = FileGroup.get_by_path(session, file_path)
                     if not file_group:
                         # Create FileGroup for unindexed file
                         paths_for_group = glob_shared_stem(file_path)

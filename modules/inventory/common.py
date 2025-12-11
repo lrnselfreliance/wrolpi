@@ -142,8 +142,9 @@ class InventoriesConfig(ConfigFile):
 
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         inventories = []
-        for inventory in get_inventories():
-            inventories.append(inventory.dict())
+        with get_db_session() as session:
+            for inventory in get_inventories(session):
+                inventories.append(inventory.dict())
 
         if not inventories:
             raise NoInventories('No Inventories are in the database!')

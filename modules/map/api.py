@@ -41,7 +41,7 @@ async def import_pbfs(_: Request, body: schema.ImportPost):
 @map_bp.get('/files')
 @openapi.description('Find any map files, get their import status')
 def get_files_status(request: Request):
-    paths = lib.get_import_status()
+    paths = lib.get_import_status(request.ctx.session)
     paths = sorted(paths, key=lambda i: str(i.path))
     pending = request.app.shared_ctx.map_importing.get('pending')
     if pending:

@@ -11,7 +11,7 @@ from wrolpi.api_utils import api_app
 from wrolpi.cmd import SUDO_BIN, run_command
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
 from wrolpi.dates import timedelta_to_timestamp, seconds_to_timestamp, now
-from wrolpi.db import optional_session, get_db_session
+from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.vars import PROJECT_DIR, IS_RPI5
 
@@ -208,8 +208,7 @@ async def run_import_command(*paths: Path):
         raise ValueError(f'Importing map file failed with return code {result.return_code}')
 
 
-@optional_session
-def get_import_status(session: Session = None) -> List[MapFile]:
+def get_import_status(session: Session) -> List[MapFile]:
     paths = get_map_paths()
     map_paths = []
     for path in paths:

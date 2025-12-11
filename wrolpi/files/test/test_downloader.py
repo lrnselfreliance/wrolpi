@@ -19,7 +19,7 @@ async def test_file_downloader(test_session, make_files_structure, test_director
 
     # Create download for the video file.
     video_url = f'{url}/{video_file.name}'
-    test_download_manager.create_download(video_url, file_downloader.name, test_session,
+    test_download_manager.create_download(test_session, video_url, file_downloader.name,
                                           destination=str(test_directory / 'downloads'))
     test_session.commit()
 
@@ -73,7 +73,7 @@ async def test_file_downloader_meta4(test_session, make_files_structure, test_di
         assert response.status == HTTPStatus.OK, response.content
 
     # Create download for the video file, this should automatically check for the .meta4 file and use it with aria2c.
-    test_download_manager.create_download(video_url, file_downloader.name, test_session,
+    test_download_manager.create_download(test_session, video_url, file_downloader.name,
                                           destination=str(test_directory / 'downloads'))
     test_session.commit()
 

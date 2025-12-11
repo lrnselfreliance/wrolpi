@@ -9,7 +9,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, replace_file
-from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
@@ -99,14 +99,14 @@ class Video(ModelHelper, Base):
         return file_group.mimetype.startswith('video/')
 
     @staticmethod
-    def do_model(file_group: FileGroup, session: Session) -> 'Video':
+    def do_model(session: Session, file_group: FileGroup) -> 'Video':
         # Check if a Video already exists for this FileGroup
         video = session.query(Video).filter_by(file_group_id=file_group.id).one_or_none()
         if not video:
             # Create new Video if it doesn't exist
             video = Video(file_group_id=file_group.id, file_group=file_group)
             session.add(video)
-        video.validate()
+        video.validate(session)
         file_group.indexed = True
         video.flush()
         return video
@@ -208,12 +208,12 @@ class Video(ModelHelper, Base):
                 break
 
         # Fetch the videos by id, if they exist.
-        previous_video = Video.find_by_id(previous_id, session) if previous_id else None
-        next_video = Video.find_by_id(next_id, session) if next_id else None
+        previous_video = Video.find_by_id(session, previous_id) if previous_id else None
+        next_video = Video.find_by_id(session, next_id) if next_id else None
 
         return previous_video, next_video
 
-    def validate(self, session: Session = None):
+    def validate(self, session: Session):
         """Perform a validation of this video and it's files."""
         if not self.file_group.primary_path:
             # Can't validate if there is no video file.
@@ -222,7 +222,7 @@ class Video(ModelHelper, Base):
         logger.debug(f'Validating {self}')
         from .lib import validate_video
         try:
-            validate_video(self, self.channel.generate_posters if self.channel else False)
+            validate_video(session, self, self.channel.generate_posters if self.channel else False)
         except Exception as e:
             logger.error(f'Failed to validate video {self}', exc_info=e)
             if PYTEST:
@@ -239,7 +239,7 @@ class Video(ModelHelper, Base):
 
         # If this Video is in a Channel's directory, then it is part of that Channel.
         session: Session = session or Session.object_session(self)
-        if session and (channel := Channel.get_by_path(self.video_path.parent, session)):
+        if session and (channel := Channel.get_by_path(session, self.video_path.parent)):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
 
@@ -263,7 +263,7 @@ class Video(ModelHelper, Base):
         session.add(video)
         session.flush([video, file_group])
 
-        video.validate()
+        video.validate(session)
         session.flush([video, ])
         return video
 
@@ -322,46 +322,40 @@ class Video(ModelHelper, Base):
         return caption_text
 
     @staticmethod
-    @optional_session
-    def get_by_path(path, session: Session) -> Optional['Video']:
+    def get_by_path(session: Session, path) -> Optional['Video']:
         video = session.query(Video) \
             .join(FileGroup, FileGroup.id == Video.file_group_id) \
             .filter(FileGroup.primary_path == path).one_or_none()
         return video
 
     @staticmethod
-    @optional_session
-    def get_by_url(url: str, session: Session) -> Optional['Video']:
+    def get_by_url(session: Session, url: str) -> Optional['Video']:
         video = session.query(Video) \
             .join(FileGroup, FileGroup.id == Video.file_group_id) \
             .filter(FileGroup.url == url).one_or_none()
         return video
 
     @staticmethod
-    @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional['Video']:
+    def get_by_id(session: Session, id_: int) -> Optional['Video']:
         """Attempt to find a Video with the provided id.  Returns None if it cannot be found."""
         video = session.query(Video).filter(Video.id == id_).one_or_none()
         return video
 
     @staticmethod
-    @optional_session
-    def find_by_id(id_: int, session: Session = None) -> 'Video':
+    def find_by_id(session: Session, id_: int) -> 'Video':
         """Find a Video with the provided id, raises an exception if it cannot be found.
 
         @raise UnknownVideo: if the Video can not be found"""
-        video = Video.get_by_id(id_, session)
+        video = Video.get_by_id(session, id_)
         if not video:
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
-    def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
-        session = session or Session.object_session(self)
-        return self.file_group.add_tag(tag_id_or_name, session=session)
+    def add_tag(self, session: Session, tag_id_or_name: int | str) -> TagFile:
+        return self.file_group.add_tag(session, tag_id_or_name)
 
-    def untag(self, tag_id_or_name: int | str, session: Session = None):
-        session = session or Session.object_session(self)
-        self.file_group.untag(tag_id_or_name, session)
+    def untag(self, session: Session, tag_id_or_name: int | str):
+        self.file_group.untag(session, tag_id_or_name)
 
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.
@@ -468,7 +462,7 @@ class Video(ModelHelper, Base):
         largest_video = duplicate_videos.pop(largest_video_idx)
 
         # Delete the video at the destination, if it is not the largest.
-        existing_video = Video.get_by_path(video_path, session=session)
+        existing_video = Video.get_by_path(session, video_path)
         if existing_video and largest_video != existing_video:
             delete_video(existing_video)
             for idx, video in enumerate(duplicate_videos):
@@ -480,7 +474,7 @@ class Video(ModelHelper, Base):
             largest_video.file_group.move(video_path)
         for tag_name in tag_names:
             if tag_name not in largest_video.file_group.tag_names:
-                largest_video.add_tag(tag_name, session)
+                largest_video.add_tag(session, tag_name)
 
         logger.warning(f'Deleting duplicate videos: {duplicate_videos}')
 
@@ -660,7 +654,7 @@ class Channel(ModelHelper, Base):
         downloads = data.pop('downloads', [])
 
         if tag_name := data.pop('tag_name', None):
-            self.tag = Tag.find_by_name(tag_name, session)
+            self.tag = Tag.find_by_name(session, tag_name)
 
         for key, value in data.items():
             setattr(self, key, value)
@@ -677,7 +671,7 @@ class Channel(ModelHelper, Base):
             if isinstance(download, dict):
                 url = download['url']
                 # Use download frequency from downloads config before the channels config.
-                if existing_download := Download.get_by_url(url, session=session):
+                if existing_download := Download.get_by_url(session, url):
                     frequency = existing_download.frequency
                 else:
                     frequency = download.get('frequency')
@@ -691,7 +685,7 @@ class Channel(ModelHelper, Base):
                 logger.error(f'Refusing to create Download for Channel without frequency: {url}')
                 continue
 
-            download = self.get_or_create_download(url, frequency, session=session, reset_attempts=True)
+            download = self.get_or_create_download(session, url, frequency, reset_attempts=True)
             download.collection_id = self.collection_id
             session.add(download)
 
@@ -754,7 +748,7 @@ class Channel(ModelHelper, Base):
                 logger.error(f'Refusing to create Download for Channel without frequency: {url}')
                 continue
 
-            download_obj = self.get_or_create_download(url, frequency, session=session, reset_attempts=True)
+            download_obj = self.get_or_create_download(session, url, frequency, reset_attempts=True)
             download_obj.collection_id = self.collection_id
             session.add(download_obj)
 
@@ -776,29 +770,25 @@ class Channel(ModelHelper, Base):
         return config
 
     @classmethod
-    def from_config(cls, data: dict, session: Session = None) -> 'Channel':
+    def from_config(cls, session: Session, data: dict) -> 'Channel':
         """
         Create or update a Channel from config data. This also creates/updates the Collection.
 
         Args:
-            data: Config dict containing channel metadata (name, directory, url, source_id, etc.)
             session: Database session
+            data: Config dict containing channel metadata (name, directory, url, source_id, etc.)
 
         Returns:
             The created or updated Channel
         """
         from wrolpi.collections import Collection
-        from wrolpi.db import get_db_session
-
-        if session is None:
-            session = get_db_session()
 
         # Ensure this is treated as a channel collection
         data = data.copy()
         data['kind'] = 'channel'
 
         # Create or update the Collection first
-        collection = Collection.from_config(data, session=session)
+        collection = Collection.from_config(session, data)
 
         # Extract Channel-specific fields
         url = data.get('url')
@@ -823,7 +813,7 @@ class Channel(ModelHelper, Base):
         return channel
 
     @staticmethod
-    def get_by_path(path: pathlib.Path, session: Session) -> Optional['Channel']:
+    def get_by_path(session: Session, path: pathlib.Path) -> Optional['Channel']:
         if not path:
             raise RuntimeError('Must provide path to get Channel')
         path = pathlib.Path(path) if isinstance(path, str) else path
@@ -883,9 +873,9 @@ class Channel(ModelHelper, Base):
             # Clear tag.
             self.tag = None
         elif isinstance(tag_id_or_name, int):
-            self.tag = Tag.find_by_id(tag_id_or_name, session)
+            self.tag = Tag.find_by_id(session, tag_id_or_name)
         elif isinstance(tag_id_or_name, str):
-            self.tag = Tag.find_by_name(tag_id_or_name, session)
+            self.tag = Tag.find_by_name(session, tag_id_or_name)
         # Copy the id in case some code needs the id before flush.
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
@@ -916,19 +906,17 @@ class Channel(ModelHelper, Base):
             background_task(_())
 
     @staticmethod
-    @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional['Channel']:
+    def get_by_id(session: Session, id_: int) -> Optional['Channel']:
         """Attempt to find a Channel with the provided id.  Returns None if it cannot be found."""
         channel = session.query(Channel).filter_by(id=id_).one_or_none()
         return channel
 
     @staticmethod
-    @optional_session
-    def find_by_id(id_: int, session: Session = None) -> 'Channel':
+    def find_by_id(session: Session, id_: int) -> 'Channel':
         """Find a Channel with the provided id, raises an exception when no Channel is found.
 
         @raise UnknownChannel: if the channel can not be found"""
-        if channel := Channel.get_by_id(id_, session=session):
+        if channel := Channel.get_by_id(session, id_):
             return channel
         raise UnknownChannel(f'Cannot find channel with id {id_}')
 
@@ -941,8 +929,7 @@ class Channel(ModelHelper, Base):
             elif len(matching_entries) > 1:
                 raise RuntimeError(f'More than one info_json entry matches {video_source_id}')
 
-    @optional_session
-    def get_or_create_download(self, url: str, frequency: int, session: Session = None,
+    def get_or_create_download(self, session: Session, url: str, frequency: int,
                                reset_attempts: bool = False) -> Download:
         """Get a Download record, if it does not exist, create it.  Create a Download if necessary
         which goes into this Channel's directory.
@@ -952,7 +939,7 @@ class Channel(ModelHelper, Base):
         from modules.videos.downloader import ChannelDownloader, VideoDownloader
 
         return self.collection.get_or_create_download(
-            url, frequency, session=session,
+            session, url, frequency,
             reset_attempts=reset_attempts,
             downloader_name=ChannelDownloader.name,
             sub_downloader_name=VideoDownloader.name
@@ -966,8 +953,7 @@ class Channel(ModelHelper, Base):
             return f'https://www.youtube.com/feeds/videos.xml?channel_id={self.source_id}'
 
     @staticmethod
-    @optional_session
-    def get_by_url(url: str, session: Session = None) -> Optional['Channel']:
+    def get_by_url(session: Session, url: str) -> Optional['Channel']:
         if not url:
             raise RuntimeError('Must provide URL to get Channel')
         channel = session.query(Channel).filter_by(url=url).one_or_none()

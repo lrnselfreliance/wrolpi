@@ -20,7 +20,7 @@ from modules.videos.models import Channel
 def test_get_bad_channel(test_session, test_directory, params):
     """A Channel cannot be found without data."""
     with pytest.raises(UnknownChannel):
-        lib.get_channel(**params)
+        lib.get_channel(test_session, **params)
 
 
 def test_get_channel(test_session, test_directory, channel_factory):
@@ -38,19 +38,19 @@ def test_get_channel(test_session, test_directory, channel_factory):
 
     test_session.commit()
 
-    channel = lib.get_channel(channel_id=channel_id_channel.id, return_dict=False)
+    channel = lib.get_channel(test_session, channel_id=channel_id_channel.id, return_dict=False)
     assert channel == channel_id_channel
 
-    channel = lib.get_channel(source_id='the source id', return_dict=False)
+    channel = lib.get_channel(test_session, source_id='the source id', return_dict=False)
     assert channel == source_id_channel
 
-    channel = lib.get_channel(url='https://example.com/channel', return_dict=False)
+    channel = lib.get_channel(test_session, url='https://example.com/channel', return_dict=False)
     assert channel == url_channel
 
     # Directory can be relative, or absolute.
-    channel = lib.get_channel(directory='some directory', return_dict=False)
+    channel = lib.get_channel(test_session, directory='some directory', return_dict=False)
     assert channel == directory_channel
-    channel = lib.get_channel(directory=f'{test_directory}/some directory', return_dict=False)
+    channel = lib.get_channel(test_session, directory=f'{test_directory}/some directory', return_dict=False)
     assert channel == directory_channel
 
     # Channel is found using the priority of params, incorrect data is ignored.
@@ -61,8 +61,8 @@ def test_get_channel(test_session, test_directory, channel_factory):
         dict(channel_id=channel_id_channel.id, source_id='the source id'),
     ]
     for p in params:
-        assert lib.get_channel(**p, return_dict=False) == channel_id_channel
-        assert lib.get_channel(**p)
+        assert lib.get_channel(test_session, **p, return_dict=False) == channel_id_channel
+        assert lib.get_channel(test_session, **p)
 
 
 @pytest.mark.asyncio
@@ -115,7 +115,7 @@ async def test_search_channels_by_name(test_session, channel_factory, video_fact
     test_session.commit()
 
     async def assert_search(name: str, channel_names: List[str], order_by_video_count=False):
-        channels = await lib.search_channels_by_name(name, order_by_video_count=order_by_video_count)
+        channels = await lib.search_channels_by_name(test_session, name, order_by_video_count=order_by_video_count)
         for channel in channels:
             channel_name = channel_names.pop(0)
             if channel.name != channel_name:
@@ -139,7 +139,7 @@ async def test_tag_channel_existing(async_client, test_session, test_directory, 
     assert str(channel.directory).startswith(f'{test_directory}/videos/one/')
 
     tag = await tag_factory()
-    await lib.tag_channel(tag.name, channel_directory, channel.id, test_session)
+    await lib.tag_channel(test_session, tag.name, channel_directory, channel.id)
     await await_switches()
 
     # Channel's tag is saved to the config.
@@ -161,7 +161,7 @@ async def test_tag_channel_without_directory_saves_config(
     tag = await tag_factory(name='Tech')
 
     # Tag without providing directory (directory=None)
-    await lib.tag_channel(tag.name, None, channel.id, test_session)
+    await lib.tag_channel(test_session, tag.name, None, channel.id)
     test_session.commit()
     await await_switches()
 
@@ -189,7 +189,7 @@ async def test_untag_channel_without_directory_saves_config(
     assert channel.tag is not None
 
     # Untag without providing directory (tag_name=None, directory=None)
-    await lib.tag_channel(None, None, channel.id, test_session)
+    await lib.tag_channel(test_session, None, None, channel.id)
     test_session.commit()
     await await_switches()
 

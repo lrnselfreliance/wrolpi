@@ -343,6 +343,9 @@ class TestCollectionDeletion:
         # Check response
         assert response.status_code == HTTPStatus.NO_CONTENT
 
+        # Expire all cached objects to see changes made by the API's separate session
+        test_session.expire_all()
+
         # Verify collection is deleted
         assert test_session.query(Collection).filter_by(id=collection_id).count() == 0
 

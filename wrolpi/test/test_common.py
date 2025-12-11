@@ -1073,7 +1073,8 @@ async def test_initialize_config_files(async_client, test_session, test_director
 
     # Create some DB entries so the configs will not be imported.
     tag1, tag2 = await tag_factory(), await tag_factory()
-    download = test_download_manager.create_download('https://example.com', downloader_name=test_downloader.name)
+    download = test_download_manager.create_download(test_session, 'https://example.com',
+                                                     downloader_name=test_downloader.name)
     test_session.commit()
     # Write some config files, they should not be re-created.
     get_wrolpi_config().get_file().write_text('wrolpi')

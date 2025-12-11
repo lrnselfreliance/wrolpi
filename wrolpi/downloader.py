@@ -32,7 +32,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL
 from wrolpi.dates import TZDateTime, now, Seconds
-from wrolpi.db import get_db_session, get_db_curs, optional_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
 from wrolpi.events import Events
 from wrolpi.media_path import MediaPathType
@@ -252,33 +252,29 @@ class Download(ModelHelper, Base):  # noqa
         save_downloads_config.activate_switch()
 
     @staticmethod
-    def get_by_id(id_: int, session: Session = None) -> Optional['Download']:
+    def get_by_id(session: Session, id_: int) -> Optional['Download']:
         download = session.query(Download).filter(Download.id == id_).one_or_none()
         return download
 
     @classmethod
-    @optional_session
-    def find_by_id(cls, id_: int, session: Session = None) -> 'Download':
-        if download := cls.get_by_id(id_, session):
+    def find_by_id(cls, session: Session, id_) -> 'Download':
+        if download := cls.get_by_id(session, id_):
             return download
         raise UnknownDownload(f'Cannot find Download with id: {id_}')
 
     @staticmethod
-    @optional_session
-    def get_by_url(url: str, session: Session = None) -> Optional['Download']:
+    def get_by_url(session: Session, url: str) -> Optional['Download']:
         download = session.query(Download).filter(Download.url == url).one_or_none()
         return download
 
     @classmethod
-    @optional_session
-    def find_by_url(cls, url: str, session: Session = None) -> 'Download':
-        if download := cls.get_by_url(url, session):
+    def find_by_url(cls, session: Session, url: str) -> 'Download':
+        if download := cls.get_by_url(session, url):
             return download
         raise UnknownDownload(f'Cannot find Download with URL: {url}')
 
     @classmethod
-    @optional_session
-    def get_all_by_destination(cls, destination: str | pathlib.Path, session: Session = None) -> List['Download']:
+    def get_all_by_destination(cls, session: Session, destination: str | pathlib.Path) -> List['Download']:
         destination = str(destination)
         downloads = session.query(Download).filter_by(destination=destination).all()
         return downloads
@@ -310,8 +306,7 @@ class Downloader:
     async def do_download(self, download: Download) -> DownloadResult:
         raise NotImplementedError()
 
-    @optional_session
-    def already_downloaded(self, *urls: List[str], session: Session = None):
+    def already_downloaded(self, session: Session, *urls: List[str]):
         raise NotImplementedError()
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
@@ -564,12 +559,12 @@ class DownloadManager:
             return downloader
         raise InvalidDownload(f'Cannot find downloader with name {name}')
 
-    def get_or_create_download(self, url: str, session: Session, reset_attempts: bool = False) -> Download:
+    def get_or_create_download(self, session: Session, url: str, reset_attempts: bool = False) -> Download:
         """Get a Download by its URL, if it cannot be found create one."""
         if not url:
             raise ValueError('Download must have a URL')
 
-        if download := Download.get_by_url(url, session=session):
+        if download := Download.get_by_url(session, url):
             return download
 
         if self.is_skipped(url):
@@ -582,8 +577,7 @@ class DownloadManager:
         session.add(download)
         return download
 
-    @optional_session
-    def create_downloads(self, urls: List[str], downloader_name: str, session: Session = None,
+    def create_downloads(self, session: Session, urls: List[str], downloader_name: str,
                          reset_attempts: bool = False, sub_downloader_name: str = None,
                          destination: str | pathlib.Path = None, tag_names: List[str] = None, settings: dict = None) \
             -> List[Download]:
@@ -619,7 +613,7 @@ class DownloadManager:
                 self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                 continue
 
-            download = self.get_or_create_download(url, session, reset_attempts=reset_attempts)
+            download = self.get_or_create_download(session, url, reset_attempts=reset_attempts)
             # Download may have failed, try again.
             download.renew(reset_attempts=reset_attempts)
             download.destination = destination or None
@@ -649,18 +643,16 @@ class DownloadManager:
 
         return downloads
 
-    @optional_session
-    def create_download(self, url: str, downloader_name: str, session: Session = None, reset_attempts: bool = False,
+    def create_download(self, session: Session, url: str, downloader_name: str, reset_attempts: bool = False,
                         sub_downloader_name: str = None, destination: str | pathlib.Path = None,
                         tag_names: List[str] = None, settings: Dict = None) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
-        downloads = self.create_downloads([url], session=session, downloader_name=downloader_name,
+        downloads = self.create_downloads(session, [url], downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
                                           destination=destination, tag_names=tag_names, settings=settings)
         return downloads[0]
 
-    @optional_session
-    def recurring_download(self, url: str, frequency: int, downloader_name: str, session: Session = None,
+    def recurring_download(self, session: Session, url: str, frequency: int, downloader_name: str,
                            sub_downloader_name: str = None, reset_attempts: bool = False,
                            destination: str | pathlib.Path = None, tag_names: List[str] = None,
                            settings: Dict = None, collection_id: int = None) -> Download:
@@ -672,7 +664,7 @@ class DownloadManager:
         if downloader_name == ScrapeHTMLDownloader.name and frequency:
             raise InvalidDownload(f'Cannot schedule recurring download for {downloader_name=}')
 
-        download, = self.create_downloads([url, ], session=session, downloader_name=downloader_name,
+        download, = self.create_downloads(session, [url, ], downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
                                           destination=destination, tag_names=tag_names, settings=settings)
         download.frequency = frequency
@@ -681,20 +673,18 @@ class DownloadManager:
 
         # Only recurring Downloads can be Collection Downloads - look up via Channel.
         from modules.videos.models import Channel
-        if channel := Channel.get_by_url(url=download.url, session=session):
+        if channel := Channel.get_by_url(session, url=download.url):
             download.collection_id = channel.collection_id
 
         session.commit()
 
         return download
 
-    @optional_session
-    def update_download(self, id_: int, url: str, downloader: str,
+    def update_download(self, session: Session, id_: int, url: str, downloader: str,
                         destination: str | pathlib.Path = None, tag_names: List[str] = None,
                         sub_downloader: str | None = None, frequency: int = None,
-                        settings: Dict = None, collection_id: int = None,
-                        session: Session = None) -> Download:
-        download = Download.find_by_id(id_, session=session)
+                        settings: Dict = None, collection_id: int = None) -> Download:
+        download = Download.find_by_id(session, id_)
         if collection_id and not frequency:
             raise InvalidDownload(f'A once-download cannot be associated with a Collection')
         download.url = url
@@ -714,8 +704,7 @@ class DownloadManager:
         return download
 
     @wrol_mode_check
-    @optional_session
-    async def dispatch_downloads(self, session: Session = None):
+    async def dispatch_downloads(self):
         """Dispatch Sanic signals to start downloads.  This only starts as many downloads as the
          SIMULTANEOUS_DOWNLOAD_DOMAINS variable."""
         if not self.can_download:
@@ -728,23 +717,25 @@ class DownloadManager:
             return
 
         # Find download whose domain isn't already being downloaded.
-        new_downloads = list(session.query(Download).filter(
-            Download.status == 'new',
-            Download.domain not in self.processing_domains,
-        ).order_by(
-            Download.frequency.is_(None),
-            Download.frequency,
-            Download.id))
-        count = 0
-        for download in new_downloads:
-            domain = download.domain
-            if domain not in self.processing_domains and len(self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
-                self._add_processing_domain(domain)
-                context = dict(download_id=download.id, download_url=download.url)
-                await api_app.dispatch('wrolpi.download.download', context=context)
-                count += 1
-        if count:
-            self.log_debug(f'Added {count} downloads to queue.')
+        with get_db_session(commit=True) as session:
+            new_downloads = list(session.query(Download).filter(
+                Download.status == 'new',
+                Download.domain not in self.processing_domains,
+            ).order_by(
+                Download.frequency.is_(None),
+                Download.frequency,
+                Download.id))
+            count = 0
+            for download in new_downloads:
+                domain = download.domain
+                if domain not in self.processing_domains and len(
+                        self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
+                    self._add_processing_domain(domain)
+                    context = dict(download_id=download.id, download_url=download.url)
+                    await api_app.dispatch('wrolpi.download.download', context=context)
+                    count += 1
+            if count:
+                self.log_debug(f'Added {count} downloads to queue.')
 
     async def do_downloads(self):
         """Schedule any downloads that are new.
@@ -809,7 +800,6 @@ class DownloadManager:
                 stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred'"
             curs.execute(stmt)
 
-    @optional_session
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """
         Get all "new" downloads.  This method fetches the first download each iteration, so it will fetch downloads
@@ -826,8 +816,7 @@ class DownloadManager:
             last = download
             yield download
 
-    @optional_session
-    def get_recurring_downloads(self, session: Session = None, limit: int = None):
+    def get_recurring_downloads(self, session: Session, limit: int = None):
         """Get all Downloads that will be downloaded in the future."""
         query = session.query(Download).filter(
             Download.frequency != None  # noqa
@@ -840,8 +829,7 @@ class DownloadManager:
         downloads = query.all()
         return downloads
 
-    @optional_session
-    def get_once_downloads(self, session: Session = None, limit: int = None):
+    def get_once_downloads(self, session: Session, limit: int = None):
         """Get all Downloads that will not reoccur."""
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
@@ -863,8 +851,7 @@ class DownloadManager:
             renewed_count = 0
             for download in recurring:
                 # A new download may not have a `next_download`, create it if necessary.
-                download.next_download = download.next_download or self.calculate_next_download(download,
-                                                                                                session=session)
+                download.next_download = download.next_download or self.calculate_next_download(session, download)
                 if download.next_download < now_ and download.status not in (
                         DownloadStatus.new, DownloadStatus.pending):
                     download.renew()
@@ -879,19 +866,17 @@ class DownloadManager:
         downloads = list(session.query(Download).all())
         return downloads
 
-    @optional_session
-    def delete_download(self, download_id: int, session: Session = None):
+    def delete_download(self, session: Session, download_id: int):
         """Delete a Download.  Returns True if a Download was deleted, otherwise return False."""
-        if download := Download.get_by_id(download_id, session=session):
+        if download := Download.get_by_id(session, download_id):
             # This saves the config twice.
             download.delete()
             return True
         return False
 
-    @optional_session
-    def restart_download(self, download_id: int, session: Session = None) -> Download:
+    def restart_download(self, session: Session, download_id: int) -> Download:
         """Renews a download and resets its download attempts."""
-        download = Download.find_by_id(download_id, session=session)
+        download = Download.find_by_id(session, download_id)
         download.renew(reset_attempts=True)
         session.commit()
 
@@ -905,7 +890,7 @@ class DownloadManager:
         api_app.shared_ctx.download_manager_data.update(download_manager_data)
 
         with get_db_session(commit=True) as session:
-            if download := Download.get_by_id(download_id, session=session):
+            if download := Download.get_by_id(session, download_id):
                 download.error = 'User stopped this download'
                 download.fail()
 
@@ -1045,8 +1030,7 @@ class DownloadManager:
         return summary
 
     @staticmethod
-    @optional_session
-    def calculate_next_download(download: Download, session: Session) -> Optional[datetime]:
+    def calculate_next_download(session: Session, download: Download) -> Optional[datetime]:
         """
         If the download is "deferred", download soon.  But, slowly increase the time between attempts.
 
@@ -1099,7 +1083,6 @@ class DownloadManager:
             stmt = stmt.where(Download.status == status)
         return stmt
 
-    @optional_session
     def delete_completed(self, session: Session) -> List[int]:
         """Delete any completed download records."""
         stmt = self._delete_downloads_q(once=True, status=DownloadStatus.complete)
@@ -1107,7 +1090,6 @@ class DownloadManager:
         session.commit()
         return deleted_ids
 
-    @optional_session
     def delete_failed(self, session: Session):
         """Delete any failed download records."""
         stmt = self._delete_downloads_q(once=True, status=DownloadStatus.failed, returning=Download.url)
@@ -1118,7 +1100,6 @@ class DownloadManager:
 
         session.commit()
 
-    @optional_session
     def delete_once(self, session: Session):
         """Delete all once-download records."""
         stmt = self._delete_downloads_q(once=True)
@@ -1165,7 +1146,7 @@ async def signal_download_download(download_id: int, download_url: str):
 
             with get_db_session(commit=True) as session:
                 # Mark the download as started in new session so the change is committed.
-                download = Download.find_by_id(download_id, session=session)
+                download = Download.find_by_id(session, download_id)
                 download.started()
             download_domain = download.domain
 
@@ -1205,12 +1186,12 @@ async def signal_download_download(download_id: int, download_url: str):
                 download.location = result.location or download.location or None
                 # Clear any old errors if the download succeeded.
                 download.error = result.error if result.error else None
-                download.next_download = download_manager.calculate_next_download(download, session)
+                download.next_download = download_manager.calculate_next_download(session, download)
 
                 urls = download.filter_excluded(result.downloads) if result.downloads else None
                 if urls:
                     worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                    download_manager.create_downloads(urls, session, downloader_name=download.sub_downloader,
+                    download_manager.create_downloads(session, urls, downloader_name=download.sub_downloader,
                                                       settings=result.settings)
 
                 if try_again is False and not download.frequency:
@@ -1405,7 +1386,7 @@ class DownloadManagerConfig(ConfigFile):
                     subscription = session.query(ZimSubscription).filter_by(name=name, language=language).one_or_none()
                     if not subscription:
                         subscription = ZimSubscription(name=name, language=language)
-                    subscription.change_download(download.url, download.frequency, session=session)
+                    subscription.change_download(session, download.url, download.frequency)
                     session.add(subscription)
                     need_commit = True
 
@@ -1455,7 +1436,6 @@ def save_downloads_config():
 save_downloads_config: ActivateSwitchMethod
 
 
-@optional_session
 async def import_downloads_config(session: Session):
     """Upsert all Downloads in the Download Manager Config into the DB.
 
@@ -1512,7 +1492,8 @@ class RSSDownloader(Downloader):
                 logger.warning(f'RSS entry {idx} did not have a link!')
 
         # Only download new URLs.
-        urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(*urls)]]
+        with get_db_session() as session:
+            urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(session, *urls)]]
         # Remove skipped URLs before duration checks. (Typically done after this by the download worker).
         urls = [i for i in urls if not download_manager.is_skipped(i)]
 
@@ -1602,7 +1583,7 @@ class RSSDownloader(Downloader):
             from modules.videos.models import Channel
             channel = Channel.get_by_source_id(session, f'UC{yt_channel_id}')
             if channel:
-                download_ = Download.get_by_id(download_id, session=session)
+                download_ = Download.get_by_id(session, download_id)
                 download_.collection = channel.collection
                 download_.collection_id = channel.collection_id
                 download_.location = download_.location or channel.location

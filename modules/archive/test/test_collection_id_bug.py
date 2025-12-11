@@ -65,7 +65,7 @@ async def test_model_archive_sets_collection_id(async_client, test_session, test
 
     # Model the archive using the production code path
     # This should create an Archive with collection_id set
-    archive = model_archive(file_group, session=test_session)
+    archive = model_archive(test_session, file_group)
 
     # The bug: collection_id is None, causing NOT NULL constraint violation
     assert archive is not None, "Archive should be created"
@@ -126,7 +126,7 @@ async def test_model_archive_extracts_url_from_singlefile(async_client, test_ses
     file_group = FileGroup.from_paths(test_session, *file_paths)
 
     # Model the archive - it should extract the URL from the singlefile
-    archive = model_archive(file_group, session=test_session)
+    archive = model_archive(test_session, file_group)
 
     assert archive is not None
     assert archive.file_group.url == url, \

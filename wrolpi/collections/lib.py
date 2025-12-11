@@ -10,8 +10,10 @@ from typing import List, Optional, Dict
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory
-from wrolpi.db import get_db_session, optional_session
+from wrolpi.db import get_db_session
+from wrolpi.errors import RefreshConflict
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.tags import Tag
@@ -32,8 +34,7 @@ __all__ = [
 ]
 
 
-@optional_session
-def get_collections(kind: Optional[str] = None, session: Session = None) -> List[dict]:
+def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     """
     Get all collections, optionally filtered by kind.
 
@@ -41,8 +42,8 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
     avoiding the N+1 query problem that occurs with per-collection queries.
 
     Args:
-        kind: Optional collection kind to filter by (e.g., 'domain', 'channel')
         session: Database session
+        kind: Optional collection kind to filter by (e.g., 'domain', 'channel')
 
     Returns:
         List of collection dicts with statistics for each collection type
@@ -135,14 +136,13 @@ def get_collections(kind: Optional[str] = None, session: Session = None) -> List
     return result
 
 
-@optional_session
-def get_collection_with_stats(collection_id: int, session: Session = None) -> dict:
+def get_collection_with_stats(session: Session, collection_id: int) -> dict:
     """
     Get a single collection with type-specific statistics.
 
     Args:
-        collection_id: The collection ID
         session: Database session
+        collection_id: The collection ID
 
     Returns:
         Collection dict with statistics
@@ -209,23 +209,22 @@ def get_collection_with_stats(collection_id: int, session: Session = None) -> di
     return data
 
 
-@optional_session
 def update_collection(
+        session: Session,
         collection_id: int,
         directory: Optional[str] = None,
         tag_name: Optional[str] = None,
         description: Optional[str] = None,
-        session: Session = None
 ) -> Collection:
     """
     Update a collection's properties.
 
     Args:
+        session: Database session
         collection_id: The collection ID
         directory: New directory (relative or absolute path), or None to clear
         tag_name: New tag name, empty string to clear, or None to leave unchanged
         description: New description, or None to leave unchanged
-        session: Database session
 
     Returns:
         Updated Collection object
@@ -319,21 +318,20 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         Events.send_directory_refresh(f'Refreshing: {relative_dir}')
 
 
-@optional_session(commit=True)
 async def tag_collection(
+        session: Session,
         collection_id: int,
         tag_name: Optional[str] = None,
         directory: Optional[str] = None,
-        session: Session = None
 ) -> Dict:
     """
     Tag a collection and optionally move files to a new directory, or remove a tag if no tag_name is provided.
 
     Args:
+        session: Database session
         collection_id: The collection ID
         tag_name: Tag name to apply, or None to remove the tag
         directory: Optional new directory for the collection
-        session: Database session
 
     Returns:
         Dict with tag information and suggested directory
@@ -343,9 +341,6 @@ async def tag_collection(
         ValidationError: If tagging requirements not met
         RefreshConflict: If a file refresh is in progress and directory change is requested
     """
-    from wrolpi import flags
-    from wrolpi.errors import RefreshConflict
-
     collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
 
     if not collection:
@@ -465,11 +460,10 @@ async def tag_collection(
     }
 
 
-@optional_session
 def get_tag_info(
+        session: Session,
         collection_id: int,
         tag_name: Optional[str],
-        session: Session = None
 ) -> Dict:
     """
     Get information about tagging a collection with a specific tag.
@@ -478,9 +472,9 @@ def get_tag_info(
     For collections without a directory, returns suggested_directory=None.
 
     Args:
+        session: Database session
         collection_id: The collection ID
         tag_name: Tag name to check
-        session: Database session
 
     Returns:
         Dict with suggested_directory, conflict flag, and optional conflict_message
@@ -534,10 +528,9 @@ def get_tag_info(
     }
 
 
-@optional_session
 def delete_collection(
+        session: Session,
         collection_id: int,
-        session: Session = None
 ) -> Dict:
     """
     Delete a collection and orphan its child items.
@@ -548,8 +541,8 @@ def delete_collection(
     - Triggers domain config save
 
     Args:
-        collection_id: The collection ID to delete
         session: Database session
+        collection_id: The collection ID to delete
 
     Returns:
         Dict with collection information
@@ -588,21 +581,20 @@ def delete_collection(
     return collection_dict
 
 
-@optional_session
 def search_collections(
+        session: Session,
         kind: Optional[str] = None,
         tag_names: Optional[List[str]] = None,
         search_str: Optional[str] = None,
-        session: Session = None
 ) -> List[dict]:
     """
     Search collections by kind, tags, and search string.
 
     Args:
+        session: Database session
         kind: Optional collection kind filter
         tag_names: Optional list of tag names to filter by
         search_str: Optional search string for collection names
-        session: Database session
 
     Returns:
         List of matching collection dicts

@@ -8,7 +8,6 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     unique_by_predicate
-from wrolpi.db import optional_session
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -180,17 +179,16 @@ class Collection(ModelHelper, Base):
 
         return config
 
-    @optional_session
-    def get_or_create_download(self, url: str, frequency: int, session: Session = None,
+    def get_or_create_download(self, session: Session, url: str, frequency: int,
                                reset_attempts: bool = False,
                                downloader_name: str = None,
                                sub_downloader_name: str = None) -> 'Download':
         """Get or create a Download for this Collection.
 
         Args:
+            session: Database session
             url: The URL to download
             frequency: Seconds between re-downloading
-            session: Database session
             reset_attempts: Reset download attempts if True
             downloader_name: Name of the downloader to use
             sub_downloader_name: Name of the sub-downloader for child downloads
@@ -210,10 +208,10 @@ class Collection(ModelHelper, Base):
         if not frequency:
             raise InvalidDownload('Download for Collection must have a frequency')
 
-        download = Download.get_by_url(url, session=session)
+        download = Download.get_by_url(session, url)
         if not download:
             download = download_manager.recurring_download(
-                url, frequency, downloader_name, session=session,
+                session, url, frequency, downloader_name,
                 sub_downloader_name=sub_downloader_name,
                 destination=str(self.directory) if self.directory else None,
                 reset_attempts=reset_attempts,
@@ -224,8 +222,7 @@ class Collection(ModelHelper, Base):
         return download
 
     @staticmethod
-    @optional_session
-    def from_config(data: dict, session: Session = None) -> 'Collection':
+    def from_config(session: Session, data: dict) -> 'Collection':
         """
         Create or update a Collection from config data.
 
@@ -233,8 +230,8 @@ class Collection(ModelHelper, Base):
         If the collection has no directory, items are managed manually (not from config).
 
         Args:
-            data: Config dict containing collection metadata
             session: Database session
+            data: Config dict containing collection metadata
 
         Returns:
             The created or updated Collection
@@ -268,7 +265,7 @@ class Collection(ModelHelper, Base):
         # - If directory is provided, resolve by unique directory
         # - Otherwise, fall back to first match by (name, kind)
         if directory:
-            collection = Collection.get_by_path(directory, session)
+            collection = Collection.get_by_path(session, directory)
         else:
             collection = session.query(Collection).filter_by(name=name, kind=kind).first()
 
@@ -280,7 +277,7 @@ class Collection(ModelHelper, Base):
             collection.kind = kind
 
             if tag_name:
-                tag = Tag.get_by_name(tag_name, session)
+                tag = Tag.get_by_name(session, tag_name)
                 if tag:
                     collection.tag = tag
                 else:
@@ -299,7 +296,7 @@ class Collection(ModelHelper, Base):
             )
 
             if tag_name:
-                tag = Tag.get_by_name(tag_name, session)
+                tag = Tag.get_by_name(session, tag_name)
                 if tag:
                     collection.tag = tag
                 else:
@@ -312,15 +309,14 @@ class Collection(ModelHelper, Base):
         # If directory-restricted, populate with FileGroups from that directory
         if collection.directory and collection.directory.is_dir():
             logger.info(f'Populating collection {repr(name)} from directory {collection.directory}')
-            collection.populate_from_directory(session=session)
+            collection.populate_from_directory(session)
         elif collection.directory and not collection.directory.is_dir():
             logger.warning(f'Collection directory does not exist: {collection.directory}')
 
         return collection
 
     @staticmethod
-    @optional_session
-    def batch_from_config(data_list: List[dict], session: Session = None) -> List['Collection']:
+    def batch_from_config(session: Session, data_list: List[dict]) -> List['Collection']:
         """
         Create or update multiple Collections from config data in batch.
         More efficient than calling from_config() in a loop because it pre-fetches
@@ -330,8 +326,8 @@ class Collection(ModelHelper, Base):
         use claim_videos_for_channels() after batch_from_config() to assign videos to channels.
 
         Args:
-            data_list: List of config dicts containing collection metadata
             session: Database session
+            data_list: List of config dicts containing collection metadata
 
         Returns:
             List of created or updated Collections
@@ -460,12 +456,11 @@ class Collection(ModelHelper, Base):
 
         return collections
 
-    def populate_from_directory(self, session: Session = None):
+    def populate_from_directory(self, session: Session):
         """
         Populate this collection with all FileGroups in the collection's directory.
         Only works for directory-restricted collections.
         """
-        session = session or Session.object_session(self)
 
         if not self.is_directory_restricted:
             logger.warning(f'Cannot populate unrestricted collection from directory: {self}')
@@ -490,7 +485,7 @@ class Collection(ModelHelper, Base):
         # Add new FileGroups
         new_file_groups = [fg for fg in file_groups if fg.id not in existing_fg_ids]
         if new_file_groups:
-            self.add_file_groups(new_file_groups, session=session)
+            self.add_file_groups(session, new_file_groups)
             logger.info(f'Added {len(new_file_groups)} FileGroups to collection {repr(self.name)}')
 
     def validate_file_group(self, file_group: FileGroup) -> bool:
@@ -560,7 +555,7 @@ class Collection(ModelHelper, Base):
             position = (max_position or 0) + 1
         else:
             # Insert at specific position - need to shift existing items
-            self._shift_positions(position, shift_by=1, session=session)
+            self._shift_positions(session, position, shift_by=1)
 
         item = CollectionItem(
             collection_id=self.id,
@@ -572,19 +567,18 @@ class Collection(ModelHelper, Base):
 
         return item
 
-    def add_file_groups(self, file_groups: List[FileGroup], session: Session = None) -> List['CollectionItem']:
+    def add_file_groups(self, session: Session, file_groups: List[FileGroup]) -> List['CollectionItem']:
         """
         Add multiple FileGroups to this Collection in batch.
         More efficient than calling add_file_group in a loop.
 
         Args:
-            file_groups: List of FileGroups to add
             session: Database session
+            file_groups: List of FileGroups to add
 
         Returns:
             List of created CollectionItems
         """
-        session = session or Session.object_session(self)
 
         # Validate all file groups first
         for fg in file_groups:
@@ -625,9 +619,8 @@ class Collection(ModelHelper, Base):
         logger.debug(f'Added {len(items)} FileGroups to Collection {self.id}')
         return items
 
-    def remove_file_group(self, file_group_id: int, session: Session = None):
+    def remove_file_group(self, session: Session, file_group_id: int):
         """Remove a FileGroup from this Collection."""
-        session = session or Session.object_session(self)
 
         item = session.query(CollectionItem).filter_by(
             collection_id=self.id,
@@ -640,18 +633,17 @@ class Collection(ModelHelper, Base):
             session.flush()
 
             # Shift remaining items down
-            self._shift_positions(position + 1, shift_by=-1, session=session)
+            self._shift_positions(session, position + 1, shift_by=-1)
 
-    def remove_file_groups(self, file_group_ids: List[int], session: Session = None):
+    def remove_file_groups(self, session: Session, file_group_ids: List[int]):
         """
         Remove multiple FileGroups from this Collection in batch.
         More efficient than calling remove_file_group in a loop.
 
         Args:
-            file_group_ids: List of FileGroup IDs to remove
             session: Database session
+            file_group_ids: List of FileGroup IDs to remove
         """
-        session = session or Session.object_session(self)
 
         if not file_group_ids:
             return
@@ -707,7 +699,7 @@ class Collection(ModelHelper, Base):
         item.position = new_position
         session.flush()
 
-    def _shift_positions(self, from_position: int, shift_by: int, session: Session):
+    def _shift_positions(self, session: Session, from_position: int, shift_by: int):
         """Helper to shift positions of items."""
         session.query(CollectionItem).filter(
             CollectionItem.collection_id == self.id,
@@ -715,10 +707,8 @@ class Collection(ModelHelper, Base):
         ).update({'position': CollectionItem.position + shift_by})
         session.flush()
 
-    def get_items(self, limit: Optional[int] = None, offset: int = 0,
-                  session: Session = None) -> List['CollectionItem']:
+    def get_items(self, session: Session, limit: Optional[int] = None, offset: int = 0) -> List['CollectionItem']:
         """Get items in this collection, ordered by position."""
-        session = session or Session.object_session(self)
 
         query = session.query(CollectionItem).filter_by(
             collection_id=self.id
@@ -732,25 +722,22 @@ class Collection(ModelHelper, Base):
         return query.all()
 
     @staticmethod
-    @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional['Collection']:
+    def get_by_id(session: Session, id_: int) -> Optional['Collection']:
         """Attempt to find a Collection with the provided id. Returns None if not found."""
         return session.query(Collection).filter_by(id=id_).one_or_none()
 
     @staticmethod
-    @optional_session
-    def find_by_id(id_: int, session: Session = None) -> 'Collection':
+    def find_by_id(session: Session, id_: int) -> 'Collection':
         """Find a Collection with the provided id, raises an exception if not found.
 
         @raise UnknownCollection: if the collection cannot be found
         """
-        if collection := Collection.get_by_id(id_, session=session):
+        if collection := Collection.get_by_id(session, id_):
             return collection
         raise UnknownCollection(f'Cannot find Collection with id {id_}')
 
     @staticmethod
-    @optional_session
-    def get_by_path(path: pathlib.Path, session: Session = None) -> Optional['Collection']:
+    def get_by_path(session: Session, path: pathlib.Path) -> Optional['Collection']:
         """Find a Collection by its directory path. Returns None if not found."""
         if not path:
             return None
@@ -759,13 +746,12 @@ class Collection(ModelHelper, Base):
         return session.query(Collection).filter_by(directory=path).one_or_none()
 
     @staticmethod
-    @optional_session
-    def find_by_path(path: pathlib.Path, session: Session = None) -> 'Collection':
+    def find_by_path(session: Session, path: pathlib.Path) -> 'Collection':
         """Find a Collection by its directory path, raises an exception if not found.
 
         @raise UnknownCollection: if the collection cannot be found
         """
-        if collection := Collection.get_by_path(path, session=session):
+        if collection := Collection.get_by_path(session, path):
             return collection
         raise UnknownCollection(f'Cannot find Collection with directory {path}')
 
@@ -798,9 +784,9 @@ class Collection(ModelHelper, Base):
         if tag_id_or_name is None:
             self.tag = None
         elif isinstance(tag_id_or_name, int):
-            self.tag = Tag.find_by_id(tag_id_or_name, session)
+            self.tag = Tag.find_by_id(session, tag_id_or_name)
         elif isinstance(tag_id_or_name, str):
-            self.tag = Tag.find_by_name(tag_id_or_name, session)
+            self.tag = Tag.find_by_name(session, tag_id_or_name)
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
@@ -873,7 +859,7 @@ class Collection(ModelHelper, Base):
         def change_download_destinations(from_directory: pathlib.Path, to_directory: pathlib.Path):
             """Update download destinations from one directory to another."""
             downloads = list(self.downloads)
-            downloads.extend(Download.get_all_by_destination(from_directory, session=session))
+            downloads.extend(Download.get_all_by_destination(session, from_directory))
             downloads = unique_by_predicate(downloads, lambda i: i.id)
             for download in downloads:
                 download.destination = to_directory
@@ -898,7 +884,7 @@ class Collection(ModelHelper, Base):
                 if send_events:
                     Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
             else:
-                await move_files(directory, *list(old_directory.iterdir()), session=session)
+                await move_files(session, directory, *list(old_directory.iterdir()))
                 if send_events:
                     Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
         except Exception as e:

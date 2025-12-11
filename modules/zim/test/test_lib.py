@@ -20,10 +20,10 @@ async def test_get_zim(async_client, test_session, zim_path_factory):
     zim_path_factory()
     await files_lib.refresh_files()
 
-    assert lib.get_zim(1)
+    assert lib.get_zim(test_session, 1)
 
     with pytest.raises(UnknownZim):
-        assert lib.get_zim(2)
+        assert lib.get_zim(test_session, 2)
 
 
 @pytest.mark.asyncio
@@ -54,15 +54,15 @@ async def test_zim_get_entry(async_client, test_session, zim_path_factory):
 async def test_zim_bad_entry(async_client, test_session, test_zim, tag_factory):
     tag1 = await tag_factory()
     with pytest.raises(UnknownZimEntry):
-        test_zim.tag_entry(tag1.name, 'path does not exist')
+        test_zim.tag_entry(test_session, tag1.name, 'path does not exist')
 
 
 @pytest.mark.asyncio
 async def test_zim_get_entries_tags(async_client, test_session, test_zim, tag_factory):
     tag1, tag2 = await tag_factory('tag1'), await tag_factory('tag2')
-    test_zim.tag_entry(tag1.name, 'one')
-    test_zim.tag_entry(tag2.name, 'one')
-    test_zim.tag_entry(tag1.name, 'two')
+    test_zim.tag_entry(test_session, tag1.name, 'one')
+    test_zim.tag_entry(test_session, tag2.name, 'one')
+    test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
 
     assert lib.get_entries_tags(['one', 'two', 'home'], 1) \
@@ -72,7 +72,7 @@ async def test_zim_get_entries_tags(async_client, test_session, test_zim, tag_fa
 @pytest.mark.asyncio
 async def test_tag_zim_entry_model(async_client, test_session, zim_factory, tag_factory):
     tag = await tag_factory()
-    tze = zim_factory('zim1').tag_entry(tag.name, 'one')
+    tze = zim_factory('zim1').tag_entry(test_session, tag.name, 'one')
     # Test TagZimEntry.__repr__
     assert repr(tze) == "<TagZimEntry tag='one' zim=zim1 zim_entry=one>"
 
@@ -83,21 +83,21 @@ async def test_zim_entries_with_tags(async_client, test_session, zim_factory, ta
     tag1, tag2 = await tag_factory(), await tag_factory()
     zim1, zim2 = zim_factory('zim1'), zim_factory('zim2')
     # Tag Zim1 with both tags, but Zim2 shares one of the tags and is returned when no Zim is passed.
-    zim1.tag_entry(tag1.name, 'one')
-    zim1.tag_entry(tag2.name, 'two')
-    zim2.tag_entry(tag2.name, 'home')
+    zim1.tag_entry(test_session, tag1.name, 'one')
+    zim1.tag_entry(test_session, tag2.name, 'two')
+    zim2.tag_entry(test_session, tag2.name, 'home')
     test_session.commit()
 
     # Get entries from zim1 only.
-    entries = zim1.entries_with_tags([tag1.name, ])
+    entries = zim1.entries_with_tags(test_session, [tag1.name, ])
     assert len(entries) == 1
     assert entries[0].path == 'one'
-    entries = zim1.entries_with_tags([tag2.name, ])
+    entries = zim1.entries_with_tags(test_session, [tag2.name, ])
     assert len(entries) == 1
     assert entries[0].path == 'two'
 
     # Get entries from any Zim.
-    entries = lib.Zim.entries_with_tags([tag2.name, ])
+    entries = lib.Zim.all_entries_with_tags(test_session, [tag2.name, ])
     assert {i.path for i in entries} == {'two', 'home'}, 'Tag2 was applied to `two` and `home`'
 
 
@@ -135,9 +135,9 @@ async def test_zim_tags_config(async_client, test_session, test_directory, test_
 
     # Tag three Zim entries.
     tag1, tag2 = await tag_factory('Tag1'), await tag_factory('Tag2')
-    test_zim.tag_entry(tag1.name, 'one')
-    test_zim.tag_entry(tag2.name, 'one')
-    test_zim.tag_entry(tag1.name, 'two')
+    test_zim.tag_entry(test_session, tag1.name, 'one')
+    test_zim.tag_entry(test_session, tag2.name, 'one')
+    test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
     await await_switches()
     # Tags are created in empty database.
@@ -151,7 +151,7 @@ async def test_zim_tags_config(async_client, test_session, test_directory, test_
     ]
 
     # Remove a tag, the config should change.
-    test_zim.untag_entry(tag1.name, 'one')
+    test_zim.untag_entry(test_session, tag1.name, 'one')
     test_session.commit()
     await await_switches()
 
@@ -186,7 +186,7 @@ def test_zim_all_entries(test_session, test_zim):
 @pytest.mark.asyncio
 async def test_zim_download(test_session, kiwix_download_zim, test_directory, test_zim_bytes, flags_lock,
                             await_switches):
-    await lib.subscribe('Wikipedia (with images)', 'es')
+    await lib.subscribe(test_session, 'Wikipedia (with images)', 'es')
 
     # Downloading the catalog should lead to a new Zim file being downloaded.
     await kiwix_download_zim(expected_url='https://download.kiwix.org/zim/wikipedia/wikipedia_es_all_maxi_2023-06.zim')
@@ -264,12 +264,12 @@ async def test_zim_tag_migration(await_switches, test_session, test_directory, z
     zim3 = zim_factory('wikipedia_en_all_maxi_2020-03.zim')  # The latest Zim.
     tag1, tag2 = await tag_factory('tag1'), await tag_factory('tag2')
     # Tag outdated Zim entries.
-    zim1.tag_entry(tag1.name, 'home')
-    zim1.tag_entry(tag2.name, 'one')
+    zim1.tag_entry(test_session, tag1.name, 'home')
+    zim1.tag_entry(test_session, tag2.name, 'one')
     # This should not be migrated.
-    zim2.tag_entry(tag2.name, 'two')
+    zim2.tag_entry(test_session, tag2.name, 'two')
     # Tag the latest Zim as well.
-    zim3.tag_entry(tag2.name, 'one')
+    zim3.tag_entry(test_session, tag2.name, 'one')
     test_session.commit()
     assert test_session.query(TagZimEntry).count() == 4
     await await_switches()
@@ -358,7 +358,7 @@ def test_zim_download_url_to_name(url, expected):
 @pytest.mark.asyncio
 async def test_zim_subscription_download_import(async_client, test_session):
     # Subscription creates a ZimSubscription and Download
-    await lib.subscribe('Wikisource', 'en', session=test_session)
+    await lib.subscribe(test_session, 'Wikisource', 'en')
     # Add a once-download.  This should not be associated with a ZimSubscription.
     test_session.add(
         Download(url='https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2021-03.zim', status='complete'))
@@ -376,7 +376,7 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
     for _ in range(1):  # Import twice.
         # Importing the config restores the Download and ZimSubscription.
-        await import_downloads_config(session=test_session)
+        await import_downloads_config(test_session)
         recurring, once = test_session.query(Download).order_by(Download.frequency)
         assert once.url == 'https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2021-03.zim'
         assert test_session.query(Download).count() == 2
@@ -404,7 +404,7 @@ async def test_zim_modeler(async_client, test_session, zim_factory):
     assert fg.model == 'zim'
 
 
-def test_get_custom_zims_directory(test_directory, test_wrolpi_config):
+def test_get_custom_zims_directory(async_client, test_directory, test_wrolpi_config):
     """Custom directory can be used for zims directory."""
     assert lib.get_zim_directory() == (test_directory / 'zims')
 

@@ -39,7 +39,7 @@ class TestDomainValidation:
             'name': 'example.com',
             'kind': 'domain',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         assert collection.name == 'example.com'
         assert collection.kind == 'domain'
         assert collection.directory is None
@@ -50,7 +50,7 @@ class TestDomainValidation:
             'kind': 'domain',
         }
         with pytest.raises(ValueError, match='Invalid domain name'):
-            Collection.from_config(invalid_config, session=test_session)
+            Collection.from_config(test_session, invalid_config)
 
         # Domain starting with dot should fail
         invalid_config2 = {
@@ -58,7 +58,7 @@ class TestDomainValidation:
             'kind': 'domain',
         }
         with pytest.raises(ValueError, match='Invalid domain name'):
-            Collection.from_config(invalid_config2, session=test_session)
+            Collection.from_config(test_session, invalid_config2)
 
         # Domain ending with dot should fail
         invalid_config3 = {
@@ -66,7 +66,7 @@ class TestDomainValidation:
             'kind': 'domain',
         }
         with pytest.raises(ValueError, match='Invalid domain name'):
-            Collection.from_config(invalid_config3, session=test_session)
+            Collection.from_config(test_session, invalid_config3)
 
     def test_from_config_allows_any_name_for_channel_kind(self, test_session: Session):
         """Test that channel kind does not enforce domain validation."""
@@ -75,7 +75,7 @@ class TestDomainValidation:
             'name': 'My Channel Without Dots',
             'kind': 'channel',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         assert collection.name == 'My Channel Without Dots'
         assert collection.kind == 'channel'
 
@@ -86,7 +86,7 @@ class TestDomainValidation:
             'kind': 'domain',
             'description': 'Archives from example.org',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.commit()
 
         assert collection.name == 'example.org'
@@ -101,7 +101,7 @@ class TestDomainValidation:
             'name': 'blog.example.com',
             'kind': 'domain',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.commit()
 
         assert collection.name == 'blog.example.com'
@@ -115,7 +115,7 @@ class TestDomainValidation:
             'kind': 'domain',
             'description': 'Initial description',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.commit()
         collection_id = collection.id
 
@@ -125,7 +125,7 @@ class TestDomainValidation:
             'kind': 'domain',
             'description': 'Updated description',
         }
-        updated = Collection.from_config(updated_config, session=test_session)
+        updated = Collection.from_config(test_session, updated_config)
         assert updated.id == collection_id
         assert updated.description == 'Updated description'
 
@@ -136,7 +136,7 @@ class TestDomainValidation:
             'kind': 'domain',
             'description': 'Test domain',
         }
-        collection = Collection.from_config(config, session=test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.commit()
 
         exported = collection.to_config()
@@ -157,8 +157,8 @@ class TestDomainValidation:
             'kind': 'channel',
         }
 
-        domain_coll = Collection.from_config(domain_config, session=test_session)
-        channel_coll = Collection.from_config(channel_config, session=test_session)
+        domain_coll = Collection.from_config(test_session, domain_config)
+        channel_coll = Collection.from_config(test_session, channel_config)
         test_session.commit()
 
         # Both should exist with different IDs
@@ -190,7 +190,7 @@ class TestDirectoryValidation:
 
         # Should raise ValidationError
         with pytest.raises(ValidationError, match="must be under media directory"):
-            Collection.from_config(config, test_session)
+            Collection.from_config(test_session, config)
 
     def test_from_config_accepts_relative_path(self, test_session, test_directory):
         """Test that from_config converts relative paths to absolute under media directory."""
@@ -202,7 +202,7 @@ class TestDirectoryValidation:
             'directory': 'archive/example.com'  # Relative path
         }
 
-        collection = Collection.from_config(config, test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.flush()
 
         # Should be converted to absolute path under media directory
@@ -223,7 +223,7 @@ class TestDirectoryValidation:
             'directory': str(valid_path)
         }
 
-        collection = Collection.from_config(config, test_session)
+        collection = Collection.from_config(test_session, config)
         test_session.flush()
 
         # Should accept the path

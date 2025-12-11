@@ -14,7 +14,7 @@ from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry, UnknownZim
 from wrolpi import dates, tags
 from wrolpi.common import Base, logger, get_relative_to_media_directory, ModelHelper
 from wrolpi.dates import TZDateTime
-from wrolpi.db import optional_session, get_db_curs
+from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -100,31 +100,27 @@ class Zim(Base, ModelHelper):
         return zim
 
     @staticmethod
-    @optional_session
-    def get_by_path(path: pathlib.Path, session: Session = None) -> Optional['Zim']:
+    def get_by_path(session: Session, path: pathlib.Path) -> Optional['Zim']:
         zim = session.query(Zim).filter_by(path=path).one_or_none()
         return zim
 
     @staticmethod
-    @optional_session
-    def find_by_path(path: pathlib.Path, session: Session = None) -> 'Zim':
-        zim = Zim.get_by_path(path, session=session)
+    def find_by_path(session: Session, path: pathlib.Path) -> 'Zim':
+        zim = Zim.get_by_path(session, path)
         if not zim:
             raise UnknownZim(f'Cannot find zim at path')
         return zim
 
     @staticmethod
-    @optional_session
-    def get_by_id(zim_id: int, session: Session = None) -> Optional['Zim']:
-        zim = session.query(Zim).filter_by(id=zim_id).one_or_none()
+    def get_by_id(session: Session, id_: int) -> Optional['Zim']:
+        zim = session.query(Zim).filter_by(id=id_).one_or_none()
         return zim
 
     @staticmethod
-    @optional_session
-    def find_by_id(zim_id: int, session: Session = None) -> 'Zim':
-        zim = Zim.get_by_id(zim_id, session=session)
+    def find_by_id(session: Session, id_: int) -> 'Zim':
+        zim = Zim.get_by_id(session, id_)
         if not zim:
-            raise UnknownZim(f'Cannot find zim with ID {zim_id}')
+            raise UnknownZim(f'Cannot find zim with ID {id_}')
         return zim
 
     def get_zim(self) -> Archive:
@@ -149,7 +145,7 @@ class Zim(Base, ModelHelper):
         return False
 
     @staticmethod
-    def do_model(file_group: FileGroup, session: Session) -> 'Zim':
+    def do_model(session: Session, file_group: FileGroup) -> 'Zim':
         from modules.zim.lib import model_zim
         zim = model_zim(file_group, session)
         return zim
@@ -226,26 +222,23 @@ class Zim(Base, ModelHelper):
 
         raise UnknownZimEntry(f'Cannot find entry at {path=}')
 
-    def tag_entry(self, tag_id_or_name: int | str, zim_entry: str) -> 'TagZimEntry':
+    def tag_entry(self, session: Session, tag_id_or_name: int | str, zim_entry: str) -> 'TagZimEntry':
         """Create a TagZimEntry for this Zim at the provided entry (path) for the provided Tag."""
-        session = Session.object_session(self)
-
         # Ensure the entry exists.
         self.find_entry(zim_entry)
 
-        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
+        tag = Tag.get_by_name(session, tag_id_or_name) if isinstance(tag_id_or_name, str) \
             else Tag.get_by_id(tag_id_or_name, session)
         tag_zim_entry = TagZimEntry(tag=tag, zim=self, zim_entry=zim_entry)
         session.add(tag_zim_entry)
         tags.save_tags_config.activate_switch()
         return tag_zim_entry
 
-    def untag_entry(self, tag_id_or_name: int | str, zim_entry: str):
+    def untag_entry(self, session: Session, tag_id_or_name: int | str, zim_entry: str):
         """Removes any TagZimEntry of the Zim entry at the provided path for the provided Tag.
 
         @raise UnknownZimTagEntry: No entry exists to remove."""
-        session = Session.object_session(self)
-        tag = Tag.get_by_name(tag_id_or_name, session) if isinstance(tag_id_or_name, str) \
+        tag = Tag.get_by_name(session, tag_id_or_name) if isinstance(tag_id_or_name, str) \
             else Tag.get_by_id(tag_id_or_name, session)
         tag_zim_entry = TagZimEntry.get_by_primary_keys(tag.id, self.id, zim_entry, session)
         if tag_zim_entry:
@@ -274,23 +267,23 @@ class Zim(Base, ModelHelper):
 
         return entries
 
-    @optional_session
-    def entries_with_tags(*args, session: Session = None, **kwargs) -> List[Entry]:
+    def entries_with_tags(self, session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) -> List[
+        Entry]:
         """Return Zim Entries tagged with the provided names."""
-        limit = int(kwargs.pop('limit', 10))
-        offset = int(kwargs.pop('offset', 0))
-        args = list(args)
-
-        zim: Zim | None = args.pop(0) if isinstance(args[0], Zim) else None
-        zim_id = zim.id if zim else None
-        tag_names: List[str] = args.pop(0)
-
         if limit < 1:
             raise RuntimeError('Limit must be greater than zero')
-        if args:
-            raise RuntimeError('Extra unknown arguments')
 
-        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=zim_id)
+        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=self.id)
+        entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
+        return entries
+
+    @staticmethod
+    def all_entries_with_tags(session: Session, tag_names: List[str], limit: int = 10, offset: int = 0) -> List[Entry]:
+        """Return Zim Entries tagged with the provided names from ALL Zims."""
+        if limit < 1:
+            raise RuntimeError('Limit must be greater than zero')
+
+        tags_sub_select, params = tag_names_to_zim_sub_select(tag_names, zim_id=None)
         entries = Zim._entries_with_tags_process(limit, offset, params, session, tags_sub_select)
         return entries
 
@@ -321,8 +314,7 @@ class Zims:
     """Convenience class which searches all known Zim files."""
 
     @staticmethod
-    @optional_session
-    def get_all(session: Session = None) -> List[Zim]:
+    def get_all(session: Session) -> List[Zim]:
         """Returns all Zim records."""
         zims = list()
         for zim in session.query(Zim).order_by(Zim.path):
@@ -335,9 +327,8 @@ class Zims:
         return zims
 
     @classmethod
-    @optional_session
-    def estimate(cls, search_str: str, session: Session = None) -> OrderedDictType[Zim, int]:
-        zims = cls.get_all(session=session)
+    def estimate(cls, session: Session, search_str: str) -> OrderedDictType[Zim, int]:
+        zims = cls.get_all(session)
         results = OrderedDict()
         for zim in zims:
             if zim.auto_search:
@@ -345,12 +336,11 @@ class Zims:
         return results
 
     @classmethod
-    @optional_session
-    def entries_with_tags(cls, tag_names: List[str], session: Session = None) -> OrderedDictType[Zim, int]:
-        zims = cls.get_all(session=session)
+    def entries_with_tags(cls, session: Session, tag_names: List[str]) -> OrderedDictType[Zim, int]:
+        zims = cls.get_all(session)
         results = OrderedDict()
         for zim in zims:
-            results[zim] = len(zim.entries_with_tags(tag_names, session=session))
+            results[zim] = len(zim.entries_with_tags(session, tag_names))
         return results
 
 
@@ -408,10 +398,10 @@ class ZimSubscription(Base):
         )
         return d
 
-    def change_download(self, url: str, frequency: int, session: Session):
+    def change_download(self, session: Session, url: str, frequency: int):
         # A Zim file is found using the KiwixCatalogDownloader, then handled by the KiwixZimDownloader.
         old_url = self.download.url if self.download else url
-        download = download_manager.get_or_create_download(old_url, session=session, reset_attempts=True)
+        download = download_manager.get_or_create_download(session, old_url, reset_attempts=True)
         download.url = url
         download.frequency = frequency
         download.downloader = 'kiwix_catalog'
@@ -423,8 +413,7 @@ class ZimSubscription(Base):
         return download
 
     @staticmethod
-    @optional_session
-    def get_or_create(name: str, session: Session = None) -> 'ZimSubscription':
+    def get_or_create(session: Session, name: str) -> 'ZimSubscription':
         subscription = session.query(ZimSubscription).filter_by(name=name).one_or_none()
         if subscription:
             return subscription

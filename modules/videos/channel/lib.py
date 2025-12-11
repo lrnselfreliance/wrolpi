@@ -9,7 +9,7 @@ from wrolpi import flags
 from wrolpi.collections import Collection
 from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
-from wrolpi.db import get_db_curs, optional_session, get_db_session
+from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, RefreshConflict
 from wrolpi.tags import Tag
@@ -53,7 +53,6 @@ async def get_minimal_channels() -> List[dict]:
 COD = Union[dict, Channel]
 
 
-@optional_session
 def get_channel(session: Session, *, channel_id: int = None, source_id: str = None, url: str = None,
                 directory: str = None, name: str = None, return_dict: bool = True) -> COD:
     """
@@ -92,10 +91,9 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
     return channel
 
 
-@optional_session
 async def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
-    channel = Channel.find_by_id(channel_id, session)
+    channel = Channel.find_by_id(session, channel_id)
 
     # Verify that the URL/Name/directory aren't taken
     check_for_channel_conflicts(
@@ -132,7 +130,6 @@ async def update_channel(session: Session, *, data: schema.ChannelPutRequest, ch
     return channel
 
 
-@optional_session
 def create_channel(session: Session, data: schema.ChannelPostRequest, return_dict: bool = True) -> Union[Channel, dict]:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
@@ -176,9 +173,8 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
     return channel.dict() if return_dict else channel
 
 
-@optional_session(commit=True)
 def delete_channel(session: Session, *, channel_id: int):
-    channel = Channel.find_by_id(channel_id, session=session)
+    channel = Channel.find_by_id(session, channel_id)
 
     channel_dict = channel.dict()
     channel.delete_with_videos()
@@ -188,8 +184,7 @@ def delete_channel(session: Session, *, channel_id: int):
     return channel_dict
 
 
-@optional_session
-async def search_channels_by_name(name: str, limit: int = 5, session: Session = None,
+async def search_channels_by_name(session: Session, name: str, limit: int = 5,
                                   order_by_video_count: bool = False) -> List[Channel]:
     name = name or ''
     name_no_spaces = ''.join(name.split(' '))
@@ -222,8 +217,8 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
 async def create_channel_download(channel_id: int, url: str, frequency: int, settings: dict):
     """Create Download for Channel."""
     with get_db_session(commit=True) as session:
-        channel = Channel.find_by_id(channel_id, session=session)
-        download = channel.get_or_create_download(url, frequency, session, reset_attempts=True)
+        channel = Channel.find_by_id(session, channel_id)
+        download = channel.get_or_create_download(session, url, frequency, reset_attempts=True)
         download.settings = settings
 
     save_channels_config.activate_switch()
@@ -237,8 +232,8 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     """Fetch Channel's Download, update its properties."""
     with get_db_session(commit=True) as session:
         # Ensure that the Channel exists.
-        Channel.find_by_id(channel_id, session=session)
-        download = Download.find_by_id(download_id, session=session)
+        Channel.find_by_id(session, channel_id)
+        download = Download.find_by_id(session, download_id)
         download.url = url
         download.frequency = frequency
         download.settings = settings
@@ -253,8 +248,7 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
 
 
 @wrol_mode_check
-@optional_session
-async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, channel_id: int, session: Session = None):
+async def tag_channel(session: Session, tag_name: str | None, directory: pathlib.Path | None, channel_id: int):
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
@@ -262,7 +256,7 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
     if directory and flags.refreshing.is_set():
         raise RefreshConflict('Refusing to move channel while file refresh is in progress')
 
-    channel = Channel.find_by_id(channel_id, session)
+    channel = Channel.find_by_id(session, channel_id)
 
     # May also clear the tag if `tag_name` is None.
     channel.set_tag(tag_name)
@@ -287,8 +281,7 @@ async def tag_channel(tag_name: str | None, directory: pathlib.Path | None, chan
         save_channels_config.activate_switch()
 
 
-@optional_session
-async def search_channels(tag_names: List[str], session: Session) -> List[Channel]:
+async def search_channels(session: Session, tag_names: List[str]) -> List[Channel]:
     """Search Tagged Channels."""
     channels = session.query(Channel).join(Collection).join(Tag).filter(Tag.name.in_(tag_names)).all()
     return channels

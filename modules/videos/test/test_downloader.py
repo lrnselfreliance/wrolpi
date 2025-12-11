@@ -98,7 +98,7 @@ async def test_download_no_channel(test_session, video_download_manager, test_di
     mock_video_extract_info.return_value = info_json
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-        video_download_manager.create_download(url, video_downloader.name)
+        video_download_manager.create_download(test_session, url, video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
 
     mock_video_process_runner.assert_called_once()
@@ -119,7 +119,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
         settings = dict(tag_names=[tag1.name, tag2.name])
-        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
         await video_download_manager.wait_for_all_downloads()
 
     mock_video_process_runner.assert_called_once()
@@ -141,7 +141,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
     mock_video_extract_info.return_value = example_channel_json
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        simple_channel.get_or_create_download(url, 60, test_session)
+        simple_channel.get_or_create_download(test_session, url, 60)
         # Download channel.
         await video_download_manager.wait_for_all_downloads()
         # Download videos.
@@ -166,7 +166,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        download = simple_channel.get_or_create_download(url, 60, test_session)
+        download = simple_channel.get_or_create_download(test_session, url, 60)
         download.frequency = 100
         download.settings = {'title_include': '2'}
         await video_download_manager.wait_for_all_downloads()
@@ -184,7 +184,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
     test_session.commit()
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        download = simple_channel.get_or_create_download(url, 60, test_session)
+        download = simple_channel.get_or_create_download(test_session, url, 60)
         download.frequency = 100
         download.settings = {'title_exclude': '2'}
         await video_download_manager.wait_for_all_downloads()
@@ -233,30 +233,30 @@ async def test_get_or_create_channel(async_client, test_session, test_directory,
         (dict(name='qux'), c4),
     ]
     for kwargs, expected in tests:
-        channel = get_or_create_channel(**kwargs)
+        channel = get_or_create_channel(test_session, **kwargs)
         assert expected.id == channel.id, f'Expected {expected} for {kwargs} but got {channel}'
 
     # A new channel is created.  It will not be automatically downloaded.
-    channel = get_or_create_channel(source_id='quux', name='quux', url='https://example.org')
+    channel = get_or_create_channel(test_session, source_id='quux', name='quux', url='https://example.org')
     assert channel.id == 5
     assert channel.source_id == 'quux'
     assert channel.name == 'quux'
     assert channel.url == 'https://example.org'
 
     # New channel can be retrieved.
-    assert get_or_create_channel(source_id='quux') == channel
+    assert get_or_create_channel(test_session, source_id='quux') == channel
 
     # A Channel can be created with a tag name.
-    channel = get_or_create_channel(name='One Channel', tag_name=one.name)
+    channel = get_or_create_channel(test_session, name='One Channel', tag_name=one.name)
     await await_switches()
     assert channel.directory == test_directory / f'videos/one/One Channel'
     assert channel.tag_name == one.name and channel.tag == one
 
     # Getting the same Channel will not change the tag.
-    channel = get_or_create_channel(name='One Channel', tag_name=two.name)
+    channel = get_or_create_channel(test_session, name='One Channel', tag_name=two.name)
     assert channel.directory == test_directory / f'videos/one/One Channel'
     assert channel.tag_name == one.name and channel.tag == one
-    channel = get_or_create_channel(name='One Channel')
+    channel = get_or_create_channel(test_session, name='One Channel')
     assert channel.directory == test_directory / f'videos/one/One Channel'
     assert channel.directory.is_dir()
     assert channel.tag_name == one.name and channel.tag == one
@@ -275,7 +275,7 @@ def test_bad_downloader(test_session, video_download_manager):
     Attempting to use an unknown downloader should raise an error.
     """
     with pytest.raises(InvalidDownload):
-        video_download_manager.create_download('https://example.com', downloader_name='bad downloader')
+        video_download_manager.create_download(test_session, 'https://example.com', downloader_name='bad downloader')
 
 
 @pytest.mark.asyncio
@@ -303,7 +303,7 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
-        video_download_manager.create_download(url, video_downloader.name)
+        video_download_manager.create_download(test_session, url, video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
 
         mock_video_process_runner.assert_called_once()
@@ -338,7 +338,7 @@ async def test_download_result(test_session, test_directory, video_download_mana
     mock_video_extract_info.return_value = example_video_json
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = [video_file, {'id': 'foo'}]
-        video_download_manager.create_download('https://example.com', video_downloader.name)
+        video_download_manager.create_download(test_session, 'https://example.com', video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
         # Sleep to allow background tasks to finish.
         await asyncio.sleep(1)
@@ -362,7 +362,7 @@ async def test_download_destination(test_session, test_directory, video_download
     # This result will be ignored during the test, we just need some value so the download does not fail.
     mock_video_prepare_filename.return_value = str(test_directory / 'test video.mp4')
 
-    video_download_manager.create_download('https://example.com/1', downloader_name=VideoDownloader.name)
+    video_download_manager.create_download(test_session, 'https://example.com/1', downloader_name=VideoDownloader.name)
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the channel directory.
     assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default'] \
@@ -370,7 +370,7 @@ async def test_download_destination(test_session, test_directory, video_download
 
     mock_video_prepare_filename.reset_mock()
 
-    video_download_manager.create_download('https://example.com/2', downloader_name=VideoDownloader.name,
+    video_download_manager.create_download(test_session, 'https://example.com/2', downloader_name=VideoDownloader.name,
                                            destination=f'{test_directory}/custom')
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the custom directory specified.
@@ -446,7 +446,8 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
     """All videos in a playlist can be downloaded for it's Channel."""
     download = Download(url='https://example.com/playlist-url')
     test_session.add(download)
-    channel = get_or_create_channel(example_playlist_json['channel_id'], download.url, example_channel_json['uploader'])
+    channel = get_or_create_channel(test_session, source_id=example_playlist_json['channel_id'], url=download.url,
+                                    name=example_channel_json['uploader'])
     video = Video.from_paths(test_session, video_file)
     video.channel_id = channel.id
     video.source_id = 'video 1 id'
@@ -577,7 +578,7 @@ async def test_video_download_cookies(test_session, test_directory, mock_video_e
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
-        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
         await video_download_manager.wait_for_all_downloads()
 
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
@@ -604,7 +605,7 @@ async def test_video_download_always_use_cookies(test_session, test_directory, m
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
-        video_download_manager.create_download(url, video_downloader.name)
+        video_download_manager.create_download(test_session, url, video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
 
         download, cmd, out_dir = mock_video_process_runner.call_args[0]

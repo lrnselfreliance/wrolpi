@@ -11,7 +11,7 @@ from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html
-from wrolpi.db import optional_session, get_db_session
+from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
@@ -36,8 +36,7 @@ class ArchiveDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<ArchiveDownloader>'
 
-    @optional_session
-    def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
+    def already_downloaded(self, session: Session, *urls: List[str]) -> List:
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
         return file_groups
 
@@ -57,7 +56,7 @@ class ArchiveDownloader(Downloader, ABC):
             archive_id = archive.id
 
         with get_db_session() as session:
-            archive = Archive.find_by_id(archive_id, session)
+            archive = Archive.find_by_id(session, archive_id)
             need_commit = False
             if tag_names := download.tag_names:
                 for name in tag_names:
@@ -107,7 +106,7 @@ class ArchiveDownloader(Downloader, ABC):
 archive_downloader = ArchiveDownloader()
 
 
-def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
+def model_archive(session: Session, file_group: FileGroup) -> Archive:
     """
     Models an Archive from a given FileGroup.
 
@@ -117,8 +116,8 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
     (title, contents) from either the JSON or text readability files.
 
     Args:
+        session: Database session.
         file_group: The FileGroup to model as an Archive.
-        session: An optional database session for committing changes.
 
     Returns:
         An Archive object representing the modeled archive.
@@ -289,7 +288,7 @@ async def archive_modeler():
                                 raise
                     else:
                         try:
-                            model_archive(file_group, session=session)
+                            model_archive(session, file_group)
                             # Successfully modeled, mark as indexed
                             file_group.indexed = True
                         except InvalidArchive:

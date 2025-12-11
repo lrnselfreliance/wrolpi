@@ -28,8 +28,8 @@ def get_brands(_: Request):
 
 
 @inventory_bp.get('/')
-def get_inventories(_: Request):
-    inventories = inventory.get_inventories()
+def get_inventories(request: Request):
+    inventories = inventory.get_inventories(request.ctx.session)
     return json_response(dict(inventories=inventories))
 
 

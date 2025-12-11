@@ -119,6 +119,36 @@ def json_error_handler(request: Request, exception: Exception):
 
 api_app.error_handler.add(Exception, json_error_handler)
 
+
+@api_app.middleware('request')
+async def inject_session(request: Request):
+    """Inject a database session into the request context."""
+    from wrolpi.db import get_db_context
+    engine, session = get_db_context()
+    request.ctx.session = session
+    request.ctx._db_engine = engine
+
+
+@api_app.middleware('response')
+async def cleanup_session(request: Request, response_: HTTPResponse):
+    """Cleanup session after request completes."""
+    if hasattr(request.ctx, 'session'):
+        session = request.ctx.session
+        try:
+            if response_.status < 400:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            # Don't close session during tests - the test_session fixture manages it.
+            if not PYTEST:
+                session.close()
+    return response_
+
+
 PERPETUAL_WORKERS = list()
 
 

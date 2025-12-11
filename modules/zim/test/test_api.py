@@ -12,9 +12,9 @@ from wrolpi.downloader import Download
 async def test_zim_search(async_client, test_session, test_zim, tag_factory, assert_zim_search):
     """Entries can be tagged and retrieved using their containing Zim."""
     tag1, tag2 = await tag_factory(), await tag_factory()
-    test_zim.tag_entry(tag1.name, 'one')
-    test_zim.tag_entry(tag2.name, 'one')
-    test_zim.tag_entry(tag1.name, 'two')
+    test_zim.tag_entry(test_session, tag1.name, 'one')
+    test_zim.tag_entry(test_session, tag2.name, 'one')
+    test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
 
     # Test searching with only `search_str`.
@@ -83,18 +83,18 @@ async def test_zim_search(async_client, test_session, test_zim, tag_factory, ass
 async def test_entries_by_tag(async_client, test_session, test_zim, tag_factory):
     """Entries can be tagged and retrieved using their containing Zim."""
     tag1, tag2 = await tag_factory(), await tag_factory()
-    test_zim.tag_entry(tag1.name, 'one')
-    test_zim.tag_entry(tag2.name, 'one')
-    test_zim.tag_entry(tag1.name, 'two')
+    test_zim.tag_entry(test_session, tag1.name, 'one')
+    test_zim.tag_entry(test_session, tag2.name, 'one')
+    test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
 
-    result = test_zim.entries_with_tags([tag1.name, tag2.name])
+    result = test_zim.entries_with_tags(test_session, [tag1.name, tag2.name])
     assert [(i.path, i.title) for i in result] == [('one', 'One'), ]
 
-    result = test_zim.entries_with_tags([tag1.name, ])
+    result = test_zim.entries_with_tags(test_session, [tag1.name, ])
     assert [(i.path, i.title) for i in result] == [('one', 'One'), ('two', 'Two')]
 
-    result = test_zim.entries_with_tags([tag2.name, ])
+    result = test_zim.entries_with_tags(test_session, [tag2.name, ])
     assert [(i.path, i.title) for i in result] == [('one', 'One'), ]
 
 

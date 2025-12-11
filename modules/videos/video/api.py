@@ -78,13 +78,14 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def video_delete(_: Request, video_ids: str):
+async def video_delete(request: Request, video_ids: str):
     try:
         video_ids = [int(i) for i in str(video_ids).split(',')]
     except Exception:
         raise ValidationError('Unable to parse video ids')
 
-    lib.delete_videos(*video_ids)
+    session = request.ctx.session
+    lib.delete_videos(session, *video_ids)
 
     save_channels_config.activate_switch()
     Events.send_deleted(f'Deleted {len(video_ids)} videos')

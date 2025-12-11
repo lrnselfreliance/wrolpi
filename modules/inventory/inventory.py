@@ -7,7 +7,7 @@ import psycopg2
 from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, Base
-from wrolpi.db import get_db_session, get_db_curs, optional_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import APIError
 from .models import Inventory, Item
 
@@ -85,8 +85,7 @@ DEFAULT_INVENTORIES = [
 sort_categories = partial(sorted, key=itemgetter(1, 0))
 
 
-@optional_session
-def get_inventories(session: Session = None) -> List[Inventory]:
+def get_inventories(session: Session) -> List[Inventory]:
     inventories = session.query(Inventory).filter(
         Inventory.deleted_at == None,  # noqa
     ).order_by(

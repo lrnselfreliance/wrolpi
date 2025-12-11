@@ -8,7 +8,6 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi import lang
 from wrolpi.api_utils import json_response
 from wrolpi.common import logger
-from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from . import lib, schema
@@ -24,12 +23,12 @@ logger = logger.getChild(__name__)
     summary='List all known Zim files',
     response=schema.GetZimsResponse,
 )
-async def get_zims(_: Request):
-    with get_db_session() as session:
-        zims = lib.get_zims(session=session)
-        resp = {
-            'zims': [i.__json__() for i in zims],
-        }
+async def get_zims(request: Request):
+    session = request.ctx.session
+    zims = lib.get_zims(session)
+    resp = {
+        'zims': [i.__json__() for i in zims],
+    }
     return json_response(resp)
 
 
@@ -37,9 +36,11 @@ async def get_zims(_: Request):
 @openapi.definition(
     summary='Delete all Zim files',
 )
-async def delete_zims(_: Request, zim_ids: str):
+async def delete_zims(request: Request, zim_ids: str):
+    session = request.ctx.session
+
     zim_ids = [int(i) for i in zim_ids.split(',')]
-    lib.delete_zims(zim_ids)
+    lib.delete_zims(session, zim_ids)
     return response.empty()
 
 
@@ -49,9 +50,10 @@ async def delete_zims(_: Request, zim_ids: str):
     body=schema.ZimAutoSearchRequest,
 )
 @validate(schema.ZimAutoSearchRequest)
-async def post_set_zim_auto_search(_: Request, zim_id: int, body: schema.ZimAutoSearchRequest):
+async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.ZimAutoSearchRequest):
+    session = request.ctx.session
     zim_id = int(zim_id)
-    lib.set_zim_auto_search(zim_id, body.auto_search)
+    lib.set_zim_auto_search(session, zim_id, body.auto_search)
     return response.empty()
 
 
@@ -62,8 +64,9 @@ async def post_set_zim_auto_search(_: Request, zim_id: int, body: schema.ZimAuto
     response=schema.ZimSearchResponse,
 )
 @validate(schema.ZimSearchRequest)
-async def search_zim(_: Request, zim_id: int, body: schema.ZimSearchRequest):
-    headlines = lib.headline_zim(body.search_str, zim_id, tag_names=body.tag_names, offset=body.offset,
+async def search_zim(request: Request, zim_id: int, body: schema.ZimSearchRequest):
+    session = request.ctx.session
+    headlines = lib.headline_zim(session, body.search_str, zim_id, tag_names=body.tag_names, offset=body.offset,
                                  limit=body.limit)
     return json_response({'zim': headlines})
 
@@ -92,8 +95,10 @@ async def get_zim_entry(_: Request, zim_id: int, zim_path: str):
     body=schema.TagZimEntry,
 )
 @validate(schema.TagZimEntry)
-async def post_zim_tag(_: Request, body: schema.TagZimEntry):
-    await lib.add_tag(body.tag_name, body.zim_id, body.zim_entry)
+async def post_zim_tag(request: Request, body: schema.TagZimEntry):
+    session = request.ctx.session
+
+    await lib.add_tag(session, body.tag_name, body.zim_id, body.zim_entry)
     return response.empty(HTTPStatus.CREATED)
 
 
@@ -103,8 +108,10 @@ async def post_zim_tag(_: Request, body: schema.TagZimEntry):
     body=schema.TagZimEntry,
 )
 @validate(schema.TagZimEntry)
-async def post_zim_untag(_: Request, body: schema.TagZimEntry):
-    await lib.untag(body.tag_name, body.zim_id, body.zim_entry)
+async def post_zim_untag(request: Request, body: schema.TagZimEntry):
+    session = request.ctx.session
+
+    await lib.untag(session, body.tag_name, body.zim_id, body.zim_entry)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -113,10 +120,10 @@ async def post_zim_untag(_: Request, body: schema.TagZimEntry):
     summary='Retrieve Zim subscriptions',
     response=schema.ZimSubscriptions,
 )
-async def get_zim_subscriptions(_: Request):
+async def get_zim_subscriptions(request: Request):
     catalog = lib.get_kiwix_catalog()
-    with get_db_session() as session:
-        subscriptions = {i: j.__json__() for i, j in lib.get_kiwix_subscriptions(session).items()}
+    session = request.ctx.session
+    subscriptions = {i: j.__json__() for i, j in lib.get_kiwix_subscriptions(session).items()}
     resp = dict(
         catalog=catalog,
         iso_639_codes=lang.ISO_639_CODES,
@@ -131,8 +138,10 @@ async def get_zim_subscriptions(_: Request):
     body=schema.ZimSubscribeRequest,
 )
 @validate(schema.ZimSubscribeRequest)
-async def post_zim_subscribe(_: Request, body: schema.ZimSubscribeRequest):
-    await lib.subscribe(body.name, body.language)
+async def post_zim_subscribe(request: Request, body: schema.ZimSubscribeRequest):
+    session = request.ctx.session
+
+    await lib.subscribe(session, body.name, body.language)
     if download_manager.disabled or download_manager.stopped:
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
@@ -144,8 +153,10 @@ async def post_zim_subscribe(_: Request, body: schema.ZimSubscribeRequest):
 @openapi.definition(
     summary='Unsubscribe to a particular Kiwix Zim',
 )
-async def delete_zim_subscription(_: Request, subscription_id: int):
-    await lib.unsubscribe(subscription_id)
+async def delete_zim_subscription(request: Request, subscription_id: int):
+    session = request.ctx.session
+
+    await lib.unsubscribe(session, subscription_id)
     Events.send_deleted(f'Zim subscription deleted')
     return response.empty(HTTPStatus.NO_CONTENT)
 
@@ -175,16 +186,18 @@ async def delete_outdated_zims(_: Request):
 
 @zim_bp.post('/search_estimates')
 @validate(json=schema.SearchEstimateRequest)
-async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
+async def post_search_estimates(request: Request, body: schema.SearchEstimateRequest):
     """Get an estimated count of FileGroups/Zims which may or may not have been tagged."""
 
     if not body.search_str and not body.tag_names:
         return response.empty(HTTPStatus.BAD_REQUEST)
 
+    session = request.ctx.session
+
     if body.tag_names:
         # Get actual count of entries tagged with the tag names.
         zims_estimates = list()
-        for zim, count in Zims.entries_with_tags(body.tag_names).items():
+        for zim, count in Zims.entries_with_tags(session, body.tag_names).items():
             d = dict(
                 estimate=count,
                 **zim.__json__(),
@@ -193,7 +206,7 @@ async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
     else:
         # Get estimates using libzim.
         zims_estimates = list()
-        for zim, estimate in Zims.estimate(body.search_str).items():
+        for zim, estimate in Zims.estimate(session, body.search_str).items():
             d = dict(
                 estimate=estimate,
                 **zim.__json__(),

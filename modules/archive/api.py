@@ -5,10 +5,10 @@ from http import HTTPStatus
 from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
-from sqlalchemy.orm import Session
 
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
+from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
@@ -25,8 +25,9 @@ logger = logger.getChild(__name__)
 @archive_bp.get('/<archive_id:int>')
 @openapi.description('Get an archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_archive(_: Request, archive_id: int):
-    archive = lib.get_archive(archive_id=archive_id)
+async def get_archive(request: Request, archive_id: int):
+    session = request.ctx.session
+    archive = lib.get_archive(session, archive_id)
     archive_file_group = archive.file_group.__json__()
     history = [i.file_group.__json__() for i in archive.history]
     return json_response({'file_group': archive_file_group, 'history': history})
@@ -115,12 +116,12 @@ async def singlefile_upload_switch_handler(url=None):
     logger.info(f'Created Archive from upload ({q_size}): {archive}')
     Events.send_archive_uploaded(f'Created Archive from upload: {name}', url=archive.location)
     url = archive.file_group.url
-    if url and (download := Download.get_by_url(url)):
-        if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
-            # Download was attempted and failed, user manually archived the URL.
-            download.complete()
-            download.location = archive.location
-            Session.object_session(download).commit()
+    with get_db_session(commit=True) as session:
+        if url and (download := Download.get_by_url(session, url)):
+            if (download.is_failed or download.is_deferred) and download.downloader == ArchiveDownloader.name:
+                # Download was attempted and failed, user manually archived the URL.
+                download.complete()
+                download.location = archive.location
 
     # Call this function again so any new singlefiles can be archived.
     singlefile_upload_switch_handler.activate_switch()
@@ -154,9 +155,10 @@ async def generate_screenshot_switch_handler(archive_id=None):
     try:
         await lib.generate_archive_screenshot(archive_id)
         # Always send success event since exceptions are raised on failure
-        archive = lib.get_archive(archive_id=archive_id)
-        location = archive.location
-        name = archive.file_group.title or archive.file_group.url
+        with get_db_session() as session:
+            archive = lib.get_archive(session, archive_id)
+            location = archive.location
+            name = archive.file_group.title or archive.file_group.url
         logger.info(f'Generated screenshot for Archive ({q_size}): {archive_id}')
         Events.send_screenshot_generated(f'Generated screenshot for: {name}', url=location)
     except Exception as e:
@@ -196,11 +198,12 @@ async def post_upload_singlefile(request: Request):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-async def post_generate_screenshot(_: Request, archive_id: int):
+async def post_generate_screenshot(request: Request, archive_id: int):
     """Queue a screenshot generation request for an Archive."""
+    session = request.ctx.session
     # Verify archive exists
     try:
-        archive = lib.get_archive(archive_id=archive_id)
+        archive = lib.get_archive(session, archive_id)
     except Exception:
         return json_response({'error': f'Archive {archive_id} not found'}, status=HTTPStatus.NOT_FOUND)
 

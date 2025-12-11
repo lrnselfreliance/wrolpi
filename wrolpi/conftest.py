@@ -148,8 +148,11 @@ async def background_task_listener(request, response):
 
 
 @pytest.fixture
-async def async_client(test_directory) -> SanicASGITestClient:
-    """Get an Async Sanic Test Client with all default routes attached."""
+async def async_client(test_directory, test_session) -> SanicASGITestClient:
+    """Get an Async Sanic Test Client with all default routes attached.
+
+    Depends on test_session to ensure the database mock is in place for session middleware.
+    """
     api_app.signalize()
     attach_shared_contexts(api_app)
     initialize_configs_contexts(api_app)
@@ -414,6 +417,7 @@ def make_files_structure(test_directory) -> Callable[[Union[List[Union[pathlib.P
 
     def create_files(paths: Union[List, Dict], file_groups: bool = False, session: Session = None) \
             -> List[pathlib.Path]:
+        # Note: session is optional here for backwards compatibility - file_groups=True requires session
         files = []
 
         @iterify(list)
@@ -534,7 +538,7 @@ def tag_factory(test_session) -> Callable[[Optional[str]], Awaitable[Tag]]:
     async def factory(name: str = None) -> Tag:
         if not name:
             name = names.pop(0)
-        tag = await upsert_tag(name, f'#{str(count) * 6}', session=test_session)
+        tag = await upsert_tag(test_session, name, f'#{str(count) * 6}')
         return tag
 
     return factory

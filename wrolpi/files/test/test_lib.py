@@ -86,7 +86,7 @@ async def test_delete_file_names(async_client, test_session, make_files_structur
     foo_fg = FileGroup.from_paths(test_session, foo)
     foo1_fg = FileGroup.from_paths(test_session, foo1)
     tag = await tag_factory()
-    foo1_fg.add_tag(tag.id)
+    foo1_fg.add_tag(test_session, tag.id)
     test_session.commit()
     assert foo.is_file()
     assert foo1.is_file()
@@ -114,7 +114,7 @@ async def test_delete_tagged(await_switches, test_session, make_files_structure,
     await lib.refresh_files()
     # Both files end up in a group.
     bar = test_session.query(FileGroup).one()
-    bar.add_tag(tag.id)
+    bar.add_tag(test_session, tag.id)
     await await_switches()
     test_session.commit()
 
@@ -381,7 +381,7 @@ async def test_file_group_tag(test_session, make_files_structure, test_directory
     one = await tag_factory()
 
     foo: FileGroup = test_session.query(FileGroup).one()
-    foo.add_tag(one.id)
+    foo.add_tag(test_session, one.id)
     test_session.commit()
 
     tag_file2: TagFile = test_session.query(TagFile).one()
@@ -753,8 +753,8 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
     srt_group = FileGroup.from_paths(test_session, srt)
     test_session.add_all([vid_group, srt_group])
     test_session.flush([vid_group, srt_group])
-    vid_tag_file = vid_group.add_tag(one.name, test_session)
-    srt_tag_file = srt_group.add_tag(two.name, test_session)
+    vid_tag_file = vid_group.add_tag(test_session, one.name)
+    srt_tag_file = srt_group.add_tag(test_session, two.name)
     test_session.flush([vid_tag_file, srt_tag_file])
     tag_file_created_at = vid_tag_file.created_at
     srt_file_created_at = srt_tag_file.created_at
@@ -794,7 +794,7 @@ async def test_move(async_client, test_session, test_directory, make_files_struc
     await lib.refresh_files()
 
     # mv foo qux
-    plan = await lib.move(qux, foo, session=test_session)
+    plan = await lib.move(test_session, qux, foo)
     plan = [(str(i.relative_to(test_directory)), str(j.relative_to(test_directory))) for i, j in plan.items()]
     # The deepest files are moved first.
     assert plan == [('foo/bar/baz/archive.html', 'qux/foo/bar/baz/archive.html'),
@@ -823,7 +823,7 @@ async def test_move_files(async_client, test_session, test_directory, make_files
     })
     dest = test_directory / 'dest'
 
-    plan = await lib.move(dest, one, two, session=test_session)
+    plan = await lib.move(test_session, dest, one, two)
     assert list(plan.items()) == [
         (test_directory / 'foo/one.txt', test_directory / 'dest/one.txt'),
         (test_directory / 'two.txt', test_directory / 'dest/two.txt'),
@@ -855,7 +855,7 @@ async def test_move_deep_directory(async_client, test_session, test_directory, m
     dest = test_directory / 'deep/dest'
 
     # mv foo/bar foo/qux foo/quuz.mp4 foo/quuz.txt deep/dest
-    plan = await lib.move(dest, bar, qux, quuz_mp4, quuz_txt, session=test_session)
+    plan = await lib.move(test_session, dest, bar, qux, quuz_mp4, quuz_txt)
     assert list(plan.items()) == [
         (test_directory / 'foo/qux/quux.txt', test_directory / 'deep/dest/qux/quux.txt'),
         (test_directory / 'foo/bar/baz.txt', test_directory / 'deep/dest/bar/baz.txt'),
@@ -891,7 +891,7 @@ async def test_move_directory(async_client, test_session, test_directory, make_f
     assert_directories({'foo'})
 
     bar = test_directory / 'bar'
-    await lib.rename(test_directory / 'foo', 'bar', session=test_session)
+    await lib.rename(test_session, test_directory / 'foo', 'bar')
     assert (bar / 'one.txt').read_text() == 'one'
     assert_directories({'bar'})
 
@@ -920,7 +920,7 @@ async def test_move_error(test_session, test_directory, make_files_structure, vi
         return shutil.move(*args, **kwargs)
 
     with mock.patch('wrolpi.files.lib.shutil.move', mock_shutil_move), pytest.raises(FileNotFoundError):
-        await lib.move(qux, foo, session=test_session)
+        await lib.move(test_session, qux, foo)
     # The move failed, the files should be moved back.
     # foo was not deleted.
     assert foo.is_dir()
@@ -966,14 +966,14 @@ async def test_move_tagged(async_client, test_session, test_directory, make_file
     await lib.refresh_files()
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
     bar_file_group.title = 'custom title'  # Should not be overwritten.
-    bar_file_group.add_tag(tag.id)
+    bar_file_group.add_tag(test_session, tag.id)
     test_session.commit()
 
     qux = test_directory / 'qux'
     qux.mkdir()
 
     # Move both files into qux.  The Tag should also be moved.
-    await lib.move(qux, bar, foo, session=test_session)
+    await lib.move(test_session, qux, bar, foo)
     new_foo = qux / 'foo.txt'
     new_bar = qux / 'bar.txt'
     # Files were moved.
@@ -994,7 +994,7 @@ async def test_move_tagged(async_client, test_session, test_directory, make_file
     assert bar_file_group.title == 'custom title', 'Custom title should not have been overwritten.'
 
     # Rename "bar.txt" to "baz.txt"
-    await lib.rename(new_bar, 'baz.txt', session=test_session)
+    await lib.rename(test_session, new_bar, 'baz.txt')
     baz = new_bar.with_name('baz.txt')
     assert baz.read_text() == 'bar'
 
@@ -1154,7 +1154,7 @@ async def test_move_many_files(async_client, test_session, test_directory, make_
 
     with timer('test_move_many_files'):
         # mv foo bar
-        await lib.move(bar, foo, session=test_session)
+        await lib.move(test_session, bar, foo)
 
     assert not foo.is_dir()
     assert bar.is_dir()
@@ -1193,10 +1193,10 @@ async def test_get_bulk_tag_preview_files(async_client, test_session, make_files
     # Add shared and non-shared tags
     tag1 = await tag_factory('shared')
     tag2 = await tag_factory('only_foo')
-    fg_foo.add_tag(tag1.id)
-    fg_foo.add_tag(tag2.id)
-    fg_bar.add_tag(tag1.id)
-    fg_baz.add_tag(tag1.id)
+    fg_foo.add_tag(test_session, tag1.id)
+    fg_foo.add_tag(test_session, tag2.id)
+    fg_bar.add_tag(test_session, tag1.id)
+    fg_baz.add_tag(test_session, tag1.id)
     test_session.commit()
 
     # Preview for all three files
@@ -1245,7 +1245,7 @@ async def test_get_bulk_tag_preview_multi_file_filegroup(async_client, test_sess
 
     # Add a tag to this FileGroup
     tag = await tag_factory('my_tag')
-    fg.add_tag(tag.id)
+    fg.add_tag(test_session, tag.id)
     test_session.commit()
 
     # Preview for the directory should find the FileGroup and its tag
@@ -1323,8 +1323,8 @@ async def test_process_bulk_tag_job_remove_tags(async_client, test_session, make
     test_session.commit()
 
     tag = await tag_factory('to_remove')
-    fg_foo.add_tag(tag.id)
-    fg_bar.add_tag(tag.id)
+    fg_foo.add_tag(test_session, tag.id)
+    fg_bar.add_tag(test_session, tag.id)
     test_session.commit()
 
     job = {

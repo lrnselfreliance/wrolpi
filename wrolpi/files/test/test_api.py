@@ -243,8 +243,8 @@ async def test_files_search_any_tag(async_client, test_session, make_files_struc
     assert bar.primary_path.name == 'bar.txt' \
            and foo.primary_path.name == 'foo.txt' \
            and foobar.primary_path.name == 'foo bar.txt'
-    foo.add_tag(one.id)
-    foobar.add_tag(two.id)
+    foo.add_tag(test_session, one.id)
+    foobar.add_tag(test_session, two.id)
     test_session.commit()
 
     # Only `foo` is tagged with `one`
@@ -482,8 +482,8 @@ async def test_post_search_directories(test_session, async_client, make_files_st
 
     from modules.videos.models import Channel
     # Use from_config to create channels properly (creates Collection first)
-    channel1 = Channel.from_config({'directory': channel1_dir, 'name': 'Channel Name'}, session=test_session)
-    channel2 = Channel.from_config({'directory': channel2_dir, 'name': 'OtherChannel'}, session=test_session)
+    channel1 = Channel.from_config(test_session, {'directory': channel1_dir, 'name': 'Channel Name'})
+    channel2 = Channel.from_config(test_session, {'directory': channel2_dir, 'name': 'OtherChannel'})
     from wrolpi.collections import Collection
     domain_collection = Collection(directory=domain_dir, name='example.com', kind='domain')
     test_session.add(domain_collection)
@@ -635,7 +635,7 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert file_group
 
     # Remove Tag so file can be uploaded again.
-    file_group.set_tags([], test_session)
+    file_group.set_tags(test_session, [])
 
     # An existing file can be overwritten.
     forms = [
@@ -987,10 +987,10 @@ async def test_bulk_tag_preview_api(test_session, async_client, make_files_struc
     # Add shared and non-shared tags
     tag1 = await tag_factory('shared_tag')
     tag2 = await tag_factory('only_foo')
-    fg_foo.add_tag(tag1.id)
-    fg_foo.add_tag(tag2.id)
-    fg_bar.add_tag(tag1.id)
-    fg_baz.add_tag(tag1.id)
+    fg_foo.add_tag(test_session, tag1.id)
+    fg_foo.add_tag(test_session, tag2.id)
+    fg_bar.add_tag(test_session, tag1.id)
+    fg_baz.add_tag(test_session, tag1.id)
     test_session.commit()
 
     content = {'paths': ['foo.txt', 'bar.txt', 'baz.txt']}

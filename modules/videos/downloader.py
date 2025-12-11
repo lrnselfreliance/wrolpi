@@ -22,7 +22,6 @@ from wrolpi.common import logger, get_media_directory, escape_file_name, resolve
     trim_file_name, cached_multiprocessing_result, get_absolute_media_path
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
@@ -147,7 +146,7 @@ async def fetch_video_duration(url: str) -> int:
     otherwise, fetches the duration using yt-dlp."""
     with get_db_session() as session:
         # Join with Video to get duration; a URL may have other files (such as an Archive).
-        video = Video.get_by_url(url, session=session)
+        video = Video.get_by_url(session, url)
         if video and (duration := video.file_group.length):
             logger.debug(f'Using already-known duration {duration} for {url} from FileGroup')
             return duration
@@ -199,7 +198,7 @@ class ChannelDownloader(Downloader, ABC):
         if not name:
             raise ValueError(f'Could not find name')
         channel_source_id = info.get('channel_id') or info.get('id')
-        channel = get_or_create_channel(channel_source_id, download.url, name, channel_tag_name)
+        channel = get_or_create_channel(session, channel_source_id, download.url, name, channel_tag_name)
         channel.dict()  # get all attributes while we have the session.
 
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
@@ -225,7 +224,7 @@ class ChannelDownloader(Downloader, ABC):
             else:
                 logger.debug('Not updating channel because this is a playlist')
 
-            downloads = self.get_missing_videos(download)
+            downloads = self.get_missing_videos(session, download)
             return DownloadResult(
                 success=True,
                 location=location,
@@ -261,7 +260,7 @@ class ChannelDownloader(Downloader, ABC):
                 session.refresh(channel)
 
     @staticmethod
-    def get_missing_videos(download: Download) -> List[str]:
+    def get_missing_videos(session: Session, download: Download) -> List[str]:
         """
         Return all URLs of Videos in the `info_json` which need to be downloaded.
         """
@@ -323,7 +322,7 @@ class ChannelDownloader(Downloader, ABC):
         downloads = [normalize_video_url(i) for i in downloads]
 
         # Only download those that have not yet been downloaded.
-        already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
+        already_downloaded = [i.url for i in video_downloader.already_downloaded(session, *downloads)]
         downloads = [i for i in downloads if i not in already_downloaded]
 
         return downloads
@@ -343,65 +342,64 @@ class VideoDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<VideoDownloader>'
 
-    @optional_session
-    def already_downloaded(self, *urls: str, session: Session = None) -> List:
+    def already_downloaded(self, session: Session, *urls: str) -> List:
         # We only consider a video record with a video file as "downloaded".
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'video'))
         return file_groups
 
     async def do_download(self, download: Download) -> DownloadResult:
-        if download.attempts >= 10:
-            raise UnrecoverableDownloadError('Max download attempts reached')
-
-        url = normalize_video_url(download.url)
-
-        # Copy settings into Download (they may be from the ChannelDownloader)
-        settings = download.settings or dict()
-        download.destination = download.destination or settings.get('destination')
-        tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
-
-        # Video may have been downloaded previously, get its location for error reporting.
         with get_db_session() as session:
-            video_ = Video.get_by_url(url, session)
+            if download.attempts >= 10:
+                raise UnrecoverableDownloadError('Max download attempts reached')
+
+            url = normalize_video_url(download.url)
+
+            # Copy settings into Download (they may be from the ChannelDownloader)
+            settings = download.settings or dict()
+            download.destination = download.destination or settings.get('destination')
+            tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
+
+            # Video may have been downloaded previously, get its location for error reporting.
+            video_ = Video.get_by_url(session, url)
             location = video_.location if video_ else None
 
-        try:
-            download.info_json = download.info_json or extract_info(url)
-        except yt_dlp.utils.DownloadError as e:
-            # Video may be private.
             try:
-                raise RuntimeError('Failed to extract_info') from e
-            except Exception as e:
-                return DownloadResult(
-                    success=False,
-                    location=location,
-                    error='\n'.join(traceback.format_exception(e)),
-                )
+                download.info_json = download.info_json or extract_info(url)
+            except yt_dlp.utils.DownloadError as e:
+                # Video may be private.
+                try:
+                    raise RuntimeError('Failed to extract_info') from e
+                except Exception as e:
+                    return DownloadResult(
+                        success=False,
+                        location=location,
+                        error='\n'.join(traceback.format_exception(e)),
+                    )
 
-        if not download.info_json:
-            raise ValueError(f'Cannot download video with no info_json.')
+            if not download.info_json:
+                raise ValueError(f'Cannot download video with no info_json.')
 
-        channel, channel_directory, channel_id, destination, settings = await self._get_channel(download)
+            channel, channel_directory, channel_id, destination, settings = await self._get_channel(session, download)
 
-        if destination:
-            # Download to the directory specified in the settings.
-            out_dir = destination
-            logger.debug(f'Downloading {url} to destination {destination} from settings')
-        elif channel:
-            out_dir = channel_directory
-            logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
-        else:
-            # Download to the default directory if this video has no channel.
-            out_dir = get_no_channel_directory()
-            logger.debug(f'Downloading {url} to default directory')
+            if destination:
+                # Download to the directory specified in the settings.
+                out_dir = destination
+                logger.debug(f'Downloading {url} to destination {destination} from settings')
+            elif channel:
+                out_dir = channel_directory
+                logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
+            else:
+                # Download to the default directory if this video has no channel.
+                out_dir = get_no_channel_directory()
+                logger.debug(f'Downloading {url} to default directory')
 
-        # Make output directory.  (Maybe string from settings)
-        out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
-        out_dir = get_absolute_media_path(out_dir)
-        out_dir.mkdir(exist_ok=True, parents=True)
+            # Make output directory.  (Maybe string from settings)
+            out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
+            out_dir = get_absolute_media_path(out_dir)
+            out_dir.mkdir(exist_ok=True, parents=True)
 
-        if tag_names and logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f'Downloading {url} with {tag_names=}')
+            if tag_names and logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f'Downloading {url} with {tag_names=}')
 
         config = get_videos_downloader_config()
 
@@ -526,12 +524,12 @@ class VideoDownloader(Downloader, ABC):
 
             with get_db_session(commit=True) as session:
                 # Second session is started because SQLAlchemy will forget what we have done.
-                video = Video.get_by_id(video_id, session)
+                video = Video.get_by_id(session, video_id)
                 if tag_names:
                     existing_names = video.file_group.tag_names
                     for name in tag_names:
                         if name not in existing_names:
-                            video.add_tag(name)
+                            video.add_tag(session, name)
                 location = video.location
 
                 await video.get_ffprobe_json()
@@ -589,7 +587,7 @@ class VideoDownloader(Downloader, ABC):
         return result
 
     @staticmethod
-    async def _get_channel(download: Download) \
+    async def _get_channel(session: Session, download: Download) \
             -> Tuple[Optional[Channel], Optional[pathlib.Path], Optional[int], Optional[pathlib.Path], dict]:
         settings = download.settings or dict()
         channel_tag_name = i[0] if (i := settings.get('channel_tag_name')) else None
@@ -603,7 +601,8 @@ class VideoDownloader(Downloader, ABC):
         if channel_name or channel_source_id or channel_url:
             # Try to find the channel via info_json from yt-dlp.
             try:
-                channel = get_or_create_channel(source_id=channel_source_id, url=channel_url, name=channel_name,
+                channel = get_or_create_channel(session, source_id=channel_source_id, url=channel_url,
+                                                name=channel_name,
                                                 tag_name=channel_tag_name)
                 if channel:
                     found_channel = 'yt_dlp'
@@ -615,7 +614,7 @@ class VideoDownloader(Downloader, ABC):
         if not channel and destination:
             # Destination may find Channel if not already found.
             try:
-                channel = get_channel(directory=destination, return_dict=False)
+                channel = get_channel(session, directory=destination, return_dict=False)
                 found_channel = 'download_settings_directory'
                 logger.debug(f'Found a channel that shares the destination directory {channel=}')
             except UnknownChannel:
@@ -630,10 +629,9 @@ class VideoDownloader(Downloader, ABC):
             try:
                 # Find Channel by collection_id or URL
                 if collection_id:
-                    with get_db_session() as session:
-                        channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+                    channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
                 if not channel and channel_url:
-                    channel = get_channel(url=channel_url, return_dict=False)
+                    channel = get_channel(session, url=channel_url, return_dict=False)
                 logger.debug(f'Found channel with collection_id or channel url {channel=}')
             except UnknownChannel:
                 # We do not need a Channel if we have a destination directory.
@@ -811,14 +809,15 @@ channel_downloader = ChannelDownloader()
 video_downloader = VideoDownloader()
 
 
-def get_or_create_channel(source_id: str = None, url: str = None, name: str = None, tag_name: str = None) -> Channel:
+def get_or_create_channel(session: Session, source_id: str = None, url: str = None, name: str = None,
+                          tag_name: str = None) -> Channel:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
     Creates a new Channel if one cannot be found.
     """
     try:
-        channel = get_channel(source_id=source_id, url=url, name=name, return_dict=False)
+        channel = get_channel(session, source_id=source_id, url=url, name=name, return_dict=False)
         # Get all properties while we have the session.
         channel.dict()
         return channel
@@ -839,7 +838,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         directory=str(channel_directory.relative_to(get_media_directory())),
         tag_name=tag_name,
     )
-    channel = create_channel(data=data, return_dict=False)
+    channel = create_channel(session, data=data, return_dict=False)
     # Create the directory now that the channel is approved.
     channel_directory.mkdir(exist_ok=True)
     # Get all properties while we have the session.

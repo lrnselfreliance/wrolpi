@@ -5,6 +5,37 @@ import pytest
 
 from modules.archive import Archive
 from wrolpi.common import get_wrolpi_config
+from wrolpi.errors import UnknownArchive
+
+
+def test_archive_get_by_id(test_session, archive_factory):
+    """Archive.get_by_id should accept session as first argument, id as second."""
+    archive = archive_factory()
+    test_session.commit()
+
+    # Session must be first argument (session-first pattern)
+    found = Archive.get_by_id(test_session, archive.id)
+    assert found is not None
+    assert found.id == archive.id
+
+    # Non-existent ID should return None
+    not_found = Archive.get_by_id(test_session, 99999)
+    assert not_found is None
+
+
+def test_archive_find_by_id(test_session, archive_factory):
+    """Archive.find_by_id should accept session as first argument, id as second."""
+    archive = archive_factory()
+    test_session.commit()
+
+    # Session must be first argument (session-first pattern)
+    found = Archive.find_by_id(test_session, archive.id)
+    assert found is not None
+    assert found.id == archive.id
+
+    # Non-existent ID should raise UnknownArchive
+    with pytest.raises(UnknownArchive):
+        Archive.find_by_id(test_session, 99999)
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,7 @@ from wrolpi import flags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
     register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate
-from wrolpi.db import get_db_session, optional_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import refresh_files, split_file_name_words
 from wrolpi.files.models import FileGroup
@@ -148,15 +148,14 @@ def get_unique_paths(*paths: str) -> List[str]:
     return list(unique_paths)
 
 
-@optional_session
-def headline_zim(search_str: str, zim_id: int, tag_names: List[str] = None, offset: int = 0, limit: int = 10,
-                 session: Session = None) -> Dict:
+def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List[str] = None, offset: int = 0,
+                 limit: int = 10) -> Dict:
     zim_id = int(zim_id)
-    zim = get_zim(zim_id, session=session)
+    zim = get_zim(session, zim_id)
 
     if tag_names:
         # TODO what is the count goes over the limit?
-        entries = zim.entries_with_tags(tag_names, offset=offset, limit=1_000, session=session)
+        entries = zim.entries_with_tags(session, tag_names, offset=offset, limit=1_000)
         estimate = 0
     elif search_str:
         # Get suggested results (this searches titles).
@@ -232,8 +231,7 @@ def get_estimates(search_str: str) -> List[int]:
     return estimates
 
 
-@optional_session
-def get_zim(zim_id: int, session: Session = None) -> Zim:
+def get_zim(session: Session, zim_id: int) -> Zim:
     """Return the Zim record of the provided path.
 
     @raise UnknownZim: When no record exists with the id.
@@ -251,40 +249,36 @@ def get_zim(zim_id: int, session: Session = None) -> Zim:
 @functools.lru_cache(maxsize=1_000)
 def get_entry(path: str, zim_id: int) -> Entry:
     with get_db_session() as session:
-        zim = get_zim(zim_id, session=session)
+        zim = get_zim(session, zim_id)
         entry = zim.find_entry(path)
     return entry
 
 
-@optional_session
-def get_zims(ids: List[int] = None, session: Session = None) -> List[Zim]:
+def get_zims(session: Session, ids: List[int] = None) -> List[Zim]:
     if ids:
         zims = session.query(Zim).filter(Zim.id.in_(ids)).all()
     else:
-        zims = Zims.get_all(session=session)
+        zims = Zims.get_all(session)
 
     return zims
 
 
-@optional_session(commit=True)
-def delete_zims(ids: List[int], session: Session = None):
-    zims = get_zims(ids, session=session)
+def delete_zims(session: Session, ids: List[int]):
+    zims = get_zims(session, ids)
     for zim in zims:
         zim.delete()
 
 
-@optional_session
-async def add_tag(tag_name: str, zim_id: int, zim_entry: str, session: Session = None) -> TagZimEntry:
+async def add_tag(session: Session, tag_name: str, zim_id: int, zim_entry: str) -> TagZimEntry:
     zim = session.query(Zim).filter_by(id=zim_id).one()
-    tag_zim_entry = zim.tag_entry(tag_name, zim_entry)
+    tag_zim_entry = zim.tag_entry(session, tag_name, zim_entry)
     session.commit()
     return tag_zim_entry
 
 
-@optional_session
-async def untag(tag_name: str, zim_id: int, zim_entry: str, session: Session = None):
+async def untag(session: Session, tag_name: str, zim_id: int, zim_entry: str):
     zim: Zim = session.query(Zim).filter_by(id=zim_id).one()
-    zim.untag_entry(tag_name, zim_entry)
+    zim.untag_entry(session, tag_name, zim_entry)
     session.commit()
 
 
@@ -292,17 +286,15 @@ def get_kiwix_catalog():
     return KIWIX_CATALOG.copy()
 
 
-@optional_session
-def get_kiwix_subscriptions(session: Session = None) -> Dict[str, ZimSubscription]:
+def get_kiwix_subscriptions(session: Session) -> Dict[str, ZimSubscription]:
     subscriptions = session.query(ZimSubscription)
     subscriptions_by_name = {i.name: i for i in subscriptions}
     return subscriptions_by_name
 
 
-@optional_session(commit=True)
-async def subscribe(name: str, language: str, session: Session = None,
+async def subscribe(session: Session, name: str, language: str,
                     frequency: int = DownloadFrequency.days180) -> ZimSubscription:
-    subscription = ZimSubscription.get_or_create(name, session=session)
+    subscription = ZimSubscription.get_or_create(session, name)
     subscription.language = language
 
     if name == 'Wikipedia (with images)':
@@ -378,15 +370,14 @@ async def subscribe(name: str, language: str, session: Session = None,
     if language not in kiwix.KIWIX_CATALOG_BY_NAME[name]['languages']:
         raise ValueError(f'Language {repr(str(language))} is invalid for {name}')
 
-    subscription.change_download(url, frequency, session=session)
+    subscription.change_download(session, url, frequency)
     session.add(subscription)
     session.flush([subscription])
     session.commit()
     return subscription
 
 
-@optional_session
-async def unsubscribe(subscription_id: int, session: Session = None):
+async def unsubscribe(session: Session, subscription_id: int):
     subscription: ZimSubscription = session.query(ZimSubscription).filter_by(id=subscription_id).one_or_none()
     if subscription:
         session.delete(subscription)
@@ -596,8 +587,7 @@ async def restart_kiwix():
     return result.return_code
 
 
-@optional_session
-def set_zim_auto_search(zim_id: int, auto_search: bool, session: Session = None):
-    zim = Zim.find_by_id(zim_id, session)
+def set_zim_auto_search(session: Session, zim_id: int, auto_search: bool):
+    zim = Zim.find_by_id(session, zim_id)
     zim.auto_search = auto_search
     session.commit()

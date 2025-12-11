@@ -150,12 +150,12 @@ async def test_move_ebook(async_client, test_session, test_directory, example_ep
         test_directory / 'ebook example.epub',
         test_directory / 'ebook example.jpg',
     ]
-    ebook.file_group.add_tag(tag.id)
+    ebook.file_group.add_tag(test_session, tag.id)
     test_session.commit()
 
     new_directory = test_directory / 'new'
     new_directory.mkdir()
-    await move(new_directory, ebook.file_group.primary_path)
+    await move(test_session, new_directory, ebook.file_group.primary_path)
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.primary_path == test_directory / 'new/ebook example.epub'

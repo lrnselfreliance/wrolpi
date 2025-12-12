@@ -55,23 +55,96 @@ class TestInfoEndpoint:
         assert config["managed_services_count"] == 8
 
 
-class TestRootEndpoint:
-    """Tests for / root endpoint."""
+class TestDashboardEndpoint:
+    """Tests for / dashboard endpoint (UI)."""
 
-    def test_root_returns_200(self, test_client):
-        """Root endpoint should return 200 OK."""
+    def test_dashboard_returns_200(self, test_client):
+        """Dashboard endpoint should return 200 OK."""
         response = test_client.get("/")
         assert response.status_code == 200
 
-    def test_root_returns_expected_fields(self, test_client):
-        """Root endpoint should return expected fields."""
+    def test_dashboard_returns_html(self, test_client):
+        """Dashboard endpoint should return HTML."""
         response = test_client.get("/")
-        data = response.json()
-        assert data["message"] == "WROLPi Controller"
-        assert data["version"] == __version__
-        assert "endpoints" in data
-        assert data["endpoints"]["health"] == "/api/health"
-        assert data["endpoints"]["info"] == "/api/info"
+        assert "text/html" in response.headers["content-type"]
+
+    def test_dashboard_contains_title(self, test_client):
+        """Dashboard should contain title."""
+        response = test_client.get("/")
+        assert b"WROLPi Controller" in response.content
+
+    def test_dashboard_contains_version(self, test_client):
+        """Dashboard should contain version."""
+        response = test_client.get("/")
+        assert __version__.encode() in response.content
+
+    def test_dashboard_contains_status_cards(self, test_client):
+        """Dashboard should contain status cards."""
+        response = test_client.get("/")
+        content = response.text
+        assert "CPU" in content
+        assert "Memory" in content
+        assert "Load" in content
+        assert "Storage" in content
+
+    def test_dashboard_contains_navigation(self, test_client):
+        """Dashboard should contain navigation links."""
+        response = test_client.get("/")
+        content = response.text
+        assert 'href="/"' in content
+        assert 'href="/services"' in content
+        assert 'href="/disks"' in content
+
+    def test_dashboard_contains_quick_links(self, test_client):
+        """Dashboard should contain quick links section."""
+        response = test_client.get("/")
+        content = response.text
+        assert "Quick Links" in content
+        assert "WROLPi" in content
+        assert "API Docs" in content
+        assert "Map" in content
+        assert "Kiwix" in content
+        assert "Help" in content
+
+    def test_dashboard_shows_docker_banner_when_dockerized(self, test_client_docker_mode):
+        """Dashboard should show Docker mode banner when in Docker."""
+        response = test_client_docker_mode.get("/")
+        content = response.text
+        assert "Running in Docker mode" in content
+
+    def test_dashboard_no_docker_banner_when_not_dockerized(self, test_client):
+        """Dashboard should not show Docker mode banner when not in Docker."""
+        response = test_client.get("/")
+        content = response.text
+        assert "Running in Docker mode" not in content
+
+
+class TestServicesPageEndpoint:
+    """Tests for /services page endpoint."""
+
+    def test_services_page_returns_200(self, test_client):
+        """Services page should return 200 OK."""
+        response = test_client.get("/services")
+        assert response.status_code == 200
+
+    def test_services_page_returns_html(self, test_client):
+        """Services page should return HTML."""
+        response = test_client.get("/services")
+        assert "text/html" in response.headers["content-type"]
+
+
+class TestDisksPageEndpoint:
+    """Tests for /disks page endpoint."""
+
+    def test_disks_page_returns_200(self, test_client):
+        """Disks page should return 200 OK."""
+        response = test_client.get("/disks")
+        assert response.status_code == 200
+
+    def test_disks_page_returns_html(self, test_client):
+        """Disks page should return HTML."""
+        response = test_client.get("/disks")
+        assert "text/html" in response.headers["content-type"]
 
 
 class TestOpenAPIEndpoint:
@@ -94,13 +167,12 @@ class TestOpenAPIEndpoint:
         data = response.json()
         assert data["info"]["version"] == __version__
 
-    def test_openapi_has_paths(self, test_client):
-        """OpenAPI schema should have paths defined."""
+    def test_openapi_has_api_paths(self, test_client):
+        """OpenAPI schema should have API paths defined."""
         response = test_client.get("/openapi.json")
         data = response.json()
         assert "/api/health" in data["paths"]
         assert "/api/info" in data["paths"]
-        assert "/" in data["paths"]
 
 
 class TestDocsEndpoint:
@@ -136,3 +208,14 @@ class TestDriveMountedStatus:
                 response = client.get(endpoint)
                 data = response.json()
                 assert data["drive_mounted"] is expected
+
+    def test_dashboard_shows_drive_not_mounted_banner(self, reset_runtime_config, mock_docker_mode):
+        """Dashboard should show banner when drive is not mounted."""
+        from controller.main import app
+
+        with mock.patch(
+            "controller.main.is_primary_drive_mounted", return_value=False
+        ):
+            with TestClient(app) as client:
+                response = client.get("/")
+                assert "Primary drive not mounted" in response.text

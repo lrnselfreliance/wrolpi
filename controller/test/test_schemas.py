@@ -7,10 +7,8 @@ from pydantic import ValidationError
 
 from controller.api.schemas import (
     ConfigSummary,
-    EndpointsList,
     HealthResponse,
     InfoResponse,
-    RootResponse,
 )
 
 
@@ -120,54 +118,3 @@ class TestInfoResponse:
         data = response.model_dump()
         assert data["config"]["port"] == 8087
         assert data["config"]["media_directory"] == "/media/wrolpi"
-
-
-class TestEndpointsList:
-    """Tests for EndpointsList model."""
-
-    def test_default_endpoints(self):
-        """Should have default endpoint values."""
-        endpoints = EndpointsList()
-        assert endpoints.health == "/api/health"
-        assert endpoints.info == "/api/info"
-
-    def test_custom_endpoints(self):
-        """Should allow custom endpoint values."""
-        endpoints = EndpointsList(
-            health="/custom/health",
-            info="/custom/info",
-        )
-        assert endpoints.health == "/custom/health"
-        assert endpoints.info == "/custom/info"
-
-
-class TestRootResponse:
-    """Tests for RootResponse model."""
-
-    def test_valid_root_response(self):
-        """Should create valid root response."""
-        response = RootResponse(
-            message="WROLPi Controller",
-            version="1.0.0",
-            endpoints=EndpointsList(),
-        )
-        assert response.message == "WROLPi Controller"
-        assert response.version == "1.0.0"
-        assert response.endpoints.health == "/api/health"
-
-    def test_root_response_serialization(self):
-        """Should serialize with nested endpoints correctly."""
-        response = RootResponse(
-            message="Test",
-            version="2.0.0",
-            endpoints=EndpointsList(),
-        )
-        data = response.model_dump()
-        assert data == {
-            "message": "Test",
-            "version": "2.0.0",
-            "endpoints": {
-                "health": "/api/health",
-                "info": "/api/info",
-            },
-        }

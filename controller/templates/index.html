@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WROLPi Controller</title>
+    <style>
+        /* ===== INLINE CSS - No external files ===== */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+            padding: 1rem;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #16213e;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            color: #4ecca3;
+        }
+
+        .version {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        nav {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        nav a {
+            color: #eee;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        nav a:hover, nav a.active { background: #0f3460; }
+
+        .warning-banner {
+            background: #ff6b6b;
+            color: #fff;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .info-banner {
+            background: #0f3460;
+            color: #fff;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        /* Status Grid */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-card {
+            background: #16213e;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .status-card h3 {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .status-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        .status-card .sub {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #16213e;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #0f3460;
+        }
+        th {
+            background: #0f3460;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #1a3a5c; }
+
+        /* Status indicators */
+        .status-running { color: #4ecca3; }
+        .status-stopped { color: #ff6b6b; }
+        .status-unknown { color: #ffd93d; }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-right: 0.25rem;
+            text-decoration: none;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary { background: #4ecca3; color: #000; }
+        .btn-danger { background: #ff6b6b; color: #fff; }
+        .btn-warning { background: #ffd93d; color: #000; }
+        .btn-secondary { background: #0f3460; color: #fff; }
+
+        /* Quick Links */
+        .link-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+        }
+        .link-card {
+            background: #16213e;
+            padding: 1rem;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #eee;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .link-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .link-card h3 {
+            color: #4ecca3;
+            margin-bottom: 0.25rem;
+            font-size: 1rem;
+        }
+        .link-card p {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        /* Sections */
+        section {
+            margin-bottom: 2rem;
+        }
+        section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #333;
+            color: #ccc;
+        }
+
+        /* Action buttons section */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid #333;
+            border-top-color: #4ecca3;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 0.75rem;
+                text-align: center;
+            }
+            nav { justify-content: center; }
+            .btn {
+                padding: 0.35rem 0.6rem;
+                font-size: 0.8rem;
+            }
+            .status-card .value { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    {% if docker_mode %}
+    <div class="warning-banner">
+        Running in Docker mode. Disk mounting, hotspot, and shutdown are not available.
+    </div>
+    {% endif %}
+
+    {% if not drive_mounted %}
+    <div class="info-banner">
+        Primary drive not mounted. Some features may be limited.
+    </div>
+    {% endif %}
+
+    <header>
+        <div>
+            <h1>WROLPi Controller</h1>
+            <span class="version">v{{ version }}</span>
+        </div>
+        <nav>
+            <a href="/" class="active">Dashboard</a>
+            <a href="/services">Services</a>
+            <a href="/disks">Disks</a>
+        </nav>
+    </header>
+
+    <main>
+        <section id="status">
+            <h2>System Status</h2>
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>CPU</h3>
+                    <p class="value">{{ cpu.percent if cpu.percent is not none else '--' }}%</p>
+                    <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}</p>
+                </div>
+                <div class="status-card">
+                    <h3>Memory</h3>
+                    <p class="value">{{ memory.percent|default('--') }}%</p>
+                    <p class="sub">{{ memory.used_gb|default('--') }} GB used</p>
+                </div>
+                <div class="status-card">
+                    <h3>Load</h3>
+                    <p class="value">{{ load.load_1min|default('--') }}</p>
+                    <p class="sub">1 min avg</p>
+                </div>
+                <div class="status-card">
+                    <h3>Storage</h3>
+                    <p class="value">{{ storage.percent|default('--') }}%</p>
+                    <p class="sub">{{ storage.free_gb|default('--') }} GB free</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="services">
+            <h2>Services</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for service in services %}
+                    <tr>
+                        <td>
+                            {{ service.name }}
+                            {% if service.port %}<span class="sub">:{{ service.port }}</span>{% endif %}
+                        </td>
+                        <td class="status-{{ service.status }}">{{ service.status }}</td>
+                        <td>
+                            {% if service.viewable and service.status == 'running' and service.port %}
+                            <a href="http://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
+                               target="_blank" class="btn btn-secondary">View</a>
+                            {% endif %}
+                            <button class="btn btn-primary" onclick="serviceAction('{{ service.name }}', 'start')"
+                                    {% if service.status == 'running' %}disabled{% endif %}>Start</button>
+                            <button class="btn btn-danger" onclick="serviceAction('{{ service.name }}', 'stop')"
+                                    {% if service.status == 'stopped' %}disabled{% endif %}>Stop</button>
+                            <button class="btn btn-warning" onclick="serviceAction('{{ service.name }}', 'restart')">Restart</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: #666;">
+                            Service status not yet implemented
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section id="actions">
+            <h2>System Actions</h2>
+            <div class="action-buttons">
+                <button class="btn btn-warning" onclick="restartServices()">Restart All Services</button>
+                {% if not docker_mode %}
+                <button class="btn btn-danger" onclick="rebootSystem()">Reboot System</button>
+                <button class="btn btn-danger" onclick="shutdownSystem()">Shutdown System</button>
+                {% endif %}
+            </div>
+        </section>
+
+        <section id="quick-links">
+            <h2>Quick Links</h2>
+            <div class="link-grid">
+                <a href="https://{{ host }}{% if docker_mode %}:8443{% endif %}/" class="link-card" target="_blank">
+                    <h3>WROLPi</h3>
+                    <p>Main Interface</p>
+                </a>
+                <a href="http://{{ host }}:8081/docs" class="link-card" target="_blank">
+                    <h3>API Docs</h3>
+                    <p>OpenAPI</p>
+                </a>
+                <a href="https://{{ host }}:8084" class="link-card" target="_blank">
+                    <h3>Map</h3>
+                    <p>OpenStreetMap</p>
+                </a>
+                <a href="https://{{ host }}:8085" class="link-card" target="_blank">
+                    <h3>Kiwix</h3>
+                    <p>Wikipedia, etc.</p>
+                </a>
+                <a href="https://{{ host }}:8086" class="link-card" target="_blank">
+                    <h3>Help</h3>
+                    <p>Documentation</p>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <script>
+    /* ===== INLINE JAVASCRIPT - No external files ===== */
+
+    async function apiCall(url, method = 'GET') {
+        try {
+            const resp = await fetch(url, { method });
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.detail || `HTTP ${resp.status}`);
+            }
+            return await resp.json();
+        } catch (e) {
+            throw e;
+        }
+    }
+
+    async function serviceAction(name, action) {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+
+        try {
+            await apiCall(`/api/services/${name}/${action}`, 'POST');
+            // Reload page to show updated status
+            setTimeout(() => location.reload(), 1000);
+        } catch (e) {
+            alert(`Failed to ${action} ${name}: ${e.message}`);
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
+
+    async function restartServices() {
+        if (!confirm('This will restart all WROLPi services. Continue?')) return;
+
+        document.body.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                <span class="loading" style="width:3rem;height:3rem;margin-bottom:1rem;"></span>
+                <h1 style="color:#4ecca3;">Restarting services...</h1>
+                <p style="color:#888;">Please wait, this page will reload automatically.</p>
+            </div>
+        `;
+
+        try {
+            await apiCall('/api/restart', 'POST');
+        } catch (e) {
+            // Expected - connection may drop
+        }
+
+        // Poll until Controller is back
+        await waitForController();
+        location.reload();
+    }
+
+    async function rebootSystem() {
+        if (!confirm('This will REBOOT the entire system. Continue?')) return;
+
+        try {
+            await apiCall('/api/reboot', 'POST');
+            document.body.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                    <h1 style="color:#ffd93d;">Rebooting...</h1>
+                    <p style="color:#888;">The system is rebooting. This page will reload when ready.</p>
+                </div>
+            `;
+
+            // Wait then poll
+            setTimeout(async () => {
+                await waitForController(120000);
+                location.reload();
+            }, 10000);
+        } catch (e) {
+            alert(`Failed to reboot: ${e.message}`);
+        }
+    }
+
+    async function shutdownSystem() {
+        if (!confirm('This will SHUT DOWN the system. You will need physical access to turn it back on. Continue?')) return;
+
+        try {
+            await apiCall('/api/shutdown', 'POST');
+            document.body.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                    <h1 style="color:#ff6b6b;">Shutting down...</h1>
+                    <p style="color:#888;">The system is shutting down.</p>
+                </div>
+            `;
+        } catch (e) {
+            alert(`Failed to shutdown: ${e.message}`);
+        }
+    }
+
+    async function waitForController(maxWaitMs = 60000) {
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+            try {
+                const resp = await fetch('/api/health');
+                if (resp.ok) return;
+            } catch (e) {
+                // Still waiting
+            }
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        throw new Error('Controller did not respond in time');
+    }
+
+    // Auto-refresh every 30 seconds
+    setTimeout(() => location.reload(), 30000);
+    </script>
+</body>
+</html>

@@ -29,18 +29,3 @@ class InfoResponse(BaseModel):
     docker_mode: bool = Field(description="Whether running in Docker mode")
     drive_mounted: bool = Field(description="Whether the primary drive is mounted")
     config: ConfigSummary = Field(description="Configuration summary")
-
-
-class EndpointsList(BaseModel):
-    """List of available API endpoints."""
-
-    health: str = Field(default="/api/health", description="Health check endpoint")
-    info: str = Field(default="/api/info", description="Info endpoint")
-
-
-class RootResponse(BaseModel):
-    """Response model for / root endpoint."""
-
-    message: str = Field(description="Welcome message")
-    version: str = Field(description="Controller version")
-    endpoints: EndpointsList = Field(description="Available endpoints")

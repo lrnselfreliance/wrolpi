@@ -569,7 +569,8 @@ async def get_power_stats() -> PowerStats:
 DISABLE_STATUS_WORKER = bool(PYTEST)  # Do not run status worker while testing, unless explicitly needed.
 
 
-@perpetual_signal(sleep=5)
+# Disable status_worker in favor of status from Controller.
+# @perpetual_signal(sleep=5)
 async def status_worker(count: int = None, sleep_time: int = 5):
     """A background process which will gather historical data about system statistics."""
     shared_status = api_app.shared_ctx.status

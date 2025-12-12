@@ -1,0 +1,31 @@
+[Unit]
+Description=WROLPi Controller Service
+Documentation=https://github.com/lrnselfreliance/wrolpi
+After=network.target
+Before=wrolpi-api.service wrolpi-app.service postgresql.service
+
+[Service]
+Type=simple
+ExecStart=/opt/wrolpi/controller/venv/bin/uvicorn controller.main:app --host 0.0.0.0 --port 8087
+WorkingDirectory=/opt/wrolpi
+User=root
+Group=root
+Restart=always
+RestartSec=5
+# Higher priority than the API, but lower than Help.
+Nice=2
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wrolpi-controller
+
+# Security - allow privileged operations
+AmbientCapabilities=CAP_SYS_ADMIN CAP_NET_ADMIN
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

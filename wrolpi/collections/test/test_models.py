@@ -1,7 +1,7 @@
 import pytest
 
 from wrolpi.collections import Collection
-from wrolpi.errors import UnknownCollection
+from wrolpi.collections.errors import UnknownCollection
 
 
 def test_collection_get_by_id(test_session, test_directory):

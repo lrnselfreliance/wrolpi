@@ -491,9 +491,10 @@ class ConfigFile:
         if file.is_file():
             if not self.is_valid(file):
                 raise InvalidConfig(f'Config file is invalid: {str(self.get_relative_file())}')
+            # is_valid() already validated, just load the data
             config_data = self.read_config_file(file)
             config_data = {k: v for k, v in config_data.items() if k in self.default_config}
-            self._config.update(asdict(self.validator(**config_data)))
+            self._config.update(config_data)
         return self
 
     @property
@@ -653,6 +654,11 @@ class ConfigFile:
 
     def validate(self, config: dict) -> bool:
         allowed_fields = {i.name for i in fields(self.validator)}
+        default_fields = set(self.default_config.keys())
+        # Check for fields in default_config that are missing from validator
+        missing_from_validator = default_fields - allowed_fields
+        if missing_from_validator:
+            logger.error(f'{self.file_name}: Fields in default_config but missing from validator: {missing_from_validator}')
         try:
             # Remove keys no longer in the config.
             config_items = config.items()
@@ -691,6 +697,7 @@ class ConfigFile:
 @dataclass
 class WROLPiConfigValidator:
     archive_destination: str = None
+    check_for_upgrades: bool = None
     download_on_startup: bool = None
     download_timeout: int = None
     hotspot_device: str = None

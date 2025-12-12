@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WROLPi Controller</title>
+    <style>
+        /* ===== INLINE CSS - No external files ===== */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            line-height: 1.6;
+            padding: 1rem;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #16213e;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            color: #4ecca3;
+        }
+
+        .version {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .warning-banner {
+            background: #ff6b6b;
+            color: #fff;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .info-banner {
+            background: #0f3460;
+            color: #fff;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .fallback-banner {
+            background: #f39c12;
+            color: #000;
+            padding: 0.75rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .fallback-banner.show {
+            display: block;
+        }
+
+        .fallback-banner .loading {
+            border-color: #333;
+            border-top-color: #000;
+        }
+
+        .upgrade-banner {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            color: #000;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .upgrade-banner.show {
+            display: block;
+        }
+
+        .upgrade-banner h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+        }
+
+        .upgrade-banner .loading {
+            width: 2rem;
+            height: 2rem;
+            border-color: #333;
+            border-top-color: #000;
+            margin: 0.5rem auto;
+        }
+
+        .upgrade-banner .elapsed {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+        }
+
+        .upgrade-banner .warning {
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            opacity: 0.8;
+        }
+
+        .upgrade-banner .success {
+            color: #27ae60;
+            font-size: 2rem;
+        }
+
+        .upgrade-banner.complete {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: #fff;
+        }
+
+        .upgrade-banner.complete .warning {
+            display: none;
+        }
+
+        /* Status Grid */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-card {
+            background: #16213e;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .status-card h3 {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+
+        .status-card .sub {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #16213e;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        th {
+            background: #0f3460;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: #1a3a5c;
+        }
+
+        /* Status indicators */
+        .status-running {
+            color: #4ecca3;
+        }
+
+        .status-stopped {
+            color: #ff6b6b;
+        }
+
+        .status-unknown {
+            color: #ffd93d;
+        }
+
+        /* SMART health status */
+        .health-pass {
+            color: #4ecca3;
+            font-weight: bold;
+        }
+
+        .health-warn {
+            color: #ffd93d;
+            font-weight: bold;
+        }
+
+        .health-fail {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .health-unknown {
+            color: #888;
+        }
+
+        /* Drive health cards */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
+        .health-card {
+            background: #16213e;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .health-card h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            color: #ccc;
+        }
+
+        .health-card .assessment {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .health-card .temp {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-right: 0.25rem;
+            text-decoration: none;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #4ecca3;
+            color: #000;
+        }
+
+        .btn-danger {
+            background: #ff6b6b;
+            color: #fff;
+        }
+
+        .btn-warning {
+            background: #ffd93d;
+            color: #000;
+        }
+
+        .btn-secondary {
+            background: #0f3460;
+            color: #fff;
+        }
+
+        .btn-info {
+            background: #3498db;
+            color: #fff;
+        }
+
+        .btn-violet {
+            background: #9b59b6;
+            color: #fff;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: #fff;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #16213e;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: #4ecca3;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: #fff;
+        }
+
+        .modal-body {
+            padding: 1rem;
+            overflow: auto;
+            flex: 1;
+        }
+
+        .modal-body pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #ccc;
+        }
+
+        /* Mount modal form */
+        .modal-form label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #ccc;
+        }
+
+        .modal-form input[type="text"] {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .modal-form input[type="text"]:focus {
+            outline: none;
+            border-color: #4ecca3;
+        }
+
+        .modal-form .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+        }
+
+        .modal-form input[type="checkbox"] {
+            width: 1.1rem;
+            height: 1.1rem;
+            accent-color: #4ecca3;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            padding-top: 1rem;
+            border-top: 1px solid #0f3460;
+            margin-top: 0.5rem;
+        }
+
+        /* Sections */
+        section {
+            margin-bottom: 2rem;
+        }
+
+        section h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #333;
+            color: #ccc;
+        }
+
+        /* Action buttons section */
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid #333;
+            border-top-color: #4ecca3;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Toggle Switch */
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #555;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #fff;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background-color: #4ecca3;
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .toggle input:disabled + .toggle-slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .toggle-label {
+            margin-left: 0.5rem;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 0.75rem;
+                text-align: center;
+            }
+
+            nav {
+                justify-content: center;
+            }
+
+            .btn {
+                padding: 0.35rem 0.6rem;
+                font-size: 0.8rem;
+            }
+
+            .status-card .value {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+{% if docker_mode %}
+<div class="warning-banner">
+    Running in Docker mode. Disk mounting, hotspot, and shutdown are not available.
+</div>
+{% endif %}
+
+{% if not drive_mounted %}
+<div class="info-banner">
+    Primary drive not mounted. Some features may be limited.
+</div>
+{% endif %}
+
+<div id="fallback-banner" class="fallback-banner">
+    <span class="loading"></span>
+    Main UI is unavailable. Using Controller fallback. Will redirect when ready...
+</div>
+
+<div id="upgrade-banner" class="upgrade-banner">
+    <h2>Upgrade in Progress</h2>
+    <span id="upgrade-spinner" class="loading"></span>
+    <span id="upgrade-success" class="success" style="display: none;">✓</span>
+    <p id="upgrade-message">Please wait while WROLPi upgrades...</p>
+    <p class="elapsed">Elapsed: <span id="upgrade-elapsed">0:00</span></p>
+    <p class="warning">⚠ Do not power off your device or close this window during the upgrade.</p>
+</div>
+
+<header>
+    <div>
+        <h1>WROLPi Controller</h1>
+        <span class="version">v{{ version }}</span>
+    </div>
+</header>
+
+<main>
+    <section id="status">
+        <h2>System Status</h2>
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>CPU</h3>
+                <p class="value">{{ cpu.percent if cpu.percent is not none else '--' }}%</p>
+                <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}</p>
+            </div>
+            <div class="status-card">
+                <h3>Memory</h3>
+                <p class="value">{{ memory.percent|default('--') }}%</p>
+                <p class="sub">{{ memory.used_gb|default('--') }} GB used</p>
+            </div>
+            <div class="status-card">
+                <h3>Load</h3>
+                <p class="value">{{ load.load_1min|default('--') }}</p>
+                <p class="sub">1 min avg</p>
+            </div>
+            <div class="status-card">
+                <h3>Storage</h3>
+                <p class="value">{{ storage.percent|default('--') }}%</p>
+                <p class="sub">{{ storage.free_gb|default('--') }} GB free</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="actions">
+        <h2>System Actions</h2>
+        <div class="action-buttons">
+            <button class="btn btn-warning" onclick="restartServices()">Restart All Services</button>
+            {% if not docker_mode %}
+            <button class="btn btn-danger" onclick="rebootSystem()">Reboot System</button>
+            <button class="btn btn-danger" onclick="shutdownSystem()">Shutdown System</button>
+            {% endif %}
+        </div>
+    </section>
+
+    <section id="services">
+        <h2>Services</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Service</th>
+                <th>Status</th>
+                <th>Actions</th>
+                {% if not docker_mode %}
+                <th>Boot</th>
+                {% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for service in services %}
+            <tr>
+                <td>
+                    {{ service.name }}
+                    {% if service.port %}<span class="sub">:{{ service.port }}</span>{% endif %}
+                </td>
+                <td class="status-{{ service.status }}">{{ service.status }}</td>
+                <td>
+                    {% if service.status == 'running' %}
+                    <button class="btn btn-danger" onclick="serviceAction('{{ service.name }}', 'stop')">Stop</button>
+                    {% else %}
+                    <button class="btn btn-primary" onclick="serviceAction('{{ service.name }}', 'start')">Start
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-warning" onclick="serviceAction('{{ service.name }}', 'restart')">Restart
+                    </button>
+                    <button class="btn btn-info" onclick="showLogs('{{ service.name }}')">Logs</button>
+                    {% if service.viewable and service.status == 'running' and service.port %}
+                    <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
+                       target="_blank" class="btn btn-violet">View</a>
+                    {% endif %}
+                </td>
+                {% if not docker_mode %}
+                <td>
+                    {% if service.name == 'wrolpi-upgrade' %}
+                    <span style="color: #666;">--</span>
+                    {% else %}
+                    <label class="toggle">
+                        <input type="checkbox"
+                               id="boot-{{ service.name }}"
+                               {% if service.enabled %}checked{% endif %}
+                               onchange="toggleBoot('{{ service.name }}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label" id="boot-label-{{ service.name }}">
+                                {{ 'Enabled' if service.enabled else 'Disabled' }}
+                            </span>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="{% if docker_mode %}3{% else %}4{% endif %}" style="text-align: center; color: #666;">
+                    Service status not yet implemented
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <section id="disks">
+        <h2>Disks</h2>
+        <div id="disks-content">
+            <p style="color: #888; text-align: center;"><span class="loading"></span> Loading...</p>
+        </div>
+    </section>
+
+    <section id="drive-health">
+        <h2>Drive Health (SMART)</h2>
+        <div id="smart-content">
+            <p style="color: #888; text-align: center;"><span class="loading"></span> Loading...</p>
+        </div>
+    </section>
+</main>
+
+<!-- Logs Modal -->
+<div id="logs-modal" class="modal" onclick="if(event.target===this)closeLogsModal()">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="logs-title">Service Logs</h3>
+            <button class="modal-close" onclick="closeLogsModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <pre id="logs-content"><span class="loading"></span> Loading logs...</pre>
+        </div>
+    </div>
+</div>
+
+<!-- Mount Modal -->
+<div id="mount-modal" class="modal" onclick="if(event.target===this)closeMountModal()">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h3>Mount Disk</h3>
+            <button class="modal-close" onclick="closeMountModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="modal-form">
+                <label for="mount-point-input">Mount point:</label>
+                <input type="text" id="mount-point-input" placeholder="/media/..."/>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="mount-persist-checkbox"/>
+                    Persistent (survive reboots)
+                </label>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeMountModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="confirmMount()">Mount</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SMART Details Modal -->
+<div id="smart-modal" class="modal" onclick="if(event.target===this)closeSmartModal()">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3 id="smart-modal-title">Drive Health Details</h3>
+            <button class="modal-close" onclick="closeSmartModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="smart-modal-content">
+                <span class="loading"></span> Loading...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ===== INLINE JAVASCRIPT - No external files ===== */
+
+    async function apiCall(url, method = 'GET', body = null) {
+        try {
+            const options = {method};
+            if (body) {
+                options.headers = {'Content-Type': 'application/json'};
+                options.body = JSON.stringify(body);
+            }
+            const resp = await fetch(url, options);
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.detail || `HTTP ${resp.status}`);
+            }
+            return await resp.json();
+        } catch (e) {
+            throw e;
+        }
+    }
+
+    async function serviceAction(name, action) {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+
+        try {
+            await apiCall(`api/services/${name}/${action}`, 'POST');
+            // Reload page to show updated status
+            setTimeout(() => location.reload(), 1000);
+        } catch (e) {
+            alert(`Failed to ${action} ${name}: ${e.message}`);
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
+
+    async function toggleBoot(name, enabled) {
+        const checkbox = document.getElementById(`boot-${name}`);
+        const label = document.getElementById(`boot-label-${name}`);
+        const action = enabled ? 'enable' : 'disable';
+
+        // Disable checkbox while processing
+        checkbox.disabled = true;
+
+        try {
+            await apiCall(`api/services/${name}/${action}`, 'POST');
+            // Update label text
+            label.textContent = enabled ? 'Enabled' : 'Disabled';
+        } catch (e) {
+            // Revert checkbox on failure
+            checkbox.checked = !enabled;
+            alert(`Failed to ${action} ${name}: ${e.message}`);
+        } finally {
+            checkbox.disabled = false;
+        }
+    }
+
+    async function restartServices() {
+        if (!confirm('This will restart all WROLPi services. Continue?')) return;
+
+        document.body.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                <span class="loading" style="width:3rem;height:3rem;margin-bottom:1rem;"></span>
+                <h1 style="color:#4ecca3;">Restarting services...</h1>
+                <p style="color:#888;">Please wait, this page will reload automatically.</p>
+            </div>
+        `;
+
+        try {
+            await apiCall('api/restart', 'POST');
+        } catch (e) {
+            // Expected - connection may drop
+        }
+
+        // Poll until Controller is back
+        await waitForController();
+        location.reload();
+    }
+
+    async function rebootSystem() {
+        if (!confirm('This will REBOOT the entire system. Continue?')) return;
+
+        try {
+            await apiCall('api/reboot', 'POST');
+            document.body.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                    <h1 style="color:#ffd93d;">Rebooting...</h1>
+                    <p style="color:#888;">The system is rebooting. This page will reload when ready.</p>
+                </div>
+            `;
+
+            // Wait then poll
+            setTimeout(async () => {
+                await waitForController(120000);
+                location.reload();
+            }, 10000);
+        } catch (e) {
+            alert(`Failed to reboot: ${e.message}`);
+        }
+    }
+
+    async function shutdownSystem() {
+        if (!confirm('This will SHUT DOWN the system. You will need physical access to turn it back on. Continue?')) return;
+
+        try {
+            await apiCall('api/shutdown', 'POST');
+            document.body.innerHTML = `
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;">
+                    <h1 style="color:#ff6b6b;">Shutting down...</h1>
+                    <p style="color:#888;">The system is shutting down.</p>
+                </div>
+            `;
+        } catch (e) {
+            alert(`Failed to shutdown: ${e.message}`);
+        }
+    }
+
+    async function waitForController(maxWaitMs = 60000) {
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+            try {
+                const resp = await fetch('api/health');
+                if (resp.ok) return;
+            } catch (e) {
+                // Still waiting
+            }
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        throw new Error('Controller did not respond in time');
+    }
+
+    // ===== LOGS MODAL =====
+
+    async function showLogs(serviceName) {
+        const modal = document.getElementById('logs-modal');
+        const title = document.getElementById('logs-title');
+        const content = document.getElementById('logs-content');
+
+        title.textContent = `${serviceName} Logs`;
+        content.innerHTML = '<span class="loading"></span> Loading logs...';
+        modal.classList.add('show');
+
+        try {
+            const data = await apiCall(`api/services/${serviceName}/logs?lines=200`);
+            content.textContent = data.logs || 'No logs available';
+        } catch (e) {
+            content.textContent = `Error loading logs: ${e.message}`;
+        }
+    }
+
+    function closeLogsModal() {
+        document.getElementById('logs-modal').classList.remove('show');
+    }
+
+    // Close modals on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeLogsModal();
+            closeMountModal();
+            closeSmartModal();
+        }
+    });
+
+    // ===== DISK MANAGEMENT =====
+
+    function formatSize(bytes) {
+        if (!bytes) return '--';
+        // If already a string (e.g., "59.5G" from lsblk), return as-is
+        if (typeof bytes === 'string') return bytes;
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (bytes >= 1024 && i < units.length - 1) {
+            bytes /= 1024;
+            i++;
+        }
+        return `${bytes.toFixed(1)} ${units[i]}`;
+    }
+
+    async function loadDisks() {
+        const container = document.getElementById('disks-content');
+        try {
+            // Fetch disks and fstab entries in parallel
+            const [disks, fstabEntries] = await Promise.all([
+                apiCall('api/disks'),
+                apiCall('api/disks/fstab').catch(() => [])  // fstab may fail, that's ok
+            ]);
+
+            if (disks.length === 0) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">No disks detected</p>';
+                return;
+            }
+
+            // Build set of persistent mount points for quick lookup
+            const persistentMounts = new Set(fstabEntries.map(e => e.mount_point));
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Size</th>
+                            <th>Type</th>
+                            <th>Label</th>
+                            <th>Mount Point</th>
+                            <th>Persist</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            for (const disk of disks) {
+                const mounted = disk.mountpoint && disk.mountpoint !== '';
+                const mountClass = mounted ? 'status-running' : 'status-stopped';
+                const mountText = mounted ? disk.mountpoint : '--';
+
+                html += `
+                    <tr>
+                        <td>${disk.name}</td>
+                        <td>${formatSize(disk.size)}</td>
+                        <td>${disk.fstype || '--'}</td>
+                        <td>${disk.label || '--'}</td>
+                        <td class="${mountClass}">${mountText}</td>
+                        <td>
+                `;
+
+                const protectedMounts = ['/', '/boot', '/boot/firmware'];
+                const isProtected = protectedMounts.includes(disk.mountpoint);
+
+                // Persist column - only show for mounted, non-protected drives
+                if (mounted && !isProtected) {
+                    const isPersistent = persistentMounts.has(disk.mountpoint);
+                    html += `
+                        <label class="toggle">
+                            <input type="checkbox"
+                                   ${isPersistent ? 'checked' : ''}
+                                   onchange="togglePersist('${disk.path}', '${disk.mountpoint}', '${disk.fstype}', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">${isPersistent ? 'Enabled' : 'Disabled'}</span>
+                    `;
+                } else {
+                    html += '<span style="color: #666;">--</span>';
+                }
+
+                html += `</td><td>`;
+
+                // Actions column
+                if (mounted && !isProtected) {
+                    html += `<button class="btn btn-danger" onclick="unmountDisk('${disk.mountpoint}')">Unmount</button>`;
+                } else if (mounted && isProtected) {
+                    html += `<span style="color: #888;">System</span>`;
+                } else {
+                    const defaultMount = disk.label ? `/media/${disk.label}` : `/media/${disk.name}`;
+                    html += `<button class="btn btn-primary" onclick="mountDisk('${disk.path}', '${defaultMount}', '${disk.fstype || ''}')">Mount</button>`;
+                }
+
+                html += `
+                        </td>
+                    </tr>
+                `;
+            }
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+        } catch (e) {
+            if (e.message.includes('501')) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">Disk management not available in Docker mode</p>';
+            } else {
+                container.innerHTML = `<p style="color: #ff6b6b; text-align: center;">Error loading disks: ${e.message}</p>`;
+            }
+        }
+    }
+
+    // Mount modal state
+    let pendingMountDevice = null;
+    let pendingMountFstype = null;
+
+    function mountDisk(device, defaultMount, fstype) {
+        pendingMountDevice = device;
+        pendingMountFstype = fstype;
+        document.getElementById('mount-point-input').value = defaultMount;
+        document.getElementById('mount-persist-checkbox').checked = false;
+        document.getElementById('mount-modal').classList.add('show');
+        document.getElementById('mount-point-input').focus();
+    }
+
+    function closeMountModal() {
+        document.getElementById('mount-modal').classList.remove('show');
+        pendingMountDevice = null;
+        pendingMountFstype = null;
+    }
+
+    async function confirmMount() {
+        const mountPoint = document.getElementById('mount-point-input').value.trim();
+        const persist = document.getElementById('mount-persist-checkbox').checked;
+
+        if (!mountPoint) {
+            alert('Mount point is required');
+            return;
+        }
+
+        const btn = document.querySelector('#mount-modal .btn-primary');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+
+        try {
+            await apiCall('api/disks/mount', 'POST', {
+                device: pendingMountDevice,
+                mount_point: mountPoint,
+                fstype: pendingMountFstype || null,
+                persist: persist
+            });
+            closeMountModal();
+            setTimeout(() => location.reload(), 500);
+        } catch (e) {
+            alert(`Failed to mount: ${e.message}`);
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
+
+    async function unmountDisk(mountPoint) {
+        if (!confirm(`Unmount ${mountPoint}?`)) return;
+
+        try {
+            await apiCall('api/disks/unmount', 'POST', {
+                mount_point: mountPoint
+            });
+            setTimeout(() => location.reload(), 500);
+        } catch (e) {
+            alert(`Failed to unmount: ${e.message}`);
+        }
+    }
+
+    async function togglePersist(device, mountPoint, fstype, enablePersist) {
+        const checkbox = event.target;
+        const label = checkbox.closest('td').querySelector('.toggle-label');
+        checkbox.disabled = true;
+
+        try {
+            if (enablePersist) {
+                // Add to fstab
+                await apiCall('api/disks/fstab', 'POST', {
+                    device: device,
+                    mount_point: mountPoint,
+                    fstype: fstype || 'auto'
+                });
+                if (label) label.textContent = 'Enabled';
+            } else {
+                // Remove from fstab
+                const encodedPath = encodeURIComponent(mountPoint.slice(1));
+                await apiCall(`api/disks/fstab/${encodedPath}`, 'DELETE');
+                if (label) label.textContent = 'Disabled';
+            }
+            checkbox.disabled = false;
+        } catch (e) {
+            alert(`Failed to update persistence: ${e.message}`);
+            // Revert checkbox state on failure
+            checkbox.checked = !enablePersist;
+            checkbox.disabled = false;
+        }
+    }
+
+    // Load disks on page load
+    loadDisks();
+
+    // ===== SMART DRIVE HEALTH =====
+
+    // Store SMART data for modal display
+    let smartData = [];
+
+    async function loadSmart() {
+        const container = document.getElementById('smart-content');
+        try {
+            const response = await apiCall('api/disks/smart');
+
+            if (!response.available) {
+                container.innerHTML = `<p style="color: #888; text-align: center;">${response.reason || 'SMART monitoring not available'}</p>`;
+                return;
+            }
+
+            const drives = response.drives || [];
+            smartData = drives;
+
+            if (drives.length === 0) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">No SMART-capable drives detected</p>';
+                return;
+            }
+
+            let html = '<div class="health-grid">';
+
+            for (const drive of drives) {
+                const assessmentClass = getHealthClass(drive.assessment);
+                const assessmentText = drive.assessment || 'Unknown';
+                const tempText = drive.temperature !== null ? `${drive.temperature}°C` : '--';
+
+                html += `
+                    <div class="health-card">
+                        <h4>${drive.device}</h4>
+                        <p class="assessment ${assessmentClass}">${assessmentText}</p>
+                        <p class="temp">${tempText}</p>
+                        <button class="btn btn-sm btn-secondary" onclick="showSmartDetails('${drive.device}')">Details</button>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+
+        } catch (e) {
+            if (e.message.includes('501')) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">SMART monitoring not available in Docker mode</p>';
+            } else {
+                container.innerHTML = `<p style="color: #ff6b6b; text-align: center;">Error loading SMART data: ${e.message}</p>`;
+            }
+        }
+    }
+
+    function getHealthClass(assessment) {
+        if (!assessment) return 'health-unknown';
+        const upper = assessment.toUpperCase();
+        if (upper === 'PASS') return 'health-pass';
+        if (upper === 'WARN') return 'health-warn';
+        if (upper === 'FAIL') return 'health-fail';
+        return 'health-unknown';
+    }
+
+    function showSmartDetails(deviceName) {
+        const drive = smartData.find(d => d.device === deviceName);
+        if (!drive) {
+            alert('Drive data not found');
+            return;
+        }
+
+        const modal = document.getElementById('smart-modal');
+        const title = document.getElementById('smart-modal-title');
+        const content = document.getElementById('smart-modal-content');
+
+        title.textContent = `${drive.device} - Health Details`;
+
+        const assessmentClass = getHealthClass(drive.assessment);
+        const formatHours = (hours) => {
+            if (hours === null || hours === undefined) return '--';
+            const days = Math.floor(hours / 24);
+            const years = Math.floor(days / 365);
+            if (years > 0) return `${hours.toLocaleString()} hrs (${years}y ${days % 365}d)`;
+            if (days > 0) return `${hours.toLocaleString()} hrs (${days}d)`;
+            return `${hours} hrs`;
+        };
+
+        content.innerHTML = `
+            <table style="width: 100%; margin: 0;">
+                <tr>
+                    <td style="color: #888; width: 40%;">Model</td>
+                    <td>${drive.model || '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Serial</td>
+                    <td>${drive.serial || '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Capacity</td>
+                    <td>${drive.capacity || '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Assessment</td>
+                    <td class="${assessmentClass}">${drive.assessment || 'Unknown'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Temperature</td>
+                    <td>${drive.temperature !== null ? drive.temperature + '°C' : '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Power-On Hours</td>
+                    <td>${formatHours(drive.power_on_hours)}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Reallocated Sectors</td>
+                    <td class="${drive.reallocated_sectors > 0 ? 'health-warn' : ''}">${drive.reallocated_sectors !== null ? drive.reallocated_sectors : '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Pending Sectors</td>
+                    <td class="${drive.pending_sectors > 0 ? 'health-warn' : ''}">${drive.pending_sectors !== null ? drive.pending_sectors : '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">SMART Enabled</td>
+                    <td>${drive.smart_enabled ? 'Yes' : 'No'}</td>
+                </tr>
+            </table>
+        `;
+
+        modal.classList.add('show');
+    }
+
+    function closeSmartModal() {
+        document.getElementById('smart-modal').classList.remove('show');
+    }
+
+    // Load SMART data on page load
+    loadSmart();
+
+    // ===== FALLBACK / UPGRADE MODE =====
+
+    // Check URL parameters for special modes
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFallback = urlParams.get('fallback') === 'true';
+    const isUpgrade = urlParams.get('upgrade') === 'true';
+
+    if (isUpgrade) {
+        // ===== UPGRADE MODE =====
+        // Show upgrade banner
+        document.getElementById('upgrade-banner').classList.add('show');
+
+        // Track elapsed time
+        const startTime = Date.now();
+        const elapsedEl = document.getElementById('upgrade-elapsed');
+
+        const updateElapsed = () => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            elapsedEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        };
+        setInterval(updateElapsed, 1000);
+
+        // Poll main API to check if upgrade is complete
+        const checkUpgradeComplete = async () => {
+            try {
+                const resp = await fetch('/api/status', {
+                    method: 'GET',
+                    headers: {'Accept': 'application/json'},
+                    signal: AbortSignal.timeout(5000)
+                });
+                if (resp.ok) {
+                    // Upgrade complete!
+                    document.getElementById('upgrade-spinner').style.display = 'none';
+                    document.getElementById('upgrade-success').style.display = 'inline';
+                    document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
+                    document.getElementById('upgrade-banner').classList.add('complete');
+
+                    // Redirect to home after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                }
+            } catch (e) {
+                // Still upgrading, continue polling
+            }
+        };
+
+        // Check every 3 seconds (same as old maintenance page)
+        setInterval(checkUpgradeComplete, 3000);
+        // Also check immediately
+        checkUpgradeComplete();
+
+    } else if (isFallback) {
+        // ===== FALLBACK MODE =====
+        // Show fallback banner
+        document.getElementById('fallback-banner').classList.add('show');
+
+        // Poll main API to check if it's back up
+        const checkMainApp = async () => {
+            try {
+                // Check main API status endpoint (not Controller)
+                const resp = await fetch('/api/status', {method: 'HEAD'});
+                if (resp.ok) {
+                    // Main app is back, redirect to home
+                    window.location.href = '/';
+                }
+            } catch (e) {
+                // Still down, continue polling
+            }
+        };
+
+        // Check every 5 seconds
+        setInterval(checkMainApp, 5000);
+        // Also check immediately
+        checkMainApp();
+    }
+
+    // Always fetch stats - Controller is independent and can provide stats during upgrade/fallback
+    startPeriodicUpdates();
+
+    // ===== PERIODIC UPDATES =====
+
+    async function updateSystemStatus() {
+        try {
+            // Fetch all stats endpoints in parallel
+            const [cpu, memory, load, primaryDrive] = await Promise.all([
+                apiCall('api/stats/cpu'),
+                apiCall('api/stats/memory'),
+                apiCall('api/stats/load'),
+                apiCall('api/stats/drives/primary'),
+            ]);
+
+            // Update CPU card
+            const cpuValue = document.querySelector('.status-card:nth-child(1) .value');
+            const cpuSub = document.querySelector('.status-card:nth-child(1) .sub');
+            if (cpuValue) cpuValue.textContent = (cpu.percent !== null ? cpu.percent : '--') + '%';
+            if (cpuSub) cpuSub.innerHTML = cpu.temperature ? cpu.temperature + '&deg;C' : '--';
+
+            // Update Memory card
+            const memValue = document.querySelector('.status-card:nth-child(2) .value');
+            const memSub = document.querySelector('.status-card:nth-child(2) .sub');
+            if (memValue && memory.total > 0) {
+                const memPercent = ((memory.used / memory.total) * 100).toFixed(1);
+                memValue.textContent = memPercent + '%';
+            }
+            if (memSub) {
+                const usedGb = (memory.used / (1024 ** 3)).toFixed(1);
+                memSub.textContent = usedGb + ' GB used';
+            }
+
+            // Update Load card
+            const loadValue = document.querySelector('.status-card:nth-child(3) .value');
+            if (loadValue) loadValue.textContent = load.minute_1 !== undefined ? load.minute_1 : '--';
+
+            // Update Storage card
+            const storageValue = document.querySelector('.status-card:nth-child(4) .value');
+            const storageSub = document.querySelector('.status-card:nth-child(4) .sub');
+            if (storageValue) {
+                storageValue.textContent = (primaryDrive.mounted && primaryDrive.percent !== undefined)
+                    ? primaryDrive.percent + '%'
+                    : '--';
+            }
+            if (storageSub && primaryDrive.mounted && primaryDrive.size && primaryDrive.used) {
+                const freeBytes = primaryDrive.size - primaryDrive.used;
+                const freeGb = (freeBytes / (1024 ** 3)).toFixed(1);
+                storageSub.textContent = freeGb + ' GB free';
+            }
+        } catch (e) {
+            console.error('Failed to update system status:', e);
+        }
+    }
+
+    async function updateServicesTable() {
+        try {
+            const services = await apiCall('api/services');
+            const tbody = document.querySelector('#services table tbody');
+            if (!tbody || !Array.isArray(services)) return;
+
+            // Check if we're in docker mode by looking for Boot column
+            const isDockerMode = !document.querySelector('th:last-child')?.textContent?.includes('Boot');
+
+            let html = '';
+            for (const service of services) {
+                html += `<tr>
+                    <td>
+                        ${service.name}
+                        ${service.port ? `<span class="sub">:${service.port}</span>` : ''}
+                    </td>
+                    <td class="status-${service.status}">${service.status}</td>
+                    <td>`;
+
+                if (service.status === 'running') {
+                    html += `<button class="btn btn-danger" onclick="serviceAction('${service.name}', 'stop')">Stop</button>`;
+                } else {
+                    html += `<button class="btn btn-primary" onclick="serviceAction('${service.name}', 'start')">Start</button>`;
+                }
+
+                html += `<button class="btn btn-warning" onclick="serviceAction('${service.name}', 'restart')">Restart</button>
+                    <button class="btn btn-info" onclick="showLogs('${service.name}')">Logs</button>`;
+
+                if (service.viewable && service.status === 'running' && service.port) {
+                    const protocol = service.use_https ? 'https' : 'http';
+                    const host = window.location.hostname;
+                    const viewPath = service.view_path || '';
+                    html += `<a href="${protocol}://${host}:${service.port}${viewPath}" target="_blank" class="btn btn-violet">View</a>`;
+                }
+
+                html += '</td>';
+
+                if (!isDockerMode) {
+                    if (service.name === 'wrolpi-upgrade') {
+                        html += `<td><span style="color: #666;">--</span></td>`;
+                    } else {
+                        html += `<td>
+                            <label class="toggle">
+                                <input type="checkbox"
+                                       id="boot-${service.name}"
+                                       ${service.enabled ? 'checked' : ''}
+                                       onchange="toggleBoot('${service.name}', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="toggle-label" id="boot-label-${service.name}">
+                                ${service.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </td>`;
+                    }
+                }
+
+                html += '</tr>';
+            }
+
+            if (services.length === 0) {
+                const colspan = isDockerMode ? 3 : 4;
+                html = `<tr><td colspan="${colspan}" style="text-align: center; color: #666;">No services</td></tr>`;
+            }
+
+            tbody.innerHTML = html;
+        } catch (e) {
+            console.error('Failed to update services:', e);
+        }
+    }
+
+    function startPeriodicUpdates() {
+        // Update every 10 seconds
+        const updateInterval = 10000;
+
+        // Initial update after a short delay (to not overlap with initial load)
+        setTimeout(() => {
+            updateSystemStatus();
+            updateServicesTable();
+            loadDisks();
+            loadSmart();
+        }, updateInterval);
+
+        // Set up periodic updates
+        setInterval(() => {
+            updateSystemStatus();
+            updateServicesTable();
+            loadDisks();
+            loadSmart();
+        }, updateInterval);
+    }
+</script>
+</body>
+</html>

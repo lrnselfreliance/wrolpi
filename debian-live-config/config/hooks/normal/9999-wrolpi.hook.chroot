@@ -30,6 +30,15 @@ python3 -m venv /opt/wrolpi/venv
   /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
   /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
+# Install Controller with separate venv.
+echo "Pre-installing WROLPi Controller..."
+python3 -m venv /opt/wrolpi/controller/venv
+/opt/wrolpi/controller/venv/bin/pip install --upgrade pip
+/opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
+  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
+  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt
+echo "Controller pre-installed"
+
 # Configure nginx.
 cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html

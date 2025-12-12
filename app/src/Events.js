@@ -119,9 +119,9 @@ function handleEvents(events) {
 
         if (event === 'upgrade_started') {
             eventToast('Upgrade Started', message, 'info', 10000);
-            // Redirect to maintenance page after a short delay
+            // Redirect to Controller UI for upgrade status after a short delay
             setTimeout(() => {
-                window.location.href = '/maintenance.html';
+                window.location.href = '/controller/?upgrade=true';
             }, 1000);
         }
 

@@ -30,11 +30,16 @@ import {
     searchDirectories,
     searchVideos,
     searchZim,
-    setHotspot,
-    setThrottle,
     updateChannel,
     updateDomain,
 } from "../api";
+import {
+    enableHotspot,
+    disableHotspot,
+    enableThrottle,
+    disableThrottle,
+    getControllerStats,
+} from "../api/controller";
 import {createSearchParams, useLocation, useSearchParams} from "react-router";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {QueryContext, SettingsContext, StatusContext} from "../contexts/contexts";
@@ -790,9 +795,23 @@ export const useHotspot = () => {
         }
     }, [status]);
 
-    const localSetHotspot = async (on) => {
+    const localSetHotspot = async (enable) => {
         setOn(null);
-        await setHotspot(on);
+        try {
+            if (enable) {
+                await enableHotspot();
+            } else {
+                await disableHotspot();
+            }
+        } catch (e) {
+            console.error('Hotspot error:', e);
+            toast({
+                type: 'error',
+                title: 'Hotspot Error',
+                description: e.message || 'Could not modify hotspot. See server logs.',
+                time: 5000,
+            });
+        }
     }
 
     return {on, inUse, hotspotSsid: hotspot_ssid, setOn, setHotspot: localSetHotspot, dockerized};
@@ -866,23 +885,38 @@ export const useConfigs = () => {
 
 export const useThrottle = () => {
     const [on, setOn] = useState(null);
-    const {settings, fetchSettings} = React.useContext(SettingsContext);
+    const {status, fetchStatus} = React.useContext(StatusContext);
 
     useEffect(() => {
-        const status = settings['throttle_status'];
-        if (status === 'powersave') {
+        const throttleStatus = status?.throttle_status;
+        if (throttleStatus === 'powersave') {
             setOn(true);
-        } else if (status === 'ondemand') {
+        } else if (throttleStatus === 'ondemand') {
             setOn(false);
         } else {
             setOn(null);
         }
-    }, [JSON.stringify(settings)]);
+    }, [status?.throttle_status]);
 
-    const localSetThrottle = async (on) => {
+    const localSetThrottle = async (enable) => {
         setOn(null);
-        await setThrottle(on);
-        await fetchSettings();
+        try {
+            if (enable) {
+                await enableThrottle();
+            } else {
+                await disableThrottle();
+            }
+        } catch (e) {
+            console.error('Throttle error:', e);
+            toast({
+                type: 'error',
+                title: 'Throttle Error',
+                description: e.message || 'Could not modify throttle. See server logs.',
+                time: 5000,
+            });
+        }
+        // Refetch status to get updated throttle state
+        await fetchStatus();
     }
 
     return {on, setOn, setThrottle: localSetThrottle};
@@ -973,7 +1007,24 @@ export const useStatus = () => {
 
     const fetchStatus = async () => {
         try {
-            setStatus(await getStatus());
+            // Fetch from both endpoints in parallel
+            const [appStatus, controllerStats] = await Promise.all([
+                getStatus().catch(e => {
+                    if (e instanceof ApiDownError) {
+                        window.apiDown = true;
+                        return {};
+                    }
+                    throw e;
+                }),
+                getControllerStats().catch(e => {
+                    // Controller may be down, continue with app status only
+                    console.debug('Controller stats unavailable:', e.message);
+                    return {};
+                }),
+            ]);
+
+            // Merge both responses - controller stats override app status for system info
+            setStatus({...appStatus, ...controllerStats});
             window.apiDown = false;
         } catch (e) {
             if (e instanceof ApiDownError) {
@@ -1484,8 +1535,8 @@ export const useVINDecoder = (defaultVINNumber = '') => {
 
 export const useWROLMode = () => {
     // Returns the current boolean WROL Mode, during fetch this returns null.
-    const {status} = useContext(StatusContext);
-    return status ? status.wrol_mode : null;
+    const {settings} = useContext(SettingsContext);
+    return settings ? settings.wrol_mode : null;
 }
 
 export const useDockerized = () => {

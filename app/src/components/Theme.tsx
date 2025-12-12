@@ -27,6 +27,12 @@ import {
     StatisticGroup as SStatisticGroup,
     Tab as STab,
     Table as STable,
+    TableBody as STableBody,
+    TableCell as STableCell,
+    TableFooter as STableFooter,
+    TableHeader as STableHeader,
+    TableHeaderCell as STableHeaderCell,
+    TableRow as STableRow,
     TabPane as STabPane,
     TextArea as STextArea,
     AccordionProps,
@@ -55,6 +61,12 @@ import {
     StatisticGroupProps,
     TabProps,
     TableProps,
+    TableBodyProps,
+    TableCellProps,
+    TableFooterProps,
+    TableHeaderProps,
+    TableHeaderCellProps,
+    TableRowProps,
     TabPaneProps,
     TextAreaProps,
 } from "semantic-ui-react";
@@ -262,10 +274,7 @@ export function Segment(props: SegmentProps) {
     return <SSegment {...i} {...props}/>
 }
 
-export function Table(props: TableProps) {
-    const {i} = useContext(ThemeContext);
-    return <STable {...i} {...props}/>
-}
+// Table is now a compound component - see COMPOUND COMPONENTS section below
 
 export function TextArea(props: TextAreaProps) {
     const {i} = useContext(ThemeContext);
@@ -497,4 +506,62 @@ const BreadcrumbBase: React.FC<BreadcrumbProps> = (props) => {
 
 export const Breadcrumb: BreadcrumbComponent = Object.assign(BreadcrumbBase, {
     Divider: BreadcrumbDivider,
+});
+
+// ----------------------------------------------------------------------------
+// Table Compound Component
+// ----------------------------------------------------------------------------
+
+type TableBodyComponent = React.FC<TableBodyProps>;
+type TableCellComponent = React.FC<TableCellProps>;
+type TableFooterComponent = React.FC<TableFooterProps>;
+type TableHeaderComponent = React.FC<TableHeaderProps>;
+type TableHeaderCellComponent = React.FC<TableHeaderCellProps>;
+type TableRowComponent = React.FC<TableRowProps>;
+
+interface TableComponent extends React.FC<TableProps> {
+    Body: TableBodyComponent;
+    Cell: TableCellComponent;
+    Footer: TableFooterComponent;
+    Header: TableHeaderComponent;
+    HeaderCell: TableHeaderCellComponent;
+    Row: TableRowComponent;
+}
+
+const TableBody: TableBodyComponent = (props) => {
+    return <STableBody {...props}/>
+};
+
+const TableCell: TableCellComponent = (props) => {
+    return <STableCell {...props}/>
+};
+
+const TableFooter: TableFooterComponent = (props) => {
+    return <STableFooter {...props}/>
+};
+
+const TableHeader: TableHeaderComponent = (props) => {
+    return <STableHeader {...props}/>
+};
+
+const TableHeaderCell: TableHeaderCellComponent = (props) => {
+    return <STableHeaderCell {...props}/>
+};
+
+const TableRow: TableRowComponent = (props) => {
+    return <STableRow {...props}/>
+};
+
+const TableBase: React.FC<TableProps> = (props) => {
+    const {i} = useContext(ThemeContext);
+    return <STable {...i} {...props}/>
+};
+
+export const Table: TableComponent = Object.assign(TableBase, {
+    Body: TableBody,
+    Cell: TableCell,
+    Footer: TableFooter,
+    Header: TableHeader,
+    HeaderCell: TableHeaderCell,
+    Row: TableRow,
 });

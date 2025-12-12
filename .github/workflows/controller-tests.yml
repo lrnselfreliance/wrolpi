@@ -1,0 +1,32 @@
+name: Controller Tests
+
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+    branches: [master]
+
+jobs:
+  controller-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: controller
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: controller/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        run: python -m pytest test/ -v --tb=short --confcutdir=$(pwd)

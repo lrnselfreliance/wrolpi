@@ -18,6 +18,7 @@ set -e
 set -x
 
 # Stop services if they are running.
+systemctl stop wrolpi-controller.service || :
 systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
@@ -43,7 +44,6 @@ cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
 [ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
-cp /opt/wrolpi/etc/raspberrypios/maintenance.html /var/www/maintenance.html
 
 # Generate nginx certificate for HTTPS.
 if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then
@@ -52,6 +52,9 @@ if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then
       -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=$(hostname).local"
   chmod 640 /etc/nginx/cert.key /etc/nginx/cert.crt
 fi
+
+# Start nginx quickly so user can access Controller from React UI
+systemctl start nginx || :
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
@@ -62,10 +65,53 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
+systemctl enable wrolpi-controller.service
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
+
+# Repair Controller (offline-safe - no pip install)
+repair_controller() {
+    echo "Checking WROLPi Controller..."
+
+    # Check venv exists
+    if [ ! -f /opt/wrolpi/controller/venv/bin/python ]; then
+        echo "ERROR: Controller venv missing!"
+        echo "Run install.sh or upgrade.sh (requires internet) to reinstall."
+        return 1
+    fi
+
+    # Check venv is functional
+    if ! /opt/wrolpi/controller/venv/bin/python --version > /dev/null 2>&1; then
+        echo "ERROR: Controller venv is corrupted!"
+        echo "Run install.sh or upgrade.sh (requires internet) to reinstall."
+        return 1
+    fi
+
+    # Check systemd service is installed
+    if [ ! -f /etc/systemd/system/wrolpi-controller.service ]; then
+        echo "Controller systemd service not installed, copying..."
+        cp /opt/wrolpi/etc/raspberrypios/wrolpi-controller.service /etc/systemd/system/
+        systemctl daemon-reload
+    fi
+
+    # Ensure service is enabled
+    if ! systemctl is-enabled wrolpi-controller > /dev/null 2>&1; then
+        echo "Enabling Controller service..."
+        systemctl enable wrolpi-controller
+    fi
+
+    echo "Controller repair completed"
+}
+
+# Run Controller repair if venv exists (skip on fresh install)
+if [ -d /opt/wrolpi/controller/venv ]; then
+    repair_controller || echo "Controller repair failed, continuing..."
+fi
+
+# Start Controller so user can monitor repair in UI.
+systemctl start wrolpi-controller
 
 # Copy config files necessary for map.
 cp -r /opt/wrolpi/etc/raspberrypios/postgresql@15-map.service.d /etc/systemd/system/

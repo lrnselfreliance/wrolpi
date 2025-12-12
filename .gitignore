@@ -137,3 +137,6 @@ pg_data
 .DS_Store
 app/cypress/screenshots
 app/cypress/videos
+ 
+.claude
+*.md

@@ -1,6 +1,6 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
-import {checkUpgrade, postRestart, postShutdown, triggerUpgrade} from "../../api";
+import {checkUpgrade, postRestart, postShutdown, saveSettings as saveSettingsApi, triggerUpgrade} from "../../api";
 import {
     Button,
     Divider,
@@ -14,10 +14,8 @@ import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Inp
 import {
     APIButton,
     ErrorMessage,
-    HotspotToggle,
     InfoPopup,
     RefreshHeader,
-    ThrottleToggle,
     Toggle,
     useMessageDismissal,
     WROLModeMessage
@@ -107,8 +105,8 @@ function UpgradeSegment() {
         try {
             const response = await triggerUpgrade();
             if (response.ok) {
-                // Redirect to maintenance page
-                window.location.href = '/maintenance.html';
+                // Redirect to Controller UI for upgrade status
+                window.location.href = '/controller/?upgrade=true';
             }
         } catch (e) {
             setUpgrading(false);
@@ -249,6 +247,47 @@ function toApiLogLevel(logLevel) {
         1: 40,
     }[logLevel]
 }
+
+function WROLModeSection() {
+    const {settings, fetchSettings} = React.useContext(SettingsContext);
+    const wrolMode = settings?.wrol_mode || false;
+
+    const toggleWROLMode = async (checked) => {
+        try {
+            await saveSettingsApi({wrol_mode: checked});
+            await fetchSettings();  // Refresh context immediately
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Failed to toggle WROL Mode',
+                description: e.message,
+                time: 5000,
+            });
+        }
+    };
+
+    return (
+        <Segment>
+            <Header as='h3'>
+                <Icon name='shield'/>
+                WROL Mode
+            </Header>
+            <p>
+                Enable read-only mode. No content can be deleted or modified.
+                Enable this when the SHTF and you want to prevent any potential loss of data.
+            </p>
+            <p style={{fontSize: '0.9em', color: '#888'}}>
+                Note: User settings and tags can still be modified.
+            </p>
+            <Toggle
+                checked={wrolMode}
+                onChange={toggleWROLMode}
+                label={wrolMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
+            />
+        </Segment>
+    );
+}
+
 
 export function SettingsPage() {
     const [disabled, setDisabled] = React.useState(false);
@@ -579,15 +618,6 @@ export function SettingsPage() {
         body = <ErrorMessage>Unable to fetch settings</ErrorMessage>
     }
 
-    const controlSegment = <Segment>
-        <Header as='h3'>Control WROLPi</Header>
-        <HotspotToggle/>
-        <ThrottleToggle/>
-
-        <RestartButton/>
-        <ShutdownButton/>
-    </Segment>;
-
     const configsSegment = <Segment>
         <RefreshHeader
             header='Configs'
@@ -610,8 +640,6 @@ export function SettingsPage() {
     return <Container fluid>
         <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
-        {controlSegment}
-
         <Segment>
             <Header as='h2'>Settings</Header>
             {body}
@@ -620,6 +648,8 @@ export function SettingsPage() {
         {configsSegment}
 
         <UpgradeSegment/>
+
+        <WROLModeSection/>
 
         <Segment>
             <Header as='h1'>Browser Settings</Header>

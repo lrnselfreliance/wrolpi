@@ -114,6 +114,48 @@ else
 fi
 
 echo
+# Controller
+
+if [ -f /opt/wrolpi/controller/venv/bin/python3 ]; then
+  echo "OK: Controller Python virtual environment exists"
+
+  if /opt/wrolpi/controller/venv/bin/python3 --version 2>/dev/null > /dev/null; then
+    echo 'OK: Controller Python can be run'
+  else
+    echo "FAILED: Controller Python could not be run"
+  fi
+else
+  echo "FAILED: Controller Python virtual environment does not exist"
+fi
+
+if systemctl list-unit-files "*wrolpi-controller*" >/dev/null 2>&1; then
+  echo "OK: WROLPi Controller systemd exists"
+else
+  echo "FAILED: WROLPi Controller systemd does not exist"
+fi
+
+if [ -f /etc/systemd/system/wrolpi-controller.service ]; then
+  if systemctl status wrolpi-controller.service >/dev/null 2>&1; then
+    echo "OK: WROLPi Controller service is up"
+  else
+    echo "FAILED: WROLPi Controller service is not up"
+  fi
+fi
+
+if curl -s http://0.0.0.0:8087/api/health --max-time 5 >/dev/null 2>&1; then
+  echo "OK: WROLPi Controller health check passed"
+else
+  echo "FAILED: WROLPi Controller health check failed"
+fi
+
+# WROL Mode status
+if [ -f /media/wrolpi/config/.wrol_mode ]; then
+  echo "Note: WROL Mode is ACTIVE"
+else
+  echo "OK: WROL Mode is inactive"
+fi
+
+echo
 # API
 
 if [ -f /opt/wrolpi/venv/bin/python3 ]; then

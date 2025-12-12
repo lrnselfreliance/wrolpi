@@ -24,6 +24,12 @@ except ImportError:
 # Container name prefix (from docker-compose project)
 CONTAINER_PREFIX = os.environ.get("COMPOSE_PROJECT_NAME", "wrolpi")
 
+# Containers that should not have a "View" button (non-HTTP services)
+NON_VIEWABLE_CONTAINERS = {"db", "postgres", "postgresql", "redis", "memcached"}
+
+# Containers that should use HTTPS (in addition to *_https suffix detection)
+HTTPS_CONTAINERS = {"web"}
+
 
 def can_manage_containers() -> bool:
     """Check if we can manage Docker containers."""
@@ -98,7 +104,8 @@ def get_container_status(name: str) -> dict:
             "docker_status": docker_status,
             "port": port,
             "available": True,
-            "viewable": True,  # All containers are potentially viewable
+            "viewable": name not in NON_VIEWABLE_CONTAINERS,
+            "use_https": name.endswith("_https") or name in HTTPS_CONTAINERS,
         }
     except NotFound:
         return {
@@ -153,7 +160,8 @@ def get_all_containers_status() -> list[dict]:
                     "status": "running" if container.status == "running" else "stopped",
                     "docker_status": container.status,
                     "port": port,
-                    "viewable": True,
+                    "viewable": service_name not in NON_VIEWABLE_CONTAINERS,
+                    "use_https": service_name.endswith("_https") or service_name in HTTPS_CONTAINERS,
                 })
 
         return results

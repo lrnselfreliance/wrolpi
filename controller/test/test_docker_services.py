@@ -127,6 +127,91 @@ class TestGetAllContainersStatus:
                 assert len(result) == 1
                 assert result[0]["name"] == "api"
 
+    def test_db_container_not_viewable(self):
+        """Database container should not be viewable (port 5432 is not HTTP)."""
+        mock_container = mock.Mock()
+        mock_container.name = f"{CONTAINER_PREFIX}-db-1"
+        mock_container.status = "running"
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"5432/tcp": [{"HostPort": "5432"}]}}}
+
+        mock_client = mock.Mock()
+        mock_client.containers.list.return_value = [mock_container]
+
+        with mock.patch("controller.lib.docker_services.can_manage_containers", return_value=True):
+            with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
+                result = get_all_containers_status()
+                assert len(result) == 1
+                assert result[0]["name"] == "db"
+                assert result[0]["viewable"] is False
+
+    def test_api_container_is_viewable(self):
+        """API container should be viewable (HTTP service)."""
+        mock_container = mock.Mock()
+        mock_container.name = f"{CONTAINER_PREFIX}-api-1"
+        mock_container.status = "running"
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"8081/tcp": [{"HostPort": "8081"}]}}}
+
+        mock_client = mock.Mock()
+        mock_client.containers.list.return_value = [mock_container]
+
+        with mock.patch("controller.lib.docker_services.can_manage_containers", return_value=True):
+            with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
+                result = get_all_containers_status()
+                assert len(result) == 1
+                assert result[0]["name"] == "api"
+                assert result[0]["viewable"] is True
+
+    def test_https_container_uses_https(self):
+        """Containers with _https suffix should have use_https=True."""
+        mock_container = mock.Mock()
+        mock_container.name = f"{CONTAINER_PREFIX}-help_https-1"
+        mock_container.status = "running"
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"8086/tcp": [{"HostPort": "8086"}]}}}
+
+        mock_client = mock.Mock()
+        mock_client.containers.list.return_value = [mock_container]
+
+        with mock.patch("controller.lib.docker_services.can_manage_containers", return_value=True):
+            with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
+                result = get_all_containers_status()
+                assert len(result) == 1
+                assert result[0]["name"] == "help_https"
+                assert result[0]["use_https"] is True
+
+    def test_non_https_container_uses_http(self):
+        """Containers without _https suffix should have use_https=False."""
+        mock_container = mock.Mock()
+        mock_container.name = f"{CONTAINER_PREFIX}-api-1"
+        mock_container.status = "running"
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"8081/tcp": [{"HostPort": "8081"}]}}}
+
+        mock_client = mock.Mock()
+        mock_client.containers.list.return_value = [mock_container]
+
+        with mock.patch("controller.lib.docker_services.can_manage_containers", return_value=True):
+            with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
+                result = get_all_containers_status()
+                assert len(result) == 1
+                assert result[0]["name"] == "api"
+                assert result[0].get("use_https", False) is False
+
+    def test_web_container_uses_https(self):
+        """Web container (nginx proxy) should have use_https=True."""
+        mock_container = mock.Mock()
+        mock_container.name = f"{CONTAINER_PREFIX}-web-1"
+        mock_container.status = "running"
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"443/tcp": [{"HostPort": "8443"}]}}}
+
+        mock_client = mock.Mock()
+        mock_client.containers.list.return_value = [mock_container]
+
+        with mock.patch("controller.lib.docker_services.can_manage_containers", return_value=True):
+            with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
+                result = get_all_containers_status()
+                assert len(result) == 1
+                assert result[0]["name"] == "web"
+                assert result[0]["use_https"] is True
+
     def test_filters_by_prefix(self):
         """Should only return containers with correct prefix."""
         mock_container1 = mock.Mock()

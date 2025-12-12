@@ -303,7 +303,7 @@
                         <td class="status-{{ service.status }}">{{ service.status }}</td>
                         <td>
                             {% if service.viewable and service.status == 'running' and service.port %}
-                            <a href="http://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
+                            <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
                                target="_blank" class="btn btn-secondary">View</a>
                             {% endif %}
                             <button class="btn btn-primary" onclick="serviceAction('{{ service.name }}', 'start')"

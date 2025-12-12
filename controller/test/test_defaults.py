@@ -74,9 +74,25 @@ class TestManagedServicesConfig:
         for key, value in expected.items():
             assert service[key] == value, f"Service {name} has {key}={service.get(key)}, expected {value}"
 
+    @pytest.mark.parametrize("name,use_https", [
+        ("wrolpi-help", True),
+        ("wrolpi-kiwix", True),
+        ("apache2", True),
+        ("wrolpi-api", False),
+        ("wrolpi-app", False),
+        ("postgresql", False),
+    ])
+    def test_service_use_https(self, name, use_https):
+        """HTTPS services should have use_https=True, others should have False."""
+        services = DEFAULT_CONFIG["managed_services"]
+        service = next((s for s in services if s["name"] == name), None)
+        assert service is not None, f"Service {name} not found"
+        assert service.get("use_https", False) == use_https, \
+            f"Service {name} should have use_https={use_https}"
+
     def test_all_services_have_required_fields(self):
         """All services should have required fields."""
-        required_fields = ["name", "systemd_name", "port", "viewable", "description"]
+        required_fields = ["name", "systemd_name", "port", "viewable", "use_https", "description"]
         for service in DEFAULT_CONFIG["managed_services"]:
             for field in required_fields:
                 assert field in service, f"Service {service.get('name')} missing {field}"

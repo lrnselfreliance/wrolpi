@@ -127,6 +127,19 @@ class TestGetServiceStatus:
             result = get_service_status("wrolpi-api")
             assert result["status"] == expected_status
 
+    @pytest.mark.parametrize("service_name,expected_https", [
+        ("wrolpi-help", True),
+        ("wrolpi-kiwix", True),
+        ("apache2", True),
+        ("wrolpi-api", False),
+    ])
+    def test_returns_use_https_field(self, service_name, expected_https):
+        """Should return use_https field from service config."""
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="active", stderr="")
+            result = get_service_status(service_name)
+            assert result.get("use_https", False) == expected_https
+
 
 class TestGetAllServicesStatus:
     """Tests for get_all_services_status function."""

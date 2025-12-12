@@ -24,6 +24,7 @@ DEFAULT_CONFIG = {
             "port": 8081,
             "viewable": True,
             "view_path": "/docs",
+            "use_https": False,
             "description": "Python API (Sanic)",
         },
         {
@@ -31,6 +32,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "wrolpi-app",
             "port": 3000,
             "viewable": False,
+            "use_https": False,
             "description": "React frontend",
         },
         {
@@ -38,6 +40,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "wrolpi-help",
             "port": 8086,
             "viewable": True,
+            "use_https": True,
             "description": "Help documentation",
         },
         {
@@ -45,6 +48,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "wrolpi-kiwix",
             "port": 8085,
             "viewable": True,
+            "use_https": True,
             "description": "Kiwix/Zim server",
         },
         # Map services
@@ -53,6 +57,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "renderd",
             "port": None,
             "viewable": False,
+            "use_https": False,
             "description": "Map tile rendering daemon",
         },
         {
@@ -60,6 +65,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "apache2",
             "port": 8084,
             "viewable": True,
+            "use_https": True,
             "description": "Map tile web server",
         },
         # System services
@@ -68,6 +74,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "postgresql",
             "port": 5432,
             "viewable": False,
+            "use_https": False,
             "description": "PostgreSQL database",
         },
         {
@@ -75,6 +82,7 @@ DEFAULT_CONFIG = {
             "systemd_name": "nginx",
             "port": 80,
             "viewable": True,
+            "use_https": False,
             "description": "Web proxy",
         },
     ],

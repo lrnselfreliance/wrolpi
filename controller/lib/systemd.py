@@ -111,6 +111,7 @@ def get_service_status(name: str) -> dict:
             "port": service_config.get("port"),
             "viewable": service_config.get("viewable", False),
             "view_path": service_config.get("view_path", ""),
+            "use_https": service_config.get("use_https", False),
             "description": service_config.get("description", ""),
             "error": "systemctl not available",
         }
@@ -134,6 +135,7 @@ def get_service_status(name: str) -> dict:
         "port": service_config.get("port"),
         "viewable": service_config.get("viewable", False),
         "view_path": service_config.get("view_path", ""),
+        "use_https": service_config.get("use_https", False),
         "description": service_config.get("description", ""),
     }
 

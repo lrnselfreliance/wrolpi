@@ -23,6 +23,7 @@ from controller.api.schemas import (
     InfoResponse,
 )
 from controller.api.admin import router as admin_router
+from controller.api.disks import router as disks_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
 from controller.lib.config import (
@@ -84,6 +85,7 @@ app = FastAPI(
 
 # Include routers
 app.include_router(admin_router)
+app.include_router(disks_router)
 app.include_router(services_router)
 app.include_router(status_router)
 

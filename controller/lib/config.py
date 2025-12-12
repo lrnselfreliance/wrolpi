@@ -44,6 +44,11 @@ def is_docker_mode() -> bool:
     return os.environ.get("DOCKERIZED", "").lower() == "true"
 
 
+def get_media_directory() -> Path:
+    """Get the media directory path."""
+    return Path(os.environ.get("MEDIA_DIRECTORY", "/media/wrolpi"))
+
+
 def is_primary_drive_mounted() -> bool:
     """Check if the primary WROLPi drive is mounted."""
     return Path("/media/wrolpi/config").exists()

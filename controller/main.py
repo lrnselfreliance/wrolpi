@@ -22,6 +22,8 @@ from controller.api.schemas import (
     HealthResponse,
     InfoResponse,
 )
+from controller.api.admin import router as admin_router
+from controller.api.services import router as services_router
 from controller.api.status import router as status_router
 from controller.lib.config import (
     get_config,
@@ -29,12 +31,17 @@ from controller.lib.config import (
     is_primary_drive_mounted,
     reload_config_from_drive,
 )
+from controller.lib.docker_services import (
+    can_manage_containers,
+    get_all_containers_status,
+)
 from controller.lib.status import (
     get_cpu_status,
     get_load_status,
     get_memory_status,
     get_primary_drive_status,
 )
+from controller.lib.systemd import get_all_services_status
 
 
 # Templates directory
@@ -76,6 +83,8 @@ app = FastAPI(
 )
 
 # Include routers
+app.include_router(admin_router)
+app.include_router(services_router)
 app.include_router(status_router)
 
 
@@ -105,6 +114,15 @@ async def dashboard(request: Request):
             "free_gb": primary_drive["free_gb"],
         }
 
+    # Get service status
+    if is_docker_mode():
+        if can_manage_containers():
+            services = get_all_containers_status()
+        else:
+            services = []
+    else:
+        services = get_all_services_status()
+
     context = {
         "version": __version__,
         "docker_mode": is_docker_mode(),
@@ -125,8 +143,8 @@ async def dashboard(request: Request):
         },
         "storage": storage,
 
-        # Services - placeholder until Phase 6
-        "services": [],
+        # Real service status
+        "services": services,
     }
 
     return templates.TemplateResponse(request, "index.html", context)

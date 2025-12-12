@@ -250,6 +250,7 @@ class ServiceStatusResponse(BaseModel):
     port: Optional[int] = Field(default=None, description="Service port")
     viewable: Optional[bool] = Field(default=False, description="Whether service has a web UI")
     view_path: Optional[str] = Field(default="", description="Path to web UI")
+    use_https: Optional[bool] = Field(default=False, description="Whether service uses HTTPS")
     description: Optional[str] = Field(default="", description="Service description")
     available: Optional[bool] = Field(default=None, description="Whether management is available")
     reason: Optional[str] = Field(default=None, description="Reason if unavailable")

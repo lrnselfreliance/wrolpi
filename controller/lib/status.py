@@ -3,41 +3,78 @@ System status collection for WROLPi Controller.
 
 Provides functions to collect CPU, memory, load, disk, network, and power
 status information. This is the authoritative source for system hardware status.
+
+The status format matches the main WROLPi API's format so the React app
+can seamlessly switch between data sources.
 """
 
+import os
+import statistics
 import psutil
 from pathlib import Path
 from typing import Optional
+
+
+# CPU frequency paths
+MIN_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq')
+MAX_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq')
+CUR_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
 
 
 def get_cpu_status() -> dict:
     """
     Get CPU usage, frequency, temperature, and core count.
 
-    Returns:
-        dict with keys: percent, frequency_mhz, frequency_max_mhz,
-                       temperature_c, cores
+    Returns format compatible with main API's cpu_stats:
+        dict with keys: cores, cur_frequency, max_frequency, min_frequency,
+                       percent, temperature, high_temperature, critical_temperature
     """
-    cpu_percent = psutil.cpu_percent(interval=0.1)
-    cpu_freq = psutil.cpu_freq()
+    cpu_percent = int(psutil.cpu_percent(interval=0.1))
     cpu_count = psutil.cpu_count()
 
-    # Temperature - Raspberry Pi specific path
-    temperature = None
-    temp_path = Path("/sys/class/thermal/thermal_zone0/temp")
-    if temp_path.exists():
-        try:
-            temp_raw = temp_path.read_text().strip()
-            temperature = round(int(temp_raw) / 1000, 1)  # millidegrees to degrees
-        except (ValueError, IOError):
-            pass
+    # Get frequency from sys files (more reliable than psutil on RPi)
+    min_frequency = max_frequency = cur_frequency = None
+    try:
+        if MIN_FREQUENCY_PATH.exists():
+            min_frequency = int(MIN_FREQUENCY_PATH.read_text())
+        if MAX_FREQUENCY_PATH.exists():
+            max_frequency = int(MAX_FREQUENCY_PATH.read_text())
+        if CUR_FREQUENCY_PATH.exists():
+            cur_frequency = int(CUR_FREQUENCY_PATH.read_text())
+    except (ValueError, IOError):
+        pass
+
+    # Get temperature using psutil
+    temperature = high_temperature = critical_temperature = None
+    try:
+        temp = psutil.sensors_temperatures()
+        if temp:
+            name = 'coretemp' if 'coretemp' in temp else list(temp.keys())[0]
+            temperatures = temp.get(name)
+            if temperatures:
+                temperature = statistics.median([i.current or 0 for i in temperatures])
+                high_temperature = statistics.median([i.high or 0 for i in temperatures])
+                critical_temperature = statistics.median([i.critical or 0 for i in temperatures])
+
+                # Temperatures may not exist.
+                high_temperature = high_temperature or 60
+                critical_temperature = critical_temperature or 95
+
+                if high_temperature and high_temperature == critical_temperature:
+                    # Display yellow warning before red warning.
+                    high_temperature = critical_temperature - 25
+    except Exception:
+        pass
 
     return {
-        "percent": cpu_percent,
-        "frequency_mhz": round(cpu_freq.current) if cpu_freq else None,
-        "frequency_max_mhz": round(cpu_freq.max) if cpu_freq else None,
-        "temperature_c": temperature,
         "cores": cpu_count,
+        "cur_frequency": cur_frequency - min_frequency if cur_frequency and min_frequency else None,
+        "max_frequency": max_frequency,
+        "min_frequency": min_frequency,
+        "percent": cpu_percent,
+        "temperature": int(temperature) if temperature else None,
+        "high_temperature": int(high_temperature) if high_temperature else None,
+        "critical_temperature": int(critical_temperature) if critical_temperature else None,
     }
 
 
@@ -45,20 +82,15 @@ def get_memory_status() -> dict:
     """
     Get memory usage statistics.
 
-    Returns:
-        dict with keys: total_bytes, available_bytes, used_bytes, percent,
-                       total_gb, used_gb, available_gb
+    Returns format compatible with main API's memory_stats:
+        dict with keys: total, used, free, cached
     """
     mem = psutil.virtual_memory()
     return {
-        "total_bytes": mem.total,
-        "available_bytes": mem.available,
-        "used_bytes": mem.used,
-        "percent": mem.percent,
-        # Convenience fields in GB
-        "total_gb": round(mem.total / (1024**3), 1),
-        "used_gb": round(mem.used / (1024**3), 1),
-        "available_gb": round(mem.available / (1024**3), 1),
+        "total": mem.total,
+        "used": mem.used,
+        "free": mem.free,
+        "cached": getattr(mem, 'cached', 0),  # cached may not exist on all platforms (e.g., macOS)
     }
 
 
@@ -66,54 +98,55 @@ def get_load_status() -> dict:
     """
     Get system load averages.
 
-    Returns:
-        dict with keys: load_1min, load_5min, load_15min
+    Returns format compatible with main API's load_stats:
+        dict with keys: minute_1, minute_5, minute_15
     """
     load1, load5, load15 = psutil.getloadavg()
     return {
-        "load_1min": round(load1, 2),
-        "load_5min": round(load5, 2),
-        "load_15min": round(load15, 2),
+        "minute_1": str(round(load1, 2)),
+        "minute_5": str(round(load5, 2)),
+        "minute_15": str(round(load15, 2)),
     }
+
+
+IGNORED_DRIVES = ['/boot', '/etc']
+VALID_FORMATS = {'btrfs', 'ext4', 'ext3', 'ext2', 'vfat', 'exfat', 'apfs'}
 
 
 def get_drive_status() -> list[dict]:
     """
     Get disk usage for mounted filesystems.
-    Focuses on /media mounts but includes root.
 
-    Returns:
-        list of dicts with keys: device, mount_point, fstype,
-                                 total_bytes, used_bytes, free_bytes, percent,
-                                 total_gb, used_gb, free_gb
+    Returns format compatible with main API's drives_stats:
+        list of dicts with keys: mount, percent, size, used
     """
     drives = []
+    seen_devices = set()
 
     for partition in psutil.disk_partitions():
-        # Include /media mounts and root
-        if not (partition.mountpoint.startswith("/media") or
-                partition.mountpoint == "/"):
+        # Skip ignored directories
+        if any(partition.mountpoint.startswith(i) for i in IGNORED_DRIVES):
             continue
+        # Skip non-standard filesystems
+        if partition.fstype not in VALID_FORMATS:
+            continue
+        # Skip duplicate devices (only use first partition)
+        if partition.device in seen_devices:
+            continue
+        seen_devices.add(partition.device)
 
         try:
             usage = psutil.disk_usage(partition.mountpoint)
             drives.append({
-                "device": partition.device,
-                "mount_point": partition.mountpoint,
-                "fstype": partition.fstype,
-                "total_bytes": usage.total,
-                "used_bytes": usage.used,
-                "free_bytes": usage.free,
-                "percent": usage.percent,
-                # Convenience fields in GB
-                "total_gb": round(usage.total / (1024**3), 1),
-                "used_gb": round(usage.used / (1024**3), 1),
-                "free_gb": round(usage.free / (1024**3), 1),
+                "mount": partition.mountpoint,
+                "percent": int(usage.percent),
+                "size": int(usage.total),
+                "used": int(usage.used),
             })
         except (PermissionError, OSError):
             pass
 
-    return drives
+    return sorted(drives, key=lambda i: i["mount"])
 
 
 def get_primary_drive_status() -> Optional[dict]:
@@ -124,84 +157,70 @@ def get_primary_drive_status() -> Optional[dict]:
         dict with drive status, or None if not mounted
     """
     for drive in get_drive_status():
-        if drive["mount_point"] == "/media/wrolpi":
+        if drive["mount"] == "/media/wrolpi":
             return drive
     return None
 
 
-def get_network_status() -> list[dict]:
+IGNORED_NIC_NAMES = {'lo', 'veth', 'tun', 'docker', 'br-'}
+
+
+def get_network_status() -> dict:
     """
     Get network interface statistics.
 
-    Returns:
-        list of dicts with keys: name, ipv4, ipv6, mac,
-                                 bytes_sent, bytes_recv,
-                                 bytes_sent_mb, bytes_recv_mb
+    Returns format compatible with main API's nic_bandwidth_stats:
+        dict of interface_name -> stats
     """
-    interfaces = []
-    addrs = psutil.net_if_addrs()
-    stats = psutil.net_io_counters(pernic=True)
+    from datetime import datetime
+    timestamp = datetime.now().timestamp()
+    counters = dict()
+    if_stats = psutil.net_if_stats()
 
-    for iface, addresses in addrs.items():
-        # Skip loopback
-        if iface == "lo":
+    for name, counter in sorted(psutil.net_io_counters(pernic=True, nowrap=True).items(), key=lambda i: i[0]):
+        if name in IGNORED_NIC_NAMES:
             continue
+        stats = if_stats.get(name)
+        counters[name] = {
+            'name': name,
+            'now': timestamp,
+            'bytes_recv': counter.bytes_recv,
+            'bytes_sent': counter.bytes_sent,
+            'speed': int(stats.speed) if stats else 0,
+            # Initialize bandwidth per second to 0 (requires historical data to calculate)
+            'bytes_recv_ps': 0,
+            'bytes_sent_ps': 0,
+        }
 
-        iface_stats = stats.get(iface)
-
-        # Extract addresses by type
-        ipv4 = None
-        ipv6 = None
-        mac = None
-        for addr in addresses:
-            if addr.family.name == "AF_INET":
-                ipv4 = addr.address
-            elif addr.family.name == "AF_INET6":
-                ipv6 = addr.address
-            elif addr.family.name == "AF_PACKET":
-                mac = addr.address
-
-        interfaces.append({
-            "name": iface,
-            "ipv4": ipv4,
-            "ipv6": ipv6,
-            "mac": mac,
-            "bytes_sent": iface_stats.bytes_sent if iface_stats else 0,
-            "bytes_recv": iface_stats.bytes_recv if iface_stats else 0,
-            # Convenience in MB
-            "bytes_sent_mb": round((iface_stats.bytes_sent if iface_stats else 0) / (1024**2), 1),
-            "bytes_recv_mb": round((iface_stats.bytes_recv if iface_stats else 0) / (1024**2), 1),
-        })
-
-    return interfaces
+    return counters
 
 
 def get_power_status() -> dict:
     """
     Get power/voltage status (Raspberry Pi specific).
 
-    Returns:
-        dict with keys: undervoltage_detected, currently_throttled,
-                       undervoltage_occurred, throttling_occurred
+    Returns format compatible with main API's power_stats:
+        dict with keys: under_voltage, over_current
     """
+    import subprocess
+
     result = {
-        "undervoltage_detected": False,
-        "currently_throttled": False,
-        "undervoltage_occurred": False,
-        "throttling_occurred": False,
+        "under_voltage": False,
+        "over_current": False,
     }
 
-    # Check via /sys (Raspberry Pi)
-    throttled_path = Path("/sys/devices/platform/soc/soc:firmware/get_throttled")
-    if throttled_path.exists():
-        try:
-            value = int(throttled_path.read_text().strip(), 16)
-            result["undervoltage_detected"] = bool(value & 0x1)     # Bit 0
-            result["currently_throttled"] = bool(value & 0x4)       # Bit 2
-            result["undervoltage_occurred"] = bool(value & 0x10000) # Bit 16
-            result["throttling_occurred"] = bool(value & 0x40000)   # Bit 18
-        except (ValueError, IOError):
-            pass
+    try:
+        # Check via dmesg (same method as main API)
+        proc = subprocess.run(
+            ['dmesg'],
+            capture_output=True,
+            timeout=5,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            result["under_voltage"] = b' Undervoltage detected' in proc.stdout
+            result["over_current"] = b' over-current change ' in proc.stdout
+    except Exception:
+        pass
 
     return result
 
@@ -210,17 +229,55 @@ def get_full_status() -> dict:
     """
     Get complete system status.
 
-    Returns:
-        dict with all status categories
+    Returns format compatible with main API's /api/status response.
+    The React Status.js component expects this exact format.
     """
-    primary_drive = get_primary_drive_status()
+    from datetime import datetime
+    from controller.lib.config import is_docker_mode
+
+    cpu_stats = get_cpu_status()
+    memory_stats = get_memory_status()
+    load_stats = get_load_status()
+    drives_stats = get_drive_status()
+    power_stats = get_power_status()
+    nic_bandwidth_stats = get_network_status()
+
+    # Build disk bandwidth stats (similar format to NIC)
+    disk_bandwidth_stats = {}
+    timestamp = datetime.now().timestamp()
+    try:
+        for name, counter in sorted(psutil.disk_io_counters(perdisk=True).items(), key=lambda i: i[0]):
+            # Skip partitions, only report base disks
+            if any(name.startswith(skip) for skip in ('loop', 'ram')):
+                continue
+            # Skip partition numbers (report sda, not sda1)
+            if name not in disk_bandwidth_stats:
+                disk_bandwidth_stats[name] = {
+                    'name': name,
+                    'now': timestamp,
+                    'bytes_read': counter.read_bytes,
+                    'bytes_write': counter.write_bytes,
+                    'bytes_read_ps': 0,
+                    'bytes_write_ps': 0,
+                    'max_read_ps': 500_000,
+                    'max_write_ps': 500_000,
+                }
+    except Exception:
+        pass
 
     return {
-        "cpu": get_cpu_status(),
-        "memory": get_memory_status(),
-        "load": get_load_status(),
-        "drives": get_drive_status(),
-        "primary_drive": primary_drive,
-        "network": get_network_status(),
-        "power": get_power_status(),
+        # Core status fields expected by Status.js
+        "cpu_stats": cpu_stats,
+        "memory_stats": memory_stats,
+        "load_stats": load_stats,
+        "drives_stats": drives_stats,
+        "nic_bandwidth_stats": nic_bandwidth_stats,
+        "disk_bandwidth_stats": disk_bandwidth_stats,
+        "power_stats": power_stats,
+        "processes_stats": [],  # Empty list, processes require more complex gathering
+        "iostat_stats": {},  # Empty dict, iostat requires more complex gathering
+
+        # Additional fields expected by the React app
+        "dockerized": is_docker_mode(),
+        "last_status": datetime.now().isoformat(),
     }

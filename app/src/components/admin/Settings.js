@@ -14,10 +14,8 @@ import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Inp
 import {
     APIButton,
     ErrorMessage,
-    HotspotToggle,
     InfoPopup,
     RefreshHeader,
-    ThrottleToggle,
     Toggle,
     useMessageDismissal,
     WROLModeMessage
@@ -579,15 +577,6 @@ export function SettingsPage() {
         body = <ErrorMessage>Unable to fetch settings</ErrorMessage>
     }
 
-    const controlSegment = <Segment>
-        <Header as='h3'>Control WROLPi</Header>
-        <HotspotToggle/>
-        <ThrottleToggle/>
-
-        <RestartButton/>
-        <ShutdownButton/>
-    </Segment>;
-
     const configsSegment = <Segment>
         <RefreshHeader
             header='Configs'
@@ -609,8 +598,6 @@ export function SettingsPage() {
 
     return <Container fluid>
         <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
-
-        {controlSegment}
 
         <Segment>
             <Header as='h2'>Settings</Header>

@@ -111,9 +111,10 @@ async def dashboard(request: Request):
     # Format storage data
     storage = {}
     if primary_drive:
+        free_bytes = primary_drive["size"] - primary_drive["used"]
         storage = {
             "percent": primary_drive["percent"],
-            "free_gb": primary_drive["free_gb"],
+            "free_gb": round(free_bytes / (1024**3), 1),
         }
 
     # Get service status
@@ -134,14 +135,14 @@ async def dashboard(request: Request):
         # Real status data
         "cpu": {
             "percent": cpu["percent"],
-            "temperature_c": cpu["temperature_c"],
+            "temperature_c": cpu["temperature"],  # Field renamed
         },
         "memory": {
-            "percent": memory["percent"],
-            "used_gb": memory["used_gb"],
+            "percent": round((memory["used"] / memory["total"]) * 100, 1) if memory["total"] > 0 else 0,
+            "used_gb": round(memory["used"] / (1024**3), 1),
         },
         "load": {
-            "load_1min": load["load_1min"],
+            "load_1min": load["minute_1"],  # Field renamed
         },
         "storage": storage,
 

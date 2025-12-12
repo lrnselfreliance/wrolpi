@@ -1,5 +1,8 @@
 """
 Integration tests for Controller status API endpoints.
+
+The status endpoints now return formats compatible with the main WROLPi API
+so the React app can seamlessly use either source.
 """
 
 import pytest
@@ -14,25 +17,27 @@ class TestStatusEndpoint:
         assert response.status_code == 200
 
     def test_status_returns_all_categories(self, test_client):
-        """Status endpoint should return all status categories."""
+        """Status endpoint should return all status categories (main API format)."""
         response = test_client.get("/api/status")
         data = response.json()
-        assert "cpu" in data
-        assert "memory" in data
-        assert "load" in data
-        assert "drives" in data
-        assert "primary_drive" in data
-        assert "network" in data
-        assert "power" in data
+        assert "cpu_stats" in data
+        assert "memory_stats" in data
+        assert "load_stats" in data
+        assert "drives_stats" in data
+        assert "nic_bandwidth_stats" in data
+        assert "disk_bandwidth_stats" in data
+        assert "power_stats" in data
+        assert "dockerized" in data
+        assert "last_status" in data
 
     def test_status_cpu_is_valid(self, test_client):
         """Status should include valid CPU data."""
         response = test_client.get("/api/status")
         data = response.json()
-        assert "percent" in data["cpu"]
-        assert "cores" in data["cpu"]
-        assert isinstance(data["cpu"]["percent"], (int, float))
-        assert isinstance(data["cpu"]["cores"], int)
+        assert "percent" in data["cpu_stats"]
+        assert "cores" in data["cpu_stats"]
+        assert isinstance(data["cpu_stats"]["percent"], (int, float))
+        assert isinstance(data["cpu_stats"]["cores"], int)
 
 
 class TestCpuEndpoint:
@@ -44,14 +49,17 @@ class TestCpuEndpoint:
         assert response.status_code == 200
 
     def test_cpu_returns_expected_fields(self, test_client):
-        """CPU endpoint should return expected fields."""
+        """CPU endpoint should return expected fields (main API format)."""
         response = test_client.get("/api/status/cpu")
         data = response.json()
         assert "percent" in data
-        assert "frequency_mhz" in data
-        assert "frequency_max_mhz" in data
-        assert "temperature_c" in data
         assert "cores" in data
+        assert "cur_frequency" in data
+        assert "max_frequency" in data
+        assert "min_frequency" in data
+        assert "temperature" in data
+        assert "high_temperature" in data
+        assert "critical_temperature" in data
 
     def test_cpu_percent_valid_range(self, test_client):
         """CPU percent should be between 0 and 100."""
@@ -69,22 +77,19 @@ class TestMemoryEndpoint:
         assert response.status_code == 200
 
     def test_memory_returns_expected_fields(self, test_client):
-        """Memory endpoint should return expected fields."""
+        """Memory endpoint should return expected fields (main API format)."""
         response = test_client.get("/api/status/memory")
         data = response.json()
-        assert "total_bytes" in data
-        assert "available_bytes" in data
-        assert "used_bytes" in data
-        assert "percent" in data
-        assert "total_gb" in data
-        assert "used_gb" in data
-        assert "available_gb" in data
+        assert "total" in data
+        assert "used" in data
+        assert "free" in data
+        assert "cached" in data
 
     def test_memory_bytes_positive(self, test_client):
-        """Memory bytes should be positive."""
+        """Memory total should be positive."""
         response = test_client.get("/api/status/memory")
         data = response.json()
-        assert data["total_bytes"] > 0
+        assert data["total"] > 0
 
 
 class TestLoadEndpoint:
@@ -96,20 +101,21 @@ class TestLoadEndpoint:
         assert response.status_code == 200
 
     def test_load_returns_expected_fields(self, test_client):
-        """Load endpoint should return expected fields."""
+        """Load endpoint should return expected fields (main API format)."""
         response = test_client.get("/api/status/load")
         data = response.json()
-        assert "load_1min" in data
-        assert "load_5min" in data
-        assert "load_15min" in data
+        assert "minute_1" in data
+        assert "minute_5" in data
+        assert "minute_15" in data
 
     def test_load_values_non_negative(self, test_client):
         """Load values should be non-negative."""
         response = test_client.get("/api/status/load")
         data = response.json()
-        assert data["load_1min"] >= 0
-        assert data["load_5min"] >= 0
-        assert data["load_15min"] >= 0
+        # Values are strings in main API format
+        assert float(data["minute_1"]) >= 0
+        assert float(data["minute_5"]) >= 0
+        assert float(data["minute_15"]) >= 0
 
 
 class TestDrivesEndpoint:
@@ -127,15 +133,16 @@ class TestDrivesEndpoint:
         assert isinstance(data, list)
 
     def test_drives_are_valid_if_present(self, test_client):
-        """Drives should have required fields if present."""
+        """Drives should have required fields if present (main API format)."""
         response = test_client.get("/api/status/drives")
         data = response.json()
         # List may be empty in Docker containers
         if data:
             drive = data[0]
-            assert "device" in drive
-            assert "mount_point" in drive
+            assert "mount" in drive
             assert "percent" in drive
+            assert "size" in drive
+            assert "used" in drive
 
 
 class TestPrimaryDriveEndpoint:
@@ -162,18 +169,17 @@ class TestNetworkEndpoint:
         response = test_client.get("/api/status/network")
         assert response.status_code == 200
 
-    def test_network_returns_list(self, test_client):
-        """Network endpoint should return a list."""
+    def test_network_returns_dict(self, test_client):
+        """Network endpoint should return a dict (main API format)."""
         response = test_client.get("/api/status/network")
         data = response.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
 
     def test_network_excludes_loopback(self, test_client):
         """Network should not include loopback interface."""
         response = test_client.get("/api/status/network")
         data = response.json()
-        loopback = [i for i in data if i["name"] == "lo"]
-        assert len(loopback) == 0
+        assert "lo" not in data
 
 
 class TestPowerEndpoint:
@@ -185,20 +191,18 @@ class TestPowerEndpoint:
         assert response.status_code == 200
 
     def test_power_returns_expected_fields(self, test_client):
-        """Power endpoint should return expected fields."""
+        """Power endpoint should return expected fields (main API format)."""
         response = test_client.get("/api/status/power")
         data = response.json()
-        assert "undervoltage_detected" in data
-        assert "currently_throttled" in data
-        assert "undervoltage_occurred" in data
-        assert "throttling_occurred" in data
+        assert "under_voltage" in data
+        assert "over_current" in data
 
     def test_power_values_are_bool(self, test_client):
         """Power values should be booleans."""
         response = test_client.get("/api/status/power")
         data = response.json()
-        assert isinstance(data["undervoltage_detected"], bool)
-        assert isinstance(data["currently_throttled"], bool)
+        assert isinstance(data["under_voltage"], bool)
+        assert isinstance(data["over_current"], bool)
 
 
 class TestDashboardWithRealData:

@@ -21,6 +21,47 @@ npm install || npm install || npm install || npm install # try install multiple 
 # Upgrade the WROLPi database.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
 
+# Upgrade Controller
+upgrade_controller() {
+    echo "Upgrading WROLPi Controller..."
+
+    # Stop Controller during upgrade
+    systemctl stop wrolpi-controller || true
+
+    # Create Controller venv if it doesn't exist
+    if [ ! -d /opt/wrolpi/controller/venv ]; then
+        echo "Creating Controller virtual environment..."
+        python3 -m venv /opt/wrolpi/controller/venv
+    fi
+
+    # Update dependencies
+    echo "Updating Controller dependencies..."
+    /opt/wrolpi/controller/venv/bin/pip install --upgrade pip
+    /opt/wrolpi/controller/venv/bin/pip install --upgrade -r /opt/wrolpi/controller/requirements.txt
+
+    # Reload systemd in case service file changed
+    systemctl daemon-reload
+
+    # Start Controller
+    systemctl start wrolpi-controller
+
+    # Wait for health check (up to 30 seconds)
+    echo "Waiting for Controller health check..."
+    for i in {1..30}; do
+        if curl -s http://localhost:8087/api/health > /dev/null 2>&1; then
+            echo "Controller upgraded successfully"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "WARNING: Controller health check failed after upgrade"
+    echo "Check logs: journalctl -u wrolpi-controller -n 50"
+    return 1
+}
+
+upgrade_controller || echo "Controller upgrade failed, continuing..."
+
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."
 

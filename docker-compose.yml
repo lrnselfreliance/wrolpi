@@ -14,9 +14,36 @@ services:
     volumes:
       - ./pg_data:/var/lib/postgresql/data
 
+  controller: # WROLPi Controller Service
+    build:
+      context: .
+      dockerfile: docker/controller/Dockerfile
+    container_name: wrolpi-controller
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    volumes:
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Host system info (read-only)
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # Config directory
+      - ${MEDIA_DIRECTORY:-./test}/config:/media/wrolpi/config
+    environment:
+      - DOCKERIZED=true
+      - MEDIA_DIRECTORY=/media/wrolpi
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl -f http://127.0.0.1:8087/api/health || exit 1' ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
   api:
     depends_on:
       - db
+      - controller
     build:
       context: .
       dockerfile: docker/api/Dockerfile

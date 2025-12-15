@@ -1,5 +1,5 @@
 import React from 'react';
-import {Container, Icon} from "semantic-ui-react";
+import {Container, Dropdown, Icon} from "semantic-ui-react";
 import {Button, Header, Loader, Modal, Segment, Table} from "../Theme";
 import {
     APIButton,
@@ -34,11 +34,22 @@ const statusColors = {
 };
 
 
+const linesOptions = [
+    {key: 100, text: '100 lines', value: 100},
+    {key: 250, text: '250 lines', value: 250},
+    {key: 500, text: '500 lines', value: 500},
+    {key: 1000, text: '1000 lines', value: 1000},
+    {key: 5000, text: '5000 lines', value: 5000},
+];
+
 function ServiceRow({service, onAction, dockerized}) {
     const [loading, setLoading] = React.useState(false);
     const [logsOpen, setLogsOpen] = React.useState(false);
     const [logs, setLogs] = React.useState('');
     const [logsLoading, setLogsLoading] = React.useState(false);
+    const [linesCount, setLinesCount] = React.useState(250);
+    const [countdown, setCountdown] = React.useState(10);
+    const logsRef = React.useRef(null);
 
     const handleAction = async (action, actionFn) => {
         setLoading(true);
@@ -63,17 +74,69 @@ function ServiceRow({service, onAction, dockerized}) {
         }
     };
 
-    const handleViewLogs = async () => {
-        setLogsOpen(true);
-        setLogsLoading(true);
+    const fetchLogs = async (lines, showLoading = false) => {
+        if (showLoading) setLogsLoading(true);
         try {
-            const result = await getServiceLogs(service.name, 100);
+            const result = await getServiceLogs(service.name, lines);
             setLogs(result.logs || 'No logs available');
         } catch (e) {
             setLogs(`Error fetching logs: ${e.message}`);
         } finally {
-            setLogsLoading(false);
+            if (showLoading) setLogsLoading(false);
         }
+    };
+
+    // Scroll to bottom when logs finish loading
+    React.useEffect(() => {
+        if (!logsLoading && logsRef.current) {
+            logsRef.current.scrollTop = logsRef.current.scrollHeight;
+        }
+    }, [logsLoading]);
+
+    // Auto-refresh countdown timer (only when scrolled to bottom)
+    React.useEffect(() => {
+        if (!logsOpen) return;
+
+        const interval = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    // Check if scrolled to bottom (within 50px threshold)
+                    if (logsRef.current) {
+                        const {scrollTop, scrollHeight, clientHeight} = logsRef.current;
+                        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+                        if (isAtBottom) {
+                            fetchLogs(linesCount);
+                        }
+                    }
+                    return 10; // Reset countdown
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [logsOpen, linesCount]);
+
+    const handleViewLogs = async () => {
+        setLogsOpen(true);
+        fetchLogs(linesCount, true); // Show loading on initial open
+    };
+
+    const handleLinesChange = (e, {value}) => {
+        setLinesCount(value);
+        fetchLogs(value);
+    };
+
+    const handleDownloadLogs = () => {
+        const datetime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `${service.name}_${datetime}.txt`;
+        const blob = new Blob([logs], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const isRunning = service.status === 'running';
@@ -140,7 +203,7 @@ function ServiceRow({service, onAction, dockerized}) {
                         {logsLoading ? (
                             <Loader active inline='centered'/>
                         ) : (
-                            <pre style={{
+                            <pre ref={logsRef} style={{
                                 whiteSpace: 'pre-wrap',
                                 wordWrap: 'break-word',
                                 maxHeight: '400px',
@@ -156,6 +219,16 @@ function ServiceRow({service, onAction, dockerized}) {
                         )}
                     </Modal.Content>
                     <Modal.Actions>
+                        <span style={{marginRight: '0.5em', color: '#888'}}>{countdown}s</span>
+                        <Dropdown
+                            selection
+                            options={linesOptions}
+                            value={linesCount}
+                            onChange={handleLinesChange}
+                            style={{marginRight: 'auto'}}
+                        />
+                        <Button onClick={() => fetchLogs(linesCount)} color='blue' icon='refresh' content='Refresh'/>
+                        <Button onClick={handleDownloadLogs} color='yellow' icon='download' content='Download'/>
                         <Button onClick={() => setLogsOpen(false)}>Close</Button>
                     </Modal.Actions>
                 </Modal>

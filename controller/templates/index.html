@@ -444,6 +444,15 @@
             margin-top: 0.5rem;
         }
 
+        .logs-select {
+            background: #1a1a2e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            color: #fff;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
         /* Sections */
         section {
             margin-bottom: 2rem;
@@ -663,7 +672,7 @@
                     {% endif %}
                     <button class="btn btn-warning" onclick="serviceAction('{{ service.name }}', 'restart')">Restart
                     </button>
-                    <button class="btn btn-info" onclick="showLogs('{{ service.name }}')">Logs</button>
+                    <button class="btn btn-info" onclick="showLogs('{{ service.name }}', true)">Logs</button>
                     {% if service.viewable and service.status == 'running' and service.port %}
                     <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
                        target="_blank" class="btn btn-violet">View</a>
@@ -723,6 +732,19 @@
         </div>
         <div class="modal-body">
             <pre id="logs-content"><span class="loading"></span> Loading logs...</pre>
+        </div>
+        <div class="modal-footer">
+            <span id="logs-countdown" style="color: #888; margin-right: 0.5rem;">10s</span>
+            <select id="logs-lines-select" class="logs-select" onchange="changeLogLines()">
+                <option value="100">100 lines</option>
+                <option value="250" selected>250 lines</option>
+                <option value="500">500 lines</option>
+                <option value="1000">1000 lines</option>
+                <option value="5000">5000 lines</option>
+            </select>
+            <button class="btn btn-info" onclick="refreshLogs()">Refresh</button>
+            <button class="btn btn-warning" onclick="downloadLogs()">Download</button>
+            <button class="btn btn-secondary" onclick="closeLogsModal()">Close</button>
         </div>
     </div>
 </div>
@@ -901,24 +923,95 @@
 
     // ===== LOGS MODAL =====
 
-    async function showLogs(serviceName) {
+    let currentLogsService = null;
+    let logsCountdown = 10;
+    let logsCountdownInterval = null;
+
+    function startLogsCountdown() {
+        if (logsCountdownInterval) clearInterval(logsCountdownInterval);
+        logsCountdown = 10;
+        document.getElementById('logs-countdown').textContent = '10s';
+
+        logsCountdownInterval = setInterval(() => {
+            logsCountdown--;
+            document.getElementById('logs-countdown').textContent = logsCountdown + 's';
+
+            if (logsCountdown <= 0) {
+                // Check if scrolled to bottom (within 50px threshold)
+                const modalBody = document.getElementById('logs-content').closest('.modal-body');
+                const isAtBottom = modalBody.scrollHeight - modalBody.scrollTop - modalBody.clientHeight < 50;
+
+                if (isAtBottom && currentLogsService) {
+                    showLogs(currentLogsService);
+                }
+                logsCountdown = 10;
+                document.getElementById('logs-countdown').textContent = '10s';
+            }
+        }, 1000);
+    }
+
+    function stopLogsCountdown() {
+        if (logsCountdownInterval) {
+            clearInterval(logsCountdownInterval);
+            logsCountdownInterval = null;
+        }
+    }
+
+    async function showLogs(serviceName, showLoading = false) {
         const modal = document.getElementById('logs-modal');
         const title = document.getElementById('logs-title');
         const content = document.getElementById('logs-content');
+        const modalBody = content.closest('.modal-body');
+        const linesSelect = document.getElementById('logs-lines-select');
+
+        currentLogsService = serviceName;
+        const lines = linesSelect.value;
 
         title.textContent = `${serviceName} Logs`;
-        content.innerHTML = '<span class="loading"></span> Loading logs...';
+        if (showLoading) {
+            content.innerHTML = '<span class="loading"></span> Loading logs...';
+        }
         modal.classList.add('show');
 
         try {
-            const data = await apiCall(`api/services/${serviceName}/logs?lines=200`);
+            const data = await apiCall(`api/services/${serviceName}/logs?lines=${lines}`);
             content.textContent = data.logs || 'No logs available';
+            // Scroll modal-body to bottom of logs
+            modalBody.scrollTop = modalBody.scrollHeight;
+            // Start countdown after logs loaded
+            startLogsCountdown();
         } catch (e) {
             content.textContent = `Error loading logs: ${e.message}`;
         }
     }
 
+    function changeLogLines() {
+        if (currentLogsService) {
+            showLogs(currentLogsService);
+        }
+    }
+
+    function refreshLogs() {
+        if (currentLogsService) {
+            showLogs(currentLogsService);
+        }
+    }
+
+    function downloadLogs() {
+        const content = document.getElementById('logs-content').textContent;
+        const datetime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `${currentLogsService}_${datetime}.txt`;
+        const blob = new Blob([content], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     function closeLogsModal() {
+        stopLogsCountdown();
         document.getElementById('logs-modal').classList.remove('show');
     }
 
@@ -1432,7 +1525,7 @@
                 }
 
                 html += `<button class="btn btn-warning" onclick="serviceAction('${service.name}', 'restart')">Restart</button>
-                    <button class="btn btn-info" onclick="showLogs('${service.name}')">Logs</button>`;
+                    <button class="btn btn-info" onclick="showLogs('${service.name}', true)">Logs</button>`;
 
                 if (service.viewable && service.status === 'running' && service.port) {
                     const protocol = service.use_https ? 'https' : 'http';

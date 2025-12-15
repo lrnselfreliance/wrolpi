@@ -60,6 +60,39 @@ def parse_fstab() -> list[dict]:
     return entries
 
 
+def _filter_entry_with_comment(entries: list[dict], mount_point: str) -> list[dict]:
+    """
+    Remove a mount entry and its preceding WROLPi comment if present.
+
+    Args:
+        entries: List of parsed fstab entries
+        mount_point: Mount point to remove
+
+    Returns:
+        Filtered list without the mount entry and its associated WROLPi comment
+    """
+    result = []
+    skip_indices = set()
+
+    # First pass: identify which entries to skip
+    for i, entry in enumerate(entries):
+        if entry.get("mount_point") == mount_point:
+            skip_indices.add(i)
+            # Check if previous entry is a WROLPi comment
+            if i > 0:
+                prev_entry = entries[i - 1]
+                if (prev_entry["type"] == "comment" and
+                        "WROLPi managed mount" in prev_entry.get("line", "")):
+                    skip_indices.add(i - 1)
+
+    # Second pass: build result without skipped entries
+    for i, entry in enumerate(entries):
+        if i not in skip_indices:
+            result.append(entry)
+
+    return result
+
+
 def add_fstab_entry(
         device: str,
         mount_point: str,
@@ -108,8 +141,8 @@ def add_fstab_entry(
     # Read current fstab
     entries = parse_fstab()
 
-    # Remove any existing entry for this mount point
-    entries = [e for e in entries if e.get("mount_point") != mount_point]
+    # Remove any existing entry for this mount point (and its WROLPi comment)
+    entries = _filter_entry_with_comment(entries, mount_point)
 
     # Build new entry line
     new_entry = f"{device_spec} {mount_point} {fstype} {options} 0 2\n"
@@ -166,8 +199,8 @@ def remove_fstab_entry(mount_point: str) -> dict:
     entries = parse_fstab()
     original_count = len([e for e in entries if e["type"] == "mount"])
 
-    # Remove entry
-    entries = [e for e in entries if e.get("mount_point") != mount_point]
+    # Remove entry (and its WROLPi comment)
+    entries = _filter_entry_with_comment(entries, mount_point)
     new_count = len([e for e in entries if e["type"] == "mount"])
 
     if original_count == new_count:
@@ -190,9 +223,9 @@ def remove_fstab_entry(mount_point: str) -> dict:
 
 
 def get_wrolpi_fstab_entries() -> list[dict]:
-    """Get all fstab entries for mounts under /media/wrolpi."""
+    """Get all fstab entries for mounts under /media (WROLPi-managed mounts)."""
     entries = parse_fstab()
     return [
         e for e in entries
-        if e["type"] == "mount" and e["mount_point"].startswith("/media/wrolpi")
+        if e["type"] == "mount" and e["mount_point"].startswith("/media")
     ]

@@ -12,7 +12,7 @@ export default function AdminRoute() {
         {text: 'Downloads', to: '/admin', key: 'admin', end: true},
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
         {text: 'Status', to: '/admin/status', key: 'status'},
-        {text: 'Controller', to: '/admin/controller', key: 'controller'},
+        {text: 'Control', to: '/admin/controller', key: 'controller'},
     ];
 
     return <PageContainer>

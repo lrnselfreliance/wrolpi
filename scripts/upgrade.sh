@@ -39,25 +39,9 @@ upgrade_controller() {
     /opt/wrolpi/controller/venv/bin/pip install --upgrade pip
     /opt/wrolpi/controller/venv/bin/pip install --upgrade -r /opt/wrolpi/controller/requirements.txt
 
-    # Reload systemd in case service file changed
+    # Start the Controller.
     systemctl daemon-reload
-
-    # Start Controller
     systemctl start wrolpi-controller
-
-    # Wait for health check (up to 30 seconds)
-    echo "Waiting for Controller health check..."
-    for i in {1..30}; do
-        if curl -s http://localhost:8087/api/health > /dev/null 2>&1; then
-            echo "Controller upgraded successfully"
-            return 0
-        fi
-        sleep 1
-    done
-
-    echo "WARNING: Controller health check failed after upgrade"
-    echo "Check logs: journalctl -u wrolpi-controller -n 50"
-    return 1
 }
 
 upgrade_controller || echo "Controller upgrade failed, continuing..."

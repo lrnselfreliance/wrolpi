@@ -151,10 +151,10 @@ export async function getMounts() {
     return controllerFetch('/disks/mounts');
 }
 
-export async function mountDisk(device, mountPoint) {
+export async function mountDisk(device, mountPoint, fstype = null, options = 'defaults', persist = false) {
     return controllerFetch('/disks/mount', {
         method: 'POST',
-        body: JSON.stringify({device, mount_point: mountPoint}),
+        body: JSON.stringify({device, mount_point: mountPoint, fstype, options, persist}),
     });
 }
 
@@ -171,6 +171,24 @@ export async function detectWrolpiDrives() {
 
 export async function getSmartStatus() {
     return controllerFetch('/disks/smart');
+}
+
+// --- Fstab Endpoints ---
+
+export async function getFstabEntries() {
+    return controllerFetch('/disks/fstab');
+}
+
+export async function addFstabEntry(device, mountPoint, fstype, options = 'defaults,nofail,x-systemd.device-timeout=10s') {
+    return controllerFetch('/disks/fstab', {
+        method: 'POST',
+        body: JSON.stringify({device, mount_point: mountPoint, fstype, options}),
+    });
+}
+
+export async function removeFstabEntry(mountPoint) {
+    const encodedPath = encodeURIComponent(mountPoint.slice(1));
+    return controllerFetch(`/disks/fstab/${encodedPath}`, {method: 'DELETE'});
 }
 
 // --- Health Check ---

@@ -60,23 +60,38 @@ def parse_fstab() -> list[dict]:
     return entries
 
 
-def _filter_entry_with_comment(entries: list[dict], mount_point: str) -> list[dict]:
+def _filter_entry_with_comment(
+        entries: list[dict],
+        mount_point: str = None,
+        device: str = None,
+) -> list[dict]:
     """
-    Remove a mount entry and its preceding WROLPi comment if present.
+    Remove mount entries and their preceding WROLPi comments if present.
 
     Args:
         entries: List of parsed fstab entries
-        mount_point: Mount point to remove
+        mount_point: Mount point to remove (optional)
+        device: Device spec to remove (e.g., "UUID=1234" or "/dev/sda1") (optional)
 
     Returns:
-        Filtered list without the mount entry and its associated WROLPi comment
+        Filtered list without matching mount entries and their associated WROLPi comments
     """
     result = []
     skip_indices = set()
 
     # First pass: identify which entries to skip
     for i, entry in enumerate(entries):
-        if entry.get("mount_point") == mount_point:
+        should_skip = False
+
+        # Check mount_point match
+        if mount_point and entry.get("mount_point") == mount_point:
+            should_skip = True
+
+        # Check device match
+        if device and entry.get("device") == device:
+            should_skip = True
+
+        if should_skip:
             skip_indices.add(i)
             # Check if previous entry is a WROLPi comment
             if i > 0:
@@ -141,8 +156,9 @@ def add_fstab_entry(
     # Read current fstab
     entries = parse_fstab()
 
-    # Remove any existing entry for this mount point (and its WROLPi comment)
-    entries = _filter_entry_with_comment(entries, mount_point)
+    # Remove any existing entry for this mount point or device (and its WROLPi comment)
+    # This ensures we don't get duplicates when remounting the same device to a different location
+    entries = _filter_entry_with_comment(entries, mount_point=mount_point, device=device_spec)
 
     # Build new entry line
     new_entry = f"{device_spec} {mount_point} {fstype} {options} 0 2\n"

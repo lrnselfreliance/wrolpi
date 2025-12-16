@@ -1055,6 +1055,12 @@
 
             // Build set of persistent mount points for quick lookup
             const persistentMounts = new Set(fstabEntries.map(e => e.mount_point));
+            // Build map of device (UUID) to fstab entry for unmounted drive lookup
+            const persistentByDevice = new Map();
+            fstabEntries.forEach(e => {
+                // e.device is like "UUID=1234-5678" or "/dev/sda1"
+                persistentByDevice.set(e.device, e);
+            });
 
             let html = `
                 <table>
@@ -1090,14 +1096,26 @@
                 const protectedMounts = ['/', '/boot', '/boot/firmware'];
                 const isProtected = protectedMounts.includes(disk.mountpoint);
 
-                // Persist column - only show for mounted, non-protected drives
-                if (mounted && !isProtected) {
-                    const isPersistent = persistentMounts.has(disk.mountpoint);
+                // Check if this disk has a persistent entry (by mount point or UUID)
+                let isPersistent = false;
+                let persistentEntry = null;
+
+                if (mounted) {
+                    isPersistent = persistentMounts.has(disk.mountpoint);
+                } else if (disk.uuid) {
+                    // Check if unmounted drive has fstab entry by UUID
+                    persistentEntry = persistentByDevice.get(`UUID=${disk.uuid}`);
+                    isPersistent = !!persistentEntry;
+                }
+
+                // Persist column - show for mounted drives OR unmounted persistent drives
+                if ((mounted || isPersistent) && !isProtected) {
+                    const mountPoint = mounted ? disk.mountpoint : persistentEntry.mount_point;
                     html += `
                         <label class="toggle">
                             <input type="checkbox"
                                    ${isPersistent ? 'checked' : ''}
-                                   onchange="togglePersist('${disk.path}', '${disk.mountpoint}', '${disk.fstype}', this.checked)">
+                                   onchange="togglePersist('${disk.path}', '${mountPoint}', '${disk.fstype}', this.checked)">
                             <span class="toggle-slider"></span>
                         </label>
                         <span class="toggle-label">${isPersistent ? 'Enabled' : 'Disabled'}</span>

@@ -103,6 +103,7 @@ def save_config() -> None:
     """
     Save current runtime config to the WROLPi drive.
     Only saves the diff from defaults to keep the file clean.
+    If config matches defaults, removes the config file.
     """
     if not is_primary_drive_mounted():
         raise RuntimeError("Cannot save config: primary drive not mounted")
@@ -111,7 +112,9 @@ def save_config() -> None:
     diff = _get_config_diff(_runtime_config, DEFAULT_CONFIG)
 
     if not diff:
-        # Nothing to save - config matches defaults
+        # Config matches defaults - remove config file if it exists
+        if CONFIG_PATH_ON_DRIVE.exists():
+            CONFIG_PATH_ON_DRIVE.unlink()
         return
 
     CONFIG_PATH_ON_DRIVE.parent.mkdir(parents=True, exist_ok=True)

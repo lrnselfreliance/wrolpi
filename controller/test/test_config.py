@@ -205,6 +205,36 @@ class TestSaveConfig:
         # Only port should be in the file
         assert saved == {"port": 9999}
 
+    def test_save_config_removes_file_when_matches_defaults(
+            self, reset_runtime_config, mock_config_path, mock_drive_mounted
+    ):
+        """Should remove config file when config matches defaults."""
+        # First create a config file with non-default value
+        update_config("port", 9999)
+        save_config()
+        assert mock_config_path.exists()
+
+        # Reset to default value
+        update_config("port", 8087)  # Default port
+        save_config()
+
+        # File should be removed since config matches defaults
+        assert not mock_config_path.exists()
+
+    def test_save_config_removes_stale_file(
+            self, reset_runtime_config, mock_config_path, mock_drive_mounted
+    ):
+        """Should remove existing config file when config is reset to defaults."""
+        # Simulate an existing stale config file
+        mock_config_path.write_text("drives:\n  mounts:\n  - device: UUID=1234\n")
+        assert mock_config_path.exists()
+
+        # Runtime config matches defaults (no changes made)
+        save_config()
+
+        # File should be removed
+        assert not mock_config_path.exists()
+
 
 class TestUpdateConfig:
     """Tests for update_config function."""

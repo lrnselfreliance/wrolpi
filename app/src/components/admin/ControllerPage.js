@@ -1,5 +1,5 @@
 import React from 'react';
-import {Container, Dropdown, Icon} from "semantic-ui-react";
+import {Container, Dropdown, Icon, Confirm, Input, Checkbox, Form} from "semantic-ui-react";
 import {Button, Header, Loader, Modal, Segment, Table} from "../Theme";
 import {
     APIButton,
@@ -17,9 +17,13 @@ import {
     disableService,
     getServiceLogs,
     getDisks,
-    getMounts,
     getSmartStatus,
     restartServices,
+    getFstabEntries,
+    addFstabEntry,
+    removeFstabEntry,
+    mountDisk,
+    unmountDisk,
 } from "../../api/controller";
 import {toast} from "react-semantic-toasts-2";
 import {RestartButton, ShutdownButton} from "./Settings";
@@ -481,32 +485,150 @@ function SmartDetailsModal({drive, open, onClose}) {
 }
 
 
+// Protected mount points that should not be unmounted
+const PROTECTED_MOUNTS = ['/', '/boot', '/boot/firmware'];
+
+// Helper to format disk size
+const formatSize = (size) => {
+    if (!size) return '-';
+    // If already a string (e.g., "59.5G" from lsblk), return as-is
+    if (typeof size === 'string') return size;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let bytes = size;
+    while (bytes >= 1024 && i < units.length - 1) {
+        bytes /= 1024;
+        i++;
+    }
+    return `${bytes.toFixed(1)} ${units[i]}`;
+};
+
+
+function MountModal({disk, open, onClose, onMount}) {
+    const [mountPoint, setMountPoint] = React.useState('');
+    const [persist, setPersist] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
+
+    // Set default mount point when disk changes
+    React.useEffect(() => {
+        if (disk) {
+            const defaultMount = disk.label ? `/media/${disk.label}` : `/media/${disk.name}`;
+            setMountPoint(defaultMount);
+            setPersist(false);
+        }
+    }, [disk]);
+
+    const handleMount = async () => {
+        if (!mountPoint.trim()) {
+            toast({
+                type: 'error',
+                title: 'Mount point required',
+                description: 'Please enter a mount point.',
+                time: 3000,
+            });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await mountDisk(disk.path, mountPoint.trim(), disk.fstype, 'defaults', persist);
+            toast({
+                type: 'success',
+                title: 'Disk Mounted',
+                description: `${disk.name} mounted at ${mountPoint}`,
+                time: 3000,
+            });
+            onClose();
+            if (onMount) onMount();
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Mount Failed',
+                description: e.message,
+                time: 5000,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!disk) return null;
+
+    return (
+        <Modal open={open} onClose={onClose} size='small'>
+            <Modal.Header>
+                <Icon name='disk'/>
+                Mount Disk: {disk.name}
+            </Modal.Header>
+            <Modal.Content>
+                <Form>
+                    <Form.Field>
+                        <label>Mount Point</label>
+                        <Input
+                            value={mountPoint}
+                            onChange={(e) => setMountPoint(e.target.value)}
+                            placeholder="/media/..."
+                            fluid
+                        />
+                    </Form.Field>
+                    <Form.Field>
+                        <Checkbox
+                            label="Persistent (survive reboots)"
+                            checked={persist}
+                            onChange={(e, {checked}) => setPersist(checked)}
+                        />
+                    </Form.Field>
+                    {disk.fstype && (
+                        <p style={{color: '#888', fontSize: '0.9em'}}>
+                            Filesystem: {disk.fstype}
+                            {disk.label && ` | Label: ${disk.label}`}
+                            {disk.size && ` | Size: ${formatSize(disk.size)}`}
+                        </p>
+                    )}
+                </Form>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={onClose} disabled={loading}>Cancel</Button>
+                <Button color='green' onClick={handleMount} loading={loading} disabled={loading}>
+                    <Icon name='check'/>
+                    Mount
+                </Button>
+            </Modal.Actions>
+        </Modal>
+    );
+}
+
+
 function DiskSection() {
     const [disks, setDisks] = React.useState([]);
-    const [mounts, setMounts] = React.useState([]);
+    const [fstabEntries, setFstabEntries] = React.useState([]);
     const [smartDrives, setSmartDrives] = React.useState([]);
     const [smartAvailable, setSmartAvailable] = React.useState(true);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
     const [selectedDrive, setSelectedDrive] = React.useState(null);
     const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const [mountModalOpen, setMountModalOpen] = React.useState(false);
+    const [selectedDisk, setSelectedDisk] = React.useState(null);
+    const [unmountConfirmOpen, setUnmountConfirmOpen] = React.useState(false);
+    const [unmountTarget, setUnmountTarget] = React.useState(null);
     const dockerized = useDockerized();
 
     const fetchDiskInfo = async () => {
         setLoading(true);
         setError(null);
         try {
-            const [disksResult, mountsResult, smartResult] = await Promise.allSettled([
+            const [disksResult, fstabResult, smartResult] = await Promise.allSettled([
                 getDisks(),
-                getMounts(),
+                getFstabEntries(),
                 getSmartStatus(),
             ]);
 
             if (disksResult.status === 'fulfilled') {
                 setDisks(Array.isArray(disksResult.value) ? disksResult.value : []);
             }
-            if (mountsResult.status === 'fulfilled') {
-                setMounts(Array.isArray(mountsResult.value) ? mountsResult.value : []);
+            if (fstabResult.status === 'fulfilled') {
+                setFstabEntries(Array.isArray(fstabResult.value) ? fstabResult.value : []);
             }
             if (smartResult.status === 'fulfilled' && smartResult.value) {
                 // Handle new API format: {available: bool, drives: [...]}
@@ -527,6 +649,81 @@ function DiskSection() {
     const handleShowDetails = (drive) => {
         setSelectedDrive(drive);
         setDetailsOpen(true);
+    };
+
+    const handleOpenMountModal = (disk) => {
+        setSelectedDisk(disk);
+        setMountModalOpen(true);
+    };
+
+    const handleCloseMountModal = () => {
+        setMountModalOpen(false);
+        setSelectedDisk(null);
+    };
+
+    const handleUnmountClick = (mountPoint) => {
+        setUnmountTarget(mountPoint);
+        setUnmountConfirmOpen(true);
+    };
+
+    const handleUnmountConfirm = async () => {
+        if (!unmountTarget) return;
+
+        try {
+            await unmountDisk(unmountTarget);
+            toast({
+                type: 'success',
+                title: 'Disk Unmounted',
+                description: `Unmounted ${unmountTarget}`,
+                time: 3000,
+            });
+            fetchDiskInfo();
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Unmount Failed',
+                description: e.message,
+                time: 5000,
+            });
+        } finally {
+            setUnmountConfirmOpen(false);
+            setUnmountTarget(null);
+        }
+    };
+
+    const handleTogglePersist = async (disk, enable) => {
+        try {
+            if (enable) {
+                await addFstabEntry(disk.path, disk.mountpoint, disk.fstype || 'auto');
+                toast({
+                    type: 'success',
+                    title: 'Persistence Enabled',
+                    description: `${disk.mountpoint} will persist across reboots`,
+                    time: 3000,
+                });
+            } else {
+                await removeFstabEntry(disk.mountpoint);
+                toast({
+                    type: 'success',
+                    title: 'Persistence Disabled',
+                    description: `${disk.mountpoint} will not persist across reboots`,
+                    time: 3000,
+                });
+            }
+            fetchDiskInfo();
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Failed to update persistence',
+                description: e.message,
+                time: 5000,
+            });
+        }
+    };
+
+    // Check if a mount point is in fstab (persistent)
+    const isPersistent = (mountpoint) => {
+        return fstabEntries.some(entry => entry.mount_point === mountpoint);
     };
 
     React.useEffect(() => {
@@ -561,28 +758,78 @@ function DiskSection() {
 
             {error && <p style={{color: 'orange'}}>Some disk information unavailable: {error}</p>}
 
-            <Header as='h4'>Current Mounts</Header>
-            {mounts.length > 0 ? (
+            <Header as='h4'>Disks</Header>
+            {disks.length > 0 ? (
                 <Table unstackable striped compact>
                     <Table.Header>
                         <Table.Row>
-                            <Table.HeaderCell>Device</Table.HeaderCell>
+                            <Table.HeaderCell>Name</Table.HeaderCell>
+                            <Table.HeaderCell>Size</Table.HeaderCell>
+                            <Table.HeaderCell>Type</Table.HeaderCell>
+                            <Table.HeaderCell>Label</Table.HeaderCell>
                             <Table.HeaderCell>Mount Point</Table.HeaderCell>
-                            <Table.HeaderCell>Filesystem</Table.HeaderCell>
+                            <Table.HeaderCell>Persist</Table.HeaderCell>
+                            <Table.HeaderCell>Actions</Table.HeaderCell>
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {mounts.map((mount, idx) => (
-                            <Table.Row key={idx}>
-                                <Table.Cell>{mount.device}</Table.Cell>
-                                <Table.Cell>{mount.mount_point}</Table.Cell>
-                                <Table.Cell>{mount.fstype}</Table.Cell>
-                            </Table.Row>
-                        ))}
+                        {disks.map((disk) => {
+                            const isMounted = disk.mountpoint && disk.mountpoint !== '';
+                            const isProtected = PROTECTED_MOUNTS.includes(disk.mountpoint);
+                            const persistent = isMounted && isPersistent(disk.mountpoint);
+
+                            return (
+                                <Table.Row key={disk.path || disk.name}>
+                                    <Table.Cell>{disk.name}</Table.Cell>
+                                    <Table.Cell>{formatSize(disk.size)}</Table.Cell>
+                                    <Table.Cell>{disk.fstype || '-'}</Table.Cell>
+                                    <Table.Cell>{disk.label || '-'}</Table.Cell>
+                                    <Table.Cell>
+                                        {isMounted ? (
+                                            <span>{disk.mountpoint}</span>
+                                        ) : (
+                                            <span style={{color: '#888'}}>-</span>
+                                        )}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                        {isMounted && !isProtected ? (
+                                            <Toggle
+                                                checked={persistent}
+                                                onChange={(checked) => handleTogglePersist(disk, checked)}
+                                                label={persistent ? 'Enabled' : 'Disabled'}
+                                            />
+                                        ) : (
+                                            <span style={{color: '#888'}}>-</span>
+                                        )}
+                                    </Table.Cell>
+                                    <Table.Cell>
+                                        {isMounted && isProtected ? (
+                                            <span style={{color: '#888'}}>System</span>
+                                        ) : isMounted ? (
+                                            <Button
+                                                size='small'
+                                                color='red'
+                                                icon='eject'
+                                                content='Unmount'
+                                                onClick={() => handleUnmountClick(disk.mountpoint)}
+                                            />
+                                        ) : (
+                                            <Button
+                                                size='small'
+                                                color='green'
+                                                icon='plug'
+                                                content='Mount'
+                                                onClick={() => handleOpenMountModal(disk)}
+                                            />
+                                        )}
+                                    </Table.Cell>
+                                </Table.Row>
+                            );
+                        })}
                     </Table.Body>
                 </Table>
             ) : (
-                <p>No mounts found.</p>
+                <p>No disks detected.</p>
             )}
 
             <Header as='h4'>SMART Health</Header>
@@ -634,6 +881,25 @@ function DiskSection() {
                 drive={selectedDrive}
                 open={detailsOpen}
                 onClose={() => setDetailsOpen(false)}
+            />
+
+            <MountModal
+                disk={selectedDisk}
+                open={mountModalOpen}
+                onClose={handleCloseMountModal}
+                onMount={fetchDiskInfo}
+            />
+
+            <Confirm
+                open={unmountConfirmOpen}
+                header='Unmount Disk'
+                content={`Are you sure you want to unmount ${unmountTarget}?`}
+                onCancel={() => {
+                    setUnmountConfirmOpen(false);
+                    setUnmountTarget(null);
+                }}
+                onConfirm={handleUnmountConfirm}
+                confirmButton='Unmount'
             />
 
             <Button onClick={fetchDiskInfo} style={{marginTop: '1em'}}>

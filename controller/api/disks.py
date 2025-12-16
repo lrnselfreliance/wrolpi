@@ -7,7 +7,12 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from controller.lib.config import is_docker_mode
+from controller.lib.config import (
+    get_config_value,
+    is_docker_mode,
+    save_config,
+    update_config,
+)
 from controller.lib.disks import (
     get_block_devices,
     get_mounts,
@@ -112,6 +117,30 @@ async def disk_mount(request: MountRequest):
         )
         result["fstab"] = fstab_result
 
+        # Save to controller.yaml to track WROLPi-managed mounts
+        if fstab_result.get("success"):
+            mount_entry = {
+                "device": fstab_result.get("device", request.device),
+                "mount_point": request.mount_point,
+                "fstype": request.fstype or "auto",
+                "options": request.options,
+            }
+
+            # Get current mounts, filter out any existing entry for same mount_point or device
+            current_mounts = get_config_value("drives.mounts", [])
+            current_mounts = [
+                m for m in current_mounts
+                if m.get("mount_point") != request.mount_point
+                and m.get("device") != mount_entry["device"]
+            ]
+            current_mounts.append(mount_entry)
+
+            update_config("drives.mounts", current_mounts)
+            try:
+                save_config()
+            except RuntimeError:
+                pass  # Primary drive not mounted - can't save yet
+
     return result
 
 
@@ -168,6 +197,15 @@ async def delete_fstab(mount_point: str):
 
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+
+    # Remove from controller.yaml - mount is no longer persistent
+    current_mounts = get_config_value("drives.mounts", [])
+    current_mounts = [m for m in current_mounts if m.get("mount_point") != mount_point]
+    update_config("drives.mounts", current_mounts)
+    try:
+        save_config()
+    except RuntimeError:
+        pass  # Primary drive not mounted - can't save
 
     return result
 

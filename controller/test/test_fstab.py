@@ -131,6 +131,45 @@ UUID=5678 /media/test ext4 defaults,nofail 0 2
                             # The old timestamp should NOT be there
                             assert "2025-12-15T15:57:37.675757" not in written_str
 
+    def test_replaces_entry_for_same_uuid_different_mount_point(self):
+        """Should remove old entry when adding same UUID to different mount point.
+
+        Scenario: User mounts /dev/sda1 (UUID=5678) to /media/64GB with persist,
+        then unmounts, then mounts same device to /media/64GB-2 with persist.
+        The old /media/64GB entry should be removed.
+        """
+        fstab_content = """\
+# /etc/fstab
+UUID=1234 / ext4 defaults 0 1
+# WROLPi managed mount - added 2025-12-15T15:57:37.675757
+UUID=5678 /media/64GB exfat defaults,nofail,x-systemd.device-timeout=10s 0 2
+"""
+        written_content = []
+
+        def mock_write(content):
+            written_content.append(content)
+
+        mock_file = mock.mock_open(read_data=fstab_content)
+        mock_file().write = mock_write
+
+        with mock.patch("controller.lib.fstab.require_normal_mode"):
+            with mock.patch("controller.lib.fstab.get_uuid", return_value="5678"):
+                with mock.patch("controller.lib.fstab.backup_fstab"):
+                    with mock.patch("builtins.open", mock_file):
+                        with mock.patch("subprocess.run"):
+                            # Mount same device to different mount point
+                            result = add_fstab_entry("/dev/sda1", "/media/64GB-2", "exfat")
+                            assert result["success"] is True
+                            written_str = "".join(written_content)
+                            # Should only have ONE entry for UUID=5678 (the new one)
+                            assert written_str.count("UUID=5678") == 1
+                            # Should have the new mount point
+                            assert "/media/64GB-2" in written_str
+                            # Should NOT have the old mount point
+                            assert "/media/64GB " not in written_str
+                            # Should have exactly ONE WROLPi comment
+                            assert written_str.count("WROLPi managed mount") == 1
+
 
 class TestRemoveFstabEntry:
     """Tests for remove_fstab_entry function."""

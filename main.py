@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import sys
-from contextlib import suppress
+from contextlib import contextmanager
 
 from sanic import Sanic
 from sanic.signals import Event
@@ -28,6 +28,15 @@ from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
+
+
+@contextmanager
+def log_and_suppress(*exceptions, message="Exception suppressed"):
+    """Like contextlib.suppress but logs the exception at INFO level first."""
+    try:
+        yield
+    except exceptions as e:
+        logger.info(f'{message}: {e}', exc_info=e)
 
 
 def db_main(args):
@@ -228,7 +237,7 @@ async def start_single_tasks(app: Sanic):
     logger.debug(f'start_single_tasks started')
 
     # Import configs, ignore errors so the service will start.  Configs will refuse to save if they failed to import.
-    with suppress(Exception):
+    with log_and_suppress(Exception, message='Failed to import wrolpi config'):
         get_wrolpi_config().import_config()
         logger.debug('wrolpi config imported')
 
@@ -238,27 +247,27 @@ async def start_single_tasks(app: Sanic):
         if wrolpi_config.wrol_mode:
             logger.warning('Refusing to import other configs when WROL mode is enabled!')
         else:
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import tags config'):
                 tags.import_tags_config()
                 logger.debug('tags config imported')
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import videos downloader config'):
                 get_videos_downloader_config().import_config()
                 logger.debug('videos downloader config imported')
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import downloads config'):
                 await import_downloads_config()
                 logger.debug('downloads config imported')
             # Channels uses both downloads and tags.
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import channels config'):
                 import_channels_config()
                 logger.debug('channels config imported')
             # Domains config import
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import domains config'):
                 import_domains_config()
                 logger.debug('domains config imported')
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to import inventories config'):
                 import_inventories_config()
                 logger.debug('inventories config imported')
-            with suppress(Exception):
+            with log_and_suppress(Exception, message='Failed to init inventory'):
                 init_inventory()
 
     from modules.zim.lib import flag_outdated_zim_files

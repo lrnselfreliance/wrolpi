@@ -138,3 +138,65 @@ async def test_model_archive_extracts_url_from_singlefile(async_client, test_ses
     collection = test_session.query(Collection).get(archive.collection_id)
     assert collection.name == domain
     assert collection.kind == 'domain'
+
+
+@pytest.mark.asyncio
+async def test_archive_outside_directory_keeps_collection_directory(async_client, test_session, test_directory,
+                                                                     make_files_structure):
+    """
+    Test that model_archive() does NOT clear collection.directory when archive is outside it.
+
+    Bug: Previously, if an archive was found outside its domain collection's directory,
+    the code would clear collection.directory = None. This was wrong because:
+    1. Archives should still be associated with domain collection based on URL
+    2. The collection's directory should remain intact for other archives
+    """
+    import datetime
+    import pytz
+
+    domain = 'zerohedge.com'
+    url = f'https://{domain}/article'
+
+    # Create a domain collection WITH a specific directory
+    collection_dir = 'archive/News/zerohedge.com'
+    collection = Collection(name=domain, kind='domain', directory=collection_dir)
+    test_session.add(collection)
+    test_session.commit()
+    collection_id = collection.id
+
+    # Create the collection directory
+    (test_directory / collection_dir).mkdir(parents=True, exist_ok=True)
+
+    # Create archive files in a DIFFERENT directory (simulating manual file move)
+    old_archive_dir = test_directory / 'archive' / domain
+    old_archive_dir.mkdir(parents=True)
+
+    timestamp = archive_strftime(datetime.datetime(2000, 1, 1, 0, 0, 0).astimezone(pytz.UTC))
+    title = 'Test Article'
+
+    singlefile_content = f'''<!DOCTYPE html><html><!--
+ Page saved with SingleFile
+ url: {url}
+--><head><title>{title}</title></head>
+<body><p>Content</p></body></html>'''
+
+    files = make_files_structure({
+        str(old_archive_dir / f'{timestamp}_{title}.html'): singlefile_content.strip(),
+        str(old_archive_dir / f'{timestamp}_{title}.readability.json'): '{"title": "' + title + '"}',
+    })
+
+    from wrolpi.files.models import FileGroup
+
+    file_paths = [pathlib.Path(f) for f in files]
+    file_group = FileGroup.from_paths(test_session, *file_paths)
+
+    # Model the archive - archive is in archive/zerohedge.com but collection dir is archive/News/zerohedge.com
+    archive = model_archive(test_session, file_group)
+
+    assert archive is not None
+    assert archive.collection_id == collection_id, "Archive should be associated with domain collection"
+
+    # CRITICAL: The collection's directory should NOT be cleared
+    test_session.refresh(collection)
+    assert str(collection.directory) == collection_dir, \
+        f"Collection directory should NOT be cleared! Expected '{collection_dir}', got '{collection.directory}'"

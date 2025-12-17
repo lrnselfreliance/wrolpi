@@ -44,15 +44,21 @@ class ArchiveDownloader(Downloader, ABC):
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
+        # Get destination from settings (passed by RSS downloader from download.destination column)
+        destination = None
+        if download.settings and download.settings.get('destination'):
+            destination = pathlib.Path(download.settings['destination'])
+
         if DOCKERIZED or PYTEST:
             # Perform the archive in the Archive docker container.  (Typically in the development environment).
             singlefile, readability, screenshot = await request_archive(download.url)
-            archive: Archive = await lib.model_archive_result(download.url, singlefile, readability, screenshot)
+            archive: Archive = await lib.model_archive_result(
+                download.url, singlefile, readability, screenshot, destination=destination)
             archive_id = archive.id
         else:
             # Perform the archive using locally installed executables.
             singlefile = await self.do_singlefile(download)
-            archive = await lib.singlefile_to_archive(singlefile)
+            archive = await lib.singlefile_to_archive(singlefile, destination=destination)
             archive_id = archive.id
 
         with get_db_session() as session:
@@ -211,27 +217,9 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
         archive.validate()
         archive.flush()
 
-        # Validate that archive path matches domain directory (efficient O(1) check)
-        if archive.collection_id and archive.collection:
-            collection = archive.collection
-            if collection.kind == 'domain' and collection.directory and not collection.tag_id:
-                # Check if archive path is under the domain's directory
-                archive_path = pathlib.Path(file_group.primary_path)
-                from wrolpi.common import get_media_directory
-                media_dir = get_media_directory()
-                collection_abs_dir = media_dir / collection.directory
-
-                try:
-                    # Check if archive is under the collection's directory
-                    archive_path.relative_to(collection_abs_dir)
-                except ValueError:
-                    # Archive is NOT under the domain's directory - clear it
-                    logger.warning(
-                        f'Archive {archive.id} at {archive_path} is not under domain directory {collection.directory}. '
-                        f'Clearing domain directory (domain is not tagged).'
-                    )
-                    collection.directory = None
-                    session.flush([collection])
+        # Note: We intentionally do NOT clear collection.directory when archive is outside it.
+        # Archives are associated with domain collections based on URL, not file location.
+        # The collection's directory should remain intact for other archives.
 
         file_group.title = file_group.a_text = title or archive.file_group.title
         file_group.d_text = contents

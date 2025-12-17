@@ -277,9 +277,19 @@ def get_archive_destination(domain_collection: 'Collection') -> pathlib.Path:
 MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH = 200
 
 
-def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
-    """Create a list of archive files using a shared name schema.  Raise an error if any of them exist."""
-    directory = get_domain_directory(url)
+def get_new_archive_files(url: str, title: Optional[str], destination: pathlib.Path = None) -> ArchiveFiles:
+    """Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
+
+    Args:
+        url: The URL being archived (used to derive domain if no destination)
+        title: Title for the archive files
+        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
+    """
+    if destination:
+        directory = destination
+        directory.mkdir(parents=True, exist_ok=True)
+    else:
+        directory = get_domain_directory(url)
     # Datetime is valid in Linux and Windows.
     dt = archive_strftime(now())
 
@@ -391,9 +401,17 @@ async def request_screenshot(url: str, singlefile_path: pathlib.Path) -> Optiona
     return screenshot
 
 
-async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes) -> Archive:
+async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes,
+                               destination: pathlib.Path = None) -> Archive:
     """
     Convert results from ArchiveDownloader into real files.  Create Archive record.
+
+    Args:
+        url: The URL that was archived
+        singlefile: The HTML content from SingleFile
+        readability: The readability extraction results
+        screenshot: The screenshot bytes
+        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
     """
     readability = readability.copy() if readability else readability
     # First try to get the title from Readability.
@@ -406,7 +424,7 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
             # Readability could not find title, lets use ours.
             readability['title'] = title
 
-    archive_files = get_new_archive_files(url, title)
+    archive_files = get_new_archive_files(url, title, destination=destination)
 
     if readability:
         # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
@@ -1114,11 +1132,15 @@ async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
             raise RuntimeError(f'Failed to extract readability for {url} got {result.return_code}') from e
 
 
-async def singlefile_to_archive(singlefile: bytes) -> Archive:
+async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = None) -> Archive:
     """
     Convert a SingleFile to an Archive.
 
     This is done by extracting readability, creating a screenshot, then attaching them to an Archive/FileGroup.
+
+    Args:
+        singlefile: The SingleFile HTML bytes
+        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
     """
     # Get URL first because it does some simple checking of `singlefile`
     url = get_url_from_singlefile(singlefile)
@@ -1146,7 +1168,7 @@ async def singlefile_to_archive(singlefile: bytes) -> Archive:
             logger.error(f'Failed to extract screenshot from: {url}', exc_info=e)
 
     logger.trace(f'singlefile_to_archive modeling: {url}')
-    archive: Archive = await model_archive_result(url, singlefile, readability, screenshot)
+    archive: Archive = await model_archive_result(url, singlefile, readability, screenshot, destination=destination)
     return archive
 
 

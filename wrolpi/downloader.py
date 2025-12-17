@@ -1509,7 +1509,11 @@ class RSSDownloader(Downloader):
             next_download_settings['video_resolutions'] = i
         if i := settings.get('video_format'):
             next_download_settings['video_format'] = i
-        if i := settings.get('destination'):
+        # Use download.destination column (settings['destination'] is legacy)
+        if download.destination:
+            next_download_settings['destination'] = str(download.destination)
+        elif i := settings.get('destination'):
+            # Fallback to legacy settings for backwards compatibility
             next_download_settings['destination'] = i
 
         result = DownloadResult(

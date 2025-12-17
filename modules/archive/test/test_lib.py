@@ -394,6 +394,25 @@ def test_get_new_archive_files(fake_now):
 
 
 @skip_circleci
+def test_get_new_archive_files_with_destination(test_directory, fake_now):
+    """Archive files can be created in a custom destination directory instead of the default."""
+    fake_now(datetime(2001, 1, 1))
+    custom_destination = test_directory / 'archive/News/custom-domain.com'
+    custom_destination.mkdir(parents=True, exist_ok=True)
+
+    # When destination is provided, files should go there instead of archive/<domain>
+    archive_files = get_new_archive_files('https://example.com/page', 'Title', destination=custom_destination)
+
+    # Files should be in the custom destination, not archive/example.com
+    assert str(archive_files.singlefile).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.html')
+    assert str(archive_files.readability).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.html')
+    assert str(archive_files.readability_txt).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.txt')
+    assert str(archive_files.readability_json).endswith(
+        'archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.json')
+    assert str(archive_files.screenshot).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.png')
+
+
+@skip_circleci
 @pytest.mark.asyncio
 async def test_title_in_filename(test_session, fake_now, test_directory, image_bytes_factory):
     """

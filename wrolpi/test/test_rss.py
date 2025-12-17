@@ -123,3 +123,58 @@ async def test_rss_downloader_filter_titles(test_session):
         dict(link='https://example.com/a', title='A'),
         dict(link='https://example.com/b', title='b'),
     ]
+
+
+@pytest.mark.asyncio
+async def test_rss_downloader_uses_destination_column(test_session, test_download_manager, await_switches):
+    """RSS downloader should pass download.destination to child downloads, not settings['destination'].
+
+    The destination column is the source of truth. settings['destination'] is legacy.
+    """
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
+        mock_parse_feed.return_value = dict(
+            bozo=0,
+            entries=[
+                dict(link='https://example.com/a'),
+                dict(link='https://example.com/b'),
+            ]
+        )
+        # Create RSS download with destination column set, but empty settings.
+        test_download_manager.create_download(
+            test_session,
+            'https://example.com/feed',
+            rss_downloader.name,
+            sub_downloader_name='rss_http',
+            destination='archive/custom/path',  # destination column
+            settings={},  # Empty settings - destination should come from column
+        )
+        await test_download_manager.wait_for_all_downloads()
+
+    # Get all downloads
+    downloads = test_session.query(Download).order_by(Download.id).all()
+    assert len(downloads) == 3, 'Expected 1 RSS download + 2 child downloads'
+
+    # The RSS download itself
+    rss_download = downloads[0]
+    assert rss_download.url == 'https://example.com/feed'
+    assert str(rss_download.destination).endswith('archive/custom/path')
+
+    # Child downloads should have destination in their settings (passed from RSS download.destination)
+    child_a = downloads[1]
+    child_b = downloads[2]
+    assert child_a.url == 'https://example.com/a'
+    assert child_b.url == 'https://example.com/b'
+    # The destination should be passed from RSS download.destination column to child settings
+    assert child_a.settings.get('destination') is not None, \
+        'Child download should inherit destination from RSS download.destination column'
+    assert child_a.settings['destination'].endswith('archive/custom/path'), \
+        f"Expected destination ending with 'archive/custom/path', got {child_a.settings.get('destination')}"
+    assert child_b.settings.get('destination') is not None, \
+        'Child download should inherit destination from RSS download.destination column'
+    assert child_b.settings['destination'].endswith('archive/custom/path'), \
+        f"Expected destination ending with 'archive/custom/path', got {child_b.settings.get('destination')}"

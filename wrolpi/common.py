@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 from wrolpi.dates import now, from_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, \
     ValidationError
+from wrolpi.log_levels import TRACE_LEVEL, name_to_int as log_level_name_to_int, int_to_name as log_level_int_to_name
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
 
@@ -176,8 +177,7 @@ class TraceLogger(logging.Logger):
 logger: TraceLogger = logging.getLogger()  # noqa Not really a TraceLogger, but I wanted IDE suggestions.
 logging.config.dictConfig(LOGGING_CONFIG)
 
-# Add extra verbose debug level (-vvv)
-TRACE_LEVEL = logging.DEBUG - 5
+# Add extra verbose debug level (-vvv). TRACE_LEVEL imported from log_levels.
 if not hasattr(logging, 'TRACE'):
     add_logging_level('TRACE', TRACE_LEVEL)
 
@@ -705,6 +705,7 @@ class WROLPiConfigValidator:
     hotspot_password: str = None
     hotspot_ssid: str = None
     ignore_outdated_zims: bool = None
+    log_level: str = None
     map_destination: str = None
     nav_color: str = None
     throttle_on_startup: bool = None
@@ -769,6 +770,7 @@ class WROLPiConfig(ConfigFile):
         check_for_upgrades=True,
         ignore_outdated_zims=False,
         ignored_directories=['config', 'tags'],
+        log_level='info',
         map_destination='map',
         nav_color='violet',
         throttle_on_startup=False,
@@ -876,6 +878,14 @@ class WROLPiConfig(ConfigFile):
     @ignore_outdated_zims.setter
     def ignore_outdated_zims(self, value: bool):
         self.update({'ignore_outdated_zims': value})
+
+    @property
+    def log_level(self) -> str:
+        return self._config.get('log_level', 'info')
+
+    @log_level.setter
+    def log_level(self, value: str):
+        self.update({'log_level': value})
 
     @property
     def check_for_upgrades(self) -> bool:

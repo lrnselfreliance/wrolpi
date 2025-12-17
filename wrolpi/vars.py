@@ -1,4 +1,3 @@
-import logging
 import multiprocessing
 import os
 import pathlib
@@ -45,12 +44,10 @@ def list_var(name: str, default='') -> List[str]:
     return [i for i in os.environ.get(name, default).split(',')]
 
 
-LOG_LEVEL_INT = logging.INFO
-if '-vv' in sys.argv:
-    LOG_LEVEL_INT = logging.DEBUG
-elif '-vvv' in sys.argv:
-    # SQLAlchemy will increase logging.
-    LOG_LEVEL_INT = logging.DEBUG - 5
+from wrolpi.log_levels import get_log_level_from_env_or_config
+
+# Get initial log level from ENV or config. CLI flags are handled by main.py argparse.
+LOG_LEVEL_INT = get_log_level_from_env_or_config()
 
 # Special environment variable set in the docker/api/Dockerfile.
 DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))

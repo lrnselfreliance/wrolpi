@@ -462,13 +462,51 @@ class FileGroup(ModelHelper, Base):
 
         logger.debug(f'Moved FileGroup: {self.primary_path} -> {new_primary_path}')
         self.files = existing_files
+
+        # Update paths in self.data to match new file locations
+        if self.data:
+            old_parent = str(self.primary_path.parent)
+            new_parent = str(new_primary_path.parent)
+            updated_data = {}
+            for key, value in self.data.items():
+                if value is None:
+                    updated_data[key] = value
+                elif isinstance(value, pathlib.Path):
+                    str_value = str(value)
+                    if str_value.startswith(old_parent):
+                        updated_data[key] = pathlib.Path(str_value.replace(old_parent, new_parent, 1))
+                    else:
+                        updated_data[key] = value
+                elif isinstance(value, str) and value.startswith(old_parent):
+                    updated_data[key] = value.replace(old_parent, new_parent, 1)
+                elif isinstance(value, list):
+                    # Handle lists (like Video.caption_paths)
+                    new_list = []
+                    for item in value:
+                        if isinstance(item, pathlib.Path):
+                            str_item = str(item)
+                            if str_item.startswith(old_parent):
+                                new_list.append(pathlib.Path(str_item.replace(old_parent, new_parent, 1)))
+                            else:
+                                new_list.append(item)
+                        elif isinstance(item, str) and item.startswith(old_parent):
+                            new_list.append(item.replace(old_parent, new_parent, 1))
+                        else:
+                            new_list.append(item)
+                    updated_data[key] = new_list
+                else:
+                    updated_data[key] = value
+            self.data = updated_data
+
         if self.title == self.primary_path.name:
             # Do not overwrite title from modeler.
             self.title = new_primary_path.name
         self.a_text = split_file_name_words(new_primary_path.name)
         self.primary_path = new_primary_path
-        # Need to re-index for self.data.
-        self.indexed = False if self.data else self.indexed
+        # Data paths are updated in-place above, no need to re-index for existing data.
+        # Only re-index if there's no data yet (new file that hasn't been modeled).
+        if not self.data:
+            self.indexed = False
         # Flush the changes to the FileGroup.
         self.flush()
 

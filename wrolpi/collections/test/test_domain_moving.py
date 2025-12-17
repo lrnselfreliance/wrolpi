@@ -87,6 +87,17 @@ async def test_tag_domain_collection_moves_archives(
     if src_dir.exists():
         assert not list(src_dir.iterdir()), f'Old directory {src_dir} should be empty'
 
+    # Verify FileGroup.data paths were also updated (the bug we're fixing)
+    for archive in [archive1, archive2]:
+        test_session.refresh(archive)
+        data = archive.file_group.data
+        assert data is not None, f"Archive {archive.id} should have FileGroup.data"
+        # All path fields in data should point to new directory
+        for key, value in data.items():
+            if isinstance(value, (str, pathlib.Path)) and 'archive' in str(value):
+                assert str(dest_dir) in str(value), \
+                    f"FileGroup.data['{key}'] should be in {dest_dir}, got {value}"
+
 
 @pytest.mark.asyncio
 async def test_tag_domain_collection_moves_extra_files(

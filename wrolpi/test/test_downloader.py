@@ -415,7 +415,7 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):
     # Can import with an empty config.
-    await import_downloads_config(test_session)
+    await import_downloads_config()
     assert_downloads([])
 
     test_downloader.set_test_success()
@@ -479,7 +479,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     get_download_manager_config().initialize()
 
     # Import the saved downloads.
-    await import_downloads_config(test_session)
+    await import_downloads_config()
     expected = [
         dict(
             url='https://example.com/2',
@@ -504,7 +504,7 @@ async def test_downloads_config(test_session, test_download_manager, test_downlo
     assert_downloads(expected)
 
     # Import again, no duplicates.
-    await import_downloads_config(test_session)
+    await import_downloads_config()
     assert_downloads(expected)
 
 

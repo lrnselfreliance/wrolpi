@@ -376,7 +376,7 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
     for _ in range(1):  # Import twice.
         # Importing the config restores the Download and ZimSubscription.
-        await import_downloads_config(test_session)
+        await import_downloads_config()
         recurring, once = test_session.query(Download).order_by(Download.frequency)
         assert once.url == 'https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2021-03.zim'
         assert test_session.query(Download).count() == 2

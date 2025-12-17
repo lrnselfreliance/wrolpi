@@ -1436,7 +1436,7 @@ def save_downloads_config():
 save_downloads_config: ActivateSwitchMethod
 
 
-async def import_downloads_config(session: Session):
+async def import_downloads_config():
     """Upsert all Downloads in the Download Manager Config into the DB.
 
     The config is the source of truth."""

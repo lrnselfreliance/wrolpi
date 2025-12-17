@@ -8,6 +8,7 @@ import {
     Toggle,
 } from "../Common";
 import {useDockerized} from "../../hooks/customHooks";
+import {Media} from "../../contexts/contexts";
 import {
     getServices,
     startService,
@@ -162,11 +163,15 @@ function ServiceRow({service, onAction, dockerized}) {
                 <strong>{service.name}</strong>
                 {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
             </Table.Cell>
-            <Table.Cell>{service.port || '-'}</Table.Cell>
-            <Table.Cell>
-                <Icon name='circle' color={statusColor}/>
-                {service.status}
-            </Table.Cell>
+            <Media greaterThanOrEqual='tablet'>
+                <Table.Cell>{service.port || '-'}</Table.Cell>
+            </Media>
+            <Media greaterThanOrEqual='tablet'>
+                <Table.Cell>
+                    <Icon name='circle' color={statusColor}/>
+                    {service.status}
+                </Table.Cell>
+            </Media>
             <Table.Cell>
                 {isRunning ? (
                     <Button
@@ -250,20 +255,22 @@ function ServiceRow({service, onAction, dockerized}) {
                 )}
             </Table.Cell>
             {!dockerized && (
-                <Table.Cell>
-                    <Toggle
-                        checked={service.enabled === true}
-                        disabled={service.enabled === null || loading}
-                        onChange={async (checked) => {
-                            if (checked) {
-                                await handleAction('Enable', enableService);
-                            } else {
-                                await handleAction('Disable', disableService);
-                            }
-                        }}
-                        label={service.enabled ? 'Enabled' : 'Disabled'}
-                    />
-                </Table.Cell>
+                <Media greaterThanOrEqual='tablet'>
+                    <Table.Cell>
+                        <Toggle
+                            checked={service.enabled === true}
+                            disabled={service.enabled === null || loading}
+                            onChange={async (checked) => {
+                                if (checked) {
+                                    await handleAction('Enable', enableService);
+                                } else {
+                                    await handleAction('Disable', disableService);
+                                }
+                            }}
+                            label={service.enabled ? 'Enabled' : 'Disabled'}
+                        />
+                    </Table.Cell>
+                </Media>
             )}
         </Table.Row>
     );
@@ -347,10 +354,18 @@ function ServicesSection() {
                 <Table.Header>
                     <Table.Row>
                         <Table.HeaderCell>Service</Table.HeaderCell>
-                        <Table.HeaderCell>Port</Table.HeaderCell>
-                        <Table.HeaderCell>Status</Table.HeaderCell>
+                        <Media greaterThanOrEqual='tablet'>
+                            <Table.HeaderCell>Port</Table.HeaderCell>
+                        </Media>
+                        <Media greaterThanOrEqual='tablet'>
+                            <Table.HeaderCell>Status</Table.HeaderCell>
+                        </Media>
                         <Table.HeaderCell>Actions</Table.HeaderCell>
-                        {!dockerized && <Table.HeaderCell>Boot</Table.HeaderCell>}
+                        {!dockerized && (
+                            <Media greaterThanOrEqual='tablet'>
+                                <Table.HeaderCell>Boot</Table.HeaderCell>
+                            </Media>
+                        )}
                     </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -365,18 +380,36 @@ function ServicesSection() {
                 </Table.Body>
                 <Table.Footer>
                     <Table.Row>
-                        <Table.HeaderCell colSpan={dockerized ? 4 : 5}>
-                            <APIButton
-                                color='yellow'
-                                onClick={handleRestartServices}
-                                confirmContent='Are you sure you want to restart all WROLPi services?'
-                                confirmButton='Restart Services'
-                                disabled={restarting}
-                            >
-                                <Icon name='refresh'/>
-                                {restarting ? 'Restarting...' : 'Restart All Services'}
-                            </APIButton>
-                        </Table.HeaderCell>
+                        {/* Mobile: 2 columns (Service, Actions) */}
+                        <Media at='mobile'>
+                            <Table.HeaderCell colSpan={2}>
+                                <APIButton
+                                    color='yellow'
+                                    onClick={handleRestartServices}
+                                    confirmContent='Are you sure you want to restart all WROLPi services?'
+                                    confirmButton='Restart Services'
+                                    disabled={restarting}
+                                >
+                                    <Icon name='refresh'/>
+                                    {restarting ? 'Restarting...' : 'Restart All Services'}
+                                </APIButton>
+                            </Table.HeaderCell>
+                        </Media>
+                        {/* Tablet+: 4 columns (dockerized) or 5 columns (non-dockerized) */}
+                        <Media greaterThanOrEqual='tablet'>
+                            <Table.HeaderCell colSpan={dockerized ? 4 : 5}>
+                                <APIButton
+                                    color='yellow'
+                                    onClick={handleRestartServices}
+                                    confirmContent='Are you sure you want to restart all WROLPi services?'
+                                    confirmButton='Restart Services'
+                                    disabled={restarting}
+                                >
+                                    <Icon name='refresh'/>
+                                    {restarting ? 'Restarting...' : 'Restart All Services'}
+                                </APIButton>
+                            </Table.HeaderCell>
+                        </Media>
                     </Table.Row>
                 </Table.Footer>
             </Table>

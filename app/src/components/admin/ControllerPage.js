@@ -47,7 +47,8 @@ const linesOptions = [
     {key: 5000, text: '5000 lines', value: 5000},
 ];
 
-function ServiceRow({service, onAction, dockerized}) {
+// Custom hook for service row state and handlers
+function useServiceRow(service, onAction) {
     const [loading, setLoading] = React.useState(false);
     const [logsOpen, setLogsOpen] = React.useState(false);
     const [logs, setLogs] = React.useState('');
@@ -145,7 +146,6 @@ function ServiceRow({service, onAction, dockerized}) {
     };
 
     const isRunning = service.status === 'running';
-    const isStopped = service.status === 'stopped';
     const statusColor = statusColors[service.status] || 'grey';
 
     // Build view URL if service is viewable
@@ -157,21 +157,154 @@ function ServiceRow({service, onAction, dockerized}) {
         viewUrl = `${protocol}://${host}:${service.port}${path}`;
     }
 
+    return {
+        loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
+        handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
+        isRunning, statusColor, viewUrl
+    };
+}
+
+// Logs modal component (shared between mobile and desktop)
+function ServiceLogsModal({service, logsOpen, setLogsOpen, logs, logsLoading, logsRef, linesCount, countdown, handleViewLogs, handleLinesChange, handleDownloadLogs, fetchLogs}) {
+    return (
+        <Modal
+            open={logsOpen}
+            onClose={() => setLogsOpen(false)}
+            onOpen={handleViewLogs}
+            trigger={<Button size='small' icon='file text' content='Logs' color='blue'/>}
+            size='fullscreen'
+        >
+            <Modal.Header>Logs: {service.name}</Modal.Header>
+            <Modal.Content scrolling>
+                {logsLoading ? (
+                    <Loader active inline='centered'/>
+                ) : (
+                    <pre ref={logsRef} style={{
+                        whiteSpace: 'pre-wrap',
+                        wordWrap: 'break-word',
+                        maxHeight: '400px',
+                        overflow: 'auto',
+                        backgroundColor: '#1a1a1a',
+                        color: '#00ff00',
+                        padding: '1em',
+                        fontFamily: 'monospace',
+                        fontSize: '0.85em',
+                    }}>
+                        {logs}
+                    </pre>
+                )}
+            </Modal.Content>
+            <Modal.Actions>
+                <span style={{marginRight: '0.5em', color: '#888'}}>{countdown}s</span>
+                <Dropdown
+                    selection
+                    options={linesOptions}
+                    value={linesCount}
+                    onChange={handleLinesChange}
+                    style={{marginRight: 'auto'}}
+                />
+                <Button onClick={() => fetchLogs(linesCount)} color='blue' icon='refresh' content='Refresh'/>
+                <Button onClick={handleDownloadLogs} color='yellow' icon='download' content='Download'/>
+                <Button onClick={() => setLogsOpen(false)}>Close</Button>
+            </Modal.Actions>
+        </Modal>
+    );
+}
+
+// Mobile service row - simplified layout
+function MobileServiceRow({service, onAction}) {
+    const {
+        loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
+        handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
+        isRunning, statusColor, viewUrl
+    } = useServiceRow(service, onAction);
+
+    return (
+        <Table.Row>
+            <Table.Cell>
+                <strong>{service.name}</strong>
+                {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
+                <div style={{marginTop: '0.3em'}}>
+                    <Icon name='circle' color={statusColor}/> {service.status}
+                </div>
+            </Table.Cell>
+            <Table.Cell textAlign='right'>
+                {isRunning ? (
+                    <Button
+                        size='small'
+                        icon='stop'
+                        color='red'
+                        disabled={loading}
+                        loading={loading}
+                        onClick={() => handleAction('Stop', stopService)}
+                    />
+                ) : (
+                    <Button
+                        size='small'
+                        icon='play'
+                        color='green'
+                        disabled={loading}
+                        loading={loading}
+                        onClick={() => handleAction('Start', startService)}
+                    />
+                )}
+                <Button
+                    size='small'
+                    icon='refresh'
+                    color='yellow'
+                    disabled={loading}
+                    loading={loading}
+                    onClick={() => handleAction('Restart', restartService)}
+                />
+                <ServiceLogsModal
+                    service={service}
+                    logsOpen={logsOpen}
+                    setLogsOpen={setLogsOpen}
+                    logs={logs}
+                    logsLoading={logsLoading}
+                    logsRef={logsRef}
+                    linesCount={linesCount}
+                    countdown={countdown}
+                    handleViewLogs={handleViewLogs}
+                    handleLinesChange={handleLinesChange}
+                    handleDownloadLogs={handleDownloadLogs}
+                    fetchLogs={fetchLogs}
+                />
+                {viewUrl && (
+                    <Button
+                        size='small'
+                        icon='external'
+                        as='a'
+                        href={viewUrl}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        color='violet'
+                    />
+                )}
+            </Table.Cell>
+        </Table.Row>
+    );
+}
+
+// Desktop service row - full layout with all columns
+function DesktopServiceRow({service, onAction, dockerized}) {
+    const {
+        loading, logsOpen, setLogsOpen, logs, logsLoading, linesCount, countdown, logsRef,
+        handleAction, fetchLogs, handleViewLogs, handleLinesChange, handleDownloadLogs,
+        isRunning, statusColor, viewUrl
+    } = useServiceRow(service, onAction);
+
     return (
         <Table.Row>
             <Table.Cell>
                 <strong>{service.name}</strong>
                 {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
             </Table.Cell>
-            <Media greaterThanOrEqual='tablet'>
-                <Table.Cell>{service.port || '-'}</Table.Cell>
-            </Media>
-            <Media greaterThanOrEqual='tablet'>
-                <Table.Cell>
-                    <Icon name='circle' color={statusColor}/>
-                    {service.status}
-                </Table.Cell>
-            </Media>
+            <Table.Cell>{service.port || '-'}</Table.Cell>
+            <Table.Cell>
+                <Icon name='circle' color={statusColor}/>
+                {service.status}
+            </Table.Cell>
             <Table.Cell>
                 {isRunning ? (
                     <Button
@@ -200,47 +333,20 @@ function ServiceRow({service, onAction, dockerized}) {
                     loading={loading}
                     onClick={() => handleAction('Restart', restartService)}
                 />
-                <Modal
-                    open={logsOpen}
-                    onClose={() => setLogsOpen(false)}
-                    onOpen={handleViewLogs}
-                    trigger={<Button size='small' icon='file text' content='Logs' color='blue'/>}
-                    size='fullscreen'
-                >
-                    <Modal.Header>Logs: {service.name}</Modal.Header>
-                    <Modal.Content scrolling>
-                        {logsLoading ? (
-                            <Loader active inline='centered'/>
-                        ) : (
-                            <pre ref={logsRef} style={{
-                                whiteSpace: 'pre-wrap',
-                                wordWrap: 'break-word',
-                                maxHeight: '400px',
-                                overflow: 'auto',
-                                backgroundColor: '#1a1a1a',
-                                color: '#00ff00',
-                                padding: '1em',
-                                fontFamily: 'monospace',
-                                fontSize: '0.85em',
-                            }}>
-                                {logs}
-                            </pre>
-                        )}
-                    </Modal.Content>
-                    <Modal.Actions>
-                        <span style={{marginRight: '0.5em', color: '#888'}}>{countdown}s</span>
-                        <Dropdown
-                            selection
-                            options={linesOptions}
-                            value={linesCount}
-                            onChange={handleLinesChange}
-                            style={{marginRight: 'auto'}}
-                        />
-                        <Button onClick={() => fetchLogs(linesCount)} color='blue' icon='refresh' content='Refresh'/>
-                        <Button onClick={handleDownloadLogs} color='yellow' icon='download' content='Download'/>
-                        <Button onClick={() => setLogsOpen(false)}>Close</Button>
-                    </Modal.Actions>
-                </Modal>
+                <ServiceLogsModal
+                    service={service}
+                    logsOpen={logsOpen}
+                    setLogsOpen={setLogsOpen}
+                    logs={logs}
+                    logsLoading={logsLoading}
+                    logsRef={logsRef}
+                    linesCount={linesCount}
+                    countdown={countdown}
+                    handleViewLogs={handleViewLogs}
+                    handleLinesChange={handleLinesChange}
+                    handleDownloadLogs={handleDownloadLogs}
+                    fetchLogs={fetchLogs}
+                />
                 {viewUrl && (
                     <Button
                         size='small'
@@ -255,22 +361,20 @@ function ServiceRow({service, onAction, dockerized}) {
                 )}
             </Table.Cell>
             {!dockerized && (
-                <Media greaterThanOrEqual='tablet'>
-                    <Table.Cell>
-                        <Toggle
-                            checked={service.enabled === true}
-                            disabled={service.enabled === null || loading}
-                            onChange={async (checked) => {
-                                if (checked) {
-                                    await handleAction('Enable', enableService);
-                                } else {
-                                    await handleAction('Disable', disableService);
-                                }
-                            }}
-                            label={service.enabled ? 'Enabled' : 'Disabled'}
-                        />
-                    </Table.Cell>
-                </Media>
+                <Table.Cell>
+                    <Toggle
+                        checked={service.enabled === true}
+                        disabled={service.enabled === null || loading}
+                        onChange={async (checked) => {
+                            if (checked) {
+                                await handleAction('Enable', enableService);
+                            } else {
+                                await handleAction('Disable', disableService);
+                            }
+                        }}
+                        label={service.enabled ? 'Enabled' : 'Disabled'}
+                    />
+                </Table.Cell>
             )}
         </Table.Row>
     );
@@ -344,75 +448,77 @@ function ServicesSection() {
         </Segment>;
     }
 
+    const restartButton = (colSpan) => (
+        <Table.Footer>
+            <Table.Row>
+                <Table.HeaderCell colSpan={colSpan}>
+                    <APIButton
+                        color='yellow'
+                        onClick={handleRestartServices}
+                        confirmContent='Are you sure you want to restart all WROLPi services?'
+                        confirmButton='Restart Services'
+                        disabled={restarting}
+                    >
+                        <Icon name='refresh'/>
+                        {restarting ? 'Restarting...' : 'Restart All Services'}
+                    </APIButton>
+                </Table.HeaderCell>
+            </Table.Row>
+        </Table.Footer>
+    );
+
     return (
         <Segment>
             <Header as='h3'>
                 <Icon name='server'/>
                 Services
             </Header>
-            <Table unstackable striped>
-                <Table.Header>
-                    <Table.Row>
-                        <Table.HeaderCell>Service</Table.HeaderCell>
-                        <Media greaterThanOrEqual='tablet'>
+            {/* Mobile table - 2 columns */}
+            <Media at='mobile'>
+                <Table unstackable striped size='small'>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>Service</Table.HeaderCell>
+                            <Table.HeaderCell>Actions</Table.HeaderCell>
+                        </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                        {services.map(service => (
+                            <MobileServiceRow
+                                key={service.name}
+                                service={service}
+                                onAction={fetchServices}
+                            />
+                        ))}
+                    </Table.Body>
+                    {restartButton(2)}
+                </Table>
+            </Media>
+            {/* Desktop table - full columns */}
+            <Media greaterThanOrEqual='tablet'>
+                <Table unstackable striped>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>Service</Table.HeaderCell>
                             <Table.HeaderCell>Port</Table.HeaderCell>
-                        </Media>
-                        <Media greaterThanOrEqual='tablet'>
                             <Table.HeaderCell>Status</Table.HeaderCell>
-                        </Media>
-                        <Table.HeaderCell>Actions</Table.HeaderCell>
-                        {!dockerized && (
-                            <Media greaterThanOrEqual='tablet'>
-                                <Table.HeaderCell>Boot</Table.HeaderCell>
-                            </Media>
-                        )}
-                    </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                    {services.map(service => (
-                        <ServiceRow
-                            dockerized={dockerized}
-                            key={service.name}
-                            service={service}
-                            onAction={fetchServices}
-                        />
-                    ))}
-                </Table.Body>
-                <Table.Footer>
-                    <Table.Row>
-                        {/* Mobile: 2 columns (Service, Actions) */}
-                        <Media at='mobile'>
-                            <Table.HeaderCell colSpan={2}>
-                                <APIButton
-                                    color='yellow'
-                                    onClick={handleRestartServices}
-                                    confirmContent='Are you sure you want to restart all WROLPi services?'
-                                    confirmButton='Restart Services'
-                                    disabled={restarting}
-                                >
-                                    <Icon name='refresh'/>
-                                    {restarting ? 'Restarting...' : 'Restart All Services'}
-                                </APIButton>
-                            </Table.HeaderCell>
-                        </Media>
-                        {/* Tablet+: 4 columns (dockerized) or 5 columns (non-dockerized) */}
-                        <Media greaterThanOrEqual='tablet'>
-                            <Table.HeaderCell colSpan={dockerized ? 4 : 5}>
-                                <APIButton
-                                    color='yellow'
-                                    onClick={handleRestartServices}
-                                    confirmContent='Are you sure you want to restart all WROLPi services?'
-                                    confirmButton='Restart Services'
-                                    disabled={restarting}
-                                >
-                                    <Icon name='refresh'/>
-                                    {restarting ? 'Restarting...' : 'Restart All Services'}
-                                </APIButton>
-                            </Table.HeaderCell>
-                        </Media>
-                    </Table.Row>
-                </Table.Footer>
-            </Table>
+                            <Table.HeaderCell>Actions</Table.HeaderCell>
+                            {!dockerized && <Table.HeaderCell>Boot</Table.HeaderCell>}
+                        </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                        {services.map(service => (
+                            <DesktopServiceRow
+                                dockerized={dockerized}
+                                key={service.name}
+                                service={service}
+                                onAction={fetchServices}
+                            />
+                        ))}
+                    </Table.Body>
+                    {restartButton(dockerized ? 4 : 5)}
+                </Table>
+            </Media>
             {services.length === 0 && (
                 <p>No services found. Services may not be available in this environment.</p>
             )}

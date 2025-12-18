@@ -1,29 +1,24 @@
 import React from 'react';
-import {Container, Dropdown, Icon, Confirm, Input, Checkbox, Form} from "semantic-ui-react";
+import {Checkbox, Confirm, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
 import {Button, Header, Loader, Modal, Segment, Table} from "../Theme";
-import {
-    APIButton,
-    HotspotToggle,
-    ThrottleToggle,
-    Toggle,
-} from "../Common";
+import {APIButton, HotspotToggle, ThrottleToggle, Toggle,} from "../Common";
 import {useDockerized} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
 import {
+    addFstabEntry,
+    disableService,
+    enableService,
+    getDisks,
+    getFstabEntries,
+    getServiceLogs,
     getServices,
+    getSmartStatus,
+    mountDisk,
+    removeFstabEntry,
+    restartService,
+    restartServices,
     startService,
     stopService,
-    restartService,
-    enableService,
-    disableService,
-    getServiceLogs,
-    getDisks,
-    getSmartStatus,
-    restartServices,
-    getFstabEntries,
-    addFstabEntry,
-    removeFstabEntry,
-    mountDisk,
     unmountDisk,
 } from "../../api/controller";
 import {toast} from "react-semantic-toasts-2";
@@ -165,13 +160,26 @@ function useServiceRow(service, onAction) {
 }
 
 // Logs modal component (shared between mobile and desktop)
-function ServiceLogsModal({service, logsOpen, setLogsOpen, logs, logsLoading, logsRef, linesCount, countdown, handleViewLogs, handleLinesChange, handleDownloadLogs, fetchLogs}) {
+function ServiceLogsModal({
+                              service,
+                              logsOpen,
+                              setLogsOpen,
+                              logs,
+                              logsLoading,
+                              logsRef,
+                              linesCount,
+                              countdown,
+                              handleViewLogs,
+                              handleLinesChange,
+                              handleDownloadLogs,
+                              fetchLogs
+                          }) {
     return (
         <Modal
             open={logsOpen}
             onClose={() => setLogsOpen(false)}
             onOpen={handleViewLogs}
-            trigger={<Button size='small' icon='file text' content='Logs' color='blue'/>}
+            trigger={<Button size='small' icon='file text' color='blue'/>}
             size='fullscreen'
         >
             <Modal.Header>Logs: {service.name}</Modal.Header>
@@ -222,11 +230,9 @@ function MobileServiceRow({service, onAction}) {
     return (
         <Table.Row>
             <Table.Cell>
+                <Icon name='circle' color={statusColor}/>
                 <strong>{service.name}</strong>
                 {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
-                <div style={{marginTop: '0.3em'}}>
-                    <Icon name='circle' color={statusColor}/> {service.status}
-                </div>
             </Table.Cell>
             <Table.Cell textAlign='right'>
                 {isRunning ? (
@@ -297,14 +303,11 @@ function DesktopServiceRow({service, onAction, dockerized}) {
     return (
         <Table.Row>
             <Table.Cell>
+                <Icon name='circle' color={statusColor}/>
                 <strong>{service.name}</strong>
                 {service.description && <div style={{fontSize: '0.9em', color: '#888'}}>{service.description}</div>}
             </Table.Cell>
             <Table.Cell>{service.port || '-'}</Table.Cell>
-            <Table.Cell>
-                <Icon name='circle' color={statusColor}/>
-                {service.status}
-            </Table.Cell>
             <Table.Cell>
                 {isRunning ? (
                     <Button
@@ -351,7 +354,6 @@ function DesktopServiceRow({service, onAction, dockerized}) {
                     <Button
                         size='small'
                         icon='external'
-                        content='View'
                         as='a'
                         href={viewUrl}
                         target='_blank'
@@ -501,7 +503,6 @@ function ServicesSection() {
                         <Table.Row>
                             <Table.HeaderCell>Service</Table.HeaderCell>
                             <Table.HeaderCell>Port</Table.HeaderCell>
-                            <Table.HeaderCell>Status</Table.HeaderCell>
                             <Table.HeaderCell>Actions</Table.HeaderCell>
                             {!dockerized && <Table.HeaderCell>Boot</Table.HeaderCell>}
                         </Table.Row>

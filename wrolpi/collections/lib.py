@@ -25,6 +25,7 @@ logger = logger.getChild(__name__)
 __all__ = [
     'get_collections',
     'get_collection_with_stats',
+    'get_domain_statistics',
     'update_collection',
     'refresh_collection',
     'tag_collection',
@@ -162,21 +163,11 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
     # This can be extended for different collection types
     if collection.kind == 'domain':
         # Add archive statistics for domain collections
-        # Local imports to avoid circular import: collections -> archive -> collections
-        from modules.archive import Archive
-        from wrolpi.files.models import FileGroup
-
-        stats_query = session.query(
-            func.count(Archive.id).label('archive_count'),
-            func.sum(FileGroup.size).label('size')
-        ).outerjoin(
-            FileGroup, FileGroup.id == Archive.file_group_id
-        ).filter(
-            Archive.collection_id == collection_id
-        ).one()
-
-        data['archive_count'] = stats_query.archive_count or 0
-        data['size'] = stats_query.size or 0
+        # Use the detailed statistics function (similar to Channel.get_statistics())
+        statistics = get_domain_statistics(session, collection_id)
+        data['archive_count'] = statistics['archive_count']
+        data['size'] = statistics['size']
+        data['statistics'] = statistics
         data['domain'] = data['name']  # Alias for backward compatibility
 
     elif collection.kind == 'channel':
@@ -618,3 +609,48 @@ def search_collections(
 
     collections = query.all()
     return [collection.__json__() for collection in collections]
+
+
+def get_domain_statistics(session: Session, collection_id: int) -> Dict:
+    """
+    Get detailed statistics for a domain collection.
+
+    Similar to Channel.get_statistics(), this returns comprehensive stats about
+    a domain collection's archives.
+
+    Args:
+        session: Database session
+        collection_id: The domain collection ID
+
+    Returns:
+        Dict with:
+        - archive_count: Number of archives in the domain
+        - size: Total size of all archive files
+        - largest_archive: Size of the largest archive
+        - archive_tags: Count of archives that have at least one tag
+    """
+    # Local imports to avoid circular import: collections -> archive -> collections
+    from modules.archive.models import Archive
+    from wrolpi.files.models import FileGroup
+    from wrolpi.tags import TagFile
+
+    # Use a single query with aggregate functions similar to Channel.get_statistics()
+    stats_query = session.query(
+        func.count(Archive.id).label('archive_count'),
+        func.coalesce(func.sum(FileGroup.size), 0).label('size'),
+        func.coalesce(func.max(FileGroup.size), 0).label('largest_archive'),
+        func.count(Archive.id).filter(TagFile.file_group_id.isnot(None)).label('archive_tags')
+    ).outerjoin(
+        FileGroup, FileGroup.id == Archive.file_group_id
+    ).outerjoin(
+        TagFile, FileGroup.id == TagFile.file_group_id
+    ).filter(
+        Archive.collection_id == collection_id
+    ).one()
+
+    return {
+        'archive_count': stats_query.archive_count or 0,
+        'size': int(stats_query.size or 0),
+        'largest_archive': int(stats_query.largest_archive or 0),
+        'archive_tags': stats_query.archive_tags or 0,
+    }

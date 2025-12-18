@@ -10,9 +10,14 @@ import {
     GridRow,
     Image,
     Input,
+    PlaceholderHeader,
+    PlaceholderLine,
+    StatisticLabel,
+    StatisticValue,
     TableCell,
     TextArea,
 } from "semantic-ui-react";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {
     APIButton,
     BackButton,
@@ -23,6 +28,7 @@ import {
     FileIcon,
     findPosterPath,
     humanFileSize,
+    humanNumber,
     InfoHeader,
     isoDatetimeToAgoPopup,
     mimetypeColor,
@@ -48,12 +54,12 @@ import {
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomain, useDomains, useOneQuery, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
+import {useArchive, useDomain, useDomains, useOneQuery, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, darkTheme, Header, Loader, Popup, Segment, Tab} from "./Theme";
+import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, Statistic, Tab} from "./Theme";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
@@ -384,6 +390,32 @@ const DOMAIN_ROUTES = {
     searchParam: 'domain'
 };
 
+function DomainStatistics({statistics}) {
+    if (!statistics) {
+        return <></>
+    }
+
+    return <Segment>
+        <Header as='h1'>Statistics</Header>
+        <Statistic>
+            <StatisticValue>{statistics.archive_count}</StatisticValue>
+            <StatisticLabel>Archives</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
+            <StatisticLabel>Total Size</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanFileSize(statistics.largest_archive, true)}</StatisticValue>
+            <StatisticLabel>Largest Archive</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanNumber(statistics.archive_tags)}</StatisticValue>
+            <StatisticLabel>Archive Tags</StatisticLabel>
+        </Statistic>
+    </Segment>
+}
+
 export function DomainsPage() {
     useTitle('Archive Domains');
 
@@ -565,6 +597,10 @@ export function DomainEditPage() {
 
     return <>
         <BackButton/>
+        <Link to={`/archive?domain=${domain?.domain}`}>
+            <Button>Archives</Button>
+        </Link>
+
         <CollectionEditForm
             form={form}
             title={`Edit Domain: ${domain?.domain || '...'}`}
@@ -617,6 +653,8 @@ export function DomainEditPage() {
                 fetchDownloads={fetchDomain}
             />
         </Segment>
+
+        {domain && domain.statistics && <DomainStatistics statistics={domain.statistics}/>}
     </>;
 }
 
@@ -666,7 +704,16 @@ function ArchiveSettingsPage() {
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
 
-    useTitle('Archives');
+    const {domain, domains} = useSearchDomain();
+
+    // Find the domain object from the domains list to get the ID for the edit link
+    const domainObj = domain && domains ? domains.find(d => d.domain === domain) : null;
+
+    let title = 'Archives';
+    if (domainObj && domainObj.domain) {
+        title = `${domainObj.domain} Archives`;
+    }
+    useTitle(title);
 
     const {
         archives,
@@ -763,7 +810,29 @@ function ArchivesPage() {
         placeholder='Search Archives...'
     />;
 
+    // Domain header with edit link when filtering by domain
+    let header;
+    if (domainObj && domainObj.domain) {
+        const editLink = `/archive/domain/${domainObj.id}/edit`;
+        header = <>
+            <Header as='h1'>
+                {domainObj.domain}
+                <Link to={editLink}>
+                    <Icon name='edit' style={{marginLeft: '0.5em'}}/>
+                </Link>
+            </Header>
+        </>;
+    } else if (domain) {
+        // Domain filter is set but domain object not loaded yet
+        header = <Placeholder style={{marginBottom: '1em'}}>
+            <PlaceholderHeader>
+                <PlaceholderLine/>
+            </PlaceholderHeader>
+        </Placeholder>;
+    }
+
     return <>
+        {header}
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>

@@ -101,7 +101,7 @@ async def get_iostat_stats() -> IostatInfo:
                 cpu_statuses, _ = partition(lambda i: i['type'] == 'cpu', iostat_stats)
                 _, cpu_stats = cpu_statuses  # Use the second status because the first is a lie.
 
-                if logger.isEnabledFor(TRACE_LEVEL):
+                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
                     logger.trace(
                         f'get_iostat_stats'
                         f' percent_iowait={cpu_stats["percent_iowait"]}'
@@ -116,7 +116,7 @@ async def get_iostat_stats() -> IostatInfo:
                     percent_user=cpu_stats['percent_user'],
                 )
     except Exception as e:
-        if logger.isEnabledFor(TRACE_LEVEL):
+        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(f'get_iostat_stats failed: {e}')
         warn_iostat_once(e)
 

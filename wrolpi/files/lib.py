@@ -351,7 +351,7 @@ def get_unique_files_by_stem(files: List[pathlib.Path] | Tuple[pathlib.Path, ...
         -> List[pathlib.Path]:
     """Returns the first of each Path with a unique stem.  Used to detect if a group of files share a stem."""
     results = unique_by_predicate(files, lambda i: split_path_stem_and_suffix(i)[0])
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'get_unique_files_by_stem {files=}')
         logger.trace(f'get_unique_files_by_stem {results=}')
     return results

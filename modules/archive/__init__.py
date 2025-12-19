@@ -301,7 +301,7 @@ async def archive_modeler():
 
             if processed < 19:
                 # Did not reach limit (enumerate is 0-indexed, so 19 = 20 items), do not query again.
-                if logger.isEnabledFor(TRACE_LEVEL):
+                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
                     logger.trace(f'archive_modeler: DONE (processed {processed + 1} files)')
                 break
 

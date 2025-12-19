@@ -149,14 +149,14 @@ async def post_search_directories(request, body: schema.DirectoriesSearchRequest
 
     session = request.ctx.session
     path = get_media_directory() / body.path
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {path=}')
 
     try:
         matching_directories = lib.get_matching_directories(path)
     except FileNotFoundError:
         matching_directories = []
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {matching_directories=}')
 
     # Search Channels by name.
@@ -164,7 +164,7 @@ async def post_search_directories(request, body: schema.DirectoriesSearchRequest
     channels = await search_channels_by_name(session, name=body.path)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {channel_paths=}')
 
     # Search Domains by name.
@@ -173,7 +173,7 @@ async def post_search_directories(request, body: schema.DirectoriesSearchRequest
     # search_domains_by_name returns dicts with 'directory' and 'domain' keys
     domain_directories = [dict(path=i['directory'], domain=i['domain']) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {domain_paths=}')
 
     # Get all Directory that match but do not contain the above directories.
@@ -188,7 +188,7 @@ async def post_search_directories(request, body: schema.DirectoriesSearchRequest
     directories = unique_by_predicate(directories, lambda i: i['path'])
     directories = list(sorted(directories, key=lambda i: i['path']))[:20]
 
-    if logger.isEnabledFor(TRACE_LEVEL):
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
         logger.trace(f'post_search_directories: {excluded=}')
         logger.trace(f'post_search_directories: {directories=}')
 

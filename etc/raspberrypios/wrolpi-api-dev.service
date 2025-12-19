@@ -6,7 +6,7 @@ Conflicts=wrolpi-api.service
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/wrolpi/venv/bin/python -m sanic main:api_app --host 0.0.0.0 --port 8081 -w 1 --reload --debug
+ExecStart=/opt/wrolpi/venv/bin/python -m sanic main:api_app --host 0.0.0.0 --port 8081 -w 2 --reload --debug
 ExecReload=/bin/kill -HUP $MAINPID
 Group=wrolpi
 User=wrolpi

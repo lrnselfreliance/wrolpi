@@ -1,6 +1,7 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {checkUpgrade, postRestart, postShutdown, saveSettings as saveSettingsApi, triggerUpgrade} from "../../api";
+import {getServices, stopService, startService} from "../../api/controller";
 import {
     Button,
     Divider,
@@ -299,6 +300,12 @@ export function SettingsPage() {
     const {clearAll} = useMessageDismissal();
     const dockerized = useDockerized();
 
+    // Trace level modal state
+    const [traceModalOpen, setTraceModalOpen] = React.useState(false);
+    const [traceCountdown, setTraceCountdown] = React.useState(5);
+    const [traceSwitching, setTraceSwitching] = React.useState(false);
+    const [isDevMode, setIsDevMode] = React.useState(false);
+
     // Get current settings from the API.
     const {settings, saveSettings, fetchSettings} = React.useContext(SettingsContext);
     // Used to track changes to the settings form between saves/loads.
@@ -309,6 +316,22 @@ export function SettingsPage() {
     React.useEffect(() => {
         fetchConfigs();
     }, []);
+
+    // Check if we're running in dev mode (wrolpi-api-dev service)
+    React.useEffect(() => {
+        if (!dockerized) {
+            const checkDevMode = async () => {
+                try {
+                    const services = await getServices();
+                    const apiDevService = services.find(s => s.name === 'wrolpi-api-dev');
+                    setIsDevMode(apiDevService?.status === 'running');
+                } catch (e) {
+                    console.error('Failed to check dev mode status:', e);
+                }
+            };
+            checkDevMode();
+        }
+    }, [dockerized]);
 
     const localFetchSettings = async () => {
         console.debug('fetching settings...');
@@ -322,6 +345,20 @@ export function SettingsPage() {
     }
 
     const localSaveSettings = async (newSettings) => {
+        // Check if trace level is selected (5 = trace in frontend)
+        const isTraceLevel = newSettings.log_level === 5;
+
+        // In native mode, if trace is selected and not already in dev mode, show confirmation modal
+        if (isTraceLevel && !dockerized && !isDevMode) {
+            setTraceModalOpen(true);
+            return;
+        }
+
+        // Otherwise, save normally
+        await doSaveSettings(newSettings);
+    }
+
+    const doSaveSettings = async (newSettings) => {
         setDisabled(true);
         setPendingSave(true);
         newSettings.download_timeout = parseInt(newSettings.download_timeout);
@@ -333,6 +370,68 @@ export function SettingsPage() {
             setDisabled(false);
             setPendingSave(false);
         }
+    }
+
+    const handleTraceModalConfirm = async () => {
+        setTraceSwitching(true);
+        setTraceCountdown(5);
+
+        // Start countdown
+        const countdownInterval = setInterval(() => {
+            setTraceCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(countdownInterval);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        // Wait for countdown
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        try {
+            // Save settings first
+            await doSaveSettings({...state});
+
+            // Switch to dev mode: stop wrolpi-api, start wrolpi-api-dev
+            toast({
+                type: 'info',
+                title: 'Switching to Debug Mode',
+                description: 'Stopping production API and starting debug API...',
+                time: 3000,
+            });
+
+            await stopService('wrolpi-api');
+            await startService('wrolpi-api-dev');
+
+            toast({
+                type: 'success',
+                title: 'Debug Mode Enabled',
+                description: 'API is now running in debug mode with trace logging enabled.',
+                time: 5000,
+            });
+
+            setIsDevMode(true);
+        } catch (e) {
+            console.error('Failed to switch to dev mode:', e);
+            toast({
+                type: 'error',
+                title: 'Service Switch Failed',
+                description: `Failed to switch API services: ${e.message}. You may need to manually restart services.`,
+                time: 10000,
+            });
+        } finally {
+            setTraceSwitching(false);
+            setTraceModalOpen(false);
+            setTraceCountdown(5);
+        }
+    }
+
+    const handleTraceModalCancel = () => {
+        // Reset log level to previous value and close modal
+        setState({...state, log_level: fromApiLogLevel(settings.log_level)});
+        setTraceModalOpen(false);
     }
 
     const handleHotspotChange = async () => {
@@ -655,6 +754,62 @@ export function SettingsPage() {
             <Header as='h1'>Browser Settings</Header>
             <APIButton onClick={clearAll}>Show All Hints</APIButton>
         </Segment>
+
+        {/* Trace Level Modal - shown when user selects trace level in native mode */}
+        <Modal
+            open={traceModalOpen}
+            onClose={() => !traceSwitching && handleTraceModalCancel()}
+            size='small'
+        >
+            <Modal.Header>
+                <Icon name='bug'/> Enable Debug Mode for Trace Logging
+            </Modal.Header>
+            <Modal.Content>
+                {traceSwitching ? (
+                    <>
+                        <p>
+                            <Icon name='spinner' loading/>
+                            {traceCountdown > 0
+                                ? `Switching to debug mode in ${traceCountdown} seconds...`
+                                : 'Switching API services...'}
+                        </p>
+                        <p style={{color: '#888', fontSize: '0.9em'}}>
+                            The API will restart. This page may temporarily lose connection.
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <p>
+                            Trace logging requires running the API in debug mode, which has slightly reduced
+                            performance (2 workers instead of 5).
+                        </p>
+                        <p>
+                            This will save your settings and restart the API service. The page may temporarily
+                            lose connection during the switch.
+                        </p>
+                        <p style={{color: '#888', fontSize: '0.9em'}}>
+                            You can switch back to production mode later from the Controller page.
+                        </p>
+                    </>
+                )}
+            </Modal.Content>
+            <Modal.Actions>
+                <Button
+                    color='grey'
+                    onClick={handleTraceModalCancel}
+                    disabled={traceSwitching}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    color='green'
+                    onClick={handleTraceModalConfirm}
+                    disabled={traceSwitching}
+                >
+                    <Icon name='check'/> Enable Debug Mode
+                </Button>
+            </Modal.Actions>
+        </Modal>
     </Container>;
 }
 

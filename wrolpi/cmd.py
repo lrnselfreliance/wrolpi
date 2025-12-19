@@ -130,7 +130,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         cmd_str = ' '.join(shlex.quote(i) for i in cmd)
         if log_command:
             logger.info(f'run_command: running ({timeout=}): {cmd_str}')
-        elif logger.isEnabledFor(TRACE_LEVEL):
+        elif __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(f'run_command: running ({timeout=}): {cmd_str}')
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -171,7 +171,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         if log_command:
             logger.debug(
                 f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
-        elif logger.isEnabledFor(TRACE_LEVEL):
+        elif __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(
                 f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
         return CommandResult(

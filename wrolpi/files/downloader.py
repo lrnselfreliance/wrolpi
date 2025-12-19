@@ -36,7 +36,7 @@ class FileDownloader(Downloader, ABC):
         if not destination:
             raise UnrecoverableDownloadError(f'Cannot download the file without a destination')
 
-        if logger.isEnabledFor(TRACE_LEVEL):
+        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(f'FileDownloader: downloading {download.url} to {destination}')
 
         # Create the destination only if it is within the media directory.

@@ -198,7 +198,7 @@ def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testin
             except Exception as e:
                 logger.error(f'Perpetual worker {event_} had error', exc_info=e)
             finally:
-                if logger.isEnabledFor(TRACE_LEVEL):
+                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
                     elapsed = int(time() - start)
                     logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
                 if not cancelled:

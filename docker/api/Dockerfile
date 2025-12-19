@@ -17,6 +17,6 @@ COPY main.py /opt/wrolpi/
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
 
-ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
+ENTRYPOINT [ "python3", "/opt/wrolpi/main.py"]
 # Log level controlled by LOG_LEVEL env var or wrolpi.yaml config (default: info)
 CMD ["api", "--host", "0.0.0.0"]

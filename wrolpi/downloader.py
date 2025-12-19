@@ -323,7 +323,7 @@ class Downloader:
         coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug)
         result = await self.cancel_wrapper(coro, download)
 
-        if logger.isEnabledFor(TRACE_LEVEL):
+        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             for line in result.stdout.decode().splitlines():
                 logger.trace(line)
             for line in result.stderr.decode().splitlines():

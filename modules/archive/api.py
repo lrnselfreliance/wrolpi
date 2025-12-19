@@ -88,7 +88,7 @@ async def singlefile_upload_switch_handler(url=None):
 
     q: multiprocessing.Queue = api_app.shared_ctx.archive_singlefiles
 
-    trace_enabled = logger.isEnabledFor(TRACE_LEVEL)
+    trace_enabled = __debug__ and logger.isEnabledFor(TRACE_LEVEL)
     if trace_enabled:
         logger.trace(f'singlefile_upload_switch_handler called for {url}')
     try:
@@ -135,7 +135,7 @@ async def generate_screenshot_switch_handler(archive_id=None):
     """Used by `post_generate_screenshot` to generate screenshots in the background"""
     q: multiprocessing.Queue = api_app.shared_ctx.archive_screenshots
 
-    trace_enabled = logger.isEnabledFor(TRACE_LEVEL)
+    trace_enabled = __debug__ and logger.isEnabledFor(TRACE_LEVEL)
     if trace_enabled:
         logger.trace(f'generate_screenshot_switch_handler called for archive_id={archive_id}')
     try:

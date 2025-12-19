@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
-    slow_logger, get_title_from_html
+    slow_logger, get_title_from_html, TRACE_LEVEL
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -144,6 +144,7 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
         raise InvalidArchive('FileGroup does not contain any html files')
 
     # All Archives have a Singlefile.
+    singlefile_path = None
     for file in html_paths:
         try:
             if is_singlefile_file(file):
@@ -153,7 +154,8 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
             if PYTEST:
                 raise
             logger.debug(f'Cannot check is_singlefile_file of {repr(file)}', exc_info=e)
-    else:
+
+    if singlefile_path is None:
         logger.debug(f'No Archive singlefile found in {file_group}')
         raise InvalidArchive('FileGroup does not contain a singlefile')
 
@@ -260,7 +262,6 @@ async def archive_modeler():
 
             processed = 0
             for processed, (file_group, archive) in enumerate(results):
-
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
                                  logger__=logger):
                     if archive:
@@ -269,7 +270,7 @@ async def archive_modeler():
                             archive.validate()
                             # Successfully validated, mark as indexed
                             file_group.indexed = True
-                        except Exception:
+                        except Exception as e:
                             logger.error(f'Unable to validate Archive {archive_id}')
                             # Don't mark as indexed - will retry later
                             if PYTEST:
@@ -291,11 +292,11 @@ async def archive_modeler():
 
             session.commit()
 
-            if processed < 20:
-                # Did not reach limit, do not query again.
+            if processed < 19:
+                # Did not reach limit (enumerate is 0-indexed, so 19 = 20 items), do not query again.
+                if logger.isEnabledFor(TRACE_LEVEL):
+                    logger.trace(f'archive_modeler: DONE (processed {processed + 1} files)')
                 break
-
-            logger.debug(f'Modeled {processed} Archives')
 
         # Sleep to catch cancel.
         await asyncio.sleep(0)

@@ -101,6 +101,29 @@ def add_logging_level(level_name: str, level_int: int, methodName=None):
     setattr(logging, methodName, logToRoot)
 
 
+def is_journal_stream() -> bool:
+    """Check if stderr is connected to systemd journal.
+
+    Systemd sets JOURNAL_STREAM to device:inode of the journal socket when a service's
+    stdout/stderr is connected to the journal. We verify our stderr matches to avoid
+    false positives from subprocesses with redirected output.
+    """
+    journal_stream = os.environ.get('JOURNAL_STREAM')
+    if not journal_stream:
+        return False
+    try:
+        device, inode = map(int, journal_stream.split(':'))
+        stat = os.fstat(sys.stderr.fileno())
+        return stat.st_dev == device and stat.st_ino == inode
+    except (ValueError, OSError):
+        return False
+
+
+# Conditionally include timestamp/PID in log format.
+# When running under systemd journal, these are provided by journald.
+# When running in Docker or locally, we need to include them ourselves.
+_LOG_PREFIX = '' if is_journal_stream() else '[%(asctime)s] [%(process)d] '
+
 LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -146,12 +169,11 @@ LOGGING_CONFIG = {
     },
     'formatters': {
         'generic': {
-            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s',
+            'format': f'{_LOG_PREFIX}[%(name)s:%(lineno)d] [%(levelname)s] %(message)s',
             'class': 'logging.Formatter',
         },
         'access': {
-            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s]: '
-                      + '%(request)s %(message)s %(status)s %(byte)s',
+            'format': f'{_LOG_PREFIX}[%(name)s:%(lineno)d] [%(levelname)s]: %(request)s %(message)s %(status)s %(byte)s',
             'class': 'logging.Formatter',
         },
     },

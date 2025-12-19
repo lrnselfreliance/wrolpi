@@ -1097,3 +1097,124 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
     assert download2.collection_id == collection.id  # matched by subdirectory
     assert download3.collection_id == collection.id  # matched by URL domain
     assert download4.collection_id is None  # no frequency = no link
+
+
+@skip_circleci
+@pytest.mark.asyncio
+async def test_archive_download_uses_domain_collection_directory(async_client, test_session, test_directory, fake_now,
+                                                                  monkeypatch):
+    """
+    Test that archive downloads use the domain collection's directory when no explicit destination is set.
+
+    If a domain collection exists with a directory (e.g., archive/News/example.com), new archives for that
+    domain should be created in that directory instead of the default archive/<domain> directory.
+    """
+    from modules.archive import archive_downloader
+    from wrolpi.downloader import Download
+
+    fake_now(datetime(2024, 1, 15))
+
+    # Mock request_archive to return fake archive data
+    singlefile, readability, screenshot = make_fake_archive_result()
+
+    async def mock_request_archive(url):
+        return singlefile, readability, screenshot
+
+    # Patch in both lib and archive module (imported at module level)
+    import modules.archive
+    monkeypatch.setattr(lib, 'request_archive', mock_request_archive)
+    monkeypatch.setattr(modules.archive, 'request_archive', mock_request_archive)
+
+    # Create a domain collection with a custom directory
+    custom_dir = test_directory / 'archive/News/example.com'
+    custom_dir.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='example.com', kind='domain', directory=custom_dir)
+    test_session.add(collection)
+    test_session.commit()
+
+    # Create a download without an explicit destination
+    download = Download(
+        url='https://example.com/some-article',
+        downloader='archive',
+        settings={},  # No destination set
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    # Call the archive downloader
+    result = await archive_downloader.do_download(download)
+
+    # Verify the download was successful
+    assert result.success is True
+
+    # Verify the archive was created in the domain collection's directory
+    archives = test_session.query(Archive).all()
+    assert len(archives) == 1
+    archive = archives[0]
+
+    # The archive should be in the custom directory, not archive/example.com
+    assert str(archive.singlefile_path).startswith(str(custom_dir)), \
+        f"Archive should be in domain collection directory {custom_dir}, but was in {archive.singlefile_path.parent}"
+
+
+@skip_circleci
+@pytest.mark.asyncio
+async def test_archive_download_explicit_destination_overrides_domain_collection(
+        async_client, test_session, test_directory, fake_now, monkeypatch):
+    """
+    Test that an explicit destination in settings overrides the domain collection's directory.
+
+    Even if a domain collection exists with a directory, if the download has an explicit
+    settings['destination'], that should be used instead.
+    """
+    from modules.archive import archive_downloader
+    from wrolpi.downloader import Download
+
+    fake_now(datetime(2024, 1, 15))
+
+    # Mock request_archive to return fake archive data
+    singlefile, readability, screenshot = make_fake_archive_result()
+
+    async def mock_request_archive(url):
+        return singlefile, readability, screenshot
+
+    # Patch in both lib and archive module (imported at module level)
+    import modules.archive
+    monkeypatch.setattr(lib, 'request_archive', mock_request_archive)
+    monkeypatch.setattr(modules.archive, 'request_archive', mock_request_archive)
+
+    # Create a domain collection with a custom directory
+    collection_dir = test_directory / 'archive/News/example.com'
+    collection_dir.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='example.com', kind='domain', directory=collection_dir)
+    test_session.add(collection)
+    test_session.commit()
+
+    # Create an explicit destination that's different from the collection directory
+    explicit_dir = test_directory / 'archive/Special/my-archives'
+    explicit_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a download with an explicit destination
+    download = Download(
+        url='https://example.com/some-article',
+        downloader='archive',
+        settings={'destination': str(explicit_dir)},  # Explicit destination
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    # Call the archive downloader
+    result = await archive_downloader.do_download(download)
+
+    # Verify the download was successful
+    assert result.success is True
+
+    # Verify the archive was created in the explicit destination, NOT the collection directory
+    archives = test_session.query(Archive).all()
+    assert len(archives) == 1
+    archive = archives[0]
+
+    assert str(archive.singlefile_path).startswith(str(explicit_dir)), \
+        f"Archive should be in explicit destination {explicit_dir}, but was in {archive.singlefile_path.parent}"
+    assert not str(archive.singlefile_path).startswith(str(collection_dir)), \
+        f"Archive should NOT be in collection directory {collection_dir}"

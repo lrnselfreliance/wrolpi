@@ -49,6 +49,13 @@ class ArchiveDownloader(Downloader, ABC):
         if download.settings and download.settings.get('destination'):
             destination = pathlib.Path(download.settings['destination'])
 
+        # If no destination provided, look up the domain collection's directory
+        if not destination:
+            with get_db_session() as session:
+                collection = lib.get_or_create_domain_collection(session, download.url)
+                if collection and collection.directory:
+                    destination = collection.directory
+
         if DOCKERIZED or PYTEST:
             # Perform the archive in the Archive docker container.  (Typically in the development environment).
             singlefile, readability, screenshot = await request_archive(download.url)

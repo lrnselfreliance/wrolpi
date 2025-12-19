@@ -2,6 +2,7 @@
 Description=WROLPi React APP
 Wants=wrolpi-api.service
 PartOf=wrolpi.target
+Conflicts=wrolpi-app-dev.service
 
 [Service]
 # Use explicit `serve.json` so `epub.html` is not lost.

@@ -57,12 +57,15 @@ class TestManagedServicesConfig:
     def test_managed_services_count(self):
         """Should have expected number of managed services."""
         services = DEFAULT_CONFIG["managed_services"]
-        assert len(services) == 10
+        assert len(services) == 12
 
     @pytest.mark.parametrize("name,expected", [
         ("wrolpi-api",
          {"systemd_name": "wrolpi-api", "port": 8081, "viewable": True, "description": "Python API (Sanic)"}),
+        ("wrolpi-api-dev",
+         {"systemd_name": "wrolpi-api-dev", "port": 8081, "viewable": True, "show_only_when_running": True}),
         ("wrolpi-app", {"port": 3000, "viewable": False}),
+        ("wrolpi-app-dev", {"port": 3000, "viewable": False, "show_only_when_running": True}),
         ("nginx", {"port": 80}),
         ("postgresql", {"port": 5432, "viewable": False}),
         ("wrolpi-upgrade", {"port": None, "viewable": False, "show_only_when_running": True}),

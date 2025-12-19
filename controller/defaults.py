@@ -51,6 +51,15 @@ DEFAULT_CONFIG = {
             "description": "React frontend",
         },
         {
+            "name": "wrolpi-app-dev",
+            "systemd_name": "wrolpi-app-dev",
+            "port": 3000,
+            "viewable": False,
+            "use_https": False,
+            "description": "React frontend (Development)",
+            "show_only_when_running": True,
+        },
+        {
             "name": "wrolpi-help",
             "systemd_name": "wrolpi-help",
             "port": 8086,

@@ -1,0 +1,16 @@
+[Unit]
+Description=WROLPi React APP (Development)
+Wants=wrolpi-api.service
+PartOf=wrolpi.target
+Conflicts=wrolpi-app.service
+
+[Service]
+Environment=PORT=3000
+ExecStart=/usr/bin/npm start
+Group=wrolpi
+User=wrolpi
+WorkingDirectory=/opt/wrolpi/app/
+Nice=6
+
+[Install]
+WantedBy=default.target

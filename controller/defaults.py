@@ -34,6 +34,15 @@ DEFAULT_CONFIG = {
             "description": "Python API (Sanic)",
         },
         {
+            "name": "wrolpi-api-dev",
+            "systemd_name": "wrolpi-api-dev",
+            "port": 8081,
+            "viewable": True,
+            "use_https": False,
+            "description": "Python API (Development)",
+            "show_only_when_running": True,
+        },
+        {
             "name": "wrolpi-app",
             "systemd_name": "wrolpi-app",
             "port": 3000,

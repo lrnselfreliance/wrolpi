@@ -692,7 +692,7 @@ async def test_get_refresh_progress(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_no_groups(test_session, test_directory, make_files_structure, zip_file_factory):
+async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure, zip_file_factory):
     """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
     foo_txt, foo_zip = make_files_structure({
         'foo.txt': 'text',

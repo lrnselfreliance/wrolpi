@@ -17,7 +17,9 @@ from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate
+    register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate, aiohttp_post
+from wrolpi.dates import Seconds
+from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import refresh_files, split_file_name_words
@@ -25,6 +27,8 @@ from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
+
+CONTROLLER_SERVICE = 'http://controller:8087'
 
 __all__ = [
     'flag_outdated_zim_files',
@@ -573,9 +577,23 @@ async def restart_kiwix():
         logger.warning('Unable to restart Kiwix serve because we are testing')
         return
     if DOCKERIZED:
-        logger.warning('Setting Kiwix restart because this is in a docker container')
-        flags.kiwix_restart.set()
-        return
+        logger.info('Restarting Kiwix via controller API')
+        try:
+            async with aiohttp_post(f'{CONTROLLER_SERVICE}/api/services/zim/restart',
+                                    timeout=Seconds.minute) as response:
+                if response.status == 200:
+                    logger.info('Successfully restarted Kiwix container')
+                    return 0
+                else:
+                    logger.error(f'Failed to restart Kiwix: {response.status}')
+                    Events.send_user_notify(
+                        'Failed to restart Kiwix automatically. Please restart manually: docker compose restart zim')
+                    return 1
+        except Exception as e:
+            logger.error(f'Failed to restart Kiwix: {e}')
+            Events.send_user_notify(
+                'Failed to restart Kiwix automatically. Please restart manually: docker compose restart zim')
+            return 1
 
     logger.info('Restarting Kiwix serve')
 

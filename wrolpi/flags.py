@@ -110,8 +110,6 @@ db_up = Flag('db_up')
 refreshing = Flag('refreshing')
 # Outdated Zims need to be removed.
 outdated_zims = Flag('outdated_zims', store_db=True)
-# Kiwix server needs to be restarted.
-kiwix_restart = Flag('kiwix_restart')
 # Map Importing
 map_importing = Flag('map_importing')
 # Used to disable or enable downloading when Internet is down.
@@ -132,7 +130,6 @@ def get_flags() -> dict:
     """Return a list of all Flags which are set."""
     flags = dict(
         db_up=db_up.is_set(),
-        kiwix_restart=kiwix_restart.is_set(),
         map_importing=map_importing.is_set(),
         outdated_zims=outdated_zims.is_set(),
         refresh_cleanup=refresh_cleanup.is_set(),

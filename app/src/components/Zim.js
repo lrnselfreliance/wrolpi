@@ -153,16 +153,6 @@ export const OutdatedZimsMessage = ({onClick}) => {
     </Message>
 }
 
-export const KiwixRestartMessage = () => {
-    return <WarningMessage>
-        <Message.Header>Kiwix must be restarted</Message.Header>
-        <p>New Zim files have been downloaded; you must restart your containers.</p>
-
-        <p>Run the following to restart your containers:</p>
-        <pre>  docker-compose restart</pre>
-    </WarningMessage>
-}
-
 const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
     const {path, title, headline, tag_names} = entry;
     const [open, setOpen] = React.useState(false);

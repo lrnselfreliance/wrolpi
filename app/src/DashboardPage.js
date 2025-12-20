@@ -28,7 +28,7 @@ import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
-import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
+import {OutdatedZimsMessage} from "./components/Zim";
 import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
 import {FileCards, FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
@@ -77,11 +77,6 @@ function FlagsMessages() {
         </ErrorMessage>
     }
 
-    let kiwixRestartMessage;
-    if (flags.kiwix_restart) {
-        kiwixRestartMessage = <KiwixRestartMessage/>;
-    }
-
     let internetDownMessage;
     if (!flags.have_internet && !settings.wrol_mode) {
         internetDownMessage = <ErrorMessage icon='globe'>
@@ -95,7 +90,6 @@ function FlagsMessages() {
         {dbDownMessage || refreshRequiredMessage}
         {settings && settings['ignore_outdated_zims'] === false && flags.outdated_zims ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
-        {kiwixRestartMessage}
         {internetDownMessage}
     </>
 }

@@ -84,7 +84,6 @@ class SettingsRequest:
 @dataclass
 class FlagsStatusResponse:
     db_up: bool
-    kiwix_restart: bool
     map_importing: bool
     outdated_zims: bool
     refresh_cleanup: bool

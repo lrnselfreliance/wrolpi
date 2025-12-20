@@ -140,3 +140,4 @@ app/cypress/videos
  
 .claude
 *.md
+/.mcp.json

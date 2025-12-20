@@ -12,7 +12,7 @@ from sanic.signals import Event
 from modules.inventory import init_inventory
 from modules.inventory.common import import_inventories_config
 from modules.videos.lib import import_channels_config, get_videos_downloader_config
-from wrolpi import flags, admin
+from wrolpi import flags
 from modules.archive.lib import import_domains_config
 from wrolpi import root_api  # noqa
 from wrolpi import tags
@@ -284,25 +284,7 @@ async def start_single_tasks(app: Sanic):
         # Set all downloads to new.
         download_manager.retry_downloads()
 
-    # Hotspot/throttle are not supported in Docker containers.
-    if not DOCKERIZED:
-        if get_wrolpi_config().hotspot_on_startup:
-            logger.info('Starting hotspot...')
-            try:
-                admin.enable_hotspot()
-            except Exception as e:
-                logger.error('Failed to enable hotspot', exc_info=e)
-        else:
-            logger.info('Hotspot on startup is disabled.')
-
-        if get_wrolpi_config().throttle_on_startup:
-            logger.info('Throttling CPU...')
-            try:
-                admin.throttle_cpu_on()
-            except Exception as e:
-                logger.error('Failed to throttle CPU', exc_info=e)
-        else:
-            logger.info('CPU throttle on startup is disabled')
+    # Hotspot/throttle on startup are now handled by the Controller service.
 
     if get_wrolpi_config().download_on_startup and not wrol_mode_enabled():
         # Only start downloading when prerequisites have been met.

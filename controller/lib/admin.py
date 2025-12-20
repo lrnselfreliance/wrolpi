@@ -9,7 +9,10 @@ import enum
 import subprocess
 from pathlib import Path
 
-from controller.lib.config import get_config, is_docker_mode
+from controller.lib.config import is_docker_mode, get_config_value
+
+# Constants - use controller's own config instead of wrolpi module
+DEFAULT_CPU_FREQUENCY = get_config_value('throttle.default_governor', 'ondemand')
 
 
 class HotspotStatus(enum.Enum):
@@ -28,11 +31,13 @@ class GovernorStatus(enum.Enum):
     unknown = enum.auto()
 
 
-def get_current_ssid(interface: str = 'wlan0') -> str | None:
+def get_current_ssid(interface: str = None) -> str | None:
     """
     Returns the name of the SSID that is currently connected.
     Returns None if Hotspot is active, or no Wi-Fi network is being used.
     """
+    if interface is None:
+        interface = get_config_value('hotspot.device', 'wlan0')
     try:
         result = subprocess.run(
             ['iwgetid', interface, '--raw'],
@@ -62,9 +67,7 @@ def get_hotspot_status() -> HotspotStatus:
     if is_docker_mode():
         return HotspotStatus.unknown
 
-    config = get_config()
-    hotspot_config = config.get("hotspot", {})
-    device = hotspot_config.get("device", "wlan0")
+    device = get_config_value('hotspot.device', 'wlan0')
 
     # Check if device is connected to a Wi-Fi network (not hotspot)
     if get_current_ssid(device):
@@ -111,9 +114,7 @@ def get_hotspot_status_dict() -> dict:
         ssid: Optional[str] - Hotspot SSID when enabled
         device: Optional[str] - WiFi device name
     """
-    config = get_config()
-    hotspot_config = config.get("hotspot", {})
-    device = hotspot_config.get("device", "wlan0")
+    device = get_config_value('hotspot.device', 'wlan0')
     status = get_hotspot_status()
 
     # Map enum status to enabled/available flags
@@ -132,7 +133,7 @@ def get_hotspot_status_dict() -> dict:
         "enabled": enabled,
         "available": available,
         "reason": reason,
-        "ssid": hotspot_config.get("ssid", "WROLPi") if enabled else None,
+        "ssid": get_config_value('hotspot.ssid', 'WROLPi') if enabled else None,
         "device": device,
     }
 
@@ -147,12 +148,9 @@ def enable_hotspot() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    config = get_config()
-    hotspot_config = config.get("hotspot", {})
-
-    device = hotspot_config.get("device", "wlan0")
-    ssid = hotspot_config.get("ssid", "WROLPi")
-    password = hotspot_config.get("password", "wrolpi hotspot")
+    device = get_config_value('hotspot.device', 'wlan0')
+    ssid = get_config_value('hotspot.ssid', 'WROLPi')
+    password = get_config_value('hotspot.password', 'wrolpi hotspot')
 
     try:
         # First ensure radio is on
@@ -348,8 +346,7 @@ def disable_throttle() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    config = get_config()
-    default_governor = config.get("throttle", {}).get("default_governor", "ondemand")
+    default_governor = DEFAULT_CPU_FREQUENCY
 
     try:
         result = subprocess.run(
@@ -378,40 +375,68 @@ def disable_throttle() -> dict:
         return {"success": False, "error": str(e)}
 
 
-def shutdown_system() -> dict:
+def shutdown_system(delay: int = 10) -> dict:
     """
-    Shut down the system.
+    Shut down the system after a delay.
+
+    Args:
+        delay: Seconds to wait before shutdown (default 10). Allows API to return response.
 
     Returns:
         dict with success status
     """
+    import shutil
+
     if is_docker_mode():
         return {"success": False, "error": "Cannot shutdown from Docker container"}
 
-    try:
-        subprocess.Popen(["shutdown", "-h", "now"])
-        return {"success": True, "message": "System shutting down"}
-    except FileNotFoundError:
+    # Check if shutdown command exists before starting thread
+    if not shutil.which("shutdown"):
         return {"success": False, "error": "shutdown command not found"}
+
+    def _delayed_shutdown():
+        import time
+        time.sleep(delay)
+        subprocess.Popen(["shutdown", "-h", "now"])
+
+    try:
+        import threading
+        thread = threading.Thread(target=_delayed_shutdown, daemon=True)
+        thread.start()
+        return {"success": True, "message": f"System shutting down in {delay} seconds"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 
-def reboot_system() -> dict:
+def reboot_system(delay: int = 10) -> dict:
     """
-    Reboot the system.
+    Reboot the system after a delay.
+
+    Args:
+        delay: Seconds to wait before reboot (default 10). Allows API to return response.
 
     Returns:
         dict with success status
     """
+    import shutil
+
     if is_docker_mode():
         return {"success": False, "error": "Cannot reboot from Docker container"}
 
-    try:
-        subprocess.Popen(["reboot"])
-        return {"success": True, "message": "System rebooting"}
-    except FileNotFoundError:
+    # Check if reboot command exists before starting thread
+    if not shutil.which("reboot"):
         return {"success": False, "error": "reboot command not found"}
+
+    def _delayed_reboot():
+        import time
+        time.sleep(delay)
+        subprocess.Popen(["reboot"])
+
+    try:
+        import threading
+        thread = threading.Thread(target=_delayed_reboot, daemon=True)
+        thread.start()
+        return {"success": True, "message": f"System rebooting in {delay} seconds"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

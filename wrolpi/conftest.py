@@ -818,8 +818,3 @@ def mock_downloader_download_file():
         yield set_contents
 
 
-@pytest.fixture
-def start_status_worker():
-    """Enable the status worker for testing."""
-    with mock.patch('wrolpi.status.DISABLE_STATUS_WORKER', False):
-        yield

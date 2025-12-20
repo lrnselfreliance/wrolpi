@@ -6,12 +6,11 @@ import pytest
 from mock import mock
 from sanic import Request
 
-from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_error_handler
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
-from wrolpi.test.common import skip_circleci, assert_dict_contains, skip_macos
+from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
 @pytest.mark.asyncio
@@ -52,11 +51,8 @@ async def test_valid_regex(test_session, async_client):
 @pytest.mark.asyncio
 async def test_get_settings(test_session, async_client):
     get_wrolpi_config().ignored_directories = list()
-
-    with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
-            mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
-        request, response = await async_client.get('/api/settings')
-        assert response.status_code == HTTPStatus.OK
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
 
 
 @pytest.mark.asyncio
@@ -208,83 +204,25 @@ async def test_echo(async_client):
 @pytest.mark.asyncio
 async def test_hotspot_settings(test_session, async_client, test_wrolpi_config):
     """
-    The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
+    The User can configure hotspot settings (ssid, password, device) via /settings.
+    Hotspot control (on/off) is now done through Controller endpoints.
     """
     config = get_wrolpi_config()
     assert config.hotspot_on_startup is True
 
-    with mock.patch('wrolpi.root_api.admin') as mock_admin:
-        # Turning on the hotspot succeeds.
-        mock_admin.enable_hotspot.return_value = True
-        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
-        mock_admin.enable_hotspot.assert_called_once()
-        mock_admin.reset_mock()
+    # Hotspot password can be changed.
+    content = {'hotspot_password': 'new password', 'hotspot_ssid': 'new ssid'}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.hotspot_password == 'new password'
+    assert config.hotspot_ssid == 'new ssid'
 
-        # Turning on the hotspot fails.
-        mock_admin.enable_hotspot.return_value = False
-        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
-        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
-        assert response.json['code'] == 'HOTSPOT_ERROR'
-        mock_admin.enable_hotspot.assert_called_once()
-
-        # Turning off the hotspot succeeds.
-        mock_admin.disable_hotspot.return_value = True
-        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
-        mock_admin.disable_hotspot.assert_called_once()
-        mock_admin.reset_mock()
-
-        # Turning off the hotspot succeeds.
-        mock_admin.disable_hotspot.return_value = False
-        request, response = await async_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
-        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
-        assert response.json['code'] == 'HOTSPOT_ERROR'
-        mock_admin.disable_hotspot.assert_called_once()
-
-        mock_admin.enable_hotspot.reset_mock()
-        mock_admin.enable_hotspot.return_value = True
-        mock_admin.hotspot_status.return_value = HotspotStatus.connected
-
-        # Hotspot password can be changed.
-        mock_admin.disable_hotspot.return_value = True
-        content = {'hotspot_password': 'new password', 'hotspot_ssid': 'new ssid'}
-        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
-        assert response.status_code == HTTPStatus.NO_CONTENT
-        assert config.hotspot_password == 'new password'
-        assert config.hotspot_ssid == 'new ssid'
-        # Changing the password restarts the hotspot.
-        mock_admin.enable_hotspot.assert_called_once()
-
-        # Hotspot password must be at least 8 characters.
-        mock_admin.disable_hotspot.return_value = True
-        content = {'hotspot_password': '1234567', 'hotspot_ssid': 'new ssid'}
-        request, response = await async_client.patch('/api/settings', content=json.dumps(content))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
-                                 'error': 'Bad Request',
-                                 'message': 'Hotspot password must be at least 8 characters'
-                                 }
-
-
-@pytest.mark.asyncio
-@skip_macos
-@skip_circleci
-async def test_throttle_toggle(test_session, async_client, test_wrolpi_config):
-    get_wrolpi_config().ignored_directories = list()
-
-    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
-            mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', "this value isn't even used"):
-        mock_subprocess.check_output.side_effect = [
-            b'wlan0: unavailable',
-            b'The governor "ondemand" may decide ',
-        ]
-        request, response = await async_client.get('/api/settings')
-
-    # Throttle is off by default.
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['throttle_on_startup'] is False
-    assert response.json['throttle_status'] == 'ondemand'
+    # Hotspot password must be at least 8 characters.
+    content = {'hotspot_password': '1234567', 'hotspot_ssid': 'new ssid'}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json['code'] == 'INVALID_CONFIG'
+    assert '8 characters' in response.json['error']
 
 
 @pytest.mark.asyncio
@@ -413,8 +351,6 @@ async def test_get_status(async_client, test_session):
     assert isinstance(response.json.get('load_stats'), dict), 'load_stats should be a dict'
     assert isinstance(response.json.get('drives_stats'), list), 'drive_stats should be a dict'
     assert isinstance(response.json.get('downloads'), dict), 'downloads should be a dict'
-    assert isinstance(response.json.get('hotspot_status'), str), 'hotspot_status should be a str'
-    assert isinstance(response.json.get('throttle_status'), str), 'throttle_status should be a str'
     assert isinstance(response.json.get('version'), str), 'version should be a str'
     assert isinstance(response.json.get('memory_stats'), dict), 'memory_stats should be a dict'
     assert isinstance(response.json.get('flags'), dict), 'flags should be a dict'

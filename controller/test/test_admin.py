@@ -66,11 +66,38 @@ class TestEnableHotspot:
     def test_handles_nmcli_not_found(self):
         """Should handle nmcli not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.admin.get_config", return_value={}):
-                with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
-                    result = enable_hotspot()
-                    assert result["success"] is False
-                    assert "nmcli" in result.get("error", "").lower()
+            with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+                result = enable_hotspot()
+                assert result["success"] is False
+                assert "nmcli" in result.get("error", "").lower()
+
+    def test_uses_config_values(self):
+        """Should use get_config_value for device, ssid, and password."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            # Mock get_config_value to return custom values
+            def mock_get_config(key, default=None):
+                config_map = {
+                    'hotspot.device': 'wlan1',
+                    'hotspot.ssid': 'TestSSID',
+                    'hotspot.password': 'testpassword123',
+                }
+                return config_map.get(key, default)
+
+            with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
+                mock_run = mock.Mock()
+                mock_run.returncode = 0
+                with mock.patch("subprocess.run", return_value=mock_run) as mock_subprocess:
+                    enable_hotspot()
+
+                    # Verify the hotspot was created with config values
+                    calls = mock_subprocess.call_args_list
+                    # Find the hotspot creation call (nmcli device wifi hotspot)
+                    hotspot_call = [c for c in calls if len(c[0][0]) > 2 and 'hotspot' in c[0][0]]
+                    if hotspot_call:
+                        cmd_args = hotspot_call[0][0][0]
+                        assert "wlan1" in cmd_args
+                        assert "TestSSID" in cmd_args
+                        assert "testpassword123" in cmd_args
 
 
 class TestDisableHotspot:
@@ -165,19 +192,25 @@ class TestShutdownSystem:
     def test_handles_shutdown_not_found(self):
         """Should handle shutdown command not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            with mock.patch("subprocess.Popen", side_effect=FileNotFoundError()):
+            with mock.patch("shutil.which", return_value=None):
                 result = shutdown_system()
                 assert result["success"] is False
                 assert "not found" in result.get("error", "").lower()
 
     def test_calls_shutdown_command(self):
-        """Should call shutdown command with correct args."""
+        """Should call shutdown command with correct args after delay."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            mock_popen = mock.Mock()
-            with mock.patch("subprocess.Popen", mock_popen):
-                result = shutdown_system()
-                mock_popen.assert_called_once_with(["shutdown", "-h", "now"])
-                assert result["success"] is True
+            with mock.patch("shutil.which", return_value="/sbin/shutdown"):
+                mock_popen = mock.Mock()
+                with mock.patch("subprocess.Popen", mock_popen):
+                    # Use delay=0 for testing to avoid waiting
+                    result = shutdown_system(delay=0)
+                    assert result["success"] is True
+                    assert "shutting down" in result["message"].lower()
+                    # Give thread time to execute
+                    import time
+                    time.sleep(0.1)
+                    mock_popen.assert_called_once_with(["shutdown", "-h", "now"])
 
 
 class TestRebootSystem:
@@ -193,19 +226,25 @@ class TestRebootSystem:
     def test_handles_reboot_not_found(self):
         """Should handle reboot command not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            with mock.patch("subprocess.Popen", side_effect=FileNotFoundError()):
+            with mock.patch("shutil.which", return_value=None):
                 result = reboot_system()
                 assert result["success"] is False
                 assert "not found" in result.get("error", "").lower()
 
     def test_calls_reboot_command(self):
-        """Should call reboot command."""
+        """Should call reboot command after delay."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            mock_popen = mock.Mock()
-            with mock.patch("subprocess.Popen", mock_popen):
-                result = reboot_system()
-                mock_popen.assert_called_once_with(["reboot"])
-                assert result["success"] is True
+            with mock.patch("shutil.which", return_value="/sbin/reboot"):
+                mock_popen = mock.Mock()
+                with mock.patch("subprocess.Popen", mock_popen):
+                    # Use delay=0 for testing to avoid waiting
+                    result = reboot_system(delay=0)
+                    assert result["success"] is True
+                    assert "rebooting" in result["message"].lower()
+                    # Give thread time to execute
+                    import time
+                    time.sleep(0.1)
+                    mock_popen.assert_called_once_with(["reboot"])
 
 
 class TestRestartAllServices:

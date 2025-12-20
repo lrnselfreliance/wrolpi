@@ -17,9 +17,8 @@ from modules.map.api import map_bp
 from modules.otp.api import otp_bp
 from modules.videos.api import videos_bp
 from modules.zim.api import zim_bp
-from wrolpi import admin, flags, schema, dates
+from wrolpi import flags, schema, dates
 from wrolpi import tags
-from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
@@ -28,8 +27,7 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
 from wrolpi.config_api import config_bp
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, HotspotError, HotspotPasswordTooShort, InvalidConfig, \
-    ValidationError
+from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
@@ -161,7 +159,7 @@ def get_settings(_: Request):
         'hotspot_on_startup': wrolpi_config.hotspot_on_startup,
         'hotspot_password': wrolpi_config.hotspot_password,
         'hotspot_ssid': wrolpi_config.hotspot_ssid,
-        'hotspot_status': admin.hotspot_status().name,
+        # Hotspot/throttle status now from Controller (/controller/api/hotspot/status, /controller/api/throttle/status)
         'check_for_upgrades': wrolpi_config.check_for_upgrades,
         'ignore_outdated_zims': wrolpi_config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
@@ -170,7 +168,6 @@ def get_settings(_: Request):
         'nav_color': wrolpi_config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': wrolpi_config.throttle_on_startup,
-        'throttle_status': admin.throttle_status().name,
         'version': __version__,
         'videos_destination': wrolpi_config.videos_destination,
         'wrol_mode': wrolpi_config.wrol_mode,
@@ -200,7 +197,7 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
         return response.empty()
 
     if body.hotspot_password and len(body.hotspot_password) < 8:
-        raise HotspotPasswordTooShort()
+        raise InvalidConfig('Hotspot password must be at least 8 characters')
 
     # Remove any keys with None values, then save the config.
     new_config = {k: v for k, v in body.__dict__.items() if v is not None}
@@ -235,20 +232,8 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
         # Persist log level to config
         wrolpi_config.log_level = log_level_int_to_name(log_level)
 
-    old_password = wrolpi_config.hotspot_password
+    # Save config settings (hotspot control is now through Controller endpoints)
     wrolpi_config.update(new_config)
-
-    # If the password was changed, we need to restart the hotspot.
-    password_changed = (new_password := new_config.get('hotspot_password')) and old_password != new_password
-
-    if body.hotspot_status is True or (password_changed and admin.hotspot_status() == HotspotStatus.connected):
-        # Turn on Hotspot
-        if admin.enable_hotspot() is False:
-            raise HotspotError('Could not turn on hotspot')
-    elif body.hotspot_status is False:
-        # Turn off Hotspot
-        if admin.disable_hotspot() is False:
-            raise HotspotError('Could not turn off hotspot')
 
     return response.empty()
 
@@ -425,46 +410,6 @@ async def get_downloaders(_: Request):
     return json_response(ret)
 
 
-@api_bp.post('/hotspot/on')
-@openapi.description('Turn on the hotspot')
-@native_only
-async def hotspot_on(_: Request):
-    result = admin.enable_hotspot(overwrite=True)
-    if result:
-        return response.empty()
-    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
-
-
-@api_bp.post('/hotspot/off')
-@openapi.description('Turn off the hotspot')
-@native_only
-async def hotspot_off(_: Request):
-    result = admin.disable_hotspot()
-    if result:
-        return response.empty()
-    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
-
-
-@api_bp.post('/throttle/on')
-@openapi.description('Turn on CPU throttling')
-@native_only
-async def throttle_on(_: Request):
-    result = admin.throttle_cpu_on()
-    if result:
-        return response.empty()
-    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
-
-
-@api_bp.post('/throttle/off')
-@openapi.description('Turn off CPU throttling')
-@native_only
-async def throttle_off(_: Request):
-    result = admin.throttle_cpu_off()
-    if result:
-        return response.empty()
-    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
-
-
 @api_bp.get('/status')
 @openapi.definition(
     description='Get the status of CPU/load/etc.',
@@ -491,13 +436,11 @@ async def get_status(request: Request):
         dockerized=DOCKERIZED,
         downloads=downloads,
         flags=flags.get_flags(),
-        hotspot_ssid=admin.get_current_ssid(get_wrolpi_config().hotspot_device),
-        hotspot_status=admin.hotspot_status().name,
+        # Hotspot and throttle status now come from Controller (/controller/api/stats)
         is_rpi4=IS_RPI4,
         is_rpi5=IS_RPI5,
         is_rpi=IS_RPI,
         sanic_workers=sanic_workers,
-        throttle_status=admin.throttle_status().name,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),
         # Include all stats from status worker (includes upgrade info and git_branch).
@@ -610,22 +553,6 @@ async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
         serial=detail_to_json(vin.details, 'serial'),
     )
     return json_response(dict(vin=vin))
-
-
-@api_bp.post('/restart')
-@openapi.definition(description='Restart the system')
-@native_only
-async def post_restart(_: Request):
-    await admin.shutdown(reboot=True)
-    return response.empty(HTTPStatus.NO_CONTENT)
-
-
-@api_bp.post('/shutdown')
-@openapi.definition(description='Shutdown the system')
-@native_only
-async def post_shutdown(_: Request):
-    await admin.shutdown()
-    return response.empty(HTTPStatus.NO_CONTENT)
 
 
 @api_bp.get('/upgrade/check')

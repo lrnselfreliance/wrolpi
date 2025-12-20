@@ -1640,21 +1640,31 @@ export async function deleteOutdatedZims() {
 }
 
 export async function postShutdown() {
-    const response = await apiPost(`${API_URI}/shutdown`);
-    if (response.status !== 204) {
-        // Return the error.
-        return await response.json();
+    // Call Controller directly for system shutdown
+    const {shutdownSystem} = await import('./api/controller');
+    try {
+        const result = await shutdownSystem();
+        if (result.success) {
+            return null;  // Success
+        }
+        return {code: 'SHUTDOWN_FAILED', error: result.error};
+    } catch (e) {
+        return {code: 'SHUTDOWN_FAILED', error: e.message};
     }
-    return null
 }
 
 export async function postRestart() {
-    const response = await apiPost(`${API_URI}/restart`);
-    if (response.status !== 204) {
-        // Return the error.
-        return await response.json();
+    // Call Controller directly for system reboot
+    const {rebootSystem} = await import('./api/controller');
+    try {
+        const result = await rebootSystem();
+        if (result.success) {
+            return null;  // Success
+        }
+        return {code: 'SHUTDOWN_FAILED', error: result.error};
+    } catch (e) {
+        return {code: 'SHUTDOWN_FAILED', error: e.message};
     }
-    return null
 }
 
 export async function postVideoFileFormat(video_file_format) {

@@ -7,7 +7,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
-    unique_by_predicate
+    unique_by_predicate, TRACE_LEVEL
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -861,6 +861,8 @@ class Collection(ModelHelper, Base):
             downloads = list(self.downloads)
             downloads.extend(Download.get_all_by_destination(session, from_directory))
             downloads = unique_by_predicate(downloads, lambda i: i.id)
+            if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+                logger.trace(f'move_collection: updating {len(downloads)} download destinations')
             for download in downloads:
                 download.destination = to_directory
             session.flush(downloads)
@@ -884,7 +886,10 @@ class Collection(ModelHelper, Base):
                 if send_events:
                     Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
             else:
-                await move_files(session, directory, *list(old_directory.iterdir()))
+                files_to_move = list(old_directory.iterdir())
+                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+                    logger.trace(f'move_collection: moving {len(files_to_move)} items from {old_directory}')
+                await move_files(session, directory, *files_to_move)
                 if send_events:
                     Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
         except Exception as e:

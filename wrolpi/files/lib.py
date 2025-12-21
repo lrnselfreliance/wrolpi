@@ -1336,12 +1336,14 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
 
     # Sort plan by the deepest files first.
     plan: OrderedDict = OrderedDict(sorted(plan.items(), key=lambda i: (len(i[0].parents), i[0].name), reverse=True))
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'_move: plan created with {len(plan)} items to {destination}')
 
     # Revert plan is built out as files are moved.
     revert_plan = OrderedDict()
     new_directories = set()
 
-    def do_plan(plan_: OrderedDict[pathlib.Path, pathlib.Path]):
+    def do_plan(plan_: OrderedDict[pathlib.Path, pathlib.Path], is_revert: bool = False):
         """Apply the move plan to all the FileGroups.
 
         @warning: Cannot be cancelled!"""
@@ -1382,10 +1384,10 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                     delete_directory(source)
             logger.info(f'Move execution completed')
         except Exception as e:
-            logger.error(f'Move failed', exc_info=e)
+            logger.error(f'_move failed, reverting {len(revert_plan)} items', exc_info=e)
             new_directories = set()
             # Move files back.  Get copy because do_plan will change the revert plan.
-            do_plan(revert_plan.copy())
+            do_plan(revert_plan.copy(), is_revert=True)
             # Delete the directories that were created.
             directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
             for path in directories:
@@ -1435,7 +1437,6 @@ async def move(session: Session, destination: pathlib.Path, *sources: pathlib.Pa
 
     Returns an OrderedDict, the key is the file's old location, the value is where the file was moved.
     """
-
     with flags.refreshing:
         from wrolpi.api_utils import api_app
         api_app.shared_ctx.refresh['counted_files'] = 0

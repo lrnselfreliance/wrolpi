@@ -11,8 +11,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
-from wrolpi.common import logger, get_relative_to_media_directory
+from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
 from wrolpi.db import get_db_session
+import pathlib
 from wrolpi.errors import RefreshConflict
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -309,6 +310,25 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         Events.send_directory_refresh(f'Refreshing: {relative_dir}')
 
 
+async def _background_move_collection(collection_id: int, target_directory: pathlib.Path):
+    """Helper to run collection move in background with its own database session.
+
+    This allows the move to continue even if the original HTTP request is cancelled
+    (e.g., user closes browser tab).
+    """
+    try:
+        with get_db_session(commit=True) as session:
+            collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
+            if not collection:
+                logger.error(f'_background_move_collection: collection {collection_id} not found')
+                Events.send_file_move_failed(f'Collection move failed: collection not found')
+                return
+            await collection.move_collection(target_directory, session, send_events=True)
+    except Exception as e:
+        logger.error(f'_background_move_collection: failed for collection_id={collection_id}', exc_info=e)
+        Events.send_file_move_failed(f'Collection move failed: {e}')
+
+
 async def tag_collection(
         session: Session,
         collection_id: int,
@@ -357,6 +377,10 @@ async def tag_collection(
                 target_directory != old_directory
         )
 
+        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+            logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
+                         f'{old_directory} -> {target_directory}')
+
         if need_to_move and flags.refreshing.is_set():
             raise RefreshConflict('Refusing to move collection while file refresh is in progress')
 
@@ -372,10 +396,12 @@ async def tag_collection(
             from modules.videos.lib import save_channels_config
             save_channels_config.activate_switch()
 
-        # Move files if directory changed
+        # Move files if directory changed - run in background so closing tab won't cancel it
         if need_to_move:
             target_directory.mkdir(parents=True, exist_ok=True)
-            await collection.move_collection(target_directory, session, send_events=True)
+            # Commit tag changes before starting background move
+            session.commit()
+            background_task(_background_move_collection(collection.id, target_directory))
 
         # Return info about the un-tagging operation
         relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
@@ -413,6 +439,10 @@ async def tag_collection(
             target_directory != old_directory
     )
 
+    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+        logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
+                     f'{old_directory} -> {target_directory}')
+
     if need_to_move and flags.refreshing.is_set():
         raise RefreshConflict('Refusing to move collection while file refresh is in progress')
 
@@ -435,10 +465,12 @@ async def tag_collection(
         from modules.videos.lib import save_channels_config
         save_channels_config.activate_switch()
 
-    # Move files if directory changed
+    # Move files if directory changed - run in background so closing tab won't cancel it
     if need_to_move:
         target_directory.mkdir(parents=True, exist_ok=True)
-        await collection.move_collection(target_directory, session, send_events=True)
+        # Commit tag changes before starting background move
+        session.commit()
+        background_task(_background_move_collection(collection.id, target_directory))
 
     # Return info about the tagging operation
     relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None

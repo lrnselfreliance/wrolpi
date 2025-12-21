@@ -746,6 +746,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             Events.send_refresh_completed()
 
     api_app.shared_ctx.refresh['counted_files'] = 0
+    api_app.shared_ctx.refresh['idempotency'] = None
 
 
 async def apply_indexers():
@@ -1198,10 +1199,10 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)   AS "total_file_groups",
-                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)   AS "indexed",
-                   COUNT(id) FILTER (WHERE indexed IS FALSE)                                    AS "unindexed",
-                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s) AS "modeled"
+                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)    AS "total_file_groups",
+                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)    AS "indexed",
+                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = %(idempotency)s)   AS "unindexed",
+                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s)  AS "modeled"
                FROM file_group \
                '''
     else:

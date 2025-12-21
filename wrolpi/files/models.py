@@ -338,7 +338,10 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype
+        from wrolpi.files.lib import get_primary_file, get_mimetype, sanitize_filename_surrogates
+
+        # Sanitize any paths with invalid UTF-8 characters (renames files on disk if needed)
+        paths = tuple(sanitize_filename_surrogates(p) for p in paths)
 
         existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
         logger.trace(f'FileGroup.from_paths: {len(existing_groups)=}')

@@ -1340,3 +1340,76 @@ async def test_process_bulk_tag_job_remove_tags(async_client, test_session, make
     fgs = test_session.query(FileGroup).all()
     for fg in fgs:
         assert 'to_remove' not in fg.tag_names
+
+
+def test_sanitize_filename_surrogates_valid_path(test_directory, make_files_structure):
+    """sanitize_filename_surrogates() returns the same path for valid UTF-8 filenames."""
+    foo, = make_files_structure({'foo.txt': 'content'})
+
+    result = lib.sanitize_filename_surrogates(foo)
+
+    assert result == foo
+    assert foo.exists()
+
+
+def test_sanitize_filename_surrogates_with_emoji(test_directory, make_files_structure):
+    """sanitize_filename_surrogates() handles valid emoji filenames correctly."""
+    # Valid emoji filename (this should work on most filesystems)
+    files = make_files_structure({'test_emoji_🎉.txt': 'content'})
+    emoji_file = files[0]
+
+    result = lib.sanitize_filename_surrogates(emoji_file)
+
+    assert result == emoji_file
+    assert emoji_file.exists()
+
+
+def test_sanitize_filename_surrogates_nonexistent_path(test_directory):
+    """sanitize_filename_surrogates() returns the path unchanged if file doesn't exist."""
+    nonexistent = test_directory / 'does_not_exist.txt'
+
+    result = lib.sanitize_filename_surrogates(nonexistent)
+
+    # Path doesn't exist, so it's returned unchanged (no rename attempted)
+    assert result == nonexistent
+
+
+@pytest.mark.skipif(IS_MACOS, reason="macOS filesystem enforces UTF-8, can't create files with invalid surrogates")
+def test_sanitize_filename_surrogates_renames_file(test_directory):
+    """sanitize_filename_surrogates() renames files when it detects invalid UTF-8.
+
+    This test only runs on Linux where filesystems allow invalid UTF-8 filenames.
+    """
+    import os
+
+    # Create a file with invalid UTF-8 bytes in the filename using raw bytes
+    # \xed\xa0\xbc is an invalid UTF-8 sequence (unpaired surrogate)
+    bad_filename_bytes = b'bad_\xed\xa0\xbc_file.txt'
+    bad_file_path_bytes = os.fsencode(test_directory) + b'/' + bad_filename_bytes
+
+    # Write content to the file using raw bytes path
+    with open(bad_file_path_bytes, 'wb') as f:
+        f.write(b'test content')
+
+    # Get the path as Python sees it (with surrogates)
+    bad_path = test_directory / os.fsdecode(bad_filename_bytes)
+    assert bad_path.exists()
+
+    # Verify the path string contains surrogates (can't be encoded to UTF-8)
+    with pytest.raises(UnicodeEncodeError):
+        str(bad_path).encode('utf-8')
+
+    # Call the sanitize function
+    result = lib.sanitize_filename_surrogates(bad_path)
+
+    # The file should have been renamed
+    assert result != bad_path
+    assert result.exists()
+    assert not bad_path.exists()
+    # Surrogates should be replaced with underscores - the result should be valid UTF-8
+    try:
+        str(result).encode('utf-8')
+    except UnicodeEncodeError:
+        pytest.fail("Result path still contains invalid UTF-8 surrogates")
+    # Content should be preserved
+    assert result.read_text() == 'test content'

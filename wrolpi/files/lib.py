@@ -4,6 +4,7 @@ import datetime
 import functools
 import glob
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -63,6 +64,48 @@ def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
         .filter(FileGroup.primary_path == str(file))
     names = sorted([tag.name for tag in tags], key=lambda i: i.lower())
     return names
+
+
+def sanitize_filename_surrogates(path: pathlib.Path) -> pathlib.Path:
+    """
+    Check if a path contains invalid UTF-8 surrogates. If so, rename the file
+    on disk to replace them with underscores.
+
+    Linux filesystems store filenames as bytes. Python represents invalid UTF-8
+    sequences as surrogates. These surrogates cannot be stored in PostgreSQL.
+
+    Returns the (possibly new) path.
+    """
+    path_str = str(path)
+
+    # Check for surrogates by trying to encode as UTF-8
+    try:
+        path_str.encode('utf-8')
+        return path  # Path is valid
+    except UnicodeEncodeError:
+        pass
+
+    # Get raw bytes from filesystem and decode, replacing invalid sequences
+    raw_bytes = os.fsencode(path)
+    # Replace invalid UTF-8 sequences with underscore
+    sanitized_name = raw_bytes.decode('utf-8', errors='replace').replace('\ufffd', '_')
+    sanitized_path = pathlib.Path(sanitized_name)
+
+    if path.exists() and sanitized_path != path:
+        if sanitized_path.exists():
+            # Target already exists, add a suffix
+            stem = sanitized_path.stem
+            suffix = sanitized_path.suffix
+            counter = 1
+            while sanitized_path.exists():
+                sanitized_path = sanitized_path.with_name(f'{stem}_{counter}{suffix}')
+                counter += 1
+
+        logger.warning(f'Renaming file with invalid UTF-8 characters: {path!r} -> {sanitized_path}')
+        path.rename(sanitized_path)
+        return sanitized_path
+
+    return path
 
 
 def _get_file_dict(session: Session, file: pathlib.Path) -> Dict:
@@ -712,7 +755,7 @@ async def apply_indexers():
 
     while True:
         # Continually query for Files that have not been indexed.
-        with get_db_session(commit=True) as session:
+        with get_db_session(commit=False) as session:
             file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
             file_groups: List[FileGroup] = list(file_groups)
 
@@ -731,6 +774,29 @@ async def apply_indexers():
 
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
+
+            # Commit may fail due to invalid UTF-8 surrogates in paths
+            try:
+                session.commit()
+            except UnicodeEncodeError as e:
+                session.rollback()
+                refresh_logger.warning(f'UnicodeEncodeError during indexer commit, attempting to fix: {e}')
+                # Find and fix the problematic file(s)
+                for fg in file_groups:
+                    try:
+                        sanitized = sanitize_filename_surrogates(fg.primary_path)
+                        if sanitized != fg.primary_path:
+                            fg.primary_path = sanitized
+                            # Also update the files JSON
+                            if fg.files:
+                                fg.files = [
+                                    {**f, 'path': str(sanitize_filename_surrogates(pathlib.Path(f['path'])))}
+                                    for f in fg.files
+                                ]
+                    except Exception as fix_error:
+                        refresh_logger.error(f'Failed to sanitize path for FileGroup {fg.id}: {fix_error}')
+                # Retry commit after fixing
+                session.commit()
 
             if file_group:
                 refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')

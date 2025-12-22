@@ -150,6 +150,12 @@ async def pdf_modeler():
                         file_group.published_datetime = metadata.published_datetime
                         file_group.published_modified_datetime = metadata.modification_datetime
                         file_group.model = 'pdf'
+
+                        # Find an image with the same stem to use as the poster.
+                        poster_files = file_group.my_poster_files()
+                        if poster_files:
+                            file_group.data = file_group.data or {}
+                            file_group.data['poster_path'] = str(poster_files[0]['path'])
                 except Exception as e:
                     logger.error(f'Failed to index PDF {pdf_file}', exc_info=e)
                     if PYTEST:

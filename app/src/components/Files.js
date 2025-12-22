@@ -144,22 +144,20 @@ function FileCard({file}) {
     }
 
     const author = file.author;
-    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
     const title = file.title || file.name || file.primary_path;
-    const header = <ExternalCardLink to={downloadUrl} className='card-title-ellipsis'>
-        {title}
-    </ExternalCardLink>;
     const dt = file.published_datetime || file.published_modified_datetime || file.modified;
     return <Card color={color}>
-        <CardPoster to={downloadUrl} file={file}/>
+        <CardPoster file={file}/>
         <CardContent {...s}>
             <CardHeader>
-                <Popup on='hover'
-                       trigger={header}
-                       content={title}/>
+                <PreviewLink file={file}>
+                    <Popup on='hover'
+                           trigger={<span className='card-title-ellipsis'>{title}</span>}
+                           content={title}/>
+                </PreviewLink>
             </CardHeader>
             {author && <b {...s}>{author}</b>}
             <p>{isoDatetimeToAgoPopup(dt, false)}</p>

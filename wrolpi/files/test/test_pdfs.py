@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from PIL import Image
 
 from wrolpi.dates import now
 from wrolpi.files import lib as files_lib
@@ -74,3 +75,20 @@ async def test_pdf_indexer_max_size(test_session, example_pdf):
     await pdfs.pdf_modeler()
     file_group = test_session.query(FileGroup).one()
     assert file_group.d_text is None
+
+
+@pytest.mark.asyncio
+async def test_pdf_poster(test_session, example_pdf):
+    """PDF modeler finds an image with the same stem and uses it as the poster."""
+    # Create an image with the same stem as the PDF.
+    poster_path = example_pdf.with_suffix('.jpg')
+    Image.new('RGB', (25, 25), color='grey').save(poster_path)
+
+    files_lib._upsert_files([example_pdf, poster_path], now())
+
+    await pdfs.pdf_modeler()
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.indexed is True
+    assert file_group.data is not None
+    # FancyJSON converts paths back to pathlib.Path when reading from DB.
+    assert file_group.data.get('poster_path') == poster_path

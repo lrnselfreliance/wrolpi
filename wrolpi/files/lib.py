@@ -782,22 +782,54 @@ async def apply_indexers():
             except UnicodeEncodeError as e:
                 session.rollback()
                 refresh_logger.warning(f'UnicodeEncodeError during indexer commit, attempting to fix: {e}')
-                # Find and fix the problematic file(s)
+                # Find and fix the problematic file(s) by re-querying after rollback
+                fg_ids = [fg.id for fg in file_groups if fg.id]
+                session.expire_all()
+                file_groups = session.query(FileGroup).filter(FileGroup.id.in_(fg_ids)).all()
+
                 for fg in file_groups:
                     try:
-                        sanitized = sanitize_filename_surrogates(fg.primary_path)
-                        if sanitized != fg.primary_path:
+                        # Check if primary_path has surrogates
+                        primary_path_str = str(fg.primary_path)
+                        try:
+                            primary_path_str.encode('utf-8')
+                        except UnicodeEncodeError:
+                            sanitized = sanitize_filename_surrogates(fg.primary_path)
+                            refresh_logger.info(f'Sanitized primary_path: {fg.primary_path} -> {sanitized}')
                             fg.primary_path = sanitized
-                            # Also update the files JSON
-                            if fg.files:
-                                fg.files = [
-                                    {**f, 'path': str(sanitize_filename_surrogates(pathlib.Path(f['path'])))}
-                                    for f in fg.files
-                                ]
+
+                        # Check if files JSON has surrogates
+                        if fg.files:
+                            new_files = []
+                            for f in fg.files:
+                                path_val = f.get('path', '')
+                                # Convert to string if it's a Path object
+                                path_str = str(path_val) if path_val else ''
+                                try:
+                                    path_str.encode('utf-8')
+                                    new_files.append(f)
+                                except UnicodeEncodeError:
+                                    sanitized = sanitize_filename_surrogates(pathlib.Path(path_str))
+                                    refresh_logger.info(f'Sanitized file path: {path_str} -> {sanitized}')
+                                    new_files.append({**f, 'path': str(sanitized)})
+                            fg.files = new_files
                     except Exception as fix_error:
-                        refresh_logger.error(f'Failed to sanitize path for FileGroup {fg.id}: {fix_error}')
+                        refresh_logger.error(f'Failed to sanitize path for FileGroup {fg.id}: {fix_error}',
+                                             exc_info=fix_error)
+                    # Re-mark as indexed (rollback undid this)
+                    fg.indexed = True
+
                 # Retry commit after fixing
-                session.commit()
+                try:
+                    session.commit()
+                except UnicodeEncodeError as e2:
+                    # Still failing - skip these files and continue
+                    session.rollback()
+                    refresh_logger.error(f'Failed to fix UnicodeEncodeError, skipping batch: {e2}')
+                    # Mark as indexed in a separate transaction so we don't loop forever
+                    with get_db_curs(commit=True) as curs:
+                        curs.execute('UPDATE file_group SET indexed = TRUE WHERE id = ANY(%s)', (fg_ids,))
+                    continue
 
             if file_group:
                 refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')

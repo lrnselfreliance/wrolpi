@@ -70,10 +70,15 @@ async def test_tag_unrestricted_domain_collection(async_client, test_session, ta
 
 @pytest.mark.asyncio
 async def test_tag_domain_collection_moves_files(
-        test_session, archive_factory, tag_factory, test_directory, make_files_structure, archive_directory,
-        await_switches,
+        async_client, test_session, archive_factory, tag_factory, test_directory, make_files_structure,
+        archive_directory, await_switches, test_wrolpi_config,
 ):
     """Tagging domain collection with directory moves archive files."""
+    # Configure template to include tag in path
+    from wrolpi.common import get_wrolpi_config
+    config = get_wrolpi_config()
+    config.update({'archive_destination': 'archive/%(domain_tag)s/%(domain)s'})
+
     # Create domain collection with directory
     # Use archive_directory fixture to match where archive_factory creates files
     domain_dir = archive_directory / 'test.com'
@@ -252,48 +257,6 @@ async def test_get_or_create_domain_collection_with_directory(test_session, test
     assert collection.name == 'test.com'
     assert collection.kind == 'domain'
     assert collection.directory == domain_dir
-
-
-@pytest.mark.asyncio
-async def test_get_archive_destination_with_directory(test_session, test_directory):
-    """get_archive_destination returns collection directory when set."""
-    from modules.archive.lib import get_archive_destination
-    from wrolpi.common import get_media_directory
-
-    domain_dir = get_media_directory() / 'archives' / 'tagged' / 'example.com'
-    domain_dir.mkdir(parents=True, exist_ok=True)
-
-    collection = Collection(
-        name='example.com',
-        kind='domain',
-        directory=domain_dir
-    )
-    test_session.add(collection)
-    test_session.commit()
-
-    destination = get_archive_destination(collection)
-
-    assert destination == domain_dir
-    assert destination.is_dir()
-
-
-@pytest.mark.asyncio
-async def test_get_archive_destination_unrestricted(test_session):
-    """get_archive_destination returns default path for unrestricted collection."""
-    from modules.archive.lib import get_archive_destination, get_archive_directory
-
-    collection = Collection(
-        name='example.com',
-        kind='domain',
-        directory=None  # Unrestricted
-    )
-    test_session.add(collection)
-    test_session.commit()
-
-    destination = get_archive_destination(collection)
-    expected = get_archive_directory() / 'example.com'
-
-    assert destination == expected
 
 
 @pytest.mark.asyncio

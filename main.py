@@ -264,6 +264,10 @@ async def start_single_tasks(app: Sanic):
             with log_and_suppress(Exception, message='Failed to import domains config'):
                 import_domains_config()
                 logger.debug('domains config imported')
+            with log_and_suppress(Exception, message='Failed to import archive downloader config'):
+                from modules.archive.lib import get_archive_downloader_config
+                get_archive_downloader_config().import_config()
+                logger.debug('archive downloader config imported')
             with log_and_suppress(Exception, message='Failed to import inventories config'):
                 import_inventories_config()
                 logger.debug('inventories config imported')

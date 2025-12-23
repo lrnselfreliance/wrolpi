@@ -43,14 +43,18 @@ import {
 import {
     deleteArchives,
     deleteDomain,
+    fetchArchiveDownloaderConfig,
     generateArchiveScreenshot,
     getCollectionTagInfo,
+    postArchiveFileFormat,
     postDownload,
     refreshDomain,
     tagDomain,
     tagFileGroup,
-    untagFileGroup
+    untagFileGroup,
+    updateArchiveDownloaderConfig,
 } from "../api";
+import {InputForm, useForm} from "../hooks/useForm";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -658,8 +662,66 @@ export function DomainEditPage() {
     </>;
 }
 
+function ArchiveFileNameForm({form}) {
+    const [message, setMessage] = React.useState(null);
+
+    const onChange = async (value) => {
+        const response = await postArchiveFileFormat(value);
+        const {error, preview} = await response.json();
+        if (error) {
+            setMessage({content: error, header: 'Invalid File Name', negative: true});
+        } else {
+            setMessage({content: preview, header: 'File Name Preview', positive: true});
+        }
+    }
+
+    const label = <InfoHeader
+        headerSize='h5'
+        headerContent='Archive File Format'
+        popupProps={{wide: 'very', position: 'top left'}}
+        popupContent={<>
+            <p>Variables:</p>
+            <ul>
+                <li><code>%(title)s</code> - Page title</li>
+                <li><code>%(download_datetime)s</code> - Full datetime (YYYY-MM-DD-HH-MM-SS)</li>
+                <li><code>%(download_date)s</code> - Date only (YYYY-MM-DD)</li>
+                <li><code>%(download_year)s</code> - Year</li>
+                <li><code>%(download_month)s</code> - Month (zero-padded)</li>
+                <li><code>%(download_day)s</code> - Day (zero-padded)</li>
+                <li><code>%(domain)s</code> - Domain name</li>
+            </ul>
+            <p>Subdirectories supported: <code>%(download_year)s/%(title)s</code></p>
+        </>}
+    />;
+
+    return <InputForm
+        form={form}
+        name='file_name_format'
+        path='file_name_format'
+        label={label}
+        onChange={onChange}
+        message={message}
+    />
+}
+
 function ArchiveSettingsPage() {
+    useTitle('Archive Settings');
+
     const {t} = React.useContext(ThemeContext);
+
+    const emptyFormData = {
+        file_name_format: '%(download_datetime)s_%(title)s',
+    };
+
+    const configSubmitter = async () => {
+        return await updateArchiveDownloaderConfig(configForm.formData);
+    };
+
+    const configForm = useForm({
+        fetcher: fetchArchiveDownloaderConfig,
+        submitter: configSubmitter,
+        emptyFormData,
+    });
 
     const urlClipboardButton = <APIButton
         icon='copy'
@@ -675,29 +737,56 @@ function ArchiveSettingsPage() {
     />;
 
     return <PageContainer>
-        <Header as='h1'>SingleFile Browser Extension</Header>
+        <Segment>
+            <Header as='h3'>Archive Downloader Config</Header>
 
-        <p {...t}>
-            These are the settings necessary to configure the <a
-            href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install">SingleFile Browser
-            Extension</a> to automatically upload to your WROLPi.
-        </p>
+            <Form>
+                <Grid>
+                    <GridRow columns={1}>
+                        <GridColumn mobile={16} computer={8}>
+                            <ArchiveFileNameForm form={configForm}/>
+                        </GridColumn>
+                    </GridRow>
+                    <GridRow columns={1}>
+                        <GridColumn textAlign='right'>
+                            <APIButton
+                                disabled={configForm.disabled || !configForm.ready}
+                                type='submit'
+                                style={{marginTop: '0.5em'}}
+                                onClick={configForm.onSubmit}
+                                id='archive_settings_save_button'
+                            >Save</APIButton>
+                        </GridColumn>
+                    </GridRow>
+                </Grid>
+            </Form>
+        </Segment>
 
-        <label {...t}>Upload URL</label>
-        <Input fluid
-               value={API_ARCHIVE_UPLOAD_URI}
-               label={urlClipboardButton}
-        />
-        <label {...t}>Data Field Name</label>
-        <Input fluid
-               value='singlefile_contents'
-               label={dataFieldNameClipboardButton}
-        />
-        <label {...t}>URL Field Name</label>
-        <Input fluid
-               value='url'
-               label={urlFieldNameClipboardButton}
-        />
+        <Segment>
+            <Header as='h3'>SingleFile Browser Extension</Header>
+
+            <p {...t}>
+                These are the settings necessary to configure the <a
+                href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install">SingleFile Browser
+                Extension</a> to automatically upload to your WROLPi.
+            </p>
+
+            <label {...t}>Upload URL</label>
+            <Input fluid
+                   value={API_ARCHIVE_UPLOAD_URI}
+                   label={urlClipboardButton}
+            />
+            <label {...t}>Data Field Name</label>
+            <Input fluid
+                   value='singlefile_contents'
+                   label={dataFieldNameClipboardButton}
+            />
+            <label {...t}>URL Field Name</label>
+            <Input fluid
+                   value='url'
+                   label={urlFieldNameClipboardButton}
+            />
+        </Segment>
     </PageContainer>
 }
 

@@ -25,7 +25,7 @@ from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
 from types import GeneratorType
-from typing import Optional, List
+from typing import Optional, List, Any, AsyncGenerator
 from typing import Union, Callable, Tuple, Dict, Iterable, Generator, Any, Set
 from urllib.parse import urlparse, urlunsplit
 
@@ -764,9 +764,11 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if download_manager_config := get_download_manager_config():
         all_configs[download_manager_config.file_name] = download_manager_config
 
-    from modules.archive.lib import get_domains_config
+    from modules.archive.lib import get_domains_config, get_archive_downloader_config
     if domains_config := get_domains_config():
         all_configs[domains_config.file_name] = domains_config
+    if archive_downloader_config := get_archive_downloader_config():
+        all_configs[archive_downloader_config.file_name] = archive_downloader_config
 
     return all_configs
 
@@ -1460,7 +1462,7 @@ def recursive_map(obj: Any, func: callable):
 
 
 @contextlib.asynccontextmanager
-async def aiohttp_session(timeout: int = None) -> ClientSession:
+async def aiohttp_session(timeout: int = None) -> AsyncGenerator[ClientSession, Any]:
     """Convenience function because aiohttp timeout cannot be None."""
     if timeout:
         timeout = aiohttp.ClientTimeout(total=timeout) if timeout else None
@@ -1472,7 +1474,8 @@ async def aiohttp_session(timeout: int = None) -> ClientSession:
 
 
 @contextlib.asynccontextmanager
-async def aiohttp_post(url: str, json_, timeout: int = None, headers: dict = None) -> ClientResponse:
+async def aiohttp_post(url: str, json_, timeout: int = None, headers: dict = None) -> AsyncGenerator[
+    ClientResponse, Any]:
     """Perform an async aiohttp POST request.  Yield the response in a session."""
     headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
@@ -1481,7 +1484,7 @@ async def aiohttp_post(url: str, json_, timeout: int = None, headers: dict = Non
 
 
 @contextlib.asynccontextmanager
-async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> ClientResponse:
+async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> AsyncGenerator[ClientResponse, Any]:
     """Perform an async aiohttp GET request.  Yield the response in a session."""
     headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
@@ -1490,7 +1493,7 @@ async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Cl
 
 
 @contextlib.asynccontextmanager
-async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> ClientResponse:
+async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> AsyncGenerator[ClientResponse, Any]:
     """Perform an async aiohttp HEAD request.  Yield the response in a session."""
     headers = headers or DEFAULT_HTTP_HEADERS
     async with aiohttp_session(timeout) as session:
@@ -2265,6 +2268,11 @@ def create_empty_config_files() -> list[str]:
         if not get_videos_downloader_config().get_file().is_file():
             get_videos_downloader_config().save(overwrite=True)
             created.append(get_videos_downloader_config().get_file().name)
+
+        from modules.archive.lib import get_archive_downloader_config
+        if not get_archive_downloader_config().get_file().is_file():
+            get_archive_downloader_config().save(overwrite=True)
+            created.append(get_archive_downloader_config().get_file().name)
 
         if not get_inventories_config().get_file().is_file():
             from modules.inventory.models import Inventory

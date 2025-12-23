@@ -429,6 +429,19 @@ export async function updateVideoDownloaderConfig(config) {
     return await updateConfig('videos_downloader.yaml', config);
 }
 
+export async function fetchArchiveDownloaderConfig() {
+    return await getConfig('archives_downloader.yaml');
+}
+
+export async function updateArchiveDownloaderConfig(config) {
+    return await updateConfig('archives_downloader.yaml', config);
+}
+
+export async function postArchiveFileFormat(archive_file_format) {
+    const body = {archive_file_format};
+    return await apiPost(`${ARCHIVES_API}/file_format`, body);
+}
+
 export async function fetchBrowserProfiles() {
     const response = await apiGet(`${API_URI}/videos/browser-profiles`);
     if (response.status === 200) {

@@ -824,24 +824,88 @@ class Collection(ModelHelper, Base):
 
         For domain collections (kind == 'domain'), use the configured archive directory:
         archive/<Tag>/<Domain Name>
+
+        @deprecated: Use format_destination() instead for new code.
         """
+        # Delegate to format_destination for consistency
+        return self.format_destination(tag_name)
+
+    def format_destination(self, tag_name: Optional[str] = None) -> pathlib.Path:
+        """Format the collection's destination path using config template.
+
+        Uses videos_destination for kind='channel', archive_destination for kind='domain'.
+        Supports unified variables that work for both kinds.
+
+        Args:
+            tag_name: Optional tag name to include in the path
+
+        Returns:
+            Absolute path where this collection's files should be stored
+        """
+        from wrolpi.common import get_wrolpi_config, escape_file_name
+
+        config = get_wrolpi_config()
+
         if self.kind == 'channel':
-            # Local import to avoid circular import: collections -> videos -> collections
-            from modules.videos.lib import format_videos_destination
-            return format_videos_destination(self.name, tag_name, None)
+            template = config.videos_destination
         elif self.kind == 'domain':
-            # Use configured archive directory for domain collections
-            # Local import to avoid circular import: collections -> archive -> collections
-            from modules.archive.lib import get_archive_directory
-            base = get_archive_directory()
-            if tag_name:
-                return base / tag_name / self.name
-            return base / self.name
-        # Default behavior: place under media root by kind/tag/name
-        base = get_media_directory() / self.kind
-        if tag_name:
-            return base / tag_name / self.name
-        return base / self.name
+            template = config.archive_destination
+        else:
+            template = '%(kind)s/%(tag)s/%(name)s'
+
+        escaped_name = escape_file_name(self.name) if self.name else ''
+
+        variables = dict(
+            # Unified variables
+            name=escaped_name,
+            tag=tag_name or '',
+            kind=self.kind or '',
+            # Backward compatibility aliases for videos
+            channel_name=escaped_name,
+            channel_tag=tag_name or '',
+            # Backward compatibility aliases for archives
+            domain=escaped_name,
+            domain_tag=tag_name or '',
+        )
+
+        destination = template % variables
+        return get_media_directory() / destination.lstrip('/')
+
+    def get_or_set_directory(self, session: Session, tag_name: Optional[str] = None) -> pathlib.Path:
+        """Get collection's directory, or format and save it on first use.
+
+        - If collection has directory: return it
+        - If no directory: format from template, save to collection, return it
+
+        This ensures all files for a collection go to the same place, even if
+        the template config changes later.
+
+        Args:
+            session: Database session for committing changes
+            tag_name: Optional tag name to use when formatting (defaults to collection's tag)
+
+        Returns:
+            Absolute path to the collection's directory
+        """
+        if self.directory:
+            return get_media_directory() / self.directory
+
+        # First use - format and save
+        tag_name = tag_name or (self.tag.name if self.tag else None)
+        destination = self.format_destination(tag_name)
+
+        self.directory = get_relative_to_media_directory(destination)
+        session.commit()
+
+        # Trigger config save for persistence
+        if self.kind == 'domain':
+            from modules.archive.lib import save_domains_config
+            save_domains_config.activate_switch()
+        elif self.kind == 'channel':
+            from modules.videos.lib import save_channels_config
+            save_channels_config.activate_switch()
+
+        return destination
 
     async def move_collection(self, directory: pathlib.Path, session: Session, send_events: bool = False):
         """Move all files under this Collection's directory to a new directory.

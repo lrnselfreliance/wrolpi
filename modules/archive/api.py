@@ -70,6 +70,26 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     return json_response(ret)
 
 
+@archive_bp.post('/file_format')
+@openapi.definition(
+    description='Preview the archive file format',
+    body=schema.ArchiveFileFormatRequest,
+)
+@validate(schema.ArchiveFileFormatRequest)
+async def post_file_format(_: Request, body: schema.ArchiveFileFormatRequest):
+    try:
+        preview = lib.preview_archive_filename(body.archive_file_format)
+        return json_response(dict(
+            archive_file_format=body.archive_file_format,
+            preview=preview,
+        ))
+    except RuntimeError as e:
+        return json_response(dict(
+            error=str(e),
+            archive_file_format=body.archive_file_format,
+        ), status=HTTPStatus.BAD_REQUEST)
+
+
 @archive_bp.get('/upload')
 @openapi.definition(
     summary='A message to confirm to the user that they have the correct upload URL.'
@@ -106,7 +126,17 @@ async def singlefile_upload_switch_handler(url=None):
     logger.info(f'singlefile_upload_switch_handler queue size: {q_size}')
 
     try:
-        archive = await lib.singlefile_to_archive(singlefile)
+        # Get URL from singlefile to determine destination
+        url = lib.get_url_from_singlefile(singlefile)
+
+        # Get/create domain collection and get/set its directory
+        destination = None
+        with get_db_session(commit=True) as session:
+            collection = lib.get_or_create_domain_collection(session, url)
+            if collection:
+                destination = collection.get_or_set_directory(session)
+
+        archive = await lib.singlefile_to_archive(singlefile, destination=destination)
     except Exception as e:
         logger.error(f'singlefile_upload_switch_handler failed', exc_info=e)
         Events.send_upload_archive_failed(f'Failed to convert singlefile to archive: {e}')

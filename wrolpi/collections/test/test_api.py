@@ -141,9 +141,14 @@ class TestCollectionTagInfoAPI:
 
     @pytest.mark.asyncio
     async def test_get_tag_info_suggests_directory(
-            self, async_client, test_session, test_directory
+            self, async_client, test_session, test_directory, test_wrolpi_config
     ):
         """Test that tag_info endpoint suggests a directory for a domain collection."""
+        # Configure template to include tag
+        from wrolpi.common import get_wrolpi_config
+        config = get_wrolpi_config()
+        config.update({'archive_destination': 'archive/%(domain_tag)s/%(domain)s'})
+
         # Create a domain collection
         collection = Collection(
             name='example.com',
@@ -174,9 +179,14 @@ class TestCollectionTagInfoAPI:
 
     @pytest.mark.asyncio
     async def test_get_tag_info_detects_domain_conflict(
-            self, async_client, test_session, test_directory
+            self, async_client, test_session, test_directory, test_wrolpi_config
     ):
         """Test that tag_info detects conflicts with existing domain collections."""
+        # Configure template to include tag
+        from wrolpi.common import get_wrolpi_config
+        config = get_wrolpi_config()
+        config.update({'archive_destination': 'archive/%(domain_tag)s/%(domain)s'})
+
         # Create two domain collections
         collection1 = Collection(
             name='example.com',
@@ -211,9 +221,14 @@ class TestCollectionTagInfoAPI:
 
     @pytest.mark.asyncio
     async def test_get_tag_info_allows_channel_domain_same_directory(
-            self, async_client, test_session, test_directory, channel_factory
+            self, async_client, test_session, test_directory, channel_factory, test_wrolpi_config
     ):
         """Test that channel and domain collections can share directories."""
+        # Configure template to include tag
+        from wrolpi.common import get_wrolpi_config
+        config = get_wrolpi_config()
+        config.update({'archive_destination': 'archive/%(domain_tag)s/%(domain)s'})
+
         # Create a channel collection
         channel = channel_factory(name='test', directory=test_directory / 'videos' / 'WROL' / 'test')
         test_session.flush()
@@ -242,9 +257,14 @@ class TestCollectionTagInfoAPI:
 
     @pytest.mark.asyncio
     async def test_get_tag_info_detects_exact_directory_conflict(
-            self, async_client, test_session, test_directory
+            self, async_client, test_session, test_directory, test_wrolpi_config
     ):
         """Test that tag_info detects conflicts when suggested directory exactly matches existing collection."""
+        # Configure template to include tag
+        from wrolpi.common import get_wrolpi_config
+        config = get_wrolpi_config()
+        config.update({'archive_destination': 'archive/%(domain_tag)s/%(domain)s'})
+
         # Create two domain collections with different names but where one's suggested directory
         # would conflict with the other's existing directory
         # collection1 is already in the "WROL" tagged location

@@ -30,3 +30,8 @@ class ArchiveSearchRequest:
 class ArchiveSearchResponse:
     file_groups: List[ArchiveDict]
     totals: dict
+
+
+@dataclass
+class ArchiveFileFormatRequest:
+    archive_file_format: str

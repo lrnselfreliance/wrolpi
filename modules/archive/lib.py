@@ -214,6 +214,143 @@ def import_domains_config():
 
 
 @dataclass
+class ArchiveDownloaderConfigValidator:
+    """Validator for archives_downloader.yaml config."""
+    file_name_format: str
+    version: int = 0
+
+    def __post_init__(self):
+        # Validate file_name_format contains required %(title)s variable
+        if '%(title)s' not in self.file_name_format:
+            raise ValueError('file_name_format must contain %(title)s')
+
+
+class ArchiveDownloaderConfig(ConfigFile):
+    """
+    Config file for Archive Downloader settings.
+
+    This config mirrors videos_downloader.yaml and holds settings for how
+    archives are downloaded and named.
+
+    Format:
+        version: 0
+        file_name_format: '%(download_date)s_%(title)s'
+
+    Variables available in file_name_format:
+        - %(title)s - Page title (extracted from HTML)
+        - %(download_datetime)s - Full download datetime (YYYY-MM-DD-HH-MM-SS)
+        - %(download_date)s - Download date only (YYYY-MM-DD)
+        - %(download_year)s - Download year
+        - %(download_month)s - Download month (zero-padded)
+        - %(download_day)s - Download day (zero-padded)
+        - %(domain)s - Domain name
+
+    Subdirectories can be included in the format, e.g.:
+        '%(download_year)s/%(download_datetime)s_%(title)s'
+    """
+    file_name = 'archives_downloader.yaml'
+    validator = ArchiveDownloaderConfigValidator
+    default_config = dict(
+        version=0,
+        file_name_format='%(download_datetime)s_%(title)s',
+    )
+
+    @property
+    def file_name_format(self) -> str:
+        return self._config['file_name_format']
+
+
+# Global instance for archive downloader config
+ARCHIVE_DOWNLOADER_CONFIG: ArchiveDownloaderConfig = ArchiveDownloaderConfig()
+
+
+def get_archive_downloader_config() -> ArchiveDownloaderConfig:
+    """Get the global archive downloader config instance."""
+    return ARCHIVE_DOWNLOADER_CONFIG
+
+
+def format_archive_filename(
+        title: str,
+        domain: str = None,
+        download_date: datetime = None,
+) -> str:
+    """Format archive filename using config template.
+
+    This function formats the filename (and optional subdirectory path) for an archive
+    using the file_name_format from archives_downloader.yaml.
+
+    Args:
+        title: Page title (extracted from HTML)
+        domain: Domain name of the archived URL
+        download_date: Date of download (defaults to now)
+
+    Returns:
+        Formatted filename/path (without .html extension, added later)
+
+    Example:
+        format_archive_filename("My Article", "example.com")
+        # With default format: "2025-12-22_My Article"
+        # With "%(download_year)s/%(title)s": "2025/My Article"
+    """
+    config = get_archive_downloader_config()
+    template = config.file_name_format
+
+    download_date = download_date or now()
+
+    variables = dict(
+        title=escape_file_name(title) if title else 'untitled',
+        domain=domain or '',
+        download_datetime=archive_strftime(download_date),
+        download_date=download_date.strftime('%Y-%m-%d'),
+        download_year=str(download_date.year),
+        download_month=f'{download_date.month:02d}',
+        download_day=f'{download_date.day:02d}',
+    )
+
+    try:
+        return template % variables
+    except KeyError as e:
+        logger.error(f'Invalid variable in archive file_name_format: {e}')
+        # Fallback to default format
+        return f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}'
+
+
+def preview_archive_filename(file_name_format: str) -> str:
+    """Preview the archive filename using sample data.
+
+    Args:
+        file_name_format: The format template to preview
+
+    Returns:
+        A preview string showing what the filename would look like
+
+    Raises:
+        RuntimeError: If the format is invalid or missing required variables
+    """
+    if '%(title)s' not in file_name_format:
+        raise RuntimeError('file_name_format must contain %(title)s')
+
+    sample_date = now()
+    variables = dict(
+        title='Example Page Title',
+        domain='example.com',
+        download_datetime=archive_strftime(sample_date),
+        download_date=sample_date.strftime('%Y-%m-%d'),
+        download_year=str(sample_date.year),
+        download_month=f'{sample_date.month:02d}',
+        download_day=f'{sample_date.day:02d}',
+    )
+
+    try:
+        preview = file_name_format % variables
+        return f'{preview}.html'
+    except KeyError as e:
+        raise RuntimeError(f'Invalid variable: {e}')
+    except ValueError as e:
+        raise RuntimeError(f'Invalid format: {e}')
+
+
+@dataclass
 class ArchiveFiles:
     """Every Archive will have some of these files."""
     singlefile: pathlib.Path = None
@@ -241,38 +378,6 @@ def get_archive_directory() -> pathlib.Path:
     return archive_directory
 
 
-def get_domain_directory(url: str) -> pathlib.Path:
-    """Get the archive directory for a particular domain."""
-    domain = extract_domain(url)
-    directory = get_archive_directory() / domain
-    if directory.is_dir():
-        return directory
-    elif directory.exists():
-        raise FileNotFoundError(f'Domain directory {directory} is already a file')
-
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
-
-def get_archive_destination(domain_collection: 'Collection') -> pathlib.Path:
-    """
-    Get the destination directory for archives in a domain collection.
-
-    Args:
-        domain_collection: The domain Collection (kind='domain')
-
-    Returns:
-        Path where archives should be placed. If collection has a directory,
-        returns that directory. Otherwise returns the default archives/<domain>/ path.
-    """
-    if domain_collection.directory:
-        # Restricted collection - use collection directory
-        return get_media_directory() / domain_collection.directory
-    else:
-        # Unrestricted collection - use default archive/<domain>/ path
-        return get_archive_directory() / domain_collection.name
-
-
 # File names include domain and datetime.
 MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH = 200
 
@@ -287,9 +392,11 @@ def get_new_archive_files(url: str, title: Optional[str], destination: pathlib.P
     """
     if destination:
         directory = destination
-        directory.mkdir(parents=True, exist_ok=True)
     else:
-        directory = get_domain_directory(url)
+        # Fallback to archive/<domain>/ when no destination provided
+        domain = extract_domain(url)
+        directory = get_archive_directory() / domain
+    directory.mkdir(parents=True, exist_ok=True)
     # Datetime is valid in Linux and Windows.
     dt = archive_strftime(now())
 

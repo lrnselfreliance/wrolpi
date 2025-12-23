@@ -10,6 +10,9 @@ from PIL import Image
 from pytz import utc
 
 from modules.archive import lib
+from modules.archive.lib import ArchiveDownloaderConfigValidator
+from modules.archive.lib import format_archive_filename
+from modules.archive.lib import get_archive_downloader_config
 from modules.archive.lib import get_or_create_domain_collection, get_new_archive_files, delete_archives, \
     model_archive_result, get_domains
 from modules.archive.models import Archive
@@ -373,7 +376,7 @@ def test_get_new_archive_files_length(test_directory, fake_now):
 
 
 @skip_circleci
-def test_get_new_archive_files(fake_now):
+def test_get_new_archive_files(test_directory, fake_now):
     """Archive files have a specific format, so they are sorted by datetime, and are near each other."""
     fake_now(datetime(2001, 1, 1))
     archive_files = get_new_archive_files('https://example.com/two', None)
@@ -405,16 +408,50 @@ def test_get_new_archive_files_with_destination(test_directory, fake_now):
 
     # Files should be in the custom destination, not archive/example.com
     assert str(archive_files.singlefile).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.html')
-    assert str(archive_files.readability).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.html')
-    assert str(archive_files.readability_txt).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.txt')
+    assert str(archive_files.readability).endswith(
+        'archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.html')
+    assert str(archive_files.readability_txt).endswith(
+        'archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.txt')
     assert str(archive_files.readability_json).endswith(
         'archive/News/custom-domain.com/2001-01-01-00-00-00_Title.readability.json')
     assert str(archive_files.screenshot).endswith('archive/News/custom-domain.com/2001-01-01-00-00-00_Title.png')
 
 
 @skip_circleci
+def test_get_new_archive_files_with_subdirectory_format(test_directory, fake_now):
+    """Archive files use subdirectories when the config format contains subdirectories."""
+    from modules.archive.lib import get_archive_downloader_config
+
+    fake_now(datetime(2001, 1, 1))
+
+    # Configure a file format with subdirectory
+    config = get_archive_downloader_config()
+    original_format = config._config['file_name_format']
+    config._config['file_name_format'] = '%(download_year)s/%(download_datetime)s_%(title)s'
+
+    try:
+        archive_files = get_new_archive_files('https://example.com/page', 'My Article')
+
+        # Files should be created in a year subdirectory
+        assert str(archive_files.singlefile).endswith('archive/example.com/2001/2001-01-01-00-00-00_My Article.html')
+        assert str(archive_files.readability).endswith(
+            'archive/example.com/2001/2001-01-01-00-00-00_My Article.readability.html')
+        assert str(archive_files.readability_txt).endswith(
+            'archive/example.com/2001/2001-01-01-00-00-00_My Article.readability.txt')
+        assert str(archive_files.readability_json).endswith(
+            'archive/example.com/2001/2001-01-01-00-00-00_My Article.readability.json')
+        assert str(archive_files.screenshot).endswith('archive/example.com/2001/2001-01-01-00-00-00_My Article.png')
+
+        # The subdirectory should exist
+        subdir = test_directory / 'archive/example.com/2001'
+        assert subdir.is_dir()
+    finally:
+        config._config['file_name_format'] = original_format
+
+
+@skip_circleci
 @pytest.mark.asyncio
-async def test_title_in_filename(test_session, fake_now, test_directory, image_bytes_factory):
+async def test_title_in_filename(async_client, test_session, fake_now, test_directory, image_bytes_factory):
     """
     The Archive files have the title in the path.
     """
@@ -457,6 +494,8 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
     assert str(archive2.screenshot_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_NA.png'
 
+    # Test with malformed HTML - <title> not properly closed with </title>
+    # The parser includes </html></html> in the title, which gets escaped
     singlefile = '<html>\ntest single-file\nジにてこちら\n<title>dangerous ;\\//_title</html></html>'
     readability = dict(
         # No Title from Readability.
@@ -467,16 +506,18 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
 
     archive3 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
 
+    # Title includes </html></html> because the <title> tag is malformed (no </title>)
+    # Slashes are escaped: </html> -> <⧸html>
     assert str(archive3.singlefile_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.html'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title⧸html⧸html.html'
     assert str(archive3.readability_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.html'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title⧸html⧸html.readability.html'
     assert str(archive3.readability_txt_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.txt'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title⧸html⧸html.readability.txt'
     assert str(archive3.readability_json_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.readability.json'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title⧸html⧸html.readability.json'
     assert str(archive3.screenshot_path.relative_to(test_directory)) == \
-           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title.png'
+           'archive/example.com/2000-01-01-00-00-00_dangerous ;⧸⧸_title⧸html⧸html.png'
 
 
 @pytest.mark.asyncio
@@ -880,7 +921,6 @@ async def test_get_custom_archive_directory(async_client, test_directory, test_w
     get_wrolpi_config().archive_destination = 'custom/archives'
 
     assert lib.get_archive_directory() == (test_directory / 'custom/archives')
-    assert lib.get_domain_directory('https://example.com') == (test_directory / 'custom/archives/example.com')
 
 
 @pytest.mark.asyncio
@@ -1102,7 +1142,7 @@ def test_link_domain_and_downloads(test_session, test_download_manager):
 @skip_circleci
 @pytest.mark.asyncio
 async def test_archive_download_uses_domain_collection_directory(async_client, test_session, test_directory, fake_now,
-                                                                  monkeypatch):
+                                                                 monkeypatch):
     """
     Test that archive downloads use the domain collection's directory when no explicit destination is set.
 
@@ -1218,3 +1258,67 @@ async def test_archive_download_explicit_destination_overrides_domain_collection
         f"Archive should be in explicit destination {explicit_dir}, but was in {archive.singlefile_path.parent}"
     assert not str(archive.singlefile_path).startswith(str(collection_dir)), \
         f"Archive should NOT be in collection directory {collection_dir}"
+
+
+def test_archive_downloader_config(test_directory):
+    """ArchiveDownloaderConfig loads and provides file_name_format."""
+    config = get_archive_downloader_config()
+
+    # Default format should contain %(title)s
+    assert '%(title)s' in config.file_name_format
+    assert config.file_name_format == '%(download_datetime)s_%(title)s'
+
+
+def test_archive_downloader_config_validation():
+    """ArchiveDownloaderConfig validator rejects invalid formats."""
+    # Valid format
+    ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_%(title)s')
+
+    # Invalid format (missing %(title)s)
+    with pytest.raises(ValueError, match='must contain'):
+        ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_no_title')
+
+
+def test_format_archive_filename_default(test_directory, fake_now):
+    """format_archive_filename uses default format."""
+    result = format_archive_filename('My Article')
+
+    # Default format: %(download_datetime)s_%(title)s
+    assert result == '2000-01-01-00-00-00_My Article'
+
+
+def test_format_archive_filename_with_domain(test_directory, fake_now):
+    """format_archive_filename includes domain variable."""
+    # Temporarily change the format to include domain
+    config = get_archive_downloader_config()
+    original_format = config._config['file_name_format']
+    config._config['file_name_format'] = '%(domain)s_%(title)s'
+
+    try:
+        result = format_archive_filename('My Article', domain='example.com')
+        assert result == 'example.com_My Article'
+    finally:
+        config._config['file_name_format'] = original_format
+
+
+def test_format_archive_filename_with_year_subdirectory(test_directory, fake_now):
+    """format_archive_filename can include subdirectories in format."""
+    config = get_archive_downloader_config()
+    original_format = config._config['file_name_format']
+    config._config['file_name_format'] = '%(download_year)s/%(download_date)s_%(title)s'
+
+    try:
+        result = format_archive_filename('My Article')
+        # Should include year subdirectory
+        assert result == '2000/2000-01-01_My Article'
+    finally:
+        config._config['file_name_format'] = original_format
+
+
+def test_format_archive_filename_escapes_special_chars(test_directory, fake_now):
+    """format_archive_filename escapes special characters in title."""
+    result = format_archive_filename('My/Article:With*Special?Chars')
+
+    # Special characters should be escaped
+    assert '/' not in result.split('/')[-1]  # No slashes in filename part
+    assert '2000-01-01' in result

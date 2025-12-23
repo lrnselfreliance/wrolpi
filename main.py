@@ -215,9 +215,19 @@ async def initialize_configs(app: Sanic):
 async def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
     logger.warning('Shutting down')
-    download_manager.stop()
-    await cancel_refresh_tasks()
-    await cancel_background_tasks()
+    try:
+        download_manager.stop()
+    except AttributeError:
+        # Ignore AttributeError when context is empty, which can happen during server shutdown
+        pass
+    try:
+        await cancel_refresh_tasks()
+    except Exception as e:
+        logger.error('cancel_refresh_tasks failed. This is probably fine.', exc_info=e)
+    try:
+        await cancel_background_tasks()
+    except Exception as e:
+        logger.error('cancel_background_tasks failed. This is probably fine', exc_info=e)
 
 
 @api_app.signal(Event.SERVER_SHUTDOWN_AFTER)
@@ -264,6 +274,10 @@ async def start_single_tasks(app: Sanic):
             with log_and_suppress(Exception, message='Failed to import domains config'):
                 import_domains_config()
                 logger.debug('domains config imported')
+            with log_and_suppress(Exception, message='Failed to import archive downloader config'):
+                from modules.archive.lib import get_archive_downloader_config
+                get_archive_downloader_config().import_config()
+                logger.debug('archive downloader config imported')
             with log_and_suppress(Exception, message='Failed to import inventories config'):
                 import_inventories_config()
                 logger.debug('inventories config imported')

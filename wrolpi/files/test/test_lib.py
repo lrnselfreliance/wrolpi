@@ -900,7 +900,8 @@ count = 0
 
 
 @pytest.mark.asyncio
-async def test_move_error(test_session, test_directory, make_files_structure, video_bytes, singlefile_contents_factory):
+async def test_move_error(async_client, test_session, test_directory, make_files_structure, video_bytes,
+                          singlefile_contents_factory):
     """Files are restored when a move fails."""
     make_files_structure({
         'foo/bar/video.mp4': video_bytes,

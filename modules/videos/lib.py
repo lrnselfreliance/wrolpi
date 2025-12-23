@@ -837,6 +837,10 @@ def format_videos_destination(channel_name: str = None, channel_tag: str = None,
         -> pathlib.Path:
     """Return the directory where Videos should be downloaded according to the WROLPi Config.
 
+    Note: When you have a Collection object, prefer using Collection.format_destination()
+    or Collection.get_or_set_directory() instead, as they provide unified behavior
+    across both channel and domain collections.
+
     @warning: Directory may or may not exist."""
     videos_destination = get_wrolpi_config().videos_destination
 

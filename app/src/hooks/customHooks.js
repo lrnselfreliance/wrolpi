@@ -353,7 +353,7 @@ export const useSearchArchives = (defaultLimit) => {
 
     useEffect(() => {
         localSearchArchives();
-    }, [searchStr, limit, domain, order, activePage, JSON.stringify(activeTags), headline]);
+    }, [searchStr, limit, domain, order, offset, JSON.stringify(activeTags), headline]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});

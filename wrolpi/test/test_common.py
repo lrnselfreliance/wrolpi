@@ -1067,6 +1067,7 @@ async def test_initialize_config_files(async_client, test_session, test_director
                                        test_download_manager, test_downloader):
     """Config files should only be created if they are missing, and they will not overwrite existing entries in the DB."""
     from modules.videos.lib import get_videos_downloader_config, get_channels_config
+    from modules.archive.lib import get_archive_downloader_config
     from wrolpi.tags import get_tags_config
     from wrolpi.downloader import get_download_manager_config
     from modules.inventory.common import get_inventories_config
@@ -1079,11 +1080,13 @@ async def test_initialize_config_files(async_client, test_session, test_director
     # Write some config files, they should not be re-created.
     get_wrolpi_config().get_file().write_text('wrolpi')
     get_videos_downloader_config().get_file().write_text('video downloader')
+    get_archive_downloader_config().get_file().write_text('archive downloader')
 
     assert common.create_empty_config_files() == [], 'No configs should have been created.'
     # Config files were not overwritten with real configs.
     assert get_wrolpi_config().get_file().read_text() == 'wrolpi'
     assert get_videos_downloader_config().get_file().read_text() == 'video downloader'
+    assert get_archive_downloader_config().get_file().read_text() == 'archive downloader'
 
     # WROLPi config can be created because it is now missing.
     get_wrolpi_config().get_file().unlink()
@@ -1095,6 +1098,12 @@ async def test_initialize_config_files(async_client, test_session, test_director
     assert common.create_empty_config_files() == ['videos_downloader.yaml'], \
         'Videos Downloader config should have been created.'
     assert get_videos_downloader_config().is_valid()
+
+    # Archive Downloader config can be created because it is now missing.
+    get_archive_downloader_config().get_file().unlink()
+    assert common.create_empty_config_files() == ['archives_downloader.yaml'], \
+        'Archive Downloader config should have been created.'
+    assert get_archive_downloader_config().is_valid()
 
     # Channels config file does not exist, no conflicting Channels so the file is created.
     simple_channel.delete_with_videos()

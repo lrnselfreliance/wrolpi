@@ -759,6 +759,7 @@ export function InfoPopup({
                               iconSize = null,
                               header = '',
                               iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', marginTop: '-0.5em'},
+                            ...props
                           }) {
     const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;
     return <Popup
@@ -768,6 +769,7 @@ export function InfoPopup({
         header={header || null}
         trigger={trigger}
         hoverable={true}
+        {...props}
     />
 }
 
@@ -778,6 +780,7 @@ export function InfoHeader({
                                headerContent,
                                popupContent,
                                popupPosition = null,
+                               popupProps = {},
                                for_ = null,
                                required = false,
                                ...props
@@ -787,7 +790,7 @@ export function InfoHeader({
             <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
         </label>
         <span>
-            <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition}/>
+            <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition} {...popupProps}/>
         </span>
     </div>
 }

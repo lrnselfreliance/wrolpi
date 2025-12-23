@@ -244,17 +244,37 @@ function VideoFileNameForm({form}) {
         }
     }
 
+    const label = <InfoHeader
+        headerSize='h5'
+        headerContent='Video File Format'
+        popupProps={{wide: 'very', position: 'top left'}}
+        popupContent={<>
+            <p>Common yt-dlp variables:</p>
+            <ul>
+                <li><code>%(title)s</code> - Video title</li>
+                <li><code>%(uploader)s</code> - Channel/uploader name</li>
+                <li><code>%(upload_date)s</code> - Upload date (YYYYMMDD)</li>
+                <li><code>%(id)s</code> - Video ID</li>
+                <li><code>%(ext)s</code> - File extension</li>
+                <li><code>%(channel)s</code> - Channel name</li>
+                <li><code>%(duration)s</code> - Duration in seconds</li>
+                <li><code>%(playlist_index)s</code> - Playlist index</li>
+            </ul>
+            <p>See yt-dlp docs for all variables. Subdirectories supported.</p>
+        </>}
+    />;
+
     return <InputForm
         form={form}
         name='file_name_format'
         path='yt_dlp_options.file_name_format'
-        label='Video File Format'
+        label={label}
         onChange={onChange}
         message={message}
     />
 }
 
-function VideosSettings() {
+function VideosSettingsPage() {
     useTitle('Videos Settings');
 
     const emptyFormData = {
@@ -301,7 +321,7 @@ function VideosSettings() {
         if (_.isEmpty(tempProfiles)) {
             tempProfiles = emptyProfilesOptions;
         }
-        console.debug('VideosSettings: Got browser profiles:', tempProfiles);
+        console.debug('VideosSettingsPage: Got browser profiles:', tempProfiles);
         setBrowserProfilesOptions(tempProfiles);
     };
 
@@ -523,7 +543,7 @@ export function VideosRoute(props) {
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
             <Route path='channel' exact element={<ChannelsPage/>}/>
-            <Route path='settings' exact element={<VideosSettings/>}/>
+            <Route path='settings' exact element={<VideosSettingsPage/>}/>
             <Route path='statistics' exact element={<VideosStatistics/>}/>
             <Route path='channel/new' exact element={<ChannelNewPage/>}/>
             <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>

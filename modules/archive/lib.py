@@ -259,6 +259,10 @@ class ArchiveDownloaderConfig(ConfigFile):
     def file_name_format(self) -> str:
         return self._config['file_name_format']
 
+    def import_config(self, file: pathlib.Path = None, send_events=False):
+        super().import_config(file, send_events)
+        self.successful_import = True
+
 
 # Global instance for archive downloader config
 ARCHIVE_DOWNLOADER_CONFIG: ArchiveDownloaderConfig = ArchiveDownloaderConfig()

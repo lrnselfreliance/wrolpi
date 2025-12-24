@@ -1260,13 +1260,23 @@ async def test_archive_download_explicit_destination_overrides_domain_collection
         f"Archive should NOT be in collection directory {collection_dir}"
 
 
-def test_archive_downloader_config(test_directory):
-    """ArchiveDownloaderConfig loads and provides file_name_format."""
+@pytest.mark.asyncio
+async def test_archive_downloader_config_import(test_directory, async_client):
+    """ArchiveDownloaderConfig imports successfully and provides correct defaults."""
     config = get_archive_downloader_config()
 
     # Default format should contain %(title)s
     assert '%(title)s' in config.file_name_format
     assert config.file_name_format == '%(download_datetime)s_%(title)s'
+
+    # Create a valid config file
+    config_path = config.get_file()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('version: 0\nfile_name_format: "%(download_datetime)s_%(title)s"\n')
+
+    # Import should succeed and set successful_import
+    config.import_config()
+    assert config.successful_import is True
 
 
 def test_archive_downloader_config_validation():

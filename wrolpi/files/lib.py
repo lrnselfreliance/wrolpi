@@ -17,7 +17,7 @@ from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
 import psycopg2
-from sqlalchemy import asc
+from sqlalchemy import asc, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -236,7 +236,12 @@ async def delete(*paths: Union[str, pathlib.Path]):
                 query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
             else:
                 # Search for any FileGroups that have been tagged under this directory.
-                query = query.filter(FileGroup.primary_path.like(f'{path}/%'))
+                # Use indexed directory column for efficient lookup
+                path_str = str(path)
+                query = query.filter(or_(
+                    FileGroup.directory == path_str,
+                    FileGroup.directory.like(f'{path_str}/%')
+                ))
             for (file_group, tag_file) in query:
                 if any(i for i in paths if i in file_group.my_paths()):
                     # File that will be deleted is in a Tagged FileGroup.
@@ -404,7 +409,10 @@ refresh_logger = logger.getChild('refresh')
 
 
 def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
-    """This generates `FileGroup.files` from a list of files."""
+    """This generates `FileGroup.files` from a list of files.
+
+    Paths are stored as filenames only (relative to FileGroup.directory).
+    """
     files = list()
     for file in group:
         mimetype = get_mimetype(file)
@@ -413,7 +421,7 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
         _, suffix = split_path_stem_and_suffix(file)
         size = stat.st_size
         files.append(dict(
-            path=str(file),
+            path=file.name,  # Store filename only, not full path
             mimetype=mimetype,
             modification_datetime=modification_datetime,
             size=size,
@@ -512,16 +520,18 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                     values[primary_path] = (modification_datetime, mimetype, size, files)
 
         values = [(str(primary_path),
+                   str(primary_path.parent),  # directory
                    False,  # `indexed` is false to force indexing by default.
                    idempotency, *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
             values = mogrify(curs, values)
             stmt = f'''
                 INSERT INTO file_group
-                    (primary_path, indexed, idempotency, modification_datetime, mimetype, size, files)
+                    (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files)
                 VALUES {values}
                 ON CONFLICT (primary_path) DO UPDATE
                 SET
+                    directory=EXCLUDED.directory,
                     idempotency=EXCLUDED.idempotency,
                     modification_datetime=EXCLUDED.modification_datetime,
                     mimetype=EXCLUDED.mimetype,
@@ -639,8 +649,13 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
     with get_db_curs(commit=True) as curs:
         wheres = ''
         if paths:
-            # Use LIKE to delete any children of directories that are deleted.
-            wheres = ' OR '.join([curs.mogrify('primary_path LIKE %s', (f'{i}/%',)).decode() for i in paths])
+            # Use indexed directory column to delete any children of directories that are deleted.
+            # Match exact directory or subdirectories
+            conditions = []
+            for p in paths:
+                p_str = str(p)
+                conditions.append(curs.mogrify('(directory = %s OR directory LIKE %s)', (p_str, f'{p_str}/%')).decode())
+            wheres = ' OR '.join(conditions)
         deleted_files = ''
         if deleted:
             # Delete any paths that do not exist.
@@ -1393,8 +1408,13 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
             elif source.is_dir():
-                stmt = 'SELECT primary_path FROM file_group WHERE primary_path LIKE :like'
-                for (primary_path,) in session.execute(stmt, dict(like=f'{source}%')):
+                # Use indexed directory column for efficient lookup
+                # Match exact directory or subdirectories
+                stmt = '''SELECT primary_path FROM file_group
+                          WHERE directory = :dir OR directory LIKE :dir_pattern'''
+                source_str = str(source)
+                for (primary_path,) in session.execute(
+                        stmt, dict(dir=source_str, dir_pattern=f'{source_str}/%')):
                     primary_path = pathlib.Path(primary_path)
                     if primary_path not in plan:
                         new_primary_path = destination / source.name / primary_path.relative_to(source)
@@ -1446,6 +1466,11 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
         """Apply the move plan to all the FileGroups.
 
         @warning: Cannot be cancelled!"""
+        nonlocal new_directories
+        # Query existing directories ONCE before processing chunks (not per-chunk).
+        existing_directories = {i[0] for i in session.query(Directory.path)}
+        inserted_directories = set()
+
         # Move FileGroups in groups.
         for chunk in chunks(plan_.items(), MOVE_CHUNK_SIZE):
             old_paths = [i for i, j in chunk]
@@ -1467,10 +1492,11 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
             for directory_ in old_directories_:
                 delete_directory(directory_)
 
-            existing_directories = {i[0] for i in session.query(Directory.path)}
-            missing_directories = new_directories - existing_directories
-            for directory_ in missing_directories:
-                session.add(Directory(path=directory_, name=directory_.name))
+            # Find directories that need to be inserted (not existing and not already inserted).
+            missing_directories = new_directories - existing_directories - inserted_directories
+            if missing_directories:
+                session.add_all([Directory(path=d, name=d.name) for d in missing_directories])
+                inserted_directories.update(missing_directories)
 
             # Don't forget what has moved.
             session.flush(file_groups_)
@@ -1514,8 +1540,13 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False):
     Will refuse to delete a directory if it contains Tagged Files."""
     if recursive:
         with get_db_session() as session:
+            # Use indexed directory column for efficient lookup
+            directory_str = str(directory)
             tagged = session.query(FileGroup) \
-                .filter(FileGroup.primary_path.like(f'{directory}/%')) \
+                .filter(or_(
+                    FileGroup.directory == directory_str,
+                    FileGroup.directory.like(f'{directory_str}/%')
+                )) \
                 .join(TagFile, TagFile.file_group_id == FileGroup.id) \
                 .limit(1).one_or_none()
             if tagged:

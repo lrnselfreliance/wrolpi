@@ -668,14 +668,17 @@ def insert_file_group(test_session, test_directory):
     """Inserts a FileGroup based on the provided paths.  Does not verify if the files exist."""
 
     def _(paths: List[pathlib.Path]):
-        files = [dict(path=str(i), mimetype='fake') for i in paths]
+        # Store relative filenames in files (new schema)
+        files = [dict(path=i.name, mimetype='fake') for i in paths]
+        primary_path = paths[0]
         params = dict(
-            primary_path=str(paths[0]),
+            directory=str(primary_path.parent),
+            primary_path=str(primary_path),
             files=json.dumps(files),
         )
         test_session.execute('INSERT INTO file_group '
-                             '(indexed, primary_path, files) VALUES '
-                             '(true, :primary_path, :files)', params)
+                             '(indexed, directory, primary_path, files) VALUES '
+                             '(true, :directory, :primary_path, :files)', params)
 
     return _
 

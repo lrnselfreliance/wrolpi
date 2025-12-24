@@ -235,9 +235,9 @@ class Archive(Base, ModelHelper):
         self.file_group.append_files(screenshot_path)
 
         # Update FileGroup.data for quick lookup (similar to ebook cover_path pattern)
-        # Create new dict and reassign (like append_files does) to ensure SQLAlchemy detects the change
+        # Store as filename only (relative to directory), resolved via file_group.resolve_path()
         data = dict(self.file_group.data) if self.file_group.data else {}
-        data['screenshot_path'] = str(screenshot_path)
+        data['screenshot_path'] = screenshot_path.name  # Store filename only
         self.file_group.data = data
 
         # Validate the archive

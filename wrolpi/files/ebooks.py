@@ -164,10 +164,12 @@ class EBook(ModelHelper, Base):
         return f'<EBook id={self.id} path={repr(path)} file_group_id={self.file_group_id}>'
 
     def __json__(self) -> dict:
-        # Convert this eBook's paths to pathlib.Paths.
+        # Convert this eBook's paths to pathlib.Paths, resolving relative to directory.
         d = self.file_group.__json__()
-        d['data']['ebook_path'] = pathlib.Path(d['data']['ebook_path'])
-        d['data']['cover_path'] = pathlib.Path(d['data']['cover_path']) if 'cover_path' in d['data'] else None
+        if d.get('data') and d['data'].get('ebook_path'):
+            d['data']['ebook_path'] = self.file_group.resolve_path(d['data']['ebook_path'])
+        if d.get('data') and d['data'].get('cover_path'):
+            d['data']['cover_path'] = self.file_group.resolve_path(d['data']['cover_path'])
         return d
 
     @staticmethod
@@ -267,19 +269,23 @@ def model_ebook(file_group: FileGroup, session: Session) -> EBook:
                 # All text is d_text.
                 ebook.file_group.d_text = data.text
                 d: dict = data.__json__()
-                d['ebook_path'] = str(d['ebook_path'])
+                # Store ebook_path as filename only (relative to directory)
+                d['ebook_path'] = ebook_file.name
                 ebook.file_group.data = d
         except Exception as e:
             logger.error(f'Failed to extract epub book data', exc_info=e)
 
         if ebook.file_group.my_poster_files():
-            ebook.file_group.data['cover_path'] = ebook.file_group.my_poster_files()[0]['path']
+            # Store cover_path as filename only (relative to directory)
+            cover_path = ebook.file_group.my_poster_files()[0]['path']
+            ebook.file_group.data['cover_path'] = cover_path.name
         else:
             # Extract cover because there is no cover file.
             cover_path = ebook.generate_cover()
             if cover_path:
                 ebook.file_group.append_files(cover_path)
-                ebook.file_group.data['cover_path'] = str(cover_path)
+                # Store cover_path as filename only (relative to directory)
+                ebook.file_group.data['cover_path'] = cover_path.name
 
     if not ebook.file_group.title:
         # Book was not indexed above (probably a MOBI), use the file data.

@@ -243,13 +243,14 @@ class Video(ModelHelper, Base):
             self.channel = channel
             logger.debug(f'{self} has Channel {channel}')
 
-        # Set FileGroup.data with cached file paths for consistency with Archive
+        # Set FileGroup.data with cached file paths (stored as relative filenames)
+        # Paths are resolved to absolute when accessed via file_group.resolve_path()
         self.file_group.data = {
             'id': self.id,
-            'video_path': self.video_path,
-            'info_json_path': self.info_json_path,
-            'poster_path': self.poster_path,
-            'caption_paths': self.caption_paths,
+            'video_path': self.video_path.name if self.video_path else None,
+            'info_json_path': self.info_json_path.name if self.info_json_path else None,
+            'poster_path': self.poster_path.name if self.poster_path else None,
+            'caption_paths': [p.name for p in self.caption_paths] if self.caption_paths else [],
         }
 
     @staticmethod

@@ -340,9 +340,12 @@ class TestCollectionDeletion:
         test_session.flush()
 
         # Create file groups and archives for this domain
-        fg1 = FileGroup(primary_path=test_directory / 'archive' / 'example.com' / 'page1.html',
+        archive_dir = test_directory / 'archive' / 'example.com'
+        fg1 = FileGroup(directory=archive_dir,
+                        primary_path=archive_dir / 'page1.html',
                         url='https://example.com/page1')
-        fg2 = FileGroup(primary_path=test_directory / 'archive' / 'example.com' / 'page2.html',
+        fg2 = FileGroup(directory=archive_dir,
+                        primary_path=archive_dir / 'page2.html',
                         url='https://example.com/page2')
         test_session.add_all([fg1, fg2])
         test_session.flush()

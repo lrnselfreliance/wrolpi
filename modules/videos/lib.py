@@ -820,17 +820,25 @@ def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path
         if not directory.is_dir():
             raise UnknownDirectory()
 
-        directory = str(directory).rstrip('/')
+        directory_str = str(directory).rstrip('/')
 
+        # Query returns directory and files - files may contain relative or absolute paths
+        # Use indexed directory column for efficient lookup
         curs.execute(f'''
-            SELECT files
+            SELECT directory, files
             FROM file_group
             WHERE
-                mimetype NOT LIKE 'video%'
-                AND primary_path LIKE '{directory}/%'
+                mimetype NOT LIKE 'video%%'
+                AND (directory = '{directory_str}' OR directory LIKE '{directory_str}/%%')
         ''')
-        results = (pathlib.Path(j['path']) for i in curs.fetchall() for j in i[0])
-        yield from results
+        for row in curs.fetchall():
+            fg_directory = pathlib.Path(row[0]) if row[0] else None
+            for file_info in row[1]:
+                path = pathlib.Path(file_info['path'])
+                if not path.is_absolute() and fg_directory:
+                    # Resolve relative path using directory
+                    path = fg_directory / path
+                yield path
 
 
 def format_videos_destination(channel_name: str = None, channel_tag: str = None, channel_url: str = None) \

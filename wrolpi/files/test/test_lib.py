@@ -251,17 +251,18 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     # All files are found because they are in this refresh request, or in the `dir1` directory.
     idempotency = now()
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
+    # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
         {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
          'files': [
-             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
-             {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
+             {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
+             {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}]
+         'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}]
          },
         {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': baz, 'size': 8, 'suffix': '.txt', 'mimetype': 'text/plain'}]
+         'files': [{'path': baz.name, 'size': 8, 'suffix': '.txt', 'mimetype': 'text/plain'}]
          },
     ])
 
@@ -278,17 +279,18 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
 
     # Only modified files need to be re-indexed.
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
+    # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
         {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True,
          'files': [
-             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
-             {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
+             {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
+             {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
+         'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
         {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': baz, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
+         'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
 
@@ -297,15 +299,16 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     lib._upsert_files([video_file, bar, baz], idempotency)
     video_file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=str(video_file)).one()
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
+    # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
         # Video is no longer indexed because SRT was removed.
         {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
+         'files': [{'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
+         'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
         {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
-         'files': [{'path': baz, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
+         'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
 
@@ -766,11 +769,12 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
     # Both FileGroups are merged.
     vid = FileGroup.from_paths(test_session, vid, srt)
     test_session.commit()
-    assert {i['path'].name for i in vid.files} == {'vid.mp4', 'vid.srt'}
+    # files now stores relative filenames as strings, use my_files() to get resolved Paths
+    assert {i['path'].name for i in vid.my_files()} == {'vid.mp4', 'vid.srt'}
 
     assert test_session.query(FileGroup).count() == 1
     assert set(vid.tag_names) == {'one', 'two'}
-    assert {i['path'].name for i in vid.files} == {'vid.mp4', 'vid.srt'}
+    assert {i['path'].name for i in vid.my_files()} == {'vid.mp4', 'vid.srt'}
     # TagFile.created_at is preserved.
     assert [i for i in vid.tag_files if i.tag.name == 'one'][0].created_at == tag_file_created_at
     assert [i for i in vid.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
@@ -985,13 +989,16 @@ async def test_move_tagged(async_client, test_session, test_directory, make_file
     assert not (test_directory / 'foo/bar.txt').exists()
     # Tag was moved.
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
-    assert bar_file_group.primary_path == new_bar == bar_file_group.files[0]['path']
+    assert bar_file_group.primary_path == new_bar
+    # files now stores relative filenames; use my_files() to get resolved absolute paths
+    assert bar_file_group.my_files()[0]['path'] == new_bar
     assert bar_file_group.primary_path.is_file()
     assert bar_file_group.tag_files
     # foo.txt was not tagged, but was moved.
     assert not foo_file_group.tag_files
     assert foo_file_group.primary_path.is_file()
-    assert foo_file_group.primary_path == new_foo == foo_file_group.files[0]['path']
+    assert foo_file_group.primary_path == new_foo
+    assert foo_file_group.my_files()[0]['path'] == new_foo
     assert bar_file_group.title == 'custom title', 'Custom title should not have been overwritten.'
 
     # Rename "bar.txt" to "baz.txt"
@@ -1306,7 +1313,8 @@ async def test_process_bulk_tag_job_add_tags(test_case, expected_fg_count, async
 
     # Additional assertion for multi-file FileGroup
     if test_case == 'multi_file_filegroup':
-        file_paths = {f['path'].name for f in fgs[0].files}
+        # files now stores relative filenames as strings; use my_files() to get resolved Paths
+        file_paths = {f['path'].name for f in fgs[0].my_files()}
         assert file_paths == {'video.mp4', 'video.srt', 'video.info.json'}
 
 

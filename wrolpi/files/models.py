@@ -67,6 +67,7 @@ class FileGroup(ModelHelper, Base):
     __tablename__ = 'file_group'
     __table_args__ = (
         Index('file_group_author_idx', 'author'),
+        Index('file_group_directory_idx', 'directory'),
         Index('file_group_download_datetime_idx', 'download_datetime'),
         Index('file_group_effective_datetime_idx', 'effective_datetime'),
         Index('file_group_length_idx', 'length'),
@@ -81,6 +82,10 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_viewed_idx', 'viewed'),
     )
     id: int = Column(BigInteger, primary_key=True)
+
+    # Directory containing all files in this group (absolute path).
+    # All paths in `files` and `data` are relative to this directory.
+    directory: pathlib.Path = Column(MediaPathType, nullable=False)
 
     author = Column(String)  # name of the author, maybe even a URL
     censored = Column(Boolean)  # the file is no longer available for download
@@ -144,7 +149,7 @@ class FileGroup(ModelHelper, Base):
             author=self.author,
             censored=self.censored,
             data=self.data,
-            directory=self.primary_path.parent,
+            directory=self.directory,
             download_datetime=self.download_datetime,
             files=self.my_files(),
             id=self.id,
@@ -171,6 +176,35 @@ class FileGroup(ModelHelper, Base):
         if self.title:
             return self.title
         return self.primary_path.name
+
+    @property
+    def full_primary_path(self) -> pathlib.Path:
+        """Returns the complete absolute path to the primary file.
+
+        Handles both old format (primary_path is absolute) and new format (directory + relative primary_path).
+        """
+        if self.directory:
+            # New format: directory + relative filename
+            return self.directory / self.primary_path
+        # Old format: primary_path is already absolute
+        return self.primary_path
+
+    def resolve_path(self, relative_path: str | pathlib.Path) -> pathlib.Path:
+        """Convert a relative filename to an absolute path using this FileGroup's directory.
+
+        Handles both old format (path is already absolute) and new format (relative to directory).
+        """
+        if relative_path is None:
+            return None
+        path = pathlib.Path(relative_path) if isinstance(relative_path, str) else relative_path
+        if path.is_absolute():
+            # Old format: already absolute
+            return path
+        if self.directory:
+            # New format: resolve relative to directory
+            return self.directory / path
+        # Fallback: use primary_path's parent as directory
+        return self.primary_path.parent / path
 
     def set_viewed(self, viewed: datetime = None) -> datetime:
         """
@@ -226,35 +260,52 @@ class FileGroup(ModelHelper, Base):
         self.set_tags(session, tags)
 
     def append_files(self, *paths: pathlib.Path):
-        """Add all `paths` to this FileGroup.files."""
+        """Add all `paths` to this FileGroup.files.
+
+        Paths are stored as filenames only (relative to directory).
+        """
         from wrolpi.files.lib import get_mimetype
         new_files = list(self.files) if self.files else list()
-        new_files.extend([dict(path=path, mimetype=get_mimetype(path)) for path in paths])
+        for path in paths:
+            # Store just the filename, not the full path
+            new_files.append(dict(path=path.name, mimetype=get_mimetype(path)))
         self.files = unique_by_predicate(new_files, lambda i: i['path'])
 
     def my_files(self, *mimetypes: str) -> List[dict]:
         """Return all files related to this group that match any of the provided mimetypes.
 
+        Paths are resolved to absolute paths using directory.
+        Returns a new list (does not modify self.files in place).
+
         >>> FileGroup().my_files()
         >>> FileGroup().my_files('application/pdf')
         >>> FileGroup().my_files('video/')
         """
-        files = self.files
-        if not files:
+        if not self.files:
             logger.error(f'{self} has no files!')
             raise ValueError(f'{self} has no files!')
 
-        # Convert path strings to Paths.
-        for i in range(len(files)):
-            files[i]['path'] = pathlib.Path(files[i]['path'])
+        # Create a new list with resolved paths (don't modify self.files in place)
+        result = []
+        for file_info in self.files:
+            # Make a copy of each dict to avoid modifying the original
+            file_copy = dict(file_info)
+            path = pathlib.Path(file_info['path'])
+            if not path.is_absolute() and self.directory:
+                # New format: relative path, resolve using directory
+                file_copy['path'] = self.directory / path
+            else:
+                # Old format or already absolute: keep as-is
+                file_copy['path'] = path
+            result.append(file_copy)
 
         if mimetypes:
-            files = list(filter(lambda j: any(j['mimetype'].startswith(m) for m in mimetypes), files))
+            result = list(filter(lambda j: any(j['mimetype'].startswith(m) for m in mimetypes), result))
 
         if PYTEST:
             # Sort files to avoid random order during testing.
-            return sorted(files, key=lambda j: j['path'])
-        return files
+            return sorted(result, key=lambda j: j['path'])
+        return result
 
     def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
         return [i['path'] for i in self.my_files(*mimetypes)]
@@ -368,6 +419,7 @@ class FileGroup(ModelHelper, Base):
         if not isinstance(primary_path, pathlib.Path):
             raise ValueError('Cannot create FileGroup without a primary path.')
 
+        file_group.directory = primary_path.parent
         file_group.primary_path = primary_path
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
@@ -394,6 +446,20 @@ class FileGroup(ModelHelper, Base):
         if not file_group:
             raise UnknownFile(f'Unable to find FileGroup with path {path}')
         return file_group
+
+    @classmethod
+    def find_by_directory(cls, session: Session, directory: pathlib.Path, recursive: bool = False) -> List['FileGroup']:
+        """Find all FileGroups in a directory (optionally recursive).
+
+        Uses the indexed `directory` column for efficient lookups.
+        """
+        from sqlalchemy import or_
+        directory_str = str(directory)
+        if recursive:
+            return session.query(cls).filter(
+                or_(cls.directory == directory_str, cls.directory.like(f'{directory_str}/%'))
+            ).all()
+        return session.query(cls).filter(cls.directory == directory_str).all()
 
     @property
     def tag_names(self) -> List[str]:
@@ -434,7 +500,15 @@ class FileGroup(ModelHelper, Base):
         self.files = collected_files
 
     def move(self, new_primary_path: pathlib.Path):
-        """Move all files in this group to a new location."""
+        """Move all files in this group to a new location.
+
+        With relative paths stored in `files` and `data`, we only need to:
+        1. Move physical files to new location
+        2. Update `directory` to point to new parent
+        3. Update `primary_path` to the new path
+
+        The relative filenames in `files` and `data` remain unchanged.
+        """
         from wrolpi.files.lib import split_path_stem_and_suffix, glob_shared_stem, split_file_name_words
 
         if new_primary_path.exists():
@@ -445,71 +519,47 @@ class FileGroup(ModelHelper, Base):
             self.append_files(*glob_shared_stem(self.primary_path))
 
         new_name, _ = split_path_stem_and_suffix(new_primary_path, full=True)
-        # Need a deepcopy because changes to self.files are ignored otherwise.
-        new_files = copy.deepcopy(self.files)
+        new_directory = new_primary_path.parent
+
+        # Get current files with resolved absolute paths for moving
+        current_files = self.my_files()
+
         # Ensure that all destination files do not yet exist before move.
-        for file in new_files:
+        for file in current_files:
             _, suffix = split_path_stem_and_suffix(file['path'])
             new_path = pathlib.Path(f'{new_name}{suffix}')
             if new_path.exists():
                 raise FileExistsError(f'Cannot move {self} to {new_path} because it already exists.')
 
-        # Collect all files that exist and move them.
-        existing_files = list()
-        for idx, file in enumerate(new_files):
-            _, suffix = split_path_stem_and_suffix(file['path'])
+        # Move physical files and collect new relative file entries
+        new_files = []
+        for file in current_files:
+            old_path = file['path']  # Already resolved to absolute by my_files()
+            _, suffix = split_path_stem_and_suffix(old_path)
             new_path = pathlib.Path(f'{new_name}{suffix}')
-            if pathlib.Path(file['path']).is_file():
-                shutil.move(file['path'], new_path)
-                existing_files.append({'path': new_path, 'mimetype': file['mimetype']})
+            if old_path.is_file():
+                shutil.move(old_path, new_path)
+                # Store just the filename (relative path)
+                new_files.append({'path': new_path.name, 'mimetype': file['mimetype']})
 
         logger.debug(f'Moved FileGroup: {self.primary_path} -> {new_primary_path}')
-        self.files = existing_files
 
-        # Update paths in self.data to match new file locations
-        if self.data:
-            old_parent = str(self.primary_path.parent)
-            new_parent = str(new_primary_path.parent)
-            updated_data = {}
-            for key, value in self.data.items():
-                if value is None:
-                    updated_data[key] = value
-                elif isinstance(value, pathlib.Path):
-                    str_value = str(value)
-                    if str_value.startswith(old_parent):
-                        updated_data[key] = pathlib.Path(str_value.replace(old_parent, new_parent, 1))
-                    else:
-                        updated_data[key] = value
-                elif isinstance(value, str) and value.startswith(old_parent):
-                    updated_data[key] = value.replace(old_parent, new_parent, 1)
-                elif isinstance(value, list):
-                    # Handle lists (like Video.caption_paths)
-                    new_list = []
-                    for item in value:
-                        if isinstance(item, pathlib.Path):
-                            str_item = str(item)
-                            if str_item.startswith(old_parent):
-                                new_list.append(pathlib.Path(str_item.replace(old_parent, new_parent, 1)))
-                            else:
-                                new_list.append(item)
-                        elif isinstance(item, str) and item.startswith(old_parent):
-                            new_list.append(item.replace(old_parent, new_parent, 1))
-                        else:
-                            new_list.append(item)
-                    updated_data[key] = new_list
-                else:
-                    updated_data[key] = value
-            self.data = updated_data
+        # Update the FileGroup with new directory and relative files
+        self.files = new_files
+        self.directory = new_directory
+        self.primary_path = new_primary_path
 
+        # Update title if it was based on the filename
         if self.title == self.primary_path.name:
-            # Do not overwrite title from modeler.
             self.title = new_primary_path.name
         self.a_text = split_file_name_words(new_primary_path.name)
-        self.primary_path = new_primary_path
-        # Data paths are updated in-place above, no need to re-index for existing data.
+
+        # Note: `data` now contains relative paths that don't need updating!
+        # The filenames stay the same, only the directory changes.
         # Only re-index if there's no data yet (new file that hasn't been modeled).
         if not self.data:
             self.indexed = False
+
         # Flush the changes to the FileGroup.
         self.flush()
 
@@ -524,7 +574,7 @@ class FileGroup(ModelHelper, Base):
                 if instance and hasattr(instance, 'location'):
                     return instance.location
 
-        parent = str(get_relative_to_media_directory(self.primary_path.parent))
+        parent = str(get_relative_to_media_directory(self.directory))
         preview = str(get_relative_to_media_directory(self.primary_path))
         if parent == '.':
             # File is in the top of the media directory, App already shows top directory open.

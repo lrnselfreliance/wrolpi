@@ -90,5 +90,5 @@ async def test_pdf_poster(test_session, example_pdf):
     file_group = test_session.query(FileGroup).one()
     assert file_group.indexed is True
     assert file_group.data is not None
-    # FancyJSON converts paths back to pathlib.Path when reading from DB.
-    assert file_group.data.get('poster_path') == poster_path
+    # data['poster_path'] stores filename only (for fast moves/renames).
+    assert file_group.data.get('poster_path') == poster_path.name

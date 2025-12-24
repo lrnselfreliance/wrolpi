@@ -34,6 +34,7 @@ import {
     mimetypeColor,
     PageContainer,
     PreviewPath,
+    resolveDataPath,
     SearchInput,
     SortButton,
     TabLinks,
@@ -104,11 +105,16 @@ function ArchivePage() {
         </>
     }
 
-    const {data, size} = archiveFile;
+    const {data, size, directory} = archiveFile;
 
-    const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
-    const readabilityUrl = data.readability_path ? `/media/${encodeMediaPath(data.readability_path)}` : null;
-    const screenshotUrl = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
+    // Resolve data paths (filename-only) to full relative paths using directory
+    const singlefilePath = resolveDataPath(data.singlefile_path, directory);
+    const readabilityPath = resolveDataPath(data.readability_path, directory);
+    const screenshotPath = resolveDataPath(data.screenshot_path, directory);
+
+    const singlefileUrl = singlefilePath ? `/media/${encodeMediaPath(singlefilePath)}` : null;
+    const readabilityUrl = readabilityPath ? `/media/${encodeMediaPath(readabilityPath)}` : null;
+    const screenshotUrl = screenshotPath ? `/media/${encodeMediaPath(screenshotPath)}` : null;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='violet'/>
@@ -235,9 +241,11 @@ function ArchivePage() {
         </Tab.Pane>
     };
 
-    const localPreviewPath = (path, mimetype) => {
-        if (path) {
-            return <PreviewPath path={path} mimetype={mimetype} taggable={false}>{path}</PreviewPath>
+    // Helper to resolve and preview a data path
+    const localPreviewPath = (dataPath, mimetype) => {
+        const resolvedPath = resolveDataPath(dataPath, directory);
+        if (resolvedPath) {
+            return <PreviewPath path={resolvedPath} mimetype={mimetype} taggable={false}>{resolvedPath}</PreviewPath>
         } else {
             return 'Unknown'
         }
@@ -258,8 +266,8 @@ function ArchivePage() {
             {localPreviewPath(data.readability_json_path, 'application/json')}
 
             <Header as={'h3'}>Screenshot File</Header>
-            {data.screenshot_path ?
-                archiveFileLink(data.screenshot_path)
+            {screenshotPath ?
+                archiveFileLink(screenshotPath)
                 : 'Unknown'}
 
             <Header as={'h3'}>Directory</Header>
@@ -321,10 +329,14 @@ function ArchivePage() {
 
 export function ArchiveCard({file}) {
     const {s} = useContext(ThemeContext);
-    const {data} = file;
+    const {data, directory} = file;
 
-    const imageSrc = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
-    const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
+    // Resolve data paths (filename-only) to full relative paths using directory
+    const screenshotPath = resolveDataPath(data.screenshot_path, directory);
+    const singlefilePath = resolveDataPath(data.singlefile_path, directory);
+
+    const imageSrc = screenshotPath ? `/media/${encodeMediaPath(screenshotPath)}` : null;
+    const singlefileUrl = singlefilePath ? `/media/${encodeMediaPath(singlefilePath)}` : null;
 
     let screenshot = <Card.Icon><FileIcon file={file}/></Card.Icon>;
     const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;

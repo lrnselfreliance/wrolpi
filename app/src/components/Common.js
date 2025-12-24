@@ -656,11 +656,27 @@ export function CardGroupCentered(props) {
     </div>
 }
 
+/**
+ * Resolve a filename-only path to a full relative path using the file's directory.
+ * Paths in FileGroup.data are stored as filenames only for performance (fast moves/renames).
+ * This function resolves them to full relative paths suitable for /media/ URLs.
+ *
+ * @param {string} path - The path to resolve (may be filename-only or already a full path)
+ * @param {string} directory - The directory to prepend if path is filename-only
+ * @returns {string|null} - The resolved path, or null if path is falsy
+ */
+export function resolveDataPath(path, directory) {
+    if (!path) return null;
+    if (path.includes('/')) return path;  // Already a full relative path
+    return directory ? `${directory}/${path}` : path;
+}
+
 export function findPosterPath(file) {
     if (!file) {
         return;
     }
-    const {files, poster_path, cover_path, screenshot_path, video} = file;
+    const {files, poster_path, cover_path, screenshot_path, video, directory} = file;
+
     if (poster_path) {
         return poster_path;
     }
@@ -670,18 +686,24 @@ export function findPosterPath(file) {
     if (screenshot_path) {
         return screenshot_path;
     }
-    if (file['data'] && file['data']['cover_path']) {
-        // Ebook.
-        return file['data']['cover_path'];
-    }
-    if (file['data'] && file['data']['poster_path']) {
-        // PDF.
-        return file['data']['poster_path'];
-    }
+    // video.poster_path is already a full relative path (from Video.__json__)
     if (video && video['poster_path']) {
-        // file is a video model.
         return video['poster_path'];
     }
+    // data paths are filename-only, need to resolve with directory
+    if (file['data'] && file['data']['cover_path']) {
+        // Ebook.
+        return resolveDataPath(file['data']['cover_path'], directory);
+    }
+    if (file['data'] && file['data']['poster_path']) {
+        // PDF or Video (cached).
+        return resolveDataPath(file['data']['poster_path'], directory);
+    }
+    if (file['data'] && file['data']['screenshot_path']) {
+        // Archive.
+        return resolveDataPath(file['data']['screenshot_path'], directory);
+    }
+    // files[].path is already resolved by my_files() on the backend
     if (!_.isEmpty(files)) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];

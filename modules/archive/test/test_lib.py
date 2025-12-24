@@ -427,7 +427,7 @@ def test_get_new_archive_files_with_subdirectory_format(test_directory, fake_now
     # Configure a file format with subdirectory
     config = get_archive_downloader_config()
     original_format = config._config['file_name_format']
-    config._config['file_name_format'] = '%(download_year)s/%(download_datetime)s_%(title)s'
+    config._config['file_name_format'] = '%(download_year)s/%(download_datetime)s_%(title)s.%(ext)s'
 
     try:
         archive_files = get_new_archive_files('https://example.com/page', 'My Article')
@@ -1265,14 +1265,14 @@ async def test_archive_downloader_config_import(test_directory, async_client):
     """ArchiveDownloaderConfig imports successfully and provides correct defaults."""
     config = get_archive_downloader_config()
 
-    # Default format should contain %(title)s
-    assert '%(title)s' in config.file_name_format
-    assert config.file_name_format == '%(download_datetime)s_%(title)s'
+    # Default format should end with .%(ext)s
+    assert config.file_name_format.endswith('.%(ext)s')
+    assert config.file_name_format == '%(download_datetime)s_%(title)s.%(ext)s'
 
     # Create a valid config file
     config_path = config.get_file()
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text('version: 0\nfile_name_format: "%(download_datetime)s_%(title)s"\n')
+    config_path.write_text('version: 0\nfile_name_format: "%(download_datetime)s_%(title)s.%(ext)s"\n')
 
     # Import should succeed and set successful_import
     config.import_config()
@@ -1282,19 +1282,19 @@ async def test_archive_downloader_config_import(test_directory, async_client):
 def test_archive_downloader_config_validation():
     """ArchiveDownloaderConfig validator rejects invalid formats."""
     # Valid format
-    ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_%(title)s')
+    ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_%(title)s.%(ext)s')
 
-    # Invalid format (missing %(title)s)
-    with pytest.raises(ValueError, match='must contain'):
-        ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_no_title')
+    # Invalid format (missing .%(ext)s)
+    with pytest.raises(ValueError, match='must end with'):
+        ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_%(title)s')
 
 
 def test_format_archive_filename_default(test_directory, fake_now):
     """format_archive_filename uses default format."""
     result = format_archive_filename('My Article')
 
-    # Default format: %(download_datetime)s_%(title)s
-    assert result == '2000-01-01-00-00-00_My Article'
+    # Default format: %(download_datetime)s_%(title)s.%(ext)s
+    assert result == '2000-01-01-00-00-00_My Article.html'
 
 
 def test_format_archive_filename_with_domain(test_directory, fake_now):
@@ -1302,11 +1302,11 @@ def test_format_archive_filename_with_domain(test_directory, fake_now):
     # Temporarily change the format to include domain
     config = get_archive_downloader_config()
     original_format = config._config['file_name_format']
-    config._config['file_name_format'] = '%(domain)s_%(title)s'
+    config._config['file_name_format'] = '%(domain)s_%(title)s.%(ext)s'
 
     try:
         result = format_archive_filename('My Article', domain='example.com')
-        assert result == 'example.com_My Article'
+        assert result == 'example.com_My Article.html'
     finally:
         config._config['file_name_format'] = original_format
 
@@ -1315,12 +1315,12 @@ def test_format_archive_filename_with_year_subdirectory(test_directory, fake_now
     """format_archive_filename can include subdirectories in format."""
     config = get_archive_downloader_config()
     original_format = config._config['file_name_format']
-    config._config['file_name_format'] = '%(download_year)s/%(download_date)s_%(title)s'
+    config._config['file_name_format'] = '%(download_year)s/%(download_date)s_%(title)s.%(ext)s'
 
     try:
         result = format_archive_filename('My Article')
         # Should include year subdirectory
-        assert result == '2000/2000-01-01_My Article'
+        assert result == '2000/2000-01-01_My Article.html'
     finally:
         config._config['file_name_format'] = original_format
 
@@ -1332,3 +1332,4 @@ def test_format_archive_filename_escapes_special_chars(test_directory, fake_now)
     # Special characters should be escaped
     assert '/' not in result.split('/')[-1]  # No slashes in filename part
     assert '2000-01-01' in result
+    assert result.endswith('.html')

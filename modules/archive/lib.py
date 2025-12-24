@@ -220,9 +220,9 @@ class ArchiveDownloaderConfigValidator:
     version: int = 0
 
     def __post_init__(self):
-        # Validate file_name_format contains required %(title)s variable
-        if '%(title)s' not in self.file_name_format:
-            raise ValueError('file_name_format must contain %(title)s')
+        # Validate file_name_format ends with .%(ext)s (like video format)
+        if not self.file_name_format.endswith('.%(ext)s'):
+            raise ValueError('file_name_format must end with .%(ext)s')
 
 
 class ArchiveDownloaderConfig(ConfigFile):
@@ -234,7 +234,7 @@ class ArchiveDownloaderConfig(ConfigFile):
 
     Format:
         version: 0
-        file_name_format: '%(download_date)s_%(title)s'
+        file_name_format: '%(download_date)s_%(title)s.%(ext)s'
 
     Variables available in file_name_format:
         - %(title)s - Page title (extracted from HTML)
@@ -244,15 +244,16 @@ class ArchiveDownloaderConfig(ConfigFile):
         - %(download_month)s - Download month (zero-padded)
         - %(download_day)s - Download day (zero-padded)
         - %(domain)s - Domain name
+        - %(ext)s - File extension (required, must be at end)
 
     Subdirectories can be included in the format, e.g.:
-        '%(download_year)s/%(download_datetime)s_%(title)s'
+        '%(download_year)s/%(download_datetime)s_%(title)s.%(ext)s'
     """
     file_name = 'archives_downloader.yaml'
     validator = ArchiveDownloaderConfigValidator
     default_config = dict(
         version=0,
-        file_name_format='%(download_datetime)s_%(title)s',
+        file_name_format='%(download_datetime)s_%(title)s.%(ext)s',
     )
 
     @property
@@ -289,12 +290,12 @@ def format_archive_filename(
         download_date: Date of download (defaults to now)
 
     Returns:
-        Formatted filename/path (without .html extension, added later)
+        Formatted filename/path (with .html extension included)
 
     Example:
         format_archive_filename("My Article", "example.com")
-        # With default format: "2025-12-22_My Article"
-        # With "%(download_year)s/%(title)s": "2025/My Article"
+        # With default format: "2025-12-22_My Article.html"
+        # With "%(download_year)s/%(title)s.%(ext)s": "2025/My Article.html"
     """
     config = get_archive_downloader_config()
     template = config.file_name_format
@@ -309,6 +310,7 @@ def format_archive_filename(
         download_year=str(download_date.year),
         download_month=f'{download_date.month:02d}',
         download_day=f'{download_date.day:02d}',
+        ext='html',
     )
 
     try:
@@ -316,7 +318,7 @@ def format_archive_filename(
     except KeyError as e:
         logger.error(f'Invalid variable in archive file_name_format: {e}')
         # Fallback to default format
-        return f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}'
+        return f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html'
 
 
 def preview_archive_filename(file_name_format: str) -> str:
@@ -331,8 +333,8 @@ def preview_archive_filename(file_name_format: str) -> str:
     Raises:
         RuntimeError: If the format is invalid or missing required variables
     """
-    if '%(title)s' not in file_name_format:
-        raise RuntimeError('file_name_format must contain %(title)s')
+    if not file_name_format.endswith('.%(ext)s'):
+        raise RuntimeError('file_name_format must end with .%(ext)s')
 
     sample_date = now()
     variables = dict(
@@ -343,11 +345,11 @@ def preview_archive_filename(file_name_format: str) -> str:
         download_year=str(sample_date.year),
         download_month=f'{sample_date.month:02d}',
         download_day=f'{sample_date.day:02d}',
+        ext='html',
     )
 
     try:
-        preview = file_name_format % variables
-        return f'{preview}.html'
+        return file_name_format % variables
     except KeyError as e:
         raise RuntimeError(f'Invalid variable: {e}')
     except ValueError as e:
@@ -402,27 +404,29 @@ def get_new_archive_files(url: str, title: Optional[str], destination: pathlib.P
         directory = get_archive_directory() / domain
     directory.mkdir(parents=True, exist_ok=True)
 
-    # Use the configured file format template
+    # Use the configured file format template (returns full filename with .html extension)
     title = title or 'NA'
     title = title[:MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH]
-    prefix = format_archive_filename(title, domain=domain)
+    formatted_filename = format_archive_filename(title, domain=domain)
 
-    # Handle subdirectories in the format (e.g., "%(download_year)s/%(title)s")
-    if '/' in prefix:
-        # Prefix includes subdirectories, create them relative to base directory
-        full_path = directory / prefix
+    # Handle subdirectories in the format (e.g., "%(download_year)s/%(title)s.%(ext)s")
+    if '/' in formatted_filename:
+        # Filename includes subdirectories, create them relative to base directory
+        full_path = directory / formatted_filename
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        singlefile_path = full_path.with_suffix('.html')
-        readability_path = full_path.parent / f'{full_path.name}.readability.html'
-        readability_txt_path = full_path.parent / f'{full_path.name}.readability.txt'
-        readability_json_path = full_path.parent / f'{full_path.name}.readability.json'
-        screenshot_path = full_path.with_suffix('.png')
+        singlefile_path = full_path
+        stem = full_path.stem
+        readability_path = full_path.parent / f'{stem}.readability.html'
+        readability_txt_path = full_path.parent / f'{stem}.readability.txt'
+        readability_json_path = full_path.parent / f'{stem}.readability.json'
+        screenshot_path = full_path.parent / f'{stem}.png'
     else:
-        singlefile_path = directory / f'{prefix}.html'
-        readability_path = directory / f'{prefix}.readability.html'
-        readability_txt_path = directory / f'{prefix}.readability.txt'
-        readability_json_path = directory / f'{prefix}.readability.json'
-        screenshot_path = directory / f'{prefix}.png'
+        singlefile_path = directory / formatted_filename
+        stem = singlefile_path.stem
+        readability_path = directory / f'{stem}.readability.html'
+        readability_txt_path = directory / f'{stem}.readability.txt'
+        readability_json_path = directory / f'{stem}.readability.json'
+        screenshot_path = directory / f'{stem}.png'
 
     paths = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
 

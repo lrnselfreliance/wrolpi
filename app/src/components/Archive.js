@@ -689,8 +689,9 @@ function ArchiveFileNameForm({form}) {
                 <li><code>%(download_month)s</code> - Month (zero-padded)</li>
                 <li><code>%(download_day)s</code> - Day (zero-padded)</li>
                 <li><code>%(domain)s</code> - Domain name</li>
+                <li><code>%(ext)s</code> - File extension (required, must be at end)</li>
             </ul>
-            <p>Subdirectories supported: <code>%(download_year)s/%(title)s</code></p>
+            <p>Subdirectories supported: <code>%(download_year)s/%(title)s.%(ext)s</code></p>
         </>}
     />;
 
@@ -710,7 +711,7 @@ function ArchiveSettingsPage() {
     const {t} = React.useContext(ThemeContext);
 
     const emptyFormData = {
-        file_name_format: '%(download_datetime)s_%(title)s',
+        file_name_format: '%(download_datetime)s_%(title)s.%(ext)s',
     };
 
     const configSubmitter = async () => {

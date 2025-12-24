@@ -412,7 +412,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
 async def test_archive_file_format_preview(async_client):
     """Test the archive file format preview endpoint."""
     # Test valid format with download_datetime (default format)
-    data = {'archive_file_format': '%(download_datetime)s_%(title)s'}
+    data = {'archive_file_format': '%(download_datetime)s_%(title)s.%(ext)s'}
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert 'preview' in response.json
@@ -423,25 +423,25 @@ async def test_archive_file_format_preview(async_client):
     assert re.search(r'\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}', response.json['preview'])
 
     # Test valid format with download_date (date only)
-    data = {'archive_file_format': '%(download_date)s_%(title)s'}
+    data = {'archive_file_format': '%(download_date)s_%(title)s.%(ext)s'}
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert re.search(r'\d{4}-\d{2}-\d{2}_', response.json['preview'])
 
     # Test format with year subdirectory
-    data = {'archive_file_format': '%(download_year)s/%(download_datetime)s_%(title)s'}
+    data = {'archive_file_format': '%(download_year)s/%(download_datetime)s_%(title)s.%(ext)s'}
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK
     assert '/' in response.json['preview']  # Contains subdirectory
 
-    # Test invalid format - missing title
-    data = {'archive_file_format': '%(download_date)s'}
+    # Test invalid format - missing .%(ext)s
+    data = {'archive_file_format': '%(download_date)s_%(title)s'}
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'error' in response.json
 
     # Test invalid format - unknown variable
-    data = {'archive_file_format': '%(invalid_var)s_%(title)s'}
+    data = {'archive_file_format': '%(invalid_var)s_%(title)s.%(ext)s'}
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'error' in response.json

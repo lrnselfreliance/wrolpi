@@ -295,10 +295,15 @@ async def post_rename(request: Request, body: schema.Rename):
         logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
         raise FileConflict(f'Failed to rename {path} to {new_path}') from e
 
+    # Refresh the parent directory instead of individual files.
+    # This ensures all related files (e.g., subtitles, posters) are discovered together.
+    # Refreshing individual files causes the FileGroup's files list to be overwritten
+    # with only the specified file, losing track of associated files.
+    parent_dir = new_path.parent
     if PYTEST:
-        await lib.refresh_files([path, new_path])
+        await lib.refresh_files([parent_dir])
     else:
-        background_task(lib.refresh_files([path, new_path]))
+        background_task(lib.refresh_files([parent_dir]))
 
     return response.empty(HTTPStatus.NO_CONTENT)
 

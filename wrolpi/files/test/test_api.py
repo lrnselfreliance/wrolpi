@@ -870,6 +870,70 @@ async def test_rename_file(test_session, test_directory, make_files_structure, a
 
 
 @pytest.mark.asyncio
+async def test_rename_file_with_associated_files_via_api(test_session, test_directory, make_files_structure,
+                                                          async_client, video_bytes, srt_text):
+    """Renaming a FileGroup via API should rename all associated files.
+
+    Regression test: When renaming "example.mp4" to "example 2.mp4" and back via API,
+    associated files like "example.srt" should also be renamed both times.
+    """
+    video, srt = make_files_structure({
+        'example.mp4': video_bytes,
+        'example.srt': srt_text,
+    })
+    await lib.refresh_files()
+
+    # Verify initial state
+    fg = test_session.query(FileGroup).one()
+    assert fg.primary_path == video
+    assert len(fg.files) == 2
+
+    # First rename via API: "example.mp4" -> "example 2.mp4"
+    content = dict(path='example.mp4', new_name='example 2.mp4')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify first rename - both files should be renamed
+    new_video_1 = test_directory / 'example 2.mp4'
+    new_srt_1 = test_directory / 'example 2.srt'
+    assert new_video_1.is_file(), "Video should be renamed to 'example 2.mp4'"
+    assert new_srt_1.is_file(), "SRT should be renamed to 'example 2.srt'"
+    assert not video.exists(), "Old video should not exist"
+    assert not srt.exists(), "Old SRT should not exist"
+
+    # Verify FileGroup is updated
+    test_session.expire_all()
+    fg = test_session.query(FileGroup).one()
+    assert fg.primary_path == new_video_1
+    file_names = [f['path'] for f in fg.files]
+    assert 'example 2.mp4' in file_names
+    assert 'example 2.srt' in file_names
+    assert len(fg.files) == 2
+
+    # Second rename via API: "example 2.mp4" -> "example.mp4"
+    content = dict(path='example 2.mp4', new_name='example.mp4')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify second rename - BOTH files should be renamed back
+    final_video = test_directory / 'example.mp4'
+    final_srt = test_directory / 'example.srt'
+    assert final_video.is_file(), "Video should be renamed back to 'example.mp4'"
+    assert final_srt.is_file(), "SRT should be renamed back to 'example.srt'"
+    assert not new_video_1.exists(), "'example 2.mp4' should not exist"
+    assert not new_srt_1.exists(), "'example 2.srt' should not exist"
+
+    # Verify FileGroup is updated
+    test_session.expire_all()
+    fg = test_session.query(FileGroup).one()
+    assert fg.primary_path == final_video
+    file_names = [f['path'] for f in fg.files]
+    assert 'example.mp4' in file_names
+    assert 'example.srt' in file_names
+    assert len(fg.files) == 2
+
+
+@pytest.mark.asyncio
 async def test_rename_directory(test_session, test_directory, make_files_structure, async_client):
     make_files_structure({
         'foo/bar/baz.txt': 'asdf',

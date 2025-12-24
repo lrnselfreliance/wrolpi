@@ -1591,7 +1591,11 @@ async def move(session: Session, destination: pathlib.Path, *sources: pathlib.Pa
 
 
 async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
-    """Rename a file (and it's associated files).  Preserve any tags."""
+    """Rename a file (and it's associated files).  Preserve any tags.
+
+    If the path is a non-primary file in a FileGroup (e.g., a poster or subtitle),
+    the entire FileGroup will be renamed.
+    """
     new_path = path.with_name(new_name)
     if not path.exists():
         raise FileNotFoundError(f'Cannot find {path} to rename')
@@ -1599,11 +1603,21 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
         raise FileConflict(f'Cannot rename {path} because {new_path} already exists')
 
     with get_db_session(commit=True) as session:
-        fg: FileGroup = session.query(FileGroup).filter(FileGroup.primary_path == path).one_or_none()
+        # Find the FileGroup - it may be the primary path or a secondary file
+        fg: FileGroup = FileGroup.get_by_any_file_path(session, path)
         if not fg:
             # File wasn't yet in the DB.
             fg = FileGroup.from_paths(session, path)
-        fg.move(new_path)
+
+        # If this is not the primary file, calculate the new primary path
+        if fg.primary_path != path:
+            # Extract the new stem and apply it to the primary file's suffix
+            new_stem, _ = split_path_stem_and_suffix(new_path, full=True)
+            _, primary_suffix = split_path_stem_and_suffix(fg.primary_path, full=False)
+            new_primary_path = pathlib.Path(f'{new_stem}{primary_suffix}')
+            fg.move(new_primary_path)
+        else:
+            fg.move(new_path)
 
     return new_path
 

@@ -636,12 +636,9 @@ const useRefresh = () => {
 export function FilesRefreshButton({paths}) {
     const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
 
-    return <Button icon
-                   labelPosition='left'
+    return <Button icon='refresh'
                    loading={loading || refreshing || refreshingDirectory}
                    onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || loading || refreshing}>
-        <Icon name='refresh'/>
-        Refresh
-    </Button>;
+                   disabled={wrolModeEnabled || loading || refreshing}/>
+        ;
 }

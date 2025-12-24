@@ -34,6 +34,7 @@ from controller.lib.docker_services import (
 )
 from controller.lib.status import (
     get_cpu_status,
+    get_iostat_status,
     get_load_status,
     get_memory_status,
     get_primary_drive_status,
@@ -116,6 +117,7 @@ async def dashboard(request: Request):
         cpu = cached.get("cpu_stats") or {}
         memory = cached.get("memory_stats") or {}
         load = cached.get("load_stats") or {}
+        iostat = cached.get("iostat_stats") or {}
         drives = cached.get("drives_stats") or []
         primary_drive = None
         for drive in drives:
@@ -127,6 +129,7 @@ async def dashboard(request: Request):
         cpu = get_cpu_status()
         memory = get_memory_status()
         load = get_load_status()
+        iostat = get_iostat_status()
         primary_drive = get_primary_drive_status()
 
     # Format storage data
@@ -166,6 +169,9 @@ async def dashboard(request: Request):
             "load_1min": load["minute_1"],  # Field renamed
         },
         "storage": storage,
+        "iostat": {
+            "percent_iowait": iostat.get("percent_iowait"),
+        },
 
         # Real service status
         "services": services,

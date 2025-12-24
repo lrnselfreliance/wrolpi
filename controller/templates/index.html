@@ -628,6 +628,11 @@
                 <p class="value">{{ storage.percent|default('--') }}%</p>
                 <p class="sub">{{ storage.free_gb|default('--') }} GB free</p>
             </div>
+            <div class="status-card">
+                <h3>IO Wait</h3>
+                <p class="value" id="iowait-value">{{ iostat.percent_iowait|default('--') }}%</p>
+                <p class="sub">disk waiting</p>
+            </div>
         </div>
     </section>
 
@@ -1470,11 +1475,12 @@
     async function updateSystemStatus() {
         try {
             // Fetch all stats endpoints in parallel
-            const [cpu, memory, load, primaryDrive] = await Promise.all([
+            const [cpu, memory, load, primaryDrive, iostat] = await Promise.all([
                 apiCall('api/stats/cpu'),
                 apiCall('api/stats/memory'),
                 apiCall('api/stats/load'),
                 apiCall('api/stats/drives/primary'),
+                apiCall('api/stats/iostat'),
             ]);
 
             // Update CPU card
@@ -1511,6 +1517,26 @@
                 const freeBytes = primaryDrive.size - primaryDrive.used;
                 const freeGb = (freeBytes / (1024 ** 3)).toFixed(1);
                 storageSub.textContent = freeGb + ' GB free';
+            }
+
+            // Update IO Wait card
+            const iowaitValue = document.getElementById('iowait-value');
+            if (iowaitValue) {
+                const iowait = iostat.percent_iowait;
+                if (iowait !== null && iowait !== undefined) {
+                    iowaitValue.textContent = iowait.toFixed(1) + '%';
+                    // Color based on IO wait severity
+                    if (iowait >= 30) {
+                        iowaitValue.style.color = '#ff6b6b';  // Red
+                    } else if (iowait >= 10) {
+                        iowaitValue.style.color = '#ffd93d';  // Yellow
+                    } else {
+                        iowaitValue.style.color = '#4ecca3';  // Green (default)
+                    }
+                } else {
+                    iowaitValue.textContent = '--%';
+                    iowaitValue.style.color = '#4ecca3';
+                }
             }
         } catch (e) {
             console.error('Failed to update system status:', e);

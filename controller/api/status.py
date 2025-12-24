@@ -143,3 +143,14 @@ async def get_power(request: Request):
     if cached and cached.get("power_stats"):
         return JSONResponse(content=cached["power_stats"])
     return JSONResponse(content=get_power_status())
+
+
+@router.get("/iostat")
+async def get_iostat(request: Request):
+    """Get IO statistics (iowait, user, system, idle percentages)."""
+    cached = get_cached_status(request)
+    if cached and cached.get("iostat_stats"):
+        return JSONResponse(content=cached["iostat_stats"])
+    # Fallback to direct call
+    from controller.lib.status import get_iostat_status
+    return JSONResponse(content=get_iostat_status())

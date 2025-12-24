@@ -781,7 +781,7 @@ export function InfoPopup({
                               iconSize = null,
                               header = '',
                               iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', marginTop: '-0.5em'},
-                            ...props
+                              ...props
                           }) {
     const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;
     return <Popup

@@ -84,6 +84,18 @@ function CPUTemperatureStatistic({temperature, high_temperature, critical_temper
     return <Statistic label='Temp C°' value={temperature} {...props}/>
 }
 
+function IOWaitStatistic({percent_iowait, ...props}) {
+    if (percent_iowait === null || percent_iowait === undefined) {
+        return <Statistic label='IO Wait %' value='?'/>
+    }
+    if (percent_iowait >= 30) {
+        props['color'] = 'red';
+    } else if (percent_iowait >= 10) {
+        props['color'] = 'orange';
+    }
+    return <Statistic label='IO Wait %' value={percent_iowait.toFixed(1)} {...props}/>
+}
+
 export function BandwidthProgress({label = '', bytes, maxBytes, ...props}) {
     // Gigabit by default.
     maxBytes = maxBytes || 125_000_000;
@@ -203,9 +215,10 @@ export function StatusPage() {
     let diskBandwidthStats = [];
     let memoryPercent;
     let memorySize;
+    let percent_iowait;
 
     if (status && status['cpu_stats']) {
-        const {cpu_stats, load_stats, memory_stats, processes_stats} = status;
+        const {cpu_stats, load_stats, memory_stats, processes_stats, iostat_stats} = status;
         percent = cpu_stats['percent'];
         cores = cpu_stats['cores'] || '?';
         temperature = cpu_stats['temperature'];
@@ -223,6 +236,11 @@ export function StatusPage() {
 
         memoryPercent = Math.round(memory_stats['used'] / memory_stats['total'] * 100);
         memorySize = humanFileSize(memory_stats['total'], 0);
+
+        // Extract IO wait from iostat stats
+        if (iostat_stats) {
+            percent_iowait = iostat_stats['percent_iowait'];
+        }
     }
 
     const SizedHeader = ({children, sizeMobile = 'h1', sizeTablet = 'h2'}) => {
@@ -248,7 +266,7 @@ export function StatusPage() {
             <Segment>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <Statistic.Group>
+                <Statistic.Group size='mini'>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -258,6 +276,7 @@ export function StatusPage() {
                     <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
                     <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+                    <IOWaitStatistic percent_iowait={percent_iowait}/>
                 </Statistic.Group>
             </Segment>
         </Media>
@@ -265,7 +284,7 @@ export function StatusPage() {
             <Segment>
                 {cpuProgress}
                 {memoryUsageProgress}
-                <Statistic.Group size='mini'>
+                <Statistic.Group>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -276,6 +295,7 @@ export function StatusPage() {
                     <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
                     <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
+                    <IOWaitStatistic percent_iowait={percent_iowait}/>
                 </Statistic.Group>
             </Segment>
         </Media>

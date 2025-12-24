@@ -226,11 +226,13 @@ def get_power_status() -> dict:
 
 def get_iostat_status() -> dict:
     """
-    Get IO statistics using iostat command.
+    Get IO statistics using iostat command, with psutil fallback.
 
     Returns format compatible with main API's iostat_stats:
         dict with keys: percent_idle, percent_iowait, percent_nice,
                        percent_steal, percent_system, percent_user
+
+    Note: iowait is Linux-specific. On macOS, percent_iowait will be None.
     """
     import subprocess
 
@@ -243,6 +245,7 @@ def get_iostat_status() -> dict:
         "percent_user": None,
     }
 
+    # Try iostat + jc first (Linux)
     try:
         # Run iostat with 1 second interval, 2 counts (use second measurement)
         proc = subprocess.run(
@@ -267,9 +270,25 @@ def get_iostat_status() -> dict:
                             "percent_system": cpu_stats.get('percent_system'),
                             "percent_user": cpu_stats.get('percent_user'),
                         }
+                        if result["percent_iowait"] is not None:
+                            return result
             except ImportError:
-                # jc not available, parse manually
+                # jc not available, try psutil fallback
                 pass
+    except Exception:
+        pass
+
+    # Fallback to psutil (cross-platform, but iowait only on Linux)
+    try:
+        cpu = psutil.cpu_times_percent(interval=1)
+        result = {
+            "percent_idle": getattr(cpu, 'idle', None),
+            "percent_iowait": getattr(cpu, 'iowait', None),  # None on macOS
+            "percent_nice": getattr(cpu, 'nice', None),
+            "percent_steal": getattr(cpu, 'steal', None),
+            "percent_system": getattr(cpu, 'system', None),
+            "percent_user": getattr(cpu, 'user', None),
+        }
     except Exception:
         pass
 

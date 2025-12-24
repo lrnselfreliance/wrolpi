@@ -87,7 +87,8 @@ def video_cleanup():
                      SET channel_id = c.id
                      FROM channel c
                               INNER JOIN collection col ON col.id = c.collection_id
-                              LEFT JOIN file_group fg ON fg.primary_path LIKE col.directory || '/%'::VARCHAR
+                              LEFT JOIN file_group fg ON fg.directory = col.directory
+                                                      OR fg.directory LIKE col.directory || '/%'
                      WHERE v.channel_id IS NULL
                        AND fg.id = v.file_group_id
                      ''')
@@ -109,13 +110,13 @@ def claim_videos_for_channels(channel_ids: List[int]):
 
     logger.info(f'Claiming Videos for {len(channel_ids)} channel(s)')
     with get_db_curs(commit=True) as curs:
-        # Note: %% is escaped to % in psycopg2 when parameters are used
         curs.execute('''
                      UPDATE video v
                      SET channel_id = c.id
                      FROM channel c
                               INNER JOIN collection col ON col.id = c.collection_id
-                              LEFT JOIN file_group fg ON fg.primary_path LIKE col.directory || '/%%'::VARCHAR
+                              LEFT JOIN file_group fg ON fg.directory = col.directory
+                                                      OR fg.directory LIKE col.directory || '/%%'
                      WHERE v.channel_id IS NULL
                        AND fg.id = v.file_group_id
                        AND c.id = ANY (%s)

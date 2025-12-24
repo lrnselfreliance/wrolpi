@@ -71,12 +71,12 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     orphan_poster = Path(test_directory / 'channel name_20000104_defghijklmn_title.jpg')
     orphan_poster.write_bytes(image_bytes_factory())
 
-    # Create a bogus video in the channel.
+    # Create a bogus video in the channel (file doesn't exist, should be removed during refresh).
     video_file = test_directory / 'foo.mp4'
     with get_db_curs(commit=True) as curs:
-        stmt = "INSERT INTO file_group (mimetype, primary_path, indexed, files, model)" \
-               " values ('video/mp4', %(primary_path)s, true, %(files)s, 'video') RETURNING id"
-        params = {'primary_path': str(video_file), 'files': list()}
+        stmt = "INSERT INTO file_group (mimetype, directory, primary_path, indexed, files, model)" \
+               " values ('video/mp4', %(directory)s, %(primary_path)s, true, %(files)s, 'video') RETURNING id"
+        params = {'directory': str(test_directory), 'primary_path': str(video_file), 'files': list()}
         curs.execute(stmt, params)
         video4_id = curs.fetchall()[0][0]
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
@@ -480,10 +480,11 @@ async def test_video_upload_file_tracking(test_session, async_client, video_fact
     # Assert poster properties exist
     assert video.poster_path is not None, 'Video.poster_path should exist'
     assert video.poster_file is not None, 'Video.poster_file should exist'
-    assert video.file_group.data.get('poster_path') == video.poster_path, 'Video poster should be in FileGroup.data'
+    # data['poster_path'] stores just the filename, poster_path resolves to absolute
+    assert video.file_group.data.get('poster_path') == video.poster_path.name, 'Video poster should be in FileGroup.data'
 
-    # Assert poster is in FileGroup.files
-    file_paths = [f['path'] for f in video.file_group.files]
+    # Assert poster is in FileGroup.files (use my_files() to get resolved absolute paths)
+    file_paths = [f['path'] for f in video.file_group.my_files()]
     assert video.poster_path in file_paths, 'Poster should be in FileGroup.files'
 
     # Assert FileGroup has correct number of files
@@ -532,8 +533,8 @@ Another line of captions.
     assert video.caption_files, 'Video.caption_files should exist'
     assert video.file_group.data.get('caption_paths'), 'Video captions should be in FileGroup.data'
 
-    # Assert caption is in FileGroup.files
-    file_paths = [f['path'] for f in video.file_group.files]
+    # Assert caption is in FileGroup.files (use my_files() to get resolved absolute paths)
+    file_paths = [f['path'] for f in video.file_group.my_files()]
     assert video.caption_paths[0] in file_paths, 'Caption should be in FileGroup.files'
 
     # Assert FileGroup has correct number of files

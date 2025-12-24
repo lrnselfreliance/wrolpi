@@ -302,11 +302,12 @@ async def test_archive_upload_file_tracking(test_session, async_client, archive_
     # Assert screenshot properties exist
     assert archive.screenshot_path is not None, 'Archive.screenshot_path should exist'
     assert archive.screenshot_file is not None, 'Archive.screenshot_file should exist'
+    # data['screenshot_path'] stores just the filename, screenshot_path resolves to absolute
     assert archive.file_group.data.get(
-        'screenshot_path') == archive.screenshot_path, 'Archive screenshot should be in FileGroup.data'
+        'screenshot_path') == archive.screenshot_path.name, 'Archive screenshot should be in FileGroup.data'
 
-    # Assert image is in FileGroup.files
-    file_paths = [f['path'] for f in archive.file_group.files]
+    # Assert image is in FileGroup.files (use my_files() to get resolved absolute paths)
+    file_paths = [f['path'] for f in archive.file_group.my_files()]
     assert archive.screenshot_path in file_paths, 'Screenshot should be in FileGroup.files'
 
     # Assert FileGroup has correct number of files

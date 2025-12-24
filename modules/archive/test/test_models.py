@@ -77,8 +77,8 @@ async def test_set_screenshot(async_client, test_session, archive_factory, image
     # Set the screenshot
     archive.set_screenshot(screenshot_path)
 
-    # Verify data was set before commit
-    assert archive.file_group.data['screenshot_path'] == str(screenshot_path), \
+    # Verify data was set before commit (stores filename only, not absolute path)
+    assert archive.file_group.data['screenshot_path'] == screenshot_path.name, \
         f"Data not set correctly before commit: {archive.file_group.data.get('screenshot_path')}"
 
     test_session.commit()
@@ -87,12 +87,12 @@ async def test_set_screenshot(async_client, test_session, archive_factory, image
     test_session.expire_all()
     archive = test_session.query(Archive).filter_by(id=archive.id).one()
 
-    # Verify screenshot was set
+    # Verify screenshot was set (screenshot_path property resolves to absolute via my_files())
     assert archive.screenshot_path == screenshot_path
     assert archive.screenshot_file is not None
-    # Verify FileGroup.data was persisted to DB (FancyJSON converts strings back to Path objects)
+    # Verify FileGroup.data was persisted to DB (now stores filename only)
     assert 'screenshot_path' in archive.file_group.data
-    assert str(archive.file_group.data['screenshot_path']) == str(screenshot_path)
+    assert archive.file_group.data['screenshot_path'] == screenshot_path.name
 
     # Verify file is tracked in FileGroup.files
     screenshot_files = archive.file_group.my_files('image/')

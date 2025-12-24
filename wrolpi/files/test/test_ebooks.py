@@ -23,9 +23,10 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
     assert ebook.file_group.mimetype.startswith(EPUB_MIMETYPE)
     assert ebook.file_group.author == 'roland'
     assert ebook.size == 292579
+    # data now stores relative filenames only (not absolute paths)
     assert ebook.file_group.data == {'author': 'roland', 'title': 'WROLPi Test Book',
-                                     'cover_path': test_directory / 'ebook example.jpeg',
-                                     'ebook_path': test_directory / 'ebook example.epub',
+                                     'cover_path': 'ebook example.jpeg',
+                                     'ebook_path': 'ebook example.epub',
                                      }
 
     assert ebook.file_group.a_text, 'Book title was not indexed'
@@ -129,7 +130,8 @@ async def test_discover_calibre_cover(test_session, async_client, test_directory
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.cover_file['path'] == test_directory / 'cover.jpg'
-    assert {i['path'].name for i in ebook.file_group.files} == {'ebook example.epub', 'ebook example.mobi', 'cover.jpg'}
+    # Use my_files() to get resolved Path objects
+    assert {i['path'].name for i in ebook.file_group.my_files()} == {'ebook example.epub', 'ebook example.mobi', 'cover.jpg'}
     # Cover is not the first image from the EPUB.
     assert ebook.cover_path.stat().st_size != 292579
     # Metadata and cover were deleted from the FileGroups.
@@ -146,7 +148,8 @@ async def test_move_ebook(async_client, test_session, test_directory, example_ep
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.cover_path
     assert_dict_contains(ebook.file_group.data, dict(author='roland'))
-    assert sorted([i['path'] for i in ebook.file_group.files]) == [
+    # Use my_files() to get resolved absolute Path objects
+    assert sorted([i['path'] for i in ebook.file_group.my_files()]) == [
         test_directory / 'ebook example.epub',
         test_directory / 'ebook example.jpg',
     ]
@@ -161,7 +164,8 @@ async def test_move_ebook(async_client, test_session, test_directory, example_ep
     assert ebook.file_group.primary_path == test_directory / 'new/ebook example.epub'
     assert ebook.cover_path
     assert_dict_contains(ebook.file_group.data, dict(author='roland'))
-    assert sorted([i['path'] for i in ebook.file_group.files]) == [
+    # Use my_files() to get resolved absolute Path objects
+    assert sorted([i['path'] for i in ebook.file_group.my_files()]) == [
         test_directory / 'new/ebook example.epub',
         test_directory / 'new/ebook example.jpg',
     ]

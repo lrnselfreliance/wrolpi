@@ -1,7 +1,7 @@
 import pathlib
 from typing import Optional, List
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, or_
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -471,8 +471,13 @@ class Collection(ModelHelper, Base):
             return
 
         # Find all FileGroups in this directory tree
+        # Use indexed directory column for efficient lookup
+        directory_str = str(self.directory)
         file_groups = session.query(FileGroup).filter(
-            FileGroup.primary_path.like(f'{self.directory}/%')
+            or_(
+                FileGroup.directory == directory_str,
+                FileGroup.directory.like(f'{directory_str}/%')
+            )
         ).all()
 
         if not file_groups:

@@ -233,15 +233,16 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
 
         file_group.title = file_group.a_text = title or archive.file_group.title
         file_group.d_text = contents
+        # Store paths as filenames only (relative to directory), resolved via file_group.resolve_path()
         file_group.data = {
             'id': archive.id,
             'domain': archive.domain,
-            'readability_json_path': archive.readability_json_path,
-            'readability_path': archive.readability_path,
-            'readability_txt_path': archive.readability_txt_path,
-            'screenshot_path': archive.screenshot_path,
-            'singlefile_path': archive.singlefile_path,
-            'info_json_path': archive.info_json_path,
+            'readability_json_path': archive.readability_json_path.name if archive.readability_json_path else None,
+            'readability_path': archive.readability_path.name if archive.readability_path else None,
+            'readability_txt_path': archive.readability_txt_path.name if archive.readability_txt_path else None,
+            'screenshot_path': archive.screenshot_path.name if archive.screenshot_path else None,
+            'singlefile_path': archive.singlefile_path.name if archive.singlefile_path else None,
+            'info_json_path': archive.info_json_path.name if archive.info_json_path else None,
         }
 
         return archive

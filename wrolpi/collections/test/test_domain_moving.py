@@ -87,16 +87,21 @@ async def test_tag_domain_collection_moves_archives(
     if src_dir.exists():
         assert not list(src_dir.iterdir()), f'Old directory {src_dir} should be empty'
 
-    # Verify FileGroup.data paths were also updated (the bug we're fixing)
+    # Verify FileGroup paths were updated correctly
     for archive in [archive1, archive2]:
         test_session.refresh(archive)
         data = archive.file_group.data
         assert data is not None, f"Archive {archive.id} should have FileGroup.data"
-        # All path fields in data should point to new directory
+        # FileGroup.directory should point to new location
+        assert str(dest_dir) in str(archive.file_group.directory), \
+            f"FileGroup.directory should be in {dest_dir}, got {archive.file_group.directory}"
+        # Paths in data are now relative filenames, they don't need to change on move.
+        # The key is that directory + filename resolves to the correct absolute path.
         for key, value in data.items():
-            if isinstance(value, (str, pathlib.Path)) and 'archive' in str(value):
-                assert str(dest_dir) in str(value), \
-                    f"FileGroup.data['{key}'] should be in {dest_dir}, got {value}"
+            if key.endswith('_path') and value:
+                resolved = archive.file_group.resolve_path(value)
+                assert str(dest_dir) in str(resolved), \
+                    f"FileGroup.data['{key}'] resolved to {resolved}, should be in {dest_dir}"
 
 
 @pytest.mark.asyncio

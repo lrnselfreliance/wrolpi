@@ -8,11 +8,12 @@ Help() {
   echo "Syntax: upgrade.sh [-h] [-b BRANCH]"
   echo "options:"
   echo "h     Print this help."
-  echo "b     Upgrade from this git BRANCH."
+  echo "b     Upgrade from this git BRANCH (default: current branch, or 'release')."
   echo
 }
 
-BRANCH="release"
+BRANCH=""
+BRANCH_OVERRIDE=false
 while getopts ":hb:" option; do
   case $option in
   h) # display Help
@@ -21,6 +22,7 @@ while getopts ":hb:" option; do
     ;;
   b)
     BRANCH="${OPTARG}"
+    BRANCH_OVERRIDE=true
     ;;
   *) # invalid argument(s)
     echo "Error: Invalid option"
@@ -39,6 +41,18 @@ if [ $EUID != 0 ]; then
   sudo "$0" "$@"
   exit $?
 fi
+
+# Determine which branch to use for upgrade.
+if [ "$BRANCH_OVERRIDE" = false ]; then
+  CURRENT_BRANCH=$(git -C /opt/wrolpi branch --show-current 2>/dev/null)
+  if [ -n "$CURRENT_BRANCH" ]; then
+    BRANCH="$CURRENT_BRANCH"
+  else
+    BRANCH="release"
+  fi
+fi
+
+echo "Upgrading WROLPi from branch: ${BRANCH}"
 
 set -x
 set -e

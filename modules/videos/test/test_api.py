@@ -369,6 +369,20 @@ async def test_video_file_format(async_client, test_session, fake_now):
 
 
 @pytest.mark.asyncio
+async def test_video_file_format_with_upload_year(async_client, test_session, fake_now):
+    """Video file format API handles upload_year and upload_month variables."""
+    body = dict(video_file_format='%(upload_year)s/%(upload_month)s/%(title)s.%(ext)s')
+    request, response = await async_client.post('/api/videos/file_format', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['preview'] == '2000/01/The title of the video.mp4'
+
+    body = dict(video_file_format='%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s')
+    request, response = await async_client.post('/api/videos/file_format', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['preview'] == '2000/WROLPi_20000101_The title of the video.mp4'
+
+
+@pytest.mark.asyncio
 async def test_video_upload_file_tracking(test_session, async_client, video_factory, await_switches,
                                           make_multipart_form,
                                           image_bytes_factory):

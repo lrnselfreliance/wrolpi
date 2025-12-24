@@ -115,6 +115,29 @@ def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     return f'{dir_name}/{file_name}'
 
 
+def convert_wrolpi_filename_format(filename_format: str) -> str:
+    """Convert WROLPi-specific filename variables to yt-dlp syntax.
+
+    WROLPi provides user-friendly variables that map to yt-dlp's strftime syntax:
+        %(upload_year)s  -> %(upload_date>%Y)s
+        %(upload_month)s -> %(upload_date>%m)s
+
+    This allows users to organize videos into year/month subdirectories.
+
+    Example:
+        '%(upload_year)s/%(upload_month)s/%(title)s.%(ext)s'
+        -> '%(upload_date>%Y)s/%(upload_date>%m)s/%(title)s.%(ext)s'
+    """
+    conversions = {
+        '%(upload_year)s': '%(upload_date>%Y)s',
+        '%(upload_month)s': '%(upload_date>%m)s',
+    }
+    result = filename_format
+    for wrolpi_var, ytdlp_var in conversions.items():
+        result = result.replace(wrolpi_var, ytdlp_var)
+    return result
+
+
 def preview_filename(filename_format: str) -> str:
     """Return an example video file name formatted using the provided filename format.
 
@@ -123,8 +146,11 @@ def preview_filename(filename_format: str) -> str:
     if not filename_format.endswith('.%(ext)s'):
         raise RuntimeError('Filename must end with .%(ext)s')
 
+    # Convert WROLPi-specific variables to yt-dlp syntax
+    converted_format = convert_wrolpi_filename_format(filename_format)
+
     options = get_videos_downloader_config().yt_dlp_options
-    options['outtmpl'] = filename_format
+    options['outtmpl'] = converted_format
     ydl = YoutubeDL(copy.deepcopy(options))
     entry = dict(
         uploader='WROLPi',
@@ -135,7 +161,7 @@ def preview_filename(filename_format: str) -> str:
         ext='mp4',
         description='A description of the video',
     )
-    filename = prepare_filename(entry, ydl=ydl)[1:]
+    filename = prepare_filename(entry, ydl=ydl).lstrip('/')
 
     return filename
 
@@ -663,8 +689,10 @@ class VideoDownloader(Downloader, ABC):
         # YoutubeDL expects specific options, add onto the default options
         config = get_videos_downloader_config()
         options = config.yt_dlp_options
+        # Convert WROLPi-specific variables to yt-dlp syntax
+        converted_format = convert_wrolpi_filename_format(config.file_name_format)
         # yt-dlp expects the absolute path.
-        options['outtmpl'] = f'{out_dir}/{config.file_name_format}'
+        options['outtmpl'] = f'{out_dir}/{converted_format}'
         options['merge_output_format'] = video_format
         # options['remuxvideo'] = video_format
         options['format'] = video_resolutions

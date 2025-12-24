@@ -528,6 +528,51 @@ def test_preview_filename(test_directory, fake_now):
         preview_filename('%(upload_date)s_%(title)s.asdf')
 
 
+def test_convert_wrolpi_filename_format():
+    """WROLPi filename variables are converted to yt-dlp syntax."""
+    from modules.videos.downloader import convert_wrolpi_filename_format
+
+    # Test upload_year conversion
+    assert convert_wrolpi_filename_format('%(upload_year)s/%(title)s.%(ext)s') \
+           == '%(upload_date>%Y)s/%(title)s.%(ext)s'
+
+    # Test upload_month conversion
+    assert convert_wrolpi_filename_format('%(upload_month)s/%(title)s.%(ext)s') \
+           == '%(upload_date>%m)s/%(title)s.%(ext)s'
+
+    # Test both together
+    assert convert_wrolpi_filename_format('%(upload_year)s/%(upload_month)s/%(title)s.%(ext)s') \
+           == '%(upload_date>%Y)s/%(upload_date>%m)s/%(title)s.%(ext)s'
+
+    # Test with other variables unchanged
+    format_str = '%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+    expected = '%(upload_date>%Y)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+    assert convert_wrolpi_filename_format(format_str) == expected
+
+    # Test format without WROLPi variables unchanged
+    original = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+    assert convert_wrolpi_filename_format(original) == original
+
+
+def test_preview_filename_with_upload_year(test_directory, fake_now):
+    """preview_filename works with upload_year and upload_month variables."""
+    # Year only
+    assert preview_filename('%(upload_year)s/%(title)s.%(ext)s') \
+           == '2000/The title of the video.mp4'
+
+    # Month only
+    assert preview_filename('%(upload_month)s/%(title)s.%(ext)s') \
+           == '01/The title of the video.mp4'
+
+    # Year and month together
+    assert preview_filename('%(upload_year)s/%(upload_month)s/%(title)s.%(ext)s') \
+           == '2000/01/The title of the video.mp4'
+
+    # Combined with traditional format
+    assert preview_filename('%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s') \
+           == '2000/WROLPi_20000101_The title of the video.mp4'
+
+
 def test_normalize_video_file_names(test_directory, video_download_manager):
     """VideoDownloader renames caption files that do not share the video file's stem."""
     downloader = VideoDownloader()

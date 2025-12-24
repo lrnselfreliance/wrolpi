@@ -254,6 +254,8 @@ function VideoFileNameForm({form}) {
                 <li><code>%(title)s</code> - Video title</li>
                 <li><code>%(uploader)s</code> - Channel/uploader name</li>
                 <li><code>%(upload_date)s</code> - Upload date (YYYYMMDD)</li>
+                <li><code>%(upload_year)s</code> - Upload year (YYYY)</li>
+                <li><code>%(upload_month)s</code> - Upload month (01-12)</li>
                 <li><code>%(id)s</code> - Video ID</li>
                 <li><code>%(ext)s</code> - File extension</li>
                 <li><code>%(channel)s</code> - Channel name</li>

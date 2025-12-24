@@ -650,7 +650,9 @@ def get_tags() -> List[dict]:
                             t.name,
                             t.color,
                             (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id) AS file_group_count,
-                            (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id)  AS zim_entry_count
+                            (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id)  AS zim_entry_count,
+                            (SELECT COUNT(*) FROM collection WHERE tag_id = t.id AND kind = 'channel') AS channel_count,
+                            (SELECT COUNT(*) FROM collection WHERE tag_id = t.id AND kind = 'domain') AS domain_count
                      FROM tag t
                      GROUP BY t.id, t.name, t.color
                      ORDER BY t.name

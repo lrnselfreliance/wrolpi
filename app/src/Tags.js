@@ -184,7 +184,7 @@ export const useTagsInterval = () => {
 
 function EditTagRow({tag, onDelete, onEdit}) {
     const {SingleTag} = React.useContext(TagsContext);
-    const {name, color, id, file_group_count, zim_entry_count} = tag;
+    const {name, color, id, file_group_count, zim_entry_count, channel_count, domain_count} = tag;
 
     const deleteConfirm = <>
         <APIButton
@@ -196,18 +196,39 @@ function EditTagRow({tag, onDelete, onEdit}) {
         />
     </>;
     const editButton = <Button primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
-    const countColor = (file_group_count + zim_entry_count) > 0 ? 'black' : 'grey';
-    const countLabel = <Label color={countColor}>{file_group_count + zim_entry_count}</Label>;
+
+    // Individual count labels for tablet+
+    const fileCountColor = file_group_count > 0 ? 'black' : 'grey';
+    const fileCountLabel = <Label color={fileCountColor}>{file_group_count}</Label>;
+    const zimCountColor = zim_entry_count > 0 ? 'black' : 'grey';
+    const zimCountLabel = <Label color={zimCountColor}>{zim_entry_count}</Label>;
+    const channelCountColor = channel_count > 0 ? 'black' : 'grey';
+    const channelCountLabel = <Label color={channelCountColor}>{channel_count}</Label>;
+    const domainCountColor = domain_count > 0 ? 'black' : 'grey';
+    const domainCountLabel = <Label color={domainCountColor}>{domain_count}</Label>;
+
+    // Combined count for mobile
+    const totalCount = file_group_count + zim_entry_count + channel_count + domain_count;
+    const totalCountColor = totalCount > 0 ? 'black' : 'grey';
+    const totalCountLabel = <Label color={totalCountColor}>{totalCount}</Label>;
 
     return <TableRow>
         <TableCell>{deleteConfirm}</TableCell>
         <TableCell>{editButton}</TableCell>
         <TableCell><SingleTag name={name}/></TableCell>
+        <Media at='mobile'>
+            {(className, renderChildren) => {
+                return renderChildren ? <TableCell className={className}>{totalCountLabel}</TableCell> : null;
+            }}
+        </Media>
         <Media greaterThanOrEqual='tablet'>
             {(className, renderChildren) => {
-                return renderChildren ? <TableCell className={className}>
-                        {countLabel}
-                    </TableCell>
+                return renderChildren ? <>
+                        <TableCell className={className}>{fileCountLabel}</TableCell>
+                        <TableCell className={className}>{zimCountLabel}</TableCell>
+                        <TableCell className={className}>{channelCountLabel}</TableCell>
+                        <TableCell className={className}>{domainCountLabel}</TableCell>
+                    </>
                     : null;
             }}
         </Media>
@@ -278,12 +299,20 @@ function EditTagsModal() {
     }
 
     const tableHeaders = [
+        {key: 'delete', text: 'Delete', sortBy: null, width: 1},
+        {key: 'edit', text: 'Edit', sortBy: null, width: 1},
+        {key: 'name', text: 'Name', sortBy: 'name', width: 4},
+        {key: 'files', text: 'Files', sortBy: 'file_group_count', width: 2},
+        {key: 'zims', text: 'Zims', sortBy: 'zim_entry_count', width: 2},
+        {key: 'channels', text: 'Channels', sortBy: 'channel_count', width: 2},
+        {key: 'domains', text: 'Domains', sortBy: 'domain_count', width: 2},
+    ];
+    const mobileTableHeaders = [
         {key: 'delete', text: 'Delete', sortBy: null, width: 2},
         {key: 'edit', text: 'Edit', sortBy: null, width: 2},
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'count', text: 'Count', sortBy: i => i['file_group_count'] + i['zim_entry_count'], width: 2},
+        {key: 'count', text: 'Count', sortBy: i => i['file_group_count'] + i['zim_entry_count'] + i['channel_count'] + i['domain_count'], width: 4},
     ];
-    const mobileTableHeaders = tableHeaders.slice(3);
 
     return <>
         <Modal closeIcon

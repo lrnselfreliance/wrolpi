@@ -1615,18 +1615,38 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
     if new_directory.exists():
         raise FileConflict(f'Cannot rename {directory} to {new_directory} because it already exists.')
 
-    # Move all paths into the new directory.
-    paths = list(directory.iterdir())
-    try:
-        await move(session, new_directory, *paths)
-        if send_events:
-            Events.send_file_move_completed(f'Directory has been renamed: {directory}')
-    except Exception:
-        if send_events:
-            Events.send_file_move_failed(f'Directory rename has failed: {directory}')
-        raise
-    # Remove the old directory.
-    delete_directory(directory)
+    # Check if this directory is a Collection's directory
+    from wrolpi.collections.models import Collection
+    collection: Collection = session.query(Collection).filter(Collection.directory == directory).one_or_none()
+
+    if collection:
+        # Use Collection's move method which handles files, config saves, and cleanup
+        new_directory.mkdir(parents=True, exist_ok=True)
+        await collection.move_collection(new_directory, session, send_events=send_events)
+    else:
+        # Regular directory rename - move all paths into the new directory.
+        paths = list(directory.iterdir())
+        try:
+            await move(session, new_directory, *paths)
+            if send_events:
+                Events.send_file_move_completed(f'Directory has been renamed: {directory}')
+        except Exception:
+            if send_events:
+                Events.send_file_move_failed(f'Directory rename has failed: {directory}')
+            raise
+
+        # Update nested Collections (files already moved by move() above)
+        directory_str = str(directory)
+        nested_collections = session.query(Collection).filter(
+            Collection.directory.like(f'{directory_str}/%')
+        ).all()
+        for coll in nested_collections:
+            relative = coll.directory.relative_to(directory)
+            new_coll_dir = new_directory / relative
+            await coll.move_collection(new_coll_dir, session, send_events=send_events, with_files=False)
+
+        # Remove the old directory.
+        delete_directory(directory)
 
     return new_directory
 

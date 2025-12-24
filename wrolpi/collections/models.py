@@ -912,10 +912,14 @@ class Collection(ModelHelper, Base):
 
         return destination
 
-    async def move_collection(self, directory: pathlib.Path, session: Session, send_events: bool = False):
+    async def move_collection(self, directory: pathlib.Path, session: Session, send_events: bool = False,
+                              with_files: bool = True):
         """Move all files under this Collection's directory to a new directory.
 
         Also updates download destinations for downloads associated with this collection.
+
+        If with_files=False, only updates the directory reference without moving files.
+        Use this when files have already been moved by a parent directory rename.
         """
         if not directory.is_dir():
             raise FileNotFoundError(f'Destination directory does not exist: {directory}')
@@ -948,32 +952,37 @@ class Collection(ModelHelper, Base):
             save_downloads_config.activate_switch()
             save_tags_config.activate_switch()
 
-        try:
-            if not old_directory.exists():
-                # Old directory does not exist; refresh both
-                await refresh_files([old_directory, directory])
+        if with_files:
+            try:
+                if not old_directory.exists():
+                    # Old directory does not exist; refresh both
+                    await refresh_files([old_directory, directory])
+                    if send_events:
+                        Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
+                else:
+                    files_to_move = list(old_directory.iterdir())
+                    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+                        logger.trace(f'move_collection: moving {len(files_to_move)} items from {old_directory}')
+                    await move_files(session, directory, *files_to_move)
+                    if send_events:
+                        Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
+            except Exception as e:
+                logger.error(f'Collection move failed! Reverting changes...', exc_info=e)
+                # Revert download destinations
+                change_download_destinations(directory, old_directory)
+                self.directory = old_directory
+                self.flush(session)
                 if send_events:
-                    Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
-            else:
-                files_to_move = list(old_directory.iterdir())
-                if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-                    logger.trace(f'move_collection: moving {len(files_to_move)} items from {old_directory}')
-                await move_files(session, directory, *files_to_move)
-                if send_events:
-                    Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
-        except Exception as e:
-            logger.error(f'Collection move failed! Reverting changes...', exc_info=e)
-            # Revert download destinations
-            change_download_destinations(directory, old_directory)
-            self.directory = old_directory
-            self.flush(session)
+                    Events.send_file_move_failed(f'Moving Collection {self.name} has failed')
+                raise
+            finally:
+                session.commit()
+                if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
+                    old_directory.rmdir()
+        else:
+            # Files already moved, just send event
             if send_events:
-                Events.send_file_move_failed(f'Moving Collection {self.name} has failed')
-            raise
-        finally:
-            session.commit()
-            if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
-                old_directory.rmdir()
+                Events.send_file_move_completed(f'Collection {repr(self.name)} directory updated')
 
 
 class CollectionItem(ModelHelper, Base):

@@ -440,6 +440,32 @@ class FileGroup(ModelHelper, Base):
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 
+    @classmethod
+    def get_by_any_file_path(cls, session: Session, path: pathlib.Path) -> Optional['FileGroup']:
+        """Find a FileGroup that contains the given file path (primary or not).
+
+        This method first checks if the path is a primary_path, and if not,
+        searches for a FileGroup where the file is in the files list.
+        """
+        from sqlalchemy import text
+
+        path = pathlib.Path(path)
+        directory = str(path.parent)
+        filename = path.name
+
+        # First, try to find by primary_path (most common case)
+        if file_group := cls.get_by_path(session, path):
+            return file_group
+
+        # Search for FileGroups in the same directory that contain this file
+        file_groups = session.query(FileGroup).filter(FileGroup.directory == directory).all()
+        for fg in file_groups:
+            for file_info in fg.files:
+                if file_info.get('path') == filename:
+                    return fg
+
+        return None
+
     @staticmethod
     def find_by_path(session: Session, path) -> 'FileGroup':
         file_group = FileGroup.get_by_path(session, path)

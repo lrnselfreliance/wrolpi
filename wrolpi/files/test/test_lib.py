@@ -1422,3 +1422,112 @@ def test_sanitize_filename_surrogates_renames_file(test_directory):
         pytest.fail("Result path still contains invalid UTF-8 surrogates")
     # Content should be preserved
     assert result.read_text() == 'test content'
+
+
+@pytest.mark.asyncio
+async def test_rename_file_with_associated_files_twice(async_client, test_session, test_directory, make_files_structure,
+                                                        video_bytes, srt_text):
+    """
+    Renaming a FileGroup twice should rename all associated files both times.
+
+    Regression test for: When renaming "example.mp4" to "example 2.mp4" and then back to "example.mp4",
+    the associated file "example.srt" should be renamed along with the primary file both times.
+    """
+    # Create a FileGroup with primary file and associated file
+    video, srt = make_files_structure({
+        'example.mp4': video_bytes,
+        'example.srt': srt_text,
+    })
+    await lib.refresh_files()
+
+    # Verify initial state
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.primary_path == video
+    assert len(file_group.files) == 2
+    assert video.is_file()
+    assert srt.is_file()
+
+    # First rename: "example.mp4" -> "example 2.mp4"
+    new_path_1 = await lib.rename_file(video, 'example 2.mp4')
+    test_session.expire_all()
+
+    # Verify first rename - both files should be renamed
+    new_video_1 = test_directory / 'example 2.mp4'
+    new_srt_1 = test_directory / 'example 2.srt'
+    assert new_path_1 == new_video_1
+    assert new_video_1.is_file(), "Video should be renamed to 'example 2.mp4'"
+    assert new_srt_1.is_file(), "SRT should be renamed to 'example 2.srt'"
+    assert not video.exists(), "Old video should not exist"
+    assert not srt.exists(), "Old SRT should not exist"
+
+    # Verify FileGroup is updated
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.primary_path == new_video_1
+    file_names = [f['path'] for f in file_group.files]
+    assert 'example 2.mp4' in file_names
+    assert 'example 2.srt' in file_names
+    assert len(file_group.files) == 2
+
+    # Second rename: "example 2.mp4" -> "example.mp4"
+    new_path_2 = await lib.rename_file(new_video_1, 'example.mp4')
+    test_session.expire_all()
+
+    # Verify second rename - BOTH files should be renamed back
+    final_video = test_directory / 'example.mp4'
+    final_srt = test_directory / 'example.srt'
+    assert new_path_2 == final_video
+    assert final_video.is_file(), "Video should be renamed back to 'example.mp4'"
+    assert final_srt.is_file(), "SRT should be renamed back to 'example.srt'"
+    assert not new_video_1.exists(), "'example 2.mp4' should not exist"
+    assert not new_srt_1.exists(), "'example 2.srt' should not exist"
+
+    # Verify FileGroup is updated
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.primary_path == final_video
+    file_names = [f['path'] for f in file_group.files]
+    assert 'example.mp4' in file_names
+    assert 'example.srt' in file_names
+    assert len(file_group.files) == 2
+
+
+@pytest.mark.asyncio
+async def test_rename_non_primary_file_renames_filegroup(async_client, test_session, test_directory,
+                                                          make_files_structure, video_bytes, srt_text):
+    """
+    Renaming a non-primary file (like a subtitle) should rename the entire FileGroup.
+
+    If a user renames "example.srt" to "renamed.srt", the primary "example.mp4"
+    should also be renamed to "renamed.mp4".
+    """
+    # Create a FileGroup with primary file and associated file
+    video, srt = make_files_structure({
+        'example.mp4': video_bytes,
+        'example.srt': srt_text,
+    })
+    await lib.refresh_files()
+
+    # Verify initial state
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.primary_path == video
+    assert len(file_group.files) == 2
+
+    # Rename the non-primary file (the SRT)
+    new_path = await lib.rename_file(srt, 'renamed.srt')
+    test_session.expire_all()
+
+    # Verify all files in the FileGroup were renamed
+    new_video = test_directory / 'renamed.mp4'
+    new_srt = test_directory / 'renamed.srt'
+    assert new_path == new_srt
+    assert new_video.is_file(), "Primary video should be renamed to 'renamed.mp4'"
+    assert new_srt.is_file(), "SRT should be renamed to 'renamed.srt'"
+    assert not video.exists(), "Old video should not exist"
+    assert not srt.exists(), "Old SRT should not exist"
+
+    # Verify FileGroup is updated correctly
+    file_group = test_session.query(FileGroup).one()
+    assert file_group.primary_path == new_video
+    file_names = [f['path'] for f in file_group.files]
+    assert 'renamed.mp4' in file_names
+    assert 'renamed.srt' in file_names
+    assert len(file_group.files) == 2

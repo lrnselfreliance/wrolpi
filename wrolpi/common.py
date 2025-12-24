@@ -1330,13 +1330,14 @@ ZIG_TYPE = Union[int, float, complex, Decimal, datetime]
 def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
     """
     Generate numbers between `low` and `high` that are
-    spread out evenly.  Produces infinite results.
+    spread out evenly.  Produces infinite unique results.
 
-    >>> list(zig_zag(0, 10))
-    [0, 5, 2, 7, 1, 3, 6, 8, 0, 1, 3, 4, 5, 6, 8, 9]
-    >>> list(zig_zag(0, 5))
-    [0, 2, 1, 3, 0, 1, 3, 4]
-    >>> list(zig_zag(50.0, 100.0))
+    >>> import itertools
+    >>> list(itertools.islice(zig_zag(0, 10), 10))
+    [0, 5, 2, 7, 1, 3, 6, 8, 4, 9]
+    >>> list(itertools.islice(zig_zag(0, 5), 5))
+    [0, 2, 1, 3, 4]
+    >>> list(itertools.islice(zig_zag(50.0, 100.0), 11))
     [50.0, 75.0, 62.5, 87.5, 56.25, 68.75, 81.25, 93.75, 53.125, 59.375, 65.625]
     """
     output_type = type(low)
@@ -1352,9 +1353,10 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
     divisor = 2
     diff = high - low
     while True:
-        if num not in results:
-            yield output_type(num)
-            results.add(num)
+        output_value = output_type(num)
+        if output_value not in results:
+            yield output_value
+            results.add(output_value)
         num += diff / divisor
         if num >= high:
             divisor *= 2

@@ -178,6 +178,94 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
 
 
 @pytest.mark.asyncio
+async def test_calculate_next_download_overdue_spreading(test_session, test_download_manager, fake_now):
+    """When multiple same-frequency downloads are overdue (e.g., after service restart),
+    they should be spread dynamically from NOW instead of bunching up."""
+    # Set up 3 weekly downloads that WERE scheduled in the past (overdue)
+    d1 = Download(url='https://example.com/overdue1', frequency=DownloadFrequency.weekly)
+    d1.last_successful_download = datetime(2000, 1, 1, tzinfo=pytz.UTC)  # Oldest
+    d1.next_download = datetime(2000, 1, 8, tzinfo=pytz.UTC)  # Was due Jan 8
+
+    d2 = Download(url='https://example.com/overdue2', frequency=DownloadFrequency.weekly)
+    d2.last_successful_download = datetime(2000, 1, 2, tzinfo=pytz.UTC)  # Middle
+    d2.next_download = datetime(2000, 1, 9, tzinfo=pytz.UTC)  # Was due Jan 9
+
+    d3 = Download(url='https://example.com/overdue3', frequency=DownloadFrequency.weekly)
+    d3.last_successful_download = datetime(2000, 1, 3, tzinfo=pytz.UTC)  # Newest
+    d3.next_download = datetime(2000, 1, 10, tzinfo=pytz.UTC)  # Was due Jan 10
+
+    test_session.add_all([d1, d2, d3])
+    test_session.commit()
+
+    # It's now Jan 15 - all three are overdue
+    now_ = fake_now(datetime(2000, 1, 15, tzinfo=pytz.UTC))
+
+    # Most overdue (d1, oldest last_successful_download) should run immediately
+    assert test_download_manager.calculate_next_download(test_session, d1) == now_
+
+    # Others spread across the week from NOW using zig_zag pattern
+    # zig_zag(now, now+week) with 3 items gives: [now, now+3.5days, now+1.75days]
+    d2_result = test_download_manager.calculate_next_download(test_session, d2)
+    d3_result = test_download_manager.calculate_next_download(test_session, d3)
+
+    # d2 gets second slot (middle of week), d3 gets third slot (1/4 of week)
+    assert d2_result == datetime(2000, 1, 18, 12, tzinfo=pytz.UTC)  # now + 3.5 days
+    assert d3_result == datetime(2000, 1, 16, 18, tzinfo=pytz.UTC)  # now + 1.75 days
+
+
+@pytest.mark.asyncio
+async def test_calculate_next_download_single_overdue(test_session, test_download_manager, fake_now):
+    """A single overdue download should use normal scheduling (not spread logic)."""
+    d1 = Download(url='https://example.com/overdue', frequency=DownloadFrequency.weekly)
+    d1.last_successful_download = datetime(2000, 1, 1, tzinfo=pytz.UTC)
+    d1.next_download = datetime(2000, 1, 8, tzinfo=pytz.UTC)  # Was due Jan 8
+
+    d2 = Download(url='https://example.com/not_overdue', frequency=DownloadFrequency.weekly)
+    d2.last_successful_download = datetime(2000, 1, 10, tzinfo=pytz.UTC)
+    d2.next_download = datetime(2000, 1, 20, tzinfo=pytz.UTC)  # Not overdue (due Jan 20)
+
+    test_session.add_all([d1, d2])
+    test_session.commit()
+
+    # It's now Jan 15 - only d1 is overdue
+    fake_now(datetime(2000, 1, 15, tzinfo=pytz.UTC))
+
+    # Single overdue download uses normal zig_zag scheduling (next iteration boundary)
+    result = test_download_manager.calculate_next_download(test_session, d1)
+    # Should be in the next iteration window, not NOW
+    assert result >= datetime(2000, 1, 15, tzinfo=pytz.UTC)
+    assert result != datetime(2000, 1, 15, tzinfo=pytz.UTC)  # Not immediately
+
+
+@pytest.mark.asyncio
+async def test_calculate_next_download_new_download_while_overdue(test_session, test_download_manager, fake_now):
+    """A new download added while other same-frequency downloads are overdue should run first."""
+    # Existing download that is overdue
+    d1 = Download(url='https://example.com/overdue', frequency=DownloadFrequency.weekly)
+    d1.last_successful_download = datetime(2000, 1, 1, tzinfo=pytz.UTC)
+    d1.next_download = datetime(2000, 1, 8, tzinfo=pytz.UTC)  # Was due Jan 8
+
+    # Another overdue download
+    d2 = Download(url='https://example.com/overdue2', frequency=DownloadFrequency.weekly)
+    d2.last_successful_download = datetime(2000, 1, 2, tzinfo=pytz.UTC)
+    d2.next_download = datetime(2000, 1, 9, tzinfo=pytz.UTC)  # Was due Jan 9
+
+    # New download with no history
+    d3 = Download(url='https://example.com/new', frequency=DownloadFrequency.weekly)
+    d3.last_successful_download = None  # Never downloaded
+    d3.next_download = None  # Never scheduled
+
+    test_session.add_all([d1, d2, d3])
+    test_session.commit()
+
+    # It's now Jan 15 - d1 and d2 are overdue, d3 is new
+    now_ = fake_now(datetime(2000, 1, 15, tzinfo=pytz.UTC))
+
+    # New download (d3) should run immediately because there are overdue downloads
+    assert test_download_manager.calculate_next_download(test_session, d3) == now_
+
+
+@pytest.mark.asyncio
 async def test_recurring_downloads(test_session, test_download_manager, fake_now, test_downloader, await_switches):
     """A recurring Download should be downloaded forever."""
     test_downloader.set_test_success()

@@ -1036,6 +1036,10 @@ class DownloadManager:
 
         If the download is "complete" and the download has a frequency, schedule the download in it's next iteration.
         (Next week, month, etc.)
+
+        When multiple same-frequency downloads are overdue (e.g., after service restart), they are spread
+        dynamically from NOW using zig_zag. The most overdue download (by last_successful_download) runs
+        immediately, others are spread across the frequency period.
         """
         if download.is_deferred:
             # Increase next_download slowly at first, then by large gaps later.  The largest gap is the download
@@ -1053,7 +1057,40 @@ class DownloadManager:
             raise ValueError('Cannot get next download when Download is not in DB.')
 
         freq = download.frequency
+        now_ = now()
 
+        # Get all downloads with same frequency, ordered by last_successful_download
+        # (NULL/oldest first - these are most overdue)
+        same_freq_downloads = session.query(Download).filter_by(frequency=freq).order_by(
+            Download.last_successful_download.asc().nullsfirst(),
+            Download.id  # Tiebreaker for consistent ordering
+        ).all()
+
+        # Identify overdue downloads (next_download in past, NOT new downloads with NULL next_download)
+        overdue_downloads = [
+            d for d in same_freq_downloads
+            if d.next_download is not None and d.next_download < now_
+        ]
+
+        # New download added while others are overdue: run immediately
+        if download.next_download is None and len(overdue_downloads) >= 1:
+            return now_
+
+        # Multiple overdue: spread dynamically from NOW using zig_zag
+        if len(overdue_downloads) > 1 and download in overdue_downloads:
+            overdue_index = overdue_downloads.index(download)
+
+            # Most overdue runs immediately
+            if overdue_index == 0:
+                return now_
+
+            # Others spread across frequency period from NOW using zig_zag
+            end_time = now_ + timedelta(seconds=freq)
+            zagger = zig_zag(now_, end_time)
+            slots = [slot for slot, _ in zip(zagger, range(len(overdue_downloads)))]
+            return slots[overdue_index]
+
+        # Normal case: use fixed iteration boundaries with zig_zag
         # Keep this Download in it's position within the like-frequency downloads.
         downloads = [i.id for i in session.query(Download).filter_by(frequency=freq).order_by(Download.id)]
         index = downloads.index(download.id)
@@ -1061,7 +1098,7 @@ class DownloadManager:
         # Download was successful.  Spread the same-frequency downloads out over their iteration.
         start_date = datetime(2000, 1, 1).replace(tzinfo=pytz.UTC)
         # Weeks/months/etc. since start_date.
-        iterations = ((now() - start_date) // freq).total_seconds()
+        iterations = ((now_ - start_date) // freq).total_seconds()
         # Download slots start the next nearest iteration since 2000-01-01.
         # For example, if a weekly download was performed on 2000-01-01 it will get the same slot within
         # 2000-01-01 to 2000-01-08.
@@ -1070,9 +1107,7 @@ class DownloadManager:
         # Get this downloads position in the next iteration.  If a download is performed at the 3rd slot this week,
         # it will be downloaded the 3rd slot of next week.
         zagger = zig_zag(start_date, end_date)
-        next_download = [i for i, j in zip(zagger, range(len(downloads)))][index]
-        next_download = next_download
-        return next_download
+        return [i for i, j in zip(zagger, range(len(downloads)))][index]
 
     @staticmethod
     def _delete_downloads_q(once: bool = False, status: str = None, returning=Download.id) -> Delete:

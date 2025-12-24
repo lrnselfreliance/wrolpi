@@ -890,6 +890,90 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
+async def test_rename_collection_directory(test_session, test_directory, make_files_structure, async_client):
+    """Renaming a Collection's directory updates the Collection.directory."""
+    from wrolpi.collections.models import Collection
+
+    # Create a collection with a directory
+    collection_dir = test_directory / 'my_collection'
+    collection_dir.mkdir()
+    (collection_dir / 'file.txt').write_text('contents')
+    collection = Collection(name='Test Collection', kind='channel', directory=collection_dir)
+    test_session.add(collection)
+    test_session.commit()
+    collection_id = collection.id
+
+    await lib.refresh_files()
+
+    # Rename the directory
+    content = dict(path='my_collection', new_name='renamed_collection')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify Collection.directory was updated
+    test_session.expire_all()
+    collection = test_session.query(Collection).filter_by(id=collection_id).one()
+    assert collection.directory == test_directory / 'renamed_collection'
+    assert not (test_directory / 'my_collection').exists()
+    assert (test_directory / 'renamed_collection' / 'file.txt').is_file()
+
+
+@pytest.mark.asyncio
+async def test_rename_directory_with_nested_collections(test_session, test_directory, async_client):
+    """Renaming a parent directory updates nested Collection directories and download destinations."""
+    from wrolpi.collections.models import Collection
+    from wrolpi.downloader import Download
+
+    # Create parent directory with nested collection directories
+    parent_dir = test_directory / 'videos'
+    parent_dir.mkdir()
+
+    channel_a_dir = parent_dir / 'channel_a'
+    channel_a_dir.mkdir()
+    (channel_a_dir / 'video1.mp4').write_bytes(b'fake video 1')
+
+    channel_b_dir = parent_dir / 'channel_b'
+    channel_b_dir.mkdir()
+    (channel_b_dir / 'video2.mp4').write_bytes(b'fake video 2')
+
+    # Create two channel collections for the nested directories
+    coll_a = Collection(name='Channel A', kind='channel', directory=channel_a_dir)
+    coll_b = Collection(name='Channel B', kind='channel', directory=channel_b_dir)
+    test_session.add_all([coll_a, coll_b])
+    test_session.commit()
+
+    # Create a download associated with channel_a
+    download = Download(url='https://example.com/channel_a', destination=channel_a_dir, collection_id=coll_a.id)
+    test_session.add(download)
+    test_session.commit()
+    coll_a_id, coll_b_id, download_id = coll_a.id, coll_b.id, download.id
+
+    await lib.refresh_files()
+
+    # Rename the parent directory
+    content = dict(path='videos', new_name='my_videos')
+    request, response = await async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Verify nested Collection directories were updated
+    test_session.expire_all()
+    coll_a = test_session.query(Collection).filter_by(id=coll_a_id).one()
+    coll_b = test_session.query(Collection).filter_by(id=coll_b_id).one()
+
+    assert coll_a.directory == test_directory / 'my_videos' / 'channel_a'
+    assert coll_b.directory == test_directory / 'my_videos' / 'channel_b'
+
+    # Verify download destination was updated
+    download = test_session.query(Download).filter_by(id=download_id).one()
+    assert download.destination == test_directory / 'my_videos' / 'channel_a'
+
+    # Verify files were moved
+    assert (test_directory / 'my_videos' / 'channel_a' / 'video1.mp4').exists()
+    assert (test_directory / 'my_videos' / 'channel_b' / 'video2.mp4').exists()
+    assert not (test_directory / 'videos').exists()
+
+
+@pytest.mark.asyncio
 async def test_delete_directory_recursive(test_session, test_directory, make_files_structure, async_client,
                                           assert_files):
     make_files_structure(['dir/foo', 'dir/bar', 'empty'])

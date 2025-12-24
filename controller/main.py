@@ -150,6 +150,9 @@ async def dashboard(request: Request):
     else:
         services = get_all_services_status()
 
+    # Sort services by name for consistent display
+    services = sorted(services, key=lambda s: s["name"])
+
     context = {
         "version": __version__,
         "docker_mode": is_docker_mode(),

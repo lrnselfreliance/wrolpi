@@ -45,6 +45,7 @@ async def list_services() -> Union[list[ServiceStatusResponse], ServicesListErro
     if is_docker_mode():
         if can_manage_containers():
             statuses = get_all_containers_status()
+            statuses = sorted(statuses, key=lambda s: s["name"])
             return [ServiceStatusResponse(**s) for s in statuses if "error" not in s]
         else:
             return ServicesListErrorResponse(
@@ -53,6 +54,7 @@ async def list_services() -> Union[list[ServiceStatusResponse], ServicesListErro
             )
     else:
         statuses = get_all_services_status()
+        statuses = sorted(statuses, key=lambda s: s["name"])
         return [ServiceStatusResponse(**s) for s in statuses]
 
 

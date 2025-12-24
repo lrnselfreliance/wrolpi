@@ -50,7 +50,9 @@ class TestDashboardEndpoint:
     def test_dashboard_contains_title(self, test_client):
         """Dashboard should contain title."""
         response = test_client.get("/")
-        assert b"WROLPi Controller" in response.content
+        # Title format is "Controller - {hostname} WROLPi"
+        assert b"Controller" in response.content
+        assert b"WROLPi" in response.content
 
     def test_dashboard_contains_version(self, test_client):
         """Dashboard should contain version."""

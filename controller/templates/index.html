@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WROLPi Controller</title>
+    <title>Controller - {{ host }} WROLPi</title>
     <style>
         /* ===== INLINE CSS - No external files ===== */
         * {
@@ -599,7 +599,7 @@
 
 <header>
     <div>
-        <h1>WROLPi Controller</h1>
+        <h1>Controller - {{ host }} WROLPi</h1>
         <span class="version">v{{ version }}</span>
     </div>
 </header>
@@ -630,7 +630,7 @@
             </div>
             <div class="status-card">
                 <h3>IO Wait</h3>
-                <p class="value" id="iowait-value">{{ iostat.percent_iowait|default('--') }}%</p>
+                <p class="value" id="iowait-value">{% if iostat and iostat.percent_iowait is not none %}{{ iostat.percent_iowait }}{% else %}--{% endif %}%</p>
                 <p class="sub">disk waiting</p>
             </div>
         </div>
@@ -730,7 +730,7 @@
 
 <!-- Logs Modal -->
 <div id="logs-modal" class="modal" onclick="if(event.target===this)closeLogsModal()">
-    <div class="modal-content">
+    <div class="modal-content" style="width: 80%; max-width: none;">
         <div class="modal-header">
             <h3 id="logs-title">Service Logs</h3>
             <button class="modal-close" onclick="closeLogsModal()">&times;</button>

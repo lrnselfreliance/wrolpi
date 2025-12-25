@@ -194,7 +194,7 @@ export function Getters() {
                     </Button>
                 </GridColumn>
                 <GridColumn>
-                    <Button onClick={e => handleSetGetter(e, 'upload')}>
+                    <Button color='green' onClick={e => handleSetGetter(e, 'upload')}>
                         <Icon name='upload'/>
                         Upload
                     </Button>

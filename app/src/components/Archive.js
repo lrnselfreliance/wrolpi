@@ -59,7 +59,15 @@ import {InputForm, useForm} from "../hooks/useForm";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomain, useDomains, useOneQuery, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
+import {
+    useArchive,
+    useDomain,
+    useDomains,
+    useOneQuery,
+    useSearchArchives,
+    useSearchDomain,
+    useSearchOrder
+} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
@@ -218,9 +226,10 @@ function ArchivePage() {
         await fetchArchive();
     }
 
-    const archivedDatetimeString = isoDatetimeToAgoPopup(archiveFile.download_datetime, true);
-    const publishedDatetimeString = archiveFile.published_datetime ? isoDatetimeToAgoPopup(archiveFile.published_datetime, true)
-        : 'unknown';
+    const downloadDatetimeString = archiveFile.download_datetime ?
+        isoDatetimeToAgoPopup(archiveFile.download_datetime, true) : 'unknown';
+    const publishedDatetimeString = archiveFile.published_datetime ?
+        isoDatetimeToAgoPopup(archiveFile.published_datetime, true) : 'unknown';
     const modifiedDatetimeString = archiveFile.published_modified_datetime
         ? isoDatetimeToAgoPopup(archiveFile.published_modified_datetime, true)
         : 'unknown';
@@ -295,7 +304,7 @@ function ArchivePage() {
                         <Header as='h4'>Published: {publishedDatetimeString}</Header>
                     </GridColumn>
                     <GridColumn>
-                        <Header as='h4'>Archived: {archivedDatetimeString}</Header>
+                        <Header as='h4'>Downloaded: {downloadDatetimeString}</Header>
                     </GridColumn>
                 </GridRow>
             </Grid>

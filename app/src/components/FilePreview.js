@@ -11,6 +11,7 @@ import {toast} from "react-semantic-toasts-2";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 import {pathDirectory} from "./FileBrowser";
+import {InlineErrorBoundary} from "./ErrorBoundary";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -116,11 +117,13 @@ function getSTLPreviewModal(previewFile) {
     return <React.Fragment>
         <Modal.Header>{name}</Modal.Header>
         <Modal.Content>
-            <StlViewer orbitControls shadows
-                       url={url}
-                       style={{height: '80vw', width: '80vw'}}
-                       modelProps={{color: '#7353a8'}}
-            />
+            <InlineErrorBoundary>
+                <StlViewer orbitControls shadows
+                           url={url}
+                           style={{height: '80vw', width: '80vw'}}
+                           modelProps={{color: '#7353a8'}}
+                />
+            </InlineErrorBoundary>
         </Modal.Content>
     </React.Fragment>
 }

@@ -21,6 +21,7 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -60,7 +61,9 @@ function Root() {
                     <header>
                         <NavBar/>
                     </header>
-                    <Outlet/>
+                    <ErrorBoundary>
+                        <Outlet/>
+                    </ErrorBoundary>
                     <Footer/>
                 </FilePreviewProvider>
             </TagsProvider>
@@ -73,19 +76,19 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     element={<Root/>}
     errorElement={<PageNotFound/>}
 >
-    <Route index element={<DashboardPage/>}/>
-    <Route path='search/*' element={<DashboardPage/>}/>
+    <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
+    <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='donate' element={<DonatePage/>}/>
-    <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
-    <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
-    <Route path="videos/*" element={<VideosRoute/>}/>
-    <Route path="admin/*" element={<AdminRoute/>}/>
-    <Route path="more/*" element={<MoreRoute/>}/>
-    <Route path="inventory/*" element={<InventoryRoute/>}/>
-    <Route path='archive/*' element={<ArchiveRoute/>}/>
-    <Route path='map/*' element={<MapRoute/>}/>
-    <Route path='zim/*' element={<ZimRoute/>}/>
-    <Route path='files/*' element={<FilesRoute/>}/>
+    <Route path='videos/video/:videoId' exact element={<ErrorBoundary><VideoWrapper/></ErrorBoundary>}/>
+    <Route path='videos/channel/:channelId/video/:videoId' exact element={<ErrorBoundary><VideoWrapper/></ErrorBoundary>}/>
+    <Route path="videos/*" element={<ErrorBoundary><VideosRoute/></ErrorBoundary>}/>
+    <Route path="admin/*" element={<ErrorBoundary><AdminRoute/></ErrorBoundary>}/>
+    <Route path="more/*" element={<ErrorBoundary><MoreRoute/></ErrorBoundary>}/>
+    <Route path="inventory/*" element={<ErrorBoundary><InventoryRoute/></ErrorBoundary>}/>
+    <Route path='archive/*' element={<ErrorBoundary><ArchiveRoute/></ErrorBoundary>}/>
+    <Route path='map/*' element={<ErrorBoundary><MapRoute/></ErrorBoundary>}/>
+    <Route path='zim/*' element={<ErrorBoundary><ZimRoute/></ErrorBoundary>}/>
+    <Route path='files/*' element={<ErrorBoundary><FilesRoute/></ErrorBoundary>}/>
 </Route>));
 
 export default function App() {

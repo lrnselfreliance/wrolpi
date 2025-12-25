@@ -1,7 +1,8 @@
-import {Button, Header, Icon, Modal, Placeholder, Table} from "./Theme";
+import {Button, Header, Icon, Modal, Placeholder, Progress, Segment, Table} from "./Theme";
 import {
     Checkbox,
     Form,
+    Grid,
     IconGroup,
     Input,
     PlaceholderLine,
@@ -11,16 +12,27 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {APIButton, DirectorySearch, ErrorMessage, FileIcon, humanFileSize, useIsIgnoredDirectory} from "./Common";
+import {
+    APIButton,
+    DirectorySearch,
+    ErrorMessage,
+    FileIcon,
+    humanFileSize,
+    mimetypeIconName,
+    Toggle,
+    useIsIgnoredDirectory
+} from "./Common";
 import React, {useEffect, useState} from "react";
+import {useDropzone} from "react-dropzone";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
-import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
+import {useBrowseFiles, useMediaDirectory, useUploadFile, useWROLMode} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {SettingsContext, ThemeContext} from "../contexts/contexts";
 import {BulkTagModal} from "./BulkTagModal";
+import {InlineErrorBoundary} from "./ErrorBoundary";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -77,8 +89,10 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
         let childPaths = [];
         _.forEach(children, (p, k) => {
             childPaths = [...childPaths,
-                <Path key={k} path={p} onFolderClick={onFolderClick} sortData={sortData} onFileClick={onFileClick}
-                      selectedPaths={selectedPaths} onSelect={onSelect} disabled={disabled}/>];
+                <InlineErrorBoundary key={k}>
+                    <Path path={p} onFolderClick={onFolderClick} sortData={sortData} onFileClick={onFileClick}
+                          selectedPaths={selectedPaths} onSelect={onSelect} disabled={disabled}/>
+                </InlineErrorBoundary>];
         });
         return <React.Fragment>
             {f}
@@ -138,6 +152,7 @@ export function FileBrowser() {
     const [makeDirectoryOpen, setMakeDirectoryOpen] = React.useState(false);
     const [ignoreDirectoryOpen, setIgnoreDirectoryOpen] = React.useState(false);
     const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
+    const [uploadOpen, setUploadOpen] = React.useState(false);
     const [pending, setPending] = React.useState(false);
     // Only true if only one path is selected, and it is a directory.
     const [singleDirectorySelected, setSingleDirectorySelected] = React.useState(false);
@@ -269,6 +284,18 @@ export function FileBrowser() {
             onClose={() => setMakeDirectoryOpen(false)}
             parent={selectedPaths.length ? selectedPaths[0] : null}
             onSubmit={handleMakeDirectory}
+        />
+        <Button
+            icon='upload'
+            color='green'
+            disabled={wrolModeEnabled || (selectedPathsCount > 0 && !singleDirectorySelected)}
+            onClick={() => setUploadOpen(true)}
+        />
+        <FileBrowserUploadModal
+            open={uploadOpen}
+            onClose={() => setUploadOpen(false)}
+            destination={singleDirectorySelected && selectedPaths[0] ? selectedPaths[0].slice(0, -1) : ''}
+            onComplete={reset}
         />
         <Button
             color='grey'
@@ -561,6 +588,154 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
         </Modal.Content>
         <Modal.Actions>
             <Button color='violet' onClick={handleSubmit}>Create</Button>
+        </Modal.Actions>
+    </Modal>
+}
+
+export function FileBrowserUploadModal({open, onClose, destination, onComplete}) {
+    const mediaDirectory = useMediaDirectory();
+    const {t} = React.useContext(ThemeContext);
+
+    const {
+        setFiles,
+        progresses,
+        setDestination,
+        doClear,
+        tagsSelector,
+        overwrite,
+        setOverwrite,
+        overallProgress,
+        inProgress,
+    } = useUploadFile();
+
+    const onDrop = React.useCallback(async (acceptedFiles) => {
+        if (acceptedFiles && acceptedFiles.length > 0) {
+            setFiles(acceptedFiles);
+        }
+    }, [setFiles]);
+
+    const {getRootProps, getInputProps} = useDropzone({onDrop, disabled: inProgress});
+
+    // Set destination when modal opens or destination changes
+    useEffect(() => {
+        if (open) {
+            setDestination(destination);
+        }
+    }, [open, destination, setDestination]);
+
+    // Clear upload state when destination is cleared
+    useEffect(() => {
+        if (!destination && open) {
+            doClear();
+        }
+    }, [destination, open, doClear]);
+
+    const handleClose = () => {
+        if (!inProgress) {
+            doClear();
+            onClose();
+            if (onComplete) {
+                onComplete();
+            }
+        }
+    };
+
+    let progressBars;
+    if (!_.isEmpty(progresses)) {
+        progressBars = Object.entries(progresses).map(([name, value]) => {
+            const {percent, status, type} = value;
+            let color = 'grey';
+            let statusString;
+            if (status === 'complete') {
+                color = 'green';
+                statusString = 'Complete:';
+            } else if (status === 'pending') {
+                statusString = 'Pending:';
+            } else if (status === 'failed') {
+                color = 'red';
+                statusString = 'Failed:';
+            } else if (status === 'conflicting') {
+                color = 'orange';
+                statusString = 'Already Exists:';
+            }
+            let indicating = status === 'pending';
+
+            return <Grid.Row key={name}>
+                <Grid.Column mobile={3} tablet={2} computer={1}>
+                    <Icon name={mimetypeIconName(type, name.toLowerCase())} size='big'/>
+                </Grid.Column>
+                <Grid.Column mobile={13} tablet={14} computer={15}>
+                    <Progress progress indicating={indicating} percent={percent} color={color}>
+                        <p {...t}>{statusString} {name}</p>
+                    </Progress>
+                </Grid.Column>
+            </Grid.Row>
+        })
+    }
+
+    const displayPath = destination ? `${mediaDirectory}/${destination}` : mediaDirectory;
+
+    return <Modal closeIcon open={open} onClose={handleClose} size='large'>
+        <Modal.Header>Upload to: {displayPath}</Modal.Header>
+        <Modal.Content>
+            <Form>
+                {tagsSelector}
+                <div style={{marginTop: '1em'}}>
+                <Toggle
+                    checked={overwrite}
+                    label='Overwrite existing files'
+                    onChange={() => setOverwrite(!overwrite)}
+                    disabled={inProgress}
+                />
+                </div>
+            </Form>
+
+            <Segment>
+                <Grid columns={1}>
+                    <Grid.Row>
+                        <Grid.Column style={{padding: '1em'}}>
+                            <Form>
+                                <div {...getRootProps()}>
+                                    <input {...getInputProps()}/>
+                                    <Grid textAlign='center'>
+                                        <Grid.Row>
+                                            <Grid.Column>
+                                                <Header icon>
+                                                    <Icon name='file text'/>
+                                                    Click here, or drop files here to upload
+                                                </Header>
+                                            </Grid.Column>
+                                        </Grid.Row>
+                                    </Grid>
+                                </div>
+                            </Form>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </Segment>
+
+            <Grid>
+                <Grid.Row columns={1}>
+                    <Grid.Column>
+                        {progresses && Object.keys(progresses).length > 1 && <Progress progress
+                                                                                       percent={overallProgress}
+                                                                                       color='blue'
+                                                                                       label='Overall Progress'
+                        />}
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+            <Grid columns={2}>
+                {progressBars}
+            </Grid>
+        </Modal.Content>
+        <Modal.Actions>
+            <Button
+                onClick={handleClose}
+                disabled={inProgress}
+            >
+                Close
+            </Button>
         </Modal.Actions>
     </Modal>
 }

@@ -158,6 +158,8 @@ export function FileBrowser() {
     const [singleDirectorySelected, setSingleDirectorySelected] = React.useState(false);
     // Only true if single directory is selected, and it is in settings['ignored_directories']
     const [isDirectoryIgnored, setIsDirectoryIgnored] = React.useState(false);
+    // Tracks folder that was opened while selected - its children will be auto-selected when they load
+    const pendingAutoSelectRef = React.useRef(null);
 
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {inverted} = React.useContext(ThemeContext);
@@ -194,6 +196,39 @@ export function FileBrowser() {
             setSingleDirectorySelected(false);
         }
     }, [selectedPaths, settings]);
+
+    // Auto-select immediate children when a selected folder is opened
+    useEffect(() => {
+        const folderToAutoSelect = pendingAutoSelectRef.current;
+        if (folderToAutoSelect && browseFiles && typeof browseFiles === 'object') {
+            // browseFiles is a dict: {'map/': {path: 'map/', children: {...}}, ...}
+            // children is also a dict: {'file.txt': {path: 'map/file.txt', ...}, ...}
+            const findFolderChildren = (files, targetFolder) => {
+                if (!files || typeof files !== 'object') return null;
+                // Convert dict to array of values for iteration
+                const fileList = Array.isArray(files) ? files : Object.values(files);
+                for (const file of fileList) {
+                    if (file.path === targetFolder && file.children) {
+                        // Return children as array of values
+                        return Array.isArray(file.children) ? file.children : Object.values(file.children);
+                    }
+                    if (file.children) {
+                        const found = findFolderChildren(file.children, targetFolder);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            };
+
+            const children = findFolderChildren(browseFiles, folderToAutoSelect);
+            if (children && children.length > 0) {
+                const childPaths = children.map(child => child.path);
+                const newSelectedPaths = [...new Set([...selectedPaths, ...childPaths])];
+                setSelectedPaths(newSelectedPaths);
+            }
+            pendingAutoSelectRef.current = null;
+        }
+    }, [browseFiles]);
 
     const onIgnore = async () => {
         setIgnoreDirectoryOpen(false);
@@ -337,9 +372,18 @@ export function FileBrowser() {
         if (openFolders.indexOf(folder) >= 0) {
             // Remove the folder that was clicked on, as well as its sub-folders.
             newFolders = openFolders.filter(i => !i.startsWith(folder));
+            // Unselect any children of the closed folder (they're no longer visible)
+            const newSelectedPaths = selectedPaths.filter(p => !p.startsWith(folder) || p === folder);
+            if (newSelectedPaths.length !== selectedPaths.length) {
+                setSelectedPaths(newSelectedPaths);
+            }
         } else {
             // Add the new folder to the opened folders.
             newFolders = [...openFolders, folder];
+            // If folder is selected, mark it for auto-selection of its children
+            if (selectedPaths.includes(folder)) {
+                pendingAutoSelectRef.current = folder;
+            }
         }
         console.debug(`newFolders=${newFolders}`);
         setOpenFolders(newFolders);

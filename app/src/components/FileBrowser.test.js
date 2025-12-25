@@ -176,6 +176,211 @@ describe('FileBrowser', () => {
         });
     });
 
+    describe('Auto-select directory contents', () => {
+        it('selects all children when opening a selected directory', async () => {
+            const mockSetOpenFolders = jest.fn();
+            const mockFetchFiles = jest.fn();
+
+            // Start with folder not open (no children loaded)
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: null, is_empty: false},
+                ],
+                openFolders: [],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            const {rerender} = renderFileBrowser(<FileBrowser/>);
+
+            // Select the directory checkbox
+            const checkbox = screen.getByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkbox);
+            });
+
+            // Verify directory is selected
+            expect(checkbox).toBeChecked();
+
+            // Click to expand the directory (clicking on the folder name cell)
+            const folderCell = screen.getByText('testdir/');
+            await act(async () => {
+                fireEvent.click(folderCell);
+            });
+
+            // Verify setOpenFolders was called to open the directory
+            expect(mockSetOpenFolders).toHaveBeenCalledWith(['testdir/']);
+
+            // Simulate browseFiles update with children (as would happen after fetch)
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: [
+                        {path: 'testdir/file1.txt', size: 100},
+                        {path: 'testdir/file2.txt', size: 200},
+                    ], is_empty: false},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            // Rerender to trigger the useEffect with new browseFiles
+            await act(async () => {
+                rerender(
+                    <AllContextsWrapper>
+                        <FileBrowser/>
+                    </AllContextsWrapper>
+                );
+            });
+
+            // Verify all checkboxes are checked (parent + 2 children)
+            await waitFor(() => {
+                const checkboxes = screen.getAllByRole('checkbox');
+                expect(checkboxes.length).toBe(3);
+                checkboxes.forEach(cb => expect(cb).toBeChecked());
+            });
+        });
+
+        it('children remain selected when parent is unselected', async () => {
+            // Setup: directory with children, parent and children are all selected
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: [
+                        {path: 'testdir/file1.txt', size: 100},
+                        {path: 'testdir/file2.txt', size: 200},
+                    ], is_empty: false},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select all items (parent + children)
+            const checkboxes = screen.getAllByRole('checkbox');
+            expect(checkboxes.length).toBe(3);
+
+            // Select parent first
+            await act(async () => {
+                fireEvent.click(checkboxes[0]); // testdir/
+            });
+            // Select children
+            await act(async () => {
+                fireEvent.click(checkboxes[1]); // file1.txt
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[2]); // file2.txt
+            });
+
+            // Verify all are selected
+            checkboxes.forEach(cb => expect(cb).toBeChecked());
+
+            // Unselect the parent directory
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            // Parent should be unchecked, but children should remain checked
+            expect(checkboxes[0]).not.toBeChecked();
+            expect(checkboxes[1]).toBeChecked();
+            expect(checkboxes[2]).toBeChecked();
+        });
+
+        it('unselects children when parent directory is closed', async () => {
+            // Setup: directory with children, already open
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: [
+                        {path: 'testdir/file1.txt', size: 100},
+                        {path: 'testdir/file2.txt', size: 200},
+                    ], is_empty: false},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select parent and children
+            const checkboxes = screen.getAllByRole('checkbox');
+            expect(checkboxes.length).toBe(3);
+
+            await act(async () => {
+                fireEvent.click(checkboxes[0]); // testdir/
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[1]); // file1.txt
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[2]); // file2.txt
+            });
+
+            // Verify all are selected
+            checkboxes.forEach(cb => expect(cb).toBeChecked());
+
+            // Click to close the directory
+            const folderCell = screen.getByText('testdir/');
+            await act(async () => {
+                fireEvent.click(folderCell);
+            });
+
+            // Parent should still be selected, but children should be unselected
+            // (children are no longer visible after closing)
+            expect(checkboxes[0]).toBeChecked();
+        });
+
+        it('does not auto-select children when opening unselected directory', async () => {
+            const mockSetOpenFolders = jest.fn();
+            const mockFetchFiles = jest.fn();
+
+            // Start with folder not open
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: null, is_empty: false},
+                ],
+                openFolders: [],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            const {rerender} = renderFileBrowser(<FileBrowser/>);
+
+            // Click to expand WITHOUT selecting first
+            const folderCell = screen.getByText('testdir/');
+            await act(async () => {
+                fireEvent.click(folderCell);
+            });
+
+            // Simulate browseFiles update with children
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: [
+                        {path: 'testdir/file1.txt', size: 100},
+                        {path: 'testdir/file2.txt', size: 200},
+                    ], is_empty: false},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            await act(async () => {
+                rerender(
+                    <AllContextsWrapper>
+                        <FileBrowser/>
+                    </AllContextsWrapper>
+                );
+            });
+
+            // Verify NO checkboxes are checked
+            const checkboxes = screen.getAllByRole('checkbox');
+            expect(checkboxes.length).toBe(3);
+            checkboxes.forEach(cb => expect(cb).not.toBeChecked());
+        });
+    });
+
     describe('Delete functionality', () => {
         it('removes deleted directory from openFolders', async () => {
             const mockSetOpenFolders = jest.fn();

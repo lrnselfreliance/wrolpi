@@ -178,10 +178,19 @@ async def await_switches(async_client):
 
 
 @pytest.fixture
-async def await_background_tasks(async_client):
-    """Returns the `switches.await_switches` function, but primes the Sanic App to actually handle signals."""
+async def await_background_tasks(async_client, test_session):
+    """Returns a function that awaits background tasks and expires session objects.
+
+    After background tasks complete, session objects may be stale, so we automatically
+    expire them to force a refresh on next access.
+    """
     await async_client.get('/api')
-    return await_background_tasks_
+
+    async def _await_and_expire():
+        await await_background_tasks_()
+        test_session.expire_all()
+
+    return _await_and_expire
 
 
 @pytest.fixture

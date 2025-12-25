@@ -199,3 +199,51 @@ async def test_untag_channel_without_directory_saves_config(
     channel_entry = next((c for c in config.get('channels', []) if c['name'] == 'Channel Name'), None)
     assert channel_entry is not None, "Channel not found in config"
     assert channel_entry.get('tag_name') is None, "Tag should be removed from config"
+
+
+@pytest.mark.asyncio
+async def test_tag_channel_move_background_task(
+        test_session, async_client, test_directory, channel_factory, tag_factory,
+        await_background_tasks, test_channels_config
+):
+    """Test that channel move works when executed as a background task.
+
+    This replicates the production scenario where PYTEST=False causes
+    move_channel to run via background_task() instead of direct await.
+
+    Bug: When PYTEST=False, tag_channel passes a session to background_task(),
+    but by the time the task runs, the session is invalid, causing
+    DetachedInstanceError when accessing channel.collection.
+    """
+    from unittest import mock
+
+    # Create channel with files
+    original_dir = test_directory / 'videos' / 'test_channel'
+    original_dir.mkdir(parents=True)
+    channel = channel_factory(name='Test Channel', directory=original_dir)
+    test_session.commit()
+
+    # Create a test file in the channel directory
+    test_file = original_dir / 'test_video.mp4'
+    test_file.touch()
+
+    new_dir = test_directory / 'videos' / 'moved_channel'
+    new_dir.mkdir(parents=True, exist_ok=True)
+
+    tag = await tag_factory(name='MovedTag')
+    channel_id = channel.id
+
+    # Call tag_channel - it will use background_task() for the move.
+    # The fix ensures the background task creates its own session, so
+    # this should work regardless of whether the original session is closed.
+    await lib.tag_channel(test_session, tag.name, new_dir, channel_id)
+
+    # Wait for background task to complete and expire session objects
+    await await_background_tasks()
+
+    # Verify move succeeded - refresh channel from DB
+    channel = Channel.find_by_id(test_session, channel_id)
+    assert channel is not None, "Channel should still exist"
+    assert channel.directory == new_dir, f"Channel directory should be {new_dir}, got {channel.directory}"
+    assert (new_dir / 'test_video.mp4').exists(), "File should have been moved to new directory"
+    assert not test_file.exists(), "File should no longer exist in original directory"

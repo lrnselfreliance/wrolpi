@@ -12,8 +12,8 @@ from wrolpi.common import logger, \
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager, Download
 from wrolpi.errors import APIError, ValidationError, RefreshConflict
+from wrolpi.events import Events
 from wrolpi.tags import Tag
-from wrolpi.vars import PYTEST
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel
@@ -113,17 +113,13 @@ async def update_channel(session: Session, *, data: schema.ChannelPutRequest, ch
 
     session.commit()
 
-    async def _():
-        await channel.move_channel(new_directory, session, send_events=True)
-
     if new_directory != old_directory:
         if not new_directory.is_dir():
             new_directory.mkdir(parents=True)
 
-        if PYTEST:
-            await _()
-        else:
-            background_task(_())
+        # Always use background task with its own session to avoid
+        # DetachedInstanceError when the original session is closed.
+        background_task(_background_move_channel(channel.id, new_directory))
 
     save_channels_config.activate_switch()
 
@@ -247,6 +243,26 @@ async def update_channel_download(channel_id: int, download_id: int, url: str, f
     return download
 
 
+async def _background_move_channel(channel_id: int, target_directory: pathlib.Path):
+    """Helper to run channel move in background with its own database session.
+
+    This allows the move to continue even if the original HTTP request is cancelled
+    (e.g., user closes browser tab), and avoids DetachedInstanceError by creating
+    a fresh session for the background task.
+    """
+    try:
+        with get_db_session(commit=True) as session:
+            channel = Channel.find_by_id(session, channel_id)
+            if not channel:
+                logger.error(f'_background_move_channel: channel {channel_id} not found')
+                Events.send_file_move_failed(f'Channel move failed: channel not found')
+                return
+            await channel.move_channel(target_directory, session, send_events=True)
+    except Exception as e:
+        logger.error(f'_background_move_channel: failed for channel_id={channel_id}', exc_info=e)
+        Events.send_file_move_failed(f'Channel move failed: {e}')
+
+
 @wrol_mode_check
 async def tag_channel(session: Session, tag_name: str | None, directory: pathlib.Path | None, channel_id: int):
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
@@ -268,11 +284,9 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
         # Move to newly defined directory only if necessary.
         directory.mkdir(parents=True, exist_ok=True)
         if channel.directory != directory:
-            coro = channel.move_channel(directory, session, send_events=True)
-            if PYTEST:
-                await coro
-            else:
-                background_task(coro)
+            # Always use background task with its own session to avoid
+            # DetachedInstanceError when the original session is closed.
+            background_task(_background_move_channel(channel.id, directory))
         else:
             save_channels_config.activate_switch()
     else:

@@ -219,6 +219,26 @@ class TestServiceActions:
             assert result["action"] == expected_action
 
 
+class TestControllerSelfRestart:
+    """Tests for controller self-restart behavior."""
+
+    def test_controller_restart_uses_popen(self):
+        """Controller restart should use Popen to avoid blocking on self-termination."""
+        with mock.patch("subprocess.Popen") as mock_popen:
+            result = restart_service("wrolpi-controller")
+            mock_popen.assert_called_once_with(["systemctl", "restart", "wrolpi-controller"])
+            assert result["success"] is True
+            assert result["pending"] is True
+            assert result["action"] == "restart"
+
+    def test_controller_restart_handles_exception(self):
+        """Controller restart should handle exceptions gracefully."""
+        with mock.patch("subprocess.Popen", side_effect=Exception("popen failed")):
+            result = restart_service("wrolpi-controller")
+            assert result["success"] is False
+            assert "popen failed" in result["error"]
+
+
 class TestGetServiceLogs:
     """Tests for get_service_logs function."""
 

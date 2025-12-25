@@ -226,6 +226,26 @@ def restart_service(name: str) -> dict:
         return {"success": False, "error": f"Unknown service: {name}"}
 
     systemd_name = service_config.get("systemd_name", name)
+
+    # Special handling for self-restart: use Popen to avoid blocking
+    # (the process will be killed before subprocess.run can return)
+    if systemd_name == "wrolpi-controller":
+        try:
+            subprocess.Popen(["systemctl", "restart", systemd_name])
+            return {
+                "success": True,
+                "service": name,
+                "action": "restart",
+                "pending": True,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "service": name,
+                "action": "restart",
+                "error": str(e),
+            }
+
     result = _run_systemctl("restart", systemd_name)
 
     return {

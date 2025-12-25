@@ -90,6 +90,10 @@ export const semanticUIColorMap = {
     grey: '#767676',
 }
 
+export const ColorToSemanticHexColor = (color) => {
+    return semanticUIColorMap[color] || null;
+}
+
 export const validUrlRegex = /^(http|https):\/\/[^ "]+$/;
 
 export const downloadOrderOptions = [

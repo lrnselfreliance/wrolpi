@@ -70,7 +70,7 @@ import {
     TabPaneProps,
     TextAreaProps,
 } from "semantic-ui-react";
-import {ColorToSemanticHexColor} from "./Common";
+import {ColorToSemanticHexColor} from "./Vars";
 import _ from "lodash";
 import {ThemeContextValue, ThemeName, SavedThemeName} from "../types/theme";
 
@@ -335,6 +335,49 @@ export const Modal: ModalComponent = Object.assign(ModalBase, {
     Description: ModalDescription,
     Header: ModalHeader,
 });
+
+// ----------------------------------------------------------------------------
+// Confirm Component
+// ----------------------------------------------------------------------------
+
+export interface ConfirmProps {
+    open: boolean;
+    header?: string;
+    content?: string | React.ReactNode;
+    confirmButton?: string;
+    cancelButton?: string;
+    onConfirm?: () => void;
+    onCancel?: () => void;
+    onClose?: () => void;
+    size?: 'mini' | 'tiny' | 'small' | 'large' | 'fullscreen';
+}
+
+export const Confirm: React.FC<ConfirmProps> = ({
+    open,
+    header,
+    content,
+    confirmButton = 'OK',
+    cancelButton = 'Cancel',
+    onConfirm,
+    onCancel,
+    onClose,
+    size = 'tiny',
+}) => {
+    const {i} = useContext(ThemeContext);
+
+    return (
+        <Modal open={open} onClose={onClose} size={size} className="themed-confirm">
+            {header && <Modal.Header>{header}</Modal.Header>}
+            <Modal.Content>
+                {typeof content === 'string' ? <p>{content}</p> : content}
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={onCancel} {...i}>{cancelButton}</Button>
+                <Button onClick={onConfirm} color="green" {...i}>{confirmButton}</Button>
+            </Modal.Actions>
+        </Modal>
+    );
+};
 
 // ----------------------------------------------------------------------------
 // Form Compound Component

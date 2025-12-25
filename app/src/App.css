@@ -197,6 +197,11 @@ textarea.otp {
     color: #DDDDDD !important;
 }
 
+/* Mobile-responsive Confirm modal */
+.ui.modal.themed-confirm {
+    max-width: 95vw;
+}
+
 .clickable {
     cursor: pointer;
 }

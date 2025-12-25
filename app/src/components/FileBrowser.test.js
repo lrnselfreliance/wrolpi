@@ -411,11 +411,11 @@ describe('FileBrowser', () => {
                 fireEvent.click(deleteButton);
             });
 
-            // Confirm deletion in modal
+            // Confirm deletion in modal - getAllByText because Confirm renders both mobile/desktop versions
             await waitFor(() => {
-                expect(screen.getByText('Delete')).toBeInTheDocument();
+                expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
             });
-            const confirmButton = screen.getByText('Delete');
+            const confirmButton = screen.getAllByText('Delete')[0];
             await act(async () => {
                 fireEvent.click(confirmButton);
             });
@@ -456,11 +456,11 @@ describe('FileBrowser', () => {
                 fireEvent.click(deleteButton);
             });
 
-            // Confirm deletion in modal
+            // Confirm deletion in modal - getAllByText because Confirm renders both mobile/desktop versions
             await waitFor(() => {
-                expect(screen.getByText('Delete')).toBeInTheDocument();
+                expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
             });
-            const confirmButton = screen.getByText('Delete');
+            const confirmButton = screen.getAllByText('Delete')[0];
             await act(async () => {
                 fireEvent.click(confirmButton);
             });

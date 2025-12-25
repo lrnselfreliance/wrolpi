@@ -1,6 +1,6 @@
 import React from 'react';
-import {Checkbox, Confirm, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
-import {Button, Header, Loader, Modal, Segment, Table} from "../Theme";
+import {Checkbox, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
+import {Button, Confirm, Header, Loader, Modal, Segment, Table} from "../Theme";
 import {APIButton, HotspotToggle, ThrottleToggle, Toggle,} from "../Common";
 import {useDockerized} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";

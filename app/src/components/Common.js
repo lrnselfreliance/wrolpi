@@ -6,7 +6,6 @@ import {
     Button as SButton,
     ButtonGroup,
     Card,
-    Confirm,
     Container,
     Dimmer,
     DimmerDimmable,
@@ -29,6 +28,7 @@ import {
     Breadcrumb,
     Button,
     Card as ThemedCard,
+    Confirm,
     darkTheme,
     Form,
     Header,
@@ -1296,10 +1296,6 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
 export const BackButton = ({...props}) => {
     const navigate = useNavigate();
     return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)} {...props}/>;
-}
-
-export const ColorToSemanticHexColor = (color) => {
-    return semanticUIColorMap[color] || null;
 }
 
 export const filterToMimetypes = (filter) => {

@@ -51,11 +51,11 @@ async def test_archive_download_destination(async_client, test_session, test_dir
     assert str(archive.download_directory) == str(test_directory / 'archive/wrolpi.org')
 
     # Year of download is supported.
-    wrolpi_config.archive_destination = 'archives/%(domain)s/%(year)s'
+    wrolpi_config.archive_destination = 'archives/%(domain_tag)s/%(domain)s/%(year)s'
     assert str(archive.download_directory) == str(test_directory / 'archives/wrolpi.org/2000')
 
     # More download date is supported.
-    wrolpi_config.archive_destination = 'archive/%(domain)s/%(year)s/%(month)s/%(day)s'
+    wrolpi_config.archive_destination = 'archive/%(domain_tag)s/%(domain)s/%(year)s/%(month)s/%(day)s'
     assert str(archive.download_directory) == str(test_directory / 'archive/wrolpi.org/2000/1/2')
 
 

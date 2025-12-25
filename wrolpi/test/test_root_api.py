@@ -702,7 +702,7 @@ async def test_settings_special_directories(async_client, test_wrolpi_config):
     """Maintainer can change special directories."""
     request, response = await async_client.get('/api/settings')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['archive_destination'] == 'archive/%(domain)s'
+    assert response.json['archive_destination'] == 'archive/%(domain_tag)s/%(domain)s'
     assert response.json['map_destination'] == 'map'
     assert response.json['videos_destination'] == 'videos/%(channel_tag)s/%(channel_name)s'
     assert response.json['zims_destination'] == 'zims'
@@ -730,7 +730,7 @@ async def test_settings_special_directories(async_client, test_wrolpi_config):
     data = {'archive_destination': ''}
     request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert get_wrolpi_config().archive_destination == 'archive/%(domain)s'
+    assert get_wrolpi_config().archive_destination == 'archive/%(domain_tag)s/%(domain)s'
 
 
 @pytest.mark.asyncio

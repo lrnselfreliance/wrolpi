@@ -390,6 +390,7 @@ class Archive(Base, ModelHelper):
 
         This uses the configured archive_destination template with variables:
         - domain: the domain name from the Collection
+        - domain_tag: the tag name from the Collection (empty string if no tag)
         - year, month, day: current date
 
         Returns:
@@ -397,9 +398,15 @@ class Archive(Base, ModelHelper):
         """
         archive_destination = get_wrolpi_config().archive_destination
 
+        # Get the tag name from the collection if it exists
+        domain_tag = ''
+        if self.collection and self.collection.tag:
+            domain_tag = self.collection.tag.name
+
         now_ = now()
         variables = dict(
             domain=self.domain or 'unknown',
+            domain_tag=domain_tag,
             year=now_.year,
             month=now_.month,
             day=now_.day,

@@ -59,13 +59,13 @@ def test_collection_format_destination_domain(test_session, test_directory):
     test_session.flush()
 
     destination = collection.format_destination()
-    # Should use archive_destination template: archive/%(domain)s
+    # Should use archive_destination template: archive/%(domain_tag)s/%(domain)s
+    # With no tag, pathlib normalizes archive//example.com to archive/example.com
     assert destination == test_directory / 'archive' / 'example.com'
 
-    # With tag - default template doesn't include %(domain_tag)s, so tag has no effect
+    # With tag - default template includes %(domain_tag)s
     destination_with_tag = collection.format_destination(tag_name='Tech')
-    # Default archive_destination is 'archive/%(domain)s' (no tag placeholder)
-    assert destination_with_tag == test_directory / 'archive' / 'example.com'
+    assert destination_with_tag == test_directory / 'archive' / 'Tech' / 'example.com'
 
 
 @pytest.mark.asyncio

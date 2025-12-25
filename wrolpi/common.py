@@ -784,7 +784,7 @@ def get_config_by_file_name(file_name: str) -> ConfigFile:
 class WROLPiConfig(ConfigFile):
     file_name = 'wrolpi.yaml'
     default_config = dict(
-        archive_destination='archive/%(domain)s',
+        archive_destination='archive/%(domain_tag)s/%(domain)s',
         download_on_startup=True,
         download_timeout=0,
         hotspot_device='wlan0',

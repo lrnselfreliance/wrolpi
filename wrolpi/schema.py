@@ -32,7 +32,7 @@ class SettingsResponse:
     throttle_status: str
     version: str
     wrol_mode: bool
-    archive_destination: str = 'archive/%(domain)s'
+    archive_destination: str = 'archive/%(domain_tag)s/%(domain)s'
     map_destination: str = 'map'
     videos_destination: str = 'videos/%(channel_tag)s/%(channel_name)s'
     zims_destination: str = 'zims'

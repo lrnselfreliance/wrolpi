@@ -57,7 +57,7 @@ async def test_configs_crud(async_client, test_session, test_tags_config, tag_fa
     request, response = await async_client.get('/api/config?file_name=wrolpi.yaml')
     assert response.status_code == HTTPStatus.OK
     wrolpi_config = response.json['config']
-    assert wrolpi_config['archive_destination'] == 'archive/%(domain)s'
+    assert wrolpi_config['archive_destination'] == 'archive/%(domain_tag)s/%(domain)s'
     # Change config value.
     wrolpi_config['archive_destination'] = 'some new value'
     body = dict(config=wrolpi_config)

@@ -378,7 +378,7 @@ class ArchiveFiles:
 
 def get_archive_directory() -> pathlib.Path:
     archive_destination = get_wrolpi_config().archive_destination
-    variables = dict(domain='', year='', month='', day='')
+    variables = dict(domain='', domain_tag='', year='', month='', day='')
     archive_destination = archive_destination % variables
     archive_directory = get_media_directory() / archive_destination
     return archive_directory

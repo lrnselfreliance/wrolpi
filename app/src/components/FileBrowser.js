@@ -214,6 +214,14 @@ export function FileBrowser() {
 
     const onDelete = async () => {
         await deleteFile(selectedPaths);
+        // Remove deleted directories from openFolders to prevent fetching non-existent directories
+        const deletedDirs = selectedPaths.filter(p => p.endsWith('/'));
+        if (deletedDirs.length > 0 && openFolders && openFolders.length > 0) {
+            const newOpenFolders = openFolders.filter(folder =>
+                !deletedDirs.some(deleted => folder === deleted || folder.startsWith(deleted))
+            );
+            setOpenFolders(newOpenFolders.length > 0 ? newOpenFolders : null);
+        }
         await reset();
     };
 

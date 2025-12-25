@@ -175,4 +175,98 @@ describe('FileBrowser', () => {
             expect(uploadButton).toBeDisabled();
         });
     });
+
+    describe('Delete functionality', () => {
+        it('removes deleted directory from openFolders', async () => {
+            const mockSetOpenFolders = jest.fn();
+            const mockFetchFiles = jest.fn();
+            const mockDeleteFile = require('../api').deleteFile;
+            mockDeleteFile.mockResolvedValue();
+
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'testdir/', children: [{path: 'testdir/file.txt', size: 100}], is_empty: false},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select the directory (first checkbox - testdir/)
+            const checkboxes = screen.getAllByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            // Click delete button (red trash button) - uses APIButton which has confirm modal
+            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            await act(async () => {
+                fireEvent.click(deleteButton);
+            });
+
+            // Confirm deletion in modal
+            await waitFor(() => {
+                expect(screen.getByText('Delete')).toBeInTheDocument();
+            });
+            const confirmButton = screen.getByText('Delete');
+            await act(async () => {
+                fireEvent.click(confirmButton);
+            });
+
+            // Verify setOpenFolders was called to remove the deleted directory
+            await waitFor(() => {
+                expect(mockSetOpenFolders).toHaveBeenCalledWith(null);
+            });
+        });
+
+        it('does not modify openFolders when deleting files only', async () => {
+            const mockSetOpenFolders = jest.fn();
+            const mockFetchFiles = jest.fn();
+            const mockDeleteFile = require('../api').deleteFile;
+            mockDeleteFile.mockResolvedValue();
+
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'file.txt', size: 1024},
+                    {path: 'testdir/', children: null, is_empty: true},
+                ],
+                openFolders: ['testdir/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: mockFetchFiles,
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select the file (first checkbox - file.txt)
+            const checkboxes = screen.getAllByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            // Click delete button
+            const deleteButton = screen.getAllByRole('button').find(btn => btn.classList.contains('red'));
+            await act(async () => {
+                fireEvent.click(deleteButton);
+            });
+
+            // Confirm deletion in modal
+            await waitFor(() => {
+                expect(screen.getByText('Delete')).toBeInTheDocument();
+            });
+            const confirmButton = screen.getByText('Delete');
+            await act(async () => {
+                fireEvent.click(confirmButton);
+            });
+
+            // Wait for delete to complete
+            await waitFor(() => {
+                expect(mockDeleteFile).toHaveBeenCalled();
+            });
+
+            // setOpenFolders should NOT have been called since we only deleted a file
+            expect(mockSetOpenFolders).not.toHaveBeenCalled();
+        });
+    });
 });

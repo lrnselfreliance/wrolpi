@@ -9,10 +9,8 @@ import {Media} from "../../contexts/contexts";
 const nullUnit = createUnit('null');
 
 function ratioReducer(prevState, e) {
-    const {value, name} = Object.keys(e).indexOf('target') >= 0 ? e.target : e;
+    const {value, name} = 'target' in e ? e.target : e;
     let {a, aUnit, b, bUnit, c, cUnit, d, dUnit, base, lastUpdated, recentUnits} = prevState;
-    console.log('ratioReducer', name, value, lastUpdated);
-    console.debug('ratioReducer', 'a:', a.toString(), 'b:', b.toString(), 'c:', c.toString(), 'd:', d.toString());
 
     // Keep a stack of which inputs are updated.  Limit it to the 3 most recent inputs.
     let newLastUpdated = lastUpdated || [];
@@ -58,7 +56,6 @@ function ratioReducer(prevState, e) {
         base = value;
         // Get the unit of this base that the user used most recently.
         aUnit = bUnit = cUnit = dUnit = recentUnits[base] || nullUnit;
-        console.debug('ratioReducer', 'change base:', aUnit, 'value:', value);
         a = b = c = d = unit('', aUnit);
         // Reset last updated.
         newLastUpdated = [];
@@ -111,15 +108,16 @@ const baseToUnitsMap = {
     ],
     'volume': [
         {key: 'cc', value: 'cc', text: 'cc'},
-        {key: 'cuin', value: 'cuin', text: 'cuin'},
+        {key: 'liter', value: 'liter', text: 'liter'},
+        {key: 'm3', value: 'm3', text: 'meters³'},
         {key: 'cup', value: 'cup', text: 'cup'},
         {key: 'fluidounce', value: 'fluidounce', text: 'fl.oz'},
         {key: 'gallon', value: 'gallon', text: 'gallon'},
-        {key: 'liter', value: 'liter', text: 'liter'},
-        {key: 'm3', value: 'm3', text: 'meters³'},
+        {key: 'quart', value: 'quart', text: 'quart'},
         {key: 'milliliter', value: 'milliliter', text: 'ml'},
         {key: 'tablespoon', value: 'tablespoon', text: 'tablespoon'},
         {key: 'teaspoon', value: 'teaspoon', text: 'teaspoon'},
+        {key: 'cuin', value: 'cuin', text: 'cuin'},
     ],
     'mass': [
         {key: 'grain', value: 'grain', text: 'grain'},
@@ -186,30 +184,53 @@ const baseOptions = [
     {key: 'energy', value: 'energy', label: 'joule, watt, etc.', text: 'Energy'},
 ];
 
+const RatioInput = React.forwardRef(({name, label, value, unitValue, unitName, unitOptions, color, dispatch, onKeyDown}, ref) => (
+    <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
+        <div className={`ui label ${color}`}>{label}</div>
+        <input
+            id={name}
+            name={name}
+            type="number"
+            ref={ref}
+            value={unitToInputValue(value)}
+            onChange={e => dispatch(e)}
+            onKeyDown={onKeyDown}
+            onFocus={e => e.target.select()}
+        />
+        {unitOptions &&
+            <Dropdown
+                options={unitOptions}
+                className='label'
+                onChange={(_, data) => dispatch(data)}
+                name={unitName}
+                value={unitValue}
+            />}
+    </div>
+));
+
 const RatioCalculator = () => {
     // Get the units the user recently used.  These will be set if the user changes the base.
     const [storageRecentUnits, setStorageRecentUnits] = useLocalStorage('ratio_calculator_recent_units',
         initialState.recentUnits);
-    initialState.recentUnits = storageRecentUnits;
-    const [state, dispatch] = React.useReducer(ratioReducer, initialState);
+    const [state, dispatch] = React.useReducer(
+        ratioReducer,
+        storageRecentUnits,
+        (recentUnits) => ({...initialState, recentUnits})
+    );
 
     // Overwrite the most recently used unit for each base.
     React.useEffect(() => {
-        const key = unitsToBaseMap[state.aUnit];
-        setStorageRecentUnits({...storageRecentUnits, [key]: state.aUnit});
-    }, [state.aUnit]);
-    React.useEffect(() => {
-        const key = unitsToBaseMap[state.bUnit];
-        setStorageRecentUnits({...storageRecentUnits, [key]: state.bUnit});
-    }, [state.bUnit]);
-    React.useEffect(() => {
-        const key = unitsToBaseMap[state.cUnit];
-        setStorageRecentUnits({...storageRecentUnits, [key]: state.cUnit});
-    }, [state.cUnit]);
-    React.useEffect(() => {
-        const key = unitsToBaseMap[state.dUnit];
-        setStorageRecentUnits({...storageRecentUnits, [key]: state.dUnit});
-    }, [state.dUnit]);
+        const updates = {};
+        [state.aUnit, state.bUnit, state.cUnit, state.dUnit].forEach(unitValue => {
+            const baseKey = unitsToBaseMap[unitValue];
+            if (baseKey) {
+                updates[baseKey] = unitValue;
+            }
+        });
+        if (Object.keys(updates).length > 0) {
+            setStorageRecentUnits(prev => ({...prev, ...updates}));
+        }
+    }, [state.aUnit, state.bUnit, state.cUnit, state.dUnit, setStorageRecentUnits]);
 
     const inputARef = React.useRef(null);
     const inputBRef = React.useRef(null);
@@ -218,16 +239,7 @@ const RatioCalculator = () => {
 
     const unitOptions = baseToUnitsMap[state.base];
 
-    const unitDropdownOptions = {
-        options: unitOptions,
-        className: 'label',
-        onChange: (e, data) => dispatch(data),
-    };
-
-    const aColor = state.lastUpdated.indexOf('a') >= 0 ? '' : 'grey';
-    const bColor = state.lastUpdated.indexOf('b') >= 0 ? '' : 'grey';
-    const cColor = state.lastUpdated.indexOf('c') >= 0 ? '' : 'grey';
-    const dColor = state.lastUpdated.indexOf('d') >= 0 ? '' : 'grey';
+    const getColor = (name) => state.lastUpdated.includes(name) ? '' : 'grey';
 
     const baseDropdown = <Dropdown selection
                                    fluid
@@ -235,86 +247,69 @@ const RatioCalculator = () => {
                                    options={baseOptions}
                                    value={state.base}
                                    name='base'
-                                   onChange={(e, data) => dispatch(data)}
+                                   onChange={(_, data) => dispatch(data)}
                                    style={{marginBottom: '1em'}}
     />;
 
     const handleInputChange = (e) => {
         // Allow the user to switch between inputs using a, b, c, and d keys.
-        if (e?.key === 'a') {
-            inputARef.current.focus();
-        } else if (e?.key === 'b') {
-            inputBRef.current.focus();
-        } else if (e?.key === 'c') {
-            inputCRef.current.focus();
-        } else if (e?.key === 'd') {
-            inputDRef.current.focus();
+        const refs = {a: inputARef, b: inputBRef, c: inputCRef, d: inputDRef};
+        if (refs[e?.key]) {
+            refs[e.key].current.focus();
         }
-    }
+    };
 
-    const inputA = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
-        <div className={`ui label ${aColor}`}>A</div>
-        <input
-            id="a"
-            name="a"
-            type="number"
-            ref={inputARef}
-            value={unitToInputValue(state.a)}
-            onChange={e => dispatch(e)}
-            onKeyPress={handleInputChange}
-            onFocus={e => e.target.select()}
-        />
-        {state.base &&
-            <Dropdown {...unitDropdownOptions} name='aUnit' value={state.aUnit}/>}
-    </div>;
+    const inputA = <RatioInput
+        ref={inputARef}
+        name="a"
+        label="A"
+        value={state.a}
+        unitValue={state.aUnit}
+        unitName="aUnit"
+        unitOptions={unitOptions}
+        color={getColor('a')}
+        dispatch={dispatch}
+        onKeyDown={handleInputChange}
+    />;
 
-    const inputB = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
-        <div className={`ui label ${bColor}`}>B</div>
-        <input
-            id="b"
-            name="b"
-            type="number"
-            ref={inputBRef}
-            value={unitToInputValue(state.b)}
-            onChange={e => dispatch(e)}
-            onKeyPress={handleInputChange}
-            onFocus={e => e.target.select()}
-        />
-        {state.base &&
-            <Dropdown {...unitDropdownOptions} name='bUnit' value={state.bUnit}/>}
-    </div>;
+    const inputB = <RatioInput
+        ref={inputBRef}
+        name="b"
+        label="B"
+        value={state.b}
+        unitValue={state.bUnit}
+        unitName="bUnit"
+        unitOptions={unitOptions}
+        color={getColor('b')}
+        dispatch={dispatch}
+        onKeyDown={handleInputChange}
+    />;
 
-    const inputC = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
-        <div className={`ui label ${cColor}`}>C</div>
-        <input
-            id="c"
-            name="c"
-            type="number"
-            ref={inputCRef}
-            value={unitToInputValue(state.c)}
-            onChange={e => dispatch(e)}
-            onKeyPress={handleInputChange}
-            onFocus={e => e.target.select()}
-        />
-        {state.base &&
-            <Dropdown {...unitDropdownOptions} name='cUnit' value={state.cUnit}/>}
-    </div>;
+    const inputC = <RatioInput
+        ref={inputCRef}
+        name="c"
+        label="C"
+        value={state.c}
+        unitValue={state.cUnit}
+        unitName="cUnit"
+        unitOptions={unitOptions}
+        color={getColor('c')}
+        dispatch={dispatch}
+        onKeyDown={handleInputChange}
+    />;
 
-    const inputD = <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
-        <div className={`ui label ${dColor}`}>D</div>
-        <input
-            id="d"
-            name="d"
-            type="number"
-            ref={inputDRef}
-            value={unitToInputValue(state.d)}
-            onChange={e => dispatch(e)}
-            onKeyPress={handleInputChange}
-            onFocus={e => e.target.select()}
-        />
-        {state.base &&
-            <Dropdown {...unitDropdownOptions} name='dUnit' value={state.dUnit}/>}
-    </div>;
+    const inputD = <RatioInput
+        ref={inputDRef}
+        name="d"
+        label="D"
+        value={state.d}
+        unitValue={state.dUnit}
+        unitName="dUnit"
+        unitOptions={unitOptions}
+        color={getColor('d')}
+        dispatch={dispatch}
+        onKeyDown={handleInputChange}
+    />;
 
     React.useEffect(() => {
         if (inputARef.current) {
@@ -376,3 +371,6 @@ const RatioCalculator = () => {
 export const RatioCalculators = () => {
     return <RatioCalculator/>
 }
+
+// Exported for testing
+export { ratioReducer };

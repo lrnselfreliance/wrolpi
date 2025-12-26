@@ -362,11 +362,22 @@ class ChannelsConfig(ConfigFile):
                                                 )
 
             with get_db_session(commit=True) as session:
-                # Delete any Channels that were deleted from the config.
+                # Delete any Channels that were deleted from the config, along with their Collections.
+                orphaned_collection_ids = []
                 for channel in session.query(Channel):
                     if channel.id not in updated_channel_ids:
                         logger.warning(f'Deleting {channel} because it is not in the config.')
+                        orphaned_collection_ids.append(channel.collection_id)
                         channel.delete_with_videos()
+
+                # Delete orphaned Collections (kind='channel') that no longer have a Channel.
+                # This prevents Collections from appearing in the UI with null channel_id.
+                from wrolpi.collections import Collection
+                for collection_id in orphaned_collection_ids:
+                    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
+                    if collection:
+                        logger.warning(f'Deleting orphaned Collection {collection.name} (id={collection.id})')
+                        session.delete(collection)
 
             # Assign Videos to Channels using bulk SQL
             from modules.videos import claim_videos_for_channels

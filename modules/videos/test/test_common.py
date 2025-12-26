@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from modules.videos.models import Channel, Video
+from wrolpi.collections import Collection
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
@@ -297,6 +298,48 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
     import_channels_config()
     assert channel1_dir in test_channels_config.read_text()
     assert channel2_dir not in test_channels_config.read_text()
+
+
+@pytest.mark.asyncio
+async def test_import_channel_deletes_orphaned_collections(await_switches, test_session, channel_factory,
+                                                           test_channels_config):
+    """When a Channel is deleted from config, its associated Collection should also be deleted.
+
+    This prevents orphaned Collections (kind='channel') from appearing in the UI with null channel_id.
+    """
+    # Create two channels (each creates a Collection with kind='channel')
+    channel1 = channel_factory(source_id='foo')
+    channel2 = channel_factory(source_id='bar')
+    test_session.commit()
+
+    # Verify both Collections exist
+    assert test_session.query(Collection).filter_by(kind='channel').count() == 2
+
+    # Capture directory values before deletion
+    channel1_dir = str(channel1.directory)
+    channel2_dir = str(channel2.directory)
+    collection2_id = channel2.collection_id
+
+    # Write Channels to the config file
+    save_channels_config()
+    await await_switches()
+
+    # Remove channel2 from the config file
+    config = get_channels_config()
+    config_dict = config.dict()
+    config_dict['channels'] = [i for i in config.channels if i['directory'] != channel2_dir]
+    config.update(config_dict)
+    await await_switches()
+
+    # Import config - this should delete channel2 AND its Collection
+    import_channels_config()
+
+    # Verify only one Channel remains
+    assert test_session.query(Channel).count() == 1
+
+    # Verify the orphaned Collection was also deleted (this is the bug we're fixing)
+    assert test_session.query(Collection).filter_by(kind='channel').count() == 1
+    assert test_session.query(Collection).filter_by(id=collection2_id).count() == 0
 
 
 @pytest.mark.asyncio

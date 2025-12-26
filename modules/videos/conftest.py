@@ -207,7 +207,7 @@ def video_download_manager(test_download_manager) -> DownloadManager:
 
 
 @pytest.fixture
-def test_channels_config(test_directory):
+def test_channels_config(test_directory, async_client):
     (test_directory / 'config').mkdir(exist_ok=True)
     config_path = test_directory / 'config/channels.yaml'
     with set_test_channels_config() as config:

@@ -281,8 +281,7 @@ class ChannelDownloader(Downloader, ABC):
             channel = get_channel(session, channel_id=channel_id, return_dict=False)
             if not channel.videos or not channel.refreshed:
                 logger.warning(f'Refreshing videos in {channel.directory} because {channel} has no video records!')
-                await channel.refresh_files(send_events=False)
-                session.commit()  # Commit the refresh.
+                channel.refresh_files(channel.id, send_events=False)
                 session.refresh(channel)
 
     @staticmethod

@@ -889,30 +889,25 @@ class Channel(ModelHelper, Base):
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
-    async def refresh_files(self, send_events: bool = True):
+    @classmethod
+    def refresh_files(cls, id_: int, send_events: bool = True):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
-        logger.debug(f'{self}.refresh_files')
-        # Get this Channel's ID for later.  Refresh may take a long time.
-        self_id = self.id
+        # Get this Channel's info for later.  Refresh may take a long time.
+        with get_db_session() as session:
+            directory = cls.find_by_id(session, id_).directory
 
-        # Refresh all files within this channel's directory first.
-        await refresh_files([self.directory], send_events=send_events)
+        # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
+        async def _():
+            # Refresh all files within this channel's directory first.
+            from modules.videos.common import update_view_counts_and_censored
+            await refresh_files([directory], send_events=send_events)
+            # Update view count second.
+            await update_view_counts_and_censored(id_)
+            with get_db_session(commit=True) as session_:
+                channel_ = cls.find_by_id(session_, id_)
+                channel_.refreshed = True
 
-        # Apply any info_json (update view counts) second.
-        from modules.videos.common import update_view_counts_and_censored
-        if PYTEST:
-            await update_view_counts_and_censored(self_id)
-            self.refreshed = True
-        else:
-
-            # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
-            async def _():
-                await update_view_counts_and_censored(self_id)
-                with get_db_session(commit=True) as session:
-                    channel: Channel = session.query(Channel).filter(Channel.id == self_id).one()
-                    channel.refreshed = True
-
-            background_task(_())
+        background_task(_())
 
     @staticmethod
     def get_by_id(session: Session, id_: int) -> Optional['Channel']:

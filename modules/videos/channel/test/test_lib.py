@@ -150,7 +150,8 @@ async def test_tag_channel_existing(async_client, test_session, test_directory, 
 
 @pytest.mark.asyncio
 async def test_tag_channel_without_directory_saves_config(
-        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches
+        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches,
+        async_client
 ):
     """Tagging channel without providing directory should still save config."""
     channel_directory = test_directory / 'videos' / 'Channel Name'
@@ -175,7 +176,7 @@ async def test_tag_channel_without_directory_saves_config(
 
 @pytest.mark.asyncio
 async def test_untag_channel_without_directory_saves_config(
-        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches
+        test_session, test_directory, channel_factory, tag_factory, test_channels_config, await_switches,
 ):
     """Untagging channel without providing directory should still save config."""
     channel_directory = test_directory / 'videos' / 'Channel Name'

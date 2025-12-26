@@ -1384,7 +1384,7 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
         return
 
     # Use psycopg2 cursor for safe SQL building via mogrify
-    with get_db_curs() as curs:
+    with get_db_curs(commit=True) as curs:
         # Build VALUES list for the update: (old_path, new_dir, new_path)
         values = [
             (str(old_path), str(new_path.parent), str(new_path))

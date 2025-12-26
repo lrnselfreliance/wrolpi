@@ -1154,13 +1154,24 @@ async def test_upsert_file_video_with_channel(async_client, test_session, test_d
 
 @pytest.mark.asyncio
 async def test_move_many_files(async_client, test_session, test_directory, make_files_structure):
+    from wrolpi.db import get_db_curs
+
     make_files_structure([f'foo/{i}.txt' for i in range(10_000)])
     await lib.refresh_files()
 
     foo = test_directory / 'foo'
     bar = test_directory / 'bar'
 
-    with timer('test_move_many_files'):
+    # Track get_db_curs calls to verify commit=True is passed for bulk updates.
+    # Without commit=True, raw SQL is rolled back in production.
+    get_db_curs_calls = []
+    original_get_db_curs = get_db_curs
+
+    def tracking_get_db_curs(*args, **kwargs):
+        get_db_curs_calls.append(kwargs)
+        return original_get_db_curs(*args, **kwargs)
+
+    with timer('test_move_many_files'), mock.patch('wrolpi.files.lib.get_db_curs', tracking_get_db_curs):
         # mv foo bar
         await lib.move(test_session, bar, foo)
 
@@ -1168,6 +1179,11 @@ async def test_move_many_files(async_client, test_session, test_directory, make_
     assert bar.is_dir()
     assert (bar / 'foo').is_dir()
     assert (bar / 'foo/0.txt').is_file()
+
+    # Verify bulk update used commit=True (required for raw SQL to persist in production)
+    assert get_db_curs_calls, 'get_db_curs should have been called for bulk update'
+    assert all(call.get('commit') is True for call in get_db_curs_calls), \
+        'get_db_curs must be called with commit=True to persist raw SQL in production'
 
 
 @only_macos

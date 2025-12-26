@@ -1284,6 +1284,33 @@ export async function retryOnceDownloads() {
     return response
 }
 
+export async function batchDeleteDownloads(downloadIds) {
+    const response = await apiPost(`${API_URI}/download/batch/delete`, {download_ids: downloadIds});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not delete downloads!  See server logs.');
+        toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
+    }
+    return response
+}
+
+export async function batchRetryDownloads(downloadIds) {
+    const response = await apiPost(`${API_URI}/download/batch/retry`, {download_ids: downloadIds});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not retry downloads!  See server logs.');
+        toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
+    }
+    return response
+}
+
+export async function batchClearDownloads(downloadIds) {
+    const response = await apiPost(`${API_URI}/download/batch/clear`, {download_ids: downloadIds});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not clear downloads!  See server logs.');
+        toast({type: 'error', title: 'Downloads Error', description: message, time: 5000});
+    }
+    return response
+}
+
 export async function getStatistics() {
     const response = await apiGet(`${API_URI}/statistics`);
     if (response.ok) {

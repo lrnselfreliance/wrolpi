@@ -1143,6 +1143,45 @@ class DownloadManager:
         save_downloads_config.activate_switch()
         return deleted_ids
 
+    def delete_downloads_by_ids(self, session: Session, download_ids: List[int]) -> List[int]:
+        """Delete specific downloads by their IDs."""
+        if not download_ids:
+            return []
+        stmt = Download.__table__.delete().where(Download.id.in_(download_ids)).returning(Download.id)
+        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        session.commit()
+        save_downloads_config.activate_switch()
+        return deleted_ids
+
+    def retry_downloads_by_ids(self, session: Session, download_ids: List[int]) -> int:
+        """Retry specific downloads by their IDs. Returns the number of downloads renewed."""
+        if not download_ids:
+            return 0
+        downloads = session.query(Download).filter(Download.id.in_(download_ids)).all()
+        count = 0
+        for download in downloads:
+            if download.status in (DownloadStatus.failed, DownloadStatus.deferred):
+                download.renew(reset_attempts=True)
+                count += 1
+        session.commit()
+        return count
+
+    def clear_completed_by_ids(self, session: Session, download_ids: List[int]) -> List[int]:
+        """Clear (delete) specific completed once-downloads by their IDs."""
+        if not download_ids:
+            return []
+        from sqlalchemy import and_
+        stmt = Download.__table__.delete().where(
+            and_(
+                Download.id.in_(download_ids),
+                Download.status == DownloadStatus.complete,
+                Download.frequency == None  # noqa - only once-downloads
+            )
+        ).returning(Download.id)
+        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        session.commit()
+        return deleted_ids
+
     @staticmethod
     def is_skipped(*urls: str) -> bool:
         if skip_list := get_download_manager_config().skip_urls:

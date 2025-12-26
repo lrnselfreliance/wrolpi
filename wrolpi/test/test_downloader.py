@@ -662,3 +662,140 @@ async def test_download_with_collection_id(test_session, test_download_manager, 
     assert download.id is not None
     assert download.collection_id == collection.id
     assert download.frequency == DownloadFrequency.weekly
+
+
+@pytest.mark.asyncio
+async def test_batch_delete_downloads(test_session, test_download_manager, test_downloader):
+    """Test deleting specific downloads by their IDs."""
+    d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+    d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
+    d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+    test_session.commit()
+
+    # Capture IDs before deletion (objects become detached after)
+    d1_id, d2_id, d3_id = d1.id, d2.id, d3.id
+
+    # Delete only d1 and d3
+    deleted_ids = test_download_manager.delete_downloads_by_ids(test_session, [d1_id, d3_id])
+    assert set(deleted_ids) == {d1_id, d3_id}
+
+    # Only d2 remains
+    downloads = test_session.query(Download).all()
+    assert len(downloads) == 1
+    assert downloads[0].id == d2_id
+
+    # Empty list returns empty
+    deleted_ids = test_download_manager.delete_downloads_by_ids(test_session, [])
+    assert deleted_ids == []
+
+    # Non-existent IDs are silently ignored
+    deleted_ids = test_download_manager.delete_downloads_by_ids(test_session, [9999, 8888])
+    assert deleted_ids == []
+
+
+@pytest.mark.asyncio
+async def test_batch_retry_downloads(test_session, test_download_manager, test_downloader):
+    """Test retrying specific downloads by their IDs."""
+    d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+    d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
+    d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+
+    # Set different statuses
+    d1.fail()
+    d1.attempts = 5
+    d2.defer()
+    d2.attempts = 3
+    d3.complete()  # completed download should not be retried
+    test_session.commit()
+
+    # Retry d1 and d2 (not d3 since it's complete)
+    count = test_download_manager.retry_downloads_by_ids(test_session, [d1.id, d2.id, d3.id])
+    assert count == 2  # Only d1 and d2 were retried
+
+    # Verify statuses and attempts were reset
+    test_session.refresh(d1)
+    test_session.refresh(d2)
+    test_session.refresh(d3)
+
+    assert d1.status == 'new'
+    assert d1.attempts == 0
+    assert d2.status == 'new'
+    assert d2.attempts == 0
+    assert d3.status == 'complete'  # unchanged
+
+    # Empty list returns 0
+    count = test_download_manager.retry_downloads_by_ids(test_session, [])
+    assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_batch_clear_completed(test_session, test_download_manager, test_downloader):
+    """Test clearing specific completed downloads by their IDs."""
+    d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+    d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
+    d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+    d4 = test_download_manager.create_download(test_session, 'https://example.com/4', test_downloader.name)
+
+    # Set different statuses
+    d1.complete()
+    d2.complete()
+    d3.fail()  # failed download should not be cleared by this method
+    # d4 stays as 'new'
+    test_session.commit()
+
+    # Capture IDs before deletion (objects become detached after)
+    d1_id, d2_id, d3_id, d4_id = d1.id, d2.id, d3.id, d4.id
+
+    # Clear only d1 (which is complete)
+    deleted_ids = test_download_manager.clear_completed_by_ids(test_session, [d1_id, d3_id, d4_id])
+    assert deleted_ids == [d1_id]  # Only d1 was cleared (complete)
+
+    # d2, d3, d4 remain
+    downloads = test_session.query(Download).all()
+    assert len(downloads) == 3
+    assert {d.id for d in downloads} == {d2_id, d3_id, d4_id}
+
+    # Empty list returns empty
+    deleted_ids = test_download_manager.clear_completed_by_ids(test_session, [])
+    assert deleted_ids == []
+
+
+@pytest.mark.asyncio
+async def test_batch_api_endpoints(async_client, test_session, test_download_manager, test_downloader):
+    """Test the batch API endpoints."""
+    d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+    d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
+    d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+    d1.fail()
+    d2.complete()
+    test_session.commit()
+
+    # Capture IDs before operations (objects become detached after deletion)
+    d1_id, d2_id, d3_id = d1.id, d2.id, d3.id
+
+    # Test batch retry endpoint
+    body = dict(download_ids=[d1_id])
+    request, response = await async_client.post('/api/download/batch/retry', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['retried_count'] == 1
+    test_session.refresh(d1)
+    assert d1.status == 'new'
+
+    # Test batch clear endpoint
+    body = dict(download_ids=[d2_id])
+    request, response = await async_client.post('/api/download/batch/clear', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['deleted_ids'] == [d2_id]
+    assert test_session.query(Download).filter_by(id=d2_id).count() == 0
+
+    # Test batch delete endpoint
+    body = dict(download_ids=[d1_id, d3_id])
+    request, response = await async_client.post('/api/download/batch/delete', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.OK
+    assert set(response.json['deleted_ids']) == {d1_id, d3_id}
+    assert test_session.query(Download).count() == 0
+
+    # Test validation - empty list should fail
+    body = dict(download_ids=[])
+    request, response = await async_client.post('/api/download/batch/delete', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.BAD_REQUEST

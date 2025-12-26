@@ -1,5 +1,8 @@
 import React from "react";
 import {
+    batchClearDownloads,
+    batchDeleteDownloads,
+    batchRetryDownloads,
     clearCompletedDownloads,
     deleteDownload,
     deleteOnceDownloads,
@@ -20,6 +23,7 @@ import {
 import {
     Button as SButton,
     ButtonGroup,
+    Checkbox,
     Label,
     Loader,
     PlaceholderLine,
@@ -41,49 +45,75 @@ import {
     EditZimDownloadForm
 } from "../Download";
 import {Downloaders} from "../Vars";
+import {SortableTable} from "../SortableTable";
 
-function ClearDownloadsButton({callback}) {
+function ClearDownloadsButton({callback, selectedIds, clearSelection}) {
+    const hasSelection = selectedIds && selectedIds.length > 0;
+
     async function localClearDownloads() {
         try {
-            await clearCompletedDownloads();
+            if (hasSelection) {
+                await batchClearDownloads(selectedIds);
+                if (clearSelection) clearSelection();
+            } else {
+                await clearCompletedDownloads();
+            }
         } finally {
             if (callback) {
                 callback()
             }
         }
     }
+
+    const label = hasSelection ? `Clear (${selectedIds.length})` : 'Clear';
 
     return <>
         <APIButton
             onClick={localClearDownloads}
             color='violet'
             obeyWROLMode={true}
-        >Clear</APIButton>
+        >{label}</APIButton>
     </>
 }
 
-function RetryDownloadsButton({callback}) {
+function RetryDownloadsButton({callback, selectedIds, clearSelection}) {
+    const hasSelection = selectedIds && selectedIds.length > 0;
+
     async function localRetryOnce() {
         try {
-            await retryOnceDownloads();
+            if (hasSelection) {
+                await batchRetryDownloads(selectedIds);
+                if (clearSelection) clearSelection();
+            } else {
+                await retryOnceDownloads();
+            }
         } finally {
             if (callback) {
                 callback()
             }
         }
     }
+
+    const label = hasSelection ? `Retry (${selectedIds.length})` : 'Retry';
 
     return <APIButton
         color='green'
         onClick={localRetryOnce}
         obeyWROLMode={true}
-    >Retry</APIButton>
+    >{label}</APIButton>
 }
 
-function DeleteOnceDownloadsButton({callback}) {
+function DeleteOnceDownloadsButton({callback, selectedIds, clearSelection}) {
+    const hasSelection = selectedIds && selectedIds.length > 0;
+
     async function localDeleteOnce() {
         try {
-            await deleteOnceDownloads();
+            if (hasSelection) {
+                await batchDeleteDownloads(selectedIds);
+                if (clearSelection) clearSelection();
+            } else {
+                await deleteOnceDownloads();
+            }
         } finally {
             if (callback) {
                 callback()
@@ -91,13 +121,18 @@ function DeleteOnceDownloadsButton({callback}) {
         }
     }
 
+    const label = hasSelection ? `Delete (${selectedIds.length})` : 'Delete';
+    const confirmContent = hasSelection
+        ? `Are you sure you want to delete ${selectedIds.length} download(s)?`
+        : 'Are you sure you want to delete all downloads?  Some may be retried!';
+
     return <APIButton
         color='red'
         onClick={localDeleteOnce}
-        confirmContent='Are you sure you want to delete all downloads?  Some may be retried!'
+        confirmContent={confirmContent}
         confirmButton='Delete'
         obeyWROLMode={true}
-    >Delete</APIButton>
+    >{label}</APIButton>
 }
 
 
@@ -246,213 +281,267 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
     </TableRow>
 }
 
-class OnceDownloadRow extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            editModalOpen: false
-        };
-    }
+function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
+    const [editModalOpen, setEditModalOpen] = React.useState(false);
 
-    handleDelete = async () => {
+    const {url, last_successful_download, status, location, error, downloader, settings, id} = download;
+
+    const handleDelete = async () => {
         try {
-            await deleteDownload(this.props.id);
+            await deleteDownload(id);
         } finally {
-            await this.props.fetchDownloads();
+            await fetchDownloads();
         }
     };
 
-    handleStop = async () => {
+    const handleStop = async () => {
         try {
-            await killDownload(this.props.id);
+            await killDownload(id);
         } finally {
-            await this.props.fetchDownloads();
+            await fetchDownloads();
         }
     };
 
-    handleRestart = async () => {
+    const handleRestart = async () => {
         try {
-            await restartDownload(this.props.id);
+            await restartDownload(id);
         } finally {
-            await this.props.fetchDownloads();
+            await fetchDownloads();
         }
     };
 
-    handleEditOpen = () => {
-        this.setState({editModalOpen: true});
+    const handleEditOpen = () => setEditModalOpen(true);
+    const handleEditClose = () => setEditModalOpen(false);
+
+    const handleEditSuccess = async () => {
+        await fetchDownloads();
+        handleEditClose();
     };
 
-    handleEditClose = () => {
-        this.setState({editModalOpen: false});
-    };
+    // Open downloads (/download), or external links in an anchor.
+    const link = location && !location.startsWith('/download') ?
+        (text) => <Link to={location}>{text}</Link> :
+        (text) => <a href={location || url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
-    handleEditSuccess = async () => {
-        await this.props.fetchDownloads();
-        this.handleEditClose();
-    };
-
-    render() {
-        let {url, last_successful_download, status, location, error, downloader, settings, id} = this.props;
-
-        // Open downloads (/download), or external links in an anchor.
-        const link = location && !location.startsWith('/download') ?
-            (text) => <Link to={location}>{text}</Link> :
-            (text) => <a href={location || url} target='_blank' rel='noopener noreferrer'>{text}</a>;
-
-        let completedAtCell = last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null;
-        let buttonCell = <TableCell/>;
-        if (status === 'pending' || status === 'new') {
-            buttonCell = (
-                <TableCell>
+    let completedAtCell = last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null;
+    let buttonCell = <TableCell/>;
+    if (status === 'pending' || status === 'new') {
+        buttonCell = (
+            <TableCell>
+                <APIButton
+                    color='red'
+                    onClick={handleStop}
+                    confirmContent='Are you sure you want to stop this download?  It will not be retried.'
+                    confirmButton='Stop'
+                    obeyWROLMode={true}
+                >Stop</APIButton>
+            </TableCell>
+        );
+    } else if (status === 'failed' || status === 'deferred') {
+        buttonCell = (
+            <TableCell>
+                <ButtonGroup>
                     <APIButton
                         color='red'
-                        onClick={this.handleStop}
-                        confirmContent='Are you sure you want to stop this download?  It will not be retried.'
-                        confirmButton='Stop'
+                        icon='trash'
+                        onClick={handleDelete}
+                        confirmContent='Are you sure you want to delete this download?'
+                        confirmButton='Delete'
                         obeyWROLMode={true}
-                    >Stop</APIButton>
-                </TableCell>
-            );
-        } else if (status === 'failed' || status === 'deferred') {
-            buttonCell = (
-                <TableCell>
-                    <ButtonGroup>
-
-                        <APIButton
-                            color='red'
-                            icon='trash'
-                            onClick={this.handleDelete}
-                            confirmContent='Are you sure you want to delete this download?'
-                            confirmButton='Delete'
-                            obeyWROLMode={true}
+                    />
+                    {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
+                        <Button
+                            icon='edit'
+                            color='blue'
+                            onClick={handleEditOpen}
                         />
-                        {(downloader === Downloaders.Video || downloader === Downloaders.Archive) && status !== 'pending' && (
-                            <Button
-                                icon='edit'
-                                color='blue'
-                                onClick={this.handleEditOpen}
-                            />
-                        )}
-                        <APIButton
-                            color='green'
-                            icon='redo'
-                            confirmContent='Are you sure you want to restart this download?'
-                            confirmButton='Start'
-                            onClick={this.handleRestart}
-                            obeyWROLMode={true}
-                        />
-                    </ButtonGroup>
-                </TableCell>
-            );
-        } else if (status === 'complete' && location) {
-            buttonCell = (
-                <TableCell>
-                    {link('View')}
-                </TableCell>
-            );
-        }
-        if (error) {
-            completedAtCell = (
-                <Modal
-                    closeIcon
-                    trigger={<Button icon='exclamation circle' color='red'/>}
-                >
-                    <Modal.Header>Download Error</Modal.Header>
-                    <Modal.Content>
-                        <pre style={{overflowX: 'scroll'}}>{error}</pre>
-                    </Modal.Content>
-                </Modal>
-            )
-        }
-
-        // Create edit modal for video or archive downloads
-        let editModal = null;
-
-        if (downloader === Downloaders.Video) {
-            editModal = (
-                <Modal
-                    closeIcon
-                    open={this.state.editModalOpen}
-                    onClose={this.handleEditClose}
-                >
-                    <Modal.Header>Edit Video Download</Modal.Header>
-                    <Modal.Content>
-                        <EditVideosDownloadForm
-                            download={{
-                                urls: url,
-                                settings: settings || {},
-                                id: id
-                            }}
-                            onCancel={this.handleEditClose}
-                            onSuccess={this.handleEditSuccess}
-                            onDelete={this.handleDelete}
-                        />
-                    </Modal.Content>
-                </Modal>
-            );
-        } else if (downloader === Downloaders.Archive) {
-            editModal = (
-                <Modal
-                    closeIcon
-                    open={this.state.editModalOpen}
-                    onClose={this.handleEditClose}
-                >
-                    <Modal.Header>Edit Archive Download</Modal.Header>
-                    <Modal.Content>
-                        <EditArchiveDownloadForm
-                            download={{
-                                urls: url,
-                                tag_names: settings?.tag_names || [],
-                                id: id
-                            }}
-                            onCancel={this.handleEditClose}
-                            onSuccess={this.handleEditSuccess}
-                            onDelete={this.handleDelete}
-                        />
-                    </Modal.Content>
-                </Modal>
-            );
-        }
-
-        return <TableRow>
-            <TableCell className='column-ellipsis'>
-                {link(url)}
+                    )}
+                    <APIButton
+                        color='green'
+                        icon='redo'
+                        confirmContent='Are you sure you want to restart this download?'
+                        confirmButton='Start'
+                        onClick={handleRestart}
+                        obeyWROLMode={true}
+                    />
+                </ButtonGroup>
             </TableCell>
+        );
+    } else if (status === 'complete' && location) {
+        buttonCell = (
             <TableCell>
-                {completedAtCell}
-                {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+                {link('View')}
             </TableCell>
-            {buttonCell}
-            {editModal}
-        </TableRow>
+        );
     }
+    if (error) {
+        completedAtCell = (
+            <Modal
+                closeIcon
+                trigger={<Button icon='exclamation circle' color='red'/>}
+            >
+                <Modal.Header>Download Error</Modal.Header>
+                <Modal.Content>
+                    <pre style={{overflowX: 'scroll'}}>{error}</pre>
+                </Modal.Content>
+            </Modal>
+        )
+    }
+
+    // Create edit modal for video or archive downloads
+    let editModal = null;
+
+    if (downloader === Downloaders.Video) {
+        editModal = (
+            <Modal
+                closeIcon
+                open={editModalOpen}
+                onClose={handleEditClose}
+            >
+                <Modal.Header>Edit Video Download</Modal.Header>
+                <Modal.Content>
+                    <EditVideosDownloadForm
+                        download={{
+                            urls: url,
+                            settings: settings || {},
+                            id: id
+                        }}
+                        onCancel={handleEditClose}
+                        onSuccess={handleEditSuccess}
+                        onDelete={handleDelete}
+                    />
+                </Modal.Content>
+            </Modal>
+        );
+    } else if (downloader === Downloaders.Archive) {
+        editModal = (
+            <Modal
+                closeIcon
+                open={editModalOpen}
+                onClose={handleEditClose}
+            >
+                <Modal.Header>Edit Archive Download</Modal.Header>
+                <Modal.Content>
+                    <EditArchiveDownloadForm
+                        download={{
+                            urls: url,
+                            tag_names: settings?.tag_names || [],
+                            id: id
+                        }}
+                        onCancel={handleEditClose}
+                        onSuccess={handleEditSuccess}
+                        onDelete={handleDelete}
+                    />
+                </Modal.Content>
+            </Modal>
+        );
+    }
+
+    return <TableRow>
+        <TableCell collapsing>
+            <Checkbox
+                checked={isSelected}
+                onChange={() => onSelect(id)}
+            />
+        </TableCell>
+        <TableCell className='column-ellipsis'>
+            {link(url)}
+        </TableCell>
+        <TableCell>
+            {completedAtCell}
+            {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+        </TableCell>
+        {buttonCell}
+        {editModal}
+    </TableRow>
 }
 
 export function OnceDownloadsTable({downloads, fetchDownloads}) {
+    const [selectedIds, setSelectedIds] = React.useState([]);
+
+    // Clear selection when downloads change (e.g., after deletion)
+    React.useEffect(() => {
+        if (downloads) {
+            // Remove any selected IDs that no longer exist
+            const downloadIds = new Set(downloads.map(d => d.id));
+            setSelectedIds(prev => prev.filter(id => downloadIds.has(id)));
+        }
+    }, [downloads]);
+
+    const onSelect = (id) => {
+        if (selectedIds.includes(id)) {
+            setSelectedIds(selectedIds.filter(i => i !== id));
+        } else {
+            setSelectedIds([...selectedIds, id]);
+        }
+    };
+
+    const clearSelection = () => setSelectedIds([]);
+
+    const toggleSelectAll = () => {
+        if (downloads && selectedIds.length === downloads.length) {
+            setSelectedIds([]);
+        } else if (downloads) {
+            setSelectedIds(downloads.map(d => d.id));
+        }
+    };
+
+    const tableHeaders = [
+        {
+            key: 'select',
+            text: <Checkbox
+                checked={downloads && downloads.length > 0 && selectedIds.length === downloads.length}
+                indeterminate={selectedIds.length > 0 && selectedIds.length < (downloads?.length || 0)}
+                onChange={toggleSelectAll}
+            />,
+            sortBy: null
+        },
+        {key: 'url', text: 'URL', sortBy: i => i.url.toLowerCase()},
+        {key: 'completed_at', text: 'Completed At', sortBy: i => i.last_successful_download || ''},
+        {key: 'control', text: 'Control', sortBy: null},
+    ];
+
+    const rowFunc = (download) => (
+        <OnceDownloadRow
+            key={download.id}
+            download={download}
+            fetchDownloads={fetchDownloads}
+            isSelected={selectedIds.includes(download.id)}
+            onSelect={onSelect}
+        />
+    );
+
+    const footer = <TableFooter>
+        <TableRow>
+            <TableHeaderCell colSpan={4}>
+                <ClearDownloadsButton
+                    callback={fetchDownloads}
+                    selectedIds={selectedIds}
+                    clearSelection={clearSelection}
+                />
+                <RetryDownloadsButton
+                    callback={fetchDownloads}
+                    selectedIds={selectedIds}
+                    clearSelection={clearSelection}
+                />
+                <DeleteOnceDownloadsButton
+                    callback={fetchDownloads}
+                    selectedIds={selectedIds}
+                    clearSelection={clearSelection}
+                />
+            </TableHeaderCell>
+        </TableRow>
+    </TableFooter>;
+
     if (downloads && downloads.length >= 1) {
-        return <>
-            <Table className='table-ellipsis'>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell width={11}>URL</TableHeaderCell>
-                        <TableHeaderCell width={2}>Completed At</TableHeaderCell>
-                        <TableHeaderCell width={2}>Control</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {downloads.map(i => <OnceDownloadRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>)}
-                </TableBody>
-                <TableFooter>
-                    <TableRow>
-                        <TableHeaderCell colSpan={3}>
-                            <ClearDownloadsButton callback={fetchDownloads}/>
-                            <RetryDownloadsButton callback={fetchDownloads}/>
-                            <DeleteOnceDownloadsButton callback={fetchDownloads}/>
-                        </TableHeaderCell>
-                    </TableRow>
-                </TableFooter>
-            </Table>
-        </>
+        return <SortableTable
+            tableHeaders={tableHeaders}
+            data={downloads}
+            rowFunc={rowFunc}
+            rowKey='id'
+            footer={footer}
+            tableProps={{className: 'table-ellipsis'}}
+        />
     } else if (downloads) {
         return <Segment>No downloads are scheduled.</Segment>
     } else if (downloads === undefined) {

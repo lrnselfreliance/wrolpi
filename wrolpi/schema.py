@@ -286,6 +286,16 @@ class DownloadRequest:
 
 
 @dataclass
+class DownloadBatchRequest:
+    """Request for batch operations on downloads."""
+    download_ids: List[int]
+
+    def __post_init__(self):
+        if not self.download_ids:
+            raise ValidationError('download_ids cannot be empty')
+
+
+@dataclass
 class JSONErrorResponse:
     error: str
 

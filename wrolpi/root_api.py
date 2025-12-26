@@ -401,6 +401,45 @@ async def delete_once(request: Request):
     return response.empty()
 
 
+@api_bp.post('/download/batch/delete')
+@openapi.definition(
+    description='Delete specific downloads by their IDs',
+    body=schema.DownloadBatchRequest,
+    validate=True,
+)
+@wrol_mode_check
+async def batch_delete_downloads(request: Request, body: schema.DownloadBatchRequest):
+    session = request.ctx.session
+    deleted_ids = download_manager.delete_downloads_by_ids(session, body.download_ids)
+    return json_response({'deleted_ids': deleted_ids})
+
+
+@api_bp.post('/download/batch/retry')
+@openapi.definition(
+    description='Retry specific downloads by their IDs',
+    body=schema.DownloadBatchRequest,
+    validate=True,
+)
+@wrol_mode_check
+async def batch_retry_downloads(request: Request, body: schema.DownloadBatchRequest):
+    session = request.ctx.session
+    count = download_manager.retry_downloads_by_ids(session, body.download_ids)
+    return json_response({'retried_count': count})
+
+
+@api_bp.post('/download/batch/clear')
+@openapi.definition(
+    description='Clear specific completed downloads by their IDs',
+    body=schema.DownloadBatchRequest,
+    validate=True,
+)
+@wrol_mode_check
+async def batch_clear_downloads(request: Request, body: schema.DownloadBatchRequest):
+    session = request.ctx.session
+    deleted_ids = download_manager.clear_completed_by_ids(session, body.download_ids)
+    return json_response({'deleted_ids': deleted_ids})
+
+
 @api_bp.get('/downloaders')
 @openapi.description('List all Downloaders that can be specified by the user.')
 async def get_downloaders(_: Request):

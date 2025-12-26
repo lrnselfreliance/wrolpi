@@ -1,6 +1,15 @@
 import {Accordion, Header, Progress, Segment, Statistic, Table} from "../Theme";
 import React, {useContext} from "react";
-import {humanBandwidth, humanFileSize, InfoHeader, LoadStatistic, useTitle} from "../Common";
+import {
+    Duration,
+    humanBandwidth,
+    humanFileSize,
+    InfoHeader,
+    LoadStatistic,
+    secondsToHMS,
+    secondsToHumanElapsed,
+    useTitle
+} from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../../contexts/contexts";

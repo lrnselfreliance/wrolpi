@@ -563,6 +563,12 @@ def delete_collection(
     - Deletes the Collection record
     - Triggers domain config save
 
+    For channel collections:
+    - Orphans child Videos (sets channel_id to NULL)
+    - Deletes the Channel record
+    - Deletes the Collection record
+    - Triggers channel config save
+
     Args:
         session: Database session
         collection_id: The collection ID to delete
@@ -596,6 +602,28 @@ def delete_collection(
 
         # Trigger domain config save
         save_domains_config.activate_switch()
+
+    # Orphan child Videos and delete Channel if this is a channel collection
+    elif collection.kind == 'channel':
+        # Local imports to avoid circular import: collections -> videos -> collections
+        from modules.videos.models import Channel, Video
+        from modules.videos.lib import save_channels_config
+
+        # Find the Channel that references this Collection
+        channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+        if channel:
+            # Orphan all Videos (set channel_id = None)
+            videos = session.query(Video).filter_by(channel_id=channel.id).all()
+            for video in videos:
+                video.channel_id = None
+            session.flush()
+
+            # Delete the Channel (before Collection to satisfy FK)
+            session.delete(channel)
+            session.flush()
+
+        # Trigger channel config save
+        save_channels_config.activate_switch()
 
     # Delete the collection
     session.delete(collection)

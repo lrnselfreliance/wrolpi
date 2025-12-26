@@ -413,6 +413,44 @@ class TestCollectionDeletion:
         # Verify collection is deleted
         assert test_session.query(Collection).filter_by(id=collection_id).count() == 0
 
+    @pytest.mark.asyncio
+    async def test_delete_channel_collection_with_videos(
+            self, async_client, test_session, test_directory, channel_factory, video_factory
+    ):
+        """Test that deleting a channel collection with videos orphans the videos."""
+        from modules.videos.models import Channel, Video
+
+        # Create a channel with videos
+        channel = channel_factory(name='test', directory=test_directory / 'videos' / 'test')
+        video = video_factory(channel_id=channel.id)
+        test_session.commit()
+
+        collection_id = channel.collection.id
+        channel_id = channel.id
+        video_id = video.id
+        video_path = video.video_path
+
+        # Delete the collection
+        request, response = await async_client.delete(f'/api/collections/{collection_id}')
+
+        # Check response
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        # Expire all cached objects to see changes made by the API's separate session
+        test_session.expire_all()
+
+        # Verify collection is deleted
+        assert test_session.query(Collection).filter_by(id=collection_id).count() == 0
+
+        # Channel should also be deleted (CASCADE from Collection)
+        assert test_session.query(Channel).filter_by(id=channel_id).count() == 0
+
+        # Video should still exist but be orphaned (channel_id = NULL)
+        video = test_session.query(Video).filter_by(id=video_id).one()
+        assert video.channel_id is None, 'Video should be orphaned when Channel is deleted'
+        assert video.video_path == video_path, 'Video path should not change'
+        assert video.video_path.is_file(), 'Video file should still exist'
+
 
 class TestCollectionTagging:
     """Test the POST /api/collections/<id>/tag endpoint for tagging and un-tagging."""

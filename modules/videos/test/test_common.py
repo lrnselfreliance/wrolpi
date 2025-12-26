@@ -343,6 +343,42 @@ async def test_import_channel_deletes_orphaned_collections(await_switches, test_
 
 
 @pytest.mark.asyncio
+async def test_import_channel_cleans_up_preexisting_orphaned_collections(await_switches, test_session, channel_factory,
+                                                                          test_channels_config):
+    """Pre-existing orphaned Collections (kind='channel') with no Channel should be deleted during import.
+
+    This handles the case where a Collection was orphaned before the cleanup fix was deployed.
+    """
+    # Create a channel (which creates a Collection)
+    channel1 = channel_factory(source_id='foo')
+    test_session.commit()
+
+    # Create an orphaned Collection directly (simulating pre-existing orphan)
+    orphan_collection = Collection(
+        name='Orphaned Channel',
+        kind='channel',
+        directory=None,
+    )
+    test_session.add(orphan_collection)
+    test_session.commit()
+    orphan_id = orphan_collection.id
+
+    # Verify we have 2 Collections with kind='channel'
+    assert test_session.query(Collection).filter_by(kind='channel').count() == 2
+
+    # Write the valid channel to config
+    save_channels_config()
+    await await_switches()
+
+    # Import config - should clean up the pre-existing orphan
+    import_channels_config()
+
+    # Verify only one Collection remains (the one with a Channel)
+    assert test_session.query(Collection).filter_by(kind='channel').count() == 1
+    assert test_session.query(Collection).filter_by(id=orphan_id).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_import_channel_download_comments(await_switches, test_session, channel_factory,
                                                 test_channels_config):
     channel = channel_factory()

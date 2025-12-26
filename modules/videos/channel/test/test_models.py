@@ -21,10 +21,13 @@ def test_delete_channel_no_url(test_session, channel_factory):
 
 @pytest.mark.asyncio
 async def test_delete_channel_with_videos(test_session, async_client, channel_factory, video_factory):
-    """Videos are disowned when their Channel is deleted."""
+    """Videos are disowned when their Channel is deleted. The Collection should also be deleted."""
+    from wrolpi.collections import Collection
+
     channel = channel_factory()
     video = video_factory(channel_id=channel.id)
     video_path, video_id = video.video_path, video.id
+    collection_id = channel.collection_id
     test_session.commit()
 
     # Delete the Channel.
@@ -36,6 +39,10 @@ async def test_delete_channel_with_videos(test_session, async_client, channel_fa
     assert video.video_path == video_path and video.id == video_id, 'Video entry should not be changed'
     assert video.video_path.is_file(), 'Video should not be deleted'
     assert not video.channel_id and not video.channel, 'Video should not have a Channel'
+
+    # Collection should also be deleted (this is the bug we're fixing)
+    assert test_session.query(Collection).filter_by(id=collection_id).count() == 0, \
+        'Collection should be deleted when Channel is deleted'
 
 
 @pytest.mark.asyncio

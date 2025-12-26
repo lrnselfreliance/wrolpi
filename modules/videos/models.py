@@ -625,7 +625,7 @@ class Channel(ModelHelper, Base):
         raise FileNotFoundError(f'Cannot create Channel info json because directory is not defined: {self}')
 
     def delete_with_videos(self):
-        """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
+        """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel and its Collection."""
         session = Session.object_session(self)
 
         # Disown the videos.
@@ -637,8 +637,15 @@ class Channel(ModelHelper, Base):
             download: Download
             download.delete()
 
-        # Must commit before final deletion.
+        # Get the Collection before deleting the Channel
+        collection = self.collection
+
+        # Delete the Channel
         session.delete(self)
+
+        # Delete the Collection after Channel to avoid FK constraint issues
+        if collection:
+            session.delete(collection)
 
     def update(self, data: dict):
         """

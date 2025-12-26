@@ -379,6 +379,23 @@ class ChannelsConfig(ConfigFile):
                         logger.warning(f'Deleting orphaned Collection {collection.name} (id={collection.id})')
                         session.delete(collection)
 
+            # Also clean up any pre-existing orphaned Collections (kind='channel')
+            # that have no associated Channel. This handles orphans created before
+            # this cleanup logic was added.
+            with get_db_session(commit=True) as session:
+                from wrolpi.collections import Collection
+                # Find all Collections with kind='channel' that no Channel references
+                orphaned_collections = session.query(Collection).outerjoin(
+                    Channel, Channel.collection_id == Collection.id
+                ).filter(
+                    Collection.kind == 'channel',
+                    Channel.id.is_(None)
+                ).all()
+
+                for collection in orphaned_collections:
+                    logger.warning(f'Deleting pre-existing orphaned Collection {collection.name} (id={collection.id})')
+                    session.delete(collection)
+
             # Assign Videos to Channels using bulk SQL
             from modules.videos import claim_videos_for_channels
             claim_videos_for_channels(list(updated_channel_ids))

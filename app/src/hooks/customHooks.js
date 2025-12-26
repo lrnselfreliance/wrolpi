@@ -49,6 +49,24 @@ import _ from "lodash";
 import {TagsSelector} from "../Tags";
 import {useForm} from "./useForm";
 
+export const useIsTouchDevice = () => {
+    // Detects if the device has a coarse pointer (touch screen).
+    // Used to disable drag selection on mobile devices.
+    const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+    useEffect(() => {
+        const touchQuery = window.matchMedia('(pointer: coarse)');
+        setIsTouchDevice(touchQuery.matches);
+
+        const handleChange = (e) => setIsTouchDevice(e.matches);
+        touchQuery.addEventListener('change', handleChange);
+
+        return () => touchQuery.removeEventListener('change', handleChange);
+    }, []);
+
+    return isTouchDevice;
+};
+
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
 }

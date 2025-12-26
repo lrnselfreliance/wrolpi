@@ -22,7 +22,7 @@ import {
     Toggle,
     useIsIgnoredDirectory
 } from "./Common";
-import React, {useEffect, useState} from "react";
+import React, {useContext, useEffect, useState} from "react";
 import {useDropzone} from "react-dropzone";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
@@ -30,7 +30,7 @@ import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useUploadFile, useWROLMode} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
-import {SettingsContext, ThemeContext} from "../contexts/contexts";
+import {DragSelectionContext, DragSelectionProvider, SettingsContext, ThemeContext} from "../contexts/contexts";
 import {BulkTagModal} from "./BulkTagModal";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 
@@ -67,14 +67,27 @@ export function splitPathParentAndName(path) {
 }
 
 function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, onSelect, disabled}) {
+    const {handleDragStart, handleDragMove, getDragState} = useContext(DragSelectionContext);
     // Creates a single table row for a folder, or a row for itself and indented rows for its children.
     let {path, children, is_empty} = folder;
     const ignored = useIsIgnoredDirectory(path);
     const pathWithNoTrailingSlash = path.substring(0, path.length - 1);
     const name = path.substring(pathWithNoTrailingSlash.lastIndexOf('/') + 1);
-    const f = <TableRow key={path} disabled={disabled}>
+    const isInSelectedPaths = selectedPaths.indexOf(folder['path']) >= 0;
+    const {isDragSelecting, isDragDeselecting} = getDragState(path, isInSelectedPaths);
+    // Preview selection: show checked if selecting, unchecked if deselecting
+    const showAsSelected = (isInSelectedPaths && !isDragDeselecting) || isDragSelecting;
+    // Visual highlight class
+    const dragClass = isDragSelecting ? 'drag-selecting' : (isDragDeselecting ? 'drag-deselecting' : '');
+    const f = <TableRow
+        key={path}
+        disabled={disabled}
+        className={dragClass}
+        onMouseDown={(e) => handleDragStart(path, e)}
+        onMouseEnter={() => handleDragMove(path)}
+    >
         <TableCell collapsing>
-            <Checkbox checked={selectedPaths.indexOf(folder['path']) >= 0} onChange={() => onSelect(folder['path'])}/>
+            <Checkbox checked={showAsSelected} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
         <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
@@ -105,10 +118,23 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
 }
 
 function File({file, onFileClick, selectedPaths, onSelect, disabled}) {
+    const {handleDragStart, handleDragMove, getDragState} = useContext(DragSelectionContext);
     const {path, size} = file;
-    return <TableRow key={path} disabled={disabled}>
+    const isInSelectedPaths = selectedPaths.indexOf(path) >= 0;
+    const {isDragSelecting, isDragDeselecting} = getDragState(path, isInSelectedPaths);
+    // Preview selection: show checked if selecting, unchecked if deselecting
+    const showAsSelected = (isInSelectedPaths && !isDragDeselecting) || isDragSelecting;
+    // Visual highlight class
+    const dragClass = isDragSelecting ? 'drag-selecting' : (isDragDeselecting ? 'drag-deselecting' : '');
+    return <TableRow
+        key={path}
+        disabled={disabled}
+        className={dragClass}
+        onMouseDown={(e) => handleDragStart(path, e)}
+        onMouseEnter={() => handleDragMove(path)}
+    >
         <TableCell collapsing>
-            <Checkbox checked={selectedPaths.indexOf(path) >= 0} onChange={() => onSelect(path)}/>
+            <Checkbox checked={showAsSelected} onChange={() => onSelect(path)}/>
         </TableCell>
         <TableCell onClick={() => onFileClick(file)} className='file-path'>
             {depthIndentation(path)}
@@ -398,28 +424,52 @@ export function FileBrowser() {
         return <ErrorMessage>Could not fetch files</ErrorMessage>
     }
 
-    return <>
-        <div style={{marginBottom: '4em'}}>
+    return <DragSelectionProvider
+        selectedPaths={selectedPaths}
+        setSelectedPaths={setSelectedPaths}
+        browseFiles={browseFiles}
+        openFolders={openFolders}
+    >
+        <FileBrowserContent
+            browseFiles={browseFiles}
+            headers={headers}
+            onFolderClick={onFolderClick}
+            setPreviewFile={setPreviewFile}
+            selectedPaths={selectedPaths}
+            onSelect={onSelect}
+            pending={pending}
+        />
+        {footer}
+    </DragSelectionProvider>
+}
+
+function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile, selectedPaths, onSelect, pending}) {
+    const {isDragging} = useContext(DragSelectionContext);
+    const containerClassName = isDragging ? 'file-browser-dragging' : '';
+
+    return (
+        <div style={{marginBottom: '4em'}} className={containerClassName}>
             <SortableTable
                 tableProps={{unstackable: true}}
                 data={browseFiles}
                 tableHeaders={headers}
                 defaultSortColumn='path'
                 rowKey='path'
-                rowFunc={(i, sortData) => <Path
-                    key={i['key']}
-                    path={i}
-                    onFolderClick={onFolderClick}
-                    onFileClick={(i) => setPreviewFile(i)}
-                    sortData={sortData}
-                    selectedPaths={selectedPaths}
-                    onSelect={onSelect}
-                    disabled={pending}
-                />}
+                rowFunc={(i, sortData) => (
+                    <Path
+                        key={i['key']}
+                        path={i}
+                        onFolderClick={onFolderClick}
+                        onFileClick={(file) => setPreviewFile(file)}
+                        sortData={sortData}
+                        selectedPaths={selectedPaths}
+                        onSelect={onSelect}
+                        disabled={pending}
+                    />
+                )}
             />
         </div>
-        {footer}
-    </>
+    );
 }
 
 export function RenameModal({open, onClose, path, onSubmit, onPending}) {

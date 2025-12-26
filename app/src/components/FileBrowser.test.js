@@ -474,4 +474,229 @@ describe('FileBrowser', () => {
             expect(mockSetOpenFolders).not.toHaveBeenCalled();
         });
     });
+
+    describe('Drag Selection', () => {
+        const mockBrowseFilesMultiple = [
+            {path: 'file1.txt', size: 100},
+            {path: 'file2.txt', size: 200},
+            {path: 'file3.txt', size: 300},
+        ];
+
+        beforeEach(() => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: mockBrowseFilesMultiple,
+                openFolders: [],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+        });
+
+        it('does not enable drag selection on touch devices', async () => {
+            // Mock matchMedia to simulate touch device
+            window.matchMedia = jest.fn().mockImplementation(query => ({
+                matches: query === '(pointer: coarse)', // true for touch devices
+                media: query,
+                onchange: null,
+                addListener: jest.fn(),
+                removeListener: jest.fn(),
+                addEventListener: jest.fn(),
+                removeEventListener: jest.fn(),
+                dispatchEvent: jest.fn(),
+            }));
+
+            renderFileBrowser(<FileBrowser/>);
+
+            const rows = screen.getAllByRole('row');
+            // Skip header row (index 0)
+            const firstRow = rows[1];
+
+            // Simulate mousedown - on touch device, this should not start drag
+            await act(async () => {
+                fireEvent.mouseDown(firstRow, {button: 0, clientX: 100, clientY: 100});
+            });
+
+            // Move mouse and mouseup - items should NOT be selected via drag
+            await act(async () => {
+                fireEvent.mouseMove(document, {clientX: 100, clientY: 200});
+                fireEvent.mouseUp(document);
+            });
+
+            // Verify no items are selected (checkboxes unchecked)
+            const checkboxes = screen.getAllByRole('checkbox');
+            checkboxes.forEach(cb => expect(cb).not.toBeChecked());
+        });
+
+        it('selects rows when dragging across them', async () => {
+            renderFileBrowser(<FileBrowser/>);
+
+            const rows = screen.getAllByRole('row');
+            // Skip header row
+            const firstDataRow = rows[1];
+            const secondDataRow = rows[2];
+            const thirdDataRow = rows[3];
+
+            // Start drag on first row
+            await act(async () => {
+                fireEvent.mouseDown(firstDataRow, {button: 0, clientX: 100, clientY: 100});
+            });
+
+            // Move mouse enough to trigger drag threshold (5px)
+            await act(async () => {
+                fireEvent.mouseMove(document, {clientX: 100, clientY: 110});
+            });
+
+            // Enter subsequent rows
+            await act(async () => {
+                fireEvent.mouseEnter(secondDataRow);
+            });
+
+            await act(async () => {
+                fireEvent.mouseEnter(thirdDataRow);
+            });
+
+            // End drag
+            await act(async () => {
+                fireEvent.mouseUp(document);
+            });
+
+            // All three files should be selected
+            const checkboxes = screen.getAllByRole('checkbox');
+            expect(checkboxes.length).toBe(3);
+            checkboxes.forEach(cb => expect(cb).toBeChecked());
+        });
+
+        it('adds to existing selection when dragging', async () => {
+            renderFileBrowser(<FileBrowser/>);
+
+            // First, select the first file via checkbox
+            const checkboxes = screen.getAllByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            // Verify first file is selected
+            expect(checkboxes[0]).toBeChecked();
+            expect(checkboxes[1]).not.toBeChecked();
+            expect(checkboxes[2]).not.toBeChecked();
+
+            const rows = screen.getAllByRole('row');
+            const secondDataRow = rows[2];
+            const thirdDataRow = rows[3];
+
+            // Start drag on second row
+            await act(async () => {
+                fireEvent.mouseDown(secondDataRow, {button: 0, clientX: 100, clientY: 100});
+            });
+
+            // Move enough to trigger drag
+            await act(async () => {
+                fireEvent.mouseMove(document, {clientX: 100, clientY: 110});
+            });
+
+            await act(async () => {
+                fireEvent.mouseEnter(thirdDataRow);
+            });
+
+            await act(async () => {
+                fireEvent.mouseUp(document);
+            });
+
+            // All three should now be selected (first via checkbox, second and third via drag)
+            const updatedCheckboxes = screen.getAllByRole('checkbox');
+            updatedCheckboxes.forEach(cb => expect(cb).toBeChecked());
+        });
+
+        it('does not start drag when clicking on checkbox', async () => {
+            renderFileBrowser(<FileBrowser/>);
+
+            const checkboxes = screen.getAllByRole('checkbox');
+
+            // Click checkbox - should toggle selection, not start drag
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+
+            expect(checkboxes[0]).toBeChecked();
+            expect(checkboxes[1]).not.toBeChecked();
+            expect(checkboxes[2]).not.toBeChecked();
+        });
+
+        it('does not start drag with right mouse button', async () => {
+            renderFileBrowser(<FileBrowser/>);
+
+            const rows = screen.getAllByRole('row');
+            const firstDataRow = rows[1];
+            const secondDataRow = rows[2];
+
+            // Try to start drag with right button
+            await act(async () => {
+                fireEvent.mouseDown(firstDataRow, {button: 2, clientX: 100, clientY: 100});
+            });
+
+            await act(async () => {
+                fireEvent.mouseMove(document, {clientX: 100, clientY: 110});
+            });
+
+            await act(async () => {
+                fireEvent.mouseEnter(secondDataRow);
+            });
+
+            await act(async () => {
+                fireEvent.mouseUp(document);
+            });
+
+            // No items should be selected
+            const checkboxes = screen.getAllByRole('checkbox');
+            checkboxes.forEach(cb => expect(cb).not.toBeChecked());
+        });
+
+        it('deselects rows when dragging from a selected item', async () => {
+            renderFileBrowser(<FileBrowser/>);
+
+            // First, select all three files via checkboxes
+            const checkboxes = screen.getAllByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkboxes[0]);
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[1]);
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[2]);
+            });
+
+            // Verify all are selected
+            expect(checkboxes[0]).toBeChecked();
+            expect(checkboxes[1]).toBeChecked();
+            expect(checkboxes[2]).toBeChecked();
+
+            const rows = screen.getAllByRole('row');
+            const firstDataRow = rows[1];
+            const secondDataRow = rows[2];
+
+            // Start drag from first row (which is selected) - should trigger deselect mode
+            await act(async () => {
+                fireEvent.mouseDown(firstDataRow, {button: 0, clientX: 100, clientY: 100});
+            });
+
+            // Move enough to trigger drag
+            await act(async () => {
+                fireEvent.mouseMove(document, {clientX: 100, clientY: 110});
+            });
+
+            await act(async () => {
+                fireEvent.mouseEnter(secondDataRow);
+            });
+
+            await act(async () => {
+                fireEvent.mouseUp(document);
+            });
+
+            // First two should now be deselected, third should remain selected
+            const updatedCheckboxes = screen.getAllByRole('checkbox');
+            expect(updatedCheckboxes[0]).not.toBeChecked();
+            expect(updatedCheckboxes[1]).not.toBeChecked();
+            expect(updatedCheckboxes[2]).toBeChecked();
+        });
+    });
 });

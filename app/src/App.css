@@ -350,3 +350,29 @@ table.ratio-table td.min-width {
     background-color: #1b1c1d;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* Drag selection visual feedback for FileBrowser */
+tr.drag-selecting td {
+    background-color: rgba(33, 133, 208, 0.15) !important;
+}
+
+.inverted tr.drag-selecting td {
+    background-color: rgba(33, 133, 208, 0.25) !important;
+}
+
+/* Drag deselection visual feedback (red tint) */
+tr.drag-deselecting td {
+    background-color: rgba(219, 40, 40, 0.15) !important;
+}
+
+.inverted tr.drag-deselecting td {
+    background-color: rgba(219, 40, 40, 0.25) !important;
+}
+
+/* Prevent text selection during drag */
+.file-browser-dragging {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}

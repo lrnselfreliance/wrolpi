@@ -154,3 +154,14 @@ async def get_iostat(request: Request):
     # Fallback to direct call
     from controller.lib.status import get_iostat_status
     return JSONResponse(content=get_iostat_status())
+
+
+@router.get("/uptime")
+async def get_uptime(request: Request):
+    """Get system uptime information."""
+    cached = get_cached_status(request)
+    if cached and cached.get("uptime_stats"):
+        return JSONResponse(content=cached["uptime_stats"])
+    # Fallback to direct call
+    from controller.lib.status import get_uptime_status
+    return JSONResponse(content=get_uptime_status())

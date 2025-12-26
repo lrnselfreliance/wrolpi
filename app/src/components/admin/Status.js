@@ -96,6 +96,27 @@ function IOWaitStatistic({percent_iowait, ...props}) {
     return <Statistic label='IO Wait %' value={percent_iowait.toFixed(1)} {...props}/>
 }
 
+function formatUptime(seconds) {
+    if (!seconds || seconds < 0) return '?';
+
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) {
+        return `${days}d ${hours}h`;
+    } else if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    } else {
+        return `${minutes}m`;
+    }
+}
+
+function UptimeStatistic({uptime_seconds, ...props}) {
+    const value = formatUptime(uptime_seconds);
+    return <Statistic label='Uptime' value={value} {...props}/>
+}
+
 export function BandwidthProgress({label = '', bytes, maxBytes, ...props}) {
     // Gigabit by default.
     maxBytes = maxBytes || 125_000_000;
@@ -216,9 +237,10 @@ export function StatusPage() {
     let memoryPercent;
     let memorySize;
     let percent_iowait;
+    let uptime_seconds;
 
     if (status && status['cpu_stats']) {
-        const {cpu_stats, load_stats, memory_stats, processes_stats, iostat_stats} = status;
+        const {cpu_stats, load_stats, memory_stats, processes_stats, iostat_stats, uptime_stats} = status;
         percent = cpu_stats['percent'];
         cores = cpu_stats['cores'] || '?';
         temperature = cpu_stats['temperature'];
@@ -240,6 +262,11 @@ export function StatusPage() {
         // Extract IO wait from iostat stats
         if (iostat_stats) {
             percent_iowait = iostat_stats['percent_iowait'];
+        }
+
+        // Extract uptime from uptime stats
+        if (uptime_stats) {
+            uptime_seconds = uptime_stats['uptime_seconds'];
         }
     }
 
@@ -277,6 +304,7 @@ export function StatusPage() {
                     <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
+                    <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>
             </Segment>
         </Media>
@@ -296,6 +324,7 @@ export function StatusPage() {
                     <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
                     <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
+                    <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>
             </Segment>
         </Media>

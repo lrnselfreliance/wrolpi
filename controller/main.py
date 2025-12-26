@@ -38,6 +38,7 @@ from controller.lib.status import (
     get_load_status,
     get_memory_status,
     get_primary_drive_status,
+    get_uptime_status,
 )
 from controller.lib.status_worker import status_worker_loop
 from controller.lib.systemd import get_all_services_status
@@ -118,6 +119,7 @@ async def dashboard(request: Request):
         memory = cached.get("memory_stats") or {}
         load = cached.get("load_stats") or {}
         iostat = cached.get("iostat_stats") or {}
+        uptime = cached.get("uptime_stats") or {}
         drives = cached.get("drives_stats") or []
         primary_drive = None
         for drive in drives:
@@ -130,6 +132,7 @@ async def dashboard(request: Request):
         memory = get_memory_status()
         load = get_load_status()
         iostat = get_iostat_status()
+        uptime = get_uptime_status()
         primary_drive = get_primary_drive_status()
 
     # Format storage data
@@ -140,6 +143,15 @@ async def dashboard(request: Request):
             "percent": primary_drive["percent"],
             "free_gb": round(free_bytes / (1024 ** 3), 1),
         }
+
+    # Format uptime
+    uptime_seconds = uptime.get("uptime_seconds", 0)
+    if uptime_seconds:
+        days = uptime_seconds // 86400
+        hours = (uptime_seconds % 86400) // 3600
+        uptime_formatted = f"{days}d {hours}h" if days > 0 else f"{hours}h {(uptime_seconds % 3600) // 60}m"
+    else:
+        uptime_formatted = "--"
 
     # Get service status
     if is_docker_mode():
@@ -174,6 +186,10 @@ async def dashboard(request: Request):
         "storage": storage,
         "iostat": {
             "percent_iowait": iostat.get("percent_iowait"),
+        },
+        "uptime": {
+            "formatted": uptime_formatted,
+            "seconds": uptime_seconds,
         },
 
         # Real service status

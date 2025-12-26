@@ -20,6 +20,7 @@ from controller.lib.status import (
     get_network_status,
     get_power_status,
     get_processes_status,
+    get_uptime_status,
 )
 
 # Type alias for cached status dict
@@ -35,7 +36,7 @@ async def collect_all_status() -> CachedStatus:
     """
     # Run all status collections concurrently using asyncio.to_thread
     # since the status functions are synchronous (use psutil)
-    cpu, memory, load, drives, network, power, iostat, processes, disk_bandwidth = await asyncio.gather(
+    cpu, memory, load, drives, network, power, iostat, processes, disk_bandwidth, uptime = await asyncio.gather(
         asyncio.to_thread(get_cpu_status),
         asyncio.to_thread(get_memory_status),
         asyncio.to_thread(get_load_status),
@@ -45,6 +46,7 @@ async def collect_all_status() -> CachedStatus:
         asyncio.to_thread(get_iostat_status),
         asyncio.to_thread(get_processes_status),
         asyncio.to_thread(get_disk_bandwidth_status),
+        asyncio.to_thread(get_uptime_status),
         return_exceptions=True,
     )
 
@@ -59,6 +61,7 @@ async def collect_all_status() -> CachedStatus:
         "iostat_stats": iostat if not isinstance(iostat, Exception) else None,
         "processes_stats": processes if not isinstance(processes, Exception) else [],
         "disk_bandwidth_stats": disk_bandwidth if not isinstance(disk_bandwidth, Exception) else {},
+        "uptime_stats": uptime if not isinstance(uptime, Exception) else None,
         "last_status": datetime.now().isoformat(),
     }
 

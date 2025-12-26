@@ -341,6 +341,25 @@ def get_processes_status() -> list[dict]:
     return processes
 
 
+def get_uptime_status() -> dict:
+    """
+    Get system uptime information.
+
+    Returns format:
+        dict with keys: boot_time (ISO timestamp), uptime_seconds (int)
+    """
+    from datetime import datetime
+
+    boot_time = psutil.boot_time()
+    boot_datetime = datetime.fromtimestamp(boot_time)
+    uptime_seconds = int((datetime.now() - boot_datetime).total_seconds())
+
+    return {
+        "boot_time": boot_datetime.isoformat(),
+        "uptime_seconds": uptime_seconds,
+    }
+
+
 IGNORED_DISK_NAMES = ('loop', 'ram')
 
 

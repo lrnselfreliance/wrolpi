@@ -633,6 +633,11 @@
                 <p class="value" id="iowait-value">{% if iostat and iostat.percent_iowait is not none %}{{ iostat.percent_iowait }}{% else %}--{% endif %}%</p>
                 <p class="sub">disk waiting</p>
             </div>
+            <div class="status-card">
+                <h3>Uptime</h3>
+                <p class="value" id="uptime-value">{{ uptime.formatted|default('--') }}</p>
+                <p class="sub">since boot</p>
+            </div>
         </div>
     </section>
 
@@ -1472,15 +1477,30 @@
 
     // ===== PERIODIC UPDATES =====
 
+    function formatUptime(seconds) {
+        if (!seconds || seconds < 0) return '--';
+        const days = Math.floor(seconds / 86400);
+        const hours = Math.floor((seconds % 86400) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        if (days > 0) {
+            return `${days}d ${hours}h`;
+        } else if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else {
+            return `${minutes}m`;
+        }
+    }
+
     async function updateSystemStatus() {
         try {
             // Fetch all stats endpoints in parallel
-            const [cpu, memory, load, primaryDrive, iostat] = await Promise.all([
+            const [cpu, memory, load, primaryDrive, iostat, uptime] = await Promise.all([
                 apiCall('api/stats/cpu'),
                 apiCall('api/stats/memory'),
                 apiCall('api/stats/load'),
                 apiCall('api/stats/drives/primary'),
                 apiCall('api/stats/iostat'),
+                apiCall('api/stats/uptime'),
             ]);
 
             // Update CPU card
@@ -1537,6 +1557,12 @@
                     iowaitValue.textContent = '--%';
                     iowaitValue.style.color = '#4ecca3';
                 }
+            }
+
+            // Update Uptime card
+            const uptimeValue = document.getElementById('uptime-value');
+            if (uptimeValue) {
+                uptimeValue.textContent = formatUptime(uptime.uptime_seconds);
             }
         } catch (e) {
             console.error('Failed to update system status:', e);

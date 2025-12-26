@@ -570,15 +570,20 @@ class FileGroup(ModelHelper, Base):
 
         logger.debug(f'Moved FileGroup: {self.primary_path} -> {new_primary_path}')
 
+        # Check if filename changed before updating primary_path
+        old_name = self.primary_path.name
+        filename_changed = old_name != new_primary_path.name
+
         # Update the FileGroup with new directory and relative files
         self.files = new_files
         self.directory = new_directory
         self.primary_path = new_primary_path
 
-        # Update title if it was based on the filename
-        if self.title == self.primary_path.name:
-            self.title = new_primary_path.name
-        self.a_text = split_file_name_words(new_primary_path.name)
+        # Update title and a_text only if filename changed
+        if filename_changed:
+            if self.title == old_name:
+                self.title = new_primary_path.name
+            self.a_text = split_file_name_words(new_primary_path.name)
 
         # Note: `data` now contains relative paths that don't need updating!
         # The filenames stay the same, only the directory changes.
@@ -586,8 +591,7 @@ class FileGroup(ModelHelper, Base):
         if not self.data:
             self.indexed = False
 
-        # Flush the changes to the FileGroup.
-        self.flush()
+        # Note: Caller is responsible for flushing/committing
 
     @property
     def location(self):

@@ -1344,6 +1344,66 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
 MOVE_CHUNK_SIZE = 100
 
 
+def _move_file_group_files(file_group: FileGroup, new_primary_path: pathlib.Path) -> None:
+    """Move all physical files of a FileGroup to a new directory.
+
+    For directory moves where filenames are preserved, this moves each file from
+    the old directory to the new directory keeping the same filename.
+
+    Args:
+        file_group: The FileGroup whose files should be moved
+        new_primary_path: The new path for the primary file
+    """
+    new_directory = new_primary_path.parent
+    new_stem, _ = split_path_stem_and_suffix(new_primary_path, full=True)
+
+    # Move each file in the FileGroup
+    for file_info in file_group.files:
+        relative_name = file_info['path']
+        old_path = file_group.directory / relative_name
+        # Calculate new path: new_stem + original suffix
+        _, suffix = split_path_stem_and_suffix(relative_name)
+        new_path = pathlib.Path(f'{new_stem}{suffix}')
+
+        if old_path.is_file():
+            shutil.move(old_path, new_path)
+            logger.debug(f'Moved file: {old_path} -> {new_path}')
+
+
+def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path, pathlib.Path]):
+    """Batch UPDATE FileGroups using raw SQL after physical files have been moved.
+
+    Only updates directory and primary_path. Other fields (files, title, a_text) remain unchanged
+    because filenames are preserved in directory moves - only the parent directory changes.
+
+    Args:
+        session: Database session
+        chunk_plan: Mapping of old_primary_path -> new_primary_path
+    """
+    if not chunk_plan:
+        return
+
+    # Use psycopg2 cursor for safe SQL building via mogrify
+    with get_db_curs() as curs:
+        # Build VALUES list for the update: (old_path, new_dir, new_path)
+        values = [
+            (str(old_path), str(new_path.parent), str(new_path))
+            for old_path, new_path in chunk_plan.items()
+        ]
+        values_sql = mogrify(curs, values)
+
+        # Use UPDATE FROM VALUES pattern for efficient batch update
+        sql = f'''
+            UPDATE file_group AS fg SET
+                directory = v.new_dir,
+                primary_path = v.new_path,
+                indexed = CASE WHEN fg.data IS NULL THEN FALSE ELSE fg.indexed END
+            FROM (VALUES {values_sql}) AS v(old_path, new_dir, new_path)
+            WHERE fg.primary_path = v.old_path
+        '''
+        curs.execute(sql)
+
+
 def add_files_to_refresh_count(count: int):
     from wrolpi.api_utils import api_app
     count = api_app.shared_ctx.refresh.get('counted_files', 0) + count
@@ -1480,6 +1540,8 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                 # We ensured there are FileGroups while building the plan, maybe user deleted a file?
                 raise RuntimeError('Could not get all FileGroups for move')
 
+            # Build chunk plan for bulk update
+            chunk_plan = {}
             for file_group_ in file_groups_:
                 old_file = file_group_.primary_path
                 new_primary_path_ = plan_[old_file]
@@ -1487,7 +1549,9 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                 parent.mkdir(parents=True, exist_ok=True)
                 if parent not in new_directories:
                     new_directories.add(parent)
-                file_group_.move(new_primary_path_)
+                # Move physical files
+                _move_file_group_files(file_group_, new_primary_path_)
+                chunk_plan[old_file] = new_primary_path_
                 revert_plan[new_primary_path_] = old_file
             for directory_ in old_directories_:
                 delete_directory(directory_)
@@ -1498,8 +1562,10 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                 session.add_all([Directory(path=d, name=d.name) for d in missing_directories])
                 inserted_directories.update(missing_directories)
 
-            # Don't forget what has moved.
-            session.flush(file_groups_)
+            # Batch update all FileGroups in this chunk with raw SQL
+            _bulk_update_file_groups_db(session, chunk_plan)
+            # Flush Directory inserts
+            session.flush()
 
     with flags.refresh_discovery:
         try:

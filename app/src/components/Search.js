@@ -10,6 +10,7 @@ import {TagsContext} from "../Tags";
 import {AccordionContent, AccordionTitle, Grid, GridColumn, GridRow, Header as SHeader, Label} from "semantic-ui-react";
 import {Accordion, Header, Icon, Loader, Modal, Segment} from "./Theme";
 import {QueryContext, ThemeContext} from "../contexts/contexts";
+import {KeyboardShortcutsContext} from "../contexts/KeyboardShortcutsContext";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -401,66 +402,14 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
 }
 
 export function SearchIconButton() {
-    // A single button which displays a modal for search suggestions.
-    const {
-        suggestionsResults,
-        handleResultSelect,
-        resultRenderer,
-        loading,
-        searchStr,
-        setSearchStr,
-    } = useSearchSuggestions();
-    const [open, setOpen] = React.useState(false);
-    const prevOpen = React.useRef(open);
+    // A single button which opens the search modal via keyboard shortcuts context.
+    const {openSearchModal} = React.useContext(KeyboardShortcutsContext);
 
-    const localHandleResultSelect = (i) => {
-        // Close modal when user selects a result.
-        setOpen(false);
-        handleResultSelect(i);
-    }
-
-    React.useEffect(() => {
-        if (prevOpen.current === true && !open) {
-            // User has closed the modal.
-            setSearchStr('');
-        }
-        prevOpen.current = open;
-    }, [open]);
-
-    const inputRef = React.useRef();
-    React.useEffect(() => {
-        // Focus on the Search's <input/> when the modal is opened.
-        if (open) {
-            inputRef.current.focus();
-        }
-    }, [open]);
-
-    let modalContents;
-    if (open) {
-        modalContents = <SearchResultsInput clearable
-                                            searchStr={searchStr}
-                                            onChange={setSearchStr}
-                                            onSubmit={setSearchStr}
-                                            size='large'
-                                            placeholder='Search everywhere...'
-                                            results={suggestionsResults}
-                                            handleResultSelect={localHandleResultSelect}
-                                            resultRenderer={resultRenderer}
-                                            loading={loading}
-                                            inputRef={inputRef}
-        />;
-    }
-
-    return <React.Fragment>
-        <a className='item' style={{paddingRight: '0.7em'}} onClick={() => setOpen(true)}>
+    return (
+        <a className='item' style={{paddingRight: '0.7em'}} onClick={openSearchModal}>
             <Icon name='search'/>
         </a>
-        <Modal open={open} onClose={() => setOpen(false)} centered={false}>
-            <Modal.Content>
-                {modalContents}
-            </Modal.Content>
-        </Modal>
-    </React.Fragment>
+    );
 }
 
 function SearchChannelPreview({channel}) {

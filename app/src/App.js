@@ -22,6 +22,7 @@ import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
 import ErrorBoundary from "./components/ErrorBoundary";
+import {KeyboardShortcutsProvider} from "./components/KeyboardShortcutsProvider";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -57,15 +58,17 @@ function Root() {
     return <QueryProvider>
         <ThemeProvider>
             <TagsProvider>
-                <FilePreviewProvider>
-                    <header>
-                        <NavBar/>
-                    </header>
-                    <ErrorBoundary>
-                        <Outlet/>
-                    </ErrorBoundary>
-                    <Footer/>
-                </FilePreviewProvider>
+                <KeyboardShortcutsProvider>
+                    <FilePreviewProvider>
+                        <header>
+                            <NavBar/>
+                        </header>
+                        <ErrorBoundary>
+                            <Outlet/>
+                        </ErrorBoundary>
+                        <Footer/>
+                    </FilePreviewProvider>
+                </KeyboardShortcutsProvider>
             </TagsProvider>
         </ThemeProvider>
     </QueryProvider>

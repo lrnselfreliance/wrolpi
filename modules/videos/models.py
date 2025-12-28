@@ -12,7 +12,8 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_re
     background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
+from wrolpi.files.lib import split_path_stem_and_suffix
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
@@ -890,7 +891,7 @@ class Channel(ModelHelper, Base):
         return self.tag
 
     @classmethod
-    def refresh_files(cls, id_: int, send_events: bool = True):
+    def refresh_channel_files(cls, id_: int, send_events: bool = True):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
         # Get this Channel's info for later.  Refresh may take a long time.
         with get_db_session() as session:
@@ -900,7 +901,7 @@ class Channel(ModelHelper, Base):
         async def _():
             # Refresh all files within this channel's directory first.
             from modules.videos.common import update_view_counts_and_censored
-            await refresh_files([directory], send_events=send_events)
+            await file_worker.run_queue_to_completion([directory], send_events=send_events)
             # Update view count second.
             await update_view_counts_and_censored(id_)
             with get_db_session(commit=True) as session_:

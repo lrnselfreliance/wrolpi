@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import logging
 import os
+import signal
 import sys
 from contextlib import contextmanager
 
@@ -17,7 +18,7 @@ from modules.archive.lib import import_domains_config
 from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
-from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
+from wrolpi.common import logger, check_media_directory, set_log_level, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
     create_empty_config_files, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
@@ -193,6 +194,22 @@ async def main_process_startup(app: Sanic):
         logger.error('Failed to create initial config files', exc_info=e)
 
 
+@api_app.main_process_start
+async def register_sighup_handler(app: Sanic, loop):
+    """Register SIGHUP handler in the main process to trigger worker restarts."""
+
+    def sighup_handler(signum, frame):
+        logger.warning('Received SIGHUP signal. Triggering worker restart...')
+        try:
+            app.manager.restart()
+        except Exception as e:
+            logger.error(f'Failed to restart workers on SIGHUP: {e}', exc_info=e)
+
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, sighup_handler)
+        logger.info('SIGHUP handler registered for worker restart')
+
+
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
 async def initialize_configs(app: Sanic):
     """Each Sanic process runs this once."""
@@ -211,7 +228,6 @@ async def initialize_configs(app: Sanic):
 
 @api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
 @api_app.listener('reload_process_stop')
-@limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
     logger.warning('Shutting down')

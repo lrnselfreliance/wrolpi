@@ -8,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video, Channel
-from wrolpi.common import logger, limit_concurrent, wrol_mode_check
+from wrolpi.common import logger, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
@@ -190,7 +190,6 @@ def download_video_info_json(url: str) -> dict:
         return info
 
 
-@limit_concurrent(1)
 @wrol_mode_check
 async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
     """

@@ -12,6 +12,7 @@ from wrolpi.collections import Collection
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
+from wrolpi.files.worker import file_worker
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts_and_censored, extract_video_duration, generate_video_poster, \
@@ -415,7 +416,7 @@ async def test_video_ffprobe_json(async_client, test_session, video_file):
     """ffprobe data is extracted when a video is modeled."""
     with mock.patch('modules.videos.lib.extract_video_duration') as mock_extract_video_duration:
         mock_extract_video_duration.side_effect = Exception('duration should be from ffprobe json')
-        await files_lib.refresh_files()
+        await file_worker.run_queue_to_completion()
 
     video = test_session.query(Video).one()
     assert video.ffprobe_json

@@ -6,8 +6,12 @@ class EmptyMessageFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.msg
-        if not message:
+        try:
+            if not message:
+                return False
+            if not message.strip():
+                return False
+            return True
+        except AttributeError:
+            # message.strip does not exist when restarting the service, ignore it.
             return False
-        if not message.strip():
-            return False
-        return True

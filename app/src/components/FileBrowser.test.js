@@ -34,6 +34,8 @@ jest.mock('../hooks/customHooks', () => ({
     useWROLMode: jest.fn(() => false),
     useStatusFlag: jest.fn(() => false),
     useUploadFile: () => mockUseUploadFile,
+    useFilesProgressInterval: () => ({fileWorker: null, progress: null, fetchFilesProgress: jest.fn()}),
+    useRecurringTimeout: jest.fn(),
 }));
 
 // Mock react-dropzone

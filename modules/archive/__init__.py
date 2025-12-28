@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.collections import Collection
-from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
+from wrolpi.common import logger, register_modeler, register_refresh_cleanup, split_lines_by_length, \
     slow_logger, get_title_from_html, TRACE_LEVEL
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
@@ -261,8 +261,9 @@ async def archive_modeler():
         with get_db_session(commit=True) as session:
             results = session.query(FileGroup, Archive) \
                 .filter(
-                # Get all groups that contain an HTML file that have not been indexed.
-                FileGroup.indexed != True,
+                # Get all groups that contain an HTML file that have not been deep indexed.
+                FileGroup.indexed == True,  # Surface indexed (visible)
+                FileGroup.deep_indexed != True,  # Not yet deep indexed
                 FileGroup.mimetype == 'text/html',
             ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \
                 .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
@@ -277,24 +278,25 @@ async def archive_modeler():
                         try:
                             archive_id = archive.id
                             archive.validate()
-                            # Successfully validated, mark as indexed
-                            file_group.indexed = True
+                            # Successfully validated, mark as deep indexed
+                            file_group.deep_indexed = True
                         except Exception as e:
                             logger.error(f'Unable to validate Archive {archive_id}')
-                            # Don't mark as indexed - will retry later
+                            # Don't mark as deep indexed - will retry later
                             if PYTEST:
                                 raise
                     else:
                         try:
                             model_archive(session, file_group)
-                            # Successfully modeled, mark as indexed
-                            file_group.indexed = True
+                            # Successfully modeled, mark as deep indexed
+                            file_group.deep_indexed = True
                         except InvalidArchive:
                             # It was not a real Archive.  Many HTML files will not be an Archive.
-                            file_group.indexed = False
+                            # Don't mark deep_indexed - let the indexer process it.
+                            # Track in invalid_archives to avoid re-processing in this modeler loop.
                             invalid_archives.add(file_group.id)
                         except Exception as e:
-                            # Some other error occurred during modeling - don't mark as indexed so we can retry
+                            # Some other error occurred during modeling - don't mark as deep indexed so we can retry
                             logger.error(f'Failed to model Archive for FileGroup {file_group.id}: {e}')
                             if PYTEST:
                                 raise
@@ -312,7 +314,6 @@ async def archive_modeler():
 
 
 @register_refresh_cleanup
-@limit_concurrent(1)
 def archive_cleanup():
     with get_db_session(commit=True) as session:
         # Remove any domain Collections without any Archives.

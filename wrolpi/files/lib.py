@@ -23,10 +23,8 @@ from sqlalchemy.orm import Session
 
 from wrolpi import flags
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
-    get_wrolpi_config, \
+from wrolpi.common import get_media_directory, wrol_mode_check, logger, partition, \
+    chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_wrolpi_config, \
     timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify
@@ -35,6 +33,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
+from wrolpi.files.worker import Priority
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
 from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where, save_tags_config, sync_tags_directory
 from wrolpi.vars import PYTEST, IS_MACOS
@@ -50,7 +49,7 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
+__all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'move', 'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
@@ -246,20 +245,25 @@ async def delete(*paths: Union[str, pathlib.Path]):
                 if any(i for i in paths if i in file_group.my_paths()):
                     # File that will be deleted is in a Tagged FileGroup.
                     raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
+    # Track parent directories for refresh after deletion
+    parent_dirs = set()
     for path in paths:
         ignored_directories = get_wrolpi_config().ignored_directories
         if ignored_directories and str(path) in ignored_directories:
             remove_ignored_directory(path)
         if path.is_dir():
             delete_directory(path, recursive=True)
+            parent_dirs.add(path.parent)
         else:
+            parent_dirs.add(path.parent)
             path.unlink()
 
-    coro = refresh_files(paths)
+    # Refresh parent directories so stale FileGroups get cleaned up
+    from wrolpi.files.worker import file_worker
     if PYTEST:
-        await coro
+        await file_worker.run_queue_to_completion(list(parent_dirs))
     else:
-        background_task(coro)
+        file_worker.queue_refresh(list(parent_dirs))
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):
@@ -345,7 +349,58 @@ for six_ in ISO_639_CODES.keys():
     EXTRA_SUFFIXES |= {f'.{i}-auto.srt' for i in ISO_639_CODES}
     EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
 
+# Convert to lowercase frozensets for O(1) case-insensitive lookup
+_SUFFIXES_LOWER = frozenset(s.lower() for s in SUFFIXES)
+_EXTRA_SUFFIXES_LOWER = frozenset(s.lower() for s in EXTRA_SUFFIXES)
+_HARDCODED_SUFFIXES = frozenset({'.info.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
+
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
+
+
+def _extract_candidate_suffixes(name_lower: str) -> List[str]:
+    """Extract potential suffixes from filename (last 1, 2, 3 dot-parts).
+
+    Returns suffixes in order from shortest to longest.
+    """
+    parts = name_lower.rsplit('.', 3)
+    if len(parts) == 1:
+        return []
+    candidates = []
+    append_candidate = candidates.append
+    suffix = ''
+    for i in range(len(parts) - 1, 0, -1):
+        suffix = '.' + parts[i] + suffix
+        append_candidate(suffix)
+    return candidates
+
+
+def _get_suffix_length(name_lower: str) -> int:
+    """Get length of matching suffix using O(1) set lookups.
+
+    Returns 0 if no suffix matches.
+    """
+    # Fast path: check hardcoded multi-part suffixes first
+    for suffix in _HARDCODED_SUFFIXES:
+        if name_lower.endswith(suffix):
+            return len(suffix)
+
+    candidates = _extract_candidate_suffixes(name_lower)
+    if not candidates:
+        return 0
+
+    # Check SUFFIXES (longest first for most specific match)
+    for suffix in reversed(candidates):
+        if suffix in _SUFFIXES_LOWER:
+            return len(suffix)
+
+    # Only check EXTRA_SUFFIXES for .srt/.vtt files
+    simple_suffix = candidates[0] if candidates else ''
+    if simple_suffix in {'.srt', '.vtt'}:
+        for suffix in reversed(candidates):
+            if suffix in _EXTRA_SUFFIXES_LOWER:
+                return len(suffix)
+
+    return len(simple_suffix)
 
 
 @functools.lru_cache(maxsize=10_000)
@@ -371,22 +426,18 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
         stem = f'{path.parent}/{stem}' if full else stem
         return stem, f'{info}{format_num}{suffix}{part}'
 
-    # May or may not be absolute.  Convert to lowercase so any suffix case can be matched.
-    full_ = str(path).lower()
-    # Get the special matching suffix, if any.  Match against `.en.srt` but could return `.EN.SRT`
-    suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), None)
-    if not suffix and (full_.endswith('.srt') or full_.endswith('.vtt')):
-        # Special handling for numerous language/region codes.
-        suffix = next(filter(lambda i: full_.endswith(i), EXTRA_SUFFIXES), path.suffix)
-    # Fallback to pathlib's suffix.
-    suffix = suffix or path.suffix
-    # Return the suffix from the path's name in the original case.
-    if suffix:
-        idx = -1 * len(suffix)
+    name = path.name
+    name_lower = name.lower()
+
+    # Get suffix length using O(1) set lookups instead of O(n) linear search
+    suffix_len = _get_suffix_length(name_lower)
+
+    if suffix_len > 0:
+        idx = -suffix_len
         if full:
-            return f'{path.parent}/{path.name[:idx]}', path.name[idx:]
+            return f'{path.parent}/{name[:idx]}', name[idx:]
         else:
-            return path.name[:idx], path.name[idx:]
+            return name[:idx], name[idx:]
 
     # Path has no suffix.
     if full:
@@ -478,17 +529,22 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
-def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
+def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime, batch_size: int = 2000):
     """Insert/update all records of the provided files.
 
-    Any inserted files will be marked with `indexed=false`.  Any existing files will only be updated if their
-    size/modification_datetime changed.
+    New files are surface indexed immediately (indexed=True, deep_indexed=False).
+    Existing files are only updated if their size/modification_datetime changed.
+
+    Args:
+        files: List of file paths to upsert
+        idempotency: Timestamp for this refresh cycle
+        batch_size: Number of files per SQL batch (default 2000)
 
     It is assumed all files exist."""
     idempotency = str(idempotency)
 
     non_primary_files = set()
-    for chunk in chunks_by_stem(files, 100):
+    for chunk in chunks_by_stem(files, batch_size):
         # Group all files by their shared full-stem.  `chunk_by_stem` already sorted the files.
         grouped = group_files_by_stem(chunk, pre_sorted=True)
         # Convert the groups into file_groups.  Extract common information into `file_group.data`.
@@ -507,7 +563,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                 size = sum(i.stat().st_size for i in group)
                 files = json.dumps(_paths_to_files_dict(group))
                 values[primary_path] = (modification_datetime, mimetype, size, files)
-                non_primary_files = {i for i in group if i != primary_path}
+                non_primary_files |= {i for i in group if i != primary_path}
             except NoPrimaryFile:
                 # Cannot find primary path, create a `file_group` for each file.
                 for primary_path in group:
@@ -521,13 +577,14 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
 
         values = [(str(primary_path),
                    str(primary_path.parent),  # directory
-                   False,  # `indexed` is false to force indexing by default.
+                   True,  # `indexed` is true - file is surface indexed (visible, filename searchable).
+                   False,  # `deep_indexed` is false - needs content extraction by modelers.
                    idempotency, *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
             values = mogrify(curs, values)
             stmt = f'''
                 INSERT INTO file_group
-                    (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files)
+                    (primary_path, directory, indexed, deep_indexed, idempotency, modification_datetime, mimetype, size, files)
                 VALUES {values}
                 ON CONFLICT (primary_path) DO UPDATE
                 SET
@@ -547,9 +604,13 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                         ELSE EXCLUDED.files
                         END
                     ),
-                    -- Preseve TRUE `indexed` only if the files have not changed.
-                    indexed=(
-                        file_group.indexed = true
+                    -- Two-phase indexing: indexed=True means surface indexed (always visible).
+                    -- Once a file is discovered, it remains indexed. Only reset on INSERT.
+                    indexed=COALESCE(file_group.indexed, EXCLUDED.indexed),
+                    -- Reset deep_indexed when file changes, preserve when unchanged.
+                    -- Check mtime, size, and file count (same conditions as files preservation).
+                    deep_indexed=(
+                        file_group.deep_indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
                         AND file_group.size = EXCLUDED.size
                         AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
@@ -572,286 +633,42 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                              (list(map(str, non_primary_files)),))
 
 
-def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
-    """Return a new list which does not contain any file paths that are in ignored directories."""
-    ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
-    for idx, ignored_directory in enumerate(ignored_directories):
-        ignored_directory = pathlib.Path(ignored_directory)
-        if not ignored_directory.is_absolute():
-            ignored_directories[idx] = str(get_media_directory() / ignored_directory)
+def remove_files_in_ignored_directories(files: List[pathlib.Path],
+                                        ignored_directories: List[str] = None) -> List[pathlib.Path]:
+    """Return a new list which does not contain any file paths that are in ignored directories.
+
+    Args:
+        files: List of file paths to filter
+        ignored_directories: Optional pre-computed list of absolute ignored directory paths.
+                             If not provided, computed from config (slower).
+    """
+    if ignored_directories is None:
+        ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
+        for idx, ignored_directory in enumerate(ignored_directories):
+            ignored_directory = pathlib.Path(ignored_directory)
+            if not ignored_directory.is_absolute():
+                ignored_directories[idx] = str(get_media_directory() / ignored_directory)
+    if not ignored_directories:
+        return files
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
     return files
 
 
-async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
-    """Discover all files in the directories provided in paths, as well as all files in paths.
-
-    All records for files in `paths` that do not exist will be deleted.
-
-    Will refuse to refresh when the media directory is empty."""
-    try:
-        next(get_media_directory().iterdir())
-    except StopIteration:
-        # We don't want to delete a bunch of files which would exist if the drive was mounted.
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
-    except FileNotFoundError:
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
-
-    if not paths:
-        raise ValueError('Must provide some paths to refresh.')
-
-    idempotency = idempotency or now()
-
-    exists, deleted = partition(lambda i: i.exists(), paths)
-
-    # DISCOVER all files, upsert their records.
-
-    if exists:
-        # Recursively upsert all files that exist, and files in the existing directories.
-        directories, files = partition(lambda i: i.is_dir(), exists)
-        while directories:
-            directory = directories.pop(0)
-            try:
-                new_files, new_directories = get_files_and_directories(directory)
-            except FileNotFoundError as e:
-                # Directory may have been deleted during refresh.
-                logger.warning(f'Cannot refresh directory because it is missing: {directory}', exc_info=e)
-                continue
-            except PermissionError as e:
-                # Directory may have been deleted during refresh.
-                logger.warning(f'Do not have permission to refresh directory: {directory}', exc_info=e)
-                continue
-            directories.extend(new_directories)
-            files.extend(new_files)
-
-            # Remove any files in ignored directories.
-            files = remove_files_in_ignored_directories(files)
-
-            refresh_logger.debug(f'Discovered {len(new_files)} files in {directory}')
-            if len(files) >= 100:
-                # Wait until there are enough files to perform the upsert.
-                try:
-                    _upsert_files(files, idempotency)
-                except Exception as e:
-                    refresh_logger.error(f'Failed to upsert files', exc_info=e)
-                files = list()
-            # Sleep to catch cancel.
-            await asyncio.sleep(0)
-        if files:
-            # Not enough files for the chunks above, finish what is left.
-            try:
-                _upsert_files(files, idempotency)
-            except Exception as e:
-                refresh_logger.error(f'Failed to upsert files', exc_info=e)
-
-        refresh_logger.info('Finished discovering files.  Will now remove deleted files from DB...')
-
-    with get_db_curs(commit=True) as curs:
-        wheres = ''
-        if paths:
-            # Use indexed directory column to delete any children of directories that are deleted.
-            # Match exact directory or subdirectories
-            conditions = []
-            for p in paths:
-                p_str = str(p)
-                conditions.append(curs.mogrify('(directory = %s OR directory LIKE %s)', (p_str, f'{p_str}/%')).decode())
-            wheres = ' OR '.join(conditions)
-        deleted_files = ''
-        if deleted:
-            # Delete any paths that do not exist.
-            deleted_files = ' OR '.join([curs.mogrify('primary_path = %s', (str(i),)).decode() for i in deleted])
-
-        idempotency = curs.mogrify('%s', (idempotency,)).decode()
-        wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
-        stmt = f'''
-            DELETE FROM file_group
-            WHERE
-                -- Delete all known-deleted files.
-                {deleted_files}
-                -- Delete any files in the refreshed paths that were not updated.
-                {" OR " + wheres if deleted_files else wheres}
-        '''
-        refresh_logger.debug(stmt)
-        curs.execute(stmt)
+def get_ignored_directories_list() -> List[str]:
+    """Return list of absolute ignored directory paths for startswith filtering."""
+    return list(get_ignored_directories_set())
 
 
-@limit_concurrent(1)  # Only one refresh at a time.
-@wrol_mode_check
-@cancelable_wrapper
-async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = True):
-    """Find, model, and index all files in the media directory."""
-    from wrolpi.api_utils import api_app
-    if isinstance(paths, str):
-        paths = [pathlib.Path(paths), ]
-    if isinstance(paths, pathlib.Path):
-        paths = [paths, ]
-
-    idempotency = now()
-    api_app.shared_ctx.refresh['idempotency'] = idempotency
-
-    refreshing_all_files = False
-
-    with flags.refreshing, timer('refresh_files', 'info'):
-        api_app.shared_ctx.refresh['counted_files'] = 0
-        if not paths:
-            refresh_logger.warning('Refreshing all files')
-            refreshing_all_files = True
-        else:
-            refresh_msg = ", ".join(list(map(str, paths)))
-            refresh_logger.warning(f'Refreshing {refresh_msg[:1000]}')
-        if send_events:
-            Events.send_global_refresh_started()
-
-        # Add all files in the media directory to the DB.
-        paths = paths or [get_media_directory()]
-
-        directories = list(filter(lambda i: i.is_dir(), paths))
-        found_directories = set()
-        if directories:
-            with flags.refresh_counting:
-                while directories:
-                    directory = directories.pop()
-                    try:
-                        files, dirs = get_files_and_directories(directory)
-                    except PermissionError as e:
-                        refresh_logger.error(f'Error refreshing {directory}', exc_info=e)
-                        continue
-                    directories.extend(dirs)
-                    found_directories |= set(dirs)
-                    add_files_to_refresh_count(len(files))
-                    # Sleep to catch cancel.
-                    await asyncio.sleep(0)
-                refresh_logger.info(f'Counted {api_app.shared_ctx.refresh["counted_files"]} files')
-
-        with flags.refresh_discovery:
-            await refresh_discover_paths(paths, idempotency)
-            if send_events:
-                Events.send_global_refresh_discovery_completed()
-
-        # Model all files that have not been indexed.
-        with flags.refresh_modeling:
-            await apply_modelers()
-            if send_events:
-                Events.send_global_refresh_modeling_completed()
-
-        # Index the rest of the files that were not indexed by modelers.
-        with flags.refresh_indexing:
-            await apply_indexers()
-            if send_events:
-                Events.send_global_refresh_indexing_completed()
-
-        # Cleanup any outdated file data.
-        with flags.refresh_cleanup:
-            await apply_refresh_cleanup()
-
-            with get_db_session() as session:
-                parent_directories = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(paths))}
-                parent_directories |= set(filter(lambda i: i.is_dir(), paths))
-            upsert_directories(parent_directories, found_directories)
-
-            if send_events:
-                Events.send_global_after_refresh_completed()
-
-        refresh_logger.warning('Done refreshing Files')
-
-        if refreshing_all_files:
-            # Only set refresh_complete flag if all files have been refreshed.
-            flags.refresh_complete.set()
-        if send_events:
-            Events.send_refresh_completed()
-
-    api_app.shared_ctx.refresh['counted_files'] = 0
-    api_app.shared_ctx.refresh['idempotency'] = None
-
-
-async def apply_indexers():
-    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""
-    from wrolpi.files.models import FileGroup
-    refresh_logger.info('Applying indexers')
-
-    while True:
-        # Continually query for Files that have not been indexed.
-        with get_db_session(commit=False) as session:
-            file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
-            file_groups: List[FileGroup] = list(file_groups)
-
-            file_group = None
-            processed = 0
-            for file_group in file_groups:
-                processed += 1
-                try:
-                    file_group.do_index()
-                except Exception:
-                    # Error has already been logged in .do_index.
-                    if PYTEST:
-                        raise
-                # Always mark the FileGroup as indexed.  We won't try to index it again.
-                file_group.indexed = True
-
-                # Sleep to catch cancel.
-                await asyncio.sleep(0)
-
-            # Commit may fail due to invalid UTF-8 surrogates in paths
-            try:
-                session.commit()
-            except UnicodeEncodeError as e:
-                session.rollback()
-                refresh_logger.warning(f'UnicodeEncodeError during indexer commit, attempting to fix: {e}')
-                # Find and fix the problematic file(s) by re-querying after rollback
-                fg_ids = [fg.id for fg in file_groups if fg.id]
-                session.expire_all()
-                file_groups = session.query(FileGroup).filter(FileGroup.id.in_(fg_ids)).all()
-
-                for fg in file_groups:
-                    try:
-                        # Check if primary_path has surrogates
-                        primary_path_str = str(fg.primary_path)
-                        try:
-                            primary_path_str.encode('utf-8')
-                        except UnicodeEncodeError:
-                            sanitized = sanitize_filename_surrogates(fg.primary_path)
-                            refresh_logger.info(f'Sanitized primary_path: {fg.primary_path} -> {sanitized}')
-                            fg.primary_path = sanitized
-
-                        # Check if files JSON has surrogates
-                        if fg.files:
-                            new_files = []
-                            for f in fg.files:
-                                path_val = f.get('path', '')
-                                # Convert to string if it's a Path object
-                                path_str = str(path_val) if path_val else ''
-                                try:
-                                    path_str.encode('utf-8')
-                                    new_files.append(f)
-                                except UnicodeEncodeError:
-                                    sanitized = sanitize_filename_surrogates(pathlib.Path(path_str))
-                                    refresh_logger.info(f'Sanitized file path: {path_str} -> {sanitized}')
-                                    new_files.append({**f, 'path': str(sanitized)})
-                            fg.files = new_files
-                    except Exception as fix_error:
-                        refresh_logger.error(f'Failed to sanitize path for FileGroup {fg.id}: {fix_error}',
-                                             exc_info=fix_error)
-                    # Re-mark as indexed (rollback undid this)
-                    fg.indexed = True
-
-                # Retry commit after fixing
-                try:
-                    session.commit()
-                except UnicodeEncodeError as e2:
-                    # Still failing - skip these files and continue
-                    session.rollback()
-                    refresh_logger.error(f'Failed to fix UnicodeEncodeError, skipping batch: {e2}')
-                    # Mark as indexed in a separate transaction so we don't loop forever
-                    with get_db_curs(commit=True) as curs:
-                        curs.execute('UPDATE file_group SET indexed = TRUE WHERE id = ANY(%s)', (fg_ids,))
-                    continue
-
-            if file_group:
-                refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')
-
-            if processed < 20:
-                # Processed less than the limit, don't do the next query.
-                break
+def get_ignored_directories_set() -> Set[str]:
+    """Return set of absolute ignored directory paths for fast O(1) lookup during scandir_tree."""
+    media_dir = get_media_directory()
+    ignored = set()
+    for dir_path in get_wrolpi_config().ignored_directories:
+        dir_path = pathlib.Path(dir_path)
+        if not dir_path.is_absolute():
+            dir_path = media_dir / dir_path
+        ignored.add(str(dir_path))
+    return ignored
 
 
 def upsert_directories(parent_directories, directories):
@@ -860,7 +677,8 @@ def upsert_directories(parent_directories, directories):
     `directories`.
     """
     idempotency = now()
-    directories = list(directories) + list(parent_directories)
+    # Combine and deduplicate directories to avoid "ON CONFLICT cannot affect row a second time" error
+    directories = set(directories) | set(parent_directories)
 
     # Only insert directories that are children of `media_directory` and exist.
     directories = get_paths_in_media_directory([i for i in directories if i.is_dir()])
@@ -1210,7 +1028,6 @@ async def remove_file_group_tag(session: Session, file_group_id: int, file_group
 @dataclasses.dataclass
 class RefreshProgress:
     counted_files: int = 0
-    counting: bool = False
     discovery: bool = False
     indexed: int = 0
     indexing: bool = False
@@ -1224,7 +1041,6 @@ class RefreshProgress:
     def __json__(self) -> dict:
         d = dict(
             counted_files=self.counted_files,
-            counting=self.counting,
             discovery=self.discovery,
             indexed=self.indexed,
             indexing=self.indexing,
@@ -1241,7 +1057,7 @@ class RefreshProgress:
 def get_refresh_progress() -> RefreshProgress:
     from wrolpi.api_utils import api_app
 
-    idempotency = api_app.shared_ctx.refresh.get('idempotency')
+    idempotency = api_app.shared_ctx.file_worker_data.get('idempotency')
     if idempotency:
         stmt = '''
                SELECT
@@ -1271,7 +1087,6 @@ def get_refresh_progress() -> RefreshProgress:
 
         progress = RefreshProgress(
             counted_files=api_app.shared_ctx.refresh.get('counted_files', 0),
-            counting=flags.refresh_counting.is_set(),
             discovery=flags.refresh_discovery.is_set(),
             indexed=int(results['indexed'] or 0),
             indexing=flags.refresh_indexing.is_set(),
@@ -1447,76 +1262,73 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
     sources = get_unique_files_by_stem(sources)
     logger.info(f'move got {len(sources)} to move')
 
-    with flags.refresh_counting:
-        for source in sources:
-            if source.is_file():
-                # Get any FileGroups that share the source's stem.
-                files = glob_shared_stem(source)
-                file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(files)).all()
-                if not file_groups:
-                    # No FileGroups for this source file, create one.
-                    try:
-                        fg = FileGroup.from_paths(session, *files)
-                        file_groups = [fg, ]
-                    except NoPrimaryFile:
-                        for file in files:
-                            fg = FileGroup.from_paths(session, file)
-                            add_file_group_to_plan(fg)
-                add_files_to_refresh_count(len(file_groups))
-                for fg in file_groups:
-                    add_file_group_to_plan(fg)
+    for source in sources:
+        if source.is_file():
+            # Get any FileGroups that share the source's stem.
+            files = glob_shared_stem(source)
+            file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(files)).all()
+            if not file_groups:
+                # No FileGroups for this source file, create one.
+                try:
+                    fg = FileGroup.from_paths(session, *files)
+                    file_groups = [fg, ]
+                except NoPrimaryFile:
+                    for file in files:
+                        fg = FileGroup.from_paths(session, file)
+                        add_file_group_to_plan(fg)
+            add_files_to_refresh_count(len(file_groups))
+            for fg in file_groups:
+                add_file_group_to_plan(fg)
+            # Sleep to catch cancel.
+            await asyncio.sleep(0)
+        elif source.is_dir():
+            # Use indexed directory column for efficient lookup
+            # Match exact directory or subdirectories
+            stmt = '''SELECT primary_path FROM file_group
+                      WHERE directory = :dir OR directory LIKE :dir_pattern'''
+            source_str = str(source)
+            for (primary_path,) in session.execute(
+                    stmt, dict(dir=source_str, dir_pattern=f'{source_str}/%')):
+                primary_path = pathlib.Path(primary_path)
+                if primary_path not in plan:
+                    new_primary_path = destination / source.name / primary_path.relative_to(source)
+                    if new_primary_path.exists():
+                        raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path}')
+                    plan[primary_path] = new_primary_path
+                    add_files_to_refresh_count(1)
+
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
-            elif source.is_dir():
-                # Use indexed directory column for efficient lookup
-                # Match exact directory or subdirectories
-                stmt = '''SELECT primary_path FROM file_group
-                          WHERE directory = :dir OR directory LIKE :dir_pattern'''
-                source_str = str(source)
-                for (primary_path,) in session.execute(
-                        stmt, dict(dir=source_str, dir_pattern=f'{source_str}/%')):
-                    primary_path = pathlib.Path(primary_path)
-                    if primary_path not in plan:
-                        new_primary_path = destination / source.name / primary_path.relative_to(source)
-                        if new_primary_path.exists():
-                            raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path}')
-                        plan[primary_path] = new_primary_path
+
+            # Move directories of this source.
+            for directory in (i for i in walk(source) if i.is_dir()):
+                new_directory = destination / source.name / directory.relative_to(source)
+                plan[directory] = new_directory
+
+            # Find any files in this directory that are not yet in the DB and add them to the plan.
+            files = {i for i in walk(source) if i.is_file()}
+            if missing_files := files - set(plan.keys()):
+                for paths in group_files_by_stem(missing_files):
+                    try:
+                        # Only create the FileGroup if a primary_path can be found.
+                        get_primary_file(paths)
+                        file_group = FileGroup.from_paths(session, *paths)
                         add_files_to_refresh_count(1)
+                        add_source_file_group_to_plan(file_group, source)
+                    except NoPrimaryFile:
+                        # No primary path for these paths, create FileGroups for each.
+                        add_files_to_refresh_count(1)
+                        for file in paths:
+                            fg = FileGroup.from_paths(session, file)
+                            add_source_file_group_to_plan(fg, source)
 
                     # Sleep to catch cancel.
                     await asyncio.sleep(0)
-
-                # Move directories of this source.
-                for directory in (i for i in walk(source) if i.is_dir()):
-                    new_directory = destination / source.name / directory.relative_to(source)
-                    plan[directory] = new_directory
-
-                # Find any files in this directory that are not yet in the DB and add them to the plan.
-                files = {i for i in walk(source) if i.is_file()}
-                if missing_files := files - set(plan.keys()):
-                    for paths in group_files_by_stem(missing_files):
-                        try:
-                            # Only create the FileGroup if a primary_path can be found.
-                            get_primary_file(paths)
-                            file_group = FileGroup.from_paths(session, *paths)
-                            add_files_to_refresh_count(1)
-                            add_source_file_group_to_plan(file_group, source)
-                        except NoPrimaryFile:
-                            # No primary path for these paths, create FileGroups for each.
-                            add_files_to_refresh_count(1)
-                            for file in paths:
-                                fg = FileGroup.from_paths(session, file)
-                                add_source_file_group_to_plan(fg, source)
-
-                        # Sleep to catch cancel.
-                        await asyncio.sleep(0)
-            else:
-                raise UnknownFile(f'Unknown path type, cannot move: {source}')
+        else:
+            raise UnknownFile(f'Unknown path type, cannot move: {source}')
 
     # Sort plan by the deepest files first.
     plan: OrderedDict = OrderedDict(sorted(plan.items(), key=lambda i: (len(i[0].parents), i[0].name), reverse=True))
-    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-        logger.trace(f'_move: plan created with {len(plan)} items to {destination}')
 
     # Revert plan is built out as files are moved.
     revert_plan = OrderedDict()
@@ -1530,29 +1342,98 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
         # Query existing directories ONCE before processing chunks (not per-chunk).
         existing_directories = {i[0] for i in session.query(Directory.path)}
         inserted_directories = set()
+        chunk_number = 0
 
         # Move FileGroups in groups.
         for chunk in chunks(plan_.items(), MOVE_CHUNK_SIZE):
+            chunk_number += 1
             old_paths = [i for i, j in chunk]
             old_files, old_directories_ = partition(lambda i: i.is_file(), old_paths)
             file_groups_ = session.query(FileGroup).filter(FileGroup.primary_path.in_(old_files)).all()
             if len(file_groups_) != len(old_files):
                 # We ensured there are FileGroups while building the plan, maybe user deleted a file?
+                missing = set(old_files) - {fg.primary_path for fg in file_groups_}
+                logger.error(f'do_plan: missing FileGroups for paths: {missing}')
                 raise RuntimeError('Could not get all FileGroups for move')
 
-            # Build chunk plan for bulk update
+            # Build chunk plan for bulk update (first pass - no file moves yet)
             chunk_plan = {}
+            source_fg_by_path = {fg.primary_path: fg for fg in file_groups_}
             for file_group_ in file_groups_:
                 old_file = file_group_.primary_path
                 new_primary_path_ = plan_[old_file]
+                chunk_plan[old_file] = new_primary_path_
+
+            # Check for conflicting FileGroups at target paths BEFORE moving files
+            target_paths = [str(p) for p in chunk_plan.values()]
+            conflicts = session.query(FileGroup).filter(
+                FileGroup.primary_path.in_(target_paths)
+            ).all()
+
+            paths_to_skip = []
+            if conflicts:
+                # Build lookup: target_path -> FileGroup
+                target_fg_map = {str(fg.primary_path): fg for fg in conflicts}
+
+                # Get source FileGroups for this chunk
+                source_paths = [str(p) for p in chunk_plan.keys()]
+                source_fgs = session.query(FileGroup).filter(
+                    FileGroup.primary_path.in_(source_paths)
+                ).all()
+                source_fg_map = {str(fg.primary_path): fg for fg in source_fgs}
+
+                # Batch query: which FileGroups are linked to models?
+                all_fg_ids = [fg.id for fg in conflicts] + [fg.id for fg in source_fgs]
+
+                from modules.videos.models import Video
+                from modules.archive.models import Archive
+                from wrolpi.files.ebooks import EBook
+
+                linked_ids = set()
+                for model, attr in [(Video, Video.file_group_id), (Archive, Archive.file_group_id),
+                                    (EBook, EBook.file_group_id)]:
+                    linked_ids.update(
+                        r[0] for r in session.query(attr).filter(attr.in_(all_fg_ids)).all()
+                    )
+
+                # Resolve conflicts - check for unresolvable ones FIRST (before moving any files)
+                for source_path, target_path in list(chunk_plan.items()):
+                    target_path_str = str(target_path)
+                    source_path_str = str(source_path)
+
+                    if target_path_str in target_fg_map:
+                        target_fg = target_fg_map[target_path_str]
+                        source_fg = source_fg_map.get(source_path_str)
+
+                        target_linked = target_fg.id in linked_ids
+                        source_linked = source_fg and source_fg.id in linked_ids
+
+                        if target_linked and source_linked:
+                            # Both linked - real conflict, fail early before moving any files
+                            logger.error(f'Conflict: both source {source_fg.id} and target {target_fg.id} are linked at {target_path_str}')
+                            raise ValueError(f'Cannot resolve conflict at {target_path_str}: both FileGroups are linked to models')
+                        elif not target_linked:
+                            # Target is orphan - will delete it later, proceed with update
+                            logger.info(f'Will delete orphan FileGroup {target_fg.id} at target {target_path_str}')
+                        elif not source_linked:
+                            # Target is linked, source is orphan - will delete source, skip update
+                            logger.info(f'Will delete orphan source FileGroup {source_fg.id}, keeping linked target at {target_path_str}')
+                            paths_to_skip.append(source_path)
+
+            # Now move physical files for ALL paths (including skipped ones - files still need to move)
+            for old_file, new_primary_path_ in list(chunk_plan.items()):
+                file_group_ = source_fg_by_path[old_file]
                 parent = new_primary_path_.parent
                 parent.mkdir(parents=True, exist_ok=True)
                 if parent not in new_directories:
                     new_directories.add(parent)
-                # Move physical files
                 _move_file_group_files(file_group_, new_primary_path_)
-                chunk_plan[old_file] = new_primary_path_
                 revert_plan[new_primary_path_] = old_file
+
+            # Remove paths that should be skipped from DB update (but files were moved)
+            for path in paths_to_skip:
+                del chunk_plan[path]
+
             for directory_ in old_directories_:
                 delete_directory(directory_)
 
@@ -1562,8 +1443,28 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
                 session.add_all([Directory(path=d, name=d.name) for d in missing_directories])
                 inserted_directories.update(missing_directories)
 
+            # Now handle the conflict resolutions (delete orphans)
+            if conflicts:
+                for source_path, target_path in list(chunk_plan.items()):
+                    target_path_str = str(target_path)
+                    if target_path_str in target_fg_map:
+                        target_fg = target_fg_map[target_path_str]
+                        if target_fg.id not in linked_ids:
+                            # Target is orphan - delete it now
+                            session.delete(target_fg)
+
+                # Delete orphan source FileGroups for skipped paths
+                for source_path in paths_to_skip:
+                    source_fg = source_fg_map.get(str(source_path))
+                    if source_fg:
+                        session.delete(source_fg)
+
+                # Commit to release locks before bulk update uses separate connection
+                session.commit()
+
             # Batch update all FileGroups in this chunk with raw SQL
-            _bulk_update_file_groups_db(session, chunk_plan)
+            if chunk_plan:
+                _bulk_update_file_groups_db(session, chunk_plan)
             # Flush Directory inserts
             session.flush()
 
@@ -1633,25 +1534,53 @@ async def move(session: Session, destination: pathlib.Path, *sources: pathlib.Pa
 
     Returns an OrderedDict, the key is the file's old location, the value is where the file was moved.
     """
-    with flags.refreshing:
-        from wrolpi.api_utils import api_app
-        api_app.shared_ctx.refresh['counted_files'] = 0
+    from wrolpi.api_utils import api_app
+    from wrolpi.events import Events
 
-        # Move the files, if this fails it will revert itself and raise an error.
-        with timer('moving files', 'info'):
-            plan = await _move(session, destination, *sources)
-            session.commit()
+    # Initialize move progress tracking
+    api_app.shared_ctx.move.update({
+        'active': True,
+        'phase': 'counting',
+        'total': len(sources),
+        'processed': 0,
+        'destination': str(destination),
+        'source_count': len(sources),
+    })
+    Events.send_file_move_started(f'Moving {len(sources)} files to {destination.name}')
 
-        with flags.refresh_indexing:
-            await apply_indexers()
+    try:
+        with flags.refreshing:
+            api_app.shared_ctx.refresh['counted_files'] = 0
 
-        with flags.refresh_modeling:
-            await apply_modelers()
+            # Move the files, if this fails it will revert itself and raise an error.
+            with timer('moving files', 'info'):
+                api_app.shared_ctx.move['phase'] = 'moving'
+                plan = await _move(session, destination, *sources)
+                api_app.shared_ctx.move['total'] = len(plan)
+                api_app.shared_ctx.move['processed'] = len(plan)
+                session.commit()
 
-        with flags.refresh_cleanup:
-            await apply_refresh_cleanup()
-            # Save tags now that files have been moved.
-            save_tags_config.activate_switch()
+            with flags.refresh_indexing:
+                api_app.shared_ctx.move['phase'] = 'indexing'
+                from wrolpi.files.worker import file_worker
+                await file_worker._apply_indexers()
+
+            with flags.refresh_modeling:
+                api_app.shared_ctx.move['phase'] = 'modeling'
+                await apply_modelers()
+
+            with flags.refresh_cleanup:
+                api_app.shared_ctx.move['phase'] = 'cleanup'
+                await apply_refresh_cleanup()
+                # Save tags now that files have been moved.
+                save_tags_config.activate_switch()
+
+        Events.send_file_move_completed(f'Moved {len(plan)} files to {destination.name}')
+    except Exception as e:
+        Events.send_file_move_failed(f'Failed to move files to {destination.name}: {e}')
+        raise
+    finally:
+        api_app.shared_ctx.move.clear()
 
     return plan
 

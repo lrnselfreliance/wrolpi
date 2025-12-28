@@ -1177,7 +1177,10 @@ export async function fetchFilesProgress() {
     const response = await apiGet(`${API_URI}/files/refresh_progress`);
     if (response.ok) {
         const json = await response.json();
-        return json['progress'];
+        return {
+            progress: json['progress'],
+            fileWorker: json['file_worker'],
+        };
     }
 }
 

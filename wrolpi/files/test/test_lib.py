@@ -20,6 +20,7 @@ from wrolpi.conftest import await_switches
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
 from wrolpi.test.common import only_macos
@@ -111,7 +112,7 @@ async def test_delete_tagged(await_switches, test_session, make_files_structure,
     """Cannot delete a file that has been tagged."""
     tag = await tag_factory()
     make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     # Both files end up in a group.
     bar = test_session.query(FileGroup).one()
     bar.add_tag(test_session, tag.id)
@@ -179,7 +180,7 @@ async def test_refresh_files(async_client, test_session, make_files_structure, a
     ])
     foo, bar, baz = files
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_file_groups([
         {'primary_path': 'foo.txt', 'indexed': True},
         {'primary_path': 'bar.txt', 'indexed': True},
@@ -187,12 +188,12 @@ async def test_refresh_files(async_client, test_session, make_files_structure, a
 
     baz.unlink()
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_file_groups([{'primary_path': 'foo.txt', 'indexed': True}, {'primary_path': 'bar.txt', 'indexed': True}])
 
     foo.unlink()
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_file_groups([{'primary_path': 'bar.txt', 'indexed': True}])
 
 
@@ -203,7 +204,7 @@ async def test_file_group_location(async_client, test_session, make_files_struct
         'foo/one.txt': 'one',
         'two.txt': 'two',
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     one, two = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
     assert one.location == '/files?folders=foo&preview=foo%2Fone.txt'
@@ -215,7 +216,7 @@ async def test_refresh_bogus_files(async_client, test_session, make_files_struct
                                    assert_file_groups, insert_file_group):
     """Bogus files are removed during a refresh."""
     make_files_structure(['does exist.txt'])
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     insert_file_group([test_directory / 'does not exist.txt'])
     test_session.commit()
 
@@ -225,7 +226,7 @@ async def test_refresh_bogus_files(async_client, test_session, make_files_struct
         {'primary_path': 'does not exist.txt', 'indexed': True},
     ])
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     assert test_session.query(FileGroup).count() == 1, 'Bogus file was not removed'
     assert_file_groups([{'primary_path': 'does exist.txt', 'indexed': True}])
@@ -235,7 +236,7 @@ async def test_refresh_bogus_files(async_client, test_session, make_files_struct
 async def test_refresh_empty_media_directory(async_client, test_session, test_directory):
     """refresh_paths will refuse to refresh with an empty media directory."""
     with pytest.raises(UnknownDirectory):
-        await lib.refresh_files()
+        await file_worker.run_queue_to_completion()
 
 
 @pytest.mark.asyncio
@@ -252,44 +253,46 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     idempotency = now()
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
     # Note: files now store relative filenames only (not absolute paths)
+    # Two-phase indexing: indexed=True (surface), deep_indexed=False (needs modeler)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [
              {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}]
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': baz.name, 'size': 8, 'suffix': '.txt', 'mimetype': 'text/plain'}]
          },
     ])
 
-    # Modified files should be re-indexed.
+    # Modified files should be re-indexed (deep_indexed reset to False).
     bar.touch()
     baz.write_text('new baz')
-    # Simulate that the video was indexed, it should not be re-indexed because it was not modified.
-    test_session.query(FileGroup).filter_by(primary_path=video_file).one().indexed = True
+    # Simulate that the video was deep indexed, it should not be re-indexed because it was not modified.
+    video_fg = test_session.query(FileGroup).filter_by(primary_path=video_file).one()
+    video_fg.deep_indexed = True
     test_session.commit()
     assert_file_groups(
         [{'primary_path': str(video_file), 'idempotency': idempotency,
-          'indexed': True}],
+          'indexed': True, 'deep_indexed': True}],
         assert_count=False)
 
-    # Only modified files need to be re-indexed.
+    # Only modified files need to be re-indexed (deep_indexed reset).
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
     # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True,
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': True,
          'files': [
              {'path': srt_file3.name, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
@@ -297,43 +300,165 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     # Deleting SRT removes it from the video.
     srt_file3.unlink()
     lib._upsert_files([video_file, bar, baz], idempotency)
+    # Expire session cache to get fresh data after raw SQL update.
+    test_session.expire_all()
     video_file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=str(video_file)).one()
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
     # Note: files now store relative filenames only (not absolute paths)
     assert_file_groups([
-        # Video is no longer indexed because SRT was removed.
-        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
+        # Video deep_indexed is reset because SRT was removed (files changed).
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': video_file.name, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
-        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': bar.name, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
-        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False,
          'files': [{'path': baz.name, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
 
 
+def test_same_stem_files_in_separate_batches_creates_orphans(test_session, test_directory, video_bytes):
+    """
+    BUG DEMONSTRATION: When files with the same stem are processed in
+    separate calls to _upsert_files, they create separate FileGroups
+    instead of being grouped together.
+
+    This replicates the real-world issue where video thumbnails (.webp)
+    are not associated with their video (.mp4) FileGroups.
+    """
+    # Create files with the same stem
+    video_path = test_directory / 'my_video.mp4'
+    poster_path = test_directory / 'my_video.webp'
+
+    video_path.write_bytes(video_bytes)
+    poster_path.write_bytes(b'RIFF\x00\x00\x00\x00WEBP')  # Minimal webp
+
+    idempotency = now()
+
+    # Simulate batch 1: only video file
+    lib._upsert_files([video_path], idempotency)
+
+    # Simulate batch 2: only poster file (processed separately, simulating batch split)
+    lib._upsert_files([poster_path], idempotency)
+
+    # BUG: This creates 2 FileGroups instead of 1
+    test_session.expire_all()
+    file_groups = test_session.query(FileGroup).filter(
+        FileGroup.directory == str(test_directory)
+    ).all()
+
+    # This assertion demonstrates the bug - we expect 1 but get 2
+    assert len(file_groups) == 2, \
+        f"BUG DEMO: Expected 2 orphaned FileGroups (the bug), got {len(file_groups)}"
+
+    # The video FileGroup only has the video, not the poster
+    video_fg = next(fg for fg in file_groups if fg.mimetype == 'video/mp4')
+    assert len(video_fg.files) == 1, "Video FileGroup should only have 1 file (the bug)"
+    assert video_fg.files[0]['mimetype'] == 'video/mp4'
+
+    # The poster is in its own FileGroup (orphaned)
+    poster_fg = next(fg for fg in file_groups if fg.mimetype == 'image/webp')
+    assert len(poster_fg.files) == 1, "Poster FileGroup should only have 1 file"
+
+
 @pytest.mark.asyncio
-async def test_refresh_discover_paths(test_session, make_files_structure, test_directory, assert_files,
-                                      assert_file_groups):
+async def test_subsequent_refresh_merges_orphaned_file_groups(async_client, test_session, test_directory, video_bytes):
+    """
+    Demonstrates that a global refresh will correctly merge orphaned FileGroups
+    that share the same stem.
+
+    This simulates the real-world scenario where orphaned FileGroups were
+    created (e.g., due to files being processed in separate batches before
+    the batch expansion fix), and shows that a global refresh fixes the issue.
+    """
+    # Create files with the same stem
+    video_path = test_directory / 'my_video.mp4'
+    poster_path = test_directory / 'my_video.webp'
+
+    video_path.write_bytes(video_bytes)
+    poster_path.write_bytes(b'RIFF\x00\x00\x00\x00WEBP')
+
+    idempotency1 = now()
+
+    # Simulate orphaned state: files processed in separate batches (the bug scenario)
+    # This represents data from before the batch expansion fix was applied
+    lib._upsert_files([video_path], idempotency1)
+    lib._upsert_files([poster_path], idempotency1)
+
+    # Verify orphan state: 2 separate FileGroups
+    test_session.expire_all()
+    file_groups = test_session.query(FileGroup).filter(
+        FileGroup.directory == str(test_directory)
+    ).all()
+    assert len(file_groups) == 2, "Setup: Should have 2 orphaned FileGroups"
+
+    # Global refresh should merge the orphaned FileGroups
+    await file_worker.run_queue_to_completion()
+
+    # After global refresh, should be merged into 1 FileGroup
+    test_session.expire_all()
+    file_groups = test_session.query(FileGroup).filter(
+        FileGroup.directory == str(test_directory)
+    ).all()
+
+    assert len(file_groups) == 1, \
+        f"After global refresh, expected 1 FileGroup, got {len(file_groups)}"
+
+    fg = file_groups[0]
+    assert fg.mimetype == 'video/mp4', "Primary should be video"
+    assert len(fg.files) == 2, f"Should have 2 files, got {len(fg.files)}"
+
+
+@pytest.mark.asyncio
+async def test_upsert_mtime_resets_deep_indexed(test_session, make_files_structure, test_directory, assert_file_groups):
+    """Test that touching a file (mtime change only) resets deep_indexed."""
+    import time
+    foo, = make_files_structure(['foo.txt'])
+
+    # Initial upsert - file is surface indexed, not deep indexed.
+    idempotency = now()
+    lib._upsert_files([foo], idempotency)
+    assert_file_groups([
+        {'primary_path': foo, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False},
+    ])
+
+    # Simulate that the file was deep indexed.
+    foo_fg = test_session.query(FileGroup).filter_by(primary_path=foo).one()
+    foo_fg.deep_indexed = True
+    test_session.commit()
+    assert_file_groups([
+        {'primary_path': foo, 'indexed': True, 'deep_indexed': True},
+    ], assert_count=False)
+
+    # Touch the file to change mtime only (size stays the same).
+    time.sleep(0.01)  # Ensure mtime changes
+    foo.touch()
+
+    # Re-upsert - deep_indexed should be reset because mtime changed.
+    lib._upsert_files([foo], idempotency)
+    test_session.expire_all()
+    assert_file_groups([
+        {'primary_path': foo, 'idempotency': idempotency, 'indexed': True, 'deep_indexed': False},
+    ])
+
+
+@pytest.mark.asyncio
+async def test_refresh_paths(async_client, test_session, make_files_structure, test_directory, assert_files,
+                             assert_file_groups):
+    """Test that refresh_files() handles specific paths correctly."""
     foo, bar, baz = make_files_structure(['dir1/foo.txt', 'dir1/bar.txt', 'baz.txt'])
     dir1 = foo.parent
 
-    # `refresh_paths` only refreshes the file requested.
-    await lib.refresh_discover_paths([foo, ])
-    assert_files([
-        {'path': 'dir1/foo.txt'},
-    ])
-
-    # `refresh_paths` refreshes recursively.
-    await lib.refresh_discover_paths([foo.parent, ])
+    # `refresh_files` refreshes recursively from a directory.
+    await file_worker.run_queue_to_completion([foo.parent, ])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
     ])
 
-    # `refresh_paths` finally discovers the file at the top of the media directory.
-    await lib.refresh_discover_paths([test_directory, ])
+    # `refresh_files` discovers files at the top of the media directory.
+    await file_worker.run_queue_to_completion([test_directory, ])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
@@ -342,7 +467,7 @@ async def test_refresh_discover_paths(test_session, make_files_structure, test_d
 
     # Records for deleted files are deleted.  Request a refresh of `dir1` so we indirectly refresh `foo`.
     foo.unlink()
-    await lib.refresh_discover_paths([dir1, ])
+    await file_worker.run_queue_to_completion([dir1, ])
     assert_files([
         {'path': 'dir1/bar.txt'},
         {'path': 'baz.txt'},
@@ -351,16 +476,17 @@ async def test_refresh_discover_paths(test_session, make_files_structure, test_d
     # Records for all children of a directory are deleted.
     bar.unlink()
     dir1.rmdir()
-    await lib.refresh_discover_paths([dir1, ])
+    await file_worker.run_queue_to_completion([dir1, ])
     assert_files([
         {'path': 'baz.txt'},
     ])
 
 
 @pytest.mark.asyncio
-async def test_refresh_discover_paths_groups(test_session, make_files_structure, test_directory, video_bytes):
+async def test_refresh_files_groups(async_client, test_session, make_files_structure, test_directory, video_bytes):
+    """Test that files with shared stems are grouped into FileGroups."""
     make_files_structure({'dir1/foo.mp4': video_bytes, 'dir1/foo.info.json': 'hello', 'baz.txt': 'hello'})
-    await lib.refresh_discover_paths([test_directory, ], now())
+    await file_worker.run_queue_to_completion([test_directory, ])
 
     # Two "foo" files, one "baz" file.
     assert test_session.query(FileGroup).count() == 2
@@ -373,14 +499,16 @@ async def test_refresh_discover_paths_groups(test_session, make_files_structure,
     # "bar" file is the only file related to the "bar" group.
     assert len(baz.my_files()) == 1
     assert str(baz.my_files()[0]['path'].relative_to(test_directory)) == 'baz.txt'
-    assert baz.indexed is False
+    # Full pipeline: both surface and deep indexed
+    assert baz.indexed is True
+    assert baz.deep_indexed is True
 
 
 @pytest.mark.asyncio
 async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches):
     """A FileGroup can be tagged."""
     make_files_structure(['foo.mp4'])
-    await lib.refresh_discover_paths([test_directory, ], now())
+    await file_worker.run_queue_to_completion([test_directory, ])
     one = await tag_factory()
 
     foo: FileGroup = test_session.query(FileGroup).one()
@@ -396,7 +524,7 @@ async def test_refresh_a_text_no_indexer(async_client, test_session, make_files_
     """File.a_text is filled even if the file does not match an Indexer."""
     make_files_structure(['foo', 'bar-bar'])
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     files = {i.a_text for i in test_session.query(FileGroup)}
     assert files == {'bar bar bar-bar', 'foo'}
@@ -408,11 +536,11 @@ async def test_refresh_many_files(async_client, test_session, make_files_structu
     file_count = 10_000
     make_files_structure([f'{uuid4()}.txt' for _ in range(file_count)])
     with timer('first refresh'):
-        await lib.refresh_files()
+        await file_worker.run_queue_to_completion()
     assert test_session.query(FileGroup).count() == file_count
 
     with timer('second refresh'):
-        await lib.refresh_files()
+        await file_worker.run_queue_to_completion()
     assert test_session.query(FileGroup).count() == file_count
 
 
@@ -434,7 +562,7 @@ async def test_refresh_cancel(async_client, test_session, make_files_structure, 
             await task_
         assert (datetime.now() - before).total_seconds() < 1.2, 'Task took too long.  Was the refresh canceled?'
 
-    task = asyncio.create_task(lib.refresh_files())
+    task = asyncio.create_task(file_worker.run_queue_to_completion())
     await assert_cancel(task)
 
 
@@ -453,7 +581,7 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
     Image.new('RGB', (25, 25), color='grey').save(bar)
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', baz)
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_files([
         {'path': 'dir/foo text.txt'},
         {'path': 'dir/bar.jpeg'},
@@ -495,7 +623,7 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     # Enable slow feature for testing.
     # TODO can this be sped up to always be included?
     with mock.patch('modules.videos.lib.EXTRACT_SUBTITLES', True):
-        await lib.refresh_files()
+        await file_worker.run_queue_to_completion()
 
     text_file, zip_file, image_file, unknown_file, video_file \
         = test_session.query(FileGroup).order_by(FileGroup.primary_path)
@@ -525,11 +653,11 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
 
     with mock.patch('modules.videos.models.Video.validate') as mock_validate:
         mock_validate.side_effect = Exception('This should not be called twice')
-        await lib.refresh_files()
+        await file_worker.run_queue_to_completion()
 
     # Change the contents, the file should be re-indexed.
     text_path.write_text('new text contents')
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     files, total = lib.search_files('new', 10, 0)
     assert total == 1
 
@@ -556,7 +684,7 @@ async def test_large_text_indexer(async_client, test_session, make_files_structu
     large, = make_files_structure({
         'large_file.txt': 'foo ' * 1_000_000,
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert test_session.query(FileGroup).count() == 1
 
     assert large.is_file() and large.stat().st_size == 4_000_000
@@ -703,7 +831,7 @@ async def test_refresh_files_no_groups(async_client, test_session, test_director
     })
     assert foo_txt.stat().st_size and foo_zip.stat().st_size
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     # Two distinct FileGroups.
     assert test_session.query(FileGroup).count() == 2
@@ -724,21 +852,21 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     bar.mkdir()
     baz.mkdir()
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_directories({'foo', 'bar', 'baz'})
 
     # Deleted directory is removed.
     foo.rmdir()
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_directories({'bar', 'baz'})
 
     bar.rmdir()
-    await lib.refresh_files([bar])
+    await file_worker.run_queue_to_completion([bar])
     assert_directories({'baz', })
 
     # A new directory can be refreshed directly.
     foo.mkdir()
-    await lib.refresh_files([foo])
+    await file_worker.run_queue_to_completion([foo])
     assert_directories({'foo', 'baz'})
 
 
@@ -795,7 +923,7 @@ async def test_move(async_client, test_session, test_directory, make_files_struc
     })
     foo = test_directory / 'foo'
     qux = test_directory / 'qux'
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     # mv foo qux
     plan = await lib.move(test_session, qux, foo)
@@ -891,7 +1019,7 @@ async def test_move_directory(async_client, test_session, test_directory, make_f
     make_files_structure({
         'foo/one.txt': 'one',
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert_directories({'foo'})
 
     bar = test_directory / 'bar'
@@ -938,6 +1066,249 @@ async def test_move_error(async_client, test_session, test_directory, make_files
 
 
 @pytest.mark.asyncio
+async def test_physically_moved_file_creates_duplicate_filegroup(async_client, test_session, test_directory,
+                                                                  make_files_structure):
+    """
+    BUG: When files are physically moved (outside WROLPi) but the DB isn't updated,
+    subsequent operations create duplicate FileGroups instead of updating existing ones.
+
+    This happens because FileGroup.from_paths queries by exact primary_path, not by filename.
+    """
+    # Create a file and its FileGroup at location A
+    make_files_structure({'dir_a/video.mp4': b'video content'})
+    dir_a = test_directory / 'dir_a'
+    dir_b = test_directory / 'dir_b'
+    dir_b.mkdir()
+
+    await file_worker.run_queue_to_completion()
+
+    # Verify one FileGroup exists at dir_a
+    file_groups_before = test_session.query(FileGroup).all()
+    assert len(file_groups_before) == 1
+    original_fg = file_groups_before[0]
+    original_fg_id = original_fg.id
+    assert original_fg.directory == dir_a
+    assert original_fg.primary_path == dir_a / 'video.mp4'
+
+    # Physically move the file to dir_b (simulating failed move or manual move)
+    shutil.move(dir_a / 'video.mp4', dir_b / 'video.mp4')
+    assert not (dir_a / 'video.mp4').exists()
+    assert (dir_b / 'video.mp4').exists()
+
+    # Now call from_paths on the new location - this simulates what happens during refresh
+    # BUG: This creates a NEW FileGroup instead of updating the existing one
+    new_fg = FileGroup.from_paths(test_session, dir_b / 'video.mp4')
+    test_session.flush()
+
+    # Check the result
+    all_file_groups = test_session.query(FileGroup).all()
+
+    # BUG DEMONSTRATION: We now have 2 FileGroups for the same logical file!
+    # The original one still points to dir_a (orphaned - no physical file)
+    # The new one points to dir_b (where the file actually is)
+    assert len(all_file_groups) == 2, \
+        f"Expected 2 FileGroups (bug: duplicate created), got {len(all_file_groups)}"
+
+    # Verify we have one at each location
+    dirs = {fg.directory for fg in all_file_groups}
+    assert dirs == {dir_a, dir_b}, f"Expected FileGroups at both dirs, got {dirs}"
+
+    # The original FileGroup is now orphaned (points to non-existent file)
+    original_fg = test_session.query(FileGroup).filter(FileGroup.id == original_fg_id).one()
+    assert not original_fg.primary_path.exists(), "Original FileGroup should point to non-existent file"
+
+    # EXPECTED BEHAVIOR (when bug is fixed):
+    # - Only 1 FileGroup should exist
+    # - It should be updated to point to the new location (dir_b)
+    # - The test assertions above will fail once the bug is fixed
+
+
+@pytest.mark.asyncio
+async def test_move_handles_orphaned_filegroup_conflict(async_client, test_session, test_directory,
+                                                         make_files_structure):
+    """
+    When moving files to a location that has orphaned FileGroups, the move should succeed
+    by proactively deleting unindexed orphans before the DB update.
+
+    Orphaned FileGroups have indexed=False because they point to non-existent files.
+    The move operation detects these conflicts and deletes them before updating paths.
+    """
+    # Create a file and its FileGroup at location A
+    make_files_structure({'dir_a/video.mp4': b'video content'})
+    dir_a = test_directory / 'dir_a'
+    dir_b = test_directory / 'dir_b'
+    dir_b.mkdir()
+
+    await file_worker.run_queue_to_completion()
+
+    # Verify one FileGroup exists at dir_a
+    file_groups = test_session.query(FileGroup).all()
+    assert len(file_groups) == 1
+    original_fg = file_groups[0]
+    assert original_fg.directory == dir_a
+
+    # Create an orphaned FileGroup at dir_b (simulating a previous failed move)
+    # This orphan has no physical file, no linked model, and is not indexed
+    orphan_fg = FileGroup()
+    orphan_fg.primary_path = dir_b / 'video.mp4'
+    orphan_fg.directory = dir_b
+    orphan_fg.mimetype = 'video/mp4'
+    orphan_fg.indexed = False  # Orphans are unindexed (can't index non-existent files)
+    test_session.add(orphan_fg)
+    test_session.commit()
+
+    # Now we have 2 FileGroups: one real at dir_a, one orphan at dir_b
+    assert test_session.query(FileGroup).count() == 2
+    orphan_id = orphan_fg.id
+
+    # Try to move from dir_a to dir_b - this would fail with UniqueViolation without the fix
+    await lib.move(test_session, dir_b, dir_a / 'video.mp4')
+
+    # Verify the move succeeded
+    assert not (dir_a / 'video.mp4').exists(), "File should be moved from dir_a"
+    assert (dir_b / 'video.mp4').exists(), "File should be at dir_b"
+
+    # Verify we still have only 1 FileGroup (orphan was deleted, original was updated)
+    remaining = test_session.query(FileGroup).all()
+    assert len(remaining) == 1, f"Expected 1 FileGroup after move, got {len(remaining)}"
+
+    # The remaining FileGroup should be the original one, now at dir_b
+    assert remaining[0].id == original_fg.id
+    assert remaining[0].directory == dir_b
+    assert remaining[0].primary_path == dir_b / 'video.mp4'
+
+    # The orphan should be deleted
+    orphan = test_session.query(FileGroup).filter(FileGroup.id == orphan_id).one_or_none()
+    assert orphan is None, "Orphaned FileGroup should have been deleted"
+
+
+@pytest.mark.asyncio
+async def test_move_handles_indexed_orphan_at_target(async_client, test_session, test_directory,
+                                                      make_files_structure):
+    """
+    When target has an indexed FileGroup that is NOT linked to any model (orphan),
+    it should be deleted and the move should proceed.
+    """
+    make_files_structure({'dir_a/video.mp4': b'video content'})
+    dir_a = test_directory / 'dir_a'
+    dir_b = test_directory / 'dir_b'
+    dir_b.mkdir()
+
+    await file_worker.run_queue_to_completion()
+
+    original_fg = test_session.query(FileGroup).one()
+    assert original_fg.directory == dir_a
+
+    # Create an indexed but orphan FileGroup at target (not linked to Video)
+    orphan_fg = FileGroup()
+    orphan_fg.primary_path = dir_b / 'video.mp4'
+    orphan_fg.directory = dir_b
+    orphan_fg.mimetype = 'video/mp4'
+    orphan_fg.indexed = True  # Indexed but not linked to any model
+    test_session.add(orphan_fg)
+    test_session.commit()
+
+    orphan_id = orphan_fg.id
+    assert test_session.query(FileGroup).count() == 2
+
+    # Move should succeed - indexed orphan at target gets deleted
+    await lib.move(test_session, dir_b, dir_a / 'video.mp4')
+
+    assert (dir_b / 'video.mp4').exists()
+    remaining = test_session.query(FileGroup).all()
+    assert len(remaining) == 1
+    assert remaining[0].id == original_fg.id
+    assert test_session.query(FileGroup).filter(FileGroup.id == orphan_id).one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_move_target_linked_source_orphan(async_client, test_session, test_directory,
+                                                 make_files_structure):
+    """
+    When target FileGroup is linked to a Video and source FileGroup is orphan,
+    the source orphan should be deleted and DB update skipped (target already correct).
+    """
+    make_files_structure({'dir_a/video.mp4': b'video content'})
+    dir_a = test_directory / 'dir_a'
+    dir_b = test_directory / 'dir_b'
+    dir_b.mkdir()
+
+    await file_worker.run_queue_to_completion()
+
+    source_fg = test_session.query(FileGroup).one()
+    source_fg_id = source_fg.id
+
+    # Create target FileGroup at dir_b and link it to a Video
+    target_fg = FileGroup()
+    target_fg.primary_path = dir_b / 'video.mp4'
+    target_fg.directory = dir_b
+    target_fg.mimetype = 'video/mp4'
+    target_fg.indexed = True
+    test_session.add(target_fg)
+    test_session.flush()
+
+    video = Video(file_group_id=target_fg.id)
+    test_session.add(video)
+    test_session.commit()
+
+    target_fg_id = target_fg.id
+    assert test_session.query(FileGroup).count() == 2
+
+    # Move files - source orphan deleted, target kept
+    await lib.move(test_session, dir_b, dir_a / 'video.mp4')
+
+    # File was moved
+    assert (dir_b / 'video.mp4').exists()
+
+    # Source FileGroup (orphan) was deleted
+    assert test_session.query(FileGroup).filter(FileGroup.id == source_fg_id).one_or_none() is None
+
+    # Target FileGroup (linked) was kept
+    remaining = test_session.query(FileGroup).filter(FileGroup.id == target_fg_id).one_or_none()
+    assert remaining is not None, "Linked target FileGroup should be kept"
+    assert remaining.primary_path == dir_b / 'video.mp4'
+
+
+@pytest.mark.asyncio
+async def test_move_both_linked_raises_error(async_client, test_session, test_directory,
+                                              make_files_structure):
+    """
+    When both source and target FileGroups are linked to models,
+    the move should raise an error (needs manual resolution).
+    """
+    make_files_structure({'dir_a/video.mp4': b'video content'})
+    dir_a = test_directory / 'dir_a'
+    dir_b = test_directory / 'dir_b'
+    dir_b.mkdir()
+
+    await file_worker.run_queue_to_completion()
+
+    source_fg = test_session.query(FileGroup).one()
+
+    # Link source to a Video
+    video1 = Video(file_group_id=source_fg.id)
+    test_session.add(video1)
+    test_session.flush()
+
+    # Create target FileGroup at dir_b and link it to another Video
+    target_fg = FileGroup()
+    target_fg.primary_path = dir_b / 'video.mp4'
+    target_fg.directory = dir_b
+    target_fg.mimetype = 'video/mp4'
+    target_fg.indexed = True
+    test_session.add(target_fg)
+    test_session.flush()
+
+    video2 = Video(file_group_id=target_fg.id)
+    test_session.add(video2)
+    test_session.commit()
+
+    # Move should fail - both FileGroups are linked
+    with pytest.raises(ValueError, match="Cannot resolve conflict"):
+        await lib.move(test_session, dir_b, dir_a / 'video.mp4')
+
+
+@pytest.mark.asyncio
 async def test_file_group_move(async_client, test_session, make_files_structure, test_directory, video_bytes,
                                srt_text):
     """Test FileGroup's move method"""
@@ -945,7 +1316,7 @@ async def test_file_group_move(async_client, test_session, make_files_structure,
         'video.mp4': video_bytes,
         'video.srt': srt_text,
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.indexed is True
 
@@ -968,7 +1339,7 @@ async def test_move_tagged(async_client, test_session, test_directory, make_file
         'foo/foo.txt': 'foo',
         'foo/bar.txt': 'bar',
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
     bar_file_group.title = 'custom title'  # Should not be overwritten.
     bar_file_group.add_tag(test_session, tag.id)
@@ -1040,7 +1411,7 @@ async def test_html_index(async_client, test_session, test_directory, make_files
         '''
     })
 
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     assert test_session.query(FileGroup).count() == 1, 'Too many files were refreshed.'
     archive_file: FileGroup = test_session.query(FileGroup).one()
@@ -1056,7 +1427,7 @@ Outside element.'''
 @pytest.mark.asyncio
 async def test_doc_indexer(async_client, test_session, example_doc):
     """The contents of a Microsoft doc files can be indexed."""
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
     assert doc.title == 'example word.doc'
@@ -1070,7 +1441,7 @@ async def test_doc_indexer(async_client, test_session, example_doc):
 @pytest.mark.asyncio
 async def test_docx_indexer(async_client, test_session, example_docx):
     """The contents of a Microsoft docx files can be indexed."""
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
     assert doc.title == 'example word.docx'
@@ -1081,7 +1452,7 @@ async def test_docx_indexer(async_client, test_session, example_docx):
 @pytest.mark.asyncio
 async def test_file_search_date_range(async_client, test_session, example_pdf, example_doc):
     """Test searching FileGroups by their published datetime."""
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     doc, pdf = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
 
     files, total = lib.search_files('', 10, 0)
@@ -1157,7 +1528,7 @@ async def test_move_many_files(async_client, test_session, test_directory, make_
     from wrolpi.db import get_db_curs
 
     make_files_structure([f'foo/{i}.txt' for i in range(10_000)])
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     foo = test_directory / 'foo'
     bar = test_directory / 'bar'
@@ -1454,7 +1825,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
         'example.mp4': video_bytes,
         'example.srt': srt_text,
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     # Verify initial state
     file_group = test_session.query(FileGroup).one()
@@ -1520,7 +1891,7 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
         'example.mp4': video_bytes,
         'example.srt': srt_text,
     })
-    await lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     # Verify initial state
     file_group = test_session.query(FileGroup).one()

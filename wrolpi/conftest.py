@@ -6,7 +6,6 @@ import copy
 import http.server
 import json
 import logging
-import multiprocessing
 import pathlib
 import shutil
 import tempfile
@@ -44,6 +43,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
+from wrolpi.files.worker import file_worker as global_file_worker
 from wrolpi.switches import await_switches as await_switches_
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
@@ -124,9 +124,11 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture
-def test_wrolpi_config(test_directory) -> pathlib.Path:
+def test_wrolpi_config(test_directory, shared_contexts_manager) -> pathlib.Path:
     """
     Create a test config based off the example config.
+
+    Depends on shared_contexts_manager to ensure multiprocessing shared contexts are initialized.
     """
     config_path = test_directory / 'config/wrolpi.yaml'
     set_test_config(True)
@@ -143,14 +145,29 @@ async def background_task_listener(request, response):
     await await_switches_()
 
 
+@pytest.fixture(scope='session')
+def shared_contexts_manager():
+    """Session-scoped fixture to manage the multiprocessing Manager lifecycle.
+
+    This ensures the Manager is created once per worker and properly cleaned up.
+    """
+    attach_shared_contexts(api_app)
+    yield
+    # Shutdown the multiprocessing Manager at the end of the test session.
+    # Manager is stored on app.ctx (not shared_ctx) because it contains weakrefs that can't be pickled.
+    if hasattr(api_app.ctx, 'manager') and api_app.ctx.manager is not None:
+        api_app.ctx.manager.shutdown()
+        api_app.ctx.manager = None
+
+
 @pytest.fixture
-async def async_client(test_directory, test_session) -> SanicASGITestClient:
+async def async_client(test_directory, test_session, shared_contexts_manager) -> SanicASGITestClient:
     """Get an Async Sanic Test Client with all default routes attached.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
     """
     api_app.signalize()
-    attach_shared_contexts(api_app)
+    attach_shared_contexts(api_app)  # Will reuse existing manager and reset state
     initialize_configs_contexts(api_app)
 
     client = SanicASGITestClient(api_app)
@@ -520,19 +537,16 @@ def events_history(async_client):
     yield api_app.shared_ctx.events_history
 
 
-FLAGS_LOCK = multiprocessing.Lock()
-
-
 @pytest.fixture()
 def flags_lock():
     """Wait for exclusive access to flags before testing."""
     try:
-        FLAGS_LOCK.acquire(timeout=60)
-        flags.TESTING_LOCK.set()
+        api_app.shared_ctx.flags_lock.acquire(timeout=60)
+        api_app.shared_ctx.testing_lock.set()
         yield
     finally:
-        flags.TESTING_LOCK.clear()
-        FLAGS_LOCK.release()
+        api_app.shared_ctx.testing_lock.clear()
+        api_app.shared_ctx.flags_lock.release()
 
 
 @pytest.fixture()
@@ -686,8 +700,8 @@ def insert_file_group(test_session, test_directory):
             files=json.dumps(files),
         )
         test_session.execute('INSERT INTO file_group '
-                             '(indexed, directory, primary_path, files) VALUES '
-                             '(true, :directory, :primary_path, :files)', params)
+                             '(indexed, deep_indexed, directory, primary_path, files) VALUES '
+                             '(true, false, :directory, :primary_path, :files)', params)
 
     return _
 
@@ -830,3 +844,42 @@ def mock_downloader_download_file():
         yield set_contents
 
 
+@pytest.fixture
+def file_worker(async_client, test_session, test_directory):
+    """
+    Provides the global file worker for testing.
+
+    The file worker is cleared before and after each test.
+    In tests, queue items and then await processing with:
+
+        file_worker.queue_refresh([path])
+        while not file_worker.is_empty():
+            await file_worker.process_batch()
+
+    Usage:
+        @pytest.mark.asyncio
+        async def test_something(file_worker, test_directory):
+            (test_directory / 'file.txt').touch()
+            file_worker.queue_refresh([test_directory])
+            while not file_worker.is_empty():
+                await file_worker.process_batch()
+            # Assert results...
+    """
+    global_file_worker.clear()
+    yield global_file_worker
+    global_file_worker.clear()
+
+
+@pytest.fixture
+def enable_vacuum():
+    """Enable VACUUM ANALYZE for tests that need it.
+
+    By default, VACUUM is disabled during testing for performance.
+    Use this fixture to enable it for specific tests that need to verify
+    VACUUM behavior.
+    """
+    import wrolpi.files.worker as worker
+    original = worker.DISABLE_VACUUM
+    worker.DISABLE_VACUUM = False
+    yield
+    worker.DISABLE_VACUUM = original

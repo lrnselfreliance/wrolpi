@@ -14,7 +14,15 @@ def attach_shared_contexts(app: Sanic):
     """Initializes Sanic's shared context with WROLPi's multiprocessing tools.
 
     This is called by main.py, and by testing."""
-    manager = multiprocessing.Manager()
+    # Reuse existing manager if available (avoids semaphore exhaustion in parallel tests).
+    # Store on app.ctx (not shared_ctx) because Manager contains weakrefs that can't be pickled.
+    if hasattr(app.ctx, 'manager') and app.ctx.manager is not None:
+        reset_shared_contexts(app)
+        return
+
+    # Store manager reference for cleanup (important for tests to avoid semaphore leaks).
+    # Must be on app.ctx, not shared_ctx, because Manager can't be pickled (contains weakrefs).
+    app.ctx.manager = manager = multiprocessing.Manager()
 
     # Many things wait for flags.db_up, initialize before starting.
     from wrolpi import flags
@@ -37,44 +45,65 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
     app.shared_ctx.cache = manager.dict()
-    # Shared ints
+    # Shared ints - keep as multiprocessing.Value because code uses get_lock()
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, LOG_LEVEL_INT)
 
     # Download Manager
     app.shared_ctx.download_manager_data = manager.dict()
-    app.shared_ctx.download_manager_disabled = multiprocessing.Event()
-    app.shared_ctx.download_manager_stopped = multiprocessing.Event()
+    # Use manager.Event() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.download_manager_disabled = manager.Event()
+    app.shared_ctx.download_manager_stopped = manager.Event()
     # Downloads are only begun on startup using the wrolpi config's value. Do not start downloads before importing
     # config.
     app.shared_ctx.download_manager_disabled.set()
     app.shared_ctx.download_manager_stopped.set()
 
-    app.shared_ctx.single_tasks_started = multiprocessing.Event()
-    app.shared_ctx.flags_initialized = multiprocessing.Event()
-    app.shared_ctx.perpetual_tasks_started = multiprocessing.Event()
+    # Use manager.Event() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.single_tasks_started = manager.Event()
+    app.shared_ctx.flags_initialized = manager.Event()
+    app.shared_ctx.perpetual_tasks_started = manager.Event()
 
     # Switches
     app.shared_ctx.switches = manager.dict()
-    app.shared_ctx.switches_lock = multiprocessing.Lock()
-    app.shared_ctx.switches_changed = multiprocessing.Event()
-    app.shared_ctx.archive_singlefiles = multiprocessing.Queue()
-    app.shared_ctx.archive_screenshots = multiprocessing.Queue()
+    # Use manager.Lock/Event() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.switches_lock = manager.Lock()
+    app.shared_ctx.switches_changed = manager.Event()
+    # Use manager.Queue() because multiprocessing.Queue.qsize() raises NotImplementedError on macOS
+    app.shared_ctx.archive_singlefiles = manager.Queue()
+    app.shared_ctx.archive_screenshots = manager.Queue()
 
     # Bulk tagging
     app.shared_ctx.bulk_tag = manager.dict()
+    # Use manager.Queue() because multiprocessing.Queue.qsize() raises NotImplementedError on macOS
     app.shared_ctx.bulk_tag_queue = manager.Queue()
+
+    # FileWorker - cross-process job queue and progress tracking
+    # Use manager.Queue() because multiprocessing.Queue.qsize() raises NotImplementedError on macOS
+    app.shared_ctx.file_worker_queue = manager.Queue()
+    app.shared_ctx.file_worker_data = manager.dict()
+    # Use manager.Lock() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.file_worker_lock = manager.Lock()  # Ensure only one worker runs
+    # Move operations progress tracking
+    app.shared_ctx.move = manager.dict()
 
     # Warnings
     app.shared_ctx.warn_once = manager.dict()
 
     # Configs
-    app.shared_ctx.config_save_lock = multiprocessing.Lock()
-    app.shared_ctx.config_update_lock = multiprocessing.Lock()
+    # Use manager.Lock() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.config_save_lock = manager.Lock()
+    app.shared_ctx.config_update_lock = manager.Lock()
     app.shared_ctx.configs_imported = manager.dict()
 
     # Events.
-    app.shared_ctx.events_lock = multiprocessing.Lock()
+    # Use manager.Lock() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.events_lock = manager.Lock()
     app.shared_ctx.events_history = manager.list()
+
+    # Testing - controls whether Flag operations are active during tests.
+    # Use manager.Event/Lock() to avoid semaphore exhaustion in parallel tests
+    app.shared_ctx.testing_lock = manager.Event()
+    app.shared_ctx.flags_lock = manager.Lock()
 
     reset_shared_contexts(app)
 
@@ -83,6 +112,10 @@ def reset_shared_contexts(app: Sanic):
     """Resets shared contexts (dicts/lists/Events,etc.).
 
     Should only be called when server is starting, or could start back up."""
+    # Reset all flags to False
+    from wrolpi import flags
+    app.shared_ctx.flags.update({name: False for name in flags.FLAG_NAMES})
+
     # Should only be called when server is expected to start again.
     app.shared_ctx.wrolpi_config.clear()
     app.shared_ctx.tags_config.clear()
@@ -111,6 +144,7 @@ def reset_shared_contexts(app: Sanic):
     ))
     app.shared_ctx.map_importing.clear()
     app.shared_ctx.cache.clear()
+    app.shared_ctx.move.clear()
     # Shared ints
     app.shared_ctx.log_level.value = LOG_LEVEL_INT
 
@@ -157,14 +191,37 @@ def reset_shared_contexts(app: Sanic):
         except queue.Empty:
             break
 
+    # FileWorker
+    app.shared_ctx.file_worker_data.clear()
+    app.shared_ctx.file_worker_data.update(dict(
+        idempotency=None,
+        counted_files=0,
+        jobs={},
+        move_jobs={},
+        failed_items=[],  # List of serialized QueueItems for retry
+        running=False,
+    ))
+    while True:
+        # Clear out any pending file worker jobs.
+        try:
+            app.shared_ctx.file_worker_queue.get_nowait()
+        except queue.Empty:
+            break
+
     # Events.
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.flags_initialized.clear()
     app.shared_ctx.perpetual_tasks_started.clear()
+    # Clear all accumulated events from the history (manager.list() doesn't have .clear())
+    while len(app.shared_ctx.events_history) > 0:
+        app.shared_ctx.events_history.pop()
 
     # Do not start downloads when reloading.
     app.shared_ctx.download_manager_stopped.set()
     app.shared_ctx.download_manager_disabled.set()
+
+    # Testing - clear the testing lock on reset.
+    app.shared_ctx.testing_lock.clear()
 
 
 def initialize_configs_contexts(app: Sanic):

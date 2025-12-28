@@ -47,12 +47,14 @@ async def test_ebook_modeler_processes_more_than_batch_limit(async_client, test_
 
     test_session.commit()
 
-    # Verify we have the expected number of unindexed ebook FileGroups
-    unindexed_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed == False,
+    # Verify we have the expected number of FileGroups needing deep indexing
+    # Two-phase: indexed=True (surface), deep_indexed=False (needs modeler)
+    needs_deep_count = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'application/epub+zip',
     ).count()
-    assert unindexed_count == num_ebooks, f"Expected {num_ebooks} unindexed ebook files, got {unindexed_count}"
+    assert needs_deep_count == num_ebooks, f"Expected {num_ebooks} files needing deep indexing, got {needs_deep_count}"
 
     # Run the ebook_modeler
     await ebook_modeler()
@@ -65,10 +67,11 @@ async def test_ebook_modeler_processes_more_than_batch_limit(async_client, test_
         f"ebook_modeler should process ALL {num_ebooks} files, but only processed {ebook_count}. " \
         f"This may be an off-by-one bug in the loop logic!"
 
-    # Also verify all FileGroups are now indexed
-    still_unindexed = test_session.query(FileGroup).filter(
-        FileGroup.indexed == False,
+    # Also verify all FileGroups are now deep indexed
+    still_needs_deep = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'application/epub+zip',
     ).count()
-    assert still_unindexed == 0, \
-        f"All ebook FileGroups should be indexed, but {still_unindexed} remain unindexed"
+    assert still_needs_deep == 0, \
+        f"All ebook FileGroups should be deep indexed, but {still_needs_deep} remain"

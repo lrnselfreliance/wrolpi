@@ -22,7 +22,8 @@ from wrolpi.dates import Seconds
 from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
-from wrolpi.files.lib import refresh_files, split_file_name_words
+from wrolpi.files.lib import split_file_name_words
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 
@@ -55,7 +56,7 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
         session.add(zim)
     file_group.title = file_group.primary_path.name
     file_group.a_text = split_file_name_words(file_group.primary_path.name)
-    file_group.indexed = True
+    file_group.deep_indexed = True
     file_group.model = 'zim'
     return zim
 
@@ -65,7 +66,8 @@ async def zim_modeler():
     while True:
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, Zim) \
-                .filter(FileGroup.indexed != True,  # noqa
+                .filter(FileGroup.indexed == True,  # Surface indexed (visible)
+                        FileGroup.deep_indexed != True,  # Not yet deep indexed
                         FileGroup.primary_path.ilike('%.zim'),
                         ) \
                 .outerjoin(Zim, Zim.file_group_id == FileGroup.id) \
@@ -85,7 +87,7 @@ async def zim_modeler():
                         zim_id = zim.id
                         file_group.title = file_group.primary_path.name
                         file_group.a_text = split_file_name_words(file_group.primary_path.name)
-                        file_group.indexed = True
+                        file_group.deep_indexed = True
                         file_group.model = 'zim'
                 except Exception as e:
                     if PYTEST:
@@ -546,14 +548,19 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
     outdated, _ = find_outdated_zim_files(path)
     logger.info(f'Deleting {len(outdated)} outdated Zim files: {outdated}')
     deleted_count = 0
+    # Track parent directories for refresh after deletion
+    parent_dirs = set()
     for file in outdated:
+        parent_dirs.add(file.parent)
         file.unlink()
         deleted_count += 1
 
-    if PYTEST:
-        await refresh_files(outdated)
-    else:
-        background_task(refresh_files(outdated))
+    # Refresh parent directories so stale FileGroups get cleaned up
+    if parent_dirs:
+        if PYTEST:
+            await file_worker.run_queue_to_completion(list(parent_dirs))
+        else:
+            file_worker.queue_refresh(list(parent_dirs))
 
     await restart_kiwix()
 

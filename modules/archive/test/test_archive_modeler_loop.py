@@ -79,12 +79,14 @@ async def test_archive_modeler_processes_more_than_20_files(async_client, test_s
 
     test_session.commit()
 
-    # Verify we have the expected number of unindexed HTML FileGroups
-    unindexed_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Verify we have the expected number of FileGroups needing deep indexing
+    # Two-phase: indexed=True (surface), deep_indexed=False (needs modeler)
+    needs_deep_count = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'text/html'
     ).count()
-    assert unindexed_count == num_archives, f"Expected {num_archives} unindexed HTML files, got {unindexed_count}"
+    assert needs_deep_count == num_archives, f"Expected {num_archives} files needing deep indexing, got {needs_deep_count}"
 
     # Run the archive_modeler
     await archive_modeler()
@@ -98,10 +100,11 @@ async def test_archive_modeler_processes_more_than_20_files(async_client, test_s
         f"archive_modeler should process ALL {num_archives} files, but only processed {archive_count}. " \
         f"This is the enumerate off-by-one bug!"
 
-    # Also verify all FileGroups are now indexed
-    still_unindexed = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Also verify all FileGroups are now deep indexed
+    still_needs_deep = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'text/html'
     ).count()
-    assert still_unindexed == 0, \
-        f"All HTML FileGroups should be indexed, but {still_unindexed} remain unindexed"
+    assert still_needs_deep == 0, \
+        f"All HTML FileGroups should be deep indexed, but {still_needs_deep} remain"

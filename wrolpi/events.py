@@ -77,6 +77,10 @@ class Events:
         send_event('shutdown_failed', message, subject='shutdown')
 
     @staticmethod
+    def send_file_move_started(message: str = None):
+        send_event('file_move_started', message, subject='refresh')
+
+    @staticmethod
     def send_file_move_completed(message: str = None):
         send_event('file_move_completed', message, subject='refresh')
 

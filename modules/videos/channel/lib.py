@@ -268,7 +268,6 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
     """Add a Tag to a Channel, or remove a Tag from a Channel if no `tag_name` is provided.
 
     Move the Channel to the new directory, if provided."""
-
     if directory and flags.refreshing.is_set():
         raise RefreshConflict('Refusing to move channel while file refresh is in progress')
 

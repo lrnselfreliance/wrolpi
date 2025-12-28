@@ -13,6 +13,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_
     background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
+from .worker import file_worker
 from ..api_utils import json_response, api_app
 from ..events import Events
 from ..schema import JSONErrorResponse
@@ -84,18 +85,60 @@ async def refresh(request: Request):
             raise ValueError('Can only refresh a list')
 
         paths = [media_directory / i for i in request.json['paths']]
-    await lib.refresh_files(paths)
-    return response.empty()
+
+    if paths:
+        job_id = file_worker.queue_refresh(paths)
+    else:
+        job_id = file_worker.queue_global_refresh()
+
+    return json_response({'success': True, 'job_id': job_id})
 
 
 @files_bp.get('/refresh_progress')
 @openapi.definition(
-    summary='Get the progress of the file refresh'
+    summary='Get the progress of file refresh and move operations'
 )
 async def refresh_progress(request: Request):
+    from wrolpi.api_utils import api_app
+
+    # Get refresh progress from shared context (cross-process safe)
     progress = lib.get_refresh_progress()
+
+    # Get FileWorker progress (includes all jobs, cleans up old completed jobs)
+    worker_progress = file_worker.get_progress_dict()
+
+    # Get move progress from shared context (cross-process safe)
+    move_ctx = dict(api_app.shared_ctx.move)
+    move_jobs = {}
+    if move_ctx.get('active'):
+        total = move_ctx.get('total', 0)
+        processed = move_ctx.get('processed', 0)
+        percent = (processed / total * 100) if total > 0 else 0
+        move_jobs['current'] = {
+            'type': 'move',
+            'status': 'running',
+            'phase': move_ctx.get('phase', 'moving'),
+            'total': total,
+            'processed': processed,
+            'percent': percent,
+            'display': f"{int(percent)}% ({processed}/{total} files)",
+            'source_count': move_ctx.get('source_count', 0),
+            'destination': move_ctx.get('destination'),
+        }
+
     return json_response(dict(
         progress=progress,
+        file_worker={
+            'queue_size': file_worker.queue_size(),
+            'move_jobs': move_jobs,
+            # FileWorker job progress
+            'jobs': worker_progress['jobs'],
+            'total_jobs': worker_progress['total_jobs'],
+            'active_jobs': worker_progress['active_jobs'],
+            'completed_jobs': worker_progress['completed_jobs'],
+            'total_files': worker_progress['total_files'],
+            'processed_files': worker_progress['processed_files'],
+        }
     ))
 
 
@@ -240,10 +283,11 @@ async def post_create_directory(_: Request, body: schema.Directory):
     except FileExistsError:
         raise FileConflict(f'{path} already exists')
 
+    # Refresh the new directory to add it to the Directory table
     if PYTEST:
-        await lib.refresh_files([path, ])
+        await file_worker.run_queue_to_completion([path])
     else:
-        background_task(lib.refresh_files([path, ]))
+        file_worker.queue_refresh([path])
 
     return response.empty(HTTPStatus.CREATED)
 
@@ -301,9 +345,9 @@ async def post_rename(request: Request, body: schema.Rename):
     # with only the specified file, losing track of associated files.
     parent_dir = new_path.parent
     if PYTEST:
-        await lib.refresh_files([parent_dir])
+        await file_worker.run_queue_to_completion([parent_dir])
     else:
-        background_task(lib.refresh_files([parent_dir]))
+        file_worker.queue_refresh([parent_dir])
 
     return response.empty(HTTPStatus.NO_CONTENT)
 

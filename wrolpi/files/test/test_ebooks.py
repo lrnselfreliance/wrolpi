@@ -5,7 +5,8 @@ from http import HTTPStatus
 import pytest
 
 from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE
-from wrolpi.files.lib import refresh_files, move
+from wrolpi.files.lib import move
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import assert_dict_contains
 
@@ -15,7 +16,7 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
     """Ebooks can be indexed.
 
     Covers can be discovered."""
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
 
     ebook: EBook = test_session.query(EBook).one()
 
@@ -44,7 +45,7 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 
     # Ebooks can be deleted during refresh.
     example_epub.unlink()
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
     assert test_session.query(EBook).count() == 1
     ebook = test_session.query(EBook).one()
     assert not ebook.file_group.my_files('application/epub+zip')
@@ -60,7 +61,7 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_switches):
     cover_path = example_epub.with_suffix('.jpg')
     cover_path.write_bytes(image_bytes_factory())
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
 
     ebook: EBook = test_session.query(EBook).one()
 
@@ -71,7 +72,7 @@ async def test_discover_local_cover(test_session, test_directory, example_epub, 
 @pytest.mark.asyncio
 async def test_extract_cover(test_session, test_directory, example_epub, await_switches):
     """First image is extracted from the Ebook and used as the cover."""
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
 
     ebook: EBook = test_session.query(EBook).one()
     # The WROLPi logo is the first image in the example epub.
@@ -81,8 +82,7 @@ async def test_extract_cover(test_session, test_directory, example_epub, await_s
 @pytest.mark.asyncio
 async def test_search_ebooks(test_session, async_client, example_epub):
     """Ebooks are handled in File search results."""
-    request, response = await async_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    await file_worker.run_queue_to_completion()
 
     assert test_session.query(EBook).count() == 1
 
@@ -126,7 +126,7 @@ async def test_discover_calibre_cover(test_session, async_client, test_directory
     shutil.move(image_file, cover_image)
 
     # Calibre cover image was discovered, no cover was generated.
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.cover_file['path'] == test_directory / 'cover.jpg'
@@ -143,7 +143,7 @@ async def test_move_ebook(async_client, test_session, test_directory, example_ep
     """An ebook is re-indexed when moved."""
     tag = await tag_factory()
     shutil.move(image_file, example_epub.with_suffix('.jpg'))
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.cover_path

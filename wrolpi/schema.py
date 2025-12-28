@@ -88,7 +88,6 @@ class FlagsStatusResponse:
     outdated_zims: bool
     refresh_cleanup: bool
     refresh_complete: bool
-    refresh_counting: bool
     refresh_discovery: bool
     refresh_indexing: bool
     refresh_modeling: bool

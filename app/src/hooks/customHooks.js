@@ -762,13 +762,18 @@ export const useBrowseFiles = () => {
 
 export const useFilesProgress = () => {
     const [progress, setProgress] = useState(null);
+    const [fileWorker, setFileWorker] = useState(null);
 
     const localFetchFilesProgress = async () => {
         try {
-            let p = await fetchFilesProgress();
-            setProgress(p);
+            let result = await fetchFilesProgress();
+            if (result) {
+                setProgress(result.progress);
+                setFileWorker(result.fileWorker);
+            }
         } catch (e) {
             setProgress(null);
+            setFileWorker(null);
             console.error(e);
         }
     }
@@ -777,15 +782,15 @@ export const useFilesProgress = () => {
         localFetchFilesProgress();
     }, []);
 
-    return {progress, fetchFilesProgress: localFetchFilesProgress}
+    return {progress, fileWorker, fetchFilesProgress: localFetchFilesProgress}
 }
 
 export const useFilesProgressInterval = () => {
-    const {progress, fetchFilesProgress} = useFilesProgress();
+    const {progress, fileWorker, fetchFilesProgress} = useFilesProgress();
 
     useRecurringTimeout(fetchFilesProgress, 1000 * 3);
 
-    return {progress, fetchFilesProgress};
+    return {progress, fileWorker, fetchFilesProgress};
 }
 
 export const useHotspot = () => {

@@ -75,8 +75,12 @@ function handleEvents(events) {
             eventToast('Successful tag', message, 'success');
         }
 
+        if (event === 'file_move_started') {
+            eventToast('Move Started', message, 'info');
+        }
+
         if (event === 'file_move_completed') {
-            eventToast('Successful Move', message, 'success');
+            eventToast('Move Completed', message, 'success');
         }
 
         if (event === 'file_move_failed') {

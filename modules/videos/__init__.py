@@ -4,7 +4,7 @@ from typing import List, Tuple
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
-from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
+from wrolpi.common import logger, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
@@ -22,7 +22,8 @@ async def video_modeler():
     while True:
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, Video).filter(
-                FileGroup.indexed != True,
+                FileGroup.indexed == True,  # Surface indexed (visible)
+                FileGroup.deep_indexed != True,  # Not yet deep indexed
                 FileGroup.mimetype.like('video/%'),
             ).outerjoin(Video, Video.file_group_id == FileGroup.id) \
                 .limit(VIDEO_PROCESSING_LIMIT)
@@ -54,7 +55,7 @@ async def video_modeler():
                     i = video.file_group.primary_path if video.file_group else video_id
                     logger.error(f'Unable to model Video: {str(i)}', exc_info=e)
 
-                file_group.indexed = True
+                file_group.deep_indexed = True
 
             session.commit()
 
@@ -69,7 +70,6 @@ async def video_modeler():
 
 
 @register_refresh_cleanup
-@limit_concurrent(1)
 def video_cleanup():
     logger.info('Claiming Videos for their Channels')
     with get_db_curs(commit=True) as curs:

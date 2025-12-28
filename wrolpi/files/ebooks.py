@@ -313,7 +313,8 @@ async def ebook_modeler():
                     FileGroup.mimetype == 'application/epub+zip',
                     FileGroup.mimetype == 'application/x-mobipocket-ebook',
                 ),
-                FileGroup.indexed == False,
+                FileGroup.indexed == True,  # Surface indexed (visible)
+                FileGroup.deep_indexed != True,  # Not yet deep indexed
             ).outerjoin(EBook, and_(EBook.file_group_id == FileGroup.id)) \
                 .limit(10)
             file_groups: List[Tuple[FileGroup, EBook]] = list(file_groups)
@@ -328,7 +329,7 @@ async def ebook_modeler():
                     ebook = ebook or model_ebook(file_group, session)
                     session.add(ebook)
                     file_group.model = EBook.__tablename__
-                    file_group.indexed = True
+                    file_group.deep_indexed = True
                 except Exception as e:
                     logger.error(f'Failed to index ebook {file_group}', exc_info=e)
                     if PYTEST:

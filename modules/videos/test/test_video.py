@@ -5,6 +5,7 @@ import pytest
 from modules.videos.models import Video
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 
 
@@ -60,7 +61,7 @@ async def test_video_channel_refresh(async_client, test_session, test_directory,
     test_session.query(FileGroup).delete()
     test_session.commit()
 
-    await files_lib.refresh_files()
+    await file_worker.run_queue_to_completion()
 
     assert test_session.query(FileGroup).count() == 2
     assert test_session.query(Video).count() == 2

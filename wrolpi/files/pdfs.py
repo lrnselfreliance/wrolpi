@@ -100,12 +100,13 @@ async def pdf_modeler():
         return
 
     while True:
-        # Continually query for PDFs that have not been indexed.
+        # Continually query for PDFs that have not been deep indexed.
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup) \
                 .filter(
-                # Get all groups that contain a PDF that have not been indexed.
-                FileGroup.indexed != True,
+                # Get all groups that contain a PDF that have not been deep indexed.
+                FileGroup.indexed == True,  # Surface indexed (visible)
+                FileGroup.deep_indexed != True,  # Not yet deep indexed
                 FileGroup.mimetype == 'application/pdf',
             ).limit(PDF_PROCESSING_LIMIT)
 
@@ -162,8 +163,8 @@ async def pdf_modeler():
                     if PYTEST:
                         raise
 
-                # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
-                file_group.indexed = True
+                # Even if indexing fails, we mark it as deep indexed.  We won't retry indexing this.
+                file_group.deep_indexed = True
 
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)

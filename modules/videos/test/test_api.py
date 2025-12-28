@@ -9,7 +9,7 @@ from modules.videos.video import lib as video_lib
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download
-from wrolpi.files.lib import refresh_files
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 
 
@@ -24,7 +24,7 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
 
     for _ in range(1):
         # Refreshing twice does not change the results.
-        await refresh_files()
+        await file_worker.run_queue_to_completion()
 
         assert test_session.query(FileGroup).count() == 1
         video: Video = test_session.query(Video).one()
@@ -37,7 +37,7 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
     for path in video.caption_paths:
         path.unlink()
 
-    await refresh_files()
+    await file_worker.run_queue_to_completion()
     assert video.file_group.indexed is True, 'Video was not indexed'
     assert video.file_group.a_text and video.file_group.title, 'Video title was not indexed'
     assert not video.file_group.d_text, 'Video captions were not removed'
@@ -74,15 +74,15 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     # Create a bogus video in the channel (file doesn't exist, should be removed during refresh).
     video_file = test_directory / 'foo.mp4'
     with get_db_curs(commit=True) as curs:
-        stmt = "INSERT INTO file_group (mimetype, directory, primary_path, indexed, files, model)" \
-               " values ('video/mp4', %(directory)s, %(primary_path)s, true, %(files)s, 'video') RETURNING id"
+        stmt = "INSERT INTO file_group (mimetype, directory, primary_path, indexed, deep_indexed, files, model)" \
+               " values ('video/mp4', %(directory)s, %(primary_path)s, true, false, %(files)s, 'video') RETURNING id"
         params = {'directory': str(test_directory), 'primary_path': str(video_file), 'files': list()}
         curs.execute(stmt, params)
         video4_id = curs.fetchall()[0][0]
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
-    await async_client.post('/api/files/refresh')
+    await file_worker.run_queue_to_completion()
 
     test_session.expire_all()
 
@@ -105,7 +105,7 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     # Remove video1's poster, video1 should be updated.
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
-    await async_client.post('/api/files/refresh')
+    await file_worker.run_queue_to_completion()
     video1 = Video.get_by_path(test_session, video1_video_path)
     assert not video1.poster_path
 
@@ -134,8 +134,9 @@ async def test_channels_with_videos(test_session, async_client, test_directory, 
     assert vid2_path.is_file(), 'Video file was deleted'
     assert vid3_path.is_file(), 'Video file was deleted'
 
-    await async_client.post('/api/files/refresh')
+    await file_worker.run_queue_to_completion()
 
+    test_session.expire_all()
     assert test_session.query(Video).count() == 3, 'Did not find correct amount of video files.'
     from wrolpi.collections import Collection
     assert {i[0] for i in test_session.query(Collection.name).join(Channel).filter(Collection.kind == 'channel')} == {

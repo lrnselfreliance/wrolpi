@@ -44,12 +44,14 @@ async def test_video_modeler_processes_more_than_batch_limit(async_client, test_
 
     test_session.commit()
 
-    # Verify we have the expected number of unindexed video FileGroups
-    unindexed_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Verify we have the expected number of FileGroups needing deep indexing
+    # Two-phase: indexed=True (surface), deep_indexed=False (needs modeler)
+    needs_deep_count = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype.like('video/%'),
     ).count()
-    assert unindexed_count == num_videos, f"Expected {num_videos} unindexed video files, got {unindexed_count}"
+    assert needs_deep_count == num_videos, f"Expected {num_videos} files needing deep indexing, got {needs_deep_count}"
 
     # Run the video_modeler
     await video_modeler()
@@ -62,10 +64,11 @@ async def test_video_modeler_processes_more_than_batch_limit(async_client, test_
         f"video_modeler should process ALL {num_videos} files, but only processed {video_count}. " \
         f"This may be an off-by-one bug in the loop logic!"
 
-    # Also verify all FileGroups are now indexed
-    still_unindexed = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Also verify all FileGroups are now deep indexed
+    still_needs_deep = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype.like('video/%'),
     ).count()
-    assert still_unindexed == 0, \
-        f"All video FileGroups should be indexed, but {still_unindexed} remain unindexed"
+    assert still_needs_deep == 0, \
+        f"All video FileGroups should be deep indexed, but {still_needs_deep} remain"

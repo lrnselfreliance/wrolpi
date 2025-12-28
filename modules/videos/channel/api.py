@@ -57,7 +57,7 @@ def channel_post(request: Request, body: schema.ChannelPostRequest):
     channel = lib.create_channel(session, data=body, return_dict=False)
 
     # Refresh the videos asynchronously
-    channel.refresh_files(channel.id)
+    channel.refresh_channel_files(channel.id)
 
     Events.send_created(f'Created Channel: {channel.name}')
 
@@ -104,7 +104,7 @@ def channel_refresh(request: Request, channel_id: int):
     if not channel:
         raise UnknownChannel()
 
-    channel.refresh_files(channel.id)
+    channel.refresh_channel_files(channel.id)
     directory = get_relative_to_media_directory(channel.directory)
     Events.send_directory_refresh(f'Refreshing: {directory}')
     return response.empty()

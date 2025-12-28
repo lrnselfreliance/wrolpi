@@ -43,31 +43,34 @@ async def test_pdf_modeler_processes_more_than_batch_limit(async_client, test_se
 
     test_session.commit()
 
-    # Verify we have the expected number of unindexed PDF FileGroups
-    unindexed_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Verify we have the expected number of FileGroups needing deep indexing
+    # Two-phase: indexed=True (surface), deep_indexed=False (needs modeler)
+    needs_deep_count = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'application/pdf',
     ).count()
-    assert unindexed_count == num_pdfs, f"Expected {num_pdfs} unindexed PDF files, got {unindexed_count}"
+    assert needs_deep_count == num_pdfs, f"Expected {num_pdfs} files needing deep indexing, got {needs_deep_count}"
 
     # Run the pdf_modeler
     await pdf_modeler()
 
-    # Count how many FileGroups are now indexed as PDFs
-    indexed_pdf_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed == True,
+    # Count how many FileGroups are now deep indexed as PDFs
+    deep_indexed_pdf_count = test_session.query(FileGroup).filter(
+        FileGroup.deep_indexed == True,
         FileGroup.model == 'pdf',
     ).count()
 
-    # All PDFs should be indexed
-    assert indexed_pdf_count == num_pdfs, \
-        f"pdf_modeler should process ALL {num_pdfs} files, but only processed {indexed_pdf_count}. " \
+    # All PDFs should be deep indexed
+    assert deep_indexed_pdf_count == num_pdfs, \
+        f"pdf_modeler should process ALL {num_pdfs} files, but only processed {deep_indexed_pdf_count}. " \
         f"This may be an off-by-one bug in the loop logic!"
 
-    # Also verify no FileGroups remain unindexed
-    still_unindexed = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Also verify no FileGroups still need deep indexing
+    still_needs_deep = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.mimetype == 'application/pdf',
     ).count()
-    assert still_unindexed == 0, \
-        f"All PDF FileGroups should be indexed, but {still_unindexed} remain unindexed"
+    assert still_needs_deep == 0, \
+        f"All PDF FileGroups should be deep indexed, but {still_needs_deep} remain"

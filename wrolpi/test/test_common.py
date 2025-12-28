@@ -19,7 +19,7 @@ import pytz
 
 import wrolpi.vars
 from wrolpi import common
-from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after, get_wrolpi_config, TRACE_LEVEL, \
+from wrolpi.common import cum_timer, TIMERS, print_timer, run_after, get_wrolpi_config, TRACE_LEVEL, \
     is_tempfile
 from wrolpi.errors import InvalidConfig
 from wrolpi.test.common import build_test_directories, skip_circleci, skip_macos
@@ -458,85 +458,6 @@ def test_timer():
     """`cum_timer` can be used to profile code."""
     with common.timer(name='test_timer'):
         time.sleep(0.1)
-
-
-@pytest.mark.asyncio
-@skip_macos
-async def test_limit_concurrent_async():
-    """`limit_concurrent` can throw an error when the limit is reached."""
-
-    @limit_concurrent(1)
-    async def sleeper():
-        await asyncio.sleep(1)
-
-    # `throw` was not defined.
-    await asyncio.gather(sleeper(), sleeper())
-
-    @limit_concurrent(1, throw=True)
-    async def sleeper():
-        await asyncio.sleep(1)
-
-    # One is acceptable.
-    await asyncio.gather(sleeper())
-
-    with pytest.raises(ValueError) as e:
-        # Two will throw.
-        await asyncio.gather(sleeper(), sleeper())
-    assert 'concurrent limit' in str(e)
-
-
-@skip_macos
-def test_limit_concurrent_sync():
-    """`limit_concurrent` can throw an error when the limit is reached."""
-
-    count = multiprocessing.Value('i', 0)
-    assert count.value == 0
-
-    @limit_concurrent(1)
-    def sleeper():
-        sleep(1)
-        count.value += 1
-
-    # One is acceptable.
-    sleeper()
-    assert count.value == 1
-
-    error_value = multiprocessing.Value(ctypes.c_bool)
-    assert error_value.value is False
-
-    def sleeper_wrapper():
-        try:
-            sleeper()
-        except ValueError as e:
-            error_value.value = 'concurrent limit' in str(e)
-
-    def run():
-        count.value = 0
-        p1 = multiprocessing.Process(target=sleeper_wrapper)
-        p2 = multiprocessing.Process(target=sleeper_wrapper)
-        p1.start()
-        p2.start()
-        p1.join()
-        p2.join()
-
-    # `throw` is not defined, only one wrapper runs.
-    run()
-    assert error_value.value is False
-    # Only one counted.
-    assert count.value == 1
-
-    @limit_concurrent(1, throw=True)
-    def sleeper():
-        sleep(1)
-        count.value += 1
-
-    error_value.value = False
-    assert error_value.value is False
-
-    # Error was thrown.
-    run()
-    assert error_value.value is True
-    assert count.value == 1
 
 
 @pytest.mark.asyncio

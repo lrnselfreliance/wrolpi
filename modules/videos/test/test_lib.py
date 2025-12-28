@@ -11,6 +11,7 @@ from modules.videos.models import Video, Channel
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, RSSDownloader
 from wrolpi.files import lib as files_lib
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
 
@@ -159,7 +160,7 @@ async def test_orphaned_files(async_client, test_session, make_files_structure, 
     # Remove vid3 video.  Poster is now orphaned.
     vid3.video_path.unlink()
     vid3_poster_path = vid3.poster_path
-    await files_lib.refresh_files()
+    await file_worker.run_queue_to_completion()
     test_session.commit()
 
     # 6 files when two video files are deleted.

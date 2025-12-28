@@ -48,12 +48,14 @@ async def test_zim_modeler_processes_more_than_batch_limit(async_client, test_se
 
     test_session.commit()
 
-    # Verify we have the expected number of unindexed zim FileGroups
-    unindexed_count = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Verify we have the expected number of FileGroups needing deep indexing
+    # Two-phase: indexed=True (surface), deep_indexed=False (needs modeler)
+    needs_deep_count = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.primary_path.ilike('%.zim'),
     ).count()
-    assert unindexed_count == num_zims, f"Expected {num_zims} unindexed zim files, got {unindexed_count}"
+    assert needs_deep_count == num_zims, f"Expected {num_zims} files needing deep indexing, got {needs_deep_count}"
 
     # Run the zim_modeler
     await zim_modeler()
@@ -66,10 +68,11 @@ async def test_zim_modeler_processes_more_than_batch_limit(async_client, test_se
         f"zim_modeler should process ALL {num_zims} files, but only processed {zim_count}. " \
         f"This may be an off-by-one bug in the loop logic!"
 
-    # Also verify all FileGroups are now indexed
-    still_unindexed = test_session.query(FileGroup).filter(
-        FileGroup.indexed != True,
+    # Also verify all FileGroups are now deep indexed
+    still_needs_deep = test_session.query(FileGroup).filter(
+        FileGroup.indexed == True,
+        FileGroup.deep_indexed != True,
         FileGroup.primary_path.ilike('%.zim'),
     ).count()
-    assert still_unindexed == 0, \
-        f"All zim FileGroups should be indexed, but {still_unindexed} remain unindexed"
+    assert still_needs_deep == 0, \
+        f"All zim FileGroups should be deep indexed, but {still_needs_deep} remain"

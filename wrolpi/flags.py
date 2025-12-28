@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import multiprocessing
 import subprocess
 from datetime import datetime
 
@@ -17,8 +16,6 @@ __all__ = [
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
-
-TESTING_LOCK = multiprocessing.Event()
 
 FLAG_NAMES = set()
 
@@ -40,35 +37,36 @@ class Flag:
 
     def set(self):
         """Set the multiprocessing.Event for this Flag."""
-        if PYTEST and not TESTING_LOCK.is_set():
+        from wrolpi.api_utils import api_app
+        if PYTEST and not api_app.shared_ctx.testing_lock.is_set():
             # Testing, but the test does not need flags.
             return
 
-        from wrolpi.api_utils import api_app
         api_app.shared_ctx.flags.update({self.name: True})
         self._save(True)
 
     def clear(self):
         """Clear the multiprocessing.Event for this Flag."""
-        if PYTEST and not TESTING_LOCK.is_set():
+        from wrolpi.api_utils import api_app
+        if PYTEST and not api_app.shared_ctx.testing_lock.is_set():
             # Testing, but the test does not need flags.
             return
 
-        from wrolpi.api_utils import api_app
         api_app.shared_ctx.flags.update({self.name: False})
         self._save(False)
 
     def is_set(self):
         """Return True if this multiprocessing.Event is set."""
-        if PYTEST and not TESTING_LOCK.is_set():
+        from wrolpi.api_utils import api_app
+        if PYTEST and not api_app.shared_ctx.testing_lock.is_set():
             # Testing, but the test does not need flags.
             return
 
-        from wrolpi.api_utils import api_app
         return api_app.shared_ctx.flags[self.name]
 
     def __enter__(self):
-        if PYTEST and not TESTING_LOCK.is_set():
+        from wrolpi.api_utils import api_app
+        if PYTEST and not api_app.shared_ctx.testing_lock.is_set():
             # Testing, but the test does not need flags.
             return
 
@@ -77,7 +75,8 @@ class Flag:
         self.set()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if PYTEST and not TESTING_LOCK.is_set():
+        from wrolpi.api_utils import api_app
+        if PYTEST and not api_app.shared_ctx.testing_lock.is_set():
             # Testing, but the test does not need flags.
             return
 
@@ -116,7 +115,6 @@ map_importing = Flag('map_importing')
 have_internet = Flag('have_internet')
 
 # Steps of refreshing.
-refresh_counting = Flag('refresh_counting')
 refresh_discovery = Flag('refresh_discovery')
 refresh_modeling = Flag('refresh_modeling')
 refresh_indexing = Flag('refresh_indexing')
@@ -134,7 +132,6 @@ def get_flags() -> dict:
         outdated_zims=outdated_zims.is_set(),
         refresh_cleanup=refresh_cleanup.is_set(),
         refresh_complete=refresh_complete.is_set(),
-        refresh_counting=refresh_counting.is_set(),
         refresh_discovery=refresh_discovery.is_set(),
         refresh_indexing=refresh_indexing.is_set(),
         refresh_modeling=refresh_modeling.is_set(),

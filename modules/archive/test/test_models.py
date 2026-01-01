@@ -128,3 +128,47 @@ async def test_set_screenshot(async_client, test_session, archive_factory, image
 
     # Verify no screenshot was set
     assert archive_no_screenshot.screenshot_path is None
+
+
+def test_archive_validate_updates_data_with_new_files(test_session, archive_factory, image_bytes_factory,
+                                                       shared_contexts_manager):
+    """
+    BUG: When files are added to a FileGroup after initial modeling,
+    Archive.validate() doesn't update file_group.data with new paths.
+
+    This replicates the real-world issue where an Archive is modeled before
+    its screenshot is added to the FileGroup (due to batch processing).
+    """
+    # Create archive without screenshot
+    archive = archive_factory('example.com', 'https://example.com/test', 'Test Archive', screenshot=False)
+    test_session.commit()
+
+    # Verify no screenshot initially
+    assert archive.screenshot_path is None
+    assert archive.file_group.data.get('screenshot_path') is None
+
+    # Manually add screenshot file to FileGroup (simulates batch expansion adding it later)
+    screenshot_path = archive.singlefile_path.parent / 'screenshot.png'
+    screenshot_path.write_bytes(image_bytes_factory())
+    archive.file_group.append_files(screenshot_path)
+    test_session.commit()
+
+    # Verify screenshot_path is still null in data (the bug state)
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+    assert archive.file_group.data.get('screenshot_path') is None, \
+        "Setup: screenshot_path should be None before fix"
+
+    # But screenshot_path property finds it via my_files()
+    assert archive.screenshot_path == screenshot_path, \
+        "Screenshot should be findable via property even when not in data"
+
+    # Re-validate should update data
+    archive.validate()
+    test_session.commit()
+
+    # After fix: data.screenshot_path should be updated
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+    assert archive.file_group.data.get('screenshot_path') == screenshot_path.name, \
+        f"After validate(), screenshot_path should be in data, got {archive.file_group.data}"

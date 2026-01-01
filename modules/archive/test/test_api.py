@@ -385,8 +385,9 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     # IMPORTANT: Also verify FileGroup.data was updated (this catches the bug where only files was updated)
     assert 'screenshot_path' in archive.file_group.data, \
         'screenshot_path should be in FileGroup.data after ensuring tracking'
-    assert str(archive.file_group.data['screenshot_path']) == str(original_screenshot_path), \
-        'screenshot_path in data should match the file path'
+    # data stores filename only (not absolute path), resolved via file_group.resolve_path()
+    assert archive.file_group.data['screenshot_path'] == original_screenshot_path.name, \
+        'screenshot_path in data should match the filename'
 
     # Test error case: Archive has no singlefile
     archive_no_singlefile = archive_factory('example.com', 'https://example.com/no-singlefile', screenshot=False)

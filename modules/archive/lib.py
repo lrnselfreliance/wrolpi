@@ -1326,12 +1326,7 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
                     file_group = archive.file_group
                     # append_files uses unique_by_predicate, so this is safe even if already tracked
                     file_group.append_files(archive.screenshot_path)
-
-                    # Also update FileGroup.data (same pattern as set_screenshot)
-                    data = dict(file_group.data) if file_group.data else {}
-                    data['screenshot_path'] = str(archive.screenshot_path)
-                    file_group.data = data
-
+                    # validate() calls apply_data() which updates file_group.data with current paths
                     archive.validate()
                     tracking_session.flush()
                 return archive.screenshot_path

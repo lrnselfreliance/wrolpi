@@ -138,6 +138,55 @@ async def test_discover_calibre_cover(test_session, async_client, test_directory
     assert test_session.query(FileGroup).count() == 1
 
 
+def test_ebook_validate_updates_data_with_new_files(test_session, test_directory, example_epub, image_bytes_factory,
+                                                     shared_contexts_manager):
+    """
+    BUG: When files are added to a FileGroup after initial modeling,
+    EBook doesn't update file_group.data with new paths.
+
+    This replicates the real-world issue where an EBook is modeled before
+    its cover is added to the FileGroup (due to batch processing).
+    """
+    from wrolpi.files.ebooks import model_ebook
+
+    # Create file group and ebook without a cover file nearby
+    file_group = FileGroup.from_paths(test_session, example_epub)
+    ebook = model_ebook(file_group, test_session)
+    test_session.commit()
+
+    # The ebook extracted a cover from the epub
+    assert ebook.cover_path is not None
+    original_cover = ebook.cover_path
+    assert ebook.file_group.data.get('cover_path') == original_cover.name
+
+    # Simulate the scenario: clear cover_path from data (as if it wasn't set during modeling)
+    # This simulates a FileGroup where files were added later but data wasn't updated
+    data = dict(ebook.file_group.data) if ebook.file_group.data else {}
+    data['cover_path'] = None
+    ebook.file_group.data = data
+    test_session.commit()
+
+    # Verify cover_path is null in data (the bug state)
+    test_session.expire_all()
+    ebook = test_session.query(EBook).filter_by(id=ebook.id).one()
+    assert ebook.file_group.data.get('cover_path') is None, \
+        "Setup: cover_path should be None before fix"
+
+    # But cover_path property finds it via my_poster_files()
+    assert ebook.cover_path == original_cover, \
+        "Cover should be findable via property even when not in data"
+
+    # Re-validate should update data
+    ebook.validate(test_session)
+    test_session.commit()
+
+    # After fix: data.cover_path should be updated
+    test_session.expire_all()
+    ebook = test_session.query(EBook).filter_by(id=ebook.id).one()
+    assert ebook.file_group.data.get('cover_path') == original_cover.name, \
+        f"After validate(), cover_path should be in data, got {ebook.file_group.data}"
+
+
 @pytest.mark.asyncio
 async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory):
     """An ebook is re-indexed when moved."""

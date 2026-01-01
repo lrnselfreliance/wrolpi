@@ -1055,9 +1055,9 @@ class RefreshProgress:
 
 
 def get_refresh_progress() -> RefreshProgress:
-    from wrolpi.api_utils import api_app
+    from wrolpi.files.worker import get_file_worker_state
 
-    idempotency = api_app.shared_ctx.file_worker_data.get('idempotency')
+    idempotency = get_file_worker_state().data.get('idempotency')
     if idempotency:
         stmt = '''
                SELECT
@@ -1086,7 +1086,7 @@ def get_refresh_progress() -> RefreshProgress:
         # TODO counts are wrong if we are not refreshing all files.
 
         progress = RefreshProgress(
-            counted_files=api_app.shared_ctx.refresh.get('counted_files', 0),
+            counted_files=get_file_worker_state().data.get('counted_files', 0),
             discovery=flags.refresh_discovery.is_set(),
             indexed=int(results['indexed'] or 0),
             indexing=flags.refresh_indexing.is_set(),

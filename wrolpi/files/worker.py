@@ -12,10 +12,12 @@ Two-phase indexing:
 - Surface indexing: Fast filename-based indexing (indexed=True)
 - Deep indexing: Content extraction by modelers (deep_indexed=True)
 
-All state is stored in Sanic's shared context for cross-process access:
-- api_app.shared_ctx.file_worker_queue: Queue for work items
-- api_app.shared_ctx.file_worker_data: Dict for progress/state
-- api_app.shared_ctx.file_worker_lock: Lock to ensure single worker
+State is stored in module-level local storage (not multiprocessing):
+- _local_state.queue: Queue for work items
+- _local_state.data: Dict for progress/state
+- _local_state.lock: Lock for single-worker guarantee
+
+This is safe because FileWorker only runs on one process.
 """
 
 import asyncio
@@ -98,51 +100,96 @@ def _deserialize_queue_item(item: dict) -> dict:
 
 
 # ============================================================
-# SharedStateManager - Cross-process state management
+# Local State Management - Single-process (no IPC overhead)
 # ============================================================
 
-class SharedStateManager:
-    """Manages cross-process state via Sanic's shared_ctx.
 
-    All state is stored in multiprocessing-safe data structures:
-    - file_worker_queue: Queue for work items
-    - file_worker_data: Dict for progress/state/jobs
-    - file_worker_lock: Lock for single-worker guarantee
+class _LocalFileWorkerState:
+    """Module-level state for FileWorker.
 
-    This class provides a clean interface for reading/writing
-    shared state without exposing the implementation details.
+    Since FileWorker only runs on one process, we use regular Python objects
+    instead of multiprocessing objects to avoid IPC overhead.
+
+    No lock is needed because:
+    1. perpetual_signal already ensures sequential execution (waits for completion)
+    2. FileWorker only runs on one process
     """
 
-    def _get_shared_ctx(self):
-        """Get the shared context, handling test mode."""
+    def __init__(self):
+        self.queue = queue.Queue()
+        self.data = {
+            'jobs': {},
+            'move_jobs': {},
+            'running': False,
+            'failed_items': [],
+            'idempotency': None,
+            'counted_files': 0,
+        }
+
+    def reset(self):
+        """Reset state (for testing or server restart)."""
+        # Clear queue
+        while True:
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                break
+        # Reset data
+        self.data = {
+            'jobs': {},
+            'move_jobs': {},
+            'running': False,
+            'failed_items': [],
+            'idempotency': None,
+            'counted_files': 0,
+        }
+
+
+# Module-level singleton
+_local_state = _LocalFileWorkerState()
+
+
+def get_file_worker_state() -> _LocalFileWorkerState:
+    """Get the local FileWorker state (for external access like get_refresh_progress)."""
+    return _local_state
+
+
+def reset_file_worker_state():
+    """Reset FileWorker state (called from contexts.py)."""
+    _local_state.reset()
+
+
+class SharedStateManager:
+    """Manages FileWorker state using two-queue design.
+
+    Public queue: Cross-process queue in shared_ctx - any process can add items.
+    Private queue: Local queue for fast processing - only FileWorker uses it.
+
+    FileWorker drains public → private before processing to minimize IPC overhead.
+    """
+
+    def get_public_queue(self):
+        """Get the cross-process queue for incoming work items.
+
+        Any process can add to this queue (API workers, etc.).
+        """
         from wrolpi.api_utils import api_app
-        return api_app.shared_ctx
+        return api_app.shared_ctx.file_worker_queue
 
-    def get_queue(self):
-        """Get the cross-process queue."""
-        return self._get_shared_ctx().file_worker_queue
+    def get_private_queue(self):
+        """Get the local queue for fast processing.
 
-    def get_lock(self):
-        """Get the cross-process lock for single worker guarantee."""
-        return self._get_shared_ctx().file_worker_lock
+        Only FileWorker reads from this queue.
+        """
+        return _local_state.queue
 
     def _get_data(self) -> dict:
-        """Get the cross-process data dict."""
-        return self._get_shared_ctx().file_worker_data
+        """Get the local data dict."""
+        return _local_state.data
 
     def _init_data_if_needed(self):
-        """Initialize data dict structure if not already set."""
-        data = self._get_data()
-        if 'jobs' not in data:
-            data['jobs'] = {}
-        if 'move_jobs' not in data:
-            data['move_jobs'] = {}
-        if 'running' not in data:
-            data['running'] = False
-        if 'failed_items' not in data:
-            data['failed_items'] = []
-        if 'idempotency' not in data:
-            data['idempotency'] = None
+        """No-op - local state is always initialized."""
+        pass
 
     # ---- Jobs State ----
 
@@ -588,7 +635,7 @@ class FileWorker:
         # Create job via JobTracker
         job_id = self._jobs.create_refresh_job(job_type)
 
-        q = self._state.get_queue()
+        q = self._state.get_public_queue()
         added = 0
 
         for path in paths:
@@ -621,20 +668,29 @@ class FileWorker:
     # ============================================================
 
     def queue_size(self) -> int:
-        """Get current queue size."""
-        return self._state.get_queue().qsize()
+        """Get total items in both queues."""
+        public = self._state.get_public_queue().qsize()
+        private = self._state.get_private_queue().qsize()
+        return public + private
 
     def is_empty(self) -> bool:
-        """Check if queue is empty."""
+        """Check if both queues are empty."""
         return self.queue_size() == 0
 
     def clear(self):
-        """Clear the queue and all tracking state."""
-        # Clear queue
-        q = self._state.get_queue()
+        """Clear both queues and all tracking state."""
+        # Clear public queue
+        public_q = self._state.get_public_queue()
         while True:
             try:
-                q.get_nowait()
+                public_q.get_nowait()
+            except queue.Empty:
+                break
+        # Clear private queue
+        private_q = self._state.get_private_queue()
+        while True:
+            try:
+                private_q.get_nowait()
             except queue.Empty:
                 break
 
@@ -720,26 +776,50 @@ class FileWorker:
 
         return items + additional
 
-    async def process_batch(self, batch_size: int = 100) -> int:
+    def _drain_public_to_private(self) -> int:
+        """Transfer items from public queue to private queue for fast processing.
+
+        This batches the IPC operations - we do one bulk transfer instead of
+        IPC per item during processing.
+        """
+        public_q = self._state.get_public_queue()
+        private_q = self._state.get_private_queue()
+
+        transferred = 0
+        while True:
+            try:
+                item = public_q.get_nowait()
+                private_q.put(item)
+                transferred += 1
+            except queue.Empty:
+                break
+
+        if transferred > 0:
+            logger.debug(f'Transferred {transferred} items from public to private queue')
+        return transferred
+
+    async def process_batch(self, batch_size: int = 2000) -> int:
         """
         Process a batch of queue items.
 
         Returns number of files processed.
         """
-        if self.is_empty():
+        # First, drain public queue to private queue (batch IPC transfer)
+        self._drain_public_to_private()
+
+        private_q = self._state.get_private_queue()
+        if private_q.empty():
             return 0
 
         # Set idempotency timestamp for this batch
         if self._state.get_idempotency() is None:
             self._state.set_idempotency(now())
 
-        q = self._state.get_queue()
-
-        # Pull items from queue
+        # Pull items from PRIVATE queue (fast, no IPC)
         items: List[dict] = []
         while len(items) < batch_size:
             try:
-                item = q.get_nowait()
+                item = private_q.get_nowait()
                 items.append(_deserialize_queue_item(item))
             except queue.Empty:
                 break
@@ -754,10 +834,8 @@ class FileWorker:
         files = [i for i in items if not i['is_directory']]
         directories = [i for i in items if i['is_directory']]
 
-        # Expand batch to include same-stem files from queue
-        # This prevents files with the same stem from being split across batches,
-        # which would create orphaned FileGroups.
-        files = self._expand_batch_by_stem(files, q)
+        # Note: _expand_batch_by_stem was removed for performance.
+        # Same-stem files are grouped by _upsert_files() via chunks_by_stem().
 
         # Expand directories lazily - add children back to queue
         for dir_item in directories:
@@ -798,8 +876,8 @@ class FileWorker:
         # Update job total (also sets status to RUNNING if PENDING)
         self._jobs.increment_total(job_id, len(children))
 
-        # Add children to queue
-        q = self._state.get_queue()
+        # Add children to private queue (already in FileWorker process, no IPC needed)
+        q = self._state.get_private_queue()
 
         for child in children:
             path_key = str(child)
@@ -1061,7 +1139,10 @@ class FileWorker:
         Main async processing loop.
 
         Called by perpetual_signal in production.
-        Uses lock to ensure only one worker runs across all Sanic processes.
+        Processes all batches until queue is empty, then runs deep indexing.
+
+        No lock needed - perpetual_signal ensures sequential execution
+        (waits for completion before re-dispatching).
 
         Phase flags are set in _queue_paths() and cleared here/in _cleanup():
         - refresh_discovery: Set on queue, cleared when queue empties
@@ -1073,26 +1154,21 @@ class FileWorker:
         if self.is_empty():
             return
 
-        # Try to acquire lock - if another process is running, skip
-        lock = self._state.get_lock()
-        if not lock.acquire(blocking=False):
-            return
-
+        logger.info(f'FileWorker starting processing, queue_size={self.queue_size()}')
+        self._state.set_running(True)
         try:
-            self._state.set_running(True)
-            await self.process_batch()
+            # Process all batches until queue is empty
+            while not self.is_empty():
+                await self.process_batch()
 
-            # If queue empty, transition to deep indexing phases
-            if self.is_empty():
-                # Clear discovery flag - moving to deep indexing
-                flags.refresh_discovery.clear()
+            # Clear discovery flag - moving to deep indexing
+            flags.refresh_discovery.clear()
 
-                await self.retry_failed()
-                await self._run_deep_indexing()
-                await self._cleanup()
+            await self.retry_failed()
+            await self._run_deep_indexing()
+            await self._cleanup()
         finally:
             self._state.set_running(False)
-            lock.release()
 
     async def run_queue_to_completion(self, paths: List[pathlib.Path] = None, send_events: bool = True) -> str:
         """
@@ -1236,14 +1312,4 @@ async def file_worker_loop():
 from wrolpi.api_utils import perpetual_signal
 
 file_worker_loop = perpetual_signal(sleep=0.1)(file_worker_loop)
-
-
-# ============================================================
-# Pytest Fixture Support
-# ============================================================
-
-def get_file_worker_for_testing() -> FileWorker:
-    """Get a fresh file worker for testing."""
-    worker = FileWorker()
-    worker.set_sync_mode(True)
-    return worker
+logger.info('FileWorker registered perpetual_signal: file_worker_loop')

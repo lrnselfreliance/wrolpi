@@ -77,12 +77,9 @@ def attach_shared_contexts(app: Sanic):
     # Use manager.Queue() because multiprocessing.Queue.qsize() raises NotImplementedError on macOS
     app.shared_ctx.bulk_tag_queue = manager.Queue()
 
-    # FileWorker - cross-process job queue and progress tracking
-    # Use manager.Queue() because multiprocessing.Queue.qsize() raises NotImplementedError on macOS
+    # FileWorker public queue - cross-process queue for incoming work items.
+    # Any process can add to this queue, FileWorker drains it to local queue for fast processing.
     app.shared_ctx.file_worker_queue = manager.Queue()
-    app.shared_ctx.file_worker_data = manager.dict()
-    # Use manager.Lock() to avoid semaphore exhaustion in parallel tests
-    app.shared_ctx.file_worker_lock = manager.Lock()  # Ensure only one worker runs
     # Move operations progress tracking
     app.shared_ctx.move = manager.dict()
 
@@ -191,22 +188,14 @@ def reset_shared_contexts(app: Sanic):
         except queue.Empty:
             break
 
-    # FileWorker
-    app.shared_ctx.file_worker_data.clear()
-    app.shared_ctx.file_worker_data.update(dict(
-        idempotency=None,
-        counted_files=0,
-        jobs={},
-        move_jobs={},
-        failed_items=[],  # List of serialized QueueItems for retry
-        running=False,
-    ))
+    # FileWorker - clear public queue and reset local module state
     while True:
-        # Clear out any pending file worker jobs.
         try:
             app.shared_ctx.file_worker_queue.get_nowait()
         except queue.Empty:
             break
+    from wrolpi.files.worker import reset_file_worker_state
+    reset_file_worker_state()
 
     # Events.
     app.shared_ctx.single_tasks_started.clear()

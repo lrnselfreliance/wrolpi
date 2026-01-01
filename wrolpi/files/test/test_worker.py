@@ -139,12 +139,12 @@ async def test_file_worker_video_file_group(async_client, test_session, test_dir
 
 
 @pytest.mark.asyncio
-async def test_file_worker_expands_batch_by_stem(async_client, test_session, test_directory, file_worker, video_bytes):
+async def test_file_worker_groups_same_stem_files(async_client, test_session, test_directory, file_worker, video_bytes):
     """
-    FileWorker expands batches to include same-stem files from queue.
+    FileWorker groups same-stem files within a batch via chunks_by_stem.
 
-    This prevents orphaned FileGroups when files are discovered at different times
-    or end up at batch boundaries.
+    Files with the same stem (e.g., video.mp4 and video.webp) are grouped
+    into a single FileGroup when processed in the same batch.
     """
     # Create files with the same stem
     video_path = test_directory / 'my_video.mp4'
@@ -156,18 +156,17 @@ async def test_file_worker_expands_batch_by_stem(async_client, test_session, tes
     # Queue refresh for directory
     file_worker.queue_refresh([test_directory])
 
-    # Process with tiny batch_size=1 to force batch expansion
-    # Without expansion, this would create 2 separate FileGroups
-    while not file_worker.is_empty():
-        await file_worker.process_batch(batch_size=1)
+    # Process with default batch size - both files will be in same batch
+    # and grouped by chunks_by_stem in _upsert_files
+    await file_worker.run_queue_to_completion([test_directory])
 
-    # Should create ONE FileGroup with both files due to batch expansion
+    # Should create ONE FileGroup with both files
     file_groups = test_session.query(FileGroup).filter(
         FileGroup.directory == str(test_directory)
     ).all()
 
     assert len(file_groups) == 1, \
-        f"Expected 1 FileGroup (batch expansion worked), got {len(file_groups)}"
+        f"Expected 1 FileGroup (same-stem grouping), got {len(file_groups)}"
 
     fg = file_groups[0]
     assert fg.mimetype == 'video/mp4', "Primary should be video"

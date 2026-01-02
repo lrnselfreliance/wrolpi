@@ -870,16 +870,3 @@ def file_worker(async_client, test_session, test_directory):
     global_file_worker.clear()
 
 
-@pytest.fixture
-def enable_vacuum():
-    """Enable VACUUM ANALYZE for tests that need it.
-
-    By default, VACUUM is disabled during testing for performance.
-    Use this fixture to enable it for specific tests that need to verify
-    VACUUM behavior.
-    """
-    import wrolpi.files.worker as worker
-    original = worker.DISABLE_VACUUM
-    worker.DISABLE_VACUUM = False
-    yield
-    worker.DISABLE_VACUUM = original

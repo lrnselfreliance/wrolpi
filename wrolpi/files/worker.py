@@ -35,11 +35,6 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
-# VACUUM is disabled during testing by default for performance.
-# Use the `enable_vacuum` fixture to enable it for specific tests.
-DISABLE_VACUUM = bool(PYTEST)
-
-
 class Priority(IntEnum):
     """Processing priority levels. Lower = higher priority.
 
@@ -1076,27 +1071,6 @@ class FileWorker:
                         with get_db_curs(commit=True) as curs:
                             curs.execute('UPDATE file_group SET indexed = TRUE WHERE id = ANY(%s)', (fg_ids,))
                         continue
-
-    async def _vacuum_if_enabled(self):
-        """Run VACUUM ANALYZE on file_group table if enabled.
-
-        VACUUM reclaims space and ANALYZE updates statistics for query planning.
-        Disabled during testing by default for performance.
-        """
-        if DISABLE_VACUUM:
-            return
-
-        logger.info('Running VACUUM ANALYZE on file_group table')
-        from wrolpi.db import get_db_curs
-        import psycopg2.extensions
-
-        # VACUUM cannot run inside a transaction, need autocommit mode
-        with get_db_curs(commit=False) as curs:
-            curs.connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-            curs.execute('VACUUM ANALYZE file_group')
-            curs.connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
-
-        logger.info('VACUUM ANALYZE completed')
 
     # ============================================================
     # Sync/Async Modes

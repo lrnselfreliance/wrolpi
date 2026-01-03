@@ -542,6 +542,11 @@ class VideoDownloader(Downloader, ABC):
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
                 video.channel_id = channel_id
+                # Set file_format on channel's collection if not already set (for tracking reorganization needs)
+                if channel_id:
+                    channel = session.query(Channel).filter_by(id=channel_id).one_or_none()
+                    if channel and channel.collection and not channel.collection.file_format:
+                        channel.collection.file_format = get_videos_downloader_config().file_name_format
                 video_id, video_info_json_path = video.id, video.info_json_path
                 if video_info_json_path and (new_info_json := video.clean_info_json()):
                     video.replace_info_json(new_info_json, clean=False)

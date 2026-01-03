@@ -268,7 +268,9 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Once "complete" download is removed.
-    request, response = await async_client.post('/api/download/clear_completed')
+    # Use no_auto_await() to prevent downloads from being processed during test
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = await async_client.get('/api/download')
     once_downloads = [
@@ -280,7 +282,8 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed "once" download is removed, recurring failed is not removed.
-    request, response = await async_client.post('/api/download/clear_failed')
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/clear_failed')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = await async_client.get('/api/download')
     once_downloads = [
@@ -294,7 +297,8 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
     # Downloads can be retried.
-    request, response = await async_client.post('/api/download/retry_once')
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/retry_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = await async_client.get('/api/download')
     once_downloads = [
@@ -305,7 +309,8 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # "Delete All" button deletes all once-downloads.
-    request, response = await async_client.post('/api/download/delete_once')
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/delete_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = await async_client.get('/api/download')
     check_downloads(response, [], recurring_downloads, status_code=HTTPStatus.OK)
@@ -328,7 +333,9 @@ async def test_retry_downloads(test_session, async_client, test_wrolpi_config, a
     test_session.commit()
 
     # Retry all once-downloads.
-    request, response = await async_client.post('/api/download/retry_once')
+    # Use no_auto_await() to prevent downloads from being processed before assertion
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/retry_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert_downloads([
@@ -464,7 +471,9 @@ async def test_restart_download(test_session, async_client, test_download_manage
     test_downloader.set_test_failure()
 
     # Download is now "new" again.
-    request, response = await async_client.post(f'/api/download/{download.id}/restart')
+    # Use no_auto_await() to check status before download manager processes it
+    with async_client.no_auto_await():
+        request, response = await async_client.post(f'/api/download/{download.id}/restart')
     assert response.status_code == HTTPStatus.NO_CONTENT
     download = test_session.query(Download).one()
     assert download.is_new, download.status

@@ -35,11 +35,6 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
-# VACUUM is disabled during testing by default for performance.
-# Use the `enable_vacuum` fixture to enable it for specific tests.
-DISABLE_VACUUM = bool(PYTEST)
-
-
 class Priority(IntEnum):
     """Processing priority levels. Lower = higher priority.
 
@@ -143,6 +138,13 @@ class _LocalFileWorkerState:
             'idempotency': None,
             'counted_files': 0,
         }
+        # Reset shared status if available
+        try:
+            from wrolpi.api_utils import api_app
+            if hasattr(api_app.shared_ctx, 'file_worker_status'):
+                api_app.shared_ctx.file_worker_status['private_queue_size'] = 0
+        except Exception:
+            pass
 
 
 # Module-level singleton
@@ -264,6 +266,22 @@ class SharedStateManager:
         """Set worker running state."""
         self._init_data_if_needed()
         self._get_data()['running'] = value
+
+    # ---- Shared Status (cross-process) ----
+
+    def get_status(self) -> dict:
+        """Get the shared file_worker status dict (cross-process safe)."""
+        from wrolpi.api_utils import api_app
+        return api_app.shared_ctx.file_worker_status
+
+    def update_private_queue_size(self):
+        """Update shared status with current private queue size.
+
+        Called by FileWorker after queue operations to publish the private queue size
+        so other processes can read it.
+        """
+        size = _local_state.queue.qsize()
+        self.get_status()['private_queue_size'] = size
 
 
 # ============================================================
@@ -546,11 +564,10 @@ class FileWorker:
 
     def queue_move(self, sources: List[pathlib.Path],
                    destination: pathlib.Path) -> str:
-        """Queue a move operation.
+        """Queue a move operation for background processing.
 
-        Creates a job to track the move, stores metadata for later execution.
-        The actual move is performed by execute_move() which should be called
-        after queuing.
+        Creates a job to track the move and adds it to the processing queue.
+        The move will be executed by the FileWorker's perpetual signal.
 
         Args:
             sources: List of paths to move
@@ -559,7 +576,22 @@ class FileWorker:
         Returns:
             job_id for tracking progress
         """
-        return self._jobs.create_move_job(sources, destination)
+        job_id = self._jobs.create_move_job(sources, destination)
+
+        # Add to queue for background processing
+        q = self._state.get_public_queue()
+        item = _serialize_queue_item(
+            priority=Priority.MOVE,
+            added_at=now(),
+            path=destination,  # Use destination as the path for the queue item
+            job_id=job_id,
+            is_directory=False,
+            operation='move',
+        )
+        q.put(item)
+
+        logger.info(f'Queued move job {job_id}: {len(sources)} files to {destination}')
+        return job_id
 
     async def execute_move(self, job_id: str) -> bool:
         """Execute a queued move operation.
@@ -615,12 +647,42 @@ class FileWorker:
 
     def queue_refresh(self, paths: List[pathlib.Path],
                       priority: Priority = Priority.MANUAL_REFRESH) -> str:
-        """Queue paths for refresh."""
+        """Queue paths for refresh.
+
+        Also sets up _refresh_paths for stale file deletion during cleanup.
+        """
+        # Add to refresh paths for stale deletion
+        for path in paths:
+            resolved = pathlib.Path(path).resolve()
+            if resolved not in self._refresh_paths:
+                self._refresh_paths.append(resolved)
+            if resolved.is_dir():
+                self._found_directories.add(resolved)
+
         return self._queue_paths(paths, priority, 'refresh')
 
-    def queue_global_refresh(self) -> str:
-        """Queue full media directory refresh."""
+    def queue_global_refresh(self, send_events: bool = True) -> str:
+        """Queue full media directory refresh.
+
+        Sets up context for stale file deletion and events.
+
+        Raises:
+            UnknownDirectory: If the media directory is empty (nothing to refresh).
+        """
+        from wrolpi.errors import UnknownDirectory
+
         media_dir = get_media_directory()
+
+        # Check if media directory is empty - if so, there's nothing to refresh
+        try:
+            if not any(media_dir.iterdir()):
+                raise UnknownDirectory('Media directory is empty - nothing to refresh')
+        except FileNotFoundError:
+            raise UnknownDirectory('Media directory does not exist')
+
+        self._refresh_paths = [media_dir]
+        self._found_directories.add(media_dir)
+        self._send_events = send_events
         return self._queue_paths([media_dir], Priority.GLOBAL_REFRESH, 'global')
 
     def _queue_paths(self, paths: List[pathlib.Path],
@@ -668,9 +730,13 @@ class FileWorker:
     # ============================================================
 
     def queue_size(self) -> int:
-        """Get total items in both queues."""
+        """Get total items in both queues.
+
+        Reads private queue size from shared status (published by FileWorker)
+        so this works correctly when called from other processes.
+        """
         public = self._state.get_public_queue().qsize()
-        private = self._state.get_private_queue().qsize()
+        private = self._state.get_status().get('private_queue_size', 0)
         return public + private
 
     def is_empty(self) -> bool:
@@ -693,6 +759,8 @@ class FileWorker:
                 private_q.get_nowait()
             except queue.Empty:
                 break
+        # Publish updated private queue size (now 0) for cross-process access
+        self._state.update_private_queue_size()
 
         # Clear all shared state
         self._seen_paths.clear()
@@ -796,6 +864,8 @@ class FileWorker:
 
         if transferred > 0:
             logger.debug(f'Transferred {transferred} items from public to private queue')
+            # Publish updated private queue size for cross-process access
+            self._state.update_private_queue_size()
         return transferred
 
     async def process_batch(self, batch_size: int = 2000) -> int:
@@ -824,15 +894,27 @@ class FileWorker:
             except queue.Empty:
                 break
 
+        if items:
+            # Publish updated private queue size for cross-process access
+            self._state.update_private_queue_size()
+
         if not items:
             return 0
 
         # Sort by priority (lower = higher priority)
         items.sort(key=lambda x: (x['priority'], x['added_at']))
 
+        # Separate move operations from file/directory operations
+        move_items = [i for i in items if i.get('operation') == 'move']
+        other_items = [i for i in items if i.get('operation') != 'move']
+
+        # Process move operations first (highest priority)
+        for move_item in move_items:
+            await self.execute_move(move_item['job_id'])
+
         # Separate files from directories
-        files = [i for i in items if not i['is_directory']]
-        directories = [i for i in items if i['is_directory']]
+        files = [i for i in other_items if not i['is_directory']]
+        directories = [i for i in other_items if i['is_directory']]
 
         # Note: _expand_batch_by_stem was removed for performance.
         # Same-stem files are grouped by _upsert_files() via chunks_by_stem().
@@ -878,6 +960,7 @@ class FileWorker:
 
         # Add children to private queue (already in FileWorker process, no IPC needed)
         q = self._state.get_private_queue()
+        added_count = 0
 
         for child in children:
             path_key = str(child)
@@ -894,6 +977,11 @@ class FileWorker:
                 is_directory=child.is_dir(),
             )
             q.put(item)
+            added_count += 1
+
+        if added_count > 0:
+            # Publish updated private queue size for cross-process access
+            self._state.update_private_queue_size()
 
     async def _process_files(self, items: List[dict]) -> int:
         """
@@ -1077,27 +1165,6 @@ class FileWorker:
                             curs.execute('UPDATE file_group SET indexed = TRUE WHERE id = ANY(%s)', (fg_ids,))
                         continue
 
-    async def _vacuum_if_enabled(self):
-        """Run VACUUM ANALYZE on file_group table if enabled.
-
-        VACUUM reclaims space and ANALYZE updates statistics for query planning.
-        Disabled during testing by default for performance.
-        """
-        if DISABLE_VACUUM:
-            return
-
-        logger.info('Running VACUUM ANALYZE on file_group table')
-        from wrolpi.db import get_db_curs
-        import psycopg2.extensions
-
-        # VACUUM cannot run inside a transaction, need autocommit mode
-        with get_db_curs(commit=False) as curs:
-            curs.connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-            curs.execute('VACUUM ANALYZE file_group')
-            curs.connection.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_READ_COMMITTED)
-
-        logger.info('VACUUM ANALYZE completed')
-
     # ============================================================
     # Sync/Async Modes
     # ============================================================
@@ -1170,45 +1237,39 @@ class FileWorker:
         finally:
             self._state.set_running(False)
 
-    async def run_queue_to_completion(self, paths: List[pathlib.Path] = None, send_events: bool = True) -> str:
+    async def run_queue_to_completion(self, send_events: bool = None) -> None:
         """
-        Queue paths and process to completion. Mirrors production flow.
+        Process queue until empty. For testing.
 
-        Uses run_async() which handles flags, deep indexing, and cleanup.
-        Sets _refresh_paths so _cleanup() will do stale file deletion.
+        In production, the perpetual_signal handles processing automatically.
+        In tests, call this after queuing work to ensure all work is processed.
+
+        Usage:
+            # Test pattern
+            file_worker.queue_refresh([some_path])
+            await file_worker.run_queue_to_completion()
+
+            # Or after API calls that queue work
+            response = await client.post('/api/files/refresh', ...)
+            await file_worker.run_queue_to_completion()
+
+        Args:
+            send_events: Whether to send Events during processing.
+                         If None (default), uses value set by queue_global_refresh().
         """
-        from wrolpi.errors import UnknownDirectory
         from wrolpi.events import Events
 
-        # Default to media directory
-        if paths is None:
-            media_directory = get_media_directory()
-            if not media_directory.exists():
-                raise UnknownDirectory(f'Media directory does not exist: {media_directory}')
-            if not any(media_directory.iterdir()):
-                raise UnknownDirectory(f'Media directory is empty: {media_directory}')
-            paths = [media_directory]
-        elif isinstance(paths, (str, pathlib.Path)):
-            paths = [pathlib.Path(paths)]
+        # Allow override of send_events, but default to what was set during queuing
+        if send_events is not None:
+            self._send_events = send_events
 
-        # Track refresh paths - _cleanup() will use these for stale deletion and directory upserts
-        self._refresh_paths = list(paths)
-        self._send_events = send_events
-        for p in paths:
-            if p.is_dir():
-                self._found_directories.add(p)
-
-        if send_events:
+        if self._send_events:
             Events.send_global_refresh_started()
 
-        job_id = self.queue_refresh(paths)
-
-        # Process queue until empty (mirrors perpetual signal)
+        # Process until queue is empty
         # run_async() handles flags, deep indexing, cleanup
         while not self.is_empty():
             await self.run_async()
-
-        return job_id
 
     async def _run_deep_indexing(self):
         """Run modeling and indexing phases after surface indexing completes."""

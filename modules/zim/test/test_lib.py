@@ -17,9 +17,9 @@ from wrolpi.test.common import skip_circleci
 
 
 @pytest.mark.asyncio
-async def test_get_zim(async_client, test_session, zim_path_factory):
+async def test_get_zim(async_client, test_session, zim_path_factory, await_refresh):
     zim_path_factory()
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     assert lib.get_zim(test_session, 1)
 
@@ -28,9 +28,9 @@ async def test_get_zim(async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entry(async_client, test_session, zim_path_factory):
+async def test_zim_get_entry(async_client, test_session, zim_path_factory, await_refresh):
     zim_path_factory()
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     entry: Entry = lib.get_entry('one', 1)
     assert entry.path == 'one'
@@ -390,7 +390,7 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_zim_modeler(async_client, test_session, zim_factory):
+async def test_zim_modeler(async_client, test_session, zim_factory, await_refresh):
     """Zim modeler sets FileGroup title and a_text."""
     zim = zim_factory('the_zim_title.zim')
     # Two-phase indexing: indexed=True (surface visible), deep_indexed=False (not yet content-indexed)
@@ -398,7 +398,7 @@ async def test_zim_modeler(async_client, test_session, zim_factory):
     assert zim.file_group.deep_indexed is False
     test_session.commit()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     fg: FileGroup = test_session.query(FileGroup).one()
     assert fg.indexed is True

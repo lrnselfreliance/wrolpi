@@ -137,8 +137,10 @@ async def test_zim_tag_and_untag(async_client, test_session, test_zim, tag_facto
 async def test_zim_subscribe(test_session, async_client):
     """A Kiwix subscription can be scheduled in the API.  The language can be changed."""
     # Subscribe to English.
+    # Use no_auto_await() to prevent downloads from being processed before assertions run.
     content = dict(name='Wikipedia (mini)', language='en')
-    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
 
     download: Download = test_session.query(Download).one()
@@ -156,7 +158,8 @@ async def test_zim_subscribe(test_session, async_client):
 
     # Change subscription to French.
     content = dict(name='Wikipedia (mini)', language='fr')
-    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     assert test_session.query(Download).count() == 1
 
@@ -185,7 +188,8 @@ async def test_zim_subscribe(test_session, async_client):
 
     # English Stack Exchange is special.
     content = dict(name='Stackoverflow (Stack Exchange)', language='en')
-    request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/zim/subscribe', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://download.kiwix.org/zim/stack_exchange/stackoverflow.com_en_all_'

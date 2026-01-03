@@ -166,12 +166,12 @@ async def test_delete_wrol_mode(async_client, wrol_mode_fixture):
 
 
 @pytest.mark.asyncio
-async def test_files_search_recent(test_session, test_directory, async_client, video_file_factory):
+async def test_files_search_recent(test_session, test_directory, async_client, video_file_factory, await_refresh):
     """File search can return the most recently viewed files."""
     video_file_factory(test_directory / 'foo.mp4'), video_file_factory(test_directory / 'bar.mp4')
     baz = (test_directory / 'baz.txt')
     baz.write_text('baz contents')
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # baz is most recently viewed, foo has not been viewed.
     bar, baz, foo = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
@@ -202,7 +202,8 @@ async def test_files_search_recent(test_session, test_directory, async_client, v
 
 
 @pytest.mark.asyncio
-async def test_files_search(test_session, async_client, make_files_structure, assert_files_search):
+async def test_files_search(test_session, async_client, make_files_structure, assert_files_search,
+                            await_background_tasks):
     # You can search an empty directory.
     await assert_files_search('nothing', [])
 
@@ -220,7 +221,8 @@ async def test_files_search(test_session, async_client, make_files_structure, as
     baz2.write_bytes((PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes())
 
     # Refresh so files can be searched.
-    await file_worker.run_queue_to_completion()
+    file_worker.queue_global_refresh(send_events=False)
+    await await_background_tasks()
 
     await assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
     await assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
@@ -230,7 +232,8 @@ async def test_files_search(test_session, async_client, make_files_structure, as
 
 
 @pytest.mark.asyncio
-async def test_files_search_any_tag(async_client, test_session, make_files_structure, tag_factory):
+async def test_files_search_any_tag(async_client, test_session, make_files_structure, tag_factory,
+                                    await_background_tasks):
     one, two = await tag_factory(), await tag_factory()
     files = [
         'foo.txt',
@@ -238,7 +241,8 @@ async def test_files_search_any_tag(async_client, test_session, make_files_struc
         'bar.txt',
     ]
     make_files_structure(files)
-    await file_worker.run_queue_to_completion()
+    file_worker.queue_global_refresh(send_events=False)
+    await await_background_tasks()
     bar, foobar, foo = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
     assert bar.primary_path.name == 'bar.txt' \
            and foo.primary_path.name == 'foo.txt' \
@@ -272,7 +276,8 @@ async def test_files_search_any_tag(async_client, test_session, make_files_struc
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_list(test_session, async_client, make_files_structure, test_directory, video_bytes):
+async def test_refresh_files_list(test_session, async_client, make_files_structure, test_directory, video_bytes,
+                                  await_refresh):
     """The user can request to refresh specific files."""
     make_files_structure({
         'bar.txt': 'hello',
@@ -281,13 +286,13 @@ async def test_refresh_files_list(test_session, async_client, make_files_structu
 
     # Only the single file that was refreshed is discovered.
     bar_txt = test_directory / 'bar.txt'
-    await file_worker.run_queue_to_completion([bar_txt])
+    await await_refresh([bar_txt])
     assert test_session.query(FileGroup).count() == 1
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 1
 
     # Refresh all files - should group bar.txt and bar.mp4 together
-    await file_worker.run_queue_to_completion()
+    await await_refresh([test_directory])
     test_session.expire_all()
     group: FileGroup = test_session.query(FileGroup).one()
     assert len(group.files) == 2
@@ -315,7 +320,7 @@ async def test_refresh_api_returns_job_id(async_client, test_directory, make_fil
 
 @pytest.mark.asyncio
 async def test_file_statistics(test_session, async_client, test_directory, example_pdf, example_mobi, example_epub,
-                               video_file):
+                               video_file, await_refresh):
     """A summary of File statistics can be fetched."""
     # Give each file a unique stem.
     video_file.rename(test_directory / 'video.mp4')
@@ -341,7 +346,7 @@ async def test_file_statistics(test_session, async_client, test_directory, examp
         'zip_count': 0,
     }
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     request, response = await async_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
@@ -408,10 +413,11 @@ async def test_file_group_tag(async_client):
 
 @pytest.mark.asyncio
 async def test_search_directories(async_client, test_session, test_directory, make_files_structure,
-                                  assert_directories):
+                                  assert_directories, await_background_tasks):
     """Directories can be searched by name."""
     make_files_structure(['foo/one.txt', 'foo/two.txt', 'bar/one.txt'])
-    await file_worker.run_queue_to_completion()
+    file_worker.queue_global_refresh(send_events=False)
+    await await_background_tasks()
     assert_directories({'foo', 'bar'})
     # Create directory that was not refreshed.
     (test_directory / 'baz').mkdir()
@@ -489,7 +495,7 @@ async def test_search_directories(async_client, test_session, test_directory, ma
 
 
 @pytest.mark.asyncio
-async def test_post_search_directories(test_session, async_client, make_files_structure):
+async def test_post_search_directories(test_session, async_client, make_files_structure, await_refresh):
     """Directory names can be searched.  This endpoint also returns Channel and Domain directories."""
     channel1_dir, channel2_dir, domain_dir, _ = make_files_structure([
         'dir1/',
@@ -497,7 +503,7 @@ async def test_post_search_directories(test_session, async_client, make_files_st
         'dir3/',
         'dir4/',
     ])
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     from modules.videos.models import Channel
     # Use from_config to create channels properly (creates Collection first)
@@ -764,11 +770,12 @@ async def test_post_upload_new_directory(test_session, async_client, test_direct
 
 
 @pytest.mark.asyncio
-async def test_directory_crud(test_session, async_client, test_directory, assert_directories, assert_files):
+async def test_directory_crud(test_session, async_client, test_directory, assert_directories, assert_files,
+                              await_refresh):
     """A directory can be created in a subdirectory.  Errors are returned if there are conflicts."""
     foo = test_directory / 'foo'
     foo.mkdir()
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_directories({'foo', })
 
     # Create a subdirectory.
@@ -867,12 +874,12 @@ async def test_move(test_session, test_directory, make_files_structure, async_cl
 
 
 @pytest.mark.asyncio
-async def test_rename_file(test_session, test_directory, make_files_structure, async_client):
+async def test_rename_file(test_session, test_directory, make_files_structure, async_client, await_refresh):
     """A FileGroup can be renamed.  The title and search index is updated."""
     foo_file, = make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     foo_fg = test_session.query(FileGroup).one()
     assert foo_fg.a_text == 'baz txt'
     assert foo_fg.d_text == 'asdf'
@@ -890,7 +897,7 @@ async def test_rename_file(test_session, test_directory, make_files_structure, a
 
 @pytest.mark.asyncio
 async def test_rename_file_with_associated_files_via_api(test_session, test_directory, make_files_structure,
-                                                          async_client, video_bytes, srt_text):
+                                                          async_client, video_bytes, srt_text, await_refresh):
     """Renaming a FileGroup via API should rename all associated files.
 
     Regression test: When renaming "example.mp4" to "example 2.mp4" and back via API,
@@ -900,7 +907,7 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
         'example.mp4': video_bytes,
         'example.srt': srt_text,
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Verify initial state
     fg = test_session.query(FileGroup).one()
@@ -953,11 +960,11 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
 
 
 @pytest.mark.asyncio
-async def test_rename_directory(test_session, test_directory, make_files_structure, async_client):
+async def test_rename_directory(test_session, test_directory, make_files_structure, async_client, await_refresh):
     make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     bar, foo = test_session.query(Directory).order_by(Directory.name).all()
     assert foo.name == 'foo' and bar.name == 'bar'
 
@@ -973,7 +980,8 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
-async def test_rename_collection_directory(test_session, test_directory, make_files_structure, async_client):
+async def test_rename_collection_directory(test_session, test_directory, make_files_structure, async_client,
+                                           await_refresh):
     """Renaming a Collection's directory updates the Collection.directory."""
     from wrolpi.collections.models import Collection
 
@@ -986,7 +994,7 @@ async def test_rename_collection_directory(test_session, test_directory, make_fi
     test_session.commit()
     collection_id = collection.id
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Rename the directory
     content = dict(path='my_collection', new_name='renamed_collection')
@@ -1002,7 +1010,7 @@ async def test_rename_collection_directory(test_session, test_directory, make_fi
 
 
 @pytest.mark.asyncio
-async def test_rename_directory_with_nested_collections(test_session, test_directory, async_client):
+async def test_rename_directory_with_nested_collections(test_session, test_directory, async_client, await_refresh):
     """Renaming a parent directory updates nested Collection directories and download destinations."""
     from wrolpi.collections.models import Collection
     from wrolpi.downloader import Download
@@ -1031,7 +1039,7 @@ async def test_rename_directory_with_nested_collections(test_session, test_direc
     test_session.commit()
     coll_a_id, coll_b_id, download_id = coll_a.id, coll_b.id, download.id
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Rename the parent directory
     content = dict(path='videos', new_name='my_videos')
@@ -1058,9 +1066,9 @@ async def test_rename_directory_with_nested_collections(test_session, test_direc
 
 @pytest.mark.asyncio
 async def test_delete_directory_recursive(test_session, test_directory, make_files_structure, async_client,
-                                          assert_files):
+                                          assert_files, await_refresh):
     make_files_structure(['dir/foo', 'dir/bar', 'empty'])
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert test_session.query(FileGroup).count() == 3
 
     content = {'paths': ['dir/', ]}
@@ -1074,10 +1082,10 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 @pytest.mark.asyncio
 async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks,
-                        await_switches):
+                        await_switches, await_refresh):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     content = dict(file='foo/bar.txt')
     request, response = await async_client.post('/api/files/file', content=json.dumps(content))
@@ -1095,7 +1103,7 @@ async def test_get_file(test_session, async_client, test_directory, make_files_s
 
 @pytest.mark.asyncio
 async def test_ignore_directory(test_session, async_client, test_directory, make_files_structure, test_wrolpi_config,
-                                await_switches):
+                                await_switches, await_refresh):
     """A maintainer can ignore/un-ignore directories.  The files in the directory should not be refreshed."""
     # Remove any default ignored directories.
     get_wrolpi_config().ignored_directories = []
@@ -1109,7 +1117,7 @@ async def test_ignore_directory(test_session, async_client, test_directory, make
     assert response.status_code == HTTPStatus.OK
     assert len(get_wrolpi_config().ignored_directories) == 1
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     files = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
     assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'wrolpi.yaml'}
@@ -1119,7 +1127,7 @@ async def test_ignore_directory(test_session, async_client, test_directory, make
     assert response.status_code == HTTPStatus.OK
     assert len(get_wrolpi_config().ignored_directories) == 0
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     files = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
     # Ignore configs.

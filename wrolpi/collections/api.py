@@ -266,3 +266,69 @@ async def search_collections_endpoint(request: Request, body: schema.CollectionS
         'collections': collections,
         'totals': {'collections': len(collections)}
     })
+
+
+@collection_bp.post('/<collection_id:int>/reorganize')
+@openapi.definition(
+    summary='Reorganize files in collection to match current file format',
+    body=schema.CollectionReorganizeRequest,
+    validate=True,
+)
+@openapi.response(HTTPStatus.OK, description="Reorganization preview or completion status")
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@wrol_mode_check
+async def reorganize_collection_endpoint(request: Request, collection_id: int, body: schema.CollectionReorganizeRequest):
+    """
+    Reorganize files in a collection to match the current global file format.
+
+    This endpoint moves files to new paths based on the current file_name_format
+    configuration. Useful when the format template has changed and you want to
+    reorganize existing files.
+
+    Use dry_run=true to preview changes without moving files.
+
+    Returns:
+        - preview: Summary of files to move
+        - reorganized: True if files were moved (false for dry_run)
+        - new_file_format: The format template applied
+    """
+    from wrolpi.collections.reorganize import build_reorganization_plan, execute_reorganization
+
+    from wrolpi.collections import Collection
+
+    session = request.ctx.session
+    try:
+        collection = Collection.find_by_id(session, collection_id)
+
+        # Get the new format from global config
+        new_format = collection._get_global_file_format()
+        if not new_format:
+            return json_response(
+                {'error': f'No file format configured for collection kind: {collection.kind}'},
+                status=HTTPStatus.BAD_REQUEST
+            )
+
+        # Build the reorganization plan
+        plan = await build_reorganization_plan(session, collection, new_format)
+
+        if body.dry_run:
+            return json_response({
+                'preview': plan,
+                'reorganized': False,
+                'new_file_format': new_format,
+            })
+
+        # Execute the reorganization
+        await execute_reorganization(session, collection, plan, new_format)
+
+        return json_response({
+            'preview': plan,
+            'reorganized': True,
+            'new_file_format': new_format,
+        })
+
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except Exception as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)

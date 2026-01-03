@@ -57,6 +57,7 @@ import {
 } from "../api";
 import {InputForm, useForm} from "../hooks/useForm";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
+import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
@@ -505,6 +506,8 @@ export function DomainEditPage() {
 
     // Modal state for tagging
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
+    // Modal state for reorganization
+    const [reorganizeModalOpen, setReorganizeModalOpen] = useState(false);
 
     useTitle(`Edit Domain: ${domain?.domain || '...'}`);
 
@@ -612,10 +615,21 @@ export function DomainEditPage() {
         style={{marginTop: '1em'}}
     >Tag</Button>;
 
+    const reorganizeButton = domain?.needs_reorganization ? (
+        <Button
+            type="button"
+            size='small'
+            onClick={() => setReorganizeModalOpen(true)}
+            color='orange'
+            style={{marginTop: '1em'}}
+        >Reorganize Files</Button>
+    ) : null;
+
     const actionButtons = <>
         {deleteButton}
         {refreshButton}
         {tagButton}
+        {reorganizeButton}
     </>;
 
     const [descriptionProps] = form.getCustomProps({name: 'description', path: 'description'});
@@ -668,6 +682,15 @@ export function DomainEditPage() {
             onSave={handleTagSave}
             collectionName="Domain"
             hasDirectory={!!domain?.directory}
+        />
+
+        {/* Reorganize Modal */}
+        <CollectionReorganizeModal
+            open={reorganizeModalOpen}
+            onClose={() => setReorganizeModalOpen(false)}
+            collectionId={domain?.id}
+            collectionName="Domain"
+            onSuccess={fetchDomain}
         />
 
         {/* Downloads Segment */}

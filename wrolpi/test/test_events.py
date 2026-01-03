@@ -18,11 +18,10 @@ def assert_events(expected: List[Dict], after=None):
 
 
 @pytest.mark.asyncio
-async def test_events_api_feed(test_session, async_client, example_pdf):
+async def test_events_api_feed(test_session, async_client, example_pdf, await_refresh):
     """Events can be gotten from the API."""
-    # run_queue_to_completion() creates a few events.
-    from wrolpi.files.worker import file_worker
-    await file_worker.run_queue_to_completion()
+    # await_refresh() creates a few events.
+    await await_refresh()
 
     request, response = await async_client.get('/api/events/feed')
     assert response.status_code == HTTPStatus.OK, response.body

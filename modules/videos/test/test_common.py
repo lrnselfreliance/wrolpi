@@ -412,11 +412,11 @@ async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
 
 
 @pytest.mark.asyncio
-async def test_video_ffprobe_json(async_client, test_session, video_file):
+async def test_video_ffprobe_json(test_session, video_file, await_refresh):
     """ffprobe data is extracted when a video is modeled."""
     with mock.patch('modules.videos.lib.extract_video_duration') as mock_extract_video_duration:
         mock_extract_video_duration.side_effect = Exception('duration should be from ffprobe json')
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
 
     video = test_session.query(Video).one()
     assert video.ffprobe_json

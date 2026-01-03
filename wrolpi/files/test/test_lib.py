@@ -108,11 +108,12 @@ async def test_delete_file_link(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_delete_tagged(await_switches, test_session, make_files_structure, tag_factory, video_bytes):
+async def test_delete_tagged(await_switches, test_session, make_files_structure, tag_factory, video_bytes, await_refresh):
     """Cannot delete a file that has been tagged."""
     tag = await tag_factory()
     make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})
-    await file_worker.run_queue_to_completion()
+    file_worker.queue_global_refresh(send_events=False)
+    await await_refresh()
     # Both files end up in a group.
     bar = test_session.query(FileGroup).one()
     bar.add_tag(test_session, tag.id)
@@ -171,7 +172,7 @@ def test_split_path_stem_and_suffix(path, full, expected):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files(async_client, test_session, make_files_structure, assert_file_groups):
+async def test_refresh_files(async_client, test_session, make_files_structure, assert_file_groups, await_refresh):
     """All files in the media directory should be found when calling `refresh_files`"""
     files = make_files_structure([
         'foo.txt',
@@ -180,7 +181,7 @@ async def test_refresh_files(async_client, test_session, make_files_structure, a
     ])
     foo, bar, baz = files
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_file_groups([
         {'primary_path': 'foo.txt', 'indexed': True},
         {'primary_path': 'bar.txt', 'indexed': True},
@@ -188,23 +189,23 @@ async def test_refresh_files(async_client, test_session, make_files_structure, a
 
     baz.unlink()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_file_groups([{'primary_path': 'foo.txt', 'indexed': True}, {'primary_path': 'bar.txt', 'indexed': True}])
 
     foo.unlink()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_file_groups([{'primary_path': 'bar.txt', 'indexed': True}])
 
 
 @pytest.mark.asyncio
-async def test_file_group_location(async_client, test_session, make_files_structure):
+async def test_file_group_location(async_client, test_session, make_files_structure, await_refresh):
     """FileGroup can return the URL necessary to preview the FileGroup."""
     make_files_structure({
         'foo/one.txt': 'one',
         'two.txt': 'two',
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     one, two = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
     assert one.location == '/files?folders=foo&preview=foo%2Fone.txt'
@@ -213,10 +214,10 @@ async def test_file_group_location(async_client, test_session, make_files_struct
 
 @pytest.mark.asyncio
 async def test_refresh_bogus_files(async_client, test_session, make_files_structure, test_directory,
-                                   assert_file_groups, insert_file_group):
+                                   assert_file_groups, insert_file_group, await_refresh):
     """Bogus files are removed during a refresh."""
     make_files_structure(['does exist.txt'])
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     insert_file_group([test_directory / 'does not exist.txt'])
     test_session.commit()
 
@@ -226,17 +227,21 @@ async def test_refresh_bogus_files(async_client, test_session, make_files_struct
         {'primary_path': 'does not exist.txt', 'indexed': True},
     ])
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     assert test_session.query(FileGroup).count() == 1, 'Bogus file was not removed'
     assert_file_groups([{'primary_path': 'does exist.txt', 'indexed': True}])
 
 
 @pytest.mark.asyncio
-async def test_refresh_empty_media_directory(async_client, test_session, test_directory):
-    """refresh_paths will refuse to refresh with an empty media directory."""
+async def test_refresh_empty_media_directory(async_client, test_session, test_directory, await_refresh):
+    """refresh_paths will refuse to refresh with an empty media directory.
+
+    This test is IMPORTANT because it ensures that a user cannot accidentally refresh without their drive mounted,
+    which would wipe out their indexes!.
+    """
     with pytest.raises(UnknownDirectory):
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
 
 
 @pytest.mark.asyncio
@@ -363,7 +368,7 @@ def test_same_stem_files_in_separate_batches_creates_orphans(test_session, test_
 
 
 @pytest.mark.asyncio
-async def test_subsequent_refresh_merges_orphaned_file_groups(async_client, test_session, test_directory, video_bytes):
+async def test_subsequent_refresh_merges_orphaned_file_groups(async_client, test_session, test_directory, video_bytes, await_refresh):
     """
     Demonstrates that a global refresh will correctly merge orphaned FileGroups
     that share the same stem.
@@ -394,7 +399,7 @@ async def test_subsequent_refresh_merges_orphaned_file_groups(async_client, test
     assert len(file_groups) == 2, "Setup: Should have 2 orphaned FileGroups"
 
     # Global refresh should merge the orphaned FileGroups
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # After global refresh, should be merged into 1 FileGroup
     test_session.expire_all()
@@ -445,20 +450,20 @@ async def test_upsert_mtime_resets_deep_indexed(test_session, make_files_structu
 
 @pytest.mark.asyncio
 async def test_refresh_paths(async_client, test_session, make_files_structure, test_directory, assert_files,
-                             assert_file_groups):
+                             assert_file_groups, await_refresh):
     """Test that refresh_files() handles specific paths correctly."""
     foo, bar, baz = make_files_structure(['dir1/foo.txt', 'dir1/bar.txt', 'baz.txt'])
     dir1 = foo.parent
 
     # `refresh_files` refreshes recursively from a directory.
-    await file_worker.run_queue_to_completion([foo.parent, ])
+    await await_refresh([foo.parent])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
     ])
 
     # `refresh_files` discovers files at the top of the media directory.
-    await file_worker.run_queue_to_completion([test_directory, ])
+    await await_refresh([test_directory])
     assert_files([
         {'path': 'dir1/foo.txt'},
         {'path': 'dir1/bar.txt'},
@@ -467,7 +472,7 @@ async def test_refresh_paths(async_client, test_session, make_files_structure, t
 
     # Records for deleted files are deleted.  Request a refresh of `dir1` so we indirectly refresh `foo`.
     foo.unlink()
-    await file_worker.run_queue_to_completion([dir1, ])
+    await await_refresh([dir1])
     assert_files([
         {'path': 'dir1/bar.txt'},
         {'path': 'baz.txt'},
@@ -476,17 +481,17 @@ async def test_refresh_paths(async_client, test_session, make_files_structure, t
     # Records for all children of a directory are deleted.
     bar.unlink()
     dir1.rmdir()
-    await file_worker.run_queue_to_completion([dir1, ])
+    await await_refresh([dir1])
     assert_files([
         {'path': 'baz.txt'},
     ])
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_groups(async_client, test_session, make_files_structure, test_directory, video_bytes):
+async def test_refresh_files_groups(async_client, test_session, make_files_structure, test_directory, video_bytes, await_refresh):
     """Test that files with shared stems are grouped into FileGroups."""
     make_files_structure({'dir1/foo.mp4': video_bytes, 'dir1/foo.info.json': 'hello', 'baz.txt': 'hello'})
-    await file_worker.run_queue_to_completion([test_directory, ])
+    await await_refresh([test_directory])
 
     # Two "foo" files, one "baz" file.
     assert test_session.query(FileGroup).count() == 2
@@ -505,10 +510,10 @@ async def test_refresh_files_groups(async_client, test_session, make_files_struc
 
 
 @pytest.mark.asyncio
-async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches):
+async def test_file_group_tag(test_session, make_files_structure, test_directory, tag_factory, await_switches, await_refresh):
     """A FileGroup can be tagged."""
     make_files_structure(['foo.mp4'])
-    await file_worker.run_queue_to_completion([test_directory, ])
+    await await_refresh([test_directory])
     one = await tag_factory()
 
     foo: FileGroup = test_session.query(FileGroup).one()
@@ -520,34 +525,34 @@ async def test_file_group_tag(test_session, make_files_structure, test_directory
 
 
 @pytest.mark.asyncio
-async def test_refresh_a_text_no_indexer(async_client, test_session, make_files_structure):
+async def test_refresh_a_text_no_indexer(async_client, test_session, make_files_structure, await_refresh):
     """File.a_text is filled even if the file does not match an Indexer."""
     make_files_structure(['foo', 'bar-bar'])
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     files = {i.a_text for i in test_session.query(FileGroup)}
     assert files == {'bar bar bar-bar', 'foo'}
 
 
 @pytest.mark.asyncio
-async def test_refresh_many_files(async_client, test_session, make_files_structure):
+async def test_refresh_many_files(async_client, test_session, make_files_structure, await_refresh):
     """Used to profile file refreshing"""
     file_count = 10_000
     make_files_structure([f'{uuid4()}.txt' for _ in range(file_count)])
     with timer('first refresh'):
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
     assert test_session.query(FileGroup).count() == file_count
 
     with timer('second refresh'):
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
     assert test_session.query(FileGroup).count() == file_count
 
 
 @pytest.mark.asyncio
 async def test_refresh_cancel(async_client, test_session, make_files_structure, test_directory):
     """Refresh tasks can be canceled."""
-    # Creat a lot of files so the refresh will take too long.
+    # Create a lot of files so the refresh will take too long.
     make_files_structure([f'{uuid4()}.txt' for _ in range(1_000)])
 
     async def assert_cancel(task_):
@@ -562,12 +567,14 @@ async def test_refresh_cancel(async_client, test_session, make_files_structure, 
             await task_
         assert (datetime.now() - before).total_seconds() < 1.2, 'Task took too long.  Was the refresh canceled?'
 
+    # Queue the files for refresh, then try to cancel during processing
+    file_worker.queue_global_refresh()
     task = asyncio.create_task(file_worker.run_queue_to_completion())
     await assert_cancel(task)
 
 
 @pytest.mark.asyncio
-async def test_mime_type(async_client, test_session, make_files_structure, test_directory, assert_files):
+async def test_mime_type(async_client, test_session, make_files_structure, test_directory, assert_files, await_refresh):
     """Files module uses the `file` command to get the mimetype of each file."""
     from PIL import Image
 
@@ -581,7 +588,7 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
     Image.new('RGB', (25, 25), color='grey').save(bar)
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', baz)
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_files([
         {'path': 'dir/foo text.txt'},
         {'path': 'dir/bar.jpeg'},
@@ -601,7 +608,7 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
 
 
 @pytest.mark.asyncio
-async def test_files_indexer(async_client, test_session, make_files_structure, test_directory):
+async def test_files_indexer(async_client, test_session, make_files_structure, test_directory, await_refresh):
     """An Indexer is provided for each file based on it's mimetype or contents."""
     source_files: List[str] = [
         'a text file.txt',
@@ -623,7 +630,7 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     # Enable slow feature for testing.
     # TODO can this be sped up to always be included?
     with mock.patch('modules.videos.lib.EXTRACT_SUBTITLES', True):
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
 
     text_file, zip_file, image_file, unknown_file, video_file \
         = test_session.query(FileGroup).order_by(FileGroup.primary_path)
@@ -653,11 +660,11 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
 
     with mock.patch('modules.videos.models.Video.validate') as mock_validate:
         mock_validate.side_effect = Exception('This should not be called twice')
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
 
     # Change the contents, the file should be re-indexed.
     text_path.write_text('new text contents')
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     files, total = lib.search_files('new', 10, 0)
     assert total == 1
 
@@ -677,14 +684,14 @@ def test_split_file_name_words(name, expected):
 
 
 @pytest.mark.asyncio
-async def test_large_text_indexer(async_client, test_session, make_files_structure):
+async def test_large_text_indexer(async_client, test_session, make_files_structure, await_refresh):
     """
     Large files have their indexes truncated.
     """
     large, = make_files_structure({
         'large_file.txt': 'foo ' * 1_000_000,
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert test_session.query(FileGroup).count() == 1
 
     assert large.is_file() and large.stat().st_size == 4_000_000
@@ -823,7 +830,7 @@ async def test_get_refresh_progress(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure, zip_file_factory):
+async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure, zip_file_factory, await_refresh):
     """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
     foo_txt, foo_zip = make_files_structure({
         'foo.txt': 'text',
@@ -831,7 +838,7 @@ async def test_refresh_files_no_groups(async_client, test_session, test_director
     })
     assert foo_txt.stat().st_size and foo_zip.stat().st_size
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Two distinct FileGroups.
     assert test_session.query(FileGroup).count() == 2
@@ -841,7 +848,7 @@ async def test_refresh_files_no_groups(async_client, test_session, test_director
 
 
 @pytest.mark.asyncio
-async def test_refresh_directories(test_session, test_directory, assert_directories, await_switches):
+async def test_refresh_directories(test_session, test_directory, assert_directories, await_switches, await_refresh):
     """
     Directories are stored when they are discovered.  They are removed when they can no longer be found.
     """
@@ -852,21 +859,21 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     bar.mkdir()
     baz.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_directories({'foo', 'bar', 'baz'})
 
     # Deleted directory is removed.
     foo.rmdir()
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_directories({'bar', 'baz'})
 
     bar.rmdir()
-    await file_worker.run_queue_to_completion([bar])
+    await await_refresh([bar])
     assert_directories({'baz', })
 
     # A new directory can be refreshed directly.
     foo.mkdir()
-    await file_worker.run_queue_to_completion([foo])
+    await await_refresh([foo])
     assert_directories({'foo', 'baz'})
 
 
@@ -913,7 +920,7 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
 
 @pytest.mark.asyncio
 async def test_move(async_client, test_session, test_directory, make_files_structure, video_bytes,
-                    singlefile_contents_factory):
+                    singlefile_contents_factory, await_refresh):
     """files.lib.move behaves likes posix mv"""
     make_files_structure({
         'foo/bar/video.mp4': video_bytes,
@@ -923,7 +930,7 @@ async def test_move(async_client, test_session, test_directory, make_files_struc
     })
     foo = test_directory / 'foo'
     qux = test_directory / 'qux'
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # mv foo qux
     plan = await lib.move(test_session, qux, foo)
@@ -1014,12 +1021,12 @@ async def test_move_deep_directory(async_client, test_session, test_directory, m
 
 @pytest.mark.asyncio
 async def test_move_directory(async_client, test_session, test_directory, make_files_structure,
-                              assert_directories):
+                              assert_directories, await_refresh):
     """A Directory record is deleted when it's directory is deleted."""
     make_files_structure({
         'foo/one.txt': 'one',
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert_directories({'foo'})
 
     bar = test_directory / 'bar'
@@ -1067,7 +1074,7 @@ async def test_move_error(async_client, test_session, test_directory, make_files
 
 @pytest.mark.asyncio
 async def test_physically_moved_file_creates_duplicate_filegroup(async_client, test_session, test_directory,
-                                                                  make_files_structure):
+                                                                  make_files_structure, await_refresh):
     """
     BUG: When files are physically moved (outside WROLPi) but the DB isn't updated,
     subsequent operations create duplicate FileGroups instead of updating existing ones.
@@ -1080,7 +1087,7 @@ async def test_physically_moved_file_creates_duplicate_filegroup(async_client, t
     dir_b = test_directory / 'dir_b'
     dir_b.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Verify one FileGroup exists at dir_a
     file_groups_before = test_session.query(FileGroup).all()
@@ -1125,7 +1132,7 @@ async def test_physically_moved_file_creates_duplicate_filegroup(async_client, t
 
 @pytest.mark.asyncio
 async def test_move_handles_orphaned_filegroup_conflict(async_client, test_session, test_directory,
-                                                         make_files_structure):
+                                                         make_files_structure, await_refresh):
     """
     When moving files to a location that has orphaned FileGroups, the move should succeed
     by proactively deleting unindexed orphans before the DB update.
@@ -1139,7 +1146,7 @@ async def test_move_handles_orphaned_filegroup_conflict(async_client, test_sessi
     dir_b = test_directory / 'dir_b'
     dir_b.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Verify one FileGroup exists at dir_a
     file_groups = test_session.query(FileGroup).all()
@@ -1184,7 +1191,7 @@ async def test_move_handles_orphaned_filegroup_conflict(async_client, test_sessi
 
 @pytest.mark.asyncio
 async def test_move_handles_indexed_orphan_at_target(async_client, test_session, test_directory,
-                                                      make_files_structure):
+                                                      make_files_structure, await_refresh):
     """
     When target has an indexed FileGroup that is NOT linked to any model (orphan),
     it should be deleted and the move should proceed.
@@ -1194,7 +1201,7 @@ async def test_move_handles_indexed_orphan_at_target(async_client, test_session,
     dir_b = test_directory / 'dir_b'
     dir_b.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     original_fg = test_session.query(FileGroup).one()
     assert original_fg.directory == dir_a
@@ -1223,7 +1230,7 @@ async def test_move_handles_indexed_orphan_at_target(async_client, test_session,
 
 @pytest.mark.asyncio
 async def test_move_target_linked_source_orphan(async_client, test_session, test_directory,
-                                                 make_files_structure):
+                                                 make_files_structure, await_refresh):
     """
     When target FileGroup is linked to a Video and source FileGroup is orphan,
     the source orphan should be deleted and DB update skipped (target already correct).
@@ -1233,7 +1240,7 @@ async def test_move_target_linked_source_orphan(async_client, test_session, test
     dir_b = test_directory / 'dir_b'
     dir_b.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     source_fg = test_session.query(FileGroup).one()
     source_fg_id = source_fg.id
@@ -1271,7 +1278,7 @@ async def test_move_target_linked_source_orphan(async_client, test_session, test
 
 @pytest.mark.asyncio
 async def test_move_both_linked_raises_error(async_client, test_session, test_directory,
-                                              make_files_structure):
+                                              make_files_structure, await_refresh):
     """
     When both source and target FileGroups are linked to models,
     the move should raise an error (needs manual resolution).
@@ -1281,7 +1288,7 @@ async def test_move_both_linked_raises_error(async_client, test_session, test_di
     dir_b = test_directory / 'dir_b'
     dir_b.mkdir()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     source_fg = test_session.query(FileGroup).one()
 
@@ -1310,13 +1317,13 @@ async def test_move_both_linked_raises_error(async_client, test_session, test_di
 
 @pytest.mark.asyncio
 async def test_file_group_move(async_client, test_session, make_files_structure, test_directory, video_bytes,
-                               srt_text):
+                               srt_text, await_refresh):
     """Test FileGroup's move method"""
     video, srt = make_files_structure({
         'video.mp4': video_bytes,
         'video.srt': srt_text,
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.indexed is True
 
@@ -1332,14 +1339,14 @@ async def test_file_group_move(async_client, test_session, make_files_structure,
 
 
 @pytest.mark.asyncio
-async def test_move_tagged(async_client, test_session, test_directory, make_files_structure, tag_factory):
+async def test_move_tagged(async_client, test_session, test_directory, make_files_structure, tag_factory, await_refresh):
     """A FileGroup's tag is preserved when moved or renamed."""
     tag = await tag_factory()
     foo, bar, = make_files_structure({
         'foo/foo.txt': 'foo',
         'foo/bar.txt': 'bar',
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
     bar_file_group.title = 'custom title'  # Should not be overwritten.
     bar_file_group.add_tag(test_session, tag.id)
@@ -1379,7 +1386,7 @@ async def test_move_tagged(async_client, test_session, test_directory, make_file
 
 
 @pytest.mark.asyncio
-async def test_html_index(async_client, test_session, test_directory, make_files_structure):
+async def test_html_index(async_client, test_session, test_directory, make_files_structure, await_refresh):
     make_files_structure({
         'archive.html': '''<html>
         <title>The Title</title>
@@ -1411,7 +1418,7 @@ async def test_html_index(async_client, test_session, test_directory, make_files
         '''
     })
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     assert test_session.query(FileGroup).count() == 1, 'Too many files were refreshed.'
     archive_file: FileGroup = test_session.query(FileGroup).one()
@@ -1425,9 +1432,9 @@ Outside element.'''
 
 
 @pytest.mark.asyncio
-async def test_doc_indexer(async_client, test_session, example_doc):
+async def test_doc_indexer(async_client, test_session, example_doc, await_refresh):
     """The contents of a Microsoft doc files can be indexed."""
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
     assert doc.title == 'example word.doc'
@@ -1439,9 +1446,9 @@ async def test_doc_indexer(async_client, test_session, example_doc):
 
 
 @pytest.mark.asyncio
-async def test_docx_indexer(async_client, test_session, example_docx):
+async def test_docx_indexer(async_client, test_session, example_docx, await_refresh):
     """The contents of a Microsoft docx files can be indexed."""
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
     assert doc.title == 'example word.docx'
@@ -1450,9 +1457,9 @@ async def test_docx_indexer(async_client, test_session, example_docx):
 
 
 @pytest.mark.asyncio
-async def test_file_search_date_range(async_client, test_session, example_pdf, example_doc):
+async def test_file_search_date_range(async_client, test_session, example_pdf, example_doc, await_refresh):
     """Test searching FileGroups by their published datetime."""
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     doc, pdf = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
 
     files, total = lib.search_files('', 10, 0)
@@ -1524,11 +1531,11 @@ async def test_upsert_file_video_with_channel(async_client, test_session, test_d
 
 
 @pytest.mark.asyncio
-async def test_move_many_files(async_client, test_session, test_directory, make_files_structure):
+async def test_move_many_files(async_client, test_session, test_directory, make_files_structure, await_refresh):
     from wrolpi.db import get_db_curs
 
     make_files_structure([f'foo/{i}.txt' for i in range(10_000)])
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     foo = test_directory / 'foo'
     bar = test_directory / 'bar'
@@ -1813,7 +1820,7 @@ def test_sanitize_filename_surrogates_renames_file(test_directory):
 
 @pytest.mark.asyncio
 async def test_rename_file_with_associated_files_twice(async_client, test_session, test_directory, make_files_structure,
-                                                        video_bytes, srt_text):
+                                                        video_bytes, srt_text, await_refresh):
     """
     Renaming a FileGroup twice should rename all associated files both times.
 
@@ -1825,7 +1832,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
         'example.mp4': video_bytes,
         'example.srt': srt_text,
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Verify initial state
     file_group = test_session.query(FileGroup).one()
@@ -1879,7 +1886,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
 
 @pytest.mark.asyncio
 async def test_rename_non_primary_file_renames_filegroup(async_client, test_session, test_directory,
-                                                          make_files_structure, video_bytes, srt_text):
+                                                          make_files_structure, video_bytes, srt_text, await_refresh):
     """
     Renaming a non-primary file (like a subtitle) should rename the entire FileGroup.
 
@@ -1891,7 +1898,7 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
         'example.mp4': video_bytes,
         'example.srt': srt_text,
     })
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     # Verify initial state
     file_group = test_session.query(FileGroup).one()

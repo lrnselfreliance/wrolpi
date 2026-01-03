@@ -158,7 +158,7 @@ async def test_file_worker_groups_same_stem_files(async_client, test_session, te
 
     # Process with default batch size - both files will be in same batch
     # and grouped by chunks_by_stem in _upsert_files
-    await file_worker.run_queue_to_completion([test_directory])
+    await file_worker.run_queue_to_completion()
 
     # Should create ONE FileGroup with both files
     file_groups = test_session.query(FileGroup).filter(

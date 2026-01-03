@@ -80,6 +80,8 @@ def attach_shared_contexts(app: Sanic):
     # FileWorker public queue - cross-process queue for incoming work items.
     # Any process can add to this queue, FileWorker drains it to local queue for fast processing.
     app.shared_ctx.file_worker_queue = manager.Queue()
+    # FileWorker status - worker publishes its private queue size here for cross-process access.
+    app.shared_ctx.file_worker_status = manager.dict()
     # Move operations progress tracking
     app.shared_ctx.move = manager.dict()
 
@@ -188,12 +190,14 @@ def reset_shared_contexts(app: Sanic):
         except queue.Empty:
             break
 
-    # FileWorker - clear public queue and reset local module state
+    # FileWorker - clear public queue, reset status, and reset local module state
     while True:
         try:
             app.shared_ctx.file_worker_queue.get_nowait()
         except queue.Empty:
             break
+    app.shared_ctx.file_worker_status.clear()
+    app.shared_ctx.file_worker_status['private_queue_size'] = 0
     from wrolpi.files.worker import reset_file_worker_state
     reset_file_worker_state()
 

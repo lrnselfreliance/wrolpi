@@ -278,16 +278,18 @@ def format_archive_filename(
         title: str,
         domain: str = None,
         download_date: datetime = None,
+        template: str = None,
 ) -> str:
-    """Format archive filename using config template.
+    """Format archive filename using config template or custom template.
 
     This function formats the filename (and optional subdirectory path) for an archive
-    using the file_name_format from archives_downloader.yaml.
+    using the file_name_format from archives_downloader.yaml, or a custom template.
 
     Args:
         title: Page title (extracted from HTML)
         domain: Domain name of the archived URL
         download_date: Date of download (defaults to now)
+        template: Optional custom template (defaults to config's file_name_format)
 
     Returns:
         Formatted filename/path (with .html extension included)
@@ -296,9 +298,13 @@ def format_archive_filename(
         format_archive_filename("My Article", "example.com")
         # With default format: "2025-12-22_My Article.html"
         # With "%(download_year)s/%(title)s.%(ext)s": "2025/My Article.html"
+
+        format_archive_filename("My Article", template="%(download_year)s/%(title)s.%(ext)s")
+        # Returns: "2025/My Article.html"
     """
-    config = get_archive_downloader_config()
-    template = config.file_name_format
+    if template is None:
+        config = get_archive_downloader_config()
+        template = config.file_name_format
 
     download_date = download_date or now()
 
@@ -592,6 +598,9 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
         archive.file_group.download_datetime = now()
         archive.url = url
         archive.collection = get_or_create_domain_collection(session, url)
+        # Set file_format on collection if not already set (for tracking reorganization needs)
+        if archive.collection and not archive.collection.file_format:
+            archive.collection.file_format = get_archive_downloader_config().file_name_format
         archive.flush()
 
     return archive

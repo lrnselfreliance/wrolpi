@@ -901,7 +901,8 @@ class Channel(ModelHelper, Base):
         async def _():
             # Refresh all files within this channel's directory first.
             from modules.videos.common import update_view_counts_and_censored
-            await file_worker.run_queue_to_completion([directory], send_events=send_events)
+            file_worker.queue_refresh([directory])
+            await file_worker.run_queue_to_completion(send_events=send_events)
             # Update view count second.
             await update_view_counts_and_censored(id_)
             with get_db_session(commit=True) as session_:

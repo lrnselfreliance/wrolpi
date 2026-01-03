@@ -96,6 +96,11 @@ class Collection(ModelHelper, Base):
     item_count = Column(Integer, default=0, nullable=False)
     total_size = Column(BigInteger, default=0, nullable=False)
 
+    # File format template used when files were downloaded to this collection
+    # e.g., '%(download_datetime)s_%(title)s.%(ext)s' for archives
+    # or '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s' for videos
+    file_format = Column(String, nullable=True)
+
     # Relationship to items (ordered)
     items: InstrumentedList = relationship(
         'CollectionItem',
@@ -128,6 +133,31 @@ class Collection(ModelHelper, Base):
     def is_directory_restricted(self) -> bool:
         """Returns True if this collection is restricted to a specific directory."""
         return self.directory is not None
+
+    @property
+    def needs_reorganization(self) -> bool:
+        """True if collection's file_format differs from current global config.
+
+        Returns False if:
+        - Collection has no file_format set (new collection, not yet used for downloads)
+        - Collection's file_format matches current global config
+        """
+        if not self.file_format:
+            return False
+        global_format = self._get_global_file_format()
+        if global_format is None:
+            return False
+        return self.file_format != global_format
+
+    def _get_global_file_format(self) -> str | None:
+        """Get the global file format for this collection's kind."""
+        if self.kind == 'domain':
+            from modules.archive.lib import get_archive_downloader_config
+            return get_archive_downloader_config().file_name_format
+        elif self.kind == 'channel':
+            from modules.videos.lib import get_videos_downloader_config
+            return get_videos_downloader_config().file_name_format
+        return None
 
     @staticmethod
     def is_valid_domain_name(name: str) -> bool:
@@ -957,7 +987,7 @@ class Collection(ModelHelper, Base):
             try:
                 if not old_directory.exists():
                     # Old directory does not exist; refresh both
-                    await file_worker.run_queue_to_completion([old_directory, directory])
+                    file_worker.queue_refresh([old_directory, directory])
                     if send_events:
                         Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
                 else:

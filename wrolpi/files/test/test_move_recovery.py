@@ -14,12 +14,12 @@ from unittest import mock
 import pytest
 
 from wrolpi.files import lib
-from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_recovery_files_moved_db_stale(async_client, test_session, test_directory, make_files_structure):
+async def test_recovery_files_moved_db_stale(async_client, test_session, test_directory, make_files_structure,
+                                             await_refresh):
     """
     Scenario #44: Files physically at new location, DB FileGroup points to old location.
 
@@ -41,7 +41,7 @@ async def test_recovery_files_moved_db_stale(async_client, test_session, test_di
     })
 
     # Create FileGroup via refresh
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Verify initial state
@@ -63,7 +63,7 @@ async def test_recovery_files_moved_db_stale(async_client, test_session, test_di
     assert (dest_dir / 'video.mp4').exists()  # File is at new location
 
     # Recovery: Refresh both directories
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
+    await await_refresh([source_dir, dest_dir])
     test_session.expire_all()
 
     # Assert recovery: FileGroups should now point to new location
@@ -87,7 +87,8 @@ async def test_recovery_files_moved_db_stale(async_client, test_session, test_di
 
 
 @pytest.mark.asyncio
-async def test_recovery_files_split_between_locations(async_client, test_session, test_directory, make_files_structure):
+async def test_recovery_files_split_between_locations(async_client, test_session, test_directory, make_files_structure,
+                                                      await_refresh):
     """
     Scenario #24, #52: Files exist at both old and new locations (partial move).
 
@@ -110,7 +111,7 @@ async def test_recovery_files_split_between_locations(async_client, test_session
     })
 
     # Create FileGroups via refresh
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Verify initial state: 4 FileGroups at source
@@ -130,7 +131,7 @@ async def test_recovery_files_split_between_locations(async_client, test_session
     assert not (source_dir / 'video2.mp4').exists()
 
     # Recovery: Refresh both directories
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
+    await await_refresh([source_dir, dest_dir])
     test_session.expire_all()
 
     # Assert: Should have 4 FileGroups total - 2 at each location
@@ -152,7 +153,8 @@ async def test_recovery_files_split_between_locations(async_client, test_session
 
 
 @pytest.mark.asyncio
-async def test_recovery_partial_filegroup_updates(async_client, test_session, test_directory, make_files_structure):
+async def test_recovery_partial_filegroup_updates(async_client, test_session, test_directory, make_files_structure,
+                                                  await_refresh):
     """
     Scenario #46, #22: Some FileGroups updated in DB, others still point to old location.
 
@@ -174,7 +176,7 @@ async def test_recovery_partial_filegroup_updates(async_client, test_session, te
     })
 
     # Create FileGroups via refresh
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fgs = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).all()
@@ -206,7 +208,7 @@ async def test_recovery_partial_filegroup_updates(async_client, test_session, te
     assert len(list(dest_dir.iterdir())) == 4
 
     # Recovery: Refresh both directories
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
+    await await_refresh([source_dir, dest_dir])
     test_session.expire_all()
 
     # Assert: All FileGroups should now point to dest
@@ -220,7 +222,8 @@ async def test_recovery_partial_filegroup_updates(async_client, test_session, te
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="BUG: Rollback fails when FileGroup path doesn't match moved file location")
-async def test_move_retry_after_mid_operation_failure(async_client, test_session, test_directory, make_files_structure):
+async def test_move_retry_after_mid_operation_failure(async_client, test_session, test_directory, make_files_structure,
+                                                      await_refresh):
     """
     Scenario #21: Move fails mid-operation, retry the same move.
 
@@ -245,7 +248,7 @@ async def test_move_retry_after_mid_operation_failure(async_client, test_session
     })
 
     # Create FileGroups via refresh
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fgs = test_session.query(FileGroup).all()
@@ -288,7 +291,8 @@ async def test_move_retry_after_mid_operation_failure(async_client, test_session
 
 
 @pytest.mark.asyncio
-async def test_move_no_deadlock_with_orphan_cleanup(async_client, test_session, test_directory, make_files_structure):
+async def test_move_no_deadlock_with_orphan_cleanup(async_client, test_session, test_directory, make_files_structure,
+                                                    await_refresh):
     """
     Scenario #76: Regression test for deadlock bug.
 
@@ -309,7 +313,7 @@ async def test_move_no_deadlock_with_orphan_cleanup(async_client, test_session, 
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     source_fg = test_session.query(FileGroup).filter(FileGroup.primary_path == video).one()
@@ -359,7 +363,8 @@ async def test_move_no_deadlock_with_orphan_cleanup(async_client, test_session, 
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="BUG: API move fails when files already manually moved - treats missing files as directories")
-async def test_recovery_manual_move_then_api_retry(async_client, test_session, test_directory, make_files_structure):
+async def test_recovery_manual_move_then_api_retry(async_client, test_session, test_directory, make_files_structure,
+                                                   await_refresh):
     """
     Scenario #47: User manually moves remaining files, then retries API move.
 
@@ -383,7 +388,7 @@ async def test_recovery_manual_move_then_api_retry(async_client, test_session, t
         'source/video3.mp4': b'video 3 content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Simulate: User manually moves 2 files
@@ -400,7 +405,7 @@ async def test_recovery_manual_move_then_api_retry(async_client, test_session, t
     await lib.move(test_session, dest_dir, source_dir)
 
     # Refresh to reconcile state
-    await file_worker.run_queue_to_completion([dest_dir])
+    await await_refresh([dest_dir])
     test_session.expire_all()
 
     # Verify: All 3 files at dest, all FileGroups pointing to dest
@@ -416,7 +421,7 @@ async def test_recovery_manual_move_then_api_retry(async_client, test_session, t
 
 @pytest.mark.asyncio
 async def test_refresh_recovers_multiple_inconsistent_states(async_client, test_session, test_directory,
-                                                              make_files_structure):
+                                                             make_files_structure, await_refresh):
     """
     Scenario #49: Comprehensive test of refresh as recovery mechanism.
 
@@ -436,7 +441,7 @@ async def test_refresh_recovers_multiple_inconsistent_states(async_client, test_
     })
 
     # Create FileGroup for real file
-    await file_worker.run_queue_to_completion([dir_a])
+    await await_refresh([dir_a])
     test_session.expire_all()
 
     # State 1: Create orphaned FileGroup (points to non-existent file)
@@ -461,7 +466,7 @@ async def test_refresh_recovers_multiple_inconsistent_states(async_client, test_
     assert len(fgs) == 2  # real_video FG + ghost FG
 
     # Recovery: Refresh all directories
-    await file_worker.run_queue_to_completion([dir_a, dir_b])
+    await await_refresh([dir_a, dir_b])
     test_session.expire_all()
 
     # Assert recovery
@@ -489,7 +494,7 @@ async def test_refresh_recovers_multiple_inconsistent_states(async_client, test_
 
 @pytest.mark.asyncio
 async def test_move_when_db_path_doesnt_match_filesystem(async_client, test_session, test_directory,
-                                                          make_files_structure):
+                                                         make_files_structure, await_refresh):
     """
     Scenario #12: Move file when DB FileGroup path doesn't match filesystem.
 
@@ -507,7 +512,7 @@ async def test_move_when_db_path_doesnt_match_filesystem(async_client, test_sess
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fg = test_session.query(FileGroup).filter(FileGroup.primary_path == video).one()
@@ -531,8 +536,7 @@ async def test_move_when_db_path_doesnt_match_filesystem(async_client, test_sess
         await lib.move(test_session, dest_dir, video)
 
     # Recovery: refresh all directories
-    await file_worker.run_queue_to_completion([source_dir, actual_location, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, actual_location, dest_dir])
 
     # FileGroup should now point to actual location
     fgs = test_session.query(FileGroup).all()
@@ -542,7 +546,8 @@ async def test_move_when_db_path_doesnt_match_filesystem(async_client, test_sess
 
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="Test simulates crash scenario - verifies recovery path")
-async def test_crash_after_move_plan_created(async_client, test_session, test_directory, make_files_structure):
+async def test_crash_after_move_plan_created(async_client, test_session, test_directory, make_files_structure,
+                                             await_refresh):
     """
     Scenario #37: Server crashes after move plan created, before files moved.
 
@@ -559,7 +564,7 @@ async def test_crash_after_move_plan_created(async_client, test_session, test_di
         'source/video3.mp4': b'video 3 content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Mock do_plan to raise exception after plan is created but before execution
@@ -599,7 +604,7 @@ async def test_crash_after_move_plan_created(async_client, test_session, test_di
 
 @pytest.mark.asyncio
 async def test_crash_after_orphan_deleted_before_files_moved(async_client, test_session, test_directory,
-                                                              make_files_structure):
+                                                             make_files_structure, await_refresh):
     """
     Scenario #38: Server crashes after orphan FileGroups deleted, before files moved.
 
@@ -619,7 +624,7 @@ async def test_crash_after_orphan_deleted_before_files_moved(async_client, test_
         'source/video.mp4': b'source video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     source_fg = test_session.query(FileGroup).filter(FileGroup.primary_path == video).one()
@@ -658,7 +663,8 @@ async def test_crash_after_orphan_deleted_before_files_moved(async_client, test_
 
 @pytest.mark.asyncio
 async def test_crash_after_download_destinations_updated(async_client, test_session, test_directory,
-                                                          make_files_structure, test_download_manager_config):
+                                                         await_refresh,
+                                                         make_files_structure, test_download_manager_config):
     """
     Scenario #39: Server crashes after Download destinations updated, before files moved.
 
@@ -689,7 +695,7 @@ async def test_crash_after_download_destinations_updated(async_client, test_sess
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Create a download for this collection
@@ -725,8 +731,7 @@ async def test_crash_after_download_destinations_updated(async_client, test_sess
         shutil.move(str(f), str(dest_dir / f.name))
 
     # Refresh to reconcile
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Verify recovery
     fgs = test_session.query(FileGroup).all()
@@ -735,7 +740,8 @@ async def test_crash_after_download_destinations_updated(async_client, test_sess
 
 
 @pytest.mark.asyncio
-async def test_crash_mid_single_filegroup_move(async_client, test_session, test_directory, make_files_structure):
+async def test_crash_mid_single_filegroup_move(async_client, test_session, test_directory, make_files_structure,
+                                               await_refresh):
     """
     Scenario #40: Server crashes mid-file move (single FileGroup with multiple files).
 
@@ -756,7 +762,7 @@ async def test_crash_mid_single_filegroup_move(async_client, test_session, test_
         'source/video.info.json': b'{"title": "test"}',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     # Verify we have FileGroup(s) - they may be separate due to mimetype detection
@@ -772,8 +778,7 @@ async def test_crash_mid_single_filegroup_move(async_client, test_session, test_
     assert (source_dir / 'video.info.json').exists()
 
     # Recovery: Refresh both directories
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # After refresh, we should have FileGroups at both locations
     all_fgs = test_session.query(FileGroup).all()
@@ -794,7 +799,7 @@ async def test_crash_mid_single_filegroup_move(async_client, test_session, test_
 
 @pytest.mark.asyncio
 async def test_crash_after_chunk_n_before_chunk_n_plus_1(async_client, test_session, test_directory,
-                                                          make_files_structure):
+                                                         make_files_structure, await_refresh):
     """
     Scenario #41: Server crashes after chunk N of file moves, before chunk N+1.
 
@@ -813,7 +818,7 @@ async def test_crash_after_chunk_n_before_chunk_n_plus_1(async_client, test_sess
     files_dict = {f'source/video{i}.mp4': f'video {i} content'.encode() for i in range(10)}
     make_files_structure(files_dict)
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fgs = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).all()
@@ -851,8 +856,7 @@ async def test_crash_after_chunk_n_before_chunk_n_plus_1(async_client, test_sess
     for i in range(5, 10):
         shutil.move(str(source_dir / f'video{i}.mp4'), str(dest_dir / f'video{i}.mp4'))
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # All FileGroups should now be at dest
     all_fgs = test_session.query(FileGroup).all()
@@ -864,7 +868,7 @@ async def test_crash_after_chunk_n_before_chunk_n_plus_1(async_client, test_sess
 
 @pytest.mark.asyncio
 async def test_crash_during_bulk_update_file_groups_db(async_client, test_session, test_directory,
-                                                        make_files_structure):
+                                                       make_files_structure, await_refresh):
     """
     Scenario #43: Server crashes during `_bulk_update_file_groups_db`.
 
@@ -886,7 +890,7 @@ async def test_crash_during_bulk_update_file_groups_db(async_client, test_sessio
         'source/video4.mp4': b'video 4',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fgs = test_session.query(FileGroup).all()
@@ -916,8 +920,7 @@ async def test_crash_during_bulk_update_file_groups_db(async_client, test_sessio
     assert len(list(dest_dir.iterdir())) == 4
 
     # Recovery: Refresh both
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # All should now be at dest
     all_fgs = test_session.query(FileGroup).all()
@@ -929,7 +932,7 @@ async def test_crash_during_bulk_update_file_groups_db(async_client, test_sessio
 
 @pytest.mark.asyncio
 async def test_collection_directory_updated_files_not_moved(async_client, test_session, test_directory,
-                                                             make_files_structure):
+                                                            make_files_structure, await_refresh):
     """
     Scenario #45: Files at old location, collection.directory points to new location.
 
@@ -961,8 +964,7 @@ async def test_collection_directory_updated_files_not_moved(async_client, test_s
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     fg = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).one()
     assert fg.primary_path == source_dir / 'video.mp4'
@@ -980,8 +982,7 @@ async def test_collection_directory_updated_files_not_moved(async_client, test_s
     assert not (dest_dir / 'video.mp4').exists()
 
     # Refresh should maintain FileGroup at actual file location
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # FileGroup should be at source (where file actually is)
     fg = test_session.query(FileGroup).one()
@@ -1006,7 +1007,8 @@ async def test_collection_directory_updated_files_not_moved(async_client, test_s
 
 
 @pytest.mark.asyncio
-async def test_partial_directory_move_manual_cleanup(async_client, test_session, test_directory, make_files_structure):
+async def test_partial_directory_move_manual_cleanup(async_client, test_session, test_directory, make_files_structure,
+                                                     await_refresh):
     """
     Scenario #23: Directory move partially completes, manual cleanup attempted.
 
@@ -1027,8 +1029,7 @@ async def test_partial_directory_move_manual_cleanup(async_client, test_session,
         'source/video4.mp4': b'video 4',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     assert test_session.query(FileGroup).count() == 4
 
@@ -1045,8 +1046,7 @@ async def test_partial_directory_move_manual_cleanup(async_client, test_session,
     assert len(list(dest_dir.iterdir())) == 0
 
     # Refresh to reconcile
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Should have 2 FileGroups for remaining files
     fgs = test_session.query(FileGroup).all()
@@ -1074,7 +1074,8 @@ async def test_partial_directory_move_manual_cleanup(async_client, test_session,
 
 
 @pytest.mark.asyncio
-async def test_move_file_to_same_location(async_client, test_session, test_directory, make_files_structure):
+async def test_move_file_to_same_location(async_client, test_session, test_directory, make_files_structure,
+                                          await_refresh):
     """
     Scenario #1: Move file to same location (idempotent).
 
@@ -1087,7 +1088,7 @@ async def test_move_file_to_same_location(async_client, test_session, test_direc
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
+    await await_refresh([source_dir])
     test_session.expire_all()
 
     fg = test_session.query(FileGroup).one()
@@ -1107,7 +1108,8 @@ async def test_move_file_to_same_location(async_client, test_session, test_direc
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="Current implementation raises FileExistsError when destination file exists with same name. "
                           "Enhancement needed: delete orphan FileGroup AND its physical file before moving.")
-async def test_move_file_to_destination_already_exists(async_client, test_session, test_directory, make_files_structure):
+async def test_move_file_to_destination_already_exists(async_client, test_session, test_directory,
+                                                       make_files_structure, await_refresh):
     """
     Scenario #2: Move file to destination that already exists (same name).
 
@@ -1126,8 +1128,7 @@ async def test_move_file_to_destination_already_exists(async_client, test_sessio
         'dest/video.mp4': b'dest video content - different!',
     })
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     source_fg = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).one()
     source_fg_id = source_fg.id
@@ -1165,7 +1166,8 @@ async def test_move_file_when_source_doesnt_exist(async_client, test_session, te
 
 
 @pytest.mark.asyncio
-async def test_move_file_to_itself(async_client, test_session, test_directory, make_files_structure):
+async def test_move_file_to_itself(async_client, test_session, test_directory, make_files_structure,
+                                   await_refresh):
     """
     Scenario #5: Move file to itself (source == destination).
 
@@ -1177,8 +1179,7 @@ async def test_move_file_to_itself(async_client, test_session, test_directory, m
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     fg = test_session.query(FileGroup).one()
     original_id = fg.id
@@ -1196,7 +1197,7 @@ async def test_move_file_to_itself(async_client, test_session, test_directory, m
 
 @pytest.mark.asyncio
 async def test_move_file_when_destination_parent_doesnt_exist(async_client, test_session, test_directory,
-                                                               make_files_structure):
+                                                              make_files_structure, await_refresh):
     """
     Scenario #6: Move file when destination parent doesn't exist.
 
@@ -1209,8 +1210,7 @@ async def test_move_file_when_destination_parent_doesnt_exist(async_client, test
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Move should create parent directories
     await lib.move(test_session, dest_dir, video)
@@ -1229,7 +1229,7 @@ async def test_move_file_when_destination_parent_doesnt_exist(async_client, test
 
 @pytest.mark.asyncio
 async def test_move_filegroup_when_associated_file_exists_at_target(async_client, test_session, test_directory,
-                                                                     make_files_structure):
+                                                                    make_files_structure, await_refresh):
     """
     Scenario #9: Move FileGroup when one associated file already exists at target.
 
@@ -1246,8 +1246,7 @@ async def test_move_filegroup_when_associated_file_exists_at_target(async_client
         'dest/other.jpg': b'existing jpg at dest',  # Different name, no conflict
     })
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Move source video to dest
     await lib.move(test_session, dest_dir, source_dir / 'video.mp4')
@@ -1265,7 +1264,7 @@ async def test_move_filegroup_when_associated_file_exists_at_target(async_client
 
 @pytest.mark.asyncio
 async def test_move_filegroup_when_some_associated_files_missing(async_client, test_session, test_directory,
-                                                                  make_files_structure):
+                                                                 make_files_structure, await_refresh):
     """
     Scenario #10: Move FileGroup when some associated files are missing.
 
@@ -1283,8 +1282,7 @@ async def test_move_filegroup_when_some_associated_files_missing(async_client, t
         'source/video.jpg': b'poster content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Delete the poster file (but FileGroup still references it)
     (source_dir / 'video.jpg').unlink()
@@ -1305,7 +1303,8 @@ async def test_move_filegroup_when_some_associated_files_missing(async_client, t
 
 
 @pytest.mark.asyncio
-async def test_move_directory_into_itself(async_client, test_session, test_directory, make_files_structure):
+async def test_move_directory_into_itself(async_client, test_session, test_directory, make_files_structure,
+                                          await_refresh):
     """
     Scenario #15: Move directory into itself (recursive).
 
@@ -1317,8 +1316,7 @@ async def test_move_directory_into_itself(async_client, test_session, test_direc
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Try to move directory into itself
     dest_dir = source_dir / 'subdir'
@@ -1329,7 +1327,8 @@ async def test_move_directory_into_itself(async_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
-async def test_move_directory_into_own_subdirectory(async_client, test_session, test_directory, make_files_structure):
+async def test_move_directory_into_own_subdirectory(async_client, test_session, test_directory, make_files_structure,
+                                                    await_refresh):
     """
     Scenario #16: Move directory into its own subdirectory.
 
@@ -1342,8 +1341,7 @@ async def test_move_directory_into_own_subdirectory(async_client, test_session, 
         'source/subdir/other.mp4': b'other content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Try to move source into its own subdirectory
     dest_dir = source_dir / 'subdir'
@@ -1354,7 +1352,7 @@ async def test_move_directory_into_own_subdirectory(async_client, test_session, 
 
 @pytest.mark.asyncio
 async def test_move_directory_when_dest_exists_with_different_content(async_client, test_session, test_directory,
-                                                                       make_files_structure):
+                                                                      make_files_structure, await_refresh):
     """
     Scenario #18: Move directory when destination already exists with different content.
 
@@ -1370,8 +1368,7 @@ async def test_move_directory_when_dest_exists_with_different_content(async_clie
         'dest/video4.mp4': b'dest video 4',
     })
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     assert test_session.query(FileGroup).count() == 4
 
@@ -1396,7 +1393,8 @@ async def test_move_directory_when_dest_exists_with_different_content(async_clie
 @pytest.mark.asyncio
 @pytest.mark.xfail(reason="Current implementation raises FileExistsError when physical file exists at destination. "
                           "Enhancement needed: delete orphan's physical file before moving.")
-async def test_orphan_at_target_has_different_files(async_client, test_session, test_directory, make_files_structure):
+async def test_orphan_at_target_has_different_files(async_client, test_session, test_directory, make_files_structure,
+                                                    await_refresh):
     """
     Scenario #62: Orphan at target has different files than source.
 
@@ -1421,8 +1419,7 @@ async def test_orphan_at_target_has_different_files(async_client, test_session, 
     # Create physical file at dest with different content
     (dest_dir / 'video.mp4').write_bytes(b'dest content - will be replaced')
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     source_fg = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).one()
     source_id = source_fg.id
@@ -1454,7 +1451,7 @@ async def test_orphan_at_target_has_different_files(async_client, test_session, 
 
 @pytest.mark.asyncio
 async def test_source_orphan_target_linked(async_client, test_session, test_directory, make_files_structure,
-                                           video_file_factory):
+                                           video_file_factory, await_refresh):
     """
     Scenario #60: Source is orphan, target is linked - move succeeds.
 
@@ -1476,8 +1473,7 @@ async def test_source_orphan_target_linked(async_client, test_session, test_dire
     dest_dir.mkdir()
     video_file_factory(dest_video_path)
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Dest should have a Video (created by video_modeler during refresh)
     from modules.videos.models import Video
@@ -1502,7 +1498,8 @@ async def test_source_orphan_target_linked(async_client, test_session, test_dire
 
 
 @pytest.mark.asyncio
-async def test_both_linked_to_different_channels(async_client, test_session, test_directory, video_file_factory):
+async def test_both_linked_to_different_channels(async_client, test_session, test_directory, video_file_factory,
+                                                 await_refresh):
     """
     Scenario #65: Source linked, target linked to different Channel.
 
@@ -1536,8 +1533,7 @@ async def test_both_linked_to_different_channels(async_client, test_session, tes
     video_file_factory(source_video_path)
     video_file_factory(dest_video_path)
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Videos were created by video_modeler during refresh, get them and assign channels
     source_fg = test_session.query(FileGroup).filter(FileGroup.directory == source_dir).one()
@@ -1575,7 +1571,8 @@ async def test_both_linked_to_different_channels(async_client, test_session, tes
 
 
 @pytest.mark.asyncio
-async def test_move_collection_when_directory_doesnt_exist(async_client, test_session, test_directory):
+async def test_move_collection_when_directory_doesnt_exist(async_client, test_session, test_directory,
+                                                           await_refresh):
     """
     Scenario #25: Move collection when collection.directory doesn't exist.
 
@@ -1607,7 +1604,7 @@ async def test_move_collection_when_directory_doesnt_exist(async_client, test_se
 
 @pytest.mark.asyncio
 async def test_move_collection_to_directory_with_existing_filegroups(async_client, test_session, test_directory,
-                                                                      make_files_structure):
+                                                                     make_files_structure, await_refresh):
     """
     Scenario #27: Move collection to directory that already contains other FileGroups.
 
@@ -1632,8 +1629,7 @@ async def test_move_collection_to_directory_with_existing_filegroups(async_clien
         'dest/video2.mp4': b'existing dest video',
     })
 
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     assert test_session.query(FileGroup).count() == 2
 
@@ -1649,7 +1645,7 @@ async def test_move_collection_to_directory_with_existing_filegroups(async_clien
 
 @pytest.mark.asyncio
 async def test_move_collection_when_filegroups_outside_directory(async_client, test_session, test_directory,
-                                                                  make_files_structure):
+                                                                 make_files_structure, await_refresh):
     """
     Scenario #28: Move collection when some FileGroups are outside collection.directory.
 
@@ -1677,8 +1673,7 @@ async def test_move_collection_when_filegroups_outside_directory(async_client, t
         'other/video2.mp4': b'outside collection',
     })
 
-    await file_worker.run_queue_to_completion([source_dir, other_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, other_dir])
 
     # Move collection
     await collection.move_collection(dest_dir, test_session)
@@ -1695,7 +1690,8 @@ async def test_move_collection_when_filegroups_outside_directory(async_client, t
 
 
 @pytest.mark.asyncio
-async def test_move_video_filegroup_outside_channel(async_client, test_session, test_directory, video_file_factory):
+async def test_move_video_filegroup_outside_channel(async_client, test_session, test_directory, video_file_factory,
+                                                    await_refresh):
     """
     Scenario #67: Move Video FileGroup outside Channel directory.
 
@@ -1724,8 +1720,7 @@ async def test_move_video_filegroup_outside_channel(async_client, test_session, 
     video_path = channel_dir / 'video.mp4'
     video_file_factory(video_path)
 
-    await file_worker.run_queue_to_completion([channel_dir])
-    test_session.expire_all()
+    await await_refresh([channel_dir])
 
     # Video was created by video_modeler during refresh, get it and assign channel
     fg = test_session.query(FileGroup).one()
@@ -1754,7 +1749,8 @@ async def test_move_video_filegroup_outside_channel(async_client, test_session, 
 
 
 @pytest.mark.asyncio
-async def test_move_while_previous_move_processing(async_client, test_session, test_directory, make_files_structure):
+async def test_move_while_previous_move_processing(test_session, test_directory, make_files_structure,
+                                                   await_refresh):
     """
     Scenario #58: Move A→B while previous A→B still processing.
 
@@ -1772,8 +1768,7 @@ async def test_move_while_previous_move_processing(async_client, test_session, t
         'source/video2.mp4': b'video 2',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Sequential moves (simulating what would happen if second starts after first)
     await lib.move(test_session, dest_dir, source_dir / 'video1.mp4')
@@ -1787,7 +1782,8 @@ async def test_move_while_previous_move_processing(async_client, test_session, t
 
 
 @pytest.mark.asyncio
-async def test_move_and_refresh_same_directory(async_client, test_session, test_directory, make_files_structure):
+async def test_move_and_refresh_same_directory(test_session, test_directory, make_files_structure,
+                                               await_refresh):
     """
     Scenario #80: Move and refresh on same directory simultaneously.
 
@@ -1801,15 +1797,13 @@ async def test_move_and_refresh_same_directory(async_client, test_session, test_
         'source/video.mp4': b'video content',
     })
 
-    await file_worker.run_queue_to_completion([source_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir])
 
     # Move file
     await lib.move(test_session, dest_dir, source_dir / 'video.mp4')
 
     # Refresh both directories
-    await file_worker.run_queue_to_completion([source_dir, dest_dir])
-    test_session.expire_all()
+    await await_refresh([source_dir, dest_dir])
 
     # Should have 1 FileGroup at dest
     fgs = test_session.query(FileGroup).all()

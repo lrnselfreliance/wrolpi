@@ -284,10 +284,7 @@ async def post_create_directory(_: Request, body: schema.Directory):
         raise FileConflict(f'{path} already exists')
 
     # Refresh the new directory to add it to the Directory table
-    if PYTEST:
-        await file_worker.run_queue_to_completion([path])
-    else:
-        file_worker.queue_refresh([path])
+    file_worker.queue_refresh([path])
 
     return response.empty(HTTPStatus.CREATED)
 
@@ -344,10 +341,7 @@ async def post_rename(request: Request, body: schema.Rename):
     # Refreshing individual files causes the FileGroup's files list to be overwritten
     # with only the specified file, losing track of associated files.
     parent_dir = new_path.parent
-    if PYTEST:
-        await file_worker.run_queue_to_completion([parent_dir])
-    else:
-        file_worker.queue_refresh([parent_dir])
+    file_worker.queue_refresh([parent_dir])
 
     return response.empty(HTTPStatus.NO_CONTENT)
 
@@ -474,7 +468,8 @@ async def post_upload(request: Request):
     if chunk_num == 0:
         try:
             # Delete any conflicting FileGroups if the user is overwriting.
-            await lib.delete(output)
+            # Don't queue refresh - upsert_file will handle this after upload completes.
+            await lib.delete(output, queue_refresh=False)
         except InvalidFile:
             # No conflicting files, good.
             pass

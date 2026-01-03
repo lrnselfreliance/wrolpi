@@ -205,11 +205,16 @@ def list_directories_contents(session: Session, directories_: List[str]) -> Dict
 
 
 @wrol_mode_check
-async def delete(*paths: Union[str, pathlib.Path]):
+async def delete(*paths: Union[str, pathlib.Path], queue_refresh: bool = True):
     """
     Delete a file or directory in the media directory.
 
-    This will refuse to delete any files (or files in the directories) that have been tagged."""
+    This will refuse to delete any files (or files in the directories) that have been tagged.
+
+    Args:
+        *paths: Paths to delete (relative to media directory)
+        queue_refresh: If True (default), queue a refresh to clean up stale FileGroups.
+                       Set to False when caller will handle FileGroup cleanup (e.g., upload)."""
     media_directory = get_media_directory()
     paths = [media_directory / i for i in paths]
     if any(i == media_directory for i in paths):
@@ -247,6 +252,9 @@ async def delete(*paths: Union[str, pathlib.Path]):
                     raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
     # Track parent directories for refresh after deletion
     parent_dirs = set()
+    # Track FileGroups to delete (when queue_refresh=False)
+    file_groups_to_delete = []
+
     for path in paths:
         ignored_directories = get_wrolpi_config().ignored_directories
         if ignored_directories and str(path) in ignored_directories:
@@ -256,14 +264,29 @@ async def delete(*paths: Union[str, pathlib.Path]):
             parent_dirs.add(path.parent)
         else:
             parent_dirs.add(path.parent)
+            # Find FileGroup for this file before deleting
+            if not queue_refresh:
+                with get_db_session() as session:
+                    stem, _ = split_path_stem_and_suffix(path)
+                    file_group = session.query(FileGroup).filter(
+                        FileGroup.primary_path.like(f'{path.parent}/{stem}%')
+                    ).one_or_none()
+                    if file_group:
+                        file_groups_to_delete.append(file_group.id)
             path.unlink()
 
-    # Refresh parent directories so stale FileGroups get cleaned up
-    from wrolpi.files.worker import file_worker
-    if PYTEST:
-        await file_worker.run_queue_to_completion(list(parent_dirs))
-    else:
+    # Clean up FileGroups
+    if queue_refresh:
+        # Refresh parent directories so stale FileGroups get cleaned up
+        from wrolpi.files.worker import file_worker
         file_worker.queue_refresh(list(parent_dirs))
+    elif file_groups_to_delete:
+        # Explicitly delete FileGroups when not queueing refresh
+        with get_db_session(commit=True) as session:
+            for fg_id in file_groups_to_delete:
+                file_group = session.query(FileGroup).filter(FileGroup.id == fg_id).one_or_none()
+                if file_group:
+                    session.delete(file_group)
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):

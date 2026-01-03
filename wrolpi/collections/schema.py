@@ -52,3 +52,9 @@ class CollectionTagInfoResponse:
     suggested_directory: str
     conflict: bool
     conflict_message: Optional[str] = None
+
+
+@dataclass
+class CollectionReorganizeRequest:
+    """Request body for reorganizing collection files."""
+    dry_run: bool = False  # If True, return preview without moving files

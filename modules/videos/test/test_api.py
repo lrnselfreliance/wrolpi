@@ -14,7 +14,7 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory):
+async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory, await_refresh):
     """The video modeler indexes video data into the Video's FileGroup."""
     video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()
@@ -24,7 +24,7 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
 
     for _ in range(1):
         # Refreshing twice does not change the results.
-        await file_worker.run_queue_to_completion()
+        await await_refresh()
 
         assert test_session.query(FileGroup).count() == 1
         video: Video = test_session.query(Video).one()
@@ -37,7 +37,7 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
     for path in video.caption_paths:
         path.unlink()
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     assert video.file_group.indexed is True, 'Video was not indexed'
     assert video.file_group.a_text and video.file_group.title, 'Video title was not indexed'
     assert not video.file_group.d_text, 'Video captions were not removed'
@@ -45,7 +45,7 @@ async def test_refresh_videos_index(async_client, test_session, test_directory, 
 
 @pytest.mark.asyncio
 async def test_refresh_videos(async_client, test_session, test_directory, simple_channel, video_factory,
-                              video_file_factory, image_bytes_factory):
+                              video_file_factory, image_bytes_factory, await_refresh):
     subdir = test_directory / 'subdir'
     subdir.mkdir()
 
@@ -82,7 +82,7 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     test_session.expire_all()
 
@@ -105,13 +105,13 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     # Remove video1's poster, video1 should be updated.
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
     video1 = Video.get_by_path(test_session, video1_video_path)
     assert not video1.poster_path
 
 
 @pytest.mark.asyncio
-async def test_channels_with_videos(test_session, async_client, test_directory, channel_factory, video_factory):
+async def test_channels_with_videos(test_session, async_client, test_directory, channel_factory, video_factory, await_refresh):
     channel1 = channel_factory('channel1', name='channel1')
     channel2 = channel_factory('channel2', name='channel2')
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True)
@@ -134,7 +134,7 @@ async def test_channels_with_videos(test_session, async_client, test_directory, 
     assert vid2_path.is_file(), 'Video file was deleted'
     assert vid3_path.is_file(), 'Video file was deleted'
 
-    await file_worker.run_queue_to_completion()
+    await await_refresh()
 
     test_session.expire_all()
     assert test_session.query(Video).count() == 3, 'Did not find correct amount of video files.'

@@ -17,13 +17,12 @@ from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate, aiohttp_post
+    register_refresh_cleanup, get_wrolpi_config, unique_by_predicate, aiohttp_post
 from wrolpi.dates import Seconds
-from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
+from wrolpi.events import Events
 from wrolpi.files.lib import split_file_name_words
-from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 
@@ -545,22 +544,38 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
 
 async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
     """Deletes all old Zim files."""
+    from wrolpi.db import get_db_session
+    from wrolpi.files.lib import split_path_stem_and_suffix
+    from wrolpi.files.models import FileGroup
+
     outdated, _ = find_outdated_zim_files(path)
     logger.info(f'Deleting {len(outdated)} outdated Zim files: {outdated}')
     deleted_count = 0
-    # Track parent directories for refresh after deletion
-    parent_dirs = set()
+    # Track FileGroups to delete
+    file_groups_to_delete = []
+
     for file in outdated:
-        parent_dirs.add(file.parent)
+        # Find FileGroup for this file before deleting
+        with get_db_session() as session:
+            stem, _ = split_path_stem_and_suffix(file)
+            file_group = session.query(FileGroup).filter(
+                FileGroup.primary_path.like(f'{file.parent}/{stem}%')
+            ).one_or_none()
+            if file_group:
+                file_groups_to_delete.append(file_group.id)
         file.unlink()
         deleted_count += 1
 
-    # Refresh parent directories so stale FileGroups get cleaned up
-    if parent_dirs:
-        if PYTEST:
-            await file_worker.run_queue_to_completion(list(parent_dirs))
-        else:
-            file_worker.queue_refresh(list(parent_dirs))
+    # Delete FileGroups directly
+    if file_groups_to_delete:
+        with get_db_session(commit=True) as session:
+            for fg_id in file_groups_to_delete:
+                file_group = session.query(FileGroup).filter(FileGroup.id == fg_id).one_or_none()
+                if file_group:
+                    session.delete(file_group)
+
+    # Update outdated flag (normally done during refresh cleanup, but we're not queueing refresh)
+    flag_outdated_zim_files()
 
     await restart_kiwix()
 

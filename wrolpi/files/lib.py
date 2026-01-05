@@ -342,10 +342,64 @@ EXTRA_SUFFIXES = set()
 for six_ in ISO_639_CODES.keys():
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.srt' for i in ISO_3166_CODES}
     EXTRA_SUFFIXES |= {f'.{six_}-{i}.vtt' for i in ISO_3166_CODES}
-    EXTRA_SUFFIXES |= {f'.{i}-auto.srt' for i in ISO_639_CODES}
-    EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
+# Add auto suffixes once (these don't depend on the loop variable)
+EXTRA_SUFFIXES |= {f'.{i}-auto.srt' for i in ISO_639_CODES}
+EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
+
+# Convert to lowercase frozensets for O(1) case-insensitive lookup
+_SUFFIXES_LOWER = frozenset(s.lower() for s in SUFFIXES)
+_EXTRA_SUFFIXES_LOWER = frozenset(s.lower() for s in EXTRA_SUFFIXES)
+_HARDCODED_SUFFIXES = frozenset(
+    {'.info.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
 
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
+
+
+def _extract_candidate_suffixes(name_lower: str) -> List[str]:
+    """Extract potential suffixes from filename (last 1, 2, 3 dot-parts).
+
+    Returns suffixes in order from shortest to longest.
+    """
+    parts = name_lower.rsplit('.', 3)
+    if len(parts) == 1:
+        return []
+    candidates = []
+    append_candidate = candidates.append
+    suffix = ''
+    for i in range(len(parts) - 1, 0, -1):
+        suffix = '.' + parts[i] + suffix
+        append_candidate(suffix)
+    return candidates
+
+
+@functools.lru_cache(maxsize=5_000)
+def _get_suffix_length(name_lower: str) -> int:
+    """Get length of matching suffix using O(1) set lookups.
+
+    Returns 0 if no suffix matches.
+    """
+    # Fast path: check hardcoded multi-part suffixes first
+    for suffix in _HARDCODED_SUFFIXES:
+        if name_lower.endswith(suffix):
+            return len(suffix)
+
+    candidates = _extract_candidate_suffixes(name_lower)
+    if not candidates:
+        return 0
+
+    # Check SUFFIXES (longest first for most specific match)
+    for suffix in reversed(candidates):
+        if suffix in _SUFFIXES_LOWER:
+            return len(suffix)
+
+    # Only check EXTRA_SUFFIXES for .srt/.vtt files
+    simple_suffix = candidates[0] if candidates else ''
+    if simple_suffix in {'.srt', '.vtt'}:
+        for suffix in reversed(candidates):
+            if suffix in _EXTRA_SUFFIXES_LOWER:
+                return len(suffix)
+
+    return len(simple_suffix)
 
 
 @functools.lru_cache(maxsize=10_000)
@@ -371,22 +425,18 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
         stem = f'{path.parent}/{stem}' if full else stem
         return stem, f'{info}{format_num}{suffix}{part}'
 
-    # May or may not be absolute.  Convert to lowercase so any suffix case can be matched.
-    full_ = str(path).lower()
-    # Get the special matching suffix, if any.  Match against `.en.srt` but could return `.EN.SRT`
-    suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), None)
-    if not suffix and (full_.endswith('.srt') or full_.endswith('.vtt')):
-        # Special handling for numerous language/region codes.
-        suffix = next(filter(lambda i: full_.endswith(i), EXTRA_SUFFIXES), path.suffix)
-    # Fallback to pathlib's suffix.
-    suffix = suffix or path.suffix
-    # Return the suffix from the path's name in the original case.
-    if suffix:
-        idx = -1 * len(suffix)
+    name = path.name
+    name_lower = name.lower()
+
+    # Get suffix length using O(1) set lookups instead of O(n) linear search
+    suffix_len = _get_suffix_length(name_lower)
+
+    if suffix_len > 0:
+        idx = -suffix_len
         if full:
-            return f'{path.parent}/{path.name[:idx]}', path.name[idx:]
+            return f'{path.parent}/{name[:idx]}', name[idx:]
         else:
-            return path.name[:idx], path.name[idx:]
+            return name[:idx], name[idx:]
 
     # Path has no suffix.
     if full:
@@ -1246,10 +1296,10 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)    AS "total_file_groups",
-                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)    AS "indexed",
-                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = %(idempotency)s)   AS "unindexed",
-                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s)  AS "modeled"
+                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)   AS "total_file_groups",
+                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)   AS "indexed",
+                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = %(idempotency)s)  AS "unindexed",
+                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s) AS "modeled"
                FROM file_group \
                '''
     else:
@@ -1470,8 +1520,10 @@ async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.P
             elif source.is_dir():
                 # Use indexed directory column for efficient lookup
                 # Match exact directory or subdirectories
-                stmt = '''SELECT primary_path FROM file_group
-                          WHERE directory = :dir OR directory LIKE :dir_pattern'''
+                stmt = '''SELECT primary_path
+                          FROM file_group
+                          WHERE directory = :dir
+                             OR directory LIKE :dir_pattern'''
                 source_str = str(source)
                 for (primary_path,) in session.execute(
                         stmt, dict(dir=source_str, dir_pattern=f'{source_str}/%')):
@@ -1610,9 +1662,9 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False):
             directory_str = str(directory)
             tagged = session.query(FileGroup) \
                 .filter(or_(
-                    FileGroup.directory == directory_str,
-                    FileGroup.directory.like(f'{directory_str}/%')
-                )) \
+                FileGroup.directory == directory_str,
+                FileGroup.directory.like(f'{directory_str}/%')
+            )) \
                 .join(TagFile, TagFile.file_group_id == FileGroup.id) \
                 .limit(1).one_or_none()
             if tagged:

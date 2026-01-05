@@ -10,7 +10,7 @@ from wrolpi import flags
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check, get_media_directory, background_task
 from wrolpi.errors import ValidationError
-from wrolpi.vars import PYTEST, DOCKERIZED
+from wrolpi.vars import DOCKERIZED
 
 map_bp = Blueprint('Map', '/api/map')
 
@@ -30,11 +30,7 @@ async def import_pbfs(_: Request, body: schema.ImportPost):
     if not paths:
         raise ValidationError('No PBF or dump files were provided')
 
-    coro = lib.import_files(paths)
-    if PYTEST:
-        await coro
-    else:
-        background_task(coro)
+    background_task(lib.import_files(paths))
     return response.empty()
 
 

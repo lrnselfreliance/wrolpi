@@ -485,7 +485,7 @@ async def test_update_tag(test_session, test_directory, video_factory, tag_facto
 
 @pytest.mark.asyncio
 async def test_tag_rename_with_channel(test_session, test_directory, video_factory, tag_factory,
-                                       channel_factory, await_switches):
+                                       channel_factory, await_switches, await_background_tasks):
     tag = await tag_factory()
     channel = channel_factory(name='Channel Name', tag_name=tag.name)
     video_factory(title='video', channel_id=channel.id)
@@ -497,6 +497,7 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
     assert (test_directory / 'videos/one/Channel Name/video.mp4').is_file()
 
     await tag.update_tag(test_session, 'New Tag Name', None)
+    await await_background_tasks()  # Wait for channel move background task to complete
 
     assert (test_directory / 'tags').is_dir()
     assert (test_directory / 'videos/New Tag Name/Channel Name').is_dir()

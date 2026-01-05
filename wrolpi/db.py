@@ -136,16 +136,14 @@ def get_db_curs(commit: bool = False, isolation_level=psycopg2.extensions.ISOLAT
         curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         try:
             yield curs
-            if commit and not PYTEST:
-                # Don't commit during tests - test_session manages the transaction
+            if commit:
                 connection.commit()
         except sqlalchemy.exc.DatabaseError:
             session.rollback()
             raise
         finally:
             # Rollback only if a transaction hasn't been committed.
-            # Don't rollback during tests - test_session manages the transaction
-            if not PYTEST and session.transaction.is_active:
+            if session.transaction.is_active:
                 connection.rollback()
 
 

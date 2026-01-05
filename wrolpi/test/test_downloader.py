@@ -87,7 +87,8 @@ async def test_recreate_download(test_session, test_download_manager, test_downl
 
 
 @pytest.mark.asyncio
-async def test_download_rename_tag(async_client, test_session, test_download_manager, test_downloader, tag_factory):
+async def test_download_rename_tag(async_client, test_session, test_download_manager, test_downloader, tag_factory,
+                                   await_background_tasks):
     """Renaming a Tag renames any Downloads that reference that Tag."""
     tag = await tag_factory()
 
@@ -99,6 +100,7 @@ async def test_download_rename_tag(async_client, test_session, test_download_man
     assert download.tag_names == ['one', ]
 
     await tag.update_tag(test_session, 'new name', tag.color)
+    await await_background_tasks()  # Wait for tag rename background task
 
     download = test_session.query(Download).one()
     assert download.tag_names == ['new name', ]

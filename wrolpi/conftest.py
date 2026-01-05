@@ -143,20 +143,89 @@ async def background_task_listener(request, response):
     await await_switches_()
 
 
+class AutoAwaitTestClient:
+    """
+    A wrapper around SanicASGITestClient that automatically awaits background
+    tasks and switches after modifying HTTP requests (POST, PUT, PATCH, DELETE).
+
+    This eliminates the need to manually call await_switches() and
+    await_background_tasks() after each modifying request in tests.
+    """
+
+    def __init__(self, client: SanicASGITestClient, session: Session):
+        self._client = client
+        self._session = session
+
+    async def _await_and_expire(self):
+        """Await all background tasks and switches, then expire session objects."""
+        await await_switches_()
+        await await_background_tasks_()
+        self._session.expire_all()
+
+    async def post(self, *args, **kwargs):
+        """POST request with auto-await."""
+        result = await self._client.post(*args, **kwargs)
+        await self._await_and_expire()
+        return result
+
+    async def put(self, *args, **kwargs):
+        """PUT request with auto-await."""
+        result = await self._client.put(*args, **kwargs)
+        await self._await_and_expire()
+        return result
+
+    async def patch(self, *args, **kwargs):
+        """PATCH request with auto-await."""
+        result = await self._client.patch(*args, **kwargs)
+        await self._await_and_expire()
+        return result
+
+    async def delete(self, *args, **kwargs):
+        """DELETE request with auto-await."""
+        result = await self._client.delete(*args, **kwargs)
+        await self._await_and_expire()
+        return result
+
+    async def get(self, *args, **kwargs):
+        """GET request (no auto-await)."""
+        return await self._client.get(*args, **kwargs)
+
+    async def head(self, *args, **kwargs):
+        """HEAD request (no auto-await)."""
+        return await self._client.head(*args, **kwargs)
+
+    async def options(self, *args, **kwargs):
+        """OPTIONS request (no auto-await)."""
+        return await self._client.options(*args, **kwargs)
+
+    async def websocket(self, *args, **kwargs):
+        """WebSocket connection (pass-through)."""
+        return await self._client.websocket(*args, **kwargs)
+
+    @property
+    def sanic_app(self):
+        """Access to the underlying Sanic app."""
+        return self._client.sanic_app
+
+
 @pytest.fixture
-async def async_client(test_directory, test_session) -> SanicASGITestClient:
+async def async_client(test_directory, test_session) -> AutoAwaitTestClient:
     """Get an Async Sanic Test Client with all default routes attached.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
+
+    This client automatically awaits switches and background tasks after
+    POST, PUT, PATCH, and DELETE requests, and expires session objects.
     """
     api_app.signalize()
     attach_shared_contexts(api_app)
     initialize_configs_contexts(api_app)
 
     client = SanicASGITestClient(api_app)
+    wrapped_client = AutoAwaitTestClient(client, test_session)
 
     try:
-        yield client
+        yield wrapped_client
     finally:
         api_app.stop()
         logger.debug('Destroying async_client')

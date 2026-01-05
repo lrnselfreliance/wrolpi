@@ -255,11 +255,10 @@ async def delete(*paths: Union[str, pathlib.Path]):
         else:
             path.unlink()
 
-    coro = refresh_files(paths)
-    if PYTEST:
-        await coro
-    else:
-        background_task(coro)
+    # Must refresh synchronously to clean up DB before returning.
+    # This ensures deleted FileGroups are removed before the caller continues
+    # (e.g., upload API recreating the file).
+    await refresh_files(paths)
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):

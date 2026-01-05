@@ -366,9 +366,6 @@ class TestCollectionDeletion:
         # Check response
         assert response.status_code == HTTPStatus.NO_CONTENT
 
-        # Expire all cached objects to see changes made by the API's separate session
-        test_session.expire_all()
-
         # Verify collection is deleted
         assert test_session.query(Collection).filter_by(id=collection_id).count() == 0
 
@@ -427,7 +424,6 @@ class TestCollectionDeletion:
 
         collection_id = channel.collection.id
         channel_id = channel.id
-        video_id = video.id
         video_path = video.video_path
 
         # Delete the collection
@@ -436,9 +432,6 @@ class TestCollectionDeletion:
         # Check response
         assert response.status_code == HTTPStatus.NO_CONTENT
 
-        # Expire all cached objects to see changes made by the API's separate session
-        test_session.expire_all()
-
         # Verify collection is deleted
         assert test_session.query(Collection).filter_by(id=collection_id).count() == 0
 
@@ -446,7 +439,6 @@ class TestCollectionDeletion:
         assert test_session.query(Channel).filter_by(id=channel_id).count() == 0
 
         # Video should still exist but be orphaned (channel_id = NULL)
-        video = test_session.query(Video).filter_by(id=video_id).one()
         assert video.channel_id is None, 'Video should be orphaned when Channel is deleted'
         assert video.video_path == video_path, 'Video path should not change'
         assert video.video_path.is_file(), 'Video file should still exist'
@@ -487,9 +479,6 @@ class TestCollectionTagging:
         # Check response
         assert response.status_code == HTTPStatus.OK
 
-        # Refresh the collection from database
-        test_session.refresh(collection)
-
         # Verify the tag has been removed
         assert collection.tag_id is None
         assert collection.tag_name is None
@@ -523,9 +512,6 @@ class TestCollectionTagging:
 
         # Check response - should succeed
         assert response.status_code == HTTPStatus.OK
-
-        # Refresh the collection from database
-        test_session.refresh(collection)
 
         # Verify the tag was set
         assert collection.tag_id == tag.id

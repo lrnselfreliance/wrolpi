@@ -18,11 +18,10 @@ def assert_events(expected: List[Dict], after=None):
 
 
 @pytest.mark.asyncio
-async def test_events_api_feed(test_session, async_client, example_pdf):
+async def test_events_api_feed(test_session, async_client, example_pdf, await_refresh):
     """Events can be gotten from the API."""
-    # refresh_files() creates a few events.
-    request, response = await async_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    # await_refresh() creates a few events.
+    await await_refresh()
 
     request, response = await async_client.get('/api/events/feed')
     assert response.status_code == HTTPStatus.OK, response.body
@@ -36,6 +35,7 @@ async def test_events_api_feed(test_session, async_client, example_pdf):
         dict(event='global_refresh_discovery_completed', subject='refresh'),
         dict(event='global_refresh_started', subject='refresh'),
     ]
+    assert len(expected) == len(result)
     for expected, event in zip_longest(expected, result):
         assert_dict_contains(event, expected)
 

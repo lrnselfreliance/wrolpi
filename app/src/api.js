@@ -888,6 +888,32 @@ export async function refreshDomain(domainId) {
     return response;
 }
 
+export async function reorganizeCollection(collectionId, dryRun = false) {
+    const url = `${COLLECTIONS_API}/${collectionId}/reorganize`;
+    const response = await apiPost(url, { dry_run: dryRun });
+    if (response.ok) {
+        const data = await response.json();
+        if (!dryRun) {
+            toast({
+                type: 'success',
+                title: 'Reorganization Complete',
+                description: `Moved ${data.preview.files_to_move} files`,
+                time: 3000,
+            });
+        }
+        return data;
+    } else {
+        const message = await getErrorMessage(response, 'Failed to reorganize collection');
+        toast({
+            type: 'error',
+            title: 'Reorganization Failed',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
 export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.ok) {
@@ -1177,7 +1203,10 @@ export async function fetchFilesProgress() {
     const response = await apiGet(`${API_URI}/files/refresh_progress`);
     if (response.ok) {
         const json = await response.json();
-        return json['progress'];
+        return {
+            progress: json['progress'],
+            fileWorker: json['file_worker'],
+        };
     }
 }
 

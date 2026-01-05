@@ -774,8 +774,10 @@ async def test_batch_api_endpoints(async_client, test_session, test_download_man
     d1_id, d2_id, d3_id = d1.id, d2.id, d3.id
 
     # Test batch retry endpoint
+    # Use no_auto_await() to prevent downloads from being processed before assertion
     body = dict(download_ids=[d1_id])
-    request, response = await async_client.post('/api/download/batch/retry', content=json.dumps(body))
+    with async_client.no_auto_await():
+        request, response = await async_client.post('/api/download/batch/retry', content=json.dumps(body))
     assert response.status_code == HTTPStatus.OK
     assert response.json['retried_count'] == 1
     test_session.refresh(d1)

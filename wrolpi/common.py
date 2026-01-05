@@ -303,7 +303,6 @@ __all__ = [
     'html_screenshot',
     'insert_parameter',
     'iterify',
-    'limit_concurrent',
     'logger',
     'make_media_directory',
     'minimize_dict',
@@ -1385,6 +1384,42 @@ def get_files_and_directories(directory: Path):
     return files, directories
 
 
+def scandir_tree(root: Path, ignored_directories: Set[str] = None) -> Generator[Tuple[Path, bool], None, None]:
+    """
+    Recursively scan directory tree using os.scandir() for performance.
+
+    os.scandir() returns DirEntry objects with cached is_dir(),
+    avoiding extra syscalls compared to Path.iterdir() + is_dir().
+
+    Args:
+        root: Root directory to scan
+        ignored_directories: Set of absolute path strings to skip
+
+    Yields:
+        Tuple of (path, is_dir)
+    """
+    ignored_directories = ignored_directories or set()
+
+    try:
+        with os.scandir(root) as entries:
+            for entry in entries:
+                try:
+                    entry_path = Path(entry.path)
+                    is_dir = entry.is_dir()
+
+                    if is_dir and str(entry_path) in ignored_directories:
+                        continue
+
+                    yield (entry_path, is_dir)
+
+                    if is_dir:
+                        yield from scandir_tree(entry_path, ignored_directories)
+                except (PermissionError, OSError) as e:
+                    logger_.debug(f'scandir_tree: skipping {entry.path}: {e}')
+    except (PermissionError, OSError) as e:
+        logger_.debug(f'scandir_tree: cannot scan {root}: {e}')
+
+
 # These characters are invalid in Windows or Linux.
 INVALID_FILE_CHARS = re.compile(r'[/<>:|"\\?*%!\n\r]')
 
@@ -1718,43 +1753,6 @@ def print_timer():
         seconds = round(seconds, 5)
         print(f'CUM_TIMER: {repr(name)} elapsed {seconds} cumulative seconds ({percent}%)'
               f' {calls} calls', file=sys.stderr)
-
-
-def limit_concurrent(limit: int, throw: bool = False):
-    """Wrapper that limits the amount of concurrently running functions."""
-    sema = multiprocessing.Semaphore(value=limit)
-
-    def wrapper(func: callable):
-        if inspect.iscoroutinefunction(func):
-            @wraps(func)
-            async def wrapped(*a, **kw):
-                acquired = sema.acquire(block=False)
-                if not acquired:
-                    if throw:
-                        raise ValueError(f'Reached concurrent limit! {func=}')
-                    return
-                try:
-                    return await func(*a, **kw)
-                finally:
-                    sema.release()
-
-            return wrapped
-        else:
-            @wraps(func)
-            def wrapped(*a, **kw):
-                acquired = sema.acquire(block=False)
-                if not acquired:
-                    if throw:
-                        raise ValueError(f'Reached concurrent limit! {func=}')
-                    return
-                try:
-                    return func(*a, **kw)
-                finally:
-                    sema.release()
-
-            return wrapped
-
-    return wrapper
 
 
 def truncate_object_bytes(obj: Union[List[str], str, None, Generator], maximum_bytes: int) -> Union[List[str], str]:

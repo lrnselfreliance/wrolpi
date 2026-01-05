@@ -13,11 +13,12 @@ from wrolpi.tags import TagFile, Tag
 
 
 @pytest.mark.asyncio
-async def test_tags_file_group_json(async_client, test_session, make_files_structure, tag_factory, example_pdf):
+async def test_tags_file_group_json(async_client, test_session, make_files_structure, tag_factory, example_pdf,
+                                    await_refresh):
     """The tags of a file are returned in its JSON."""
     tag_one = await tag_factory()
     tag_two = await tag_factory()
-    await files_lib.refresh_files()
+    await await_refresh()
     file_group: FileGroup = test_session.query(FileGroup).one()
 
     file_group.add_tag(test_session, tag_one.id)
@@ -54,12 +55,12 @@ async def test_tags_model(async_client, test_session, make_files_structure, tag_
 
 @pytest.mark.asyncio
 async def test_tags_file_group(async_client, test_session, make_files_structure, tag_factory, video_bytes,
-                               image_bytes_factory):
+                               image_bytes_factory, await_refresh):
     """A FileGroup can be tagged with multiple Tags."""
     make_files_structure({
         'video.mp4': video_bytes, 'video.png': image_bytes_factory(),
     })
-    await files_lib.refresh_files()
+    await await_refresh()
     video_group: FileGroup = test_session.query(FileGroup).one()
 
     tag_one = await tag_factory()
@@ -89,9 +90,9 @@ async def test_tags_file_group(async_client, test_session, make_files_structure,
 
 @pytest.mark.asyncio
 async def test_tags_config_file(test_session, test_directory, tag_factory, example_pdf, video_file, await_switches,
-                                test_tags_config):
+                                test_tags_config, await_refresh):
     """Test that the config is updated when a FileGroup is tagged."""
-    await files_lib.refresh_files()
+    await await_refresh()
     pdf: FileGroup = FileGroup.get_by_path(test_session, example_pdf)
     video: FileGroup = FileGroup.get_by_path(test_session, video_file)
     tag1 = await tag_factory()
@@ -208,9 +209,9 @@ async def test_tags_crud(async_client, test_session, example_pdf, assert_tags_co
 
 
 @pytest.mark.asyncio
-async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
+async def test_delete_tagged_file(test_session, example_pdf, tag_factory, await_refresh):
     """You cannot delete a FileGroup if it is tagged."""
-    await files_lib.refresh_files()
+    await await_refresh()
     tag = await tag_factory()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
@@ -351,7 +352,8 @@ async def test_invalid_tag(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_tags_directory(test_session, test_directory, tag_factory, video_factory, example_pdf, await_switches):
+async def test_tags_directory(test_session, test_directory, tag_factory, video_factory, example_pdf, await_switches,
+                              await_refresh):
     """Test that Tag Directory is synchronized with database."""
     readme = test_directory / 'tags/README.txt'
 
@@ -454,7 +456,7 @@ async def test_tags_directory(test_session, test_directory, tag_factory, video_f
         f'First Aid lingers and contains: {[i.name for i in (test_directory / "tags/First Aid").iterdir()]}'
 
     # Only three FileGroups were created.  Tags Directory files are ignored during refresh.
-    await files_lib.refresh_files()
+    await await_refresh()
     assert test_session.query(FileGroup).count() == 3
 
 

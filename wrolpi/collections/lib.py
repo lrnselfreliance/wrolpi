@@ -286,7 +286,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         ValidationError: If collection has no directory
     """
     # Local import to avoid circular import: collections -> files -> collections
-    from wrolpi.files.lib import refresh_files
+    from wrolpi.files.worker import file_worker
 
     with get_db_session() as session:
         collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
@@ -303,7 +303,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         directory = collection.directory
 
     # Refresh files asynchronously
-    asyncio.ensure_future(refresh_files([directory], send_events=send_events))
+    file_worker.queue_refresh([directory])
 
     if send_events:
         relative_dir = get_relative_to_media_directory(directory)

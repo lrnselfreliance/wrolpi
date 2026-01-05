@@ -181,6 +181,7 @@ class EBook(ModelHelper, Base):
     @staticmethod
     def do_model(session: Session, file_group: FileGroup) -> 'EBook':
         ebook = model_ebook(file_group, session)
+        ebook.validate(session)
         file_group.indexed = True
         return ebook
 
@@ -211,6 +212,43 @@ class EBook(ModelHelper, Base):
     @property
     def cover_path(self) -> Optional[pathlib.Path]:
         return self.cover_file['path']
+
+    @property
+    def ebook_path(self) -> Optional[pathlib.Path]:
+        """Return the path to the ebook file (epub preferred over mobi)."""
+        epub_file = next(iter(self.file_group.my_epub_files()), None)
+        if epub_file:
+            return epub_file['path']
+        mobi_file = next(iter(self.file_group.my_mobi_files()), None)
+        if mobi_file:
+            return mobi_file['path']
+        return self.file_group.primary_path
+
+    def apply_data(self):
+        """Update file_group.data with current file paths.
+
+        This ensures that paths discovered after initial modeling (e.g., when files are
+        added to the FileGroup through batch expansion) are reflected in the data dict.
+        """
+        data = dict(self.file_group.data) if self.file_group.data else {}
+        data['ebook_path'] = self.ebook_path.name if self.ebook_path else None
+        data['cover_path'] = self.cover_path.name if self.cover_path else None
+        # Preserve author and title from existing data or file_group
+        if 'author' not in data and self.file_group.author:
+            data['author'] = self.file_group.author
+        if 'title' not in data and self.file_group.title:
+            data['title'] = self.file_group.title
+        self.file_group.data = data
+
+    def validate(self, session: Session):
+        """Fill in any missing data about this EBook from its files."""
+        from wrolpi.vars import PYTEST
+        try:
+            self.apply_data()
+        except Exception as e:
+            logger.error(f'Unable to validate {self}', exc_info=e)
+            if PYTEST:
+                raise
 
     def hide_calibre_files(self):
         """Delete FileGroups of the cover/metadata when this is a Calibre ebook directory."""
@@ -313,7 +351,8 @@ async def ebook_modeler():
                     FileGroup.mimetype == 'application/epub+zip',
                     FileGroup.mimetype == 'application/x-mobipocket-ebook',
                 ),
-                FileGroup.indexed == False,
+                FileGroup.indexed == True,  # Surface indexed (visible)
+                FileGroup.deep_indexed != True,  # Not yet deep indexed
             ).outerjoin(EBook, and_(EBook.file_group_id == FileGroup.id)) \
                 .limit(10)
             file_groups: List[Tuple[FileGroup, EBook]] = list(file_groups)
@@ -328,7 +367,7 @@ async def ebook_modeler():
                     ebook = ebook or model_ebook(file_group, session)
                     session.add(ebook)
                     file_group.model = EBook.__tablename__
-                    file_group.indexed = True
+                    file_group.deep_indexed = True
                 except Exception as e:
                     logger.error(f'Failed to index ebook {file_group}', exc_info=e)
                     if PYTEST:

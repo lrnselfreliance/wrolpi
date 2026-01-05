@@ -4,7 +4,7 @@ import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
-import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
+import {useCPUTemperature, useFilesProgressInterval, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
 import {SearchIconButton} from "./Search";
 import {Icon, Popup} from "./Theme";
 import {HELP_VIEWER_URI, NAME} from "./Vars";
@@ -165,13 +165,21 @@ export function NavBar() {
     // issue.
     const warningIcon = temperatureIcon || diskWaitIcon || memoryIcon || systemLoadIcon;
 
+    // Check FileWorker for active jobs
+    const {fileWorker} = useFilesProgressInterval();
+    const hasActiveFileWorkerJobs = fileWorker?.jobs && Object.values(fileWorker.jobs).some(
+        job => job.status === 'pending' || job.status === 'running'
+    );
+
     let processingLink;
     if (status && status.flags) {
-        if (status.flags.refreshing) {
+        if (status.flags.refreshing || hasActiveFileWorkerJobs) {
             processingLink = '/files';
         } else if (status.flags.map_importing) {
             processingLink = '/map/manage';
         }
+    } else if (hasActiveFileWorkerJobs) {
+        processingLink = '/files';
     }
     const processingIcon = processingLink &&
         <Link to={processingLink}>

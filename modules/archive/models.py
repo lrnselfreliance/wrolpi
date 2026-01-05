@@ -351,6 +351,23 @@ class Archive(Base, ModelHelper):
         if metadata.modified_datetime:
             self.file_group.published_modified_datetime = metadata.modified_datetime
 
+    def apply_data(self):
+        """Update file_group.data with current file paths.
+
+        This ensures that paths discovered after initial modeling (e.g., when files are
+        added to the FileGroup through batch expansion) are reflected in the data dict.
+        """
+        data = dict(self.file_group.data) if self.file_group.data else {}
+        data['id'] = self.id
+        data['domain'] = self.domain
+        data['readability_json_path'] = self.readability_json_path.name if self.readability_json_path else None
+        data['readability_path'] = self.readability_path.name if self.readability_path else None
+        data['readability_txt_path'] = self.readability_txt_path.name if self.readability_txt_path else None
+        data['screenshot_path'] = self.screenshot_path.name if self.screenshot_path else None
+        data['singlefile_path'] = self.singlefile_path.name if self.singlefile_path else None
+        data['info_json_path'] = self.info_json_path.name if self.info_json_path else None
+        self.file_group.data = data
+
     def validate(self):
         """Fill in any missing data about this Archive from its files."""
         try:
@@ -359,6 +376,7 @@ class Archive(Base, ModelHelper):
             self.apply_domain()
             self.apply_singlefile_title()
             self.apply_metadata()
+            self.apply_data()
         except Exception as e:
             logger.warning(f'Unable to validate {self}', exc_info=e)
             if PYTEST:

@@ -11,14 +11,15 @@ from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, get_download_manager_config
 from wrolpi.files import lib as files_lib
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci
 
 
 @pytest.mark.asyncio
-async def test_get_zim(async_client, test_session, zim_path_factory):
+async def test_get_zim(async_client, test_session, zim_path_factory, await_refresh):
     zim_path_factory()
-    await files_lib.refresh_files()
+    await await_refresh()
 
     assert lib.get_zim(test_session, 1)
 
@@ -27,9 +28,9 @@ async def test_get_zim(async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entry(async_client, test_session, zim_path_factory):
+async def test_zim_get_entry(async_client, test_session, zim_path_factory, await_refresh):
     zim_path_factory()
-    await files_lib.refresh_files()
+    await await_refresh()
 
     entry: Entry = lib.get_entry('one', 1)
     assert entry.path == 'one'
@@ -389,16 +390,19 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_zim_modeler(async_client, test_session, zim_factory):
+async def test_zim_modeler(async_client, test_session, zim_factory, await_refresh):
     """Zim modeler sets FileGroup title and a_text."""
     zim = zim_factory('the_zim_title.zim')
-    assert zim.file_group.indexed is False
+    # Two-phase indexing: indexed=True (surface visible), deep_indexed=False (not yet content-indexed)
+    assert zim.file_group.indexed is True
+    assert zim.file_group.deep_indexed is False
     test_session.commit()
 
-    await files_lib.refresh_files()
+    await await_refresh()
 
     fg: FileGroup = test_session.query(FileGroup).one()
     assert fg.indexed is True
+    assert fg.deep_indexed is True  # Modeler has processed the file
     assert fg.title == 'the_zim_title.zim'
     assert fg.a_text == 'the zim title zim'
     assert fg.model == 'zim'

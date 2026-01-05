@@ -29,7 +29,7 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {OutdatedZimsMessage} from "./components/Zim";
-import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
+import {useFilesProgressInterval, useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
 import {FileCards, FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 import {useCalculators} from "./components/Calculators";
@@ -38,6 +38,7 @@ import {evaluate} from "mathjs";
 function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {status} = useContext(StatusContext);
+    const {fileWorker} = useFilesProgressInterval();
 
     if (_.isEmpty(status?.flags)) {
         return <></>
@@ -45,11 +46,16 @@ function FlagsMessages() {
 
     const flags = status['flags'];
 
+    // Check if FileWorker has active jobs
+    const hasActiveJobs = fileWorker?.jobs && Object.values(fileWorker.jobs).some(
+        job => job.status === 'pending' || job.status === 'running'
+    );
+
     let refreshingMessage;
     let refreshRequiredMessage;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
-    if (flags.refreshing) {
+    if (flags.refreshing || hasActiveJobs) {
         // Actively refreshing.
         refreshingMessage = <Message icon>
             <Icon name='circle notched' loading/>

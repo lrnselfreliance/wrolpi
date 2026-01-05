@@ -2,11 +2,11 @@
 Fixtures for Pytest tests.
 """
 import asyncio
+import contextlib
 import copy
 import http.server
 import json
 import logging
-import multiprocessing
 import pathlib
 import shutil
 import tempfile
@@ -15,7 +15,7 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
+from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional, Any, AsyncGenerator
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock, AsyncMock
@@ -31,7 +31,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # Import root api so blueprints are attached.
 import wrolpi.root_api  # noqa
-from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import CommandResult
 from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL
@@ -44,6 +43,7 @@ from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloa
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
+from wrolpi.files.worker import file_worker as global_file_worker
 from wrolpi.switches import await_switches as await_switches_
 from wrolpi.tags import Tag, upsert_tag
 from wrolpi.vars import PROJECT_DIR
@@ -124,9 +124,11 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture
-def test_wrolpi_config(test_directory) -> pathlib.Path:
+def test_wrolpi_config(test_directory, shared_contexts_manager) -> pathlib.Path:
     """
     Create a test config based off the example config.
+
+    Depends on shared_contexts_manager to ensure multiprocessing shared contexts are initialized.
     """
     config_path = test_directory / 'config/wrolpi.yaml'
     set_test_config(True)
@@ -137,26 +139,110 @@ def test_wrolpi_config(test_directory) -> pathlib.Path:
 ROUTES_ATTACHED = False
 
 
+class AutoAwaitTestClient:
+    """Wrapper around SanicASGITestClient that auto-awaits background tasks after write operations.
+
+    Write methods (POST, PUT, DELETE, PATCH) automatically await all background tasks
+    after the HTTP call completes. GET, HEAD, OPTIONS are passed through unchanged.
+
+    Also expires the session after write operations so tests get fresh ORM data.
+
+    Usage:
+        async def test_something(async_client):
+            # POST auto-awaits background tasks and expires session
+            _, response = await async_client.post('/api/files/refresh')
+            # Background tasks already complete, session already expired
+            assert test_session.query(FileGroup).count() == 1
+
+            # Opt-out for specific calls
+            with async_client.no_auto_await():
+                _, response = await async_client.post('/api/something')
+                # Must manually await if needed
+    """
+
+    WRITE_METHODS = frozenset({'post', 'put', 'delete', 'patch'})
+
+    def __init__(self, client: SanicASGITestClient, await_func, session: Session = None):
+        self._client = client
+        self._await_func = await_func
+        self._session = session
+        self._auto_await = True
+
+    def __getattr__(self, name):
+        """Delegate attribute access to underlying client."""
+        attr = getattr(self._client, name)
+        if name in self.WRITE_METHODS and self._auto_await:
+            return self._make_auto_await_method(attr)
+        return attr
+
+    def _make_auto_await_method(self, method):
+        """Create a wrapper that auto-awaits after the HTTP call."""
+
+        async def wrapper(*args, **kwargs):
+            result = await method(*args, **kwargs)
+            await self._await_func(self._session)
+            return result
+
+        return wrapper
+
+    @contextlib.contextmanager
+    def no_auto_await(self):
+        """Context manager to temporarily disable auto-await.
+
+        Usage:
+            with client.no_auto_await():
+                _, response = await client.post('/api/endpoint')
+                # No auto-await happens
+        """
+        old_value = self._auto_await
+        self._auto_await = False
+        try:
+            yield self
+        finally:
+            self._auto_await = old_value
+
+
 @api_app.on_response
 async def background_task_listener(request, response):
     """Wait for all background tasks to finish before returning API response while testing."""
     await await_switches_()
 
 
+@pytest.fixture(scope='session')
+def shared_contexts_manager():
+    """Session-scoped fixture to manage the multiprocessing Manager lifecycle.
+
+    This ensures the Manager is created once per worker and properly cleaned up.
+    """
+    attach_shared_contexts(api_app)
+    yield
+    # Shutdown the multiprocessing Manager at the end of the test session.
+    # Manager is stored on app.ctx (not shared_ctx) because it contains weakrefs that can't be pickled.
+    if hasattr(api_app.ctx, 'manager') and api_app.ctx.manager is not None:
+        api_app.ctx.manager.shutdown()
+        api_app.ctx.manager = None
+
+
 @pytest.fixture
-async def async_client(test_directory, test_session) -> SanicASGITestClient:
+async def async_client(test_directory, test_session, shared_contexts_manager) \
+        -> AsyncGenerator[AutoAwaitTestClient, Any]:
     """Get an Async Sanic Test Client with all default routes attached.
+
+    Write operations (POST, PUT, DELETE, PATCH) automatically await all background
+    tasks and expire session objects after completion. Use client.no_auto_await()
+    context manager to opt-out for specific calls.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
     """
     api_app.signalize()
-    attach_shared_contexts(api_app)
+    attach_shared_contexts(api_app)  # Will reuse existing manager and reset state
     initialize_configs_contexts(api_app)
 
     client = SanicASGITestClient(api_app)
+    wrapped = AutoAwaitTestClient(client, _await_all_background_tasks, test_session)
 
     try:
-        yield client
+        yield wrapped
     finally:
         api_app.stop()
         logger.debug('Destroying async_client')
@@ -177,20 +263,61 @@ async def await_switches(async_client):
     return await_switches_
 
 
+async def _await_all_background_tasks(session: Session = None, timeout: int = 10):
+    """Await all background task systems for testing.
+
+    Processes:
+    1. FileWorker queue to completion
+    2. Download manager pending downloads
+    3. Switches (config saves, etc.)
+    4. BACKGROUND_TASKS asyncio tasks
+
+    Args:
+        session: SQLAlchemy session to expire after tasks complete
+        timeout: Timeout for download manager and switches
+    """
+    from wrolpi.downloader import download_manager
+
+    # 1. Process FileWorker queue
+    await global_file_worker.run_queue_to_completion()
+
+    # 2. Wait for downloads (gracefully handle when not configured)
+    try:
+        if hasattr(download_manager, 'can_download') and download_manager.can_download:
+            await download_manager.wait_for_all_downloads(timeout=timeout)
+    except (TimeoutError, Exception):
+        pass
+
+    # 3. Wait for switches
+    await await_switches_(timeout=timeout)
+
+    # 4. Await any remaining background tasks
+    await await_background_tasks_()
+
+    # 5. Expire session objects so tests get fresh data
+    if session:
+        session.expire_all()
+
+
 @pytest.fixture
 async def await_background_tasks(async_client, test_session):
-    """Returns a function that awaits background tasks and expires session objects.
+    """Returns a function that awaits ALL background task systems and expires session objects.
 
-    After background tasks complete, session objects may be stale, so we automatically
-    expire them to force a refresh on next access.
+    This includes:
+    - FileWorker queue
+    - Download manager
+    - Switches (config saves)
+    - BACKGROUND_TASKS asyncio tasks
+
+    Note: With AutoAwaitTestClient, this is rarely needed for tests making HTTP write calls,
+    as POST/PUT/DELETE/PATCH auto-await. Use this for non-HTTP async operations.
     """
-    await async_client.get('/api')
 
-    async def _await_and_expire():
-        await await_background_tasks_()
-        test_session.expire_all()
+    async def _():
+        await async_client.get('/api')  # Prime the Sanic app
+        await _await_all_background_tasks(test_session)
 
-    return _await_and_expire
+    return _
 
 
 @pytest.fixture
@@ -520,19 +647,16 @@ def events_history(async_client):
     yield api_app.shared_ctx.events_history
 
 
-FLAGS_LOCK = multiprocessing.Lock()
-
-
 @pytest.fixture()
 def flags_lock():
     """Wait for exclusive access to flags before testing."""
     try:
-        FLAGS_LOCK.acquire(timeout=60)
-        flags.TESTING_LOCK.set()
+        api_app.shared_ctx.flags_lock.acquire(timeout=60)
+        api_app.shared_ctx.testing_lock.set()
         yield
     finally:
-        flags.TESTING_LOCK.clear()
-        FLAGS_LOCK.release()
+        api_app.shared_ctx.testing_lock.clear()
+        api_app.shared_ctx.flags_lock.release()
 
 
 @pytest.fixture()
@@ -686,8 +810,8 @@ def insert_file_group(test_session, test_directory):
             files=json.dumps(files),
         )
         test_session.execute('INSERT INTO file_group '
-                             '(indexed, directory, primary_path, files) VALUES '
-                             '(true, :directory, :primary_path, :files)', params)
+                             '(indexed, deep_indexed, directory, primary_path, files) VALUES '
+                             '(true, false, :directory, :primary_path, :files)', params)
 
     return _
 
@@ -830,3 +954,41 @@ def mock_downloader_download_file():
         yield set_contents
 
 
+@pytest.fixture
+def file_worker(async_client, test_session, test_directory):
+    """
+    Provides the global file worker for testing.
+
+    The file worker is cleared before and after each test.
+    In tests, queue items and then await processing with:
+
+        file_worker.queue_refresh([path])
+        while not file_worker.is_empty():
+            await file_worker.process_batch()
+
+    Usage:
+        @pytest.mark.asyncio
+        async def test_something(file_worker, test_directory):
+            (test_directory / 'file.txt').touch()
+            file_worker.queue_refresh([test_directory])
+            while not file_worker.is_empty():
+                await file_worker.process_batch()
+            # Assert results...
+    """
+    global_file_worker.clear()
+    yield global_file_worker
+    global_file_worker.clear()
+
+
+@pytest.fixture
+def await_refresh(await_background_tasks, file_worker):
+    """A fixture which queues a full media directory refresh. Automatically awaits background tasks."""
+
+    async def _(paths: list[pathlib.Path | str] = None):
+        if paths:
+            file_worker.queue_refresh(paths)
+        else:
+            file_worker.queue_global_refresh()
+        await await_background_tasks()
+
+    return _

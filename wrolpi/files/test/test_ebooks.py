@@ -4,18 +4,18 @@ from http import HTTPStatus
 
 import pytest
 
-from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE
-from wrolpi.files.lib import refresh_files, move
+from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE, model_ebook
+from wrolpi.files.lib import move
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import assert_dict_contains
 
 
 @pytest.mark.asyncio
-async def test_index(async_client, test_session, test_directory, example_epub, example_mobi):
+async def test_index(async_client, test_session, test_directory, example_epub, example_mobi, await_refresh):
     """Ebooks can be indexed.
 
     Covers can be discovered."""
-    await refresh_files()
+    await await_refresh()
 
     ebook: EBook = test_session.query(EBook).one()
 
@@ -44,7 +44,7 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 
     # Ebooks can be deleted during refresh.
     example_epub.unlink()
-    await refresh_files()
+    await await_refresh()
     assert test_session.query(EBook).count() == 1
     ebook = test_session.query(EBook).one()
     assert not ebook.file_group.my_files('application/epub+zip')
@@ -57,10 +57,10 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 
 
 @pytest.mark.asyncio
-async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_switches):
+async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_refresh):
     cover_path = example_epub.with_suffix('.jpg')
     cover_path.write_bytes(image_bytes_factory())
-    await refresh_files()
+    await await_refresh()
 
     ebook: EBook = test_session.query(EBook).one()
 
@@ -69,9 +69,9 @@ async def test_discover_local_cover(test_session, test_directory, example_epub, 
 
 
 @pytest.mark.asyncio
-async def test_extract_cover(test_session, test_directory, example_epub, await_switches):
+async def test_extract_cover(test_session, test_directory, example_epub, await_refresh):
     """First image is extracted from the Ebook and used as the cover."""
-    await refresh_files()
+    await await_refresh()
 
     ebook: EBook = test_session.query(EBook).one()
     # The WROLPi logo is the first image in the example epub.
@@ -79,10 +79,9 @@ async def test_extract_cover(test_session, test_directory, example_epub, await_s
 
 
 @pytest.mark.asyncio
-async def test_search_ebooks(test_session, async_client, example_epub):
+async def test_search_ebooks(test_session, async_client, example_epub, await_refresh):
     """Ebooks are handled in File search results."""
-    request, response = await async_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
+    await await_refresh()
 
     assert test_session.query(EBook).count() == 1
 
@@ -114,8 +113,8 @@ async def test_search_ebooks(test_session, async_client, example_epub):
 
 
 @pytest.mark.asyncio
-async def test_discover_calibre_cover(test_session, async_client, test_directory, example_epub, example_mobi,
-                                      image_file):
+async def test_discover_calibre_cover(test_session, test_directory, example_epub, example_mobi,
+                                      image_file, await_refresh):
     """Calibre puts a cover near an ebook file, test if it can be found."""
     # Create a Calibre metadata file.
     metadata = test_directory / 'metadata.opf'
@@ -126,24 +125,73 @@ async def test_discover_calibre_cover(test_session, async_client, test_directory
     shutil.move(image_file, cover_image)
 
     # Calibre cover image was discovered, no cover was generated.
-    await refresh_files()
+    await await_refresh()
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.cover_file['path'] == test_directory / 'cover.jpg'
     # Use my_files() to get resolved Path objects
-    assert {i['path'].name for i in ebook.file_group.my_files()} == {'ebook example.epub', 'ebook example.mobi', 'cover.jpg'}
+    assert {i['path'].name for i in ebook.file_group.my_files()} == {'ebook example.epub', 'ebook example.mobi',
+                                                                     'cover.jpg'}
     # Cover is not the first image from the EPUB.
     assert ebook.cover_path.stat().st_size != 292579
     # Metadata and cover were deleted from the FileGroups.
     assert test_session.query(FileGroup).count() == 1
 
 
+def test_ebook_validate_updates_data_with_new_files(test_session, test_directory, example_epub, image_bytes_factory,
+                                                    shared_contexts_manager):
+    """
+    BUG: When files are added to a FileGroup after initial modeling,
+    EBook doesn't update file_group.data with new paths.
+
+    This replicates the real-world issue where an EBook is modeled before
+    its cover is added to the FileGroup (due to batch processing).
+    """
+    # Create file group and ebook without a cover file nearby
+    file_group = FileGroup.from_paths(test_session, example_epub)
+    ebook = model_ebook(file_group, test_session)
+    test_session.commit()
+
+    # The ebook extracted a cover from the epub
+    assert ebook.cover_path is not None
+    original_cover = ebook.cover_path
+    assert ebook.file_group.data.get('cover_path') == original_cover.name
+
+    # Simulate the scenario: clear cover_path from data (as if it wasn't set during modeling)
+    # This simulates a FileGroup where files were added later but data wasn't updated
+    data = dict(ebook.file_group.data) if ebook.file_group.data else {}
+    data['cover_path'] = None
+    ebook.file_group.data = data
+    test_session.commit()
+
+    # Verify cover_path is null in data (the bug state)
+    test_session.expire_all()
+    ebook = test_session.query(EBook).filter_by(id=ebook.id).one()
+    assert ebook.file_group.data.get('cover_path') is None, \
+        "Setup: cover_path should be None before fix"
+
+    # But cover_path property finds it via my_poster_files()
+    assert ebook.cover_path == original_cover, \
+        "Cover should be findable via property even when not in data"
+
+    # Re-validate should update data
+    ebook.validate(test_session)
+    test_session.commit()
+
+    # After fix: data.cover_path should be updated
+    test_session.expire_all()
+    ebook = test_session.query(EBook).filter_by(id=ebook.id).one()
+    assert ebook.file_group.data.get('cover_path') == original_cover.name, \
+        f"After validate(), cover_path should be in data, got {ebook.file_group.data}"
+
+
 @pytest.mark.asyncio
-async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory):
+async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory,
+                          await_refresh):
     """An ebook is re-indexed when moved."""
     tag = await tag_factory()
     shutil.move(image_file, example_epub.with_suffix('.jpg'))
-    await refresh_files()
+    await await_refresh()
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.cover_path

@@ -80,6 +80,8 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_textsearch_idx', 'textsearch'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
+        Index('ix_file_group_deep_indexed', 'deep_indexed'),
+        Index('ix_file_group_indexed_deep', 'indexed', 'deep_indexed'),
     )
     id: int = Column(BigInteger, primary_key=True)
 
@@ -93,7 +95,8 @@ class FileGroup(ModelHelper, Base):
     download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
     files = Column(FancyJSON)  # populated during discovery
     idempotency = Column(TZDateTime)  # used to track which files need to be deleted during refresh
-    indexed = Column(Boolean, default=lambda: False)  # wrolpi.files.lib.apply_indexers
+    indexed = Column(Boolean, default=lambda: False)  # surface indexed - visible and filename searchable
+    deep_indexed = Column(Boolean, nullable=False, default=lambda: False)  # content extracted - full text searchable
     length = Column(BigInteger)  # video duration, article words, etc.
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "ebook", etc.
@@ -424,6 +427,10 @@ class FileGroup(ModelHelper, Base):
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
+        # Two-phase indexing: mark as surface indexed (visible, searchable by filename)
+        # but not deep indexed (content not yet extracted by modelers)
+        file_group.indexed = True
+        file_group.deep_indexed = False
         logger.trace(f'FileGroup.from_paths: {file_group}')
 
         return file_group

@@ -543,10 +543,10 @@ export function FilesSearchView({
 }
 
 export function FilesRefreshProgress() {
-    const {progress} = useFilesProgressInterval();
+    const {progress, fileWorker} = useFilesProgressInterval();
 
-    if (!progress) {
-        return;
+    if (!progress && !fileWorker) {
+        return null;
     }
 
     const {
@@ -560,32 +560,114 @@ export function FilesRefreshProgress() {
         counted_files,
         total_file_groups,
         modeled
-    } = progress;
+    } = progress || {};
 
+    // Get active move jobs (from shared context)
+    const moveJobs = fileWorker?.move_jobs ? Object.values(fileWorker.move_jobs) : [];
+    const activeMoveJobs = moveJobs.filter(j => j.status === 'running');
+
+    // Get FileWorker jobs (refresh, download, etc.)
+    const workerJobs = fileWorker?.jobs ? Object.values(fileWorker.jobs) : [];
+    const visibleWorkerJobs = workerJobs.filter(j =>
+        j.status === 'running' || j.status === 'pending' || j.status === 'completed' || j.status === 'partial'
+    );
+
+    // Full refresh in progress (via run_queue_to_completion)
     if (refreshing) {
-        // Default is Counting / Step 1.  Move progress bar toward the middle to avoid clipping out of the screen.
-        let params = {value: Math.floor(counted_files / 2), total: counted_files, progress: 'ratio'};
+        let params = {value: 0, total: 100};
         let label = 'Refresh: Counting';
+        let subLabel = null;
 
         if (discovery) {
-            params['value'] = total_file_groups;
-            params['total'] = counted_files;
-            label = 'Refresh: Discovery'
+            const percent = counted_files > 0 ? Math.round((total_file_groups / counted_files) * 100) : 0;
+            params = {value: percent, total: 100};
+            label = `Discovery: ${percent}% (${total_file_groups}/${counted_files} files)`;
+            subLabel = 'Phase 1/4: Surface indexing';
         } else if (modeling) {
-            params['value'] = modeled;
-            params['total'] = total_file_groups;
-            label = 'Refresh: Modeling';
+            const percent = total_file_groups > 0 ? Math.round((modeled / total_file_groups) * 100) : 0;
+            params = {value: percent, total: 100};
+            label = `Modeling: ${percent}% (${modeled}/${total_file_groups} files)`;
+            subLabel = 'Phase 2/4: Extracting metadata';
         } else if (indexing) {
-            params['value'] = unindexed;
-            params['total'] = unindexed + indexed;
-            label = 'Refresh: Indexing';
+            const total = (indexed || 0) + (unindexed || 0);
+            const percent = total > 0 ? Math.round((indexed / total) * 100) : 0;
+            params = {value: percent, total: 100};
+            label = `Indexing: ${percent}% (${indexed}/${total} files)`;
+            subLabel = 'Phase 3/4: Deep indexing';
         } else if (cleanup) {
-            params['value'] = 3;
-            params['total'] = 4;
-            label = 'Refresh: Cleanup';
+            params = {value: 90, total: 100};
+            label = 'Cleanup';
+            subLabel = 'Phase 4/4: Finalizing...';
         }
-        return <Progress active color='violet' {...params}>{label}</Progress>
+
+        return (
+            <Segment>
+                <Progress active color='violet' {...params}>{label}</Progress>
+                {subLabel && <p style={{fontSize: '0.9em', color: 'gray', marginTop: '0.5em'}}>{subLabel}</p>}
+            </Segment>
+        );
     }
+
+    // Render FileWorker jobs (refresh, download, etc.) - only when not in full refresh mode
+    if (visibleWorkerJobs.length > 0) {
+        return (
+            <>
+                {visibleWorkerJobs.map((job) => {
+                    const percent = job.total_items > 0
+                        ? Math.round((job.processed_items / job.total_items) * 100)
+                        : 0;
+                    const isCompleted = job.status === 'completed' || job.status === 'partial';
+                    const isFailed = job.status === 'failed';
+                    const jobTypeLabel = job.job_type === 'refresh' ? 'Refresh' :
+                                        job.job_type === 'download' ? 'Download' :
+                                        job.job_type === 'global' ? 'Global Refresh' :
+                                        job.job_type;
+                    const label = isCompleted
+                        ? `${jobTypeLabel}: Complete (${job.total_items} files)`
+                        : `${jobTypeLabel}: ${percent}% (${job.processed_items || 0}/${job.total_items || 0})`;
+                    const color = isCompleted ? 'green' : isFailed ? 'red' : 'teal';
+
+                    return (
+                        <Segment key={job.job_id}>
+                            <Progress
+                                active={!isCompleted && !isFailed}
+                                color={color}
+                                value={isCompleted ? 100 : percent}
+                                total={100}
+                            >
+                                {label}
+                            </Progress>
+                            {job.errors > 0 && (
+                                <p style={{fontSize: '0.9em', color: 'orange', marginTop: '0.5em'}}>
+                                    {job.errors} error(s)
+                                </p>
+                            )}
+                        </Segment>
+                    );
+                })}
+            </>
+        );
+    }
+
+    // Render active move jobs
+    if (activeMoveJobs.length > 0) {
+        return (
+            <>
+                {activeMoveJobs.map((job, idx) => (
+                    <Segment key={idx}>
+                        <Progress active color='blue' value={job.percent || 0} total={100}>
+                            {job.display || `Moving: ${Math.round(job.percent || 0)}%`}
+                        </Progress>
+                        <p style={{fontSize: '0.9em', color: 'gray'}}>
+                            Moving {job.source_count} files
+                        </p>
+                    </Segment>
+                ))}
+            </>
+        );
+    }
+
+    return null;
 }
 
 function FilesPage() {
@@ -610,23 +692,41 @@ export function FilesRoute() {
 }
 
 const useRefresh = () => {
+    // Flags for full refresh (run_queue_to_completion) - used by global refresh
     const refreshing = useStatusFlag('refreshing');
-    const refreshingDirectory = useStatusFlag('refreshing_directory');
     const wrolModeEnabled = useWROLMode();
 
     const [loading, setLoading] = React.useState(false);
 
+    // Get FileWorker status for pending/running jobs
+    const {fileWorker} = useFilesProgressInterval();
+
+    // Check if any FileWorker jobs are pending or running
+    const hasActiveJobs = React.useMemo(() => {
+        if (!fileWorker?.jobs) return false;
+        return Object.values(fileWorker.jobs).some(
+            job => job.status === 'pending' || job.status === 'running'
+        );
+    }, [fileWorker]);
+
     const localRefreshFiles = async (paths) => {
         setLoading(true);
         await refreshFiles(paths);
+        // Brief delay to allow FileWorker to pick up the job before clearing loading
+        setTimeout(() => setLoading(false), 500);
     }
 
     // Clear loading when global refresh event completes.
     useSubscribeEventName('refresh_completed', () => setLoading(false));
 
+    // Button should show loading when:
+    // - User just clicked refresh (loading)
+    // - FileWorker has active jobs (hasActiveJobs)
+    // - Global refresh is running (refreshing)
+    const isRefreshing = loading || hasActiveJobs || refreshing;
+
     return {
-        refreshing,
-        refreshingDirectory,
+        refreshing: isRefreshing,
         wrolModeEnabled,
         loading,
         refreshFiles: localRefreshFiles,
@@ -634,11 +734,11 @@ const useRefresh = () => {
 }
 
 export function FilesRefreshButton({paths}) {
-    const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
+    const {refreshing, wrolModeEnabled, refreshFiles} = useRefresh();
 
     return <Button icon='refresh'
-                   loading={loading || refreshing || refreshingDirectory}
+                   loading={refreshing}
                    onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || loading || refreshing}/>
+                   disabled={wrolModeEnabled || refreshing}/>
         ;
 }

@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {Grid, StatisticLabel, StatisticValue,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
+import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {
     APIButton,
     BackButton,
@@ -88,6 +89,7 @@ export function ChannelEditPage() {
 
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
     const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+    const [reorganizeModalOpen, setReorganizeModalOpen] = useState(false);
 
     const {channel, form, fetchChannel} = useChannel(channelId);
 
@@ -192,10 +194,21 @@ export function ChannelEditPage() {
         style={{marginTop: '1em'}}
     >Tag</Button>;
 
+    const reorganizeButton = channel?.needs_reorganization ? (
+        <Button
+            type="button"
+            size='small'
+            onClick={() => setReorganizeModalOpen(true)}
+            color='orange'
+            style={{marginTop: '1em'}}
+        >Reorganize Files</Button>
+    ) : null;
+
     const actionButtons = <>
         {deleteButton}
         {refreshButton}
         {tagButton}
+        {reorganizeButton}
     </>;
 
     const downloadMissingDataInfo = 'Automatically download missing comments, etc, in the background.';
@@ -277,6 +290,15 @@ export function ChannelEditPage() {
             onSave={handleTagSave}
             collectionName="Channel"
             hasDirectory={!!channel.directory}
+        />
+
+        {/* Reorganize Modal */}
+        <CollectionReorganizeModal
+            open={reorganizeModalOpen}
+            onClose={() => setReorganizeModalOpen(false)}
+            collectionId={channel?.id}
+            collectionName="Channel"
+            onSuccess={fetchChannel}
         />
 
         {/* Downloads Segment */}

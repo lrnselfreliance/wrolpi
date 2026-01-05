@@ -85,7 +85,7 @@ async def test_relationships(async_client, test_session, example_singlefile):
 
 
 @pytest.mark.asyncio
-async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory, await_refresh):
     """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
     # Create some test files, delete all records for a fresh refresh.
     archive_factory(
@@ -98,7 +98,7 @@ async def test_archive_title(async_client, test_session, archive_factory, single
     async def reset_and_get_archive():
         test_session.query(FileGroup).delete()
         test_session.commit()
-        await files_lib.refresh_files()
+        await await_refresh()
         return test_session.query(Archive).one()
 
     archive1: Archive = await reset_and_get_archive()
@@ -125,7 +125,7 @@ async def test_archive_title(async_client, test_session, archive_factory, single
 
 
 @pytest.mark.asyncio
-async def test_archive_refresh_deleted_archive(async_client, test_session, archive_directory, archive_factory):
+async def test_archive_refresh_deleted_archive(async_client, test_session, archive_directory, archive_factory, await_refresh):
     """Archives/domain collections should be deleted when archive files are deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
@@ -144,25 +144,25 @@ async def test_archive_refresh_deleted_archive(async_client, test_session, archi
 
     # All 5 archives are already in the DB.
     check_counts(archive_count=5, domain_count=2)
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     check_counts(archive_count=5, domain_count=1)
 
     # Delete archive2's files, it's the latest for 'https://example.com/1'
     for path in archive2.my_paths():
         path.unlink()
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     check_counts(archive_count=4, domain_count=1)
 
     # Delete archive1's files, now the URL is empty.
     for path in archive1.my_paths():
         path.unlink()
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     check_counts(archive_count=3, domain_count=0)
 
     # Delete archive3, now there is now example.com domain
     for path in archive3.my_paths():
         path.unlink()
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     check_counts(archive_count=2, domain_count=0)
 
     # Delete all the rest of the archives
@@ -170,12 +170,12 @@ async def test_archive_refresh_deleted_archive(async_client, test_session, archi
         path.unlink()
     for path in archive5.my_paths():
         path.unlink()
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     check_counts(archive_count=0, domain_count=0)
 
 
 @pytest.mark.asyncio
-async def test_fills_contents_with_refresh(async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_fills_contents_with_refresh(async_client, test_session, archive_factory, singlefile_contents_factory, await_refresh):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
@@ -208,7 +208,7 @@ async def test_fills_contents_with_refresh(async_client, test_session, archive_f
     assert not archive4.file_group.d_text
 
     # Fill the contents.
-    await files_lib.refresh_files()
+    await await_refresh()
     # The archives will be renamed with their title.
     archive1, archive2, archive3, archive4 = test_session.query(Archive).order_by(Archive.id)
     assert not archive4.file_group.d_text
@@ -521,7 +521,7 @@ async def test_title_in_filename(async_client, test_session, fake_now, test_dire
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives(test_session, test_directory, async_client, make_files_structure):
+async def test_refresh_archives(test_session, test_directory, async_client, make_files_structure, await_refresh):
     """Archives can be found and put in the database.  A single Archive will have multiple files."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
@@ -546,7 +546,7 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
     })
 
     # The single archive is found.
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     assert test_session.query(Archive).count() == 1
 
     # Cause a re-index of the archive.
@@ -555,7 +555,7 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
     test_session.commit()
 
     # Running the refresh does not result in a new archive.
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     assert test_session.query(Archive).count() == 1
 
     # Archives file format was changed, lets check the new formats are found.
@@ -563,7 +563,7 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
         'archive/example.com/2021-10-05-16-20-11_The Title.html': '<html></html>',
         'archive/example.com/2021-10-05-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    await async_client.post('/api/files/refresh')
+    await await_refresh()
     # The old formatted archive above is renamed.
     assert (test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html').is_file()
     assert test_session.query(Archive).count() == 2
@@ -584,7 +584,7 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives_index(test_session, make_files_structure):
+async def test_refresh_archives_index(test_session, make_files_structure, await_refresh):
     """Archives are indexed using ArchiveIndexer and archive_modeler."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
@@ -609,7 +609,7 @@ async def test_refresh_archives_index(test_session, make_files_structure):
         'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
     })
 
-    await files_lib.refresh_files()
+    await await_refresh()
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
@@ -625,7 +625,7 @@ async def test_refresh_archives_index(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_archive_meta(async_client, test_session, make_files_structure):
+async def test_archive_meta(async_client, test_session, make_files_structure, await_refresh):
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en">
 <script data-vue-meta="ssr" type="application/ld+json">
@@ -640,7 +640,7 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
         'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
     })
 
-    await files_lib.refresh_files()
+    await await_refresh()
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
@@ -655,19 +655,19 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
 
 @pytest.mark.asyncio
 async def test_refresh_archives_deleted_singlefile(async_client, test_session, make_files_structure,
-                                                   singlefile_contents_factory):
+                                                   singlefile_contents_factory, await_refresh):
     """Removing a Singlefile file from a FileGroup makes that group no longer an Archive."""
     singlefile, readability = make_files_structure({
         '2022-09-04-16-20-11_The Title.html': singlefile_contents_factory(),
         '2022-09-04-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    await files_lib.refresh_files()
+    await await_refresh()
     assert test_session.query(FileGroup).one().model == 'archive'
     assert test_session.query(Archive).count() == 1
 
     # Remove singlefile, FileGroup is no longer an Archive.
     singlefile.unlink()
-    await files_lib.refresh_files()
+    await await_refresh()
     assert test_session.query(FileGroup).one().model is None
     assert test_session.query(Archive).count() == 0
 

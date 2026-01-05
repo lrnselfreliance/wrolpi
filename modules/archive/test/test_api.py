@@ -25,6 +25,7 @@ async def check_results(async_client, data, ids):
 async def test_archives_search_order(test_session, archive_directory, archive_factory, async_client):
     """Search using all orders."""
     archive_factory('example.com', 'https://example.com/one', 'my archive', 'foo bar qux')
+    test_session.commit()
     for order_by in lib.ARCHIVE_ORDERS:
         data = {'search_str': 'foo', 'order_by': order_by}
         request, response = await async_client.post('/api/archive/search', content=json.dumps(data))
@@ -196,8 +197,6 @@ async def test_archive_upload(test_session, async_client, singlefile_contents_fa
     request, response = await async_client.post('/api/archive/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.OK
 
-    await await_switches()
-
     archive, = test_session.query(Archive).all()
     assert archive.singlefile_path.is_file(), 'Singlefile should have been saved.'
     assert archive.readability_path.is_file(), 'Readability should be extracted.'
@@ -253,11 +252,7 @@ async def test_archive_upload_file_tracking(test_session, async_client, archive_
     request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, f'Upload failed with status {response.status_code}: {response.json}'
 
-    await await_switches()
-
     # Step 4: Verify info.json is tracked
-    # Refresh the session to get updated data
-    test_session.expire_all()
     archive = test_session.query(Archive).filter_by(id=archive.id).one()
 
     # Assert info.json properties exist
@@ -293,10 +288,6 @@ async def test_archive_upload_file_tracking(test_session, async_client, archive_
     request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, f'Image upload failed with status {response.status_code}: {response.json}'
 
-    await await_switches()
-
-    # Refresh session to get updated data
-    test_session.expire_all()
     archive = test_session.query(Archive).filter_by(id=archive.id).one()
 
     # Assert screenshot properties exist
@@ -336,11 +327,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
         assert response.status_code == HTTPStatus.OK
         assert response.json['message'] == 'Screenshot generation queued'
 
-        # Wait for background processing
-        await await_switches()
-
         # Verify screenshot was generated
-        test_session.expire_all()
         archive = test_session.query(Archive).filter_by(id=archive.id).one()
         assert archive.screenshot_path is not None, 'Screenshot should have been generated'
         assert archive.screenshot_path.is_file(), 'Screenshot file should exist'
@@ -373,11 +360,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     assert response.status_code == HTTPStatus.OK
     assert response.json['message'] == 'Screenshot generation queued'
 
-    # Wait for background processing
-    await await_switches()
-
     # Verify screenshot is still there and properly tracked
-    test_session.expire_all()
     archive = test_session.query(Archive).filter_by(id=archive.id).one()
     assert archive.screenshot_path == original_screenshot_path, 'Screenshot path should be unchanged'
     assert archive.screenshot_path.is_file(), 'Screenshot file should still exist'

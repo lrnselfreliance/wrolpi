@@ -17,7 +17,6 @@ from ..api_utils import json_response, api_app
 from ..events import Events
 from ..schema import JSONErrorResponse
 from ..tags import Tag
-from ..vars import PYTEST
 
 files_bp = Blueprint('Files', '/api/files')
 
@@ -240,10 +239,7 @@ async def post_create_directory(_: Request, body: schema.Directory):
     except FileExistsError:
         raise FileConflict(f'{path} already exists')
 
-    if PYTEST:
-        await lib.refresh_files([path, ])
-    else:
-        background_task(lib.refresh_files([path, ]))
+    background_task(lib.refresh_files([path, ]))
 
     return response.empty(HTTPStatus.CREATED)
 
@@ -300,10 +296,7 @@ async def post_rename(request: Request, body: schema.Rename):
     # Refreshing individual files causes the FileGroup's files list to be overwritten
     # with only the specified file, losing track of associated files.
     parent_dir = new_path.parent
-    if PYTEST:
-        await lib.refresh_files([parent_dir])
-    else:
-        background_task(lib.refresh_files([parent_dir]))
+    background_task(lib.refresh_files([parent_dir]))
 
     return response.empty(HTTPStatus.NO_CONTENT)
 
@@ -462,11 +455,7 @@ async def post_upload(request: Request):
         logger.info(f'Got final chunk of uploaded file: {output_str}')
         del api_app.shared_ctx.uploaded_files[output_str]
         # Upsert this new file (and any related files) into the DB.
-        coro = lib.upsert_file(output, tag_names=tag_names)
-        if PYTEST:
-            await coro
-        else:
-            background_task(coro)
+        background_task(lib.upsert_file(output, tag_names=tag_names))
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

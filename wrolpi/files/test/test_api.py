@@ -902,7 +902,6 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     assert not srt.exists(), "Old SRT should not exist"
 
     # Verify FileGroup is updated
-    test_session.expire_all()
     fg = test_session.query(FileGroup).one()
     assert fg.primary_path == new_video_1
     file_names = [f['path'] for f in fg.files]
@@ -924,7 +923,6 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     assert not new_srt_1.exists(), "'example 2.srt' should not exist"
 
     # Verify FileGroup is updated
-    test_session.expire_all()
     fg = test_session.query(FileGroup).one()
     assert fg.primary_path == final_video
     file_names = [f['path'] for f in fg.files]
@@ -975,7 +973,6 @@ async def test_rename_collection_directory(test_session, test_directory, make_fi
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Verify Collection.directory was updated
-    test_session.expire_all()
     collection = test_session.query(Collection).filter_by(id=collection_id).one()
     assert collection.directory == test_directory / 'renamed_collection'
     assert not (test_directory / 'my_collection').exists()
@@ -1020,7 +1017,6 @@ async def test_rename_directory_with_nested_collections(test_session, test_direc
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Verify nested Collection directories were updated
-    test_session.expire_all()
     coll_a = test_session.query(Collection).filter_by(id=coll_a_id).one()
     coll_b = test_session.query(Collection).filter_by(id=coll_b_id).one()
 
@@ -1054,8 +1050,7 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
 
 @pytest.mark.asyncio
-async def test_get_file(test_session, async_client, test_directory, make_files_structure, await_background_tasks,
-                        await_switches):
+async def test_get_file(test_session, async_client, test_directory, make_files_structure):
     """Can get info about a single file."""
     make_files_structure({'foo/bar.txt': 'foo contents'})
     await lib.refresh_files()
@@ -1065,9 +1060,6 @@ async def test_get_file(test_session, async_client, test_directory, make_files_s
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']
     assert response.json['file']['path'] == 'foo/bar.txt'
-
-    # Wait for `viewed` to be set in background task.
-    await await_background_tasks()
 
     fg, = test_session.query(FileGroup).all()
     assert fg.primary_path == test_directory / 'foo/bar.txt'

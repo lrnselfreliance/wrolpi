@@ -20,7 +20,6 @@ async def test_tag_domain_collection_moves_archives(
         archive_factory,
         async_client,
         tag_factory,
-        await_switches,
 ):
     """
     When a domain collection with a directory is tagged via the API with a new directory,
@@ -61,17 +60,11 @@ async def test_tag_domain_collection_moves_archives(
     body = {'tag_name': 'News', 'directory': 'archive/News/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
-
-    # Refresh objects from DB
-    test_session.expire_all()
 
     # Verify collection directory was updated
     assert collection.directory == dest_dir
 
     # Verify archives were moved
-    test_session.refresh(archive1)
-    test_session.refresh(archive2)
     assert str(dest_dir) in str(archive1.file_group.primary_path), \
         f'Archive 1 should be in {dest_dir}, but is at {archive1.file_group.primary_path}'
     assert str(dest_dir) in str(archive2.file_group.primary_path), \
@@ -89,7 +82,6 @@ async def test_tag_domain_collection_moves_archives(
 
     # Verify FileGroup paths were updated correctly
     for archive in [archive1, archive2]:
-        test_session.refresh(archive)
         data = archive.file_group.data
         assert data is not None, f"Archive {archive.id} should have FileGroup.data"
         # FileGroup.directory should point to new location
@@ -111,7 +103,6 @@ async def test_tag_domain_collection_moves_extra_files(
         archive_factory,
         async_client,
         tag_factory,
-        await_switches,
 ):
     """
     Extra files (not associated with Archives) in the domain directory should also be moved.
@@ -147,7 +138,6 @@ async def test_tag_domain_collection_moves_extra_files(
     body = {'tag_name': 'News', 'directory': 'archive/News/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
 
     # Verify extra file was moved
     assert (dest_dir / 'notes.txt').exists(), 'Extra file should be moved to new directory'
@@ -162,7 +152,6 @@ async def test_tag_domain_collection_old_directory_removed(
         archive_factory,
         async_client,
         tag_factory,
-        await_switches,
 ):
     """
     After moving, the old directory should be removed if empty.
@@ -194,7 +183,6 @@ async def test_tag_domain_collection_old_directory_removed(
     body = {'tag_name': 'News', 'directory': 'archive/News/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
 
     # Verify old directory was removed
     assert not src_dir.exists(), f'Old directory {src_dir} should be removed after move'
@@ -207,7 +195,6 @@ async def test_untag_domain_collection_moves_back(
         make_files_structure,
         async_client,
         tag_factory,
-        await_switches,
 ):
     """
     When removing a tag from a domain collection with a new directory,
@@ -244,18 +231,15 @@ async def test_untag_domain_collection_moves_back(
     untagged_dir = test_directory / 'archive' / 'example.com'
     untagged_dir.mkdir(parents=True, exist_ok=True)
 
-    # Store collection ID for lookup after API call
+    # Store collection ID for lookup after API call (collection may be deleted)
     collection_id = collection.id
-    file_group_id = file_group.id
 
     # Remove the tag and move to untagged directory
     body = {'tag_name': None, 'directory': 'archive/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection_id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
 
-    # Refresh objects from DB - query fresh from database
-    test_session.expire_all()
+    # Query fresh from database - collection may be deleted during cleanup
     collection = test_session.query(Collection).filter_by(id=collection_id).one_or_none()
 
     # Note: The collection may be deleted if it becomes empty during refresh cleanup
@@ -266,8 +250,6 @@ async def test_untag_domain_collection_moves_back(
         assert collection.directory == untagged_dir
 
     # Verify file was moved - the key test here is that files moved, not the collection state
-    from wrolpi.files.models import FileGroup
-    file_group = test_session.query(FileGroup).filter_by(id=file_group_id).one()
     assert str(untagged_dir) in str(file_group.primary_path), \
         f'File should be in {untagged_dir}, but is at {file_group.primary_path}'
 
@@ -279,7 +261,6 @@ async def test_tag_domain_collection_without_directory_no_move(
         archive_factory,
         async_client,
         tag_factory,
-        await_switches,
 ):
     """
     When tagging a domain collection without providing a directory,
@@ -312,11 +293,6 @@ async def test_tag_domain_collection_without_directory_no_move(
     body = {'tag_name': 'News'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
-
-    # Refresh objects from DB
-    test_session.expire_all()
-    test_session.refresh(collection)
 
     # Verify tag was set
     assert collection.tag_name == 'News'
@@ -325,7 +301,6 @@ async def test_tag_domain_collection_without_directory_no_move(
     assert collection.directory == src_dir
 
     # Verify archive was NOT moved
-    test_session.refresh(archive)
     assert archive.file_group.primary_path == original_path, \
         f'Archive should NOT be moved when directory is not provided'
 
@@ -429,11 +404,6 @@ async def test_tag_domain_comprehensive(
     body = {'tag_name': tag.name, 'directory': 'archive/News/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
-
-    # Refresh objects from DB
-    test_session.expire_all()
-    collection = test_session.query(Collection).one()
 
     assert collection.tag_name == tag.name
     # Domain was moved to Tag's directory, old directory was removed
@@ -443,12 +413,9 @@ async def test_tag_domain_comprehensive(
     assert not domain_directory.exists(), 'Old domain directory should have been deleted.'
 
     # Domain download goes into the domain's directory
-    download = test_session.query(Download).one()
     assert download.destination == new_domain_directory, f'{download} was not moved'
 
     # Archives were moved
-    test_session.refresh(archive1)
-    test_session.refresh(archive2)
     assert str(new_domain_directory) in str(archive1.file_group.primary_path), \
         f'Archive 1 should be in new directory'
     assert str(new_domain_directory) in str(archive2.file_group.primary_path), \
@@ -474,10 +441,8 @@ async def test_tag_domain_comprehensive(
     body = {'tag_name': None, 'directory': 'archive/example.com'}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
 
-    # Refresh objects from DB
-    test_session.expire_all()
+    # Query collection from DB
     collection = test_session.query(Collection).filter_by(name='example.com').one_or_none()
 
     # Collection may be deleted during cleanup if empty, but we can still verify downloads
@@ -486,15 +451,12 @@ async def test_tag_domain_comprehensive(
         assert collection.directory == original_directory
 
     # Archives were moved back
-    test_session.refresh(archive1)
-    test_session.refresh(archive2)
     assert str(original_directory) in str(archive1.file_group.primary_path), \
         f'Archive 1 should be moved back'
     assert str(original_directory) in str(archive2.file_group.primary_path), \
         f'Archive 2 should be moved back'
 
     # Download was moved back
-    download = test_session.query(Download).one()
     assert download.destination == original_directory, f'{download} was not moved back'
 
     assert not (test_directory / 'archive/News/example.com').exists(), \
@@ -514,21 +476,13 @@ async def test_tag_domain_comprehensive(
     body = {'tag_name': tag.name}
     request, response = await async_client.post(f'/api/collections/{collection.id}/tag', json=body)
     assert response.status_code == HTTPStatus.OK, response.content.decode()
-    await await_switches()
-
-    # Refresh objects from DB
-    test_session.expire_all()
-    collection = test_session.query(Collection).filter_by(name='example.com').one()
 
     assert collection.tag_name == 'News'
     assert collection.directory == original_directory, 'Directory should not change without explicit directory'
 
     # Archives were not moved
-    test_session.refresh(archive1)
-    test_session.refresh(archive2)
     assert str(original_directory) in str(archive1.file_group.primary_path)
     assert str(original_directory) in str(archive2.file_group.primary_path)
 
     # Download was not changed
-    download = test_session.query(Download).one()
     assert download.destination == original_directory, f'{download} should not have moved'

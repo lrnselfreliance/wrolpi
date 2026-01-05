@@ -550,10 +550,8 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
         file.unlink()
         deleted_count += 1
 
-    if PYTEST:
-        await refresh_files(outdated)
-    else:
-        background_task(refresh_files(outdated))
+    # Must refresh synchronously to clean up DB before returning.
+    await refresh_files(outdated)
 
     await restart_kiwix()
 

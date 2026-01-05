@@ -222,10 +222,7 @@ class Tag(ModelHelper, Base):
                               f" {channel} {possible_directory} {self}"
                         logger.warning(msg)
 
-        if PYTEST:
-            await _()
-        else:
-            background_task(_())
+        background_task(_())
 
     def delete(self):
         """Deletes this Tag, if it is unused.

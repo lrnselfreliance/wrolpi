@@ -467,7 +467,7 @@ async def test_channel_download_id(async_client, test_session, tag_factory, simp
 
 @pytest.mark.asyncio
 async def test_tag_channel(async_client, test_session, test_directory, channel_factory, tag_factory, video_factory,
-                           test_channels_config, test_download_manager, test_downloader, await_background_tasks):
+                           test_channels_config, test_download_manager, test_downloader):
     """A single Tag can be applied to a Channel."""
     # Create channel directory in the usual videos directory.
     videos_directory = get_videos_directory()
@@ -498,7 +498,6 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     body = dict(tag_name=tag.name, directory='videos/Tag Name/Channel Name')
     request, response = await async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
-    await await_background_tasks()  # Wait for move to complete and expire session objects
 
     channel = test_session.query(Channel).one()
     assert channel.tag_name == tag.name
@@ -530,7 +529,6 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     body = dict(tag_name=None, directory='videos/Channel Name')
     request, response = await async_client.post(f'/api/videos/channels/{channel.id}/tag', json=body)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.content.decode()
-    await await_background_tasks()  # Wait for move to complete and expire session objects
 
     channel = test_session.query(Channel).one()
     assert channel.tag_name is None

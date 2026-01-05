@@ -84,8 +84,6 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
 
     await async_client.post('/api/files/refresh')
 
-    test_session.expire_all()
-
     # Posters were found during refresh.
     assert video1.file_group.my_poster_files()
     assert 'subdir' in str(video1.file_group.my_poster_files()[0])
@@ -383,8 +381,7 @@ async def test_video_file_format_with_upload_year(async_client, test_session, fa
 
 
 @pytest.mark.asyncio
-async def test_video_upload_file_tracking(test_session, async_client, video_factory, await_switches,
-                                          make_multipart_form,
+async def test_video_upload_file_tracking(test_session, async_client, video_factory, make_multipart_form,
                                           image_bytes_factory):
     """Test that uploading info.json, poster, and caption files via /api/files/upload properly tracks them in Video and FileGroup."""
     from wrolpi.common import get_relative_to_media_directory
@@ -432,11 +429,7 @@ async def test_video_upload_file_tracking(test_session, async_client, video_fact
     request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, f'Upload failed with status {response.status_code}: {response.json}'
 
-    await await_switches()
-
     # Step 4: Verify info.json is tracked
-    # Refresh the session to get updated data
-    test_session.expire_all()
     video = test_session.query(Video).filter_by(id=video.id).one()
 
     # Assert info.json properties exist
@@ -471,10 +464,6 @@ async def test_video_upload_file_tracking(test_session, async_client, video_fact
     request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, f'Poster upload failed with status {response.status_code}: {response.json}'
 
-    await await_switches()
-
-    # Refresh session to get updated data
-    test_session.expire_all()
     video = test_session.query(Video).filter_by(id=video.id).one()
 
     # Assert poster properties exist
@@ -521,10 +510,6 @@ Another line of captions.
     request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
     assert response.status_code == HTTPStatus.CREATED, f'Caption upload failed with status {response.status_code}: {response.json}'
 
-    await await_switches()
-
-    # Refresh session to get updated data
-    test_session.expire_all()
     video = test_session.query(Video).filter_by(id=video.id).one()
 
     # Assert caption properties exist

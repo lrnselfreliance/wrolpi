@@ -35,7 +35,7 @@ def get_incomplete_videos(limit: int, offset: int, channel_id: int) -> List[dict
                 -- {'streams': [{'codec_type': 'video'}, {'codec_type': 'audio'}]} -> {video,audio}
                 select v.id, array_agg(s ->> 'codec_type')::TEXT[] AS codec_types
                 from video v
-                         cross join lateral json_array_elements(ffprobe_json -> 'streams') s
+                         cross join lateral jsonb_array_elements(ffprobe_json -> 'streams') s
                          where channel_id = %(channel_id)s
                 group by v.id)
             SELECT all_videos.id AS video_id, fg.primary_path, all_videos.codec_types

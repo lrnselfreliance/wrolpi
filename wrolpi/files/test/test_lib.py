@@ -695,7 +695,8 @@ async def test_get_refresh_progress(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure, zip_file_factory):
+async def test_refresh_files_no_groups(async_client, test_session, test_directory, make_files_structure,
+                                       zip_file_factory):
     """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
     foo_txt, foo_zip = make_files_structure({
         'foo.txt': 'text',
@@ -1442,7 +1443,7 @@ def test_sanitize_filename_surrogates_renames_file(test_directory):
 
 @pytest.mark.asyncio
 async def test_rename_file_with_associated_files_twice(async_client, test_session, test_directory, make_files_structure,
-                                                        video_bytes, srt_text):
+                                                       video_bytes, srt_text):
     """
     Renaming a FileGroup twice should rename all associated files both times.
 
@@ -1508,7 +1509,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
 
 @pytest.mark.asyncio
 async def test_rename_non_primary_file_renames_filegroup(async_client, test_session, test_directory,
-                                                          make_files_structure, video_bytes, srt_text):
+                                                         make_files_structure, video_bytes, srt_text):
     """
     Renaming a non-primary file (like a subtitle) should rename the entire FileGroup.
 

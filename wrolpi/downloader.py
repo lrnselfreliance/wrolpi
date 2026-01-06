@@ -13,7 +13,7 @@ from datetime import timedelta, datetime
 from enum import Enum
 from http import HTTPStatus
 from itertools import filterfalse
-from typing import List, Dict, Generator, Iterable, Coroutine
+from typing import List, Dict, Generator, Iterable, Coroutine, Any
 from typing import Tuple, Optional
 from urllib.parse import urlparse
 
@@ -1483,7 +1483,7 @@ TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None
 
 
 @contextlib.contextmanager
-def downloads_manager_config_context() -> DownloadManagerConfig:
+def downloads_manager_config_context() -> Generator[DownloadManagerConfig, Any, None]:
     """Used to create a test config."""
     global TEST_DOWNLOAD_MANAGER_CONFIG
     TEST_DOWNLOAD_MANAGER_CONFIG = DownloadManagerConfig()

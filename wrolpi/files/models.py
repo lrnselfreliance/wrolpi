@@ -7,6 +7,7 @@ from typing import List, Type, Optional, Iterable
 
 from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event, Index
 from sqlalchemy import types
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
@@ -48,7 +49,7 @@ class FancyJSON(types.TypeDecorator):
 
     Converts datetime to ISO strings when moving into DB, and vice versa.
     """
-    impl = types.JSON
+    impl = JSONB
 
     def process_bind_param(self, value, dialect):
         if value:

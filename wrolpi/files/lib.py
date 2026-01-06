@@ -591,7 +591,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                         WHEN
                             file_group.modification_datetime = EXCLUDED.modification_datetime
                             AND file_group.size = EXCLUDED.size
-                            AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                            AND jsonb_array_length(file_group.files) = jsonb_array_length(EXCLUDED.files)
                             THEN file_group.files
                         ELSE EXCLUDED.files
                         END
@@ -601,7 +601,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                         file_group.indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
                         AND file_group.size = EXCLUDED.size
-                        AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                        AND jsonb_array_length(file_group.files) = jsonb_array_length(EXCLUDED.files)
                     )
                 RETURNING id, file_group.indexed AS old_indexed, indexed
             '''
@@ -1160,7 +1160,7 @@ def get_file_statistics():
         curs.execute('''
                      SELECT
                          -- All items in file_group.files are real individual files.
-                         SUM(json_array_length(files))                                                                             AS "total_count",
+                         SUM(jsonb_array_length(files))                                                                             AS "total_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf')                                          AS "pdf_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip')                                          AS "zip_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%')                                               AS "video_count",
@@ -1295,7 +1295,7 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)   AS "total_file_groups",
+                   SUM(jsonb_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)   AS "total_file_groups",
                    COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)   AS "indexed",
                    COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = %(idempotency)s)  AS "unindexed",
                    COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s) AS "modeled"
@@ -1306,7 +1306,7 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(json_array_length(files))              AS "total_file_groups",
+                   SUM(jsonb_array_length(files))              AS "total_file_groups",
                    COUNT(id) FILTER (WHERE indexed IS TRUE)   AS "indexed",
                    COUNT(id) FILTER (WHERE indexed IS FALSE)  AS "unindexed",
                    COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"

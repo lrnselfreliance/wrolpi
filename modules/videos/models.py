@@ -2,7 +2,8 @@ import json
 import pathlib
 from typing import Optional, Dict, List
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger, Index, text
+from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -33,7 +34,7 @@ class Video(ModelHelper, Base):
 
     source_id = Column(String)  # The id from yt-dlp
     view_count = Column(Integer)  # The view count from the ChannelDownloader (or from initial download)
-    ffprobe_json = deferred(Column(JSON))  # Data that is fetched once from ffprobe (ffmpeg)
+    ffprobe_json = deferred(Column(JSONB))  # Data that is fetched once from ffprobe (ffmpeg)
     have_comments = Column(Boolean, default=False)  # see `get_missing_videos_comments`
     comments_failed = Column(Boolean, default=False)  # see `get_missing_videos_comments`
 
@@ -547,7 +548,7 @@ class Channel(ModelHelper, Base):
     total_size = Column(BigInteger, default=0, nullable=False)  # update_channel_size
     minimum_frequency = Column(Integer)  # update_channel_minimum_frequency
 
-    info_json = deferred(Column(JSON))
+    info_json = deferred(Column(JSONB))
     info_date = Column(Date)
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')

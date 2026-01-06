@@ -15,7 +15,8 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional
+from pathlib import Path
+from typing import List, Callable, Dict, Sequence, Union, Coroutine, Awaitable, Optional, Any, Generator, AsyncGenerator
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock, AsyncMock
@@ -78,7 +79,7 @@ def test_db() -> Tuple[Engine, Session]:
 
 
 @pytest.fixture()
-def test_session() -> Session:
+def test_session() -> Generator[Session, Any, None]:
     """Pytest Fixture to get a test database session."""
     test_engine, session = test_db()
 
@@ -111,7 +112,7 @@ def test_debug_logger(request):
 
 
 @pytest.fixture
-def test_directory() -> pathlib.Path:
+def test_directory() -> Generator[Path, Any, None]:
     """
     Overwrite the media directory with a temporary directory.
     """
@@ -124,7 +125,7 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture
-def test_wrolpi_config(test_directory) -> pathlib.Path:
+def test_wrolpi_config(test_directory) -> Generator[Path, Any, None]:
     """
     Create a test config based off the example config.
     """
@@ -209,7 +210,7 @@ class AutoAwaitTestClient:
 
 
 @pytest.fixture
-async def async_client(test_directory, test_session) -> AutoAwaitTestClient:
+async def async_client(test_directory, test_session) -> AsyncGenerator[AutoAwaitTestClient, Any]:
     """Get an Async Sanic Test Client with all default routes attached.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
@@ -232,7 +233,7 @@ async def async_client(test_directory, test_session) -> AutoAwaitTestClient:
 
 
 @pytest.fixture
-def test_download_manager_config(async_client, test_directory) -> pathlib.Path:
+def test_download_manager_config(async_client, test_directory) -> Generator[Path, Any, None]:
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
@@ -267,7 +268,7 @@ async def test_download_manager(
         async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
-) -> DownloadManager:
+) -> AsyncGenerator[DownloadManager, Any]:
     with timer('test_download_manager'):
         # Needed to use signals in
         manager = DownloadManager()
@@ -279,7 +280,7 @@ async def test_download_manager(
 
 
 @pytest.fixture
-def fake_now() -> Callable:
+def fake_now() -> Generator[Callable[..., Any], Any, None]:
     try:
         set_test_now(datetime(2000, 1, 1))
         yield set_test_now
@@ -375,7 +376,7 @@ def test_downloader(test_download_manager) -> Downloader:
 
 
 @pytest.fixture
-def video_file(test_directory) -> pathlib.Path:
+def video_file(test_directory) -> Generator[Path, Any, None]:
     """Return a copy of the example Big Buck Bunny video in the `test_directory`."""
     destination = test_directory / f'video-{uuid4()}.mp4'
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
@@ -384,7 +385,7 @@ def video_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def corrupted_video_file(test_directory) -> pathlib.Path:
+def corrupted_video_file(test_directory) -> Generator[Path, Any, None]:
     """Return a copy of a corrupted video file in the `test_directory`."""
     destination = test_directory / f'corrupted-{uuid4()}.mp4'
     shutil.copy(PROJECT_DIR / 'test/corrupted.mp4', destination)
@@ -411,7 +412,7 @@ def video_bytes() -> bytes:
 
 
 @pytest.fixture
-def image_file(test_directory) -> pathlib.Path:
+def image_file(test_directory) -> Generator[Path, Any, None]:
     """Create a small image file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.jpeg'
     Image.new('RGB', (25, 25), color='grey').save(destination)
@@ -419,7 +420,7 @@ def image_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def vtt_file1(test_directory) -> pathlib.Path:
+def vtt_file1(test_directory) -> Generator[Path, Any, None]:
     """Return a copy of the example1 VTT file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', destination)
@@ -427,7 +428,7 @@ def vtt_file1(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def vtt_file2(test_directory) -> pathlib.Path:
+def vtt_file2(test_directory) -> Generator[Path, Any, None]:
     """Return a copy of the example2 VTT file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/example2.en.vtt', destination)
@@ -440,7 +441,7 @@ def srt_text() -> str:
 
 
 @pytest.fixture
-def srt_file3(test_directory) -> pathlib.Path:
+def srt_file3(test_directory) -> Generator[Path, Any, None]:
     """Return a copy of the example3 SRT file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.en.srt'
     shutil.copy(PROJECT_DIR / 'test/example3.en.srt', destination)
@@ -448,35 +449,35 @@ def srt_file3(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def example_pdf(test_directory) -> pathlib.Path:
+def example_pdf(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'pdf example.pdf'
     shutil.copy(PROJECT_DIR / 'test/pdf example.pdf', destination)
     yield destination
 
 
 @pytest.fixture
-def example_epub(test_directory) -> pathlib.Path:
+def example_epub(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'ebook example.epub'
     shutil.copy(PROJECT_DIR / 'test/ebook example.epub', destination)
     yield destination
 
 
 @pytest.fixture
-def example_mobi(test_directory) -> pathlib.Path:
+def example_mobi(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'ebook example.mobi'
     shutil.copy(PROJECT_DIR / 'test/ebook example.mobi', destination)
     yield destination
 
 
 @pytest.fixture
-def example_doc(test_directory) -> pathlib.Path:
+def example_doc(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'example word.doc'
     shutil.copy(PROJECT_DIR / 'test/example word.doc', destination)
     yield destination
 
 
 @pytest.fixture
-def example_docx(test_directory) -> pathlib.Path:
+def example_docx(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'example word.docx'
     shutil.copy(PROJECT_DIR / 'test/example word.docx', destination)
     yield destination

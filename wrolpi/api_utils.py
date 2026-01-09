@@ -201,7 +201,9 @@ def perpetual_signal(event: str = None, sleep: int | float = 1, run_while_testin
                 if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
                     elapsed = int(time() - start)
                     logger.trace(f'perpetual_signal {event_} took {elapsed} seconds')
-                if not cancelled:
+                if not cancelled and not PYTEST:
+                    # In PYTEST mode, don't self-dispatch - the test fixture handles this.
+                    # This prevents "Task was destroyed but it is pending!" errors during teardown.
                     await asyncio.sleep(sleep)
                     await api_app.dispatch(event_)
 

@@ -14,7 +14,7 @@ from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
 from wrolpi.db import get_db_session
 import pathlib
-from wrolpi.errors import RefreshConflict
+from wrolpi.errors import FileWorkerConflict
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.tags import Tag
@@ -286,7 +286,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         ValidationError: If collection has no directory
     """
     # Local import to avoid circular import: collections -> files -> collections
-    from wrolpi.files.lib import refresh_files
+    from wrolpi.files.worker import file_worker
 
     with get_db_session() as session:
         collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
@@ -303,7 +303,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
         directory = collection.directory
 
     # Refresh files asynchronously
-    asyncio.ensure_future(refresh_files([directory], send_events=send_events))
+    file_worker.queue_refresh([directory])
 
     if send_events:
         relative_dir = get_relative_to_media_directory(directory)
@@ -350,7 +350,7 @@ async def tag_collection(
     Raises:
         UnknownCollection: If collection not found
         ValidationError: If tagging requirements not met
-        RefreshConflict: If a file refresh is in progress and directory change is requested
+        FileWorkerConflict: If a file operation is in progress and directory change is requested
     """
     collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
 
@@ -381,8 +381,8 @@ async def tag_collection(
             logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
                          f'{old_directory} -> {target_directory}')
 
-        if need_to_move and flags.refreshing.is_set():
-            raise RefreshConflict('Refusing to move collection while file refresh is in progress')
+        if need_to_move and flags.file_worker_busy.is_set():
+            raise FileWorkerConflict('Refusing to move collection while FileWorker is busy')
 
         session.flush()
 
@@ -443,8 +443,8 @@ async def tag_collection(
         logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
                      f'{old_directory} -> {target_directory}')
 
-    if need_to_move and flags.refreshing.is_set():
-        raise RefreshConflict('Refusing to move collection while file refresh is in progress')
+    if need_to_move and flags.file_worker_busy.is_set():
+        raise FileWorkerConflict('Refusing to move collection while FileWorker is busy')
 
     # Apply the tag
     collection.tag_id = tag.id

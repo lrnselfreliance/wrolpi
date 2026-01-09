@@ -542,50 +542,49 @@ export function FilesSearchView({
     </>
 }
 
+function getPhaseLabel(status) {
+    switch (status) {
+        case 'counting':
+            return 'Counting';
+        case 'comparing':
+        case 'upserting':
+        case 'deleting':
+            return 'Refreshing';
+        case 'modeling':
+            return 'Modeling';
+        case 'indexing':
+            return 'Indexing';
+        case 'planning':
+            return 'Move: Planning';
+        case 'moving':
+            return 'Move: Moving';
+        case 'reverting':
+            return 'Reverting';
+        default:
+            return null;
+    }
+}
+
 export function FilesRefreshProgress() {
     const {progress} = useFilesProgressInterval();
 
-    if (!progress) {
-        return;
+    if (!progress || progress.status === 'idle') {
+        return null;
     }
 
-    const {
-        discovery,
-        refreshing,
-        modeling,
-        indexing,
-        cleanup,
-        indexed,
-        unindexed,
-        counted_files,
-        total_file_groups,
-        modeled
-    } = progress;
+    const {status, operation_total, operation_processed, operation_percent} = progress;
+    const phaseLabel = getPhaseLabel(status);
 
-    if (refreshing) {
-        // Default is Counting / Step 1.  Move progress bar toward the middle to avoid clipping out of the screen.
-        let params = {value: Math.floor(counted_files / 2), total: counted_files, progress: 'ratio'};
-        let label = 'Refresh: Counting';
-
-        if (discovery) {
-            params['value'] = total_file_groups;
-            params['total'] = counted_files;
-            label = 'Refresh: Discovery'
-        } else if (modeling) {
-            params['value'] = modeled;
-            params['total'] = total_file_groups;
-            label = 'Refresh: Modeling';
-        } else if (indexing) {
-            params['value'] = unindexed;
-            params['total'] = unindexed + indexed;
-            label = 'Refresh: Indexing';
-        } else if (cleanup) {
-            params['value'] = 3;
-            params['total'] = 4;
-            label = 'Refresh: Cleanup';
-        }
-        return <Progress active color='violet' {...params}>{label}</Progress>
+    if (!phaseLabel) {
+        return null;
     }
+
+    let label = `Refresh: ${phaseLabel}`;
+    if (operation_total > 0) {
+        label = `${label} (${operation_processed.toLocaleString()} / ${operation_total.toLocaleString()})`;
+    }
+
+    return <Progress active color='violet' percent={operation_percent || 0} progress>{label}</Progress>;
 }
 
 function FilesPage() {
@@ -610,7 +609,7 @@ export function FilesRoute() {
 }
 
 const useRefresh = () => {
-    const refreshing = useStatusFlag('refreshing');
+    const refreshing = useStatusFlag('file_worker_busy');
     const refreshingDirectory = useStatusFlag('refreshing_directory');
     const wrolModeEnabled = useWROLMode();
 

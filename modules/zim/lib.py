@@ -22,7 +22,8 @@ from wrolpi.dates import Seconds
 from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
-from wrolpi.files.lib import refresh_files, split_file_name_words
+from wrolpi.files.lib import split_file_name_words
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 
@@ -550,8 +551,8 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
         file.unlink()
         deleted_count += 1
 
-    # Must refresh synchronously to clean up DB before returning.
-    await refresh_files(outdated)
+    # Refresh synchronously to clean up DB before returning.
+    await file_worker.refresh_sync(list(outdated))
 
     await restart_kiwix()
 

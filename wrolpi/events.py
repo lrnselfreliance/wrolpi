@@ -53,6 +53,10 @@ class Events:
         send_event('directory_refresh', message, subject='refresh')
 
     @staticmethod
+    def send_files_refreshed(message: str = None):
+        send_event('files_refreshed', message, subject='refresh')
+
+    @staticmethod
     def send_deleted(message: str = None):
         send_event('deleted', message, subject='deleted')
 

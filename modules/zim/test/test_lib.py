@@ -10,15 +10,14 @@ from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, get_download_manager_config
-from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci
 
 
 @pytest.mark.asyncio
-async def test_get_zim(async_client, test_session, zim_path_factory):
+async def test_get_zim(async_client, test_session, zim_path_factory, refresh_files):
     zim_path_factory()
-    await files_lib.refresh_files()
+    await refresh_files()
 
     assert lib.get_zim(test_session, 1)
 
@@ -27,9 +26,9 @@ async def test_get_zim(async_client, test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entry(async_client, test_session, zim_path_factory):
+async def test_zim_get_entry(async_client, test_session, zim_path_factory, refresh_files):
     zim_path_factory()
-    await files_lib.refresh_files()
+    await refresh_files()
 
     entry: Entry = lib.get_entry('one', 1)
     assert entry.path == 'one'
@@ -389,13 +388,13 @@ async def test_zim_subscription_download_import(async_client, test_session):
 
 
 @pytest.mark.asyncio
-async def test_zim_modeler(async_client, test_session, zim_factory):
+async def test_zim_modeler(async_client, test_session, zim_factory, refresh_files):
     """Zim modeler sets FileGroup title and a_text."""
     zim = zim_factory('the_zim_title.zim')
     assert zim.file_group.indexed is False
     test_session.commit()
 
-    await files_lib.refresh_files()
+    await refresh_files()
 
     fg: FileGroup = test_session.query(FileGroup).one()
     assert fg.indexed is True

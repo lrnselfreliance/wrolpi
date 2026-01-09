@@ -10,7 +10,6 @@ import re
 import shutil
 import subprocess
 import urllib.parse
-from collections import OrderedDict
 from itertools import zip_longest
 from pathlib import Path
 from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
@@ -23,11 +22,11 @@ from sqlalchemy.orm import Session
 
 from wrolpi import flags
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, \
+from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
+    partition, \
+    get_files_and_directories, chunks_by_stem, walk, \
     get_wrolpi_config, \
-    timer, chunks, unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
+    unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify
 from wrolpi.downloader import download_manager, Download
@@ -50,10 +49,10 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
+__all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
-           'move', 'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
+           'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -255,10 +254,11 @@ async def delete(*paths: Union[str, pathlib.Path]):
         else:
             path.unlink()
 
-    # Must refresh synchronously to clean up DB before returning.
+    # Refresh synchronously to clean up DB before returning.
     # This ensures deleted FileGroups are removed before the caller continues
     # (e.g., upload API recreating the file).
-    await refresh_files(paths)
+    from wrolpi.files.worker import file_worker
+    await file_worker.refresh_sync(list(paths))
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):
@@ -537,7 +537,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
     idempotency = str(idempotency)
 
     non_primary_files = set()
-    for chunk in chunks_by_stem(files, 100):
+    for chunk in chunks_by_stem(files, 500):
         # Group all files by their shared full-stem.  `chunk_by_stem` already sorted the files.
         grouped = group_files_by_stem(chunk, pre_sorted=True)
         # Convert the groups into file_groups.  Extract common information into `file_group.data`.
@@ -722,95 +722,6 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         '''
         refresh_logger.debug(stmt)
         curs.execute(stmt)
-
-
-@limit_concurrent(1)  # Only one refresh at a time.
-@wrol_mode_check
-@cancelable_wrapper
-async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = True):
-    """Find, model, and index all files in the media directory."""
-    from wrolpi.api_utils import api_app
-    if isinstance(paths, str):
-        paths = [pathlib.Path(paths), ]
-    if isinstance(paths, pathlib.Path):
-        paths = [paths, ]
-
-    idempotency = now()
-    api_app.shared_ctx.refresh['idempotency'] = idempotency
-
-    refreshing_all_files = False
-
-    with flags.refreshing, timer('refresh_files', 'info'):
-        api_app.shared_ctx.refresh['counted_files'] = 0
-        if not paths:
-            refresh_logger.warning('Refreshing all files')
-            refreshing_all_files = True
-        else:
-            refresh_msg = ", ".join(list(map(str, paths)))
-            refresh_logger.warning(f'Refreshing {refresh_msg[:1000]}')
-        if send_events:
-            Events.send_global_refresh_started()
-
-        # Add all files in the media directory to the DB.
-        paths = paths or [get_media_directory()]
-
-        directories = list(filter(lambda i: i.is_dir(), paths))
-        found_directories = set()
-        if directories:
-            with flags.refresh_counting:
-                while directories:
-                    directory = directories.pop()
-                    try:
-                        files, dirs = get_files_and_directories(directory)
-                    except PermissionError as e:
-                        refresh_logger.error(f'Error refreshing {directory}', exc_info=e)
-                        continue
-                    directories.extend(dirs)
-                    found_directories |= set(dirs)
-                    add_files_to_refresh_count(len(files))
-                    # Sleep to catch cancel.
-                    await asyncio.sleep(0)
-                refresh_logger.info(f'Counted {api_app.shared_ctx.refresh["counted_files"]} files')
-
-        with flags.refresh_discovery:
-            await refresh_discover_paths(paths, idempotency)
-            if send_events:
-                Events.send_global_refresh_discovery_completed()
-
-        # Model all files that have not been indexed.
-        with flags.refresh_modeling:
-            await apply_modelers()
-            if send_events:
-                Events.send_global_refresh_modeling_completed()
-
-        # Index the rest of the files that were not indexed by modelers.
-        with flags.refresh_indexing:
-            await apply_indexers()
-            if send_events:
-                Events.send_global_refresh_indexing_completed()
-
-        # Cleanup any outdated file data.
-        with flags.refresh_cleanup:
-            await apply_refresh_cleanup()
-
-            with get_db_session() as session:
-                parent_directories = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(paths))}
-                parent_directories |= set(filter(lambda i: i.is_dir(), paths))
-            upsert_directories(parent_directories, found_directories)
-
-            if send_events:
-                Events.send_global_after_refresh_completed()
-
-        refresh_logger.warning('Done refreshing Files')
-
-        if refreshing_all_files:
-            # Only set refresh_complete flag if all files have been refreshed.
-            flags.refresh_complete.set()
-        if send_events:
-            Events.send_refresh_completed()
-
-    api_app.shared_ctx.refresh['counted_files'] = 0
-    api_app.shared_ctx.refresh['idempotency'] = None
 
 
 async def apply_indexers():
@@ -1058,8 +969,9 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
         results = session.query(FileGroup, Video) \
             .filter(FileGroup.id.in_(ordered_ids)) \
             .outerjoin(Video, Video.file_group_id == FileGroup.id)
-        # Order FileGroups by their location in ordered_ids.
-        file_groups: List[Tuple[FileGroup, Video]] = sorted(results, key=lambda i: ordered_ids.index(i[0].id))
+        # Order FileGroups by their location in ordered_ids.  Use dict for O(1) lookups instead of O(n) list.index().
+        id_to_order = {id_: idx for idx, id_ in enumerate(ordered_ids)}
+        file_groups: List[Tuple[FileGroup, Video]] = sorted(results, key=lambda i: id_to_order.get(i[0].id, 0))
         results = list()
         for extra, (file_group, video) in zip_longest(extras, file_groups):
             video: Video
@@ -1320,14 +1232,14 @@ def get_refresh_progress() -> RefreshProgress:
 
         progress = RefreshProgress(
             counted_files=api_app.shared_ctx.refresh.get('counted_files', 0),
-            counting=flags.refresh_counting.is_set(),
-            discovery=flags.refresh_discovery.is_set(),
+            counting=flags.file_worker_counting.is_set(),
+            discovery=flags.file_worker_discovery.is_set(),
             indexed=int(results['indexed'] or 0),
-            indexing=flags.refresh_indexing.is_set(),
+            indexing=flags.file_worker_indexing.is_set(),
             modeled=int(results['modeled'] or 0),
-            modeling=flags.refresh_modeling.is_set(),
-            cleanup=flags.refresh_cleanup.is_set(),
-            refreshing=flags.refreshing.is_set(),
+            modeling=flags.file_worker_modeling.is_set(),
+            cleanup=flags.file_worker_cleanup.is_set(),
+            refreshing=flags.file_worker_busy.is_set(),
             total_file_groups=int(results['total_file_groups'] or 0),
             unindexed=int(results['unindexed'] or 0),
         )
@@ -1453,258 +1365,33 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
         curs.execute(sql)
 
 
-def add_files_to_refresh_count(count: int):
-    from wrolpi.api_utils import api_app
-    count = api_app.shared_ctx.refresh.get('counted_files', 0) + count
-    api_app.shared_ctx.refresh['counted_files'] = count
-
-
-async def _move(session: Session, destination: pathlib.Path, *sources: pathlib.Path) \
-        -> OrderedDict[pathlib.Path, pathlib.Path]:
-    media_directory = get_media_directory()
-    for source in sources:
-        if not str(source).startswith(str(media_directory)):
-            raise FileNotFoundError(f'{source} is not within the media directory')
-    if not str(destination).startswith(str(media_directory)):
-        raise FileNotFoundError(f'{destination} is not within the media directory')
-
-    destination_existed = destination.is_dir()
-    destination.mkdir(parents=True, exist_ok=True)
-
-    # The files that will be moved.  [ (old_file, new_file), ... ]
-    plan: Dict[pathlib.Path, pathlib.Path] = dict()
-    # Directories that will need to be cleaned up.
-    old_directories = unique_by_predicate(i if i.is_dir() else i.parent for i in sources)
-
-    def add_file_group_to_plan(file_group_: FileGroup):
-        primary_path_ = file_group_.primary_path
-        if primary_path_ not in plan:
-            new_primary_path_ = destination / primary_path_.name
-            if new_primary_path_.exists():
-                raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path_}')
-            plan[primary_path_] = new_primary_path_
-
-    def add_source_file_group_to_plan(file_group_: FileGroup, source_: pathlib.Path):
-        primary_path_ = file_group_.primary_path
-        if primary_path_ not in plan:
-            new_primary_path_ = destination / source_.name / primary_path_.relative_to(source)
-            if new_primary_path_.exists():
-                raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path_}')
-            plan[primary_path_] = new_primary_path_
-
-    # Sources may be a list of files, we only want to issue a query for one file in each FileGroup.
-    sources = get_unique_files_by_stem(sources)
-    logger.info(f'move got {len(sources)} to move')
-
-    with flags.refresh_counting:
-        for source in sources:
-            if source.is_file():
-                # Get any FileGroups that share the source's stem.
-                files = glob_shared_stem(source)
-                file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(files)).all()
-                if not file_groups:
-                    # No FileGroups for this source file, create one.
-                    try:
-                        fg = FileGroup.from_paths(session, *files)
-                        file_groups = [fg, ]
-                    except NoPrimaryFile:
-                        for file in files:
-                            fg = FileGroup.from_paths(session, file)
-                            add_file_group_to_plan(fg)
-                add_files_to_refresh_count(len(file_groups))
-                for fg in file_groups:
-                    add_file_group_to_plan(fg)
-                # Sleep to catch cancel.
-                await asyncio.sleep(0)
-            elif source.is_dir():
-                # Use indexed directory column for efficient lookup
-                # Match exact directory or subdirectories
-                stmt = '''SELECT primary_path
-                          FROM file_group
-                          WHERE directory = :dir
-                             OR directory LIKE :dir_pattern'''
-                source_str = str(source)
-                for (primary_path,) in session.execute(
-                        stmt, dict(dir=source_str, dir_pattern=f'{source_str}/%')):
-                    primary_path = pathlib.Path(primary_path)
-                    if primary_path not in plan:
-                        new_primary_path = destination / source.name / primary_path.relative_to(source)
-                        if new_primary_path.exists():
-                            raise FileExistsError(f'Cannot move file because it already exists: {new_primary_path}')
-                        plan[primary_path] = new_primary_path
-                        add_files_to_refresh_count(1)
-
-                    # Sleep to catch cancel.
-                    await asyncio.sleep(0)
-
-                # Move directories of this source.
-                for directory in (i for i in walk(source) if i.is_dir()):
-                    new_directory = destination / source.name / directory.relative_to(source)
-                    plan[directory] = new_directory
-
-                # Find any files in this directory that are not yet in the DB and add them to the plan.
-                files = {i for i in walk(source) if i.is_file()}
-                if missing_files := files - set(plan.keys()):
-                    for paths in group_files_by_stem(missing_files):
-                        try:
-                            # Only create the FileGroup if a primary_path can be found.
-                            get_primary_file(paths)
-                            file_group = FileGroup.from_paths(session, *paths)
-                            add_files_to_refresh_count(1)
-                            add_source_file_group_to_plan(file_group, source)
-                        except NoPrimaryFile:
-                            # No primary path for these paths, create FileGroups for each.
-                            add_files_to_refresh_count(1)
-                            for file in paths:
-                                fg = FileGroup.from_paths(session, file)
-                                add_source_file_group_to_plan(fg, source)
-
-                        # Sleep to catch cancel.
-                        await asyncio.sleep(0)
-            else:
-                raise UnknownFile(f'Unknown path type, cannot move: {source}')
-
-    # Sort plan by the deepest files first.
-    plan: OrderedDict = OrderedDict(sorted(plan.items(), key=lambda i: (len(i[0].parents), i[0].name), reverse=True))
-    if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-        logger.trace(f'_move: plan created with {len(plan)} items to {destination}')
-
-    # Revert plan is built out as files are moved.
-    revert_plan = OrderedDict()
-    new_directories = set()
-
-    def do_plan(plan_: OrderedDict[pathlib.Path, pathlib.Path], is_revert: bool = False):
-        """Apply the move plan to all the FileGroups.
-
-        @warning: Cannot be cancelled!"""
-        nonlocal new_directories
-        # Query existing directories ONCE before processing chunks (not per-chunk).
-        existing_directories = {i[0] for i in session.query(Directory.path)}
-        inserted_directories = set()
-
-        # Move FileGroups in groups.
-        for chunk in chunks(plan_.items(), MOVE_CHUNK_SIZE):
-            old_paths = [i for i, j in chunk]
-            old_files, old_directories_ = partition(lambda i: i.is_file(), old_paths)
-            file_groups_ = session.query(FileGroup).filter(FileGroup.primary_path.in_(old_files)).all()
-            if len(file_groups_) != len(old_files):
-                # We ensured there are FileGroups while building the plan, maybe user deleted a file?
-                raise RuntimeError('Could not get all FileGroups for move')
-
-            # Build chunk plan for bulk update
-            chunk_plan = {}
-            for file_group_ in file_groups_:
-                old_file = file_group_.primary_path
-                new_primary_path_ = plan_[old_file]
-                parent = new_primary_path_.parent
-                parent.mkdir(parents=True, exist_ok=True)
-                if parent not in new_directories:
-                    new_directories.add(parent)
-                # Move physical files
-                _move_file_group_files(file_group_, new_primary_path_)
-                chunk_plan[old_file] = new_primary_path_
-                revert_plan[new_primary_path_] = old_file
-            for directory_ in old_directories_:
-                delete_directory(directory_)
-
-            # Find directories that need to be inserted (not existing and not already inserted).
-            missing_directories = new_directories - existing_directories - inserted_directories
-            if missing_directories:
-                session.add_all([Directory(path=d, name=d.name) for d in missing_directories])
-                inserted_directories.update(missing_directories)
-
-            # Batch update all FileGroups in this chunk with raw SQL
-            _bulk_update_file_groups_db(session, chunk_plan)
-            # Flush Directory inserts
-            session.flush()
-
-    with flags.refresh_discovery:
-        try:
-            do_plan(plan)
-            for source in sources:
-                if source.is_dir():
-                    delete_directory(source)
-            logger.info(f'Move execution completed')
-        except Exception as e:
-            logger.error(f'_move failed, reverting {len(revert_plan)} items', exc_info=e)
-            new_directories = set()
-            # Move files back.  Get copy because do_plan will change the revert plan.
-            do_plan(revert_plan.copy(), is_revert=True)
-            # Delete the directories that were created.
-            directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
-            for path in directories:
-                if path.is_dir():
-                    delete_directory(path)
-            # Remove destination only if it did not exist at the start.
-            if destination.is_dir() and destination_existed is False:
-                delete_directory(destination)
-            raise
-
-        # Clean up any old Directory records.
-        for old_directory in old_directories:
-            # Delete directories that do no exist, or are empty.
-            if not old_directory.is_dir() or next(old_directory.iterdir(), None) is None:
-                directories = session.query(Directory).filter(Directory.path.like(str(old_directory)))
-                for directory in directories:
-                    session.delete(directory)
-
-    return plan
-
-
 def delete_directory(directory: pathlib.Path, recursive: bool = False):
     """Remove a directory, remove it's Directory record.
 
-    Will refuse to delete a directory if it contains Tagged Files."""
-    if recursive:
-        with get_db_session() as session:
-            # Use indexed directory column for efficient lookup
-            directory_str = str(directory)
-            tagged = session.query(FileGroup) \
-                .filter(or_(
-                FileGroup.directory == directory_str,
-                FileGroup.directory.like(f'{directory_str}/%')
-            )) \
-                .join(TagFile, TagFile.file_group_id == FileGroup.id) \
-                .limit(1).one_or_none()
-            if tagged:
-                raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
-        shutil.rmtree(directory)
-    else:
-        directory.rmdir()
+    Will refuse to delete a directory if it contains Tagged Files.
+
+    This function is idempotent - safe to call even if the directory was already deleted."""
+    if directory.exists():
+        if recursive:
+            with get_db_session() as session:
+                # Use indexed directory column for efficient lookup
+                directory_str = str(directory)
+                tagged = session.query(FileGroup) \
+                    .filter(or_(
+                    FileGroup.directory == directory_str,
+                    FileGroup.directory.like(f'{directory_str}/%')
+                )) \
+                    .join(TagFile, TagFile.file_group_id == FileGroup.id) \
+                    .limit(1).one_or_none()
+                if tagged:
+                    raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
+            shutil.rmtree(directory)
+        else:
+            directory.rmdir()
+    # Always clean up DB record even if directory was already deleted
     with get_db_curs(commit=True) as curs:
         stmt = 'DELETE FROM directory WHERE path=%s'
         curs.execute(stmt, (str(directory),))
-
-
-async def move(session: Session, destination: pathlib.Path, *sources: pathlib.Path) \
-        -> OrderedDict[pathlib.Path, pathlib.Path]:
-    """Moves a file or directory (recursively), preserving applied Tags.
-
-    If the move fails at any point, the files will be returned to their previous locations.
-
-    Returns an OrderedDict, the key is the file's old location, the value is where the file was moved.
-    """
-    with flags.refreshing:
-        from wrolpi.api_utils import api_app
-        api_app.shared_ctx.refresh['counted_files'] = 0
-
-        # Move the files, if this fails it will revert itself and raise an error.
-        with timer('moving files', 'info'):
-            plan = await _move(session, destination, *sources)
-            session.commit()
-
-        with flags.refresh_indexing:
-            await apply_indexers()
-
-        with flags.refresh_modeling:
-            await apply_modelers()
-
-        with flags.refresh_cleanup:
-            await apply_refresh_cleanup()
-            # Save tags now that files have been moved.
-            save_tags_config.activate_switch()
-
-    return plan
 
 
 async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
@@ -1742,6 +1429,8 @@ async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
 async def rename_directory(session: Session, directory: pathlib.Path, new_name: str, send_events: bool = False) \
         -> pathlib.Path:
     """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory."""
+    from wrolpi.files.worker import file_worker
+
     new_directory = directory.with_name(new_name)
     if new_directory.exists():
         raise FileConflict(f'Cannot rename {directory} to {new_directory} because it already exists.')
@@ -1758,7 +1447,8 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
         # Regular directory rename - move all paths into the new directory.
         paths = list(directory.iterdir())
         try:
-            await move(session, new_directory, *paths)
+            job_id = file_worker.queue_move(new_directory, paths)
+            await file_worker.wait_for_job(job_id)
             if send_events:
                 Events.send_file_move_completed(f'Directory has been renamed: {directory}')
         except Exception:
@@ -1766,7 +1456,7 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
                 Events.send_file_move_failed(f'Directory rename has failed: {directory}')
             raise
 
-        # Update nested Collections (files already moved by move() above)
+        # Update nested Collections (files already moved by file_worker above)
         directory_str = str(directory)
         nested_collections = session.query(Collection).filter(
             Collection.directory.like(f'{directory_str}/%')
@@ -1776,8 +1466,9 @@ async def rename_directory(session: Session, directory: pathlib.Path, new_name: 
             new_coll_dir = new_directory / relative
             await coll.move_collection(new_coll_dir, session, send_events=send_events, with_files=False)
 
-        # Remove the old directory.
-        delete_directory(directory)
+        # Remove the old directory (recursive=True to clean up any empty subdirectories
+        # that remained after files were moved out).
+        delete_directory(directory, recursive=True)
 
     return new_directory
 

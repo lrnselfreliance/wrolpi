@@ -48,9 +48,9 @@ function FlagsMessages() {
     let refreshingMessage;
     let refreshRequiredMessage;
 
-    // Do not tell the maintainer to refresh the files if they are already refreshing.
-    if (flags.refreshing) {
-        // Actively refreshing.
+    // Do not tell the maintainer to refresh the files if the FileWorker is busy.
+    if (flags.file_worker_busy) {
+        // FileWorker is busy.
         refreshingMessage = <Message icon>
             <Icon name='circle notched' loading/>
             <Message.Content>

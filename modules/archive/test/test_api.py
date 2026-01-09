@@ -185,7 +185,7 @@ async def test_archives_search_no_query(test_session, archive_factory, async_cli
 @skip_circleci
 @pytest.mark.asyncio
 async def test_archive_upload(test_session, async_client, singlefile_contents_factory, make_multipart_form,
-                              await_switches, events_history):
+                              await_switches, events_fixture):
     """Test converting a SingleFile from the SingleFile browser extension to an Archive."""
     singlefile_contents = singlefile_contents_factory(title='upload title', url='https://example.com/single-file-url')
     forms = [
@@ -204,8 +204,7 @@ async def test_archive_upload(test_session, async_client, singlefile_contents_fa
     assert archive.screenshot_path.is_file(), 'Screenshot should have been created'
     assert archive.file_group.title == 'upload title', 'Title was not correct'
     assert archive.file_group.url == 'https://example.com/single-file-url', 'SingleFile URL should be trusted'
-    events = list(events_history)
-    assert events and events[0]['event'] == 'upload_archive', 'Event should have been sent.'
+    events_fixture.assert_has_event('upload_archive')
 
 
 @pytest.mark.asyncio

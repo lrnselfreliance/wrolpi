@@ -85,7 +85,7 @@ def register_switch_handler(switch_name: str):
 DEBUG_LOGGED = False
 
 
-@perpetual_signal(sleep=0.1, run_while_testing=True)
+@perpetual_signal(sleep=0.1, run_while_testing=False)
 async def switch_worker():
     """Watches `api_app.shared_ctx.switches` for new activated switches, handles each one at a time."""
     global DEBUG_LOGGED
@@ -99,34 +99,36 @@ async def switch_worker():
     switch_name = None
     try:
         # Get new switch and its context.  Handle each switch one at a time.
-        switches_changed.wait(timeout=1)
+        # During testing, don't block the event loop - check for pending switches directly.
+        # In production, use blocking wait which is more efficient for long-running processes.
+        if PYTEST:
+            # Non-blocking: return immediately if no switches pending.
+            # The perpetual_signal decorator will call again in 0.1s.
+            if not api_app.shared_ctx.switches:
+                return
+        else:
+            switches_changed.wait(timeout=1)
         switches: dict = api_app.shared_ctx.switches
         with api_app.shared_ctx.switches_lock:
             switch_name, context = switches.popitem()
-            switches_keys = list(switches.keys())
         # Call handler with the stored context, await coroutine, if any.
         handler = SWITCH_HANDLERS[switch_name]
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f'switch_worker handling {switch_name} of {switches_keys}')
-        else:
-            logger.info(f'switch_worker handling {switch_name} of {len(switches_keys)}')
         coro = handler(**context)
         if inspect.iscoroutine(coro):
             # Handler is async.
             await coro
-        logger.debug(f'switch_worker completed {switch_name}')
     except TimeoutError:
         # `switches_changed` is not set.
         pass
     except StopIteration:
         # No switches to handle.
         pass
-    except KeyError:
+    except KeyError as e:
         # `switches` is empty, or `switch_name` not in `SWITCH_HANDLER`
         if switch_name:
             logger.critical(f'No switch handler defined for: {switch_name}')
     finally:
-        # Clear only after task is complete to avoid
+        # Clear only after task is complete to avoid race conditions
         switches_changed.clear()
 
 
@@ -137,13 +139,21 @@ async def await_switches(timeout: int = 10):
     count = 0
     while count < (timeout * 10):
         count += 1
-        if api_app.shared_ctx.switches:
-            await asyncio.sleep(0.1)
-            continue
-        if api_app.shared_ctx.switches_changed.is_set():
+        switches_dict = dict(api_app.shared_ctx.switches) if api_app.shared_ctx.switches else {}
+        switches_changed = api_app.shared_ctx.switches_changed.is_set()
+
+        if switches_dict or switches_changed:
+            # Call switch_worker directly instead of using Sanic signal dispatch.
+            # Signal dispatch causes issues with ASGI testing in Sanic 25.x.
+            try:
+                await switch_worker()
+            except Exception as e:
+                # Log errors but continue processing, matching perpetual_signal behavior
+                logger.error(f'switch_worker had error: {e}')
             await asyncio.sleep(0.1)
             continue
         # All switches handled.
         break
     else:
+        logger.error(f'await_switches: TIMEOUT after {count} iterations, switches={list(api_app.shared_ctx.switches.keys())}, changed={api_app.shared_ctx.switches_changed.is_set()}')
         raise RuntimeError('Timed out waiting for switches.  Did you remember to use the `await_switches` fixture?')

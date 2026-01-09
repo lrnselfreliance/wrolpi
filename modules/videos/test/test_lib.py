@@ -10,7 +10,6 @@ from modules.videos.lib import parse_video_file_name, validate_video, get_statis
 from modules.videos.models import Video, Channel
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, RSSDownloader
-from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
 
@@ -142,7 +141,8 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
 
 
 @pytest.mark.asyncio
-async def test_orphaned_files(async_client, test_session, make_files_structure, test_directory, video_factory):
+async def test_orphaned_files(async_client, test_session, make_files_structure, test_directory, video_factory,
+                              refresh_files):
     # A Video without associated files is not orphaned.
     vid1 = video_factory(title='vid1', with_video_file=True)
     # The video files will be removed...
@@ -159,7 +159,7 @@ async def test_orphaned_files(async_client, test_session, make_files_structure, 
     # Remove vid3 video.  Poster is now orphaned.
     vid3.video_path.unlink()
     vid3_poster_path = vid3.poster_path
-    await files_lib.refresh_files()
+    await refresh_files()
     test_session.commit()
 
     # 6 files when two video files are deleted.

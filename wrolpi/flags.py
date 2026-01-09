@@ -10,7 +10,7 @@ from wrolpi.common import logger, Base
 
 __all__ = [
     'get_flags',
-    'refreshing',
+    'file_worker_busy',
     'refresh_complete',
 ]
 
@@ -106,8 +106,6 @@ class Flag:
 
 # Set by `check_db_is_up`.
 db_up = Flag('db_up')
-# The global refresh is running.
-refreshing = Flag('refreshing')
 # Outdated Zims need to be removed.
 outdated_zims = Flag('outdated_zims', store_db=True)
 # Map Importing
@@ -115,12 +113,14 @@ map_importing = Flag('map_importing')
 # Used to disable or enable downloading when Internet is down.
 have_internet = Flag('have_internet')
 
-# Steps of refreshing.
-refresh_counting = Flag('refresh_counting')
-refresh_discovery = Flag('refresh_discovery')
-refresh_modeling = Flag('refresh_modeling')
-refresh_indexing = Flag('refresh_indexing')
-refresh_cleanup = Flag('refresh_cleanup')
+# The FileWorker is busy (refreshing, moving, tagging, or renaming files).
+file_worker_busy = Flag('file_worker_busy')
+# Steps of FileWorker operations.
+file_worker_counting = Flag('file_worker_counting')
+file_worker_discovery = Flag('file_worker_discovery')
+file_worker_modeling = Flag('file_worker_modeling')
+file_worker_indexing = Flag('file_worker_indexing')
+file_worker_cleanup = Flag('file_worker_cleanup')
 
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
@@ -130,16 +130,16 @@ def get_flags() -> dict:
     """Return a list of all Flags which are set."""
     flags = dict(
         db_up=db_up.is_set(),
+        file_worker_busy=file_worker_busy.is_set(),
+        file_worker_cleanup=file_worker_cleanup.is_set(),
+        file_worker_counting=file_worker_counting.is_set(),
+        file_worker_discovery=file_worker_discovery.is_set(),
+        file_worker_indexing=file_worker_indexing.is_set(),
+        file_worker_modeling=file_worker_modeling.is_set(),
+        have_internet=have_internet.is_set(),
         map_importing=map_importing.is_set(),
         outdated_zims=outdated_zims.is_set(),
-        refresh_cleanup=refresh_cleanup.is_set(),
         refresh_complete=refresh_complete.is_set(),
-        refresh_counting=refresh_counting.is_set(),
-        refresh_discovery=refresh_discovery.is_set(),
-        refresh_indexing=refresh_indexing.is_set(),
-        refresh_modeling=refresh_modeling.is_set(),
-        refreshing=refreshing.is_set(),
-        have_internet=have_internet.is_set(),
     )
     return flags
 

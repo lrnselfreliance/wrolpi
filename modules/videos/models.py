@@ -13,7 +13,8 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_re
     background_task, replace_file
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
+from wrolpi.files.lib import split_path_stem_and_suffix
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST, VIDEO_INFO_JSON_KEYS_TO_CLEAN
@@ -900,9 +901,10 @@ class Channel(ModelHelper, Base):
         # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
         async def _():
             # Refresh all files within this channel's directory first.
-            from modules.videos.common import update_view_counts_and_censored
-            await refresh_files([directory], send_events=send_events)
+            job_id = file_worker.queue_refresh([directory])
+            await file_worker.wait_for_job(job_id)
             # Update view count second.
+            from modules.videos.common import update_view_counts_and_censored
             await update_view_counts_and_censored(id_)
             with get_db_session(commit=True) as session_:
                 channel_ = cls.find_by_id(session_, id_)

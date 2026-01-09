@@ -10,13 +10,13 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_pdf_title(async_client, test_session, example_pdf):
+async def test_pdf_title(async_client, test_session, example_pdf, refresh_files):
     """PDF modeler extracts a PDFs title and contents."""
-    await files_lib.refresh_files()
+    await refresh_files()
 
     with mock.patch('wrolpi.files.pdfs.get_pdf_metadata') as mock_get_pdf_metadata:
         mock_get_pdf_metadata.side_effect = Exception('Should not index twice')
-        await files_lib.refresh_files()
+        await refresh_files()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
     assert pdf.indexed is True

@@ -11,8 +11,9 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_re
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
-from wrolpi.files.lib import move as move_files, refresh_files
+from wrolpi.files.worker import file_worker
 from wrolpi.files.models import FileGroup
+from wrolpi.files.lib import delete_directory
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag
 from wrolpi.tags import save_tags_config
@@ -942,7 +943,7 @@ class Collection(ModelHelper, Base):
 
         self.directory = directory
 
-        with flags.refreshing:
+        with flags.file_worker_busy:
             # Update download destinations before moving files.
             change_download_destinations(old_directory, directory)
             session.commit()
@@ -956,14 +957,16 @@ class Collection(ModelHelper, Base):
             try:
                 if not old_directory.exists():
                     # Old directory does not exist; refresh both
-                    await refresh_files([old_directory, directory])
+                    file_worker.queue_refresh([old_directory, directory])
                     if send_events:
                         Events.send_file_move_completed(f'Collection {repr(self.name)} was moved (directory missing)')
                 else:
                     files_to_move = list(old_directory.iterdir())
                     if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
                         logger.trace(f'move_collection: moving {len(files_to_move)} items from {old_directory}')
-                    await move_files(session, directory, *files_to_move)
+                    if files_to_move:
+                        job_id = file_worker.queue_move(directory, files_to_move)
+                        await file_worker.wait_for_job(job_id)
                     if send_events:
                         Events.send_file_move_completed(f'Collection {repr(self.name)} was moved')
             except Exception as e:
@@ -978,7 +981,7 @@ class Collection(ModelHelper, Base):
             finally:
                 session.commit()
                 if old_directory.exists() and not next(iter(old_directory.iterdir()), None):
-                    old_directory.rmdir()
+                    delete_directory(old_directory)
         else:
             # Files already moved, just send event
             if send_events:

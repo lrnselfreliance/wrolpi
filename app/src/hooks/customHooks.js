@@ -783,7 +783,7 @@ export const useFilesProgress = () => {
 export const useFilesProgressInterval = () => {
     const {progress, fetchFilesProgress} = useFilesProgress();
 
-    useRecurringTimeout(fetchFilesProgress, 1000 * 3);
+    useRecurringTimeout(fetchFilesProgress, 1000);
 
     return {progress, fetchFilesProgress};
 }

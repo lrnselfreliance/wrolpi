@@ -167,7 +167,7 @@ export function NavBar() {
 
     let processingLink;
     if (status && status.flags) {
-        if (status.flags.refreshing) {
+        if (status.flags.file_worker_busy) {
             processingLink = '/files';
         } else if (status.flags.map_importing) {
             processingLink = '/map/manage';

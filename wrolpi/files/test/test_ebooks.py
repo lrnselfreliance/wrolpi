@@ -5,13 +5,13 @@ from http import HTTPStatus
 import pytest
 
 from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE
-from wrolpi.files.lib import refresh_files, move
 from wrolpi.files.models import FileGroup
+from wrolpi.files.worker import file_worker
 from wrolpi.test.common import assert_dict_contains
 
 
 @pytest.mark.asyncio
-async def test_index(async_client, test_session, test_directory, example_epub, example_mobi):
+async def test_index(async_client, test_session, test_directory, example_epub, example_mobi, refresh_files):
     """Ebooks can be indexed.
 
     Covers can be discovered."""
@@ -57,7 +57,8 @@ async def test_index(async_client, test_session, test_directory, example_epub, e
 
 
 @pytest.mark.asyncio
-async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_switches):
+async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory, await_switches,
+                                    refresh_files):
     cover_path = example_epub.with_suffix('.jpg')
     cover_path.write_bytes(image_bytes_factory())
     await refresh_files()
@@ -69,7 +70,7 @@ async def test_discover_local_cover(test_session, test_directory, example_epub, 
 
 
 @pytest.mark.asyncio
-async def test_extract_cover(test_session, test_directory, example_epub, await_switches):
+async def test_extract_cover(test_session, test_directory, example_epub, await_switches, refresh_files):
     """First image is extracted from the Ebook and used as the cover."""
     await refresh_files()
 
@@ -115,7 +116,7 @@ async def test_search_ebooks(test_session, async_client, example_epub):
 
 @pytest.mark.asyncio
 async def test_discover_calibre_cover(test_session, async_client, test_directory, example_epub, example_mobi,
-                                      image_file):
+                                      image_file, refresh_files):
     """Calibre puts a cover near an ebook file, test if it can be found."""
     # Create a Calibre metadata file.
     metadata = test_directory / 'metadata.opf'
@@ -139,7 +140,8 @@ async def test_discover_calibre_cover(test_session, async_client, test_directory
 
 
 @pytest.mark.asyncio
-async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory):
+async def test_move_ebook(async_client, test_session, test_directory, example_epub, image_file, tag_factory,
+                          refresh_files, await_background_tasks):
     """An ebook is re-indexed when moved."""
     tag = await tag_factory()
     shutil.move(image_file, example_epub.with_suffix('.jpg'))
@@ -158,7 +160,9 @@ async def test_move_ebook(async_client, test_session, test_directory, example_ep
 
     new_directory = test_directory / 'new'
     new_directory.mkdir()
-    await move(test_session, new_directory, ebook.file_group.primary_path)
+    file_worker.queue_move(new_directory, [ebook.file_group.primary_path])
+    await await_background_tasks()
+    test_session.expire_all()
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.primary_path == test_directory / 'new/ebook example.epub'

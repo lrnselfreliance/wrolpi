@@ -510,7 +510,7 @@ async def feed(request: Request, query: schema.EventsRequest):
     # available.
     start = now()
 
-    after = None if query.after == 'None' else dates.strpdate(query.after)
+    after = None if query.after in (None, 'None') else dates.strpdate(query.after)
     events = get_events(after)
     return json_response(dict(events=events, now=start))
 

@@ -190,7 +190,7 @@ async def test_channel_empty_url_doesnt_conflict(async_client, test_session, tes
 @pytest.mark.asyncio
 async def test_channel_download_requires_refresh(
         async_client, test_session, mock_video_extract_info, download_channel, video_download_manager,
-        video_factory, events_history, await_switches):
+        video_factory, events_fixture, await_switches, await_background_tasks):
     """A Channel cannot be downloaded until it has been refreshed.
 
     Videos already downloaded are not downloaded again."""
@@ -228,6 +228,8 @@ async def test_channel_download_requires_refresh(
         await video_download_manager.do_downloads()
         await video_download_manager.wait_for_all_downloads()
         await await_switches()
+        # Wait for background tasks including channel refresh which processes the file worker queue
+        await await_background_tasks()
 
     # Channel was refreshed before downloading videos.
     assert_refreshed(True)
@@ -235,8 +237,10 @@ async def test_channel_download_requires_refresh(
     # Only the missing video was downloaded.
     assert downloaded_urls == ['https://example.com/2']
 
-    # Should not send refresh events because downloads are automated.
-    assert list(events_history) == []
+    # Should not send user-facing events - only internal FileWorker events are allowed.
+    user_facing_events = ['user_notify_message', 'directory_refresh', 'files_refreshed']
+    for event_name in user_facing_events:
+        events_fixture.assert_no_event(event_name)
 
 
 @pytest.mark.asyncio

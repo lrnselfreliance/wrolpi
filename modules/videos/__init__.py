@@ -94,6 +94,7 @@ def video_cleanup():
                      ''')
 
 
+
 def claim_videos_for_channels(channel_ids: List[int]):
     """
     Assign Videos to specific Channels based on directory paths.

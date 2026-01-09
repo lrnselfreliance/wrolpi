@@ -9,12 +9,11 @@ from modules.videos.video import lib as video_lib
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download
-from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory):
+async def test_refresh_videos_index(async_client, test_session, test_directory, video_factory, refresh_files):
     """The video modeler indexes video data into the Video's FileGroup."""
     video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()
@@ -54,12 +53,12 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
                            with_info_json=True, with_poster_ext='jpg')
     test_session.commit()
     video1.file_group.size = video1.file_group.data = None
-    video1.file_group.paths = list()
+    video1.file_group.files = []
     # video2 is in the test directory.
     video2 = video_factory(channel_id=simple_channel.id, with_video_file=True, with_info_json=True,
                            with_poster_ext='jpg')
     video2.file_group.data = None
-    video2.file_group.paths = []
+    video2.file_group.files = []
     test_session.commit()
 
     assert not video1.file_group.size, 'video1 should not have size during creation'
@@ -76,7 +75,7 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     with get_db_curs(commit=True) as curs:
         stmt = "INSERT INTO file_group (mimetype, directory, primary_path, indexed, files, model)" \
                " values ('video/mp4', %(directory)s, %(primary_path)s, true, %(files)s, 'video') RETURNING id"
-        params = {'directory': str(test_directory), 'primary_path': str(video_file), 'files': list()}
+        params = {'directory': str(test_directory), 'primary_path': str(video_file), 'files': '[]'}
         curs.execute(stmt, params)
         video4_id = curs.fetchall()[0][0]
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"

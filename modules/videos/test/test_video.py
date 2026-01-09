@@ -4,7 +4,6 @@ import pytest
 
 from modules.videos.models import Video
 from wrolpi.errors import FileGroupIsTagged
-from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 
 
@@ -47,7 +46,8 @@ async def test_delete_video_with_tag(async_client, test_session, video_factory, 
 
 
 @pytest.mark.asyncio
-async def test_video_channel_refresh(async_client, test_session, test_directory, channel_factory, video_factory):
+async def test_video_channel_refresh(async_client, test_session, test_directory, channel_factory, video_factory,
+                                     refresh_files):
     """A Video will be associated with a Channel when it's files are in that Channel's directory."""
     # Create a video file in this channel's directory.
     channel = channel_factory()
@@ -60,7 +60,7 @@ async def test_video_channel_refresh(async_client, test_session, test_directory,
     test_session.query(FileGroup).delete()
     test_session.commit()
 
-    await files_lib.refresh_files()
+    await refresh_files()
 
     assert test_session.query(FileGroup).count() == 2
     assert test_session.query(Video).count() == 2

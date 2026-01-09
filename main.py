@@ -9,11 +9,11 @@ from contextlib import contextmanager
 from sanic import Sanic
 from sanic.signals import Event
 
+from modules.archive.lib import import_domains_config
 from modules.inventory import init_inventory
 from modules.inventory.common import import_inventories_config
 from modules.videos.lib import import_channels_config, get_videos_downloader_config
 from wrolpi import flags
-from modules.archive.lib import import_domains_config
 from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -24,6 +24,7 @@ from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initi
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
+from wrolpi.files.worker import file_worker
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
 from wrolpi.version import get_version_string
 
@@ -310,6 +311,12 @@ async def start_single_tasks(app: Sanic):
             logger.error('Failed to enable download', exc_info=e)
 
     logger.debug(f'start_single_tasks done')
+
+
+@perpetual_signal(sleep=1)
+async def perpetual_file_worker_queue():
+    file_worker.transfer_queue()
+    await file_worker.process_queue()
 
 
 @perpetual_signal(sleep=1)

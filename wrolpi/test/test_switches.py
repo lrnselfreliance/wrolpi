@@ -54,17 +54,17 @@ async def test_perpetual_signal(await_switches):
     """Test that perpetual_signal survives errors."""
     # Signal event is dispatched again.
     switch_handler_test2.activate_switch()
-    await asyncio.sleep(1)
+    await await_switches(timeout=2)
     assert count2.value == 1
 
     # Error is logged.
     switch_handler_test2.activate_switch()
-    await asyncio.sleep(1)
+    await await_switches(timeout=2)
     assert count2.value == 2
 
     # Switch is dispatched again.
     switch_handler_test2.activate_switch()
-    await asyncio.sleep(1)
+    await await_switches(timeout=2)
     assert count2.value == 3
 
 

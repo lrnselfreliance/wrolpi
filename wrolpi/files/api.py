@@ -13,6 +13,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_
     background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from . import lib, schema
+from .worker import file_worker
 from ..api_utils import json_response, api_app
 from ..events import Events
 from ..schema import JSONErrorResponse
@@ -76,14 +77,21 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
 )
 @wrol_mode_check
 async def refresh(request: Request):
-    paths = None
+    from wrolpi.files.worker import file_worker
+
     if request.body:
         media_directory = get_media_directory()
         if not isinstance(request.json['paths'], list):
             raise ValueError('Can only refresh a list')
-
         paths = [media_directory / i for i in request.json['paths']]
-    await lib.refresh_files(paths)
+        # When user explicitly specifies files, don't expand to stem-mates.
+        # This allows refreshing specific files without discovering related files.
+        expand_stems = not all(p.is_file() for p in paths)
+    else:
+        paths = [get_media_directory()]
+        expand_stems = True
+
+    file_worker.queue_refresh(paths, expand_stems=expand_stems)
     return response.empty()
 
 
@@ -95,6 +103,17 @@ async def refresh_progress(request: Request):
     progress = lib.get_refresh_progress()
     return json_response(dict(
         progress=progress,
+    ))
+
+
+@files_bp.get('/worker_status')
+@openapi.definition(
+    summary='Get the FileWorker status with detailed progress'
+)
+async def worker_status(request: Request):
+    from wrolpi.files.worker import file_worker
+    return json_response(dict(
+        status=dict(file_worker.status),
     ))
 
 
@@ -239,7 +258,7 @@ async def post_create_directory(_: Request, body: schema.Directory):
     except FileExistsError:
         raise FileConflict(f'{path} already exists')
 
-    background_task(lib.refresh_files([path, ]))
+    file_worker.queue_refresh([path])
 
     return response.empty(HTTPStatus.CREATED)
 
@@ -261,13 +280,7 @@ async def post_move(request: Request, body: schema.Move):
         if source.is_mount():
             raise FileConflict(f'Cannot move mounted directory!')
 
-    try:
-        await lib.move(request.ctx.session, destination, *sources)
-        Events.send_file_move_completed(f'Moving files to {body.destination} succeeded')
-    except Exception as e:
-        Events.send_file_move_failed(f'Moving files to {body.destination} failed!')
-        raise FileConflict(f'Failed to move {sources} to {destination}') from e
-
+    file_worker.queue_move(destination, sources)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -296,7 +309,7 @@ async def post_rename(request: Request, body: schema.Rename):
     # Refreshing individual files causes the FileGroup's files list to be overwritten
     # with only the specified file, losing track of associated files.
     parent_dir = new_path.parent
-    background_task(lib.refresh_files([parent_dir]))
+    file_worker.queue_refresh([parent_dir])
 
     return response.empty(HTTPStatus.NO_CONTENT)
 

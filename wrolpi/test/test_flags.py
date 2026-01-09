@@ -30,20 +30,20 @@ def test_flags(async_client, test_session, flags_lock):
 
 def test_flags_with(async_client, flags_lock):
     """A Flag can be used with `with` context."""
-    assert flags.refreshing.is_set() is False, 'Flag should not be set by default'
+    assert flags.file_worker_busy.is_set() is False, 'Flag should not be set by default'
     assert not any(v for k, v in flags.get_flags().items())
 
-    with flags.refreshing:
-        assert flags.refreshing.is_set() is True, 'Flag should be set within context.'
-        assert flags.get_flags()['refreshing']
+    with flags.file_worker_busy:
+        assert flags.file_worker_busy.is_set() is True, 'Flag should be set within context.'
+        assert flags.get_flags()['file_worker_busy']
 
-    assert flags.refreshing.is_set() is False, 'Flag should not be restored after context.'
+    assert flags.file_worker_busy.is_set() is False, 'Flag should not be restored after context.'
     assert not any(v for k, v in flags.get_flags().items())
 
     with pytest.raises(ValueError):
-        # Can't do two `refreshing` as once.
-        with flags.refreshing:
-            with flags.refreshing:
+        # Can't do two `file_worker_busy` as once.
+        with flags.file_worker_busy:
+            with flags.file_worker_busy:
                 raise Exception('We should not get here!')
 
 
@@ -51,5 +51,5 @@ def test_flags_with(async_client, flags_lock):
 async def test_flag_wait_for(async_client, flags_lock):
     """Wait for throws an error when waiting exceeds timeout."""
     with pytest.raises(TimeoutError):
-        async with flags.refreshing.wait_for(timeout=1):
+        async with flags.file_worker_busy.wait_for(timeout=1):
             await asyncio.sleep(2)

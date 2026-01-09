@@ -11,7 +11,7 @@ from wrolpi.common import logger, \
     get_media_directory, wrol_mode_check, background_task
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config, download_manager, Download
-from wrolpi.errors import APIError, ValidationError, RefreshConflict
+from wrolpi.errors import APIError, ValidationError, FileWorkerConflict
 from wrolpi.events import Events
 from wrolpi.tags import Tag
 from .. import schema
@@ -269,8 +269,8 @@ async def tag_channel(session: Session, tag_name: str | None, directory: pathlib
 
     Move the Channel to the new directory, if provided."""
 
-    if directory and flags.refreshing.is_set():
-        raise RefreshConflict('Refusing to move channel while file refresh is in progress')
+    if directory and flags.file_worker_busy.is_set():
+        raise FileWorkerConflict('Refusing to move channel while FileWorker is busy')
 
     channel = Channel.find_by_id(session, channel_id)
 

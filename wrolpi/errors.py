@@ -171,9 +171,9 @@ class InvalidDirectory(APIError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
-class RefreshConflict(APIError):
-    code = 'REFRESH_CONFLICT'
-    summary = 'Not possible during file refresh'
+class FileWorkerConflict(APIError):
+    code = 'FILE_WORKER_CONFLICT'
+    summary = 'Not possible while FileWorker is busy'
     status_code = HTTPStatus.CONFLICT
 
 

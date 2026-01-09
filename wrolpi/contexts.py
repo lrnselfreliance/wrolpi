@@ -76,6 +76,10 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.events_lock = multiprocessing.Lock()
     app.shared_ctx.events_history = manager.list()
 
+    app.shared_ctx.file_worker_public_queue = manager.Queue()
+    app.shared_ctx.file_worker_status = manager.dict()
+    app.shared_ctx.file_worker_jobs = manager.dict()
+
     reset_shared_contexts(app)
 
 
@@ -157,7 +161,29 @@ def reset_shared_contexts(app: Sanic):
         except queue.Empty:
             break
 
+    # File Worker
+    while True:
+        # Clear out any pending file tasks.
+        try:
+            app.shared_ctx.file_worker_public_queue.get_nowait()
+        except queue.Empty:
+            break
+    app.shared_ctx.file_worker_status.clear()
+    app.shared_ctx.file_worker_jobs.clear()
+    app.shared_ctx.file_worker_status.update(dict(
+        status='idle',
+        task_type=None,
+        paths=[],
+        destination=None,
+        error=None,
+        operation_total=0,
+        operation_processed=0,
+        operation_percent=0,
+    ))
+
     # Events.
+    # Clear events_history in place to preserve references held by fixtures
+    del app.shared_ctx.events_history[:]
     app.shared_ctx.single_tasks_started.clear()
     app.shared_ctx.flags_initialized.clear()
     app.shared_ctx.perpetual_tasks_started.clear()

@@ -11,6 +11,7 @@ import pathlib
 import shutil
 import tempfile
 import threading
+import time
 import zipfile
 from abc import ABC
 from datetime import datetime
@@ -36,7 +37,7 @@ from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import CommandResult
 from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL
-from wrolpi.common import logger, await_background_tasks as await_background_tasks_
+from wrolpi.common import logger, await_background_tasks as await_background_tasks_, BACKGROUND_TASKS
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
@@ -109,6 +110,43 @@ def test_debug_logger(request):
 
     with log_level_context(level):
         yield
+
+
+@pytest.fixture
+def clear_background_tasks(request):
+    """Clear BACKGROUND_TASKS before each test and fail if orphaned tasks remain after.
+
+    Tests must properly await all background tasks they create. Orphaned tasks indicate
+    a test is not properly cleaning up, which can cause cascading failures in other tests.
+    """
+    # Clear before test - cancel any orphaned tasks from previous tests
+    if BACKGROUND_TASKS:
+        logger.warning(f'clear_background_tasks: clearing {len(BACKGROUND_TASKS)} orphaned tasks BEFORE test')
+        for task in list(BACKGROUND_TASKS):
+            task_name = task.get_name() if hasattr(task, 'get_name') else str(task)
+            logger.warning(f'  orphaned task from previous test: {task_name}')
+            if not task.done():
+                task.cancel()
+        BACKGROUND_TASKS.clear()
+
+    yield
+
+    # After test - fail if orphaned tasks remain
+    if BACKGROUND_TASKS:
+        orphaned_tasks = []
+        for task in list(BACKGROUND_TASKS):
+            task_name = task.get_name() if hasattr(task, 'get_name') else str(task)
+            orphaned_tasks.append(f'{task_name} (done={task.done()})')
+            if not task.done():
+                task.cancel()
+        BACKGROUND_TASKS.clear()
+
+        # Fail the test
+        pytest.fail(
+            f'Test left {len(orphaned_tasks)} orphaned background task(s): {", ".join(orphaned_tasks)}. '
+            f'Tests must await all background tasks they create using await_background_tasks or '
+            f'the async_client fixture.'
+        )
 
 
 @pytest.fixture
@@ -210,10 +248,11 @@ class AutoAwaitTestClient:
 
 
 @pytest.fixture
-async def async_client(test_directory, test_session) -> AsyncGenerator[AutoAwaitTestClient, Any]:
+async def async_client(test_directory, test_session, clear_background_tasks) -> AsyncGenerator[AutoAwaitTestClient, Any]:
     """Get an Async Sanic Test Client with all default routes attached.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
+    Depends on clear_background_tasks to detect orphaned background tasks.
 
     This client automatically awaits switches and background tasks after
     POST, PUT, PATCH, and DELETE requests, and expires session objects.
@@ -229,7 +268,6 @@ async def async_client(test_directory, test_session) -> AsyncGenerator[AutoAwait
         yield wrapped_client
     finally:
         api_app.stop()
-        logger.debug('Destroying async_client')
 
 
 @pytest.fixture
@@ -253,11 +291,14 @@ async def await_background_tasks(async_client, test_session):
 
     After background tasks complete, session objects may be stale, so we automatically
     expire them to force a refresh on next access.
+
+    Args:
+        timeout: Optional timeout in seconds (default 15s from await_background_tasks_)
     """
     await async_client.get('/api')
 
-    async def _await_and_expire():
-        await await_background_tasks_()
+    async def _await_and_expire(timeout: int = 15):
+        await await_background_tasks_(timeout=timeout)
         test_session.expire_all()
 
     return _await_and_expire
@@ -584,10 +625,66 @@ def run_command_bad_result() -> CommandResult:
     return CommandResult(1, False, b'run_command_bad_result stdout', b'run_command_bad_result stderr', 0, 123)
 
 
+class EventsFixture:
+    """Fixture for testing events with rich assertions.
+
+    Only returns events created after this fixture was instantiated,
+    making it safe for parallel test execution.
+    """
+
+    def __init__(self, events_history: list):
+        self._history = events_history
+        # Track the starting index to only see new events during this test
+        self._start_index = len(events_history)
+
+    @property
+    def events(self) -> List[dict]:
+        """Return events captured during this test (most recent first)."""
+        # Only return events added after fixture creation
+        new_events = list(self._history[self._start_index:])
+        return list(reversed(new_events))
+
+    def get_by_name(self, event_name: str) -> List[dict]:
+        """Get all events with the given name."""
+        return [e for e in self.events if e['event'] == event_name]
+
+    def get_by_subject(self, subject: str) -> List[dict]:
+        """Get all events with the given subject."""
+        return [e for e in self.events if e['subject'] == subject]
+
+    def assert_has_event(self, event_name: str, message: str = None) -> None:
+        """Assert that an event with the given name exists."""
+        matching = self.get_by_name(event_name)
+        assert matching, f"No event found with name '{event_name}'. Events: {[e['event'] for e in self.events]}"
+        if message:
+            assert any(message in (e.get('message') or '') for e in matching), \
+                f"No '{event_name}' event contains message '{message}'"
+
+    def assert_no_event(self, event_name: str) -> None:
+        """Assert that no event with the given name exists."""
+        matching = self.get_by_name(event_name)
+        assert not matching, f"Found unexpected event '{event_name}': {matching}"
+
+    def assert_events_contain(self, expected: List[dict]) -> None:
+        """Assert that events contain all expected events (order matters, most recent first)."""
+        from wrolpi.test.common import assert_dict_contains
+        for exp, actual in zip_longest(expected, self.events):
+            assert actual is not None, f"Expected event {exp} but no more events found"
+            assert_dict_contains(actual, exp)
+
+    def assert_event_count(self, count: int) -> None:
+        """Assert the total number of events."""
+        assert len(self.events) == count, f"Expected {count} events, got {len(self.events)}"
+
+
 @pytest.fixture
-def events_history(async_client):
-    """Give each test its own Events history."""
-    yield api_app.shared_ctx.events_history
+def events_fixture(async_client) -> EventsFixture:
+    """Fixture for testing events with rich assertions.
+
+    Only sees events created after this fixture is instantiated,
+    making it safe for parallel test execution.
+    """
+    return EventsFixture(api_app.shared_ctx.events_history)
 
 
 FLAGS_LOCK = multiprocessing.Lock()
@@ -898,5 +995,36 @@ def mock_downloader_download_file():
             contents = contents_
 
         yield set_contents
+
+
+async def await_file_worker(timeout: int = 30):
+    """Wait for FileWorker to complete all pending tasks. Testing only."""
+    from wrolpi.files.worker import file_worker
+
+    start = time.time()
+    while time.time() - start < timeout:
+        file_worker.transfer_queue()
+        if file_worker.private_queue.qsize() > 0:
+            await file_worker.process_queue()
+        elif file_worker.public_queue.qsize() == 0:
+            break
+        await asyncio.sleep(0.01)
+    else:
+        raise RuntimeError('Timed out waiting for file_worker')
+
+
+@pytest.fixture
+def refresh_files(async_client):
+    """Test helper that queues and waits for file refresh."""
+
+    async def _refresh(paths=None):
+        from wrolpi.common import get_media_directory
+        from wrolpi.files.worker import file_worker
+
+        paths = paths or [get_media_directory()]
+        file_worker.queue_refresh(paths)
+        await await_file_worker()
+
+    return _refresh
 
 

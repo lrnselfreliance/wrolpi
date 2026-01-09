@@ -1174,10 +1174,10 @@ export async function deleteFile(paths) {
 }
 
 export async function fetchFilesProgress() {
-    const response = await apiGet(`${API_URI}/files/refresh_progress`);
+    const response = await apiGet(`${API_URI}/files/worker_status`);
     if (response.ok) {
         const json = await response.json();
-        return json['progress'];
+        return json['status'];
     }
 }
 

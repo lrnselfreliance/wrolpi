@@ -1801,14 +1801,16 @@ def background_task(coro) -> Task:
 
     The task is stored in a global set of background tasks so the task will not be discarded by the garbage collector.
     """
+    # Get the coroutine name for better logging (used in task name for debugging stuck tasks)
+    coro_name = getattr(coro, '__qualname__', None) or getattr(coro, '__name__', None) or str(coro)
 
     async def error_logger():
         try:
             await coro
         except Exception as e:
-            logger_.error('Background task had error:', exc_info=e)
+            logger_.error(f'background_task: error in {coro_name}:', exc_info=e)
 
-    task = asyncio.create_task(error_logger())
+    task = asyncio.create_task(error_logger(), name=f'bg:{coro_name}')
     add_background_task(task)
     return task
 
@@ -1822,13 +1824,66 @@ async def cancel_background_tasks():
             await asyncio.gather(*BACKGROUND_TASKS)
 
 
-async def await_background_tasks():
-    """Awaits all background tasks, used only for testing."""
+async def await_background_tasks(timeout: int = 15):
+    """Awaits all background tasks, used only for testing.
+
+    Processes the FileWorker queue concurrently with background tasks to avoid
+    deadlocks when background tasks wait for file worker jobs to complete.
+
+    Args:
+        timeout: Maximum seconds to wait for background tasks (default 15s)
+    """
     if not PYTEST:
         raise RuntimeError('await_background_tasks should only be used for testing')
 
-    for background_task in BACKGROUND_TASKS.copy():
-        await background_task
+    from wrolpi.files.worker import file_worker
+    import time
+
+    iteration = 0
+    max_iterations = 1000  # Safety limit to prevent infinite loops
+    start_time = time.time()
+
+    while BACKGROUND_TASKS or file_worker.public_queue.qsize() > 0 or not file_worker.private_queue.empty():
+        iteration += 1
+        elapsed = time.time() - start_time
+
+        if elapsed > timeout:
+            task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
+            logger_.error(f'await_background_tasks: TIMEOUT after {elapsed:.1f}s, {iteration} iterations')
+            logger_.error(f'  BACKGROUND_TASKS={len(BACKGROUND_TASKS)}: {task_names}')
+            logger_.error(f'  public_queue={file_worker.public_queue.qsize()}, private_queue_empty={file_worker.private_queue.empty()}')
+            # Cancel stuck tasks and clear to prevent cascading failures
+            for task in list(BACKGROUND_TASKS):
+                if not task.done():
+                    task.cancel()
+            BACKGROUND_TASKS.clear()
+            break
+
+        if iteration > max_iterations:
+            task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
+            logger_.error(f'await_background_tasks: SAFETY LIMIT REACHED after {iteration} iterations')
+            logger_.error(f'  BACKGROUND_TASKS={len(BACKGROUND_TASKS)}: {task_names}')
+            logger_.error(f'  public_queue={file_worker.public_queue.qsize()}, private_queue_empty={file_worker.private_queue.empty()}')
+            break
+
+        # Process file worker queue
+        file_worker.transfer_queue()
+        while not file_worker.private_queue.empty():
+            await file_worker.process_queue()
+
+        if not BACKGROUND_TASKS:
+            continue
+
+        # Wait for any background task to complete (with timeout so we can keep processing queue)
+        done, pending = await asyncio.wait(
+            BACKGROUND_TASKS.copy(),
+            timeout=0.1,
+            return_when=asyncio.FIRST_COMPLETED
+        )
+
+        for task in done:
+            await task  # Re-await to propagate exceptions
+            BACKGROUND_TASKS.discard(task)
 
 
 def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):

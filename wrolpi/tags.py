@@ -1,3 +1,4 @@
+
 import contextlib
 import pathlib
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config
-from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, RefreshConflict, NoPrimaryFile
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import PYTEST
@@ -164,8 +165,8 @@ class Tag(ModelHelper, Base):
         if (other := self.get_by_name(session, name)) and other.id != self.id:
             raise InvalidTag('Tag name already taken')
 
-        if flags.refreshing.is_set():
-            raise RefreshConflict('Refusing to rename tag while file refresh is in progress')
+        if flags.file_worker_busy.is_set():
+            raise FileWorkerConflict('Refusing to rename tag while FileWorker is busy')
 
         old_name = self.name
         self.name = name
@@ -607,7 +608,8 @@ def _delete_extra_tags_directory_paths(directory: pathlib.Path, links: List[path
             logger.warning(f'Refusing to delete extra Tags Directory directory which contains files: {directory}')
         else:
             logger.debug(f'Deleting extra Tags Directory directory: {directory}')
-            directory.rmdir()
+            from wrolpi.files.lib import delete_directory
+            delete_directory(directory)
 
 
 def create_tags_directory(directory: pathlib.Path):

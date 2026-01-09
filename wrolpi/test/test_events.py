@@ -18,7 +18,7 @@ def assert_events(expected: List[Dict], after=None):
 
 
 @pytest.mark.asyncio
-async def test_events_api_feed(test_session, async_client, example_pdf):
+async def test_events_api_feed(test_session, async_client, example_pdf, events_fixture):
     """Events can be gotten from the API."""
     # refresh_files() creates a few events.
     request, response = await async_client.post('/api/files/refresh')
@@ -28,6 +28,15 @@ async def test_events_api_feed(test_session, async_client, example_pdf):
     assert response.status_code == HTTPStatus.OK, response.body
     assert (result := response.json.get('events'))
 
+    # Verify using the fixture
+    events_fixture.assert_has_event('refresh_completed')
+    events_fixture.assert_has_event('global_after_refresh_completed')
+    events_fixture.assert_has_event('global_refresh_indexing_completed')
+    events_fixture.assert_has_event('global_refresh_modeling_completed')
+    events_fixture.assert_has_event('global_refresh_discovery_completed')
+    events_fixture.assert_has_event('global_refresh_started')
+
+    # Also verify the API returns the same events
     expected = [
         dict(event='refresh_completed', subject='refresh'),
         dict(event='global_after_refresh_completed', subject='refresh'),
@@ -41,22 +50,29 @@ async def test_events_api_feed(test_session, async_client, example_pdf):
 
 
 @pytest.mark.asyncio
-async def test_events_history_limit(async_client):
+async def test_events_history_limit(async_client, events_fixture):
     """EVENTS_HISTORY has a limited size."""
     for i in range(HISTORY_SIZE + 5):
         Events.send_ready()
 
-    assert len(get_events()) == HISTORY_SIZE
+    # Fixture provides access to events, verify size limit
+    assert len(events_fixture.events) == HISTORY_SIZE
 
 
 @pytest.mark.asyncio
-async def test_get_events(async_client):
+async def test_get_events(async_client, events_fixture):
+    """Test that get_events() can filter by timestamp."""
     after = now()
 
     Events.send_global_refresh_started()
     await asyncio.sleep(1)
     Events.send_ready()
 
+    # Fixture shows all events
+    events_fixture.assert_has_event('ready')
+    events_fixture.assert_has_event('global_refresh_started')
+
+    # get_events with after parameter filters by timestamp
     assert_events([dict(event='ready'), dict(event='global_refresh_started')], after=after)
 
     after = after + timedelta(seconds=0.1)

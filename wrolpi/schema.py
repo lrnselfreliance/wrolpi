@@ -84,16 +84,16 @@ class SettingsRequest:
 @dataclass
 class FlagsStatusResponse:
     db_up: bool
+    file_worker_busy: bool
+    file_worker_cleanup: bool
+    file_worker_counting: bool
+    file_worker_discovery: bool
+    file_worker_indexing: bool
+    file_worker_modeling: bool
+    have_internet: bool
     map_importing: bool
     outdated_zims: bool
-    refresh_cleanup: bool
     refresh_complete: bool
-    refresh_counting: bool
-    refresh_discovery: bool
-    refresh_indexing: bool
-    refresh_modeling: bool
-    refreshing: bool
-    have_internet: bool
 
 
 @dataclass

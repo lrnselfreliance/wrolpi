@@ -20,7 +20,6 @@ from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.collections import Collection
 from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
-from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import skip_circleci
 
@@ -85,7 +84,7 @@ async def test_relationships(async_client, test_session, example_singlefile):
 
 
 @pytest.mark.asyncio
-async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_archive_title(async_client, test_session, archive_factory, singlefile_contents_factory, refresh_files):
     """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
     # Create some test files, delete all records for a fresh refresh.
     archive_factory(
@@ -98,7 +97,7 @@ async def test_archive_title(async_client, test_session, archive_factory, single
     async def reset_and_get_archive():
         test_session.query(FileGroup).delete()
         test_session.commit()
-        await files_lib.refresh_files()
+        await refresh_files()
         return test_session.query(Archive).one()
 
     archive1: Archive = await reset_and_get_archive()
@@ -175,7 +174,8 @@ async def test_archive_refresh_deleted_archive(async_client, test_session, archi
 
 
 @pytest.mark.asyncio
-async def test_fills_contents_with_refresh(async_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_fills_contents_with_refresh(async_client, test_session, archive_factory, singlefile_contents_factory,
+                                           refresh_files):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
@@ -208,7 +208,7 @@ async def test_fills_contents_with_refresh(async_client, test_session, archive_f
     assert not archive4.file_group.d_text
 
     # Fill the contents.
-    await files_lib.refresh_files()
+    await refresh_files()
     # The archives will be renamed with their title.
     archive1, archive2, archive3, archive4 = test_session.query(Archive).order_by(Archive.id)
     assert not archive4.file_group.d_text
@@ -291,7 +291,7 @@ def test_get_domains(test_session, archive_factory):
 
 @skip_circleci
 @pytest.mark.asyncio
-async def test_new_archive(test_session, test_directory, fake_now):
+async def test_new_archive(test_session, test_directory, fake_now, async_client):
     singlefile, readability, screenshot = make_fake_archive_result()
     fake_now(datetime(2000, 1, 1))
     archive1 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
@@ -334,7 +334,7 @@ async def test_new_archive(test_session, test_directory, fake_now):
 
 
 @pytest.mark.asyncio
-async def test_get_title_from_html(test_directory, test_session, fake_now):
+async def test_get_title_from_html(test_directory, test_session, fake_now, async_client):
     fake_now(datetime(2000, 1, 1))
     singlefile, readability, screenshot = make_fake_archive_result()
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
@@ -584,11 +584,11 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives_index(test_session, make_files_structure):
+async def test_refresh_archives_index(test_session, make_files_structure, refresh_files):
     """Archives are indexed using ArchiveIndexer and archive_modeler."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
- Page saved with SingleFile 
+ Page saved with SingleFile
  url: https://example.com
  saved date: Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)
 --><head><meta charset="utf-8">
@@ -609,7 +609,7 @@ async def test_refresh_archives_index(test_session, make_files_structure):
         'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
     })
 
-    await files_lib.refresh_files()
+    await refresh_files()
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
@@ -625,7 +625,7 @@ async def test_refresh_archives_index(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_archive_meta(async_client, test_session, make_files_structure):
+async def test_archive_meta(async_client, test_session, make_files_structure, refresh_files):
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en">
 <script data-vue-meta="ssr" type="application/ld+json">
@@ -640,7 +640,7 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
         'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
     })
 
-    await files_lib.refresh_files()
+    await refresh_files()
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
@@ -655,19 +655,19 @@ async def test_archive_meta(async_client, test_session, make_files_structure):
 
 @pytest.mark.asyncio
 async def test_refresh_archives_deleted_singlefile(async_client, test_session, make_files_structure,
-                                                   singlefile_contents_factory):
+                                                   singlefile_contents_factory, refresh_files):
     """Removing a Singlefile file from a FileGroup makes that group no longer an Archive."""
     singlefile, readability = make_files_structure({
         '2022-09-04-16-20-11_The Title.html': singlefile_contents_factory(),
         '2022-09-04-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    await files_lib.refresh_files()
+    await refresh_files()
     assert test_session.query(FileGroup).one().model == 'archive'
     assert test_session.query(Archive).count() == 1
 
     # Remove singlefile, FileGroup is no longer an Archive.
     singlefile.unlink()
-    await files_lib.refresh_files()
+    await refresh_files()
     assert test_session.query(FileGroup).one().model is None
     assert test_session.query(Archive).count() == 0
 
@@ -709,7 +709,7 @@ def test_archive_order(test_session, test_directory, archive_factory):
 
 
 @pytest.mark.asyncio
-async def test_archive_download_index(test_session, test_directory, image_bytes_factory):
+async def test_archive_download_index(test_session, test_directory, image_bytes_factory, async_client):
     """An Archive is indexed when it is downloaded."""
     singlefile = '<html><title>the singlefile</title></html>'
     readability = dict(
@@ -732,7 +732,7 @@ async def test_archive_download_index(test_session, test_directory, image_bytes_
         'Did not store the screenshot'
 
 
-def test_archive_history(test_session, archive_factory):
+def test_archive_history(test_session, archive_factory, async_client):
     """Archive's can have a history of other archives.
 
     Archive's with an empty URL are not associated."""

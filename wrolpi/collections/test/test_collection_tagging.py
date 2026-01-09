@@ -171,7 +171,7 @@ def test_set_tag_on_directory_less_domain_collection(test_session):
 
 @pytest.mark.asyncio
 async def test_tag_collection_removes_tag_and_updates_directory(test_session, test_directory, tag_factory,
-                                                                await_switches):
+                                                                await_switches, await_background_tasks):
     """When removing a tag via tag_collection, the directory should be updated if provided."""
     from wrolpi.collections.lib import tag_collection
 
@@ -207,7 +207,8 @@ async def test_tag_collection_removes_tag_and_updates_directory(test_session, te
         directory=str(untagged_dir),  # New directory
     )
     test_session.commit()
-    await await_switches()
+    await await_switches(timeout=2)
+    await await_background_tasks(timeout=2)
 
     # Verify tag was removed
     assert collection.tag_id is None

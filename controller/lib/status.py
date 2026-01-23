@@ -14,6 +14,18 @@ from typing import Optional
 
 import psutil
 
+# State for bandwidth rate calculations
+_previous_network_stats: dict[str, dict] = {}
+_previous_disk_stats: dict[str, dict] = {}
+
+
+def reset_bandwidth_stats():
+    """Reset stored bandwidth stats. Useful for testing."""
+    global _previous_network_stats, _previous_disk_stats
+    _previous_network_stats = {}
+    _previous_disk_stats = {}
+
+
 # CPU frequency paths
 MIN_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq')
 MAX_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq')
@@ -166,30 +178,67 @@ IGNORED_NIC_NAMES = {'lo', 'veth', 'tun', 'docker', 'br-'}
 
 def get_network_status() -> dict:
     """
-    Get network interface statistics.
+    Get network interface statistics with per-second bandwidth rates.
 
     Returns format compatible with main API's nic_bandwidth_stats:
         dict of interface_name -> stats
     """
+    global _previous_network_stats
+
     from datetime import datetime
     timestamp = datetime.now().timestamp()
     counters = dict()
     if_stats = psutil.net_if_stats()
 
     for name, counter in sorted(psutil.net_io_counters(pernic=True, nowrap=True).items(), key=lambda i: i[0]):
-        if name in IGNORED_NIC_NAMES:
+        # Skip ignored interfaces
+        if any(name.startswith(ignored) for ignored in IGNORED_NIC_NAMES):
             continue
+
         stats = if_stats.get(name)
+
+        # Calculate per-second rates using previous values
+        bytes_recv_ps = 0
+        bytes_sent_ps = 0
+        elapsed = 0
+
+        if name in _previous_network_stats:
+            prev = _previous_network_stats[name]
+            elapsed = timestamp - prev['timestamp']
+
+            if elapsed > 0:
+                bytes_recv_diff = counter.bytes_recv - prev['bytes_recv']
+                bytes_sent_diff = counter.bytes_sent - prev['bytes_sent']
+
+                # Handle counter wrap (be safe, though nowrap=True should prevent this)
+                if bytes_recv_diff >= 0:
+                    bytes_recv_ps = int(bytes_recv_diff / elapsed)
+                if bytes_sent_diff >= 0:
+                    bytes_sent_ps = int(bytes_sent_diff / elapsed)
+
+        # Store current values for next call
+        _previous_network_stats[name] = {
+            'bytes_recv': counter.bytes_recv,
+            'bytes_sent': counter.bytes_sent,
+            'timestamp': timestamp,
+        }
+
         counters[name] = {
             'name': name,
             'now': timestamp,
             'bytes_recv': counter.bytes_recv,
             'bytes_sent': counter.bytes_sent,
             'speed': int(stats.speed) if stats else 0,
-            # Initialize bandwidth per second to 0 (requires historical data to calculate)
-            'bytes_recv_ps': 0,
-            'bytes_sent_ps': 0,
+            'bytes_recv_ps': bytes_recv_ps,
+            'bytes_sent_ps': bytes_sent_ps,
+            'elapsed': int(elapsed),
         }
+
+    # Clean up stale entries (interfaces that disappeared)
+    current_interfaces = set(counters.keys())
+    stale_interfaces = set(_previous_network_stats.keys()) - current_interfaces
+    for stale in stale_interfaces:
+        del _previous_network_stats[stale]
 
     return counters
 
@@ -365,11 +414,13 @@ IGNORED_DISK_NAMES = ('loop', 'ram')
 
 def get_disk_bandwidth_status() -> dict:
     """
-    Get disk IO bandwidth statistics.
+    Get disk IO bandwidth statistics with per-second rates.
 
     Returns format compatible with main API's disk_bandwidth_stats:
         dict of disk_name -> stats with bytes_read, bytes_write, etc.
     """
+    global _previous_disk_stats
+
     from datetime import datetime
     timestamp = datetime.now().timestamp()
     counters = dict()
@@ -383,17 +434,51 @@ def get_disk_bandwidth_status() -> dict:
             if any(name.startswith(i) for i in IGNORED_DISK_NAMES):
                 continue
 
+            # Calculate per-second rates using previous values
+            bytes_read_ps = 0
+            bytes_write_ps = 0
+            elapsed = 0
+
+            if name in _previous_disk_stats:
+                prev = _previous_disk_stats[name]
+                elapsed = timestamp - prev['timestamp']
+
+                if elapsed > 0:
+                    bytes_read_diff = counter.read_bytes - prev['bytes_read']
+                    bytes_write_diff = counter.write_bytes - prev['bytes_write']
+
+                    # Handle counter wrap (be safe)
+                    if bytes_read_diff >= 0:
+                        bytes_read_ps = int(bytes_read_diff / elapsed)
+                    if bytes_write_diff >= 0:
+                        bytes_write_ps = int(bytes_write_diff / elapsed)
+
+            # Store current values for next call
+            _previous_disk_stats[name] = {
+                'bytes_read': counter.read_bytes,
+                'bytes_write': counter.write_bytes,
+                'timestamp': timestamp,
+            }
+
             counters[name] = {
                 'name': name,
                 'now': timestamp,
                 'bytes_read': counter.read_bytes,
                 'bytes_write': counter.write_bytes,
-                # Initialize per-second rates to 0 (requires historical data)
-                'bytes_read_ps': 0,
-                'bytes_write_ps': 0,
+                'bytes_read_ps': bytes_read_ps,
+                'bytes_write_ps': bytes_write_ps,
                 'max_read_ps': 500_000,  # Default max for display scaling
                 'max_write_ps': 500_000,
+                'elapsed': int(elapsed),
+                'speed': 0,  # Disk speed not easily available via psutil
             }
+
+        # Clean up stale entries (disks that disappeared)
+        current_disks = set(counters.keys())
+        stale_disks = set(_previous_disk_stats.keys()) - current_disks
+        for stale in stale_disks:
+            del _previous_disk_stats[stale]
+
     except Exception:
         pass
 

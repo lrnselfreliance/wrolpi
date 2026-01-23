@@ -65,8 +65,8 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     data = yaml.safe_load(config_file.read_text())
     assert isinstance(data, dict)
     dumped = data.get('collections', [])
-    # Config stores absolute paths
-    assert any(c.get('name') == 'Lifecycle Test Collection' and c.get('directory') == str(coll_dir) and c.get(
+    # Config stores relative paths for portability
+    assert any(c.get('name') == 'Lifecycle Test Collection' and c.get('directory') == str(rel_dir) and c.get(
         'kind') == 'channel' for c in dumped)
 
     # 5) Add a new video to the same directory; ensure fetch methods include it after population

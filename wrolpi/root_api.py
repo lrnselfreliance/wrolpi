@@ -23,7 +23,7 @@ from wrolpi.api_utils import json_response, api_app
 from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory, search_other_estimates, log_level_int_to_name
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates
 from wrolpi.config_api import config_bp
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
@@ -31,6 +31,7 @@ from wrolpi.errors import WROLModeEnabled, InvalidConfig, ValidationError
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
+from wrolpi.log_levels import int_to_name
 from wrolpi.tags import Tag
 from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5, API_HOST, API_PORT, API_WORKERS, API_DEBUG, \
     API_ACCESS_LOG, truthy_arg, API_AUTO_RELOAD
@@ -230,7 +231,7 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
     if isinstance(log_level, int):
         set_global_log_level(log_level)
         # Persist log level to config
-        wrolpi_config.log_level = log_level_int_to_name(log_level)
+        wrolpi_config.log_level = int_to_name(log_level)
 
     # Save config settings (hotspot control is now through Controller endpoints)
     wrolpi_config.update(new_config)

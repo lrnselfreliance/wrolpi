@@ -484,7 +484,8 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
                                                         destination=str(test_directory / 'videos/Channel Name'))
     test_session.commit()
     save_channels_config()
-    assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Channel Name')
+    # Config stores relative paths for portability
+    assert get_channels_config().channels[0]['directory'] == 'videos/Channel Name'
     # Channel download downloads into the Channel's directory.
     assert channel.downloads[0].destination == test_directory / 'videos/Channel Name'
     # Make extra file in the Channel's directory, it should be moved.
@@ -527,7 +528,8 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     # No new files were created.
     assert len([i for i in walk(videos_directory) if i.is_file()]) == 3
 
-    assert get_channels_config().channels[0]['directory'] == str(test_directory / 'videos/Tag Name/Channel Name')
+    # Config stores relative paths for portability
+    assert get_channels_config().channels[0]['directory'] == 'videos/Tag Name/Channel Name'
 
     # Remove tag, Channel/Videos should be moved back.
     body = dict(tag_name=None, directory='videos/Channel Name')

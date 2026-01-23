@@ -17,7 +17,7 @@ import sys
 import tempfile
 from asyncio import Task
 from copy import deepcopy
-from dataclasses import dataclass, asdict, field, fields
+from dataclasses import dataclass, field, fields
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
@@ -25,7 +25,7 @@ from itertools import islice, filterfalse, tee
 from multiprocessing.managers import DictProxy
 from pathlib import Path
 from types import GeneratorType
-from typing import Optional, List, Any, AsyncGenerator
+from typing import Optional, List, AsyncGenerator
 from typing import Union, Callable, Tuple, Dict, Iterable, Generator, Any, Set
 from urllib.parse import urlparse, urlunsplit
 
@@ -43,7 +43,7 @@ from sqlalchemy.orm import Session
 from wrolpi.dates import now, from_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, LogLevelError, InvalidConfig, \
     ValidationError
-from wrolpi.log_levels import TRACE_LEVEL, name_to_int as log_level_name_to_int, int_to_name as log_level_int_to_name
+from wrolpi.log_levels import TRACE_LEVEL
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
 
@@ -680,7 +680,8 @@ class ConfigFile:
         # Check for fields in default_config that are missing from validator
         missing_from_validator = default_fields - allowed_fields
         if missing_from_validator:
-            logger.error(f'{self.file_name}: Fields in default_config but missing from validator: {missing_from_validator}')
+            logger.error(
+                f'{self.file_name}: Fields in default_config but missing from validator: {missing_from_validator}')
         try:
             # Remove keys no longer in the config.
             config_items = config.items()
@@ -1848,10 +1849,10 @@ async def await_background_tasks(timeout: int = 15):
         elapsed = time.time() - start_time
 
         if elapsed > timeout:
-            task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
-            logger_.error(f'await_background_tasks: TIMEOUT after {elapsed:.1f}s, {iteration} iterations')
-            logger_.error(f'  BACKGROUND_TASKS={len(BACKGROUND_TASKS)}: {task_names}')
-            logger_.error(f'  public_queue={file_worker.public_queue.qsize()}, private_queue_empty={file_worker.private_queue.empty()}')
+            if __debug__ and logger_.isEnabledFor(TRACE_LEVEL):
+                task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
+                logger_.trace(
+                    f'await_background_tasks: TIMEOUT after {elapsed:.1f}s with {len(BACKGROUND_TASKS)} tasks: {task_names}')
             # Cancel stuck tasks and clear to prevent cascading failures
             for task in list(BACKGROUND_TASKS):
                 if not task.done():
@@ -1860,10 +1861,10 @@ async def await_background_tasks(timeout: int = 15):
             break
 
         if iteration > max_iterations:
-            task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
-            logger_.error(f'await_background_tasks: SAFETY LIMIT REACHED after {iteration} iterations')
-            logger_.error(f'  BACKGROUND_TASKS={len(BACKGROUND_TASKS)}: {task_names}')
-            logger_.error(f'  public_queue={file_worker.public_queue.qsize()}, private_queue_empty={file_worker.private_queue.empty()}')
+            if __debug__ and logger_.isEnabledFor(TRACE_LEVEL):
+                task_names = [t.get_name() if hasattr(t, 'get_name') else str(t) for t in BACKGROUND_TASKS]
+                logger_.trace(
+                    f'await_background_tasks: SAFETY LIMIT after {iteration} iterations with {len(BACKGROUND_TASKS)} tasks: {task_names}')
             break
 
         # Process file worker queue

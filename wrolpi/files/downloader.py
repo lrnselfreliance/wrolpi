@@ -2,10 +2,11 @@ import pathlib
 import traceback
 from abc import ABC
 
-from wrolpi.common import get_media_directory, logger, TRACE_LEVEL
+from wrolpi.common import get_media_directory, logger
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, IgnoredDirectoryError
 from wrolpi.files.lib import upsert_file, get_file_location_href
+from wrolpi.log_levels import TRACE_LEVEL
 from wrolpi.vars import PYTEST
 
 __all__ = ['FileDownloader', 'file_downloader']

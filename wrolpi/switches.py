@@ -101,11 +101,8 @@ async def switch_worker():
         # Get new switch and its context.  Handle each switch one at a time.
         # During testing, don't block the event loop - check for pending switches directly.
         # In production, use blocking wait which is more efficient for long-running processes.
-        if PYTEST:
-            # Non-blocking: return immediately if no switches pending.
-            # The perpetual_signal decorator will call again in 0.1s.
-            if not api_app.shared_ctx.switches:
-                return
+        if PYTEST and not api_app.shared_ctx.switches:
+            return
         else:
             switches_changed.wait(timeout=1)
         switches: dict = api_app.shared_ctx.switches

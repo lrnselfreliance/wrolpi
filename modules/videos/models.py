@@ -767,9 +767,16 @@ class Channel(ModelHelper, Base):
         """
         Retrieve the data about this Channel that should be stored in a config file.
         """
+        # Store relative path for portability across different media directories
+        try:
+            directory = str(get_relative_to_media_directory(self.directory))
+        except ValueError:
+            # Directory outside media directory, store as-is
+            directory = str(self.directory)
+
         config = dict(
             calculate_duration=self.calculate_duration,
-            directory=str(self.directory),
+            directory=directory,
             download_missing_data=self.download_missing_data,
             downloads=[{'url': i.url, 'frequency': i.frequency} for i in self.downloads],
             generate_posters=self.generate_posters,

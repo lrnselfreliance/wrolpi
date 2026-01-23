@@ -17,6 +17,12 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
+# Sanic 25.x wants to use 'spawn' as the multiprocessing start method, but our code
+# uses 'fork' extensively (via multiprocessing.Manager, Event, Queue, etc.).
+# Tell Sanic to use 'fork' and that the start method is already configured.
+Sanic.start_method = "fork"
+Sanic.START_METHOD_SET = True
+
 # The only Sanic App, this is imported all over.
 api_app = Sanic(name='api_app', log_config=LOGGING_CONFIG)
 

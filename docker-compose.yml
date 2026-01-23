@@ -50,6 +50,10 @@ services:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
+    environment:
+      # Sanic 25.x wants 'spawn' but our code uses 'fork' for multiprocessing.
+      # This tells Sanic to accept the existing start method.
+      - SANIC_START_METHOD_SET=1
     volumes:
       - './main.py:/opt/wrolpi/main.py'
       - './wrolpi:/opt/wrolpi/wrolpi'

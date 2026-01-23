@@ -44,13 +44,13 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
     # Verify it populated
     assert {i.file_group_id for i in coll.get_items(test_session)} == {v1.file_group_id, v2.file_group_id}
 
-    # Dump config and verify (config stores absolute paths)
+    # Dump config and verify (config stores relative paths for portability)
     collections_config.dump_config()
     cfg_file = collections_config.get_file()
     data = yaml.safe_load(cfg_file.read_text())
     dumped = data.get('collections', [])
     assert any(
-        c.get('name') == 'Funny Clips' and c.get('directory') == str(src_dir) and c.get('kind') == 'channel' for c in
+        c.get('name') == 'Funny Clips' and c.get('directory') == str(rel_dir) and c.get('kind') == 'channel' for c in
         dumped)
 
     # Tag the collection -> should move to videos/<Tag>/<Collection Name>
@@ -79,12 +79,13 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
     assert str(dest_dir) in str(v1.file_group.primary_path)
     assert str(dest_dir) in str(v2.file_group.primary_path)
 
-    # Dump config again and verify updated directory and tag (config stores absolute paths)
+    # Dump config again and verify updated directory and tag (config stores relative paths)
     collections_config.dump_config()
     data = yaml.safe_load(cfg_file.read_text())
     dumped = data.get('collections', [])
+    rel_dest_dir = dest_dir.relative_to(get_media_directory())
     assert any(
-        c.get('name') == 'Funny Clips' and c.get('directory') == str(dest_dir) and c.get('tag_name') == 'Funny' for
+        c.get('name') == 'Funny Clips' and c.get('directory') == str(rel_dest_dir) and c.get('tag_name') == 'Funny' for
         c in dumped)
 
 

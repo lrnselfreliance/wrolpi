@@ -268,3 +268,15 @@ class TestChannelsConfigEdgeCases:
         channel = test_session.query(Channel).filter_by(url='https://example.com/new').first()
         assert channel is not None
         assert channel.name == 'Update Me'
+
+    async def test_channel_config_view_uses_relative_directory(self, test_session, test_directory, async_client,
+                                                               test_channels_config, channel_factory):
+        """Channel.config_view() should export directory as relative path for portability."""
+        channel = channel_factory()
+        test_session.commit()
+
+        config = channel.config_view()
+
+        # Directory should be relative, not absolute
+        assert not config['directory'].startswith('/'), \
+            f"Expected relative path but got absolute: {config['directory']}"

@@ -166,8 +166,12 @@ class Collection(ModelHelper, Base):
             config['description'] = self.description
 
         if self.directory:
-            # Store absolute path for consistency with Channel config
-            config['directory'] = str(self.directory)
+            # Store relative path for portability across different media directories
+            try:
+                config['directory'] = str(get_relative_to_media_directory(self.directory))
+            except ValueError:
+                # Directory outside media directory, store as-is
+                config['directory'] = str(self.directory)
 
         config['tag_name'] = self.tag_name
 

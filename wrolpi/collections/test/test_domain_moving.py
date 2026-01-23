@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from wrolpi.collections.models import Collection
+from wrolpi.common import get_media_directory
 
 
 @pytest.mark.asyncio
@@ -376,9 +377,10 @@ async def test_tag_domain_comprehensive(
     config = get_domains_config()
     domain_entry = next((c for c in config.collections if c['name'] == 'example.com'), None)
     assert domain_entry is not None, "Domain not in config"
-    # Config stores absolute paths
-    assert domain_entry['directory'] == str(domain_directory), \
-        f"Config directory should be: {domain_entry['directory']}"
+    # Config stores relative paths for portability
+    rel_domain_directory = domain_directory.relative_to(get_media_directory())
+    assert domain_entry['directory'] == str(rel_domain_directory), \
+        f"Config directory should be: {rel_domain_directory}"
 
     # Domain download downloads into the domain's directory
     assert collection.downloads[0].destination == domain_directory, \
@@ -431,7 +433,8 @@ async def test_tag_domain_comprehensive(
     config = get_domains_config()
     domain_entry = next((c for c in config.collections if c['name'] == 'example.com'), None)
     assert domain_entry is not None, "Domain should still be in config"
-    assert domain_entry['directory'] == str(new_domain_directory), \
+    rel_new_domain_directory = new_domain_directory.relative_to(get_media_directory())
+    assert domain_entry['directory'] == str(rel_new_domain_directory), \
         f"Config directory should be updated: {domain_entry['directory']}"
 
     # Remove tag, domain/archives should be moved back

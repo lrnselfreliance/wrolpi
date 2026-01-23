@@ -20,12 +20,12 @@ from typing import AsyncGenerator, Callable, Set, Dict, List, Tuple
 from sqlalchemy import text, or_
 
 from wrolpi import flags
+from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.common import get_media_directory, get_wrolpi_config, logger, walk, chunks, unique_by_predicate
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import NoPrimaryFile
 from wrolpi.events import Events
-from wrolpi.common import apply_modelers, apply_refresh_cleanup
 from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
@@ -1102,8 +1102,9 @@ class FileWorker:
 
                 # Batch check: find all primary_paths that already exist on OTHER FileGroups
                 curs.execute(
-                    '''SELECT primary_path, id FROM file_group
-                       WHERE primary_path = ANY(%s)''',
+                    '''SELECT primary_path, id
+                       FROM file_group
+                       WHERE primary_path = ANY (%s)''',
                     (all_new_paths,)
                 )
                 existing_path_to_id = {row[0]: row[1] for row in curs.fetchall()}
@@ -1125,7 +1126,8 @@ class FileWorker:
                         '''UPDATE file_group AS fg
                            SET primary_path = v.new_path
                            FROM (SELECT unnest(%s::integer[]) AS id, unnest(%s::text[]) AS new_path) AS v
-                           WHERE fg.id = v.id AND fg.primary_path != v.new_path''',
+                           WHERE fg.id = v.id
+                             AND fg.primary_path != v.new_path''',
                         ([u[0] for u in valid_updates], [u[1] for u in valid_updates])
                     )
 
@@ -1240,18 +1242,21 @@ class FileWorker:
         with get_db_curs(commit=True) as curs:
             # Single UNION ALL query to fetch all models at once (reduces 3 queries to 1)
             curs.execute('''
-                SELECT 'video' AS model_type, v.id AS model_id, fg.id AS fg_id, fg.primary_path
-                FROM video v JOIN file_group fg ON v.file_group_id = fg.id
-                WHERE fg.id = ANY(%s)
-                UNION ALL
-                SELECT 'archive', a.id, fg.id, fg.primary_path
-                FROM archive a JOIN file_group fg ON a.file_group_id = fg.id
-                WHERE fg.id = ANY(%s)
-                UNION ALL
-                SELECT 'ebook', e.id, fg.id, fg.primary_path
-                FROM ebook e JOIN file_group fg ON e.file_group_id = fg.id
-                WHERE fg.id = ANY(%s)
-            ''', (file_group_ids, file_group_ids, file_group_ids))
+                         SELECT 'video' AS model_type, v.id AS model_id, fg.id AS fg_id, fg.primary_path
+                         FROM video v
+                                  JOIN file_group fg ON v.file_group_id = fg.id
+                         WHERE fg.id = ANY (%s)
+                         UNION ALL
+                         SELECT 'archive', a.id, fg.id, fg.primary_path
+                         FROM archive a
+                                  JOIN file_group fg ON a.file_group_id = fg.id
+                         WHERE fg.id = ANY (%s)
+                         UNION ALL
+                         SELECT 'ebook', e.id, fg.id, fg.primary_path
+                         FROM ebook e
+                                  JOIN file_group fg ON e.file_group_id = fg.id
+                         WHERE fg.id = ANY (%s)
+                         ''', (file_group_ids, file_group_ids, file_group_ids))
 
             # Group results by model type
             video_ids_to_delete = []
@@ -1272,25 +1277,28 @@ class FileWorker:
             if video_ids_to_delete:
                 logger.info(f'Deleting {len(video_ids_to_delete)} Videos whose primary file was removed')
                 curs.execute('''
-                    UPDATE file_group SET model = NULL
-                    WHERE id IN (SELECT file_group_id FROM video WHERE id = ANY(%s))
-                ''', (video_ids_to_delete,))
+                             UPDATE file_group
+                             SET model = NULL
+                             WHERE id IN (SELECT file_group_id FROM video WHERE id = ANY (%s))
+                             ''', (video_ids_to_delete,))
                 curs.execute('DELETE FROM video WHERE id = ANY(%s)', (video_ids_to_delete,))
 
             if archive_ids_to_delete:
                 logger.info(f'Deleting {len(archive_ids_to_delete)} Archives whose primary file was removed')
                 curs.execute('''
-                    UPDATE file_group SET model = NULL
-                    WHERE id IN (SELECT file_group_id FROM archive WHERE id = ANY(%s))
-                ''', (archive_ids_to_delete,))
+                             UPDATE file_group
+                             SET model = NULL
+                             WHERE id IN (SELECT file_group_id FROM archive WHERE id = ANY (%s))
+                             ''', (archive_ids_to_delete,))
                 curs.execute('DELETE FROM archive WHERE id = ANY(%s)', (archive_ids_to_delete,))
 
             if ebook_ids_to_delete:
                 logger.info(f'Deleting {len(ebook_ids_to_delete)} EBooks whose primary file was removed')
                 curs.execute('''
-                    UPDATE file_group SET model = NULL
-                    WHERE id IN (SELECT file_group_id FROM ebook WHERE id = ANY(%s))
-                ''', (ebook_ids_to_delete,))
+                             UPDATE file_group
+                             SET model = NULL
+                             WHERE id IN (SELECT file_group_id FROM ebook WHERE id = ANY (%s))
+                             ''', (ebook_ids_to_delete,))
                 curs.execute('DELETE FROM ebook WHERE id = ANY(%s)', (ebook_ids_to_delete,))
 
     def _validate_move_paths(

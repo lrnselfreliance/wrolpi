@@ -213,3 +213,22 @@ class TestDomainsConfig:
         assert domains_config is not None
         assert isinstance(domains_config, DomainsConfig)
         assert domains_config.file_name == 'domains.yaml'
+
+    def test_collection_to_config_uses_relative_directory(self, test_session, test_directory, async_client):
+        """Collection.to_config() should export directory as relative path for portability."""
+        directory = test_directory / 'archive' / 'example.com'
+        directory.mkdir(parents=True)
+
+        collection = Collection.from_config(test_session, {
+            'name': 'example.com',
+            'kind': 'domain',
+            'directory': str(directory),
+        })
+        test_session.commit()
+
+        config = collection.to_config()
+
+        # Directory should be relative, not absolute
+        assert not config['directory'].startswith('/'), \
+            f"Expected relative path but got absolute: {config['directory']}"
+        assert config['directory'] == 'archive/example.com'

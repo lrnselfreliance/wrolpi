@@ -9,7 +9,7 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from wrolpi.collections import Collection
-from wrolpi.common import get_absolute_media_path, get_wrolpi_config
+from wrolpi.common import get_absolute_media_path, get_wrolpi_config, get_relative_to_media_directory
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 from .. import common
@@ -261,8 +261,9 @@ async def test_import_channel_delete_missing_channels(await_switches, test_sessi
     test_session.commit()
 
     # Capture directory values before deletion (channels will be detached after deletion)
-    channel1_dir = str(channel1.directory)
-    channel2_dir = str(channel2.directory)
+    # Config stores relative paths for portability
+    channel1_dir = str(get_relative_to_media_directory(channel1.directory))
+    channel2_dir = str(get_relative_to_media_directory(channel2.directory))
 
     # Write Channels to the config file.
     save_channels_config()
@@ -314,9 +315,9 @@ async def test_import_channel_deletes_orphaned_collections(await_switches, test_
     # Verify both Collections exist
     assert test_session.query(Collection).filter_by(kind='channel').count() == 2
 
-    # Capture directory values before deletion
-    channel1_dir = str(channel1.directory)
-    channel2_dir = str(channel2.directory)
+    # Capture directory values before deletion (config stores relative paths)
+    channel1_dir = str(get_relative_to_media_directory(channel1.directory))
+    channel2_dir = str(get_relative_to_media_directory(channel2.directory))
     collection2_id = channel2.collection_id
 
     # Write Channels to the config file

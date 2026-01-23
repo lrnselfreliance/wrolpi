@@ -435,7 +435,7 @@ async def compare_file_groups(root: Path = None, batch_size: int = 10000) -> Fil
                         for filename in fs_files
                     )
                     # If filesystem mtime is newer than DB mtime, content changed
-                    if fs_mtime > db_mtime + 0.001:  # small tolerance for float comparison
+                    if fs_mtime > float(db_mtime) + 0.001:  # small tolerance for float comparison
                         modified.append(diff)
                     else:
                         unchanged.append(diff)

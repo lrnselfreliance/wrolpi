@@ -9,12 +9,14 @@ from unittest import mock
 
 from controller.lib.status import (
     get_cpu_status,
+    get_disk_bandwidth_status,
     get_drive_status,
     get_load_status,
     get_memory_status,
     get_network_status,
     get_power_status,
     get_primary_drive_status,
+    reset_bandwidth_stats,
 )
 
 
@@ -207,3 +209,54 @@ class TestGetPowerStatus:
         result = get_power_status()
         assert isinstance(result["under_voltage"], bool)
         assert isinstance(result["over_current"], bool)
+
+
+class TestNetworkBandwidthRates:
+    """Tests for network bandwidth per-second rate calculations."""
+
+    def test_first_call_returns_zero_rates(self):
+        """First call should return zero rates (no previous data)."""
+        reset_bandwidth_stats()
+        result = get_network_status()
+        if result:
+            iface = list(result.values())[0]
+            assert iface['bytes_recv_ps'] == 0
+            assert iface['bytes_sent_ps'] == 0
+            assert iface['elapsed'] == 0
+
+    def test_second_call_has_elapsed_time(self):
+        """Second call should have non-zero elapsed time."""
+        import time
+        reset_bandwidth_stats()
+        get_network_status()
+        time.sleep(1.1)  # Wait > 1 second since elapsed is int (truncated)
+        result = get_network_status()
+        if result:
+            iface = list(result.values())[0]
+            assert iface['elapsed'] >= 1
+
+
+class TestDiskBandwidthRates:
+    """Tests for disk bandwidth per-second rate calculations."""
+
+    def test_first_call_returns_zero_rates(self):
+        """First call should return zero rates."""
+        reset_bandwidth_stats()
+        result = get_disk_bandwidth_status()
+        if result:
+            disk = list(result.values())[0]
+            assert disk['bytes_read_ps'] == 0
+            assert disk['bytes_write_ps'] == 0
+            assert disk['elapsed'] == 0
+
+    def test_second_call_has_elapsed_time(self):
+        """Second call should have non-zero elapsed time."""
+        import time
+        reset_bandwidth_stats()
+        get_disk_bandwidth_status()
+        time.sleep(1.1)  # Wait > 1 second since elapsed is int (truncated)
+        result = get_disk_bandwidth_status()
+        if result:
+            disk = list(result.values())[0]
+            assert disk['elapsed'] >= 1
+            assert 'speed' in disk

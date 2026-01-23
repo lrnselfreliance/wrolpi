@@ -129,7 +129,7 @@ async def switch_worker():
         switches_changed.clear()
 
 
-async def await_switches(timeout: int = 10):
+async def await_switches(timeout: int = 8):
     if not PYTEST:
         raise RuntimeError('This function is only for testing purposes')
 

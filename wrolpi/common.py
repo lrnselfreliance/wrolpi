@@ -1825,7 +1825,7 @@ async def cancel_background_tasks():
             await asyncio.gather(*BACKGROUND_TASKS)
 
 
-async def await_background_tasks(timeout: int = 15):
+async def await_background_tasks(timeout: int = 10):
     """Awaits all background tasks, used only for testing.
 
     Processes the FileWorker queue concurrently with background tasks to avoid

@@ -297,7 +297,7 @@ async def await_background_tasks(async_client, test_session):
     """
     await async_client.get('/api')
 
-    async def _await_and_expire(timeout: int = 15):
+    async def _await_and_expire(timeout: int = 10):
         await await_background_tasks_(timeout=timeout)
         test_session.expire_all()
 

@@ -1015,27 +1015,58 @@ async def test_config_valid(async_client, test_wrolpi_config):
 @pytest.mark.parametrize('name,expected_name', [
     ('foo', 'foo'),
     (pathlib.Path('foo'), pathlib.Path('foo')),
+    # Short filenames with parents (no trimming needed) should preserve parent directories.
+    ('some/parent/short.txt', 'some/parent/short.txt'),
+    ('/absolute/parent/short.txt', '/absolute/parent/short.txt'),
+    (pathlib.Path('/some/parent/short.txt'), pathlib.Path('/some/parent/short.txt')),
+    # Long ASCII filenames are trimmed to 200 BYTES (not characters)
     (
             'this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo long.txt',
-            'this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.txt'
+            'this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.txt'
     ),
     (
             'some/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo long.info.json',
-            'some/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.info.json'
+            'some/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.info.json'
     ),
     (
             '/absolute/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo long.info.json',
-            '/absolute/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.info.json'
+            '/absolute/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.info.json'
     ),
     (
             pathlib.Path(
                 '/some/parent/is/not/trimmed/this name is toooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo long.readability.json'),
             pathlib.Path(
-                '/some/parent/is/not/trimmed/this name is tooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.readability.json')
+                '/some/parent/is/not/trimmed/this name is tooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo.readability.json')
     ),
 ])
 def test_trim_file_name(name, expected_name):
     assert common.trim_file_name(name) == expected_name
+
+
+def test_trim_file_name_utf8_bytes():
+    """UTF-8 multi-byte characters must be trimmed by BYTE length, not character length.
+
+    Linux ext4/xfs filesystems have a 255 BYTE limit, not a 255 character limit.
+    Hindi/Devanagari characters are 3 bytes each in UTF-8, so a 121-character filename
+    can be 263 bytes, exceeding the limit.
+
+    This test reproduces the bug from: https://decay.local reorganization failure
+    """
+    # This filename has 133 characters but 291 bytes - exceeds 255 byte limit
+    hindi_filename = '2022-04-13-19-40-51_भारतीय संस्कृति और परंपराएं बहुत समृद्ध हैं हमारे देश में विविधता में एकता है यह हमारी विरासत है.readability.html'
+    assert len(hindi_filename) == 133  # Characters
+    assert len(hindi_filename.encode('utf-8')) == 291  # Bytes - exceeds 255!
+
+    result = common.trim_file_name(hindi_filename)
+
+    # Result must fit within filesystem byte limit (200 bytes leaves room for suffix variations)
+    max_bytes = 200
+    result_bytes = len(result.encode('utf-8'))
+    assert result_bytes <= max_bytes, \
+        f'Trimmed filename is {result_bytes} bytes, exceeds {max_bytes} byte limit'
+
+    # Must preserve the suffix
+    assert result.endswith('.readability.html'), f'Suffix not preserved: {result}'
 
 
 async def test_cached_multiprocessing_result(async_client):

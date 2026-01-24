@@ -11,6 +11,7 @@ import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
+import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
@@ -98,12 +99,14 @@ export default function App() {
     useEventsInterval();
 
     return <StatusProvider>
-        {/* Context and style to handle switching between mobile/computer. */}
-        <style>{mediaStyles}</style>
-        {/* Toasts can be on any page. */}
-        <SemanticToastContainer position='top-right'/>
-        <MediaContextProvider>
-            <RouterProvider router={router}/>
-        </MediaContextProvider>
+        <FileWorkerStatusProvider>
+            {/* Context and style to handle switching between mobile/computer. */}
+            <style>{mediaStyles}</style>
+            {/* Toasts can be on any page. */}
+            <SemanticToastContainer position='top-right'/>
+            <MediaContextProvider>
+                <RouterProvider router={router}/>
+            </MediaContextProvider>
+        </FileWorkerStatusProvider>
     </StatusProvider>
 }

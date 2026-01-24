@@ -139,7 +139,10 @@ def convert_wrolpi_filename_format(filename_format: str) -> str:
 
 
 def preview_filename(filename_format: str) -> str:
-    """Return an example video file name formatted using the provided filename format.
+    """Return an example video file name using simple string formatting.
+
+    This is a lightweight implementation that doesn't require YoutubeDL instantiation,
+    which is expensive (~1500 extractors loaded, regexes compiled).
 
     @raise RuntimeError: If the format is invalid.
     """
@@ -149,21 +152,31 @@ def preview_filename(filename_format: str) -> str:
     # Convert WROLPi-specific variables to yt-dlp syntax
     converted_format = convert_wrolpi_filename_format(filename_format)
 
-    options = get_videos_downloader_config().yt_dlp_options
-    options['outtmpl'] = converted_format
-    ydl = YoutubeDL(copy.deepcopy(options))
-    entry = dict(
+    sample_date = now()
+    variables = dict(
         uploader='WROLPi',
-        timestamp=int(now().timestamp()),
-        upload_date=now().strftime('%Y%m%d'),
+        channel='WROLPi',
+        upload_date=sample_date.strftime('%Y%m%d'),
         id='Qz-FuenRylQ',
         title='The title of the video',
         ext='mp4',
         description='A description of the video',
+        timestamp=int(sample_date.timestamp()),
     )
-    filename = prepare_filename(entry, ydl=ydl).lstrip('/')
 
-    return filename
+    # Handle yt-dlp's date extraction syntax %(upload_date>%Y)s and %(upload_date>%m)s
+    # Replace these with their values before standard Python % formatting
+    def replace_date_format(match):
+        date_format = match.group(1)
+        return sample_date.strftime(date_format)
+
+    converted_format = re.sub(r'%\(upload_date>([^)]+)\)s', replace_date_format, converted_format)
+
+    try:
+        filename = converted_format % variables
+        return filename.lstrip('/')
+    except KeyError as e:
+        raise RuntimeError(f'Invalid variable: {e}')
 
 
 @cached_multiprocessing_result
@@ -545,6 +558,17 @@ class VideoDownloader(Downloader, ABC):
                 video_id, video_info_json_path = video.id, video.info_json_path
                 if video_info_json_path and (new_info_json := video.clean_info_json()):
                     video.replace_info_json(new_info_json, clean=False)
+
+                # Update channel's collection's file_format to track the format used
+                if channel_id:
+                    from modules.videos.models import Channel
+                    from modules.videos.lib import save_channels_config
+                    channel_obj = session.query(Channel).get(channel_id)
+                    if channel_obj and channel_obj.collection and not channel_obj.collection.file_format:
+                        video_config = get_videos_downloader_config()
+                        channel_obj.collection.file_format = video_config.file_name_format
+                        save_channels_config.activate_switch()
+
                 session.commit()
 
             with get_db_session(commit=True) as session:

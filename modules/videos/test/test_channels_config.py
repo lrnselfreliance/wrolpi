@@ -280,3 +280,45 @@ class TestChannelsConfigEdgeCases:
         # Directory should be relative, not absolute
         assert not config['directory'].startswith('/'), \
             f"Expected relative path but got absolute: {config['directory']}"
+
+    async def test_channel_config_view_includes_file_format(self, test_session, test_directory, async_client,
+                                                            test_channels_config, channel_factory):
+        """Channel.config_view() should include file_format from underlying Collection."""
+        channel = channel_factory()
+        channel.collection.file_format = '%(uploader)s_%(id)s_%(title)s.%(ext)s'
+        test_session.commit()
+
+        config = channel.config_view()
+        assert config['file_format'] == '%(uploader)s_%(id)s_%(title)s.%(ext)s'
+
+    async def test_channel_file_format_round_trip(self, test_session, test_directory, async_client,
+                                                  test_channels_config, channel_factory):
+        """File format should survive config dump and import cycle."""
+        config = get_channels_config()
+        config_path = config.get_file()
+
+        # Create channel with file_format
+        channel = channel_factory(name='Format Test')
+        channel.collection.file_format = '%(upload_date)s_%(title)s.%(ext)s'
+        test_session.commit()
+
+        # Dump to config
+        config.dump_config()
+
+        # Verify file_format in YAML
+        with open(config_path) as f:
+            config_data = yaml.safe_load(f)
+        channel_config = next(c for c in config_data['channels'] if c['name'] == 'Format Test')
+        assert channel_config['file_format'] == '%(upload_date)s_%(title)s.%(ext)s'
+
+        # Clear the file_format to simulate factory reset
+        channel.collection.file_format = None
+        test_session.commit()
+
+        # Re-import
+        config.initialize()
+        config.import_config()
+
+        # Verify file_format restored
+        test_session.refresh(channel)
+        assert channel.collection.file_format == '%(upload_date)s_%(title)s.%(ext)s'

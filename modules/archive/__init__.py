@@ -7,7 +7,7 @@ from typing import List, Tuple, Iterable
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM
+from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html, TRACE_LEVEL
@@ -86,11 +86,29 @@ class ArchiveDownloader(Downloader, ABC):
 
     async def do_singlefile(self, download: Download) -> bytes:
         """Create a Singlefile from the archive's URL."""
+        # Get browser settings from config
+        config = lib.get_archive_downloader_config()
+
+        # Determine browser executable
+        browser_executable = config.browser_executable
+        if browser_executable:
+            # Use configured browser path
+            browser = browser_executable
+        else:
+            # Auto-detect: prefer Chromium, fallback to Firefox
+            browser = CHROMIUM or FIREFOX
+            if not browser:
+                raise RuntimeError('No browser found. Install Chromium or Firefox, or configure browser_executable.')
+
+        # Get browser args and user agent from config
+        browser_args = config.browser_args or '["--no-sandbox"]'
+        user_agent = config.user_agent or DOWNLOAD_USER_AGENT
+
         cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
                str(SINGLE_FILE_BIN),
-               '--browser-executable-path', CHROMIUM,
-               '--browser-args', '["--no-sandbox"]',
-               '--user-agent', DOWNLOAD_USER_AGENT,
+               '--browser-executable-path', str(browser),
+               '--browser-args', browser_args,
+               '--user-agent', user_agent,
                '--dump-content',
                '--load-deferred-images-dispatch-scroll-event',
                download.url,
@@ -233,17 +251,7 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
 
         file_group.title = file_group.a_text = title or archive.file_group.title
         file_group.d_text = contents
-        # Store paths as filenames only (relative to directory), resolved via file_group.resolve_path()
-        file_group.data = {
-            'id': archive.id,
-            'domain': archive.domain,
-            'readability_json_path': archive.readability_json_path.name if archive.readability_json_path else None,
-            'readability_path': archive.readability_path.name if archive.readability_path else None,
-            'readability_txt_path': archive.readability_txt_path.name if archive.readability_txt_path else None,
-            'screenshot_path': archive.screenshot_path.name if archive.screenshot_path else None,
-            'singlefile_path': archive.singlefile_path.name if archive.singlefile_path else None,
-            'info_json_path': archive.info_json_path.name if archive.info_json_path else None,
-        }
+        archive.rebuild_data()
 
         return archive
     except Exception as e:

@@ -785,6 +785,9 @@ class Channel(ModelHelper, Base):
             tag_name=self.tag_name,
             url=self.url or None,
         )
+        # Include file_format from the underlying Collection
+        if self.collection and self.collection.file_format:
+            config['file_format'] = self.collection.file_format
         return config
 
     @classmethod
@@ -860,6 +863,7 @@ class Channel(ModelHelper, Base):
         d['rss_url'] = self.get_rss_url()
         d['directory'] = \
             self.directory.relative_to(get_media_directory()) if self.directory else None
+        d['needs_reorganization'] = self.collection.needs_reorganization if self.collection else False
         if with_statistics:
             d['statistics'] = self.get_statistics()
         if with_downloads:

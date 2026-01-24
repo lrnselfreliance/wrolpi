@@ -326,3 +326,32 @@ def test_video_location(test_session, video_factory, channel_factory, async_clie
     channel = channel_factory(name='ChannelName')
     video2 = video_factory(title='vid2', channel_id=channel.id)
     assert video2.location == '/videos/channel/1/video/2'
+
+
+def test_format_video_filename_without_upload_date(test_session, video_factory, test_videos_downloader_config, caplog):
+    """Videos without upload_date should not cause KeyError when format uses upload_year."""
+    import logging
+    from modules.videos.lib import format_video_filename
+
+    # Create video without upload_date
+    video = video_factory(title='Test Video', with_video_file=True, with_info_json={'id': 'abc123'})
+    assert video.file_group.published_datetime is None
+
+    # Use a format that includes upload_year subdirectory
+    template = '%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+
+    # Should not raise KeyError and should not log an error
+    with caplog.at_level(logging.ERROR):
+        result = format_video_filename(video, template)
+
+    # Should not have logged any errors (fallback was not used)
+    assert 'Invalid variable in video file_name_format' not in caplog.text
+
+    # Should return a properly formatted filename with the template structure
+    # (empty year and date components produce a path with subdirectory)
+    assert result.endswith('.mp4')
+    assert 'Test Video' in result
+    # The result should follow the template format, not the fallback format
+    # Template result: '{upload_year}/{uploader}_{upload_date}_{id}_{title}.mp4'
+    # With empty year/date: '/__Test Video_Test Video.mp4' (has a slash for subdirectory)
+    assert '/' in result  # Confirms template was used (has subdirectory), not fallback

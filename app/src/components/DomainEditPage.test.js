@@ -54,6 +54,19 @@ jest.mock('./collections/CollectionTagModal', () => ({
     },
 }));
 
+// Mock CollectionReorganizeModal
+jest.mock('./collections/CollectionReorganizeModal', () => ({
+    CollectionReorganizeModal: ({open, onClose, collectionId, collectionName, onComplete}) => {
+        if (!open) return null;
+        return (
+            <div data-testid="collection-reorganize-modal">
+                <div data-testid="modal-header">Reorganize Files: {collectionName}</div>
+                <button data-testid="close-button" onClick={onClose}>Close</button>
+            </div>
+        );
+    },
+}));
+
 // Mock API functions
 const mockGetCollectionTagInfo = jest.fn();
 jest.mock('../api', () => ({

@@ -1404,27 +1404,45 @@ def escape_file_name(name: str) -> str:
     return name.strip()
 
 
-# Maximum length is probably 255, but we need more length for large suffixes like `.readability.json`, and temporary
-# downloading suffixes from yt-dlp.
-MAXIMUM_FILE_LENGTH = 140
+# Maximum bytes for a filename. Linux ext4/xfs limit is 255 bytes.
+# We use 200 to leave room for FileGroup suffix variations (e.g., .readability.html is 17 bytes vs .html at 5 bytes).
+MAXIMUM_FILE_BYTES = 200
 
 
 def trim_file_name(path: str | pathlib.Path) -> str | pathlib.Path:
     """Shorten the file name only if it is longer than the file system supports.  Trim from the end of the name until
-     the name is short enough (preserving any suffix)."""
+     the name is short enough (preserving any suffix).
+
+    Uses BYTE length (not character length) because UTF-8 multi-byte characters (e.g., Devanagari, Chinese)
+    can exceed the 255 byte filesystem limit even with fewer than 140 characters.
+    """
     name_type = pathlib.Path if isinstance(path, pathlib.Path) else str
     parent = path.parent if isinstance(path, pathlib.Path) else '/'.join(i for i in path.split('/')[:-1])
-    path = path.name if isinstance(path, pathlib.Path) else path
+    filename = path.name if isinstance(path, pathlib.Path) else path.split('/')[-1] if '/' in path else path
 
-    if len(path) < MAXIMUM_FILE_LENGTH:
-        return name_type(path)
+    filename_bytes = len(filename.encode('utf-8'))
+    if filename_bytes <= MAXIMUM_FILE_BYTES:
+        # No trimming needed, but preserve parent directory if present
+        if parent:
+            if name_type == pathlib.Path:
+                return parent / filename
+            return f'{parent}/{filename}'
+        return name_type(filename)
 
-    # Don't trim the filename to exactly 256 characters.
+    # Trim based on byte length, not character length.
     # This is because a FileGroup will have varying filename lengths.
     from wrolpi.files.lib import split_path_stem_and_suffix
-    stem, suffix = split_path_stem_and_suffix(path)
-    excess = MAXIMUM_FILE_LENGTH - len(suffix)
-    new_name = stem[:excess].strip() + suffix
+    stem, suffix = split_path_stem_and_suffix(filename)
+    suffix_bytes = len(suffix.encode('utf-8'))
+    target_stem_bytes = MAXIMUM_FILE_BYTES - suffix_bytes
+
+    # Trim characters from end of stem until byte length fits
+    trimmed_stem = stem
+    while len(trimmed_stem.encode('utf-8')) > target_stem_bytes and trimmed_stem:
+        trimmed_stem = trimmed_stem[:-1]
+    trimmed_stem = trimmed_stem.strip()
+
+    new_name = trimmed_stem + suffix
     if parent:
         if name_type == pathlib.Path:
             return parent / new_name
@@ -1573,7 +1591,22 @@ def register_modeler(modeler: callable):
     return modeler
 
 
-async def apply_modelers():
+async def apply_modelers(progress_callback: callable = None):
+    """Run all registered modelers.
+
+    Args:
+        progress_callback: Optional callback(processed, total) called after each modeler completes.
+    """
+    from wrolpi.db import get_db_session
+    from wrolpi.files.models import FileGroup
+
+    # Get initial count of unindexed files for progress tracking
+    initial_unindexed = 0
+    if progress_callback:
+        with get_db_session() as session:
+            initial_unindexed = session.query(FileGroup).filter(FileGroup.indexed != True).count()
+        progress_callback(0, initial_unindexed)
+
     for modeler in modelers:
         logger_.info(f'Applying modeler {modeler.__name__}')
         try:
@@ -1582,6 +1615,14 @@ async def apply_modelers():
             logger_.error(f'Modeler {modeler.__name__} raised error', exc_info=e)
             if PYTEST:
                 raise
+
+        # Update progress after each modeler
+        if progress_callback and initial_unindexed > 0:
+            with get_db_session() as session:
+                remaining = session.query(FileGroup).filter(FileGroup.indexed != True).count()
+            processed = initial_unindexed - remaining
+            progress_callback(processed, initial_unindexed)
+
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 

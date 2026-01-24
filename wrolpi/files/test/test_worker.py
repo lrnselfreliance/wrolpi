@@ -302,16 +302,24 @@ async def test_compare_file_groups_ignores_outside_root(test_session, test_direc
 
 @pytest.mark.asyncio
 async def test_compare_file_groups_cancelable(test_session, test_directory, make_files_structure):
-    """compare_file_groups can be canceled during long operations."""
+    """compare_file_groups can be canceled during long operations and reports progress via callback."""
     # Create many files to ensure scan takes time
     make_files_structure([f'docs/file{i}.txt' for i in range(100)])
 
+    # Test cancellation
     task = asyncio.create_task(compare_file_groups(test_directory))
     await asyncio.sleep(0)  # Let task start
     task.cancel()
 
     with pytest.raises(asyncio.CancelledError):
         await task
+
+    # Test progress callback with small batch size
+    progress_counts = []
+    await compare_file_groups(test_directory, batch_size=10, progress_callback=progress_counts.append)
+    # Should have been called multiple times with increasing counts
+    assert len(progress_counts) >= 1
+    assert progress_counts == sorted(progress_counts)  # Counts should be increasing
 
 
 @pytest.mark.asyncio

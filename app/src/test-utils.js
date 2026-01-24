@@ -3,10 +3,49 @@
  * Provides custom render functions with necessary context providers
  */
 
-import React from 'react';
+import React, {createContext, useContext} from 'react';
 import {render} from '@testing-library/react';
 import {BrowserRouter} from 'react-router';
 import {MediaContextProvider, ThemeContext} from './contexts/contexts';
+
+// Mock FileWorkerStatusContext for tests - avoids API calls during testing
+const MockFileWorkerStatusContext = createContext(null);
+
+function MockFileWorkerStatusProvider({children}) {
+    const mockValue = {
+        status: null,
+        error: null,
+        refresh: jest.fn(),
+        setFastPolling: jest.fn(),
+    };
+    return (
+        <MockFileWorkerStatusContext.Provider value={mockValue}>
+            {children}
+        </MockFileWorkerStatusContext.Provider>
+    );
+}
+
+// Re-export hooks that use the mock context
+export function useFileWorkerStatus() {
+    const context = useContext(MockFileWorkerStatusContext);
+    if (!context) {
+        throw new Error('useFileWorkerStatus must be used within FileWorkerStatusProvider');
+    }
+    return context;
+}
+
+export function useReorganizationStatus() {
+    const {status: progress, refresh} = useFileWorkerStatus();
+    return {
+        isReorganizing: false,
+        taskType: null,
+        collectionId: null,
+        collectionKind: null,
+        batchStatus: null,
+        workerStatus: progress,
+        refresh,
+    };
+}
 
 /**
  * Custom render function that wraps components with necessary providers
@@ -40,9 +79,11 @@ export function renderWithProviders(
     function Wrapper({children}) {
         const content = (
             <BrowserRouter>
-                <ThemeContext.Provider value={defaultThemeContext}>
-                    {children}
-                </ThemeContext.Provider>
+                <MockFileWorkerStatusProvider>
+                    <ThemeContext.Provider value={defaultThemeContext}>
+                        {children}
+                    </ThemeContext.Provider>
+                </MockFileWorkerStatusProvider>
             </BrowserRouter>
         );
 

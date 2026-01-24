@@ -7,12 +7,14 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response, api_app
+from wrolpi.cmd import get_installed_browsers
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
+from wrolpi.vars import DOCKERIZED
 from . import lib, schema
 
 NAME = 'archive'
@@ -88,6 +90,28 @@ async def post_file_format(_: Request, body: schema.ArchiveFileFormatRequest):
             error=str(e),
             archive_file_format=body.archive_file_format,
         ), status=HTTPStatus.BAD_REQUEST)
+
+
+@archive_bp.get('/browsers')
+@openapi.definition(
+    summary='Get list of installed browsers that can be used for archiving.',
+    description='Returns browsers installed on the system. Only available on native deployments (not Docker).',
+)
+async def get_browsers(_: Request):
+    """Get list of installed browsers for SingleFile."""
+    if DOCKERIZED:
+        # Browser configuration is not available in Docker
+        return json_response(dict(
+            browsers=[],
+            available=False,
+            message='Browser configuration is not available in Docker deployments.',
+        ))
+
+    browsers = get_installed_browsers()
+    return json_response(dict(
+        browsers=browsers,
+        available=True,
+    ))
 
 
 @archive_bp.get('/upload')

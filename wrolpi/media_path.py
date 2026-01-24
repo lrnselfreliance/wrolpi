@@ -18,7 +18,11 @@ class MediaPathType(types.TypeDecorator):  # noqa
             raise ValueError('MediaPath cannot be empty')
 
         if isinstance(value, pathlib.Path):
-            value = str(value.absolute())
+            if not value.is_absolute():
+                # Resolve relative paths against media directory, not cwd
+                from wrolpi.common import get_media_directory
+                value = get_media_directory() / value
+            value = str(value)
 
         if not isinstance(value, str):
             raise ValueError(f'Invalid MediaPath type ({type(value)}): {value}')

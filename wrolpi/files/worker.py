@@ -30,6 +30,7 @@ from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
+    _bulk_update_file_groups_reorganize,
 )
 
 logger = logger.getChild(__name__)
@@ -274,7 +275,11 @@ def _insert_fs_batch(session, batch: list):
     )
 
 
-async def compare_file_groups(root: Path = None, batch_size: int = 10000) -> FileComparisonResult:
+async def compare_file_groups(
+        root: Path = None,
+        batch_size: int = 10000,
+        progress_callback: Callable[[int], None] = None,
+) -> FileComparisonResult:
     """
     Compare FileGroups in DB to filesystem. Memory efficient for Raspberry Pi.
 
@@ -317,6 +322,8 @@ async def compare_file_groups(root: Path = None, batch_size: int = 10000) -> Fil
                     _insert_fs_batch(session, batch)
                     file_count += len(batch)
                     batch = []
+                    if progress_callback:
+                        progress_callback(file_count)
                     await asyncio.sleep(0)  # Cancellation yield point
         finally:
             await path_gen.aclose()  # Ensure subprocess is killed on cancellation
@@ -691,6 +698,8 @@ class FileTaskType(str, Enum):
     move = auto()  # Move files and directories to a new location, file names are not changed.
     rename = auto()  # Rename files, requires deeper updating of FileGroup.files and FileGroup.data.
     tag = auto()  # Add TagFile records for files.
+    reorganize = auto()  # Reorganize files with arbitrary source->dest mappings for collection reorganization.
+    batch_reorganize = auto()  # Batch reorganize multiple collections sequentially.
 
 
 @dataclass
@@ -708,6 +717,15 @@ class FileTask:
     next_task_type: FileTaskType = None
     job_id: str = None  # Unique ID for tracking completion
     expand_stems: bool = True  # Whether to expand files to their FileGroup stem-mates
+    # For reorganize tasks: list of (source_path, dest_path) tuples
+    move_mappings: list[tuple[pathlib.Path, pathlib.Path]] = None
+    collection_id: int = None  # Collection being reorganized
+    collection_kind: str = None  # 'channel' or 'domain' for reorganize tasks
+    # For batch_reorganize tasks
+    collection_ids: list[int] = None  # List of collection IDs to process
+    batch_kind: str = None  # 'channel' or 'domain'
+    # For deferred file_format update (only updated after successful completion)
+    pending_file_format: str = None
 
 
 class FileWorker:
@@ -844,6 +862,75 @@ class FileWorker:
         self.public_queue.put_nowait(task)
         return job_id
 
+    def queue_reorganize(
+            self,
+            move_mappings: list[tuple[pathlib.Path, pathlib.Path]],
+            collection_id: int = None,
+            collection_kind: str = None,
+            pending_file_format: str = None,
+    ) -> str:
+        """Queue a reorganize task for collection file reorganization.
+
+        Unlike queue_move which moves all files to a single destination,
+        queue_reorganize handles arbitrary source->destination mappings
+        where each file can move to a different location.
+
+        Args:
+            move_mappings: List of (source_path, dest_path) tuples
+            collection_id: Optional collection ID being reorganized (for status tracking)
+            collection_kind: 'channel' or 'domain' (for status tracking / navbar navigation)
+            pending_file_format: File format to set on collection after successful completion
+                                 (deferred update enables retry on failure)
+
+        Returns:
+            Job ID for tracking completion
+        """
+        import uuid
+        job_id = f'reorganize-{uuid.uuid4().hex[:8]}'
+        # Paths list is empty for reorganize tasks - we use move_mappings instead
+        task = FileTask(
+            FileTaskType.reorganize,
+            paths=[],
+            move_mappings=move_mappings,
+            collection_id=collection_id,
+            collection_kind=collection_kind,
+            job_id=job_id,
+            pending_file_format=pending_file_format,
+        )
+        self._set_job_status(job_id, 'pending')
+        self.public_queue.put_nowait(task)
+        return job_id
+
+    def queue_batch_reorganize(
+            self,
+            collection_ids: list[int],
+            kind: str,
+    ) -> str:
+        """Queue a batch reorganize task for multiple collections.
+
+        Processes collections sequentially, stopping on first failure.
+        Tracks overall progress and per-collection progress.
+
+        Args:
+            collection_ids: List of collection IDs to reorganize
+            kind: 'channel' or 'domain'
+
+        Returns:
+            Batch job ID for tracking completion
+        """
+        import uuid
+        job_id = f'batch-reorganize-{uuid.uuid4().hex[:8]}'
+        task = FileTask(
+            FileTaskType.batch_reorganize,
+            paths=[],
+            collection_ids=collection_ids,
+            batch_kind=kind,
+            job_id=job_id,
+        )
+        self._set_job_status(job_id, 'pending')
+        self.public_queue.put_nowait(task)
+        return job_id
+
     async def refresh_sync(self, paths: list[pathlib.Path]):
         """Synchronously refresh specific files. Use sparingly - prefer queue_refresh."""
         if not paths:
@@ -864,17 +951,32 @@ class FileWorker:
         try:
             task: FileTask = self.private_queue.get_nowait()
         except asyncio.QueueEmpty:
-            # No file tasks to perform. Sleep to catch cancel.
+            # No tasks - clear flag if set and both queues are empty
+            if flags.file_worker_busy.is_set() and self.public_queue.qsize() == 0:
+                flags.file_worker_busy.clear()
             await asyncio.sleep(0)
             return
 
-        match task.task_type:
-            case FileTaskType.count:
-                await self.handle_count(task)
-            case FileTaskType.refresh:
-                await self.handle_refresh(task)
-            case FileTaskType.move:
-                await self.handle_move(task)
+        # Set flag before processing any task (if not already set)
+        if not flags.file_worker_busy.is_set():
+            flags.file_worker_busy.set()
+
+        try:
+            match task.task_type:
+                case FileTaskType.count:
+                    await self.handle_count(task)
+                case FileTaskType.refresh:
+                    await self.handle_refresh(task)
+                case FileTaskType.move:
+                    await self.handle_move(task)
+                case FileTaskType.reorganize:
+                    await self.handle_reorganize(task)
+                case FileTaskType.batch_reorganize:
+                    await self.handle_batch_reorganize(task)
+        finally:
+            # Clear flag if both queues are now empty
+            if self.private_queue.qsize() == 0 and self.public_queue.qsize() == 0:
+                flags.file_worker_busy.clear()
 
     async def handle_count(self, task: FileTask):
         """Count files in the task's paths and chain to next task if specified."""
@@ -1006,8 +1108,12 @@ class FileWorker:
             )
             logger.info(f'Comparing {task.count} files in {len(dir_paths)} directories')
 
+            def on_compare_progress(count: int):
+                percent = int((count / task.count) * 100) if task.count > 0 else 0
+                self.update_status(operation_processed=count, operation_percent=percent)
+
             root = dir_paths[0] if len(dir_paths) == 1 else None
-            dir_result = await compare_file_groups(root=root)
+            dir_result = await compare_file_groups(root=root, progress_callback=on_compare_progress)
             if is_global_refresh:
                 Events.send_global_refresh_discovery_completed()
 
@@ -1661,15 +1767,23 @@ class FileWorker:
         """
         from wrolpi.tags import save_tags_config
 
-        self.update_status(status='modeling')
+        def on_modeling_progress(processed: int, total: int):
+            percent = int((processed / total) * 100) if total > 0 else 0
+            self.update_status(operation_total=total, operation_processed=processed, operation_percent=percent)
+
+        self.update_status(status='modeling', operation_total=0, operation_processed=0, operation_percent=0)
         with flags.file_worker_modeling:
-            await apply_modelers()
+            await apply_modelers(progress_callback=on_modeling_progress)
         if is_global_refresh:
             Events.send_global_refresh_modeling_completed()
 
-        self.update_status(status='indexing')
+        def on_indexing_progress(processed: int, total: int):
+            percent = int((processed / total) * 100) if total > 0 else 0
+            self.update_status(operation_total=total, operation_processed=processed, operation_percent=percent)
+
+        self.update_status(status='indexing', operation_total=0, operation_processed=0, operation_percent=0)
         with flags.file_worker_indexing:
-            await apply_indexers()
+            await apply_indexers(progress_callback=on_indexing_progress)
         if is_global_refresh:
             Events.send_global_refresh_indexing_completed()
 
@@ -1763,27 +1877,26 @@ class FileWorker:
         plan = {}
 
         try:
-            with flags.file_worker_busy:
-                destination.mkdir(parents=True, exist_ok=True)
+            destination.mkdir(parents=True, exist_ok=True)
 
-                # Build the move plan using bulk SQL operations
-                plan, old_directories = await build_move_plan_bulk(sources, destination)
+            # Build the move plan using bulk SQL operations
+            plan, old_directories = await build_move_plan_bulk(sources, destination)
 
-                # Update status with total
-                self.update_status(
-                    status='moving',
-                    operation_total=len(plan),
-                )
+            # Update status with total
+            self.update_status(
+                status='moving',
+                operation_total=len(plan),
+            )
 
-                # Execute the plan in chunks
-                with flags.file_worker_discovery:
-                    with get_db_session(commit=True) as session:
-                        await self._execute_move_chunks(
-                            plan, session, created_directories, revert_plan
-                        )
+            # Execute the plan in chunks
+            with flags.file_worker_discovery:
+                with get_db_session(commit=True) as session:
+                    await self._execute_move_chunks(
+                        plan, session, created_directories, revert_plan
+                    )
 
-                self._cleanup_old_directories(sources, old_directories)
-                await self._apply_post_processing()
+            self._cleanup_old_directories(sources, old_directories)
+            await self._apply_post_processing()
 
             logger.info(f'Move completed: {len(plan)} items moved to {destination}')
             Events.send_file_move_completed(f'Moved {len(sources)} items to {destination}')
@@ -1799,6 +1912,499 @@ class FileWorker:
             Events.send_file_move_failed(f'Move to {destination} failed: {e}')
         finally:
             self.reset_status()
+
+    async def handle_reorganize(self, task: FileTask):
+        """Handle reorganize task for collection file reorganization.
+
+        Unlike handle_move which moves all files to a single destination,
+        handle_reorganize handles arbitrary source->destination mappings
+        where each file (or FileGroup) can move to a different location.
+
+        This is used when a user changes their file_name_format configuration
+        and wants to reorganize existing files to match the new format.
+
+        Optimized for bulk operations:
+        - Single query to pre-fetch all FileGroups
+        - Uses FileGroup.files instead of filesystem globs
+        - Dict lookup for O(n) path matching
+        - Batched database updates
+        """
+        from wrolpi.events import Events
+        from wrolpi.files.models import FileGroup
+
+        move_mappings = task.move_mappings
+
+        if not move_mappings:
+            logger.info('Reorganize task has no move mappings, nothing to do')
+            self._complete_job(task.job_id)
+            self.reset_status()
+            return
+
+        total_moves = len(move_mappings)
+        logger.info(f'Starting reorganize task with {total_moves} file moves')
+
+        # Transition job from 'pending' to 'running' so progress can be tracked
+        self._set_job_status(task.job_id, 'running')
+
+        self.update_status(
+            status='reorganizing',
+            task_type='reorganize',
+            paths=[],
+            destination=None,
+            operation_total=total_moves,
+            operation_processed=0,
+            operation_percent=0,
+            error=None,
+            collection_id=task.collection_id,
+            collection_kind=task.collection_kind,
+        )
+
+        # Track successful moves for rollback
+        completed_moves: list[tuple[pathlib.Path, pathlib.Path]] = []
+        # Track created directories for cleanup
+        created_directories: set[pathlib.Path] = set()
+        # Track source directories to clean up after moves
+        source_directories: set[pathlib.Path] = set()
+
+        try:
+            with flags.file_worker_discovery:
+                # Phase 1: Bulk pre-fetch all FileGroups
+                source_paths = [str(s) for s, d in move_mappings]
+                with get_db_session() as session:
+                    file_groups = session.query(FileGroup).filter(
+                        FileGroup.primary_path.in_(source_paths)
+                    ).all()
+                    # Build lookup dict and detach from session
+                    # Note: fg.primary_path is a pathlib.Path (from MediaPathType), but
+                    # source_paths are strings, so we use str() for the dictionary keys
+                    fg_by_path = {}
+                    for fg in file_groups:
+                        fg_by_path[str(fg.primary_path)] = {
+                            'id': fg.id,
+                            'directory': pathlib.Path(fg.directory),
+                            'files': list(fg.files),  # Copy the list
+                            'data': dict(fg.data) if fg.data else None,
+                        }
+
+                processed = 0
+                pending_updates = []
+
+                for source_path, dest_path in move_mappings:
+                    source_path = pathlib.Path(source_path)
+                    dest_path = pathlib.Path(dest_path)
+
+                    source_exists = source_path.exists()
+                    dest_exists = dest_path.exists()
+
+                    # Look up the pre-fetched FileGroup
+                    fg_info = fg_by_path.get(str(source_path))
+                    if not fg_info:
+                        logger.debug(f'FileGroup not found by primary_path: {source_path}')
+                        processed += 1
+                        continue
+
+                    if source_exists and dest_exists:
+                        # Conflict: both exist - skip with warning
+                        logger.warning(f'Reorganize: both source and destination exist: {source_path} -> {dest_path}')
+                        processed += 1
+                        continue
+
+                    if not source_exists and not dest_exists:
+                        # Neither exists - skip with warning
+                        logger.warning(f'Reorganize: neither source nor destination exist: {source_path}')
+                        processed += 1
+                        continue
+
+                    if not source_exists and dest_exists:
+                        # Recovery case: file already moved, just update DB to match destination
+                        logger.info(f'Reorganize recovery: updating DB for already-moved file: {dest_path}')
+
+                        dest_stem, _ = split_path_stem_and_suffix(dest_path)
+
+                        # Find existing files at destination that match the FileGroup's file extensions
+                        moved_files = []
+                        for file_info in fg_info['files']:
+                            _, suffix = split_path_stem_and_suffix(pathlib.Path(file_info['path']))
+                            dest_file = dest_path.parent / f'{dest_stem}{suffix}'
+                            if dest_file.exists():
+                                # Map original source path to destination for DB update
+                                src_file = fg_info['directory'] / file_info['path']
+                                moved_files.append((src_file, dest_file))
+
+                        if moved_files:
+                            # Build DB update using existing destination files
+                            moved_lookup = {src: dst for src, dst in moved_files}
+                            new_files = []
+                            for file_info in fg_info['files']:
+                                old_file_path = pathlib.Path(file_info['path'])
+                                if not old_file_path.is_absolute():
+                                    old_file_path = fg_info['directory'] / old_file_path
+                                if old_file_path in moved_lookup:
+                                    file_info = dict(file_info)
+                                    file_info['path'] = moved_lookup[old_file_path].name
+                                new_files.append(file_info)
+
+                            new_data = fg_info['data']
+                            if new_data:
+                                new_data = dict(new_data)
+                                filename_lookup = {src.name: dst.name for src, dst in moved_files}
+                                for key, value in new_data.items():
+                                    if isinstance(value, str) and value in filename_lookup:
+                                        new_data[key] = filename_lookup[value]
+                                    elif isinstance(value, list):
+                                        new_data[key] = [filename_lookup.get(v, v) for v in value]
+
+                            pending_updates.append({
+                                'id': fg_info['id'],
+                                'directory': str(dest_path.parent),
+                                'primary_path': str(dest_path),
+                                'files': new_files,
+                                'data': new_data,
+                            })
+                            completed_moves.append((source_path, dest_path))
+
+                        processed += 1
+                        if processed % PROGRESS_UPDATE_INTERVAL == 0:
+                            percent = int((processed / total_moves) * 100)
+                            self.update_status(operation_processed=processed, operation_percent=percent)
+                        continue
+
+                    # Normal case: source exists, dest doesn't - move files
+                    # Track source directory for cleanup
+                    source_directories.add(source_path.parent)
+
+                    # Create destination directory if needed
+                    if not dest_path.parent.exists():
+                        dest_path.parent.mkdir(parents=True, exist_ok=True)
+                        created_directories.add(dest_path.parent)
+
+                    # Phase 2: Use FileGroup.files instead of glob_shared_stem()
+                    source_stem_files = []
+                    for file_info in fg_info['files']:
+                        file_path = pathlib.Path(file_info['path'])
+                        if not file_path.is_absolute():
+                            file_path = fg_info['directory'] / file_path
+                        source_stem_files.append(file_path)
+
+                    # Move all files in the FileGroup
+                    dest_stem, _ = split_path_stem_and_suffix(dest_path)
+                    moved_files = []
+                    for src_file in source_stem_files:
+                        if not src_file.exists():
+                            continue
+                        # Compute destination for this file based on its suffix
+                        _, src_suffix = split_path_stem_and_suffix(src_file)
+                        dest_file = dest_path.parent / f'{dest_stem}{src_suffix}'
+
+                        try:
+                            shutil.move(str(src_file), str(dest_file))
+                            moved_files.append((src_file, dest_file))
+                            logger.debug(f'Reorganize: moved {src_file} -> {dest_file}')
+                        except Exception as e:
+                            logger.error(f'Failed to move {src_file} -> {dest_file}: {e}')
+                            raise
+
+                    # Prepare FileGroup update
+                    if moved_files:
+                        # Phase 3: Use dict lookup instead of nested loop
+                        moved_lookup = {src: dst for src, dst in moved_files}
+
+                        # Update files list with new paths
+                        new_files = []
+                        for file_info in fg_info['files']:
+                            old_file_path = pathlib.Path(file_info['path'])
+                            if not old_file_path.is_absolute():
+                                old_file_path = fg_info['directory'] / old_file_path
+
+                            # Find the corresponding new path using dict lookup
+                            if old_file_path in moved_lookup:
+                                file_info = dict(file_info)
+                                file_info['path'] = moved_lookup[old_file_path].name
+                            new_files.append(file_info)
+
+                        # Update data dict if it has path references
+                        # Data fields store filenames only (no '/'), so use filename-to-filename lookup
+                        new_data = fg_info['data']
+                        if new_data:
+                            new_data = dict(new_data)
+                            # Build filename-to-filename lookup (not full paths)
+                            filename_lookup = {src.name: dst.name for src, dst in moved_files}
+                            for key, value in new_data.items():
+                                if isinstance(value, str) and value in filename_lookup:
+                                    new_data[key] = filename_lookup[value]
+                                elif isinstance(value, list):
+                                    # Handle list fields like caption_paths
+                                    new_data[key] = [filename_lookup.get(v, v) for v in value]
+
+                        # Phase 4: Collect update for batch processing
+                        pending_updates.append({
+                            'id': fg_info['id'],
+                            'directory': str(dest_path.parent),
+                            'primary_path': str(dest_path),
+                            'files': new_files,
+                            'data': new_data,
+                        })
+                        completed_moves.append((source_path, dest_path))
+
+                        # Flush every MOVE_CHUNK_SIZE items
+                        if len(pending_updates) >= MOVE_CHUNK_SIZE:
+                            _bulk_update_file_groups_reorganize(pending_updates)
+                            pending_updates = []
+
+                    processed += 1
+
+                    # Update progress
+                    if processed % PROGRESS_UPDATE_INTERVAL == 0 or processed == total_moves:
+                        percent = int((processed / total_moves) * 100)
+                        logger.info(f'Reorganize progress: {processed}/{total_moves} files ({percent}%)')
+                        self.update_status(
+                            operation_processed=processed,
+                            operation_percent=percent,
+                        )
+
+                # Final flush of pending updates
+                if pending_updates:
+                    _bulk_update_file_groups_reorganize(pending_updates)
+
+                # Clean up empty source directories
+                for directory in sorted(source_directories, key=lambda p: len(p.parents), reverse=True):
+                    try:
+                        if directory.is_dir() and not any(directory.iterdir()):
+                            delete_directory(directory)
+                            logger.debug(f'Cleaned up empty directory: {directory}')
+                    except (OSError, StopIteration):
+                        pass
+
+            # Skip post-processing - reorganization only moves files, nothing to re-index
+
+            # Update file_format after successful completion (deferred update for resumability)
+            if task.collection_id and task.pending_file_format:
+                from wrolpi.collections.models import Collection
+                with get_db_session(commit=True) as session:
+                    collection = session.query(Collection).filter_by(id=task.collection_id).one_or_none()
+                    if collection:
+                        collection.file_format = task.pending_file_format
+                        logger.info(f'Updated file_format for collection {collection.name}')
+                        # Trigger config save
+                        if collection.kind == 'domain':
+                            from modules.archive.lib import save_domains_config
+                            save_domains_config.activate_switch()
+                        elif collection.kind == 'channel':
+                            from modules.videos.lib import save_channels_config
+                            save_channels_config.activate_switch()
+
+            logger.info(f'Reorganize completed: {len(completed_moves)} files moved')
+            Events.send_file_move_completed(f'Reorganized {len(completed_moves)} files')
+            self._complete_job(task.job_id)
+
+        except asyncio.CancelledError:
+            logger.warning('Reorganize task was cancelled')
+            raise
+        except Exception as e:
+            logger.error(f'Reorganize failed: {e}', exc_info=e)
+            self.update_status(status='error', error=str(e))
+            # Note: We don't attempt automatic rollback for reorganize tasks
+            # as the partial state may be complex. User should refresh files.
+            Events.send_file_move_failed(f'Reorganize failed: {e}')
+        finally:
+            self.reset_status()
+
+    async def handle_batch_reorganize(self, task: FileTask):
+        """Handle batch reorganization of multiple collections.
+
+        Processes collections sequentially:
+        1. For each collection, execute reorganization
+        2. Track overall progress and per-collection progress
+        3. Stop on first failure, report which collection failed
+
+        Progress tracking:
+        - overall_percent = (completed_collections + current_collection_%) / total_collections
+        - batch_status dict tracks completed list, current collection, and failure info
+        """
+        from wrolpi.collections.reorganize import execute_reorganization
+        from wrolpi.collections.models import Collection
+        from wrolpi.events import Events
+
+        collection_ids = task.collection_ids or []
+        kind = task.batch_kind
+
+        if not collection_ids:
+            logger.info('Batch reorganize task has no collections, nothing to do')
+            self._complete_job(task.job_id)
+            self.reset_status()
+            return
+
+        total_collections = len(collection_ids)
+        logger.info(f'Starting batch reorganization of {total_collections} {kind} collections')
+
+        # Transition job from 'pending' to 'running'
+        self._set_job_status(task.job_id, 'running')
+
+        # Initialize batch status tracking
+        batch_status = {
+            'batch_job_id': task.job_id,  # Include job ID so frontend can resume polling
+            'total_collections': total_collections,
+            'completed': [],
+            'current_collection': None,
+            'failed_collection': None,
+            'error': None,
+            'overall_percent': 0,
+        }
+
+        self.update_status(
+            status='batch_reorganizing',
+            task_type='batch_reorganize',
+            paths=[],
+            destination=None,
+            operation_total=total_collections,
+            operation_processed=0,
+            operation_percent=0,
+            error=None,
+            batch_status=batch_status,
+            collection_kind=kind,
+        )
+
+        try:
+            for idx, collection_id in enumerate(collection_ids):
+                # Fetch collection info
+                with get_db_session() as session:
+                    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
+                    if not collection:
+                        logger.warning(f'Batch reorganize: collection {collection_id} not found, skipping')
+                        continue
+
+                    collection_name = collection.name
+
+                    # Update current collection in status
+                    batch_status['current_collection'] = {
+                        'id': collection_id,
+                        'name': collection_name,
+                        'status': 'running',
+                        'total': 0,
+                        'completed': 0,
+                        'percent': 0,
+                    }
+                    self.update_status(batch_status=batch_status)
+
+                    logger.info(f'Batch reorganize: processing {collection_name} ({idx + 1}/{total_collections})')
+
+                    try:
+                        # Execute reorganization for this collection
+                        # This queues a sub-job that we need to wait for
+                        job_id = execute_reorganization(collection_id, session)
+
+                        if job_id:
+                            # Wait for the reorganization job to complete
+                            # Poll for completion while updating batch status
+                            await self._wait_for_sub_job_with_progress(
+                                job_id, batch_status, collection_id, collection_name, idx, total_collections
+                            )
+
+                        # Mark this collection as completed
+                        batch_status['completed'].append({
+                            'id': collection_id,
+                            'name': collection_name,
+                            'status': 'complete',
+                        })
+
+                        # Update overall progress
+                        completed_count = len(batch_status['completed'])
+                        batch_status['overall_percent'] = int((completed_count / total_collections) * 100)
+                        batch_status['current_collection'] = None
+                        self.update_status(
+                            operation_processed=completed_count,
+                            operation_percent=batch_status['overall_percent'],
+                            batch_status=batch_status,
+                        )
+
+                        logger.info(f'Batch reorganize: completed {collection_name}')
+
+                    except Exception as e:
+                        # Collection failed - stop batch processing
+                        logger.error(f'Batch reorganize: {collection_name} failed: {e}')
+                        batch_status['failed_collection'] = {
+                            'id': collection_id,
+                            'name': collection_name,
+                        }
+                        batch_status['error'] = str(e)
+                        batch_status['current_collection'] = None
+                        self.update_status(
+                            status='error',
+                            error=str(e),
+                            batch_status=batch_status,
+                        )
+                        self._set_job_status(task.job_id, 'failed')
+                        Events.send_file_move_failed(
+                            f'Batch reorganization failed on {collection_name}: {e}'
+                        )
+                        return
+
+            # All collections completed successfully
+            logger.info(f'Batch reorganization completed: {len(batch_status["completed"])} collections processed')
+            Events.send_file_move_completed(
+                f'Batch reorganization completed: {len(batch_status["completed"])} {kind}s reorganized'
+            )
+            self._complete_job(task.job_id)
+
+        except asyncio.CancelledError:
+            logger.warning('Batch reorganize task was cancelled')
+            raise
+        except Exception as e:
+            logger.error(f'Batch reorganize failed: {e}', exc_info=e)
+            batch_status['error'] = str(e)
+            self.update_status(status='error', error=str(e), batch_status=batch_status)
+            self._set_job_status(task.job_id, 'failed')
+            Events.send_file_move_failed(f'Batch reorganization failed: {e}')
+        finally:
+            self.reset_status()
+
+    async def _wait_for_sub_job_with_progress(
+            self,
+            job_id: str,
+            batch_status: dict,
+            collection_id: int,
+            collection_name: str,
+            collection_idx: int,
+            total_collections: int,
+    ):
+        """Wait for a sub-job to complete while updating batch progress.
+
+        This is used by handle_batch_reorganize to wait for each collection's
+        reorganization job while keeping the batch status updated.
+        """
+        import time
+        start = time.time()
+        timeout = 3600  # 1 hour max per collection
+
+        while time.time() - start < timeout:
+            status = self.get_job_status(job_id)
+            if status == 'complete':
+                return
+
+            # Transfer and process queue FIRST to ensure status is updated
+            self.transfer_queue()
+            await self.process_queue()
+
+            # Update current collection progress based on worker status (now fresh)
+            worker_status = self.status
+            current = batch_status.get('current_collection', {})
+            if current:
+                current['total'] = worker_status.get('operation_total', 0)
+                current['completed'] = worker_status.get('operation_processed', 0)
+                current['percent'] = worker_status.get('operation_percent', 0)
+                batch_status['current_collection'] = current
+
+                # Calculate overall percent including current progress
+                completed_count = len(batch_status.get('completed', []))
+                current_progress = current['percent'] / 100
+                batch_status['overall_percent'] = int(
+                    ((completed_count + current_progress) / total_collections) * 100
+                )
+                self.update_status(batch_status=batch_status)
+
+            await asyncio.sleep(0.05)
+
+        raise TimeoutError(f'Collection {collection_name} reorganization timed out')
 
 
 # All processes create a FileWorker, but only one receives the signals and actually does work.

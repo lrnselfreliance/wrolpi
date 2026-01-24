@@ -1360,3 +1360,51 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
     assert 'renamed.mp4' in file_names
     assert 'renamed.srt' in file_names
     assert len(file_group.files) == 2
+
+
+
+def test_bulk_update_file_groups_reorganize_handles_datetime(test_session, test_directory):
+    """_bulk_update_file_groups_reorganize should handle datetime objects in files JSON.
+    
+    The files JSON field can contain modification_datetime as a datetime object.
+    The function must serialize these correctly to avoid JSON serialization errors.
+    """
+    from datetime import datetime, timezone
+    from wrolpi.files.lib import _bulk_update_file_groups_reorganize
+    
+    # Create a test file and FileGroup
+    test_file = test_directory / 'test_video.mp4'
+    test_file.touch()
+    
+    fg = FileGroup()
+    fg.directory = test_directory
+    fg.primary_path = test_file
+    fg.files = [{'path': 'test_video.mp4', 'mimetype': 'video/mp4'}]
+    test_session.add(fg)
+    test_session.commit()
+    fg_id = fg.id
+    
+    # Prepare update with datetime object in files (simulating what handle_reorganize does)
+    new_files = [{
+        'path': 'test_video.mp4',
+        'mimetype': 'video/mp4',
+        'modification_datetime': datetime.now(timezone.utc),  # datetime object, not string
+    }]
+    
+    updates = [{
+        'id': fg_id,
+        'directory': str(test_directory),
+        'primary_path': str(test_file),
+        'files': new_files,
+    }]
+    
+    # This should NOT raise "Object of type datetime is not JSON serializable"
+    _bulk_update_file_groups_reorganize(updates)
+    
+    # Verify the update was applied
+    test_session.expire_all()
+    fg = test_session.query(FileGroup).filter_by(id=fg_id).one()
+    assert len(fg.files) == 1
+    assert fg.files[0]['path'] == 'test_video.mp4'
+    # modification_datetime should be serialized as ISO string
+    assert 'modification_datetime' in fg.files[0]

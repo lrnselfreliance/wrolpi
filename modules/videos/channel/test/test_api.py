@@ -260,6 +260,9 @@ async def test_channel_post_directory(test_session, async_client, test_directory
 async def test_channel_by_id(test_session, async_client, simple_channel, simple_video):
     request, response = await async_client.get(f'/api/videos/channels/{simple_channel.id}')
     assert response.status_code == HTTPStatus.OK
+    channel = response.json['channel']
+    # needs_reorganization should be included for UI to display reorganization status
+    assert 'needs_reorganization' in channel
 
 
 @pytest.mark.asyncio

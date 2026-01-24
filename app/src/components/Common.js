@@ -780,7 +780,7 @@ export function InfoPopup({
                               position = 'left center',
                               iconSize = null,
                               header = '',
-                              iconStyle = {marginLeft: '0.25em', marginRight: '0.25em', marginTop: '-0.5em'},
+                              iconStyle = { margin: '0.5em'},
                               ...props
                           }) {
     const trigger = <Icon link name={icon} size={iconSize} style={iconStyle}/>;

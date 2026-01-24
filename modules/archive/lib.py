@@ -22,7 +22,7 @@ from wrolpi.cmd import READABILITY_BIN, run_command
 from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
-    get_wrolpi_config, html_screenshot, ConfigFile
+    get_wrolpi_config, html_screenshot, ConfigFile, trim_file_name
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -218,11 +218,25 @@ class ArchiveDownloaderConfigValidator:
     """Validator for archives_downloader.yaml config."""
     file_name_format: str
     version: int = 0
+    # Browser settings (only used on native deployments, not Docker)
+    browser_executable: str = None  # None means auto-detect, or absolute path
+    browser_args: str = '["--no-sandbox"]'  # JSON array of browser arguments
+    user_agent: str = None  # None means use system default
 
     def __post_init__(self):
         # Validate file_name_format ends with .%(ext)s (like video format)
         if not self.file_name_format.endswith('.%(ext)s'):
             raise ValueError('file_name_format must end with .%(ext)s')
+
+        # Validate browser_args is valid JSON array
+        if self.browser_args:
+            import json
+            try:
+                args = json.loads(self.browser_args)
+                if not isinstance(args, list):
+                    raise ValueError('browser_args must be a JSON array')
+            except json.JSONDecodeError as e:
+                raise ValueError(f'browser_args must be valid JSON: {e}')
 
 
 class ArchiveDownloaderConfig(ConfigFile):
@@ -235,6 +249,9 @@ class ArchiveDownloaderConfig(ConfigFile):
     Format:
         version: 0
         file_name_format: '%(download_date)s_%(title)s.%(ext)s'
+        browser_executable: null  # null for auto-detect, or absolute path
+        browser_args: '["--no-sandbox"]'  # JSON array of browser arguments
+        user_agent: null  # null for system default
 
     Variables available in file_name_format:
         - %(title)s - Page title (extracted from HTML)
@@ -248,17 +265,40 @@ class ArchiveDownloaderConfig(ConfigFile):
 
     Subdirectories can be included in the format, e.g.:
         '%(download_year)s/%(download_datetime)s_%(title)s.%(ext)s'
+
+    Browser settings (only used on native deployments, not Docker):
+        - browser_executable: Path to browser or null for auto-detect
+        - browser_args: JSON array of arguments passed to browser
+        - user_agent: Custom user agent string or null for default
     """
     file_name = 'archives_downloader.yaml'
     validator = ArchiveDownloaderConfigValidator
     default_config = dict(
         version=0,
         file_name_format='%(download_datetime)s_%(title)s.%(ext)s',
+        browser_executable=None,
+        browser_args='["--no-sandbox"]',
+        user_agent=None,
     )
 
     @property
     def file_name_format(self) -> str:
         return self._config['file_name_format']
+
+    @property
+    def browser_executable(self) -> Optional[str]:
+        """Get the configured browser executable path, or None for auto-detect."""
+        return self._config.get('browser_executable')
+
+    @property
+    def browser_args(self) -> str:
+        """Get the browser arguments as a JSON string."""
+        return self._config.get('browser_args', '["--no-sandbox"]')
+
+    @property
+    def user_agent(self) -> Optional[str]:
+        """Get the custom user agent, or None for system default."""
+        return self._config.get('user_agent')
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
@@ -314,11 +354,20 @@ def format_archive_filename(
     )
 
     try:
-        return template % variables
+        result = template % variables
+        # Trim the filename portion if it's too long (may include subdirectory paths)
+        if '/' in result:
+            # Has subdirectories - only trim the filename part
+            parts = result.rsplit('/', 1)
+            subdir = parts[0]
+            filename = trim_file_name(parts[1])
+            return f'{subdir}/{filename}'
+        else:
+            return trim_file_name(result)
     except KeyError as e:
         logger.error(f'Invalid variable in archive file_name_format: {e}')
         # Fallback to default format
-        return f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html'
+        return trim_file_name(f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
 
 
 def preview_archive_filename(file_name_format: str) -> str:
@@ -354,6 +403,69 @@ def preview_archive_filename(file_name_format: str) -> str:
         raise RuntimeError(f'Invalid variable: {e}')
     except ValueError as e:
         raise RuntimeError(f'Invalid format: {e}')
+
+
+def format_archive_filename_from_archive(
+        archive: Archive,
+        file_name_format: str = None,
+) -> str:
+    """Single source of truth for archive filenames when reorganizing.
+
+    Formats an archive filename using the configured file_name_format template.
+    Used by collection reorganization to compute new file paths.
+
+    Args:
+        archive: Archive model with metadata
+        file_name_format: Optional override, defaults to config value
+
+    Returns:
+        Formatted filename (may include subdirectory path like "2025/My Article.html")
+    """
+    config = get_archive_downloader_config()
+    template = file_name_format or config.file_name_format
+
+    file_group = archive.file_group
+
+    # Get download date from file_group
+    download_date = file_group.download_datetime or file_group.published_datetime or now()
+
+    # Get title
+    title = file_group.title or 'untitled'
+
+    # Get domain from URL
+    domain = ''
+    if file_group.url:
+        try:
+            domain = extract_domain(file_group.url)
+        except Exception:
+            pass
+
+    variables = dict(
+        title=escape_file_name(title) if title else 'untitled',
+        domain=domain,
+        download_datetime=archive_strftime(download_date),
+        download_date=download_date.strftime('%Y-%m-%d'),
+        download_year=str(download_date.year),
+        download_month=f'{download_date.month:02d}',
+        download_day=f'{download_date.day:02d}',
+        ext='html',
+    )
+
+    try:
+        result = template % variables
+        # Trim the filename portion if it's too long (may include subdirectory paths)
+        if '/' in result:
+            # Has subdirectories - only trim the filename part
+            parts = result.rsplit('/', 1)
+            subdir = parts[0]
+            filename = trim_file_name(parts[1])
+            return f'{subdir}/{filename}'
+        else:
+            return trim_file_name(result)
+    except KeyError as e:
+        logger.error(f'Invalid variable in archive file_name_format: {e}')
+        # Fallback to default format
+        return trim_file_name(f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
 
 
 @dataclass
@@ -416,17 +528,18 @@ def get_new_archive_files(url: str, title: Optional[str], destination: pathlib.P
         full_path.parent.mkdir(parents=True, exist_ok=True)
         singlefile_path = full_path
         stem = full_path.stem
-        readability_path = full_path.parent / f'{stem}.readability.html'
-        readability_txt_path = full_path.parent / f'{stem}.readability.txt'
-        readability_json_path = full_path.parent / f'{stem}.readability.json'
-        screenshot_path = full_path.parent / f'{stem}.png'
+        parent_dir = full_path.parent
+        readability_path = trim_file_name(parent_dir / f'{stem}.readability.html')
+        readability_txt_path = trim_file_name(parent_dir / f'{stem}.readability.txt')
+        readability_json_path = trim_file_name(parent_dir / f'{stem}.readability.json')
+        screenshot_path = trim_file_name(parent_dir / f'{stem}.png')
     else:
         singlefile_path = directory / formatted_filename
         stem = singlefile_path.stem
-        readability_path = directory / f'{stem}.readability.html'
-        readability_txt_path = directory / f'{stem}.readability.txt'
-        readability_json_path = directory / f'{stem}.readability.json'
-        screenshot_path = directory / f'{stem}.png'
+        readability_path = trim_file_name(directory / f'{stem}.readability.html')
+        readability_txt_path = trim_file_name(directory / f'{stem}.readability.txt')
+        readability_json_path = trim_file_name(directory / f'{stem}.readability.json')
+        screenshot_path = trim_file_name(directory / f'{stem}.png')
 
     paths = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
 
@@ -592,6 +705,15 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
         archive.file_group.download_datetime = now()
         archive.url = url
         archive.collection = get_or_create_domain_collection(session, url)
+
+        # Update collection's file_format to track the format used for this file
+        config = get_archive_downloader_config()
+        if archive.collection and config.file_name_format:
+            if not archive.collection.file_format:
+                # Set initial file_format on collection
+                archive.collection.file_format = config.file_name_format
+                save_domains_config.activate_switch()
+
         archive.flush()
 
     return archive

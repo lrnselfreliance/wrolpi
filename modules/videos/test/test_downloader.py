@@ -8,7 +8,8 @@ from unittest import mock
 import pytest
 
 from modules.videos.downloader import VideoDownloader, \
-    get_or_create_channel, channel_downloader, video_downloader, preview_filename
+    get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
+    prepare_filename, convert_wrolpi_filename_format
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -571,6 +572,54 @@ def test_preview_filename_with_upload_year(test_directory, fake_now):
     # Combined with traditional format
     assert preview_filename('%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s') \
            == '2000/WROLPi_20000101_The title of the video.mp4'
+
+
+def test_preview_filename_matches_youtubedl(test_directory, fake_now):
+    """Ensure our lightweight preview_filename() matches YoutubeDL's actual output.
+
+    This test validates that our simple string formatting produces identical
+    results to YoutubeDL's prepare_filename(). If yt-dlp changes behavior,
+    this test will catch it.
+    """
+    from copy import deepcopy
+    from yt_dlp import YoutubeDL
+    from wrolpi.dates import now
+
+    test_formats = [
+        '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+        '%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+        '%(upload_year)s/%(upload_month)s/%(title)s.%(ext)s',
+        '%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s',
+        '%(channel)s/%(id)s.%(ext)s',
+    ]
+
+    # Sample entry used by both methods - must match preview_filename's variables
+    sample_date = now()
+    entry = dict(
+        uploader='WROLPi',
+        channel='WROLPi',
+        timestamp=int(sample_date.timestamp()),
+        upload_date=sample_date.strftime('%Y%m%d'),
+        id='Qz-FuenRylQ',
+        title='The title of the video',
+        ext='mp4',
+        description='A description of the video',
+    )
+
+    for fmt in test_formats:
+        # Get result from our lightweight implementation
+        lightweight_result = preview_filename(fmt)
+
+        # Get result from actual YoutubeDL
+        converted_format = convert_wrolpi_filename_format(fmt)
+        options = get_videos_downloader_config().yt_dlp_options
+        options = deepcopy(options)
+        options['outtmpl'] = converted_format
+        ydl = YoutubeDL(options)
+        ytdlp_result = prepare_filename(entry, ydl=ydl).lstrip('/')
+
+        assert lightweight_result == ytdlp_result, \
+            f"Mismatch for format '{fmt}':\n  lightweight: {lightweight_result}\n  ytdlp: {ytdlp_result}"
 
 
 def test_normalize_video_file_names(test_directory, video_download_manager):

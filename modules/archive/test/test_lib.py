@@ -365,14 +365,17 @@ async def test_get_title_from_html(test_directory, test_session, fake_now, async
 
 @skip_circleci
 def test_get_new_archive_files_length(test_directory, fake_now):
-    """Archive titles are truncated to fit file system length limit.  (255-character limit for most file systems)"""
+    """Archive titles are truncated to fit file system BYTE limit (200 bytes - see MAXIMUM_FILE_BYTES)."""
+    from wrolpi.common import MAXIMUM_FILE_BYTES
+
     fake_now(datetime(2001, 1, 1))
     archive_files = get_new_archive_files('https://example.com', 'a' * 500)
-    assert len(str(archive_files.singlefile.name)) == 225
-    assert len(str(archive_files.readability.name)) == 237
-    assert len(str(archive_files.readability_txt.name)) == 236
-    assert len(str(archive_files.readability_json.name)) == 237
-    assert len(str(archive_files.screenshot.name)) == 224
+    # All filenames should be <= MAXIMUM_FILE_BYTES (bytes, not characters)
+    assert len(str(archive_files.singlefile.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
+    assert len(str(archive_files.readability.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
+    assert len(str(archive_files.readability_txt.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
+    assert len(str(archive_files.readability_json.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
+    assert len(str(archive_files.screenshot.name).encode('utf-8')) <= MAXIMUM_FILE_BYTES
 
 
 @skip_circleci
@@ -1288,6 +1291,26 @@ def test_archive_downloader_config_validation():
     # Invalid format (missing .%(ext)s)
     with pytest.raises(ValueError, match='must end with'):
         ArchiveDownloaderConfigValidator(file_name_format='%(download_date)s_%(title)s')
+
+    # Valid browser_args (JSON array)
+    ArchiveDownloaderConfigValidator(
+        file_name_format='%(title)s.%(ext)s',
+        browser_args='["--no-sandbox", "--headless"]'
+    )
+
+    # Invalid browser_args (not valid JSON)
+    with pytest.raises(ValueError, match='must be valid JSON'):
+        ArchiveDownloaderConfigValidator(
+            file_name_format='%(title)s.%(ext)s',
+            browser_args='not valid json'
+        )
+
+    # Invalid browser_args (not an array)
+    with pytest.raises(ValueError, match='must be a JSON array'):
+        ArchiveDownloaderConfigValidator(
+            file_name_format='%(title)s.%(ext)s',
+            browser_args='{"key": "value"}'
+        )
 
 
 def test_format_archive_filename_default(test_directory, fake_now):

@@ -342,18 +342,9 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     assert original_screenshot_path is not None, 'Archive should have a screenshot'
     assert original_screenshot_path.is_file(), 'Screenshot file should exist'
 
-    # Simulate the bug: archive has screenshot file but data['screenshot_path'] is not set
-    # (This could happen if the archive was created before set_screenshot was implemented)
-    if archive.file_group.data and 'screenshot_path' in archive.file_group.data:
-        data = dict(archive.file_group.data)
-        del data['screenshot_path']
-        archive.file_group.data = data
-        test_session.commit()
-        test_session.expire_all()
-        archive = test_session.query(Archive).filter_by(id=archive.id).one()
-        # Verify data was cleared but file still exists
-        assert 'screenshot_path' not in (archive.file_group.data or {}), 'screenshot_path should not be in data yet'
-        assert archive.screenshot_path is not None, 'But screenshot file should still exist'
+    # Note: Previously this test simulated a bug where data['screenshot_path'] could be missing
+    # while the file existed. This scenario is now auto-fixed by Archive.validate() which calls
+    # rebuild_data(), so the simulation is no longer necessary.
 
     request, response = await async_client.post(f'/api/archive/{archive.id}/generate_screenshot')
     assert response.status_code == HTTPStatus.OK
@@ -364,11 +355,11 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     assert archive.screenshot_path == original_screenshot_path, 'Screenshot path should be unchanged'
     assert archive.screenshot_path.is_file(), 'Screenshot file should still exist'
     assert archive.screenshot_file is not None, 'Screenshot file should still be tracked'
-    # IMPORTANT: Also verify FileGroup.data was updated (this catches the bug where only files was updated)
+    # IMPORTANT: Also verify FileGroup.data has screenshot_path (always synced via rebuild_data)
     assert 'screenshot_path' in archive.file_group.data, \
-        'screenshot_path should be in FileGroup.data after ensuring tracking'
-    assert str(archive.file_group.data['screenshot_path']) == str(original_screenshot_path), \
-        'screenshot_path in data should match the file path'
+        'screenshot_path should be in FileGroup.data'
+    assert archive.file_group.data['screenshot_path'] == original_screenshot_path.name, \
+        'screenshot_path in data should be filename only'
 
     # Test error case: Archive has no singlefile
     archive_no_singlefile = archive_factory('example.com', 'https://example.com/no-singlefile', screenshot=False)
@@ -428,3 +419,28 @@ async def test_archive_file_format_preview(async_client):
     request, response = await async_client.post('/api/archive/file_format', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'error' in response.json
+
+
+@pytest.mark.asyncio
+async def test_archive_browsers_endpoint(async_client):
+    """Test the browsers endpoint returns installed browsers."""
+    # During tests, DOCKERIZED is False, so we should get the available=True response
+    request, response = await async_client.get('/api/archive/browsers')
+    assert response.status_code == HTTPStatus.OK
+    assert 'browsers' in response.json
+    assert 'available' in response.json
+    # available should be True in non-Docker environment
+    assert response.json['available'] is True
+    # browsers is a list
+    assert isinstance(response.json['browsers'], list)
+
+
+@pytest.mark.asyncio
+async def test_archive_browsers_endpoint_dockerized(async_client):
+    """Test the browsers endpoint returns not available when dockerized."""
+    with patch('modules.archive.api.DOCKERIZED', True):
+        request, response = await async_client.get('/api/archive/browsers')
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['browsers'] == []
+        assert response.json['available'] is False
+        assert 'message' in response.json

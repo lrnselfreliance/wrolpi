@@ -57,6 +57,8 @@ import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
 import {VideoResolutionSelectorForm} from "./Download";
+import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
+import {previewBatchReorganization} from "../api";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -234,15 +236,25 @@ function VideosPage() {
 function VideoFileNameForm({form}) {
     const [message, setMessage] = React.useState(null);
 
-    const onChange = async (value) => {
-        const response = await postVideoFileFormat(value);
-        const {error, preview} = await response.json();
-        if (error) {
-            setMessage({content: error, header: 'Invalid File Name', negative: true});
-        } else {
-            setMessage({content: preview, header: 'File Name Preview', positive: true});
-        }
-    }
+    const debouncedOnChange = React.useCallback(
+        _.debounce(async (value) => {
+            const response = await postVideoFileFormat(value);
+            const {error, preview} = await response.json();
+            if (error) {
+                setMessage({content: error, header: 'Invalid File Name', negative: true});
+            } else {
+                setMessage({content: preview, header: 'File Name Preview', positive: true});
+            }
+        }, 300),
+        []
+    );
+
+    // Cleanup debounce on unmount
+    React.useEffect(() => {
+        return () => debouncedOnChange.cancel();
+    }, [debouncedOnChange]);
+
+    const onChange = debouncedOnChange;
 
     const label = <InfoHeader
         headerSize='h5'
@@ -257,10 +269,10 @@ function VideoFileNameForm({form}) {
                 <li><code>%(upload_year)s</code> - Upload year (YYYY)</li>
                 <li><code>%(upload_month)s</code> - Upload month (01-12)</li>
                 <li><code>%(id)s</code> - Video ID</li>
-                <li><code>%(ext)s</code> - File extension</li>
                 <li><code>%(channel)s</code> - Channel name</li>
                 <li><code>%(duration)s</code> - Duration in seconds</li>
                 <li><code>%(playlist_index)s</code> - Playlist index</li>
+                <li><code>%(ext)s</code> - File extension (required, must be at end)</li>
             </ul>
             <p>See yt-dlp docs for all variables. Subdirectories supported.</p>
         </>}
@@ -278,6 +290,25 @@ function VideoFileNameForm({form}) {
 
 function VideosSettingsPage() {
     useTitle('Videos Settings');
+
+    const [batchModalOpen, setBatchModalOpen] = useState(false);
+    const [channelsNeedingReorg, setChannelsNeedingReorg] = useState(0);
+    const [fetchingReorgCount, setFetchingReorgCount] = useState(true);
+
+    // Check how many channels need reorganization on mount
+    useEffect(() => {
+        setFetchingReorgCount(true);
+        previewBatchReorganization('channel')
+            .then(data => {
+                setChannelsNeedingReorg(data.total_collections || 0);
+            })
+            .catch(() => {
+                setChannelsNeedingReorg(0);
+            })
+            .finally(() => {
+                setFetchingReorgCount(false);
+            });
+    }, []);
 
     const emptyFormData = {
         video_resolutions: ['1080p', '720p', '480p', 'maximum'],
@@ -337,10 +368,11 @@ function VideosSettingsPage() {
         popupContent='Always download videos with the selected browser profile. This is risky, and therefore discouraged.'
     />;
 
-    return <Segment>
-        <Header as='h3'>Video Downloader Config</Header>
+    return <>
+        <Segment>
+            <Header as='h3'>Video Downloader Config</Header>
 
-        <Form>
+            <Form>
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column mobile={16} computer={8}>
@@ -435,7 +467,42 @@ function VideosSettingsPage() {
                 </Grid.Row>
             </Grid>
         </Form>
-    </Segment>
+        </Segment>
+
+        <Segment>
+            <Header as='h4'>File Organization</Header>
+            <p>
+                {fetchingReorgCount
+                    ? 'Checking for channels that need reorganization...'
+                    : <>
+                        <strong>{channelsNeedingReorg}</strong> channel{channelsNeedingReorg !== 1 ? 's' : ''}
+                        {channelsNeedingReorg > 0
+                            ? ' have files that do not match the current file name format.'
+                            : '. All channels are organized correctly.'}
+                      </>
+                }
+            </p>
+            <Button
+                color='orange'
+                onClick={() => setBatchModalOpen(true)}
+                id='reorganize_all_channels_button'
+                disabled={fetchingReorgCount || channelsNeedingReorg === 0}
+                loading={fetchingReorgCount}
+            >
+                <Icon name='folder open outline'/> Reorganize All Channels
+            </Button>
+        </Segment>
+
+        <BatchReorganizeModal
+            open={batchModalOpen}
+            onClose={() => setBatchModalOpen(false)}
+            kind='channel'
+            onComplete={() => {
+                setBatchModalOpen(false);
+                setChannelsNeedingReorg(0);
+            }}
+        />
+    </>
 }
 
 

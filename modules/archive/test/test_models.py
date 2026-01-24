@@ -128,3 +128,53 @@ async def test_set_screenshot(async_client, test_session, archive_factory, image
 
     # Verify no screenshot was set
     assert archive_no_screenshot.screenshot_path is None
+
+
+@pytest.mark.asyncio
+async def test_archive_validate_rebuilds_data_after_filename_change(async_client, test_session, test_directory,
+                                                                    archive_factory):
+    """Archive.validate() should rebuild data field when filenames change.
+
+    This tests the bug where reorganization updates files[] but not data{}.
+    The data field contains cached path names that must stay in sync.
+
+    The bug scenario: files are renamed during reorganization (e.g., fixing separator
+    from '___' to '_'), files[] is updated but data{} is not. The UI then uses
+    stale data.singlefile_path and gets 404 errors.
+    """
+    # Create an archive using the factory
+    archive = archive_factory(domain='test.com', url='https://test.com/article')
+    test_session.commit()
+
+    # Verify initial data field has singlefile_path
+    assert archive.file_group.data is not None
+    original_singlefile = archive.file_group.data.get('singlefile_path')
+    assert original_singlefile is not None
+
+    # Simulate what reorganization does: update files[] but not data{}
+    # (This mimics _bulk_update_file_groups_reorganize behavior)
+    # Use a realistic rename: change the title part of the filename
+    # Original: '2000-01-01-07-00-01_NA.html' -> '2000-01-01-07-00-01_New-Title.html'
+    new_filename = original_singlefile.replace('_NA.html', '_New-Title.html')
+    old_files = archive.file_group.files
+    new_files = []
+    for f in old_files:
+        new_f = dict(f)
+        if f['path'].endswith('.html') and not f['path'].endswith('.readability.html'):
+            new_f['path'] = new_filename
+        new_files.append(new_f)
+    archive.file_group.files = new_files
+    archive.file_group.primary_path = archive.file_group.directory / new_filename
+
+    # Rename the actual file on disk to match the new filename
+    old_path = archive.file_group.directory / original_singlefile
+    new_path = archive.file_group.directory / new_filename
+    old_path.rename(new_path)
+
+    # data field still has OLD filename (this is the bug)
+    assert archive.file_group.data['singlefile_path'] == original_singlefile
+
+    # After validate(), data field should have NEW filename
+    archive.validate()
+
+    assert archive.file_group.data['singlefile_path'] == new_filename

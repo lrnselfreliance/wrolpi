@@ -303,15 +303,15 @@ export function StatusPage() {
                 {cpuProgress}
                 {memoryUsageProgress}
                 <Statistic.Group size='mini'>
+                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
                     />
-                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>
@@ -322,6 +322,9 @@ export function StatusPage() {
                 {cpuProgress}
                 {memoryUsageProgress}
                 <Statistic.Group>
+                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}
@@ -329,9 +332,6 @@ export function StatusPage() {
                         critical_temperature={critical_temperature}
                         style={{marginRight: 0}}
                     />
-                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
-                    <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
-                    <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>

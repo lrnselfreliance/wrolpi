@@ -16,7 +16,7 @@ from modules.videos.models import Video
 from wrolpi import dates, flags
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, extract_domain, logger, \
-    escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config
+    escape_file_name, get_media_directory, background_task, Base, get_wrolpi_config, trim_file_name
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download, download_manager
@@ -948,3 +948,85 @@ def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
     """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument."""
     *_, browser, profile = str(profile).split('/')
     return f'{browser}:{profile}'
+
+
+def format_video_filename(
+        video: Video,
+        file_name_format: str = None,
+) -> str:
+    """Single source of truth for video filenames.
+
+    Formats a video filename using the configured file_name_format template.
+    Used by both the video downloader (initial download) and collection reorganization.
+
+    Args:
+        video: Video model with metadata (upload_date, uploader, title, source_id)
+        file_name_format: Optional override, defaults to config value
+
+    Returns:
+        Formatted filename (may include subdirectory path like "2025/01/video.mp4")
+
+    Example:
+        With format '%(upload_year)s/%(upload_month)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s':
+        Returns '2025/01/WROLPi_20250115_abc123_My Video Title.mp4'
+    """
+    from modules.videos.downloader import convert_wrolpi_filename_format
+
+    config = get_videos_downloader_config()
+    template = file_name_format or config.file_name_format
+
+    # Get metadata from video
+    file_group = video.file_group
+    info_json = video.get_info_json() or {}
+
+    # Extract upload date info
+    upload_date = file_group.published_datetime
+    if not upload_date and info_json.get('upload_date'):
+        upload_date = dates.strpdate(info_json['upload_date'])
+
+    # Build variables dict matching yt-dlp's expected variables
+    # Use info_json if available, fall back to derived values
+    uploader = info_json.get('uploader') or info_json.get('channel') or ''
+    title = file_group.title or info_json.get('title') or info_json.get('fulltitle') or 'untitled'
+    source_id = video.source_id or info_json.get('id') or ''
+
+    # Get video file extension
+    video_path = video.video_path
+    ext = video_path.suffix.lstrip('.') if video_path else config.merge_output_format or 'mp4'
+
+    variables = dict(
+        uploader=escape_file_name(uploader) if uploader else '',
+        channel=escape_file_name(uploader) if uploader else '',  # Alias
+        upload_date=upload_date.strftime('%Y%m%d') if upload_date else '',
+        id=source_id,
+        title=escape_file_name(title) if title else 'untitled',
+        ext=ext,
+        # WROLPi-specific variables for subdirectory organization
+        upload_year=str(upload_date.year) if upload_date else '',
+        upload_month=f'{upload_date.month:02d}' if upload_date else '',
+    )
+
+    # Convert WROLPi-specific variables to yt-dlp syntax then apply
+    # (This handles %(upload_year)s -> %(upload_date>%Y)s conversion)
+    converted_template = convert_wrolpi_filename_format(template)
+
+    # For the converted variables (like %(upload_date>%Y)s), we need to add them too
+    variables['upload_date>%Y'] = str(upload_date.year) if upload_date else ''
+    variables['upload_date>%m'] = f'{upload_date.month:02d}' if upload_date else ''
+
+    try:
+        result = converted_template % variables
+        # Trim the filename portion if it's too long (may include subdirectory paths)
+        if '/' in result:
+            # Has subdirectories - only trim the filename part
+            parts = result.rsplit('/', 1)
+            subdir = parts[0]
+            filename = trim_file_name(parts[1])
+            return f'{subdir}/{filename}'
+        else:
+            return trim_file_name(result)
+    except KeyError as e:
+        logger.error(f'Invalid variable in video file_name_format: {e}')
+        # Fallback to a simple format
+        fallback_title = escape_file_name(title) if title else 'untitled'
+        return trim_file_name(f'{fallback_title}.{ext}')

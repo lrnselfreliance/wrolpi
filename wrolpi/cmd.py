@@ -79,10 +79,53 @@ CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
                  )
+FIREFOX = which('firefox', 'firefox-esr',
+                '/usr/bin/firefox',
+                '/usr/bin/firefox-esr',
+                )
 READABILITY_BIN = which('readability-extractor',
                         '/usr/bin/readability-extractor',  # rpi os
                         '/usr/local/bin/readability-extractor',  # debian
                         )
+
+# Known browser definitions for SingleFile
+KNOWN_BROWSERS = {
+    'chromium': {
+        'paths': ['chromium-browser', 'chromium', '/usr/bin/chromium-browser', '/usr/bin/chromium'],
+        'name': 'Chromium',
+    },
+    'firefox': {
+        'paths': ['firefox', 'firefox-esr', '/usr/bin/firefox', '/usr/bin/firefox-esr'],
+        'name': 'Firefox',
+    },
+    'brave': {
+        'paths': ['brave-browser', '/usr/bin/brave-browser'],
+        'name': 'Brave',
+    }
+}
+
+
+def get_installed_browsers() -> list:
+    """
+    Detect browsers installed on the system that can be used with SingleFile.
+
+    Returns a list of dicts with:
+        - key: The browser identifier (e.g., 'chromium', 'firefox')
+        - name: Human-readable name (e.g., 'Chromium', 'Firefox')
+        - path: Absolute path to the executable
+    """
+    browsers = []
+
+    for key, info in KNOWN_BROWSERS.items():
+        path = which(*info['paths'])
+        if path:
+            browsers.append({
+                'key': key,
+                'name': info['name'],
+                'path': str(path),
+            })
+
+    return browsers
 
 # Videos
 YT_DLP_BIN = which(

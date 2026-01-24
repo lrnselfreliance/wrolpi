@@ -5,7 +5,6 @@ import {
     fetchChannels,
     fetchDecoded,
     fetchDomains,
-    fetchFilesProgress,
     filesSearch,
     getArchive,
     getChannel,
@@ -588,7 +587,7 @@ export const useChannel = (channel_id) => {
     return {
         channel: form.formData,
         form,
-        fetchChannel,
+        fetchChannel: form.fetcher,
     };
 }
 
@@ -758,34 +757,6 @@ export const useBrowseFiles = () => {
     }, [JSON.stringify(openFolders)])
 
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
-}
-
-export const useFilesProgress = () => {
-    const [progress, setProgress] = useState(null);
-
-    const localFetchFilesProgress = async () => {
-        try {
-            let p = await fetchFilesProgress();
-            setProgress(p);
-        } catch (e) {
-            setProgress(null);
-            console.error(e);
-        }
-    }
-
-    useEffect(() => {
-        localFetchFilesProgress();
-    }, []);
-
-    return {progress, fetchFilesProgress: localFetchFilesProgress}
-}
-
-export const useFilesProgressInterval = () => {
-    const {progress, fetchFilesProgress} = useFilesProgress();
-
-    useRecurringTimeout(fetchFilesProgress, 1000);
-
-    return {progress, fetchFilesProgress};
 }
 
 export const useHotspot = () => {

@@ -442,6 +442,14 @@ export async function postArchiveFileFormat(archive_file_format) {
     return await apiPost(`${ARCHIVES_API}/file_format`, body);
 }
 
+export async function fetchArchiveBrowsers() {
+    const response = await apiGet(`${ARCHIVES_API}/browsers`);
+    if (response.ok) {
+        return await response.json();
+    }
+    return {browsers: [], available: false};
+}
+
 export async function fetchBrowserProfiles() {
     const response = await apiGet(`${API_URI}/videos/browser-profiles`);
     if (response.status === 200) {
@@ -886,6 +894,126 @@ export async function refreshDomain(domainId) {
         });
     }
     return response;
+}
+
+export async function previewCollectionReorganization(collectionId) {
+    const response = await apiGet(`${COLLECTIONS_API}/${collectionId}/reorganize/preview`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Unable to preview reorganization. See server logs.');
+        toast({
+            type: 'error',
+            title: 'Reorganization Preview Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function executeCollectionReorganization(collectionId) {
+    const response = await apiPost(`${COLLECTIONS_API}/${collectionId}/reorganize`);
+    if (response.ok) {
+        const data = await response.json();
+        if (data.job_id) {
+            toast({
+                type: 'success',
+                title: 'Reorganization Started',
+                description: 'Files are being reorganized in the background',
+                time: 3000,
+            });
+        } else {
+            toast({
+                type: 'info',
+                title: 'No Changes Needed',
+                description: data.message || 'No files need reorganization',
+                time: 3000,
+            });
+        }
+        return data;
+    } else {
+        const message = await getErrorMessage(response, 'Unable to start reorganization. See server logs.');
+        toast({
+            type: 'error',
+            title: 'Reorganization Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function getReorganizationStatus(collectionId, jobId) {
+    const response = await apiGet(`${COLLECTIONS_API}/${collectionId}/reorganize/status/${jobId}`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Unable to get reorganization status.');
+        throw new Error(message);
+    }
+}
+
+// Batch Reorganization API Functions
+
+export async function previewBatchReorganization(kind) {
+    const endpoint = kind === 'channel' ? 'channels' : 'domains';
+    const response = await apiGet(`${COLLECTIONS_API}/reorganize/${endpoint}`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, `Unable to get ${kind}s needing reorganization.`);
+        toast({
+            type: 'error',
+            title: 'Batch Reorganization Preview Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function executeBatchReorganization(kind) {
+    const endpoint = kind === 'channel' ? 'channels' : 'domains';
+    const response = await apiPost(`${COLLECTIONS_API}/reorganize/${endpoint}`);
+    if (response.ok) {
+        const data = await response.json();
+        if (data.batch_job_id) {
+            toast({
+                type: 'success',
+                title: 'Batch Reorganization Started',
+                description: `${data.collection_count} ${kind}s are being reorganized`,
+                time: 3000,
+            });
+        } else {
+            toast({
+                type: 'info',
+                title: 'No Changes Needed',
+                description: data.message || `No ${kind}s need reorganization`,
+                time: 3000,
+            });
+        }
+        return data;
+    } else {
+        const message = await getErrorMessage(response, `Unable to start batch reorganization. See server logs.`);
+        toast({
+            type: 'error',
+            title: 'Batch Reorganization Error',
+            description: message,
+            time: 5000,
+        });
+        throw new Error(message);
+    }
+}
+
+export async function getBatchReorganizationStatus(batchJobId) {
+    const response = await apiGet(`${COLLECTIONS_API}/reorganize/batch/status/${batchJobId}`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Unable to get batch reorganization status.');
+        throw new Error(message);
+    }
 }
 
 export async function getArchive(archiveId) {

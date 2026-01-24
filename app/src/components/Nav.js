@@ -5,6 +5,7 @@ import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/c
 import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
+import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
 import {Icon, Popup} from "./Theme";
 import {HELP_VIEWER_URI, NAME} from "./Vars";
@@ -165,10 +166,33 @@ export function NavBar() {
     // issue.
     const warningIcon = temperatureIcon || diskWaitIcon || memoryIcon || systemLoadIcon;
 
+    const {isReorganizing, taskType, collectionId, collectionKind} = useReorganizationStatus();
+
     let processingLink;
     if (status && status.flags) {
         if (status.flags.file_worker_busy) {
-            processingLink = '/files';
+            // Smart navigation based on what the file worker is doing
+            if (isReorganizing && collectionId && collectionKind) {
+                // Single collection reorganization - navigate to that collection
+                if (collectionKind === 'channel') {
+                    processingLink = `/videos/channel/${collectionId}/edit`;
+                } else if (collectionKind === 'domain') {
+                    processingLink = `/archive/domain/${collectionId}/edit`;
+                } else {
+                    processingLink = '/files';
+                }
+            } else if (isReorganizing && taskType === 'batch_reorganize' && collectionKind) {
+                // Batch reorganization - navigate to settings page for that kind
+                if (collectionKind === 'channel') {
+                    processingLink = '/videos/settings';
+                } else if (collectionKind === 'domain') {
+                    processingLink = '/archive/settings';
+                } else {
+                    processingLink = '/files';
+                }
+            } else {
+                processingLink = '/files';
+            }
         } else if (status.flags.map_importing) {
             processingLink = '/map/manage';
         }

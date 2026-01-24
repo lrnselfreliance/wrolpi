@@ -90,6 +90,10 @@ class Collection(ModelHelper, Base):
     tag_id = Column(Integer, ForeignKey('tag.id'))
     tag = relationship('Tag', primaryjoin='Collection.tag_id==Tag.id')
 
+    # Stores the file_name_format used when files were last organized
+    # Used to detect when reorganization is needed after config changes
+    file_format = Column(String, nullable=True)
+
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
 
     # Columns updated by triggers (similar to Channel)
@@ -118,6 +122,36 @@ class Collection(ModelHelper, Base):
     @property
     def tag_name(self) -> str | None:
         return self.tag.name if self.tag else None
+
+    @property
+    def needs_reorganization(self) -> bool:
+        """Returns True if collection's file_format differs from current config.
+
+        When a user changes the file_name_format in their config, existing files
+        remain in their old locations. This property detects that mismatch so the
+        UI can offer to reorganize files.
+
+        Returns True when:
+        - file_format is None (collection has never been synced to config)
+        - file_format differs from current config format
+        """
+        current = self._get_current_file_format()
+        if not current:
+            return False
+        if not self.file_format:
+            # Never been reorganized - needs to sync to current config
+            return True
+        return current != self.file_format
+
+    def _get_current_file_format(self) -> str | None:
+        """Get current file_name_format from config based on collection kind."""
+        if self.kind == 'channel':
+            from modules.videos.lib import get_videos_downloader_config
+            return get_videos_downloader_config().file_name_format
+        elif self.kind == 'domain':
+            from modules.archive.lib import get_archive_downloader_config
+            return get_archive_downloader_config().file_name_format
+        return None
 
     @property
     def location(self) -> str:
@@ -174,6 +208,9 @@ class Collection(ModelHelper, Base):
                 config['directory'] = str(self.directory)
 
         config['tag_name'] = self.tag_name
+
+        if self.file_format:
+            config['file_format'] = self.file_format
 
         # Include downloads if any exist
         if self.downloads:
@@ -251,6 +288,7 @@ class Collection(ModelHelper, Base):
         description = data.get('description')
         directory = data.get('directory')
         tag_name = data.get('tag_name')
+        file_format = data.get('file_format')
         kind = (data.get('kind') or 'channel').strip()
         # Validate known kinds (forward-compatible: allow future values)
         if kind not in {'channel', 'domain'}:
@@ -280,6 +318,7 @@ class Collection(ModelHelper, Base):
             collection.description = description
             collection.directory = directory
             collection.kind = kind
+            collection.file_format = file_format
 
             if tag_name:
                 tag = Tag.get_by_name(session, tag_name)
@@ -298,6 +337,7 @@ class Collection(ModelHelper, Base):
                 description=description,
                 directory=directory,
                 kind=kind,
+                file_format=file_format,
             )
 
             if tag_name:
@@ -387,6 +427,7 @@ class Collection(ModelHelper, Base):
             description = data.get('description')
             directory = data.get('directory')
             tag_name = data.get('tag_name')
+            file_format = data.get('file_format')
             kind = (data.get('kind') or 'channel').strip()
 
             # Validate known kinds
@@ -421,6 +462,7 @@ class Collection(ModelHelper, Base):
                 collection.description = description
                 collection.directory = directory
                 collection.kind = kind
+                collection.file_format = file_format
 
                 if tag_name:
                     tag = tags_by_name.get(tag_name)
@@ -439,6 +481,7 @@ class Collection(ModelHelper, Base):
                     description=description,
                     directory=directory,
                     kind=kind,
+                    file_format=file_format,
                 )
 
                 if tag_name:
@@ -824,6 +867,8 @@ class Collection(ModelHelper, Base):
             'item_count': self.item_count,
             'total_size': self.total_size,
             'downloads': self.downloads,
+            'file_format': self.file_format,
+            'needs_reorganization': self.needs_reorganization,
         }
 
     def format_directory(self, tag_name: Optional[str]) -> pathlib.Path:
@@ -898,13 +943,14 @@ class Collection(ModelHelper, Base):
             Absolute path to the collection's directory
         """
         if self.directory:
-            return get_media_directory() / self.directory
+            # Return absolute path (joining with media_directory handles both relative and absolute paths)
+            return self.directory if self.directory.is_absolute() else get_media_directory() / self.directory
 
         # First use - format and save
         tag_name = tag_name or (self.tag.name if self.tag else None)
         destination = self.format_destination(tag_name)
 
-        self.directory = get_relative_to_media_directory(destination)
+        self.directory = destination  # Store absolute path; MediaPathType handles conversion
         session.commit()
 
         # Trigger config save for persistence

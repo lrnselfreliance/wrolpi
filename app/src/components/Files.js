@@ -33,7 +33,6 @@ import {
     useTitle
 } from "./Common";
 import {
-    useFilesProgressInterval,
     usePages,
     useSearchFiles,
     useSearchFilter,
@@ -41,6 +40,7 @@ import {
     useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
+import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
 import {Route, Routes} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
@@ -566,7 +566,7 @@ function getPhaseLabel(status) {
 }
 
 export function FilesRefreshProgress() {
-    const {progress} = useFilesProgressInterval();
+    const {status: progress} = useFileWorkerStatus();
 
     if (!progress || progress.status === 'idle') {
         return null;

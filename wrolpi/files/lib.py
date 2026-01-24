@@ -12,7 +12,7 @@ import subprocess
 import urllib.parse
 from itertools import zip_longest
 from pathlib import Path
-from typing import List, Tuple, Union, Dict, Generator, Iterable, Set
+from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
 import psycopg2
@@ -724,10 +724,22 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         curs.execute(stmt)
 
 
-async def apply_indexers():
-    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""
+async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
+    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function.
+
+    Args:
+        progress_callback: Optional callback(processed, total) called after each batch.
+    """
     from wrolpi.files.models import FileGroup
     refresh_logger.info('Applying indexers')
+
+    # Get initial count for progress tracking
+    total_to_index = 0
+    total_indexed = 0
+    if progress_callback:
+        with get_db_session() as session:
+            total_to_index = session.query(FileGroup).filter(FileGroup.indexed != True).count()
+        progress_callback(0, total_to_index)
 
     while True:
         # Continually query for Files that have not been indexed.
@@ -808,6 +820,11 @@ async def apply_indexers():
 
             if file_group:
                 refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')
+
+            # Update progress
+            total_indexed += processed
+            if progress_callback and total_to_index > 0:
+                progress_callback(total_indexed, total_to_index)
 
             if processed < 20:
                 # Processed less than the limit, don't do the next query.
@@ -1363,6 +1380,51 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
             WHERE fg.primary_path = v.old_path
         '''
         curs.execute(sql)
+
+
+def _json_serial(obj):
+    """JSON serializer for objects not serializable by default json code."""
+    import datetime
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def _bulk_update_file_groups_reorganize(updates: List[dict]):
+    """Batch UPDATE FileGroups for reorganization using raw SQL.
+
+    Unlike _bulk_update_file_groups_db, this also updates the files and data JSON fields
+    since reorganization changes filenames, not just directories.
+
+    Args:
+        updates: List of dicts with keys: id, directory, primary_path, files, data
+    """
+    if not updates:
+        return
+
+    with get_db_curs(commit=True) as curs:
+        for update in updates:
+            # Don't change indexed - reorganization only moves files, content unchanged
+            curs.execute('''
+                UPDATE file_group
+                SET directory = %s,
+                    primary_path = %s,
+                    files = %s,
+                    data = %s
+                WHERE id = %s
+            ''', (
+                update['directory'],
+                update['primary_path'],
+                json.dumps(update['files'], default=_json_serial),
+                json.dumps(update['data'], default=_json_serial) if update.get('data') else None,
+                update['id'],
+            ))
+
+    # Expire SQLAlchemy's session cache so subsequent queries see the raw SQL updates.
+    # This is necessary because get_db_curs uses the same connection as get_db_session
+    # during tests, but SQLAlchemy's identity map doesn't know about raw SQL updates.
+    with get_db_session() as session:
+        session.expire_all()
 
 
 def delete_directory(directory: pathlib.Path, recursive: bool = False):

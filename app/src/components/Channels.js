@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {Grid, StatisticLabel, StatisticValue,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
+import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {
     APIButton,
     BackButton,
@@ -88,6 +89,7 @@ export function ChannelEditPage() {
 
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
     const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+    const [reorganizeModalOpen, setReorganizeModalOpen] = useState(false);
 
     const {channel, form, fetchChannel} = useChannel(channelId);
 
@@ -192,10 +194,21 @@ export function ChannelEditPage() {
         style={{marginTop: '1em'}}
     >Tag</Button>;
 
+    const reorganizeButton = (
+        <APIButton
+            color='orange'
+            size='small'
+            onClick={() => setReorganizeModalOpen(true)}
+            obeyWROLMode={true}
+            style={{marginTop: '1em'}}
+        >Reorganize Files</APIButton>
+    );
+
     const actionButtons = <>
         {deleteButton}
         {refreshButton}
         {tagButton}
+        {reorganizeButton}
     </>;
 
     const downloadMissingDataInfo = 'Automatically download missing comments, etc, in the background.';
@@ -206,6 +219,16 @@ export function ChannelEditPage() {
         <Link to={`/videos/channel/${channel.id}/video`}>
             <Button>Videos</Button>
         </Link>
+
+        {channel?.needs_reorganization && (
+            <Message warning>
+                <Message.Header>File Format Changed</Message.Header>
+                <p>
+                    The file name format has changed. Click "Reorganize Files" to move existing files
+                    to match the new format.
+                </p>
+            </Message>
+        )}
 
         <CollectionEditForm
             form={form}
@@ -277,6 +300,16 @@ export function ChannelEditPage() {
             onSave={handleTagSave}
             collectionName="Channel"
             hasDirectory={!!channel.directory}
+        />
+
+        {/* Reorganize Modal */}
+        <CollectionReorganizeModal
+            open={reorganizeModalOpen}
+            onClose={() => setReorganizeModalOpen(false)}
+            collectionId={channel?.collection_id}
+            collectionName={channel?.name}
+            onComplete={fetchChannel}
+            needsReorganization={channel?.needs_reorganization}
         />
 
         {/* Downloads Segment */}

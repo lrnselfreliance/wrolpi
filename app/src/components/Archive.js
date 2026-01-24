@@ -44,11 +44,13 @@ import {
 import {
     deleteArchives,
     deleteDomain,
+    fetchArchiveBrowsers,
     fetchArchiveDownloaderConfig,
     generateArchiveScreenshot,
     getCollectionTagInfo,
     postArchiveFileFormat,
     postDownload,
+    previewBatchReorganization,
     refreshDomain,
     tagDomain,
     tagFileGroup,
@@ -57,10 +59,13 @@ import {
 } from "../api";
 import {InputForm, useForm} from "../hooks/useForm";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
+import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
+import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useArchive,
+    useDockerized,
     useDomain,
     useDomains,
     useOneQuery,
@@ -505,6 +510,8 @@ export function DomainEditPage() {
 
     // Modal state for tagging
     const [tagEditModalOpen, setTagEditModalOpen] = useState(false);
+    // Modal state for reorganization
+    const [reorganizeModalOpen, setReorganizeModalOpen] = useState(false);
 
     useTitle(`Edit Domain: ${domain?.domain || '...'}`);
 
@@ -612,10 +619,21 @@ export function DomainEditPage() {
         style={{marginTop: '1em'}}
     >Tag</Button>;
 
+    const reorganizeButton = (
+        <APIButton
+            color='orange'
+            size='small'
+            onClick={() => setReorganizeModalOpen(true)}
+            obeyWROLMode={true}
+            style={{marginTop: '1em'}}
+        >Reorganize Files</APIButton>
+    );
+
     const actionButtons = <>
         {deleteButton}
         {refreshButton}
         {tagButton}
+        {reorganizeButton}
     </>;
 
     const [descriptionProps] = form.getCustomProps({name: 'description', path: 'description'});
@@ -625,6 +643,16 @@ export function DomainEditPage() {
         <Link to={`/archive?domain=${domain?.domain}`}>
             <Button>Archives</Button>
         </Link>
+
+        {domain?.needs_reorganization && (
+            <Message warning>
+                <Message.Header>File Format Changed</Message.Header>
+                <p>
+                    The file name format has changed. Click "Reorganize Files" to move existing files
+                    to match the new format.
+                </p>
+            </Message>
+        )}
 
         <CollectionEditForm
             form={form}
@@ -668,6 +696,16 @@ export function DomainEditPage() {
             onSave={handleTagSave}
             collectionName="Domain"
             hasDirectory={!!domain?.directory}
+        />
+
+        {/* Reorganize Modal */}
+        <CollectionReorganizeModal
+            open={reorganizeModalOpen}
+            onClose={() => setReorganizeModalOpen(false)}
+            collectionId={domain?.id}
+            collectionName={domain?.domain}
+            onComplete={fetchDomain}
+            needsReorganization={domain?.needs_reorganization}
         />
 
         {/* Downloads Segment */}
@@ -726,13 +764,145 @@ function ArchiveFileNameForm({form}) {
     />
 }
 
+function BrowserConfigForm({form, browsers, browsersAvailable}) {
+    const {t} = React.useContext(ThemeContext);
+    const [useCustomPath, setUseCustomPath] = useState(false);
+
+    // Determine if custom path is being used based on current value
+    React.useEffect(() => {
+        const currentBrowser = form.formData?.browser_executable;
+        if (currentBrowser) {
+            // Check if current value matches any known browser
+            const isKnownBrowser = browsers.some(b => b.path === currentBrowser || b.key === currentBrowser);
+            setUseCustomPath(!isKnownBrowser);
+        }
+    }, [form.formData?.browser_executable, browsers]);
+
+    if (!browsersAvailable) {
+        return null;
+    }
+
+    // Build dropdown options: auto-detect + installed browsers + custom
+    const browserOptions = [
+        {key: 'auto', value: '', text: 'Auto-detect (recommended)'},
+        ...browsers.map(b => ({key: b.key, value: b.path, text: `${b.name} (${b.path})`})),
+        {key: 'custom', value: '__custom__', text: 'Custom path...'},
+    ];
+
+    const handleBrowserChange = (e, {value}) => {
+        if (value === '__custom__') {
+            setUseCustomPath(true);
+            form.setValue('browser_executable', '');
+        } else {
+            setUseCustomPath(false);
+            form.setValue('browser_executable', value || null);
+        }
+    };
+
+    const currentValue = form.formData?.browser_executable || '';
+    const dropdownValue = useCustomPath ? '__custom__' : currentValue;
+
+    return <>
+        <Header as='h4'>Browser Settings</Header>
+        <p {...t}>
+            Configure which browser SingleFile uses to create archives.
+            These settings only apply to native deployments (Raspberry Pi/Debian).
+        </p>
+
+        <Form.Field>
+            <label {...t}>Browser</label>
+            <Form.Dropdown
+                selection
+                options={browserOptions}
+                value={dropdownValue}
+                onChange={handleBrowserChange}
+                placeholder='Select browser...'
+            />
+        </Form.Field>
+
+        {useCustomPath && (
+            <Form.Field>
+                <label {...t}>Custom Browser Path</label>
+                <Input
+                    fluid
+                    placeholder='/usr/bin/chromium'
+                    value={form.formData?.browser_executable || ''}
+                    onChange={(e) => form.setValue('browser_executable', e.target.value)}
+                />
+                <small {...t}>Enter the absolute path to the browser executable.</small>
+            </Form.Field>
+        )}
+
+        <Form.Field>
+            <label {...t}>Browser Arguments</label>
+            <Input
+                fluid
+                placeholder='["--no-sandbox"]'
+                value={form.formData?.browser_args || '["--no-sandbox"]'}
+                onChange={(e) => form.setValue('browser_args', e.target.value)}
+            />
+            <small {...t}>JSON array of arguments passed to the browser. Default: ["--no-sandbox"]</small>
+        </Form.Field>
+
+        <Form.Field>
+            <label {...t}>User Agent</label>
+            <Input
+                fluid
+                placeholder='Leave empty to use system default'
+                value={form.formData?.user_agent || ''}
+                onChange={(e) => form.setValue('user_agent', e.target.value || null)}
+            />
+            <small {...t}>Custom user agent string. Leave empty to use the system default.</small>
+        </Form.Field>
+    </>;
+}
+
 function ArchiveSettingsPage() {
     useTitle('Archive Settings');
 
     const {t} = React.useContext(ThemeContext);
+    const dockerized = useDockerized();
+    const [batchModalOpen, setBatchModalOpen] = useState(false);
+    const [domainsNeedingReorg, setDomainsNeedingReorg] = useState(0);
+    const [fetchingReorgCount, setFetchingReorgCount] = useState(true);
+    const [browsers, setBrowsers] = useState([]);
+    const [browsersAvailable, setBrowsersAvailable] = useState(false);
+
+    // Check how many domains need reorganization on mount
+    React.useEffect(() => {
+        setFetchingReorgCount(true);
+        previewBatchReorganization('domain')
+            .then(data => {
+                setDomainsNeedingReorg(data.total_collections || 0);
+            })
+            .catch(() => {
+                setDomainsNeedingReorg(0);
+            })
+            .finally(() => {
+                setFetchingReorgCount(false);
+            });
+    }, []);
+
+    // Fetch available browsers on mount (only if not dockerized)
+    React.useEffect(() => {
+        if (dockerized === false) {
+            fetchArchiveBrowsers()
+                .then(data => {
+                    setBrowsers(data.browsers || []);
+                    setBrowsersAvailable(data.available === true);
+                })
+                .catch(() => {
+                    setBrowsers([]);
+                    setBrowsersAvailable(false);
+                });
+        }
+    }, [dockerized]);
 
     const emptyFormData = {
         file_name_format: '%(download_datetime)s_%(title)s.%(ext)s',
+        browser_executable: null,
+        browser_args: '["--no-sandbox"]',
+        user_agent: null,
     };
 
     const configSubmitter = async () => {
@@ -769,6 +939,20 @@ function ArchiveSettingsPage() {
                             <ArchiveFileNameForm form={configForm}/>
                         </GridColumn>
                     </GridRow>
+
+                    {/* Browser settings - only shown on native deployments */}
+                    {!dockerized && browsersAvailable && (
+                        <GridRow columns={1}>
+                            <GridColumn mobile={16} computer={8}>
+                                <BrowserConfigForm
+                                    form={configForm}
+                                    browsers={browsers}
+                                    browsersAvailable={browsersAvailable}
+                                />
+                            </GridColumn>
+                        </GridRow>
+                    )}
+
                     <GridRow columns={1}>
                         <GridColumn textAlign='right'>
                             <APIButton
@@ -783,6 +967,40 @@ function ArchiveSettingsPage() {
                 </Grid>
             </Form>
         </Segment>
+
+        <Segment>
+            <Header as='h4'>File Organization</Header>
+            <p>
+                {fetchingReorgCount
+                    ? 'Checking for domains that need reorganization...'
+                    : <>
+                        <strong>{domainsNeedingReorg}</strong> domain{domainsNeedingReorg !== 1 ? 's' : ''}
+                        {domainsNeedingReorg > 0
+                            ? ' have files that do not match the current file name format.'
+                            : '. All domains are organized correctly.'}
+                      </>
+                }
+            </p>
+            <Button
+                color='orange'
+                onClick={() => setBatchModalOpen(true)}
+                id='reorganize_all_domains_button'
+                disabled={fetchingReorgCount || domainsNeedingReorg === 0}
+                loading={fetchingReorgCount}
+            >
+                <Icon name='folder open outline'/> Reorganize All Domains
+            </Button>
+        </Segment>
+
+        <BatchReorganizeModal
+            open={batchModalOpen}
+            onClose={() => setBatchModalOpen(false)}
+            kind='domain'
+            onComplete={() => {
+                setBatchModalOpen(false);
+                setDomainsNeedingReorg(0);
+            }}
+        />
 
         <Segment>
             <Header as='h3'>SingleFile Browser Extension</Header>

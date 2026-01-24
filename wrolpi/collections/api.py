@@ -266,3 +266,224 @@ async def search_collections_endpoint(request: Request, body: schema.CollectionS
         'collections': collections,
         'totals': {'collections': len(collections)}
     })
+
+
+@collection_bp.get('/<collection_id:int>/reorganize/preview')
+@openapi.summary('Preview collection reorganization')
+@openapi.response(HTTPStatus.OK, schema.ReorganizationPreviewResponse, description="Reorganization preview")
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+async def preview_reorganization_endpoint(request: Request, collection_id: int):
+    """
+    Get preview with sample of files to be renamed.
+
+    Returns a preview of what would happen if the collection is reorganized.
+    This is useful for showing users what files would move before they commit.
+
+    Returns:
+        - collection_id: The collection ID
+        - collection_name: The collection name
+        - total_files: Total FileGroups in collection
+        - files_needing_move: Count needing reorganization
+        - sample_moves: ~10 example moves [{old_path, new_path}, ...]
+        - new_file_format: The format template that will be applied
+        - current_file_format: The format currently stored on collection
+    """
+    from wrolpi.collections.reorganize import get_reorganization_preview
+
+    session = request.ctx.session
+    try:
+        # Use exact_count=True for individual collection preview to get accurate count
+        preview = get_reorganization_preview(collection_id, session, exact_count=True)
+        return json_response({
+            'collection_id': preview.collection_id,
+            'collection_name': preview.collection_name,
+            'total_files': preview.total_files,
+            'files_needing_move': preview.files_needing_move,
+            'sample_moves': preview.sample_moves,
+            'new_file_format': preview.new_file_format,
+            'current_file_format': preview.current_file_format,
+        })
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
+
+
+@collection_bp.post('/<collection_id:int>/reorganize')
+@openapi.summary('Execute collection reorganization')
+@openapi.response(HTTPStatus.OK, schema.ReorganizationExecuteResponse, description="Reorganization started")
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+@wrol_mode_check
+async def execute_reorganization_endpoint(request: Request, collection_id: int):
+    """
+    Execute reorganization.
+
+    Moves files to match the current file_name_format configuration.
+    The operation runs in the background via FileWorker.
+
+    Returns:
+        - job_id: For tracking progress via the status endpoint
+        - message: Status message
+    """
+    from wrolpi.collections.reorganize import execute_reorganization
+
+    session = request.ctx.session
+    try:
+        job_id = execute_reorganization(collection_id, session)
+        if job_id:
+            return json_response({
+                'job_id': job_id,
+                'message': 'Reorganization started'
+            })
+        else:
+            return json_response({
+                'job_id': '',
+                'message': 'No files need reorganization'
+            })
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
+
+
+@collection_bp.get('/<collection_id:int>/reorganize/status/<job_id:str>')
+@openapi.summary('Get reorganization status')
+@openapi.response(HTTPStatus.OK, schema.ReorganizationStatusResponse, description="Reorganization status")
+async def get_reorganization_status_endpoint(_: Request, collection_id: int, job_id: str):
+    """
+    Get status of in-flight reorganization.
+
+    Returns:
+        - status: 'pending' | 'running' | 'complete' | 'failed'
+        - total: Total files to move
+        - completed: Files moved so far
+        - percent: Completion percentage
+        - error: Error message if failed
+    """
+    from wrolpi.collections.reorganize import get_reorganization_status
+
+    status = get_reorganization_status(job_id)
+    return json_response(status)
+
+
+# ============================================================================
+# Batch Reorganization Endpoints
+# ============================================================================
+
+
+@collection_bp.get('/reorganize/channels')
+@openapi.summary('List channels needing batch reorganization')
+@openapi.response(HTTPStatus.OK, schema.BatchReorganizationListResponse,
+                  description="List of channels needing reorganization")
+async def list_channels_needing_reorganization_endpoint(request: Request):
+    """
+    List all channels that need reorganization because their file_name_format
+    differs from the current config.
+
+    Returns:
+        - collections: List of channel info with sample moves
+        - total_collections: Total count needing reorganization
+        - total_files_needing_move: Sum of all files needing reorganization
+        - new_file_format: The config format that will be applied
+    """
+    from wrolpi.collections.reorganize import get_collections_needing_reorganization
+
+    session = request.ctx.session
+    result = get_collections_needing_reorganization('channel', session)
+    return json_response(result)
+
+
+@collection_bp.get('/reorganize/domains')
+@openapi.summary('List domains needing batch reorganization')
+@openapi.response(HTTPStatus.OK, schema.BatchReorganizationListResponse,
+                  description="List of domains needing reorganization")
+async def list_domains_needing_reorganization_endpoint(request: Request):
+    """
+    List all domains that need reorganization because their file_name_format
+    differs from the current config.
+
+    Returns:
+        - collections: List of domain info with sample moves
+        - total_collections: Total count needing reorganization
+        - total_files_needing_move: Sum of all files needing reorganization
+        - new_file_format: The config format that will be applied
+    """
+    from wrolpi.collections.reorganize import get_collections_needing_reorganization
+
+    session = request.ctx.session
+    result = get_collections_needing_reorganization('domain', session)
+    return json_response(result)
+
+
+@collection_bp.post('/reorganize/channels')
+@openapi.summary('Execute batch reorganization of all channels')
+@openapi.response(HTTPStatus.OK, schema.BatchReorganizationExecuteResponse,
+                  description="Batch reorganization started")
+@wrol_mode_check
+async def execute_batch_reorganization_channels_endpoint(request: Request):
+    """
+    Execute batch reorganization of all channels that need it.
+
+    Processes channels sequentially. If any channel fails, the batch stops
+    and reports which channel failed.
+
+    Returns:
+        - batch_job_id: For tracking progress via the batch status endpoint
+        - message: Status message
+        - collection_count: Number of channels to process
+    """
+    from wrolpi.collections.reorganize import execute_batch_reorganization
+
+    session = request.ctx.session
+    result = execute_batch_reorganization('channel', session)
+    return json_response(result)
+
+
+@collection_bp.post('/reorganize/domains')
+@openapi.summary('Execute batch reorganization of all domains')
+@openapi.response(HTTPStatus.OK, schema.BatchReorganizationExecuteResponse,
+                  description="Batch reorganization started")
+@wrol_mode_check
+async def execute_batch_reorganization_domains_endpoint(request: Request):
+    """
+    Execute batch reorganization of all domains that need it.
+
+    Processes domains sequentially. If any domain fails, the batch stops
+    and reports which domain failed.
+
+    Returns:
+        - batch_job_id: For tracking progress via the batch status endpoint
+        - message: Status message
+        - collection_count: Number of domains to process
+    """
+    from wrolpi.collections.reorganize import execute_batch_reorganization
+
+    session = request.ctx.session
+    result = execute_batch_reorganization('domain', session)
+    return json_response(result)
+
+
+@collection_bp.get('/reorganize/batch/status/<batch_job_id:str>')
+@openapi.summary('Get batch reorganization status')
+@openapi.response(HTTPStatus.OK, schema.BatchReorganizationStatusResponse,
+                  description="Batch reorganization status")
+async def get_batch_reorganization_status_endpoint(_: Request, batch_job_id: str):
+    """
+    Get status of a batch reorganization job.
+
+    Returns:
+        - status: 'pending' | 'running' | 'complete' | 'failed' | 'unknown'
+        - total_collections: Total collections in batch
+        - completed_collections: Number completed so far
+        - current_collection: Info about currently processing collection
+        - overall_percent: Overall completion percentage
+        - completed: List of completed collection info
+        - failed_collection: Info about failed collection (if any)
+        - error: Error message if failed
+    """
+    from wrolpi.collections.reorganize import get_batch_reorganization_status
+
+    status = get_batch_reorganization_status(batch_job_id)
+    return json_response(status)

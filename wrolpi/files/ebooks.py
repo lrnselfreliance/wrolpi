@@ -2,7 +2,7 @@ import asyncio
 import dataclasses
 import logging
 import pathlib
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from sqlalchemy import Column, Integer, BigInteger, ForeignKey, or_, and_, Index
 from sqlalchemy.orm import relationship, Session
@@ -304,8 +304,9 @@ def find_ebook_files_in_group(group: List):
 
 
 @register_modeler
-async def ebook_modeler():
+async def ebook_modeler(progress_callback: Callable[[int], None] = None):
     """Searches for ebook files and models them into the ebook table."""
+    total_processed = 0
     while True:
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, EBook).filter(
@@ -335,6 +336,11 @@ async def ebook_modeler():
                         raise
 
             session.commit()
+
+            # Report batch progress
+            total_processed += len(file_groups)
+            if progress_callback and len(file_groups) > 0:
+                progress_callback(total_processed)
 
             if processed < 10:
                 # Did not reach limit, no more books.

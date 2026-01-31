@@ -13,7 +13,7 @@ from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
-    get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS
+    get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
 from wrolpi.dates import TZDateTime
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import save_downloads_config
@@ -629,6 +629,11 @@ be AUTOMATICALLY DELETED!
 def sync_tags_directory():
     """Synchronizes database Tags with the Tags directory (typically /media/wrolpi/tags).  Removes any
     files that do not belong in the Tags Directory."""
+    wrolpi_config = get_wrolpi_config()
+    if not wrolpi_config.tags_directory:
+        logger.debug('Skipping tags directory sync because tags_directory setting is disabled')
+        return
+
     with get_db_session() as session:
         try:
             tags_directory = get_tags_directory()

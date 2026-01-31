@@ -28,6 +28,7 @@ class SettingsResponse:
     log_level: str
     nav_color: str
     media_directory: str
+    tags_directory: bool
     throttle_on_startup: bool
     throttle_status: str
     version: str
@@ -69,6 +70,7 @@ class SettingsRequest:
     map_destination: Optional[str] = None
     nav_color: Optional[str] = None
     media_directory: Optional[str] = None
+    tags_directory: Optional[bool] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
     videos_destination: Optional[str] = None

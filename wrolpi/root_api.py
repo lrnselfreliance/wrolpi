@@ -168,6 +168,7 @@ def get_settings(_: Request):
         'map_destination': wrolpi_config.map_destination,
         'nav_color': wrolpi_config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
+        'tags_directory': wrolpi_config.tags_directory,
         'throttle_on_startup': wrolpi_config.throttle_on_startup,
         'version': __version__,
         'videos_destination': wrolpi_config.videos_destination,

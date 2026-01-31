@@ -2,7 +2,7 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from typing import List, Tuple, Iterable
+from typing import Callable, List, Tuple, Iterable
 
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
@@ -260,10 +260,11 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
 
 
 @register_modeler
-async def archive_modeler():
+async def archive_modeler(progress_callback: Callable[[int], None] = None):
     """Searches DB for FileGroups that contain an HTML file.  If the HTML file is a SingleFile, we model it as an
     Archive."""
     invalid_archives = set()
+    total_processed = 0
 
     while True:
         with get_db_session(commit=True) as session:
@@ -276,9 +277,10 @@ async def archive_modeler():
                 .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
                 .limit(20)
             results: Iterable[Tuple[FileGroup, Archive]]
+            results_list = list(results)
 
             processed = 0
-            for processed, (file_group, archive) in enumerate(results):
+            for processed, (file_group, archive) in enumerate(results_list):
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
                                  logger__=logger):
                     if archive:
@@ -308,6 +310,12 @@ async def archive_modeler():
                                 raise
 
             session.commit()
+
+            # Report batch progress
+            batch_count = len(results_list)
+            total_processed += batch_count
+            if progress_callback and batch_count > 0:
+                progress_callback(total_processed)
 
             if processed < 19:
                 # Did not reach limit (enumerate is 0-indexed, so 19 = 20 items), do not query again.

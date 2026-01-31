@@ -61,6 +61,7 @@ import {InputForm, useForm} from "../hooks/useForm";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
+import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
@@ -868,8 +869,17 @@ function ArchiveSettingsPage() {
     const [browsers, setBrowsers] = useState([]);
     const [browsersAvailable, setBrowsersAvailable] = useState(false);
 
-    // Check how many domains need reorganization on mount
+    // Check if batch reorganization is currently active for domains
+    const {isReorganizing, taskType, collectionKind} = useReorganizationStatus();
+    const isBatchReorganizingDomains = isReorganizing && taskType === 'batch_reorganize' && collectionKind === 'domain';
+
+    // Check how many domains need reorganization on mount (skip if batch is in progress)
     React.useEffect(() => {
+        if (isBatchReorganizingDomains) {
+            // Skip fetching preview while batch reorganization is in progress
+            setFetchingReorgCount(false);
+            return;
+        }
         setFetchingReorgCount(true);
         previewBatchReorganization('domain')
             .then(data => {
@@ -881,7 +891,7 @@ function ArchiveSettingsPage() {
             .finally(() => {
                 setFetchingReorgCount(false);
             });
-    }, []);
+    }, [isBatchReorganizingDomains]);
 
     // Fetch available browsers on mount (only if not dockerized)
     React.useEffect(() => {

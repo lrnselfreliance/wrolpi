@@ -731,6 +731,7 @@ class WROLPiConfigValidator:
     log_level: str = None
     map_destination: str = None
     nav_color: str = None
+    tags_directory: bool = None
     throttle_on_startup: bool = None
     version: int = None
     videos_destination: str = None
@@ -798,6 +799,7 @@ class WROLPiConfig(ConfigFile):
         log_level='info',
         map_destination='map',
         nav_color='violet',
+        tags_directory=True,
         throttle_on_startup=False,
         version=0,
         videos_destination='videos/%(channel_tag)s/%(channel_name)s',
@@ -983,6 +985,14 @@ class WROLPiConfig(ConfigFile):
     @nav_color.setter
     def nav_color(self, value: str):
         self.update({'nav_color': value})
+
+    @property
+    def tags_directory(self) -> bool:
+        return self._config.get('tags_directory', True)
+
+    @tags_directory.setter
+    def tags_directory(self, value: bool):
+        self.update({'tags_directory': value})
 
 
 WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()
@@ -1595,7 +1605,8 @@ async def apply_modelers(progress_callback: callable = None):
     """Run all registered modelers.
 
     Args:
-        progress_callback: Optional callback(processed, total) called after each modeler completes.
+        progress_callback: Optional callback(processed, total) called after each modeler completes,
+                          or after each batch if the modeler supports progress_callback.
     """
     from wrolpi.db import get_db_session
     from wrolpi.files.models import FileGroup
@@ -1607,21 +1618,38 @@ async def apply_modelers(progress_callback: callable = None):
             initial_unindexed = session.query(FileGroup).filter(FileGroup.indexed != True).count()
         progress_callback(0, initial_unindexed)
 
+    # Track cumulative progress across all modelers
+    cumulative_processed = 0
+
     for modeler in modelers:
         logger_.info(f'Applying modeler {modeler.__name__}')
         try:
-            await modeler()
+            # Check if this modeler accepts a progress_callback parameter
+            sig = inspect.signature(modeler)
+            if 'progress_callback' in sig.parameters and progress_callback and initial_unindexed > 0:
+                # Create a callback that updates the cumulative progress
+                def make_modeler_callback(current_cumulative):
+                    def modeler_progress_callback(batch_processed: int):
+                        nonlocal cumulative_processed
+                        cumulative_processed = current_cumulative + batch_processed
+                        progress_callback(cumulative_processed, initial_unindexed)
+
+                    return modeler_progress_callback
+
+                await modeler(progress_callback=make_modeler_callback(cumulative_processed))
+            else:
+                await modeler()
         except Exception as e:
             logger_.error(f'Modeler {modeler.__name__} raised error', exc_info=e)
             if PYTEST:
                 raise
 
-        # Update progress after each modeler
+        # Update progress after each modeler completes (fallback for modelers without progress_callback)
         if progress_callback and initial_unindexed > 0:
             with get_db_session() as session:
                 remaining = session.query(FileGroup).filter(FileGroup.indexed != True).count()
-            processed = initial_unindexed - remaining
-            progress_callback(processed, initial_unindexed)
+            cumulative_processed = initial_unindexed - remaining
+            progress_callback(cumulative_processed, initial_unindexed)
 
         # Sleep to catch cancel.
         await asyncio.sleep(0)

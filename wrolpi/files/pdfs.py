@@ -1,7 +1,7 @@
 import asyncio
 import dataclasses
 import pathlib
-from typing import Generator
+from typing import Callable, Generator
 
 import pytz
 
@@ -93,12 +93,13 @@ PDF_PROCESSING_LIMIT = 10
 
 
 @register_modeler
-async def pdf_modeler():
+async def pdf_modeler(progress_callback: Callable[[int], None] = None):
     """Queries for any PDF files that have not been indexed.  Each PDF found will be indexed."""
     if not PdfReader:
         logger.warning(f'Cannot index PDF without PyPDF2')
         return
 
+    total_processed = 0
     while True:
         # Continually query for PDFs that have not been indexed.
         with get_db_session(commit=True) as session:
@@ -108,6 +109,7 @@ async def pdf_modeler():
                 FileGroup.indexed != True,
                 FileGroup.mimetype == 'application/pdf',
             ).limit(PDF_PROCESSING_LIMIT)
+            file_groups = list(file_groups)
 
             processed = 0
             for file_group in file_groups:
@@ -171,6 +173,11 @@ async def pdf_modeler():
             logger.info(f'pdf_modeler processed {processed} PDFs')
 
             session.commit()
+
+            # Report batch progress
+            total_processed += len(file_groups)
+            if progress_callback and len(file_groups) > 0:
+                progress_callback(total_processed)
 
             if processed < PDF_PROCESSING_LIMIT:
                 # Did not reach limit, do not query again.

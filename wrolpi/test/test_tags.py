@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from wrolpi import tags
-from wrolpi.common import is_hardlinked, walk
+from wrolpi.common import is_hardlinked, walk, get_wrolpi_config
 from wrolpi.errors import FileGroupIsTagged, InvalidTag, UnknownTag, UsedTag
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile, Tag
@@ -507,3 +507,31 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
     # Cannot delete Tag when used by Channel.  This prevents the need to move Channel directories when Tags are deleted.
     with pytest.raises(UsedTag):
         tag.delete()
+
+
+@pytest.mark.asyncio
+async def test_tags_directory_disabled(test_session, test_directory, tag_factory, video_factory, await_switches):
+    """Test that Tag Directory is NOT synchronized when tags_directory setting is disabled."""
+    tags_dir = test_directory / 'tags'
+
+    # Disable the tags_directory setting.
+    wrolpi_config = get_wrolpi_config()
+    wrolpi_config.tags_directory = False
+
+    # Create a tag and tag a video.
+    tag = await tag_factory()
+    video = video_factory(with_video_file=test_directory / 'video.mp4')
+    video.add_tag(test_session, tag.id)
+    test_session.commit()
+    await await_switches()
+
+    # Tags directory should NOT be created because the setting is disabled.
+    assert not tags_dir.exists(), 'Tags directory should not exist when tags_directory setting is disabled'
+
+    # Enable the setting and sync again.
+    wrolpi_config.tags_directory = True
+    tags.sync_tags_directory()
+
+    # Now the tags directory should exist with the linked file.
+    assert tags_dir.is_dir(), 'Tags directory should exist after enabling setting'
+    assert (tags_dir / tag.name / 'video.mp4').is_file(), 'Video should be linked in tags directory'

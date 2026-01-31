@@ -312,6 +312,7 @@ export async function getSettings() {
             map_destination: content.map_destination,
             nav_color: content.nav_color,
             media_directory: content.media_directory,
+            tags_directory: content.tags_directory,
             throttle_on_startup: content.throttle_on_startup,
             throttle_status: content.throttle_status,
             videos_destination: content.videos_destination,

@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,8 @@ VIDEO_PROCESSING_LIMIT = 20
 
 
 @register_modeler
-async def video_modeler():
+async def video_modeler(progress_callback: Callable[[int], None] = None):
+    total_processed = 0
     while True:
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, Video).filter(
@@ -57,6 +58,11 @@ async def video_modeler():
                 file_group.indexed = True
 
             session.commit()
+
+            # Report batch progress
+            total_processed += len(file_groups)
+            if progress_callback and len(file_groups) > 0:
+                progress_callback(total_processed)
 
             if processed < VIDEO_PROCESSING_LIMIT:
                 # Did not reach limit, do not query again.

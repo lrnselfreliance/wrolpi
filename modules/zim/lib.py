@@ -3,7 +3,7 @@ import functools
 import pathlib
 import re
 from datetime import datetime
-from typing import List, Tuple, Dict
+from typing import Callable, List, Tuple, Dict
 
 import cachetools.func
 from libzim import Entry
@@ -62,7 +62,8 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
 
 
 @register_modeler
-async def zim_modeler():
+async def zim_modeler(progress_callback: Callable[[int], None] = None):
+    total_processed = 0
     while True:
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, Zim) \
@@ -94,6 +95,11 @@ async def zim_modeler():
                     logger.error(f'Unable to model Zim {zim_id=} {file_group.primary_path=}', exc_info=e)
 
             logger.debug(f'Modeled {processed} zim files')
+
+            # Report batch progress
+            total_processed += len(file_groups)
+            if progress_callback and len(file_groups) > 0:
+                progress_callback(total_processed)
 
             if processed < 10:
                 # Did not reach limit, do not query again.

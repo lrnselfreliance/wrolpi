@@ -458,6 +458,7 @@ export function SettingsPage() {
             map_destination: settings.map_destination,
             nav_color: settings.nav_color,
             media_directory: settings.media_directory,
+            tags_directory: settings.tags_directory,
             throttle_on_startup: settings.throttle_on_startup,
             videos_destination: settings.videos_destination,
             zims_destination: settings.zims_destination,
@@ -539,6 +540,16 @@ export function SettingsPage() {
                         disabled={disabled || dockerized || state.check_for_upgrades === null}
                         checked={!dockerized && state.check_for_upgrades === true}
                         onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
+                    />
+                </div>
+
+                <div style={{margin: '0.5em'}}>
+                    <Toggle
+                        label='Tags Directory'
+                        disabled={disabled || state.tags_directory === null}
+                        checked={state.tags_directory === true}
+                        onChange={checked => handleInputChange(null, 'tags_directory', checked)}
+                        info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
                     />
                 </div>
 

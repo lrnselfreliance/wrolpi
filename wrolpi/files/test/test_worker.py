@@ -4,6 +4,7 @@ import asyncio
 import pytest
 
 from wrolpi.conftest import await_switches
+from wrolpi.dates import from_timestamp
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import compare_file_groups, count_files, file_worker, FileGroupDiff, FileTask, FileTaskType
 
@@ -179,6 +180,8 @@ async def test_compare_file_groups_mixed(test_session, test_directory, make_file
     # file1: Will be unchanged (in DB and on disk)
     fg1 = FileGroup.from_paths(test_session, file1)
     fg1.files.append({'path': 'file1.json', 'mimetype': 'application/json', 'size': 0})
+    # Update modification_datetime to include all files' mtimes (file1.json was created after file1.txt)
+    fg1.modification_datetime = from_timestamp(max(file1.stat().st_mtime, file1_json.stat().st_mtime))
 
     # file2: Will be modified (in DB, but we'll add a file on disk)
     FileGroup.from_paths(test_session, file2)

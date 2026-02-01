@@ -258,32 +258,14 @@ async def start_single_tasks(app: Sanic):
         if wrolpi_config.wrol_mode:
             logger.warning('Refusing to import other configs when WROL mode is enabled!')
         else:
-            with log_and_suppress(Exception, message='Failed to import tags config'):
-                tags.import_tags_config()
-                logger.debug('tags config imported')
+            # Import configs that don't require the database.
             with log_and_suppress(Exception, message='Failed to import videos downloader config'):
                 get_videos_downloader_config().import_config()
                 logger.debug('videos downloader config imported')
-            with log_and_suppress(Exception, message='Failed to import downloads config'):
-                await import_downloads_config()
-                logger.debug('downloads config imported')
-            # Channels uses both downloads and tags.
-            with log_and_suppress(Exception, message='Failed to import channels config'):
-                import_channels_config()
-                logger.debug('channels config imported')
-            # Domains config import
-            with log_and_suppress(Exception, message='Failed to import domains config'):
-                import_domains_config()
-                logger.debug('domains config imported')
             with log_and_suppress(Exception, message='Failed to import archive downloader config'):
                 from modules.archive.lib import get_archive_downloader_config
                 get_archive_downloader_config().import_config()
                 logger.debug('archive downloader config imported')
-            with log_and_suppress(Exception, message='Failed to import inventories config'):
-                import_inventories_config()
-                logger.debug('inventories config imported')
-            with log_and_suppress(Exception, message='Failed to init inventory'):
-                init_inventory()
 
     from modules.zim.lib import flag_outdated_zim_files
     try:
@@ -294,6 +276,28 @@ async def start_single_tasks(app: Sanic):
     logger.debug('start_single_tasks waiting for db...')
     async with flags.db_up.wait_for():
         logger.debug('start_single_tasks db is up')
+
+    # Import configs that require the database.
+    if wrolpi_config.successful_import and not wrolpi_config.wrol_mode:
+        with log_and_suppress(Exception, message='Failed to import tags config'):
+            tags.import_tags_config()
+            logger.debug('tags config imported')
+        with log_and_suppress(Exception, message='Failed to import downloads config'):
+            await import_downloads_config()
+            logger.debug('downloads config imported')
+        # Channels uses both downloads and tags.
+        with log_and_suppress(Exception, message='Failed to import channels config'):
+            import_channels_config()
+            logger.debug('channels config imported')
+        # Domains config import
+        with log_and_suppress(Exception, message='Failed to import domains config'):
+            import_domains_config()
+            logger.debug('domains config imported')
+        with log_and_suppress(Exception, message='Failed to import inventories config'):
+            import_inventories_config()
+            logger.debug('inventories config imported')
+        with log_and_suppress(Exception, message='Failed to init inventory'):
+            init_inventory()
 
     if flags.refresh_complete.is_set():
         # Set all downloads to new.

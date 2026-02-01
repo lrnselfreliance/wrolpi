@@ -2,6 +2,13 @@
 set -e
 set -x
 
+# Generate and set default locale to avoid perl warnings.
+# Users can change this later via: sudo raspi-config -> Localisation Options
+# or: sudo dpkg-reconfigure locales
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
+export LANG=en_US.UTF-8
+
 # Use Network Manager for Hotspot.
 apt purge -y hostapd
 apt autoremove -y

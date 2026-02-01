@@ -329,6 +329,82 @@ def perform_domain_migration(session: Session, verbose: bool = True) -> DomainMi
 
     print(f"Updated {stats.archives_linked} Archives with collection_id")
 
+    # Step 3b: Handle orphan archives (those with NULL domain_id) by creating collections from their URLs
+    print("\nStep 3b: Handling orphan archives (NULL domain_id)...")
+    result = session.execute(text("""
+        SELECT a.id, a.file_group_id, fg.url
+        FROM archive a
+        LEFT JOIN file_group fg ON a.file_group_id = fg.id
+        WHERE a.domain_id IS NULL
+    """))
+    orphans = list(result)
+    if orphans:
+        print(f"  Found {len(orphans)} orphan archives:")
+
+        # Group orphans by domain extracted from URL
+        from urllib.parse import urlparse
+        domain_orphans = {}
+        for archive_id, file_group_id, url in orphans:
+            print(f"    Archive {archive_id}: {url}")
+            try:
+                parsed = urlparse(url)
+                domain = parsed.netloc
+                if domain.startswith('www.'):
+                    domain = domain[4:]
+            except Exception:
+                domain = 'unknown.domain'
+
+            if domain not in domain_orphans:
+                domain_orphans[domain] = []
+            domain_orphans[domain].append((archive_id, file_group_id))
+
+        # Create collections for each domain and assign orphans
+        for domain_name, archives in domain_orphans.items():
+            print(f"  Creating collection for domain: {domain_name} ({len(archives)} archives)")
+
+            # Check if collection already exists
+            existing = session.execute(
+                text("SELECT id FROM collection WHERE name = :name AND kind = 'domain'"),
+                {'name': domain_name}
+            ).first()
+
+            if existing:
+                collection_id = existing[0]
+                print(f"    Using existing collection id={collection_id}")
+            else:
+                # Create new collection
+                session.execute(
+                    text("INSERT INTO collection (name, kind) VALUES (:name, 'domain')"),
+                    {'name': domain_name}
+                )
+                collection_id = session.execute(text("SELECT lastval()")).scalar()
+                stats.collections_created += 1
+                print(f"    Created collection id={collection_id}")
+
+            # Update archives with collection_id and create CollectionItems
+            for archive_id, file_group_id in archives:
+                session.execute(
+                    text("UPDATE archive SET collection_id = :collection_id WHERE id = :archive_id"),
+                    {'collection_id': collection_id, 'archive_id': archive_id}
+                )
+                stats.archives_linked += 1
+
+                # Create CollectionItem if not exists
+                existing_item = session.execute(
+                    text("SELECT id FROM collection_item WHERE collection_id = :cid AND file_group_id = :fgid"),
+                    {'cid': collection_id, 'fgid': file_group_id}
+                ).first()
+                if not existing_item:
+                    session.execute(
+                        text("INSERT INTO collection_item (collection_id, file_group_id, position) VALUES (:cid, :fgid, 0)"),
+                        {'cid': collection_id, 'fgid': file_group_id}
+                    )
+                    stats.collection_items_created += 1
+
+        print(f"  Processed {len(orphans)} orphan archives into {len(domain_orphans)} collections")
+    else:
+        print("  No orphan archives found")
+
     # Step 4: Create CollectionItem records
     print("\nStep 4: Creating CollectionItem records...")
 

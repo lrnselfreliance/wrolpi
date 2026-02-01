@@ -61,34 +61,34 @@ def upgrade():
     print(f"Found {len(channels)} Channel records to migrate")
 
     if channels:
-        from wrolpi.collections import Collection
-
         for channel in channels:
             channel_id = channel['id']
             channel_name = channel['name']
 
             print(f"  Processing Channel {channel_id}: {channel_name}")
 
-            # Check if Collection already exists
-            existing = session.query(Collection).filter_by(
-                name=channel_name,
-                kind='channel'
-            ).first()
+            # Check if Collection already exists (using raw SQL to avoid ORM model mismatch)
+            existing = session.execute(text("""
+                SELECT id FROM collection
+                WHERE name = :name AND kind = 'channel'
+                LIMIT 1
+            """), {'name': channel_name}).first()
 
             if existing:
-                print(f"    Collection already exists (id={existing.id})")
-                collection_id = existing.id
+                print(f"    Collection already exists (id={existing[0]})")
+                collection_id = existing[0]
             else:
-                # Create Collection
-                collection = Collection(
-                    name=channel_name,
-                    kind='channel',
-                    directory=channel['directory'],  # Channels always have directory
-                    tag_id=channel['tag_id'],
-                )
-                session.add(collection)
-                session.flush([collection])
-                collection_id = collection.id
+                # Create Collection using raw SQL
+                result = session.execute(text("""
+                    INSERT INTO collection (name, kind, directory, tag_id)
+                    VALUES (:name, 'channel', :directory, :tag_id)
+                    RETURNING id
+                """), {
+                    'name': channel_name,
+                    'directory': channel['directory'],
+                    'tag_id': channel['tag_id'],
+                })
+                collection_id = result.first()[0]
                 print(f"    Created Collection id={collection_id}")
 
             # Link Channel to Collection

@@ -66,6 +66,7 @@ import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-ro
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useArchive,
+    useArchiveStatistics,
     useDockerized,
     useDomain,
     useDomains,
@@ -1247,6 +1248,59 @@ export function ArchiveRowCells({file}) {
     </React.Fragment>
 }
 
+function ArchiveStatistics() {
+    useTitle('Archive Statistics');
+
+    const {statistics} = useArchiveStatistics();
+
+    if (statistics === null) {
+        // Request is pending.
+        return <Loader active inline='centered'/>
+    } else if (statistics === undefined) {
+        return <ErrorMessage>Unable to fetch Archive Statistics</ErrorMessage>
+    }
+
+    const {archives, historical, domains} = statistics;
+
+    const archiveNames = [
+        {key: 'archives', label: 'Archives'},
+        {key: 'sum_size', label: 'Total Size'},
+        {key: 'max_size', label: 'Largest Archive'},
+        {key: 'week', label: 'Downloads Past Week'},
+        {key: 'month', label: 'Downloads Past Month'},
+        {key: 'year', label: 'Downloads Past Year'},
+    ];
+    const historicalNames = [
+        {key: 'average_count', label: 'Average Monthly Downloads'},
+        {key: 'average_size', label: 'Average Monthly Usage'},
+    ];
+    const domainNames = [
+        {key: 'domains', label: 'Domains'},
+        {key: 'tagged_domains', label: 'Tagged Domains'},
+    ];
+
+    const buildSegment = (title, names, stats) => {
+        return <Segment>
+            <Header textAlign='center' as='h1'>{title}</Header>
+            <Statistic.Group>
+                {names.map(
+                    ({key, label}) =>
+                        <Statistic key={key} style={{margin: '2em'}}>
+                            <StatisticValue>{stats[key]}</StatisticValue>
+                            <StatisticLabel>{label}</StatisticLabel>
+                        </Statistic>
+                )}
+            </Statistic.Group>
+        </Segment>
+    }
+
+    return <>
+        {buildSegment('Archives', archiveNames, archives)}
+        {buildSegment('Historical Archives', historicalNames, historical)}
+        {buildSegment('Domains', domainNames, domains)}
+    </>
+}
+
 export function ArchiveRoute() {
     const location = useLocation();
     const path = location.pathname;
@@ -1264,6 +1318,7 @@ export function ArchiveRoute() {
             isActive: () => path.startsWith('/archive/domain')
         },
         {text: 'Settings', to: '/archive/settings'},
+        {text: 'Statistics', to: '/archive/statistics'},
     ];
     return <PageContainer>
         <TabLinks links={links}/>
@@ -1272,6 +1327,7 @@ export function ArchiveRoute() {
             <Route path='domains' element={<DomainsPage/>}/>
             <Route path='domain/:domainId/edit' element={<DomainEditPage/>}/>
             <Route path='settings' element={<ArchiveSettingsPage/>}/>
+            <Route path='statistics' element={<ArchiveStatistics/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>
     </PageContainer>

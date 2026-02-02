@@ -367,7 +367,8 @@ def format_archive_filename(
     except KeyError as e:
         logger.error(f'Invalid variable in archive file_name_format: {e}')
         # Fallback to default format
-        return trim_file_name(f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
+        return trim_file_name(
+            f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
 
 
 def preview_archive_filename(file_name_format: str) -> str:
@@ -465,7 +466,8 @@ def format_archive_filename_from_archive(
     except KeyError as e:
         logger.error(f'Invalid variable in archive file_name_format: {e}')
         # Fallback to default format
-        return trim_file_name(f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
+        return trim_file_name(
+            f'{archive_strftime(download_date)}_{escape_file_name(title) if title else "untitled"}.html')
 
 
 @dataclass
@@ -1418,6 +1420,68 @@ async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = N
     logger.trace(f'singlefile_to_archive modeling: {url}')
     archive: Archive = await model_archive_result(url, singlefile, readability, screenshot, destination=destination)
     return archive
+
+
+async def get_statistics():
+    """Get statistics about Archives and Domain Collections."""
+    with get_db_curs() as curs:
+        curs.execute('''
+                     SELECT
+                         -- total archives
+                         COUNT(a.id)                                                                         AS "archives",
+                         -- total archives downloaded over the past week/month/year
+                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= current_date - interval '1 week') AS "week",
+                         COUNT(a.id)
+                         FILTER (WHERE fg.download_datetime >= current_date - interval '1 month')            AS "month",
+                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= current_date - interval '1 year') AS "year",
+                         -- sum of all archive file sizes
+                         COALESCE(SUM(fg.size), 0)::BIGINT                                                   AS "sum_size",
+                         -- largest archive
+                         COALESCE(MAX(fg.size), 0)                                                           AS "max_size"
+                     FROM archive a
+                              LEFT JOIN file_group fg on a.file_group_id = fg.id
+                     ''')
+        archive_stats = dict(curs.fetchone())
+
+        # Get the total archives downloaded every month for the past two years.
+        curs.execute('''
+                     SELECT DATE_TRUNC('month', months.a),
+                            COUNT(archive.id)::BIGINT,
+                            SUM(size)::BIGINT AS "size"
+                     FROM generate_series(
+                                  date_trunc('month', current_date) - interval '2 years',
+                                  date_trunc('month', current_date) - interval '1 month',
+                                  '1 month'::interval) AS months(a),
+                          archive
+                              LEFT JOIN file_group fg on archive.file_group_id = fg.id
+                     WHERE fg.download_datetime >= date_trunc('month', months.a)
+                       AND fg.download_datetime < date_trunc('month', months.a) + interval '1 month'
+                       AND fg.download_datetime IS NOT NULL
+                     GROUP BY 1
+                     ORDER BY 1
+                     ''')
+        monthly_archives = [dict(i) for i in curs.fetchall()]
+
+        historical_stats = dict(monthly_archives=monthly_archives)
+        historical_stats['average_count'] = (sum(i['count'] for i in monthly_archives) // len(monthly_archives)) \
+            if monthly_archives else 0
+        historical_stats['average_size'] = (sum(i['size'] for i in monthly_archives) // len(monthly_archives)) \
+            if monthly_archives else 0
+
+        curs.execute('''
+                     SELECT COUNT(c.id)                                         AS "domains",
+                            COUNT(c.id) FILTER ( WHERE col.tag_id IS NOT NULL ) AS "tagged_domains"
+                     FROM collection c
+                              LEFT JOIN collection col on col.id = c.id
+                     WHERE c.kind = 'domain'
+                     ''')
+        domain_stats = dict(curs.fetchone())
+    ret = dict(statistics=dict(
+        archives=archive_stats,
+        domains=domain_stats,
+        historical=historical_stats,
+    ))
+    return ret
 
 
 async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:

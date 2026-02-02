@@ -35,3 +35,25 @@ class ArchiveSearchResponse:
 @dataclass
 class ArchiveFileFormatRequest:
     archive_file_format: str
+
+
+@dataclass
+class ArchiveStatistics:
+    archives: int
+    week: int
+    month: int
+    year: int
+    sum_size: int
+    max_size: int
+
+
+@dataclass
+class DomainStatistics:
+    domains: int
+    tagged_domains: int
+
+
+@dataclass
+class ArchiveStatisticsResponse:
+    archives: ArchiveStatistics
+    domains: DomainStatistics

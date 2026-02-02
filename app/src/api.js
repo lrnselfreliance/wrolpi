@@ -451,6 +451,22 @@ export async function fetchArchiveBrowsers() {
     return {browsers: [], available: false};
 }
 
+export async function getArchiveStatistics() {
+    const response = await apiGet(`${ARCHIVES_API}/statistics`);
+    if (response.status === 200) {
+        return (await response.json())['statistics'];
+    } else {
+        const message = await getErrorMessage(response, 'Could not get archive statistics.');
+        toast({
+            type: 'error',
+            title: 'Getting Archive Statistics Failed',
+            description: message,
+            time: 5000,
+        });
+    }
+    return response
+}
+
 export async function fetchBrowserProfiles() {
     const response = await apiGet(`${API_URI}/videos/browser-profiles`);
     if (response.status === 200) {

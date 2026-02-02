@@ -7,6 +7,7 @@ import {
     fetchDomains,
     filesSearch,
     getArchive,
+    getArchiveStatistics,
     getChannel,
     getConfigs,
     getDomain,
@@ -1136,6 +1137,29 @@ export const useVideoStatistics = () => {
             stats.videos.sum_duration = secondsToFullDuration(stats.videos.sum_duration);
             stats.videos.sum_size = humanFileSize(stats.videos.sum_size);
             stats.videos.max_size = humanFileSize(stats.videos.max_size);
+            stats.historical.average_size = humanFileSize(stats.historical.average_size);
+            setStatistics(stats);
+        } catch (e) {
+            console.error(e);
+            setStatistics(undefined); // Display error.
+        }
+    }
+
+    useEffect(() => {
+        fetchStatistics();
+    }, []);
+
+    return {statistics, fetchStatistics}
+}
+
+export const useArchiveStatistics = () => {
+    const [statistics, setStatistics] = useState(null);
+
+    const fetchStatistics = async () => {
+        try {
+            let stats = await getArchiveStatistics();
+            stats.archives.sum_size = humanFileSize(stats.archives.sum_size);
+            stats.archives.max_size = humanFileSize(stats.archives.max_size);
             stats.historical.average_size = humanFileSize(stats.historical.average_size);
             setStatistics(stats);
         } catch (e) {

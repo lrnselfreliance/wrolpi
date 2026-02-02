@@ -24,6 +24,13 @@ archive_bp = Blueprint('Archive', '/api/archive')
 logger = logger.getChild(__name__)
 
 
+@archive_bp.get('/statistics')
+@openapi.response(HTTPStatus.OK, schema.ArchiveStatisticsResponse)
+async def statistics(_: Request):
+    ret = await lib.get_statistics()
+    return json_response(ret, HTTPStatus.OK)
+
+
 @archive_bp.get('/<archive_id:int>')
 @openapi.description('Get an archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)

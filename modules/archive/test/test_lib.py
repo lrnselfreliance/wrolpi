@@ -1357,3 +1357,36 @@ def test_format_archive_filename_escapes_special_chars(test_directory, fake_now)
     assert '/' not in result.split('/')[-1]  # No slashes in filename part
     assert '2000-01-01' in result
     assert result.endswith('.html')
+
+
+@pytest.mark.asyncio
+async def test_get_statistics(test_session, archive_factory):
+    """get_statistics returns archive and domain statistics."""
+    from modules.archive.lib import get_statistics
+
+    # Can get statistics in empty DB.
+    result = await get_statistics()
+    assert 'statistics' in result
+    assert 'archives' in result['statistics']
+    assert 'domains' in result['statistics']
+    assert 'historical' in result['statistics']
+
+    # Empty stats should have zero values.
+    stats = result['statistics']
+    assert stats['archives']['archives'] == 0
+    assert stats['domains']['domains'] == 0
+
+    # Create some archives.
+    archive1 = archive_factory('example.com')
+    archive2 = archive_factory('example.com')
+    archive3 = archive_factory('example.org')
+    archive4 = archive_factory()  # No domain
+    test_session.commit()
+
+    result = await get_statistics()
+    stats = result['statistics']
+
+    # Should count all 4 archives.
+    assert stats['archives']['archives'] == 4
+    # Should count 2 domain collections (example.com and example.org).
+    assert stats['domains']['domains'] == 2

@@ -70,10 +70,22 @@ if [ -z "$WROLPI_UPGRADE_SERVICE" ]; then
   exit $EXIT_CODE
 fi
 
+# Clean up and report status on exit.
+trap '
+  EXIT_STATUS=$?
+  rm -f /tmp/wrolpi-upgrade.env
+  if [ $EXIT_STATUS -eq 0 ]; then
+    echo "WROLPi upgrade has completed"
+  else
+    echo "WROLPi upgrade has FAILED (exit code: $EXIT_STATUS)"
+  fi
+' EXIT
+
 echo "Upgrading WROLPi from branch: ${BRANCH}"
 
 set -x
 set -e
+set -o pipefail
 
 systemctl stop wrolpi-api
 systemctl stop wrolpi-app
@@ -86,5 +98,3 @@ systemctl stop wrolpi-app
 set +x
 
 echo "Upgrade end $(date '+%Y-%m-%d %H:%M:%S')" >>/opt/wrolpi/upgrade.log
-
-echo "WROLPi upgrade has completed"

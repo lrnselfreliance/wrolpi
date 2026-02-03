@@ -91,6 +91,12 @@ export const DragSelectionContext = React.createContext({
     handleDragStart: () => {},
     handleDragMove: () => {},
     getDragState: () => ({isDragSelecting: false, isDragDeselecting: false}),
+    shouldAllowClick: () => true,
+    // Selection state and functions
+    selectedPaths: [],
+    onSelect: () => {},
+    isSelected: () => false,
+    clearSelection: () => {},
 });
 
 export function DragSelectionProvider({children, selectedPaths, setSelectedPaths, browseFiles, openFolders}) {
@@ -99,11 +105,17 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
     // Drag selection state
     const isTouchDevice = useIsTouchDevice();
     const [isDragging, setIsDragging] = useState(false);
+    const [isMouseDown, setIsMouseDown] = useState(false);
     const [dragStartPath, setDragStartPath] = useState(null);
     const [dragSelection, setDragSelection] = useState(new Set());
     const [dragMode, setDragMode] = useState('select'); // 'select' or 'deselect'
     const allRowPathsRef = useRef([]);
     const dragStartPosRef = useRef({x: 0, y: 0});
+    // Track pending drag start - stored in refs to avoid visual changes before threshold
+    const pendingDragPathRef = useRef(null);
+    const pendingDragModeRef = useRef('select');
+    // Track if a drag just completed - used to prevent onClick from firing after drag
+    const dragJustCompletedRef = useRef(false);
 
     // Update ordered list of visible row paths when files change
     useEffect(() => {
@@ -123,10 +135,12 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
         // Determine mode: if starting from selected item, we're deselecting; otherwise selecting
         const mode = selectedPaths.includes(path) ? 'deselect' : 'select';
 
+        // Store in refs - don't set dragSelection yet to avoid visual flap
+        // Visual changes only happen after drag threshold is exceeded
         dragStartPosRef.current = {x: event.clientX, y: event.clientY};
-        setDragStartPath(path);
-        setDragSelection(new Set([path]));
-        setDragMode(mode);
+        pendingDragPathRef.current = path;
+        pendingDragModeRef.current = mode;
+        setIsMouseDown(true);
     }, [isTouchDevice, selectedPaths]);
 
     const handleDragMove = useCallback((path) => {
@@ -150,7 +164,7 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
     }, [isDragging, dragStartPath]);
 
     const handleDragEnd = useCallback(() => {
-        if (!isDragging && !dragStartPath) return;
+        if (!isMouseDown) return;
 
         const draggedPaths = Array.from(dragSelection);
         if (draggedPaths.length > 0 && isDragging) {
@@ -163,27 +177,36 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
                 newSelectedPaths = [...new Set([...selectedPaths, ...draggedPaths])];
             }
             setSelectedPaths(newSelectedPaths);
+            // Mark that a drag just completed - onClick handlers should not fire
+            dragJustCompletedRef.current = true;
         }
 
-        // Reset drag state
+        // Reset all drag state
+        setIsMouseDown(false);
         setIsDragging(false);
         setDragStartPath(null);
         setDragSelection(new Set());
         setDragMode('select');
-    }, [isDragging, dragStartPath, selectedPaths, dragSelection, dragMode, setSelectedPaths]);
+        pendingDragPathRef.current = null;
+        pendingDragModeRef.current = 'select';
+    }, [isMouseDown, isDragging, selectedPaths, dragSelection, dragMode, setSelectedPaths]);
 
     // Global mouse event listeners for drag selection
     useEffect(() => {
-        if (!dragStartPath) return;
+        if (!isMouseDown) return;
 
         const handleGlobalMouseMove = (e) => {
-            if (!isDragging && dragStartPath) {
+            if (!isDragging && pendingDragPathRef.current) {
                 // Check if we've moved enough to start dragging
                 const dx = e.clientX - dragStartPosRef.current.x;
                 const dy = e.clientY - dragStartPosRef.current.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance > DRAG_THRESHOLD) {
+                    // NOW initialize drag state - this triggers visual feedback
+                    setDragStartPath(pendingDragPathRef.current);
+                    setDragSelection(new Set([pendingDragPathRef.current]));
+                    setDragMode(pendingDragModeRef.current);
                     setIsDragging(true);
                 }
             }
@@ -191,7 +214,7 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
 
         const handleGlobalMouseUp = () => handleDragEnd();
         const handleSelectStart = (e) => {
-            if (isDragging) e.preventDefault();
+            if (isMouseDown) e.preventDefault();
         };
 
         document.addEventListener('mousemove', handleGlobalMouseMove);
@@ -203,7 +226,7 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
             document.removeEventListener('mouseup', handleGlobalMouseUp);
             document.removeEventListener('selectstart', handleSelectStart);
         };
-    }, [dragStartPath, isDragging, handleDragEnd, DRAG_THRESHOLD]);
+    }, [isMouseDown, isDragging, handleDragEnd, DRAG_THRESHOLD]);
 
     // Helper function for components to compute their visual drag state
     const getDragState = useCallback((path, isSelected) => {
@@ -213,11 +236,45 @@ export function DragSelectionProvider({children, selectedPaths, setSelectedPaths
         return {isDragSelecting, isDragDeselecting};
     }, [dragSelection, dragMode]);
 
+    // Check if a click should be allowed (not blocked by a recent drag)
+    // This is called by onClick handlers to determine if they should proceed
+    const shouldAllowClick = useCallback(() => {
+        if (dragJustCompletedRef.current) {
+            dragJustCompletedRef.current = false;
+            return false;
+        }
+        return true;
+    }, []);
+
+    // Selection functions - moved from FileBrowser to eliminate prop drilling
+    const onSelect = useCallback((path) => {
+        setSelectedPaths(prev => {
+            if (prev.includes(path)) {
+                return prev.filter(i => i !== path);
+            }
+            return [...prev, path];
+        });
+    }, [setSelectedPaths]);
+
+    const isSelected = useCallback((path) => {
+        return selectedPaths.includes(path);
+    }, [selectedPaths]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedPaths([]);
+    }, [setSelectedPaths]);
+
     const value = {
         isDragging,
         handleDragStart,
         handleDragMove,
         getDragState,
+        shouldAllowClick,
+        // Selection state and functions
+        selectedPaths,
+        onSelect,
+        isSelected,
+        clearSelection,
     };
 
     return (

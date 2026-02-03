@@ -1,7 +1,7 @@
 import React from 'react';
 import {Checkbox, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
 import {Button, Confirm, Header, Loader, Modal, Segment, Table} from "../Theme";
-import {APIButton, HotspotToggle, ThrottleToggle, Toggle,} from "../Common";
+import {APIButton, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle,} from "../Common";
 import {useDockerized} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
 import {
@@ -23,6 +23,8 @@ import {
 } from "../../api/controller";
 import {toast} from "react-semantic-toasts-2";
 import {RestartButton, ShutdownButton} from "./Settings";
+import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {CONTROLLER_URI} from "../Vars";
 
 
 // Service status color mapping
@@ -1074,6 +1076,12 @@ function AdminControlsSection() {
     );
 }
 
+function ControllerLink() {
+    return <HandPointMessage>
+        You can view the Controller at <a href={CONTROLLER_URI}>{CONTROLLER_URI}</a>
+    </HandPointMessage>
+}
+
 
 export function ControllerPage() {
     return (
@@ -1081,6 +1089,7 @@ export function ControllerPage() {
             <AdminControlsSection/>
             <ServicesSection/>
             <DiskSection/>
+            <ControllerLink/>
         </Container>
     );
 }

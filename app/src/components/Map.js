@@ -88,7 +88,7 @@ function DownloadMessage() {
 
 const ViewerMessage = () => {
     return <HandPointMessage>
-        <p>You can view your Map at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
+        <p>You can view the Map at <a href={MAP_VIEWER_URI}>{MAP_VIEWER_URI}</a></p>
     </HandPointMessage>
 }
 

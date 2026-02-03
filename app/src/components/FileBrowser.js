@@ -66,8 +66,8 @@ export function splitPathParentAndName(path) {
     return [path.substring(0, slashIndex), path.substring(slashIndex + 1, path.length)];
 }
 
-function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, onSelect, disabled}) {
-    const {handleDragStart, handleDragMove, getDragState} = useContext(DragSelectionContext);
+function Folder({folder, onFolderClick, sortData, onFileClick, disabled, loadingFolders}) {
+    const {handleDragStart, handleDragMove, getDragState, shouldAllowClick, selectedPaths, onSelect} = useContext(DragSelectionContext);
     // Creates a single table row for a folder, or a row for itself and indented rows for its children.
     let {path, children, is_empty} = folder;
     const ignored = useIsIgnoredDirectory(path);
@@ -79,9 +79,13 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
     const showAsSelected = (isInSelectedPaths && !isDragDeselecting) || isDragSelecting;
     // Visual highlight class
     const dragClass = isDragSelecting ? 'drag-selecting' : (isDragDeselecting ? 'drag-deselecting' : '');
+
+    const isLoading = loadingFolders && loadingFolders.has(path);
+    const depth = (path.match(/\//g) || []).length;
+
     const f = <TableRow
         key={path}
-        disabled={disabled}
+        disabled={isLoading || disabled}
         className={dragClass}
         onMouseDown={(e) => handleDragStart(path, e)}
         onMouseEnter={() => handleDragMove(path)}
@@ -89,7 +93,7 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
         <TableCell collapsing>
             <Checkbox checked={showAsSelected} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
-        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
+        <TableCell onClick={() => shouldAllowClick() && onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {ignored && <Icon name='eye slash' color='red'/>}
@@ -104,21 +108,27 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
             childPaths = [...childPaths,
                 <InlineErrorBoundary key={k}>
                     <Path path={p} onFolderClick={onFolderClick} sortData={sortData} onFileClick={onFileClick}
-                          selectedPaths={selectedPaths} onSelect={onSelect} disabled={disabled}/>
+                          disabled={disabled} loadingFolders={loadingFolders}/>
                 </InlineErrorBoundary>];
         });
         return <React.Fragment>
             {f}
             {childPaths}
         </React.Fragment>
+    } else if (isLoading) {
+        // Folder is loading - show skeleton rows
+        return <React.Fragment>
+            {f}
+            <SkeletonFileRow depth={depth}/>
+        </React.Fragment>;
     } else {
         // Folder has no children.
         return f;
     }
 }
 
-function File({file, onFileClick, selectedPaths, onSelect, disabled}) {
-    const {handleDragStart, handleDragMove, getDragState} = useContext(DragSelectionContext);
+function File({file, onFileClick, disabled}) {
+    const {handleDragStart, handleDragMove, getDragState, shouldAllowClick, selectedPaths, onSelect} = useContext(DragSelectionContext);
     const {path, size} = file;
     const isInSelectedPaths = selectedPaths.indexOf(path) >= 0;
     const {isDragSelecting, isDragDeselecting} = getDragState(path, isInSelectedPaths);
@@ -136,7 +146,7 @@ function File({file, onFileClick, selectedPaths, onSelect, disabled}) {
         <TableCell collapsing>
             <Checkbox checked={showAsSelected} onChange={() => onSelect(path)}/>
         </TableCell>
-        <TableCell onClick={() => onFileClick(file)} className='file-path'>
+        <TableCell onClick={() => shouldAllowClick() && onFileClick(file)} className='file-path'>
             {depthIndentation(path)}
             <FileRowTagIcon file={file}/>
             {/*null size to make icon the correct size*/}
@@ -149,26 +159,40 @@ function File({file, onFileClick, selectedPaths, onSelect, disabled}) {
     </TableRow>
 }
 
-function Path({path, onFolderClick, onFileClick, sortData, selectedPaths, onSelect, disabled}) {
+function Path({path, onFolderClick, onFileClick, sortData, disabled, loadingFolders}) {
     if (path['path'].endsWith('/')) {
         return <Folder
             folder={path}
             onFolderClick={onFolderClick}
             sortData={sortData}
-            selectedPaths={selectedPaths}
-            onSelect={onSelect}
             onFileClick={onFileClick}
             disabled={disabled}
+            loadingFolders={loadingFolders}
         />
     } else {
         return <File
             file={path}
             onFileClick={onFileClick}
-            selectedPaths={selectedPaths}
-            onSelect={onSelect}
             disabled={disabled}
         />
     }
+}
+
+function SkeletonFileRow({depth}) {
+    const indentation = '\xa0\xa0\xa0\xa0'.repeat(depth);
+    return (
+        <TableRow>
+            <TableCell collapsing>
+                <Checkbox disabled/>
+            </TableCell>
+            <TableCell className='file-path' colSpan={2}>
+                {indentation}
+                <Placeholder style={{display: 'inline-block', width: '200px', marginLeft: '0.5em'}}>
+                    <PlaceholderLine/>
+                </Placeholder>
+            </TableCell>
+        </TableRow>
+    );
 }
 
 export function FileBrowser() {
@@ -180,6 +204,8 @@ export function FileBrowser() {
     const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
     const [uploadOpen, setUploadOpen] = React.useState(false);
     const [pending, setPending] = React.useState(false);
+    // Tracks which folders are currently loading their children
+    const [loadingFolders, setLoadingFolders] = React.useState(new Set());
     // Only true if only one path is selected, and it is a directory.
     const [singleDirectorySelected, setSingleDirectorySelected] = React.useState(false);
     // Only true if single directory is selected, and it is in settings['ignored_directories']
@@ -256,21 +282,16 @@ export function FileBrowser() {
         }
     }, [browseFiles]);
 
+    // Clear loading states when file data updates
+    useEffect(() => {
+        if (loadingFolders.size > 0) {
+            setLoadingFolders(new Set());
+        }
+    }, [browseFiles]);
+
     const onIgnore = async () => {
         setIgnoreDirectoryOpen(false);
         await fetchSettings();
-    }
-
-    const onSelect = (path) => {
-        let newSelectedPaths;
-        // Select or deselect if the paths was previously selected.
-        if (selectedPathsCount && selectedPaths.indexOf(path) >= 0) {
-            newSelectedPaths = selectedPaths.filter(i => i !== path);
-        } else {
-            newSelectedPaths = [...selectedPaths, path];
-        }
-        setSelectedPaths(newSelectedPaths);
-        console.debug('selectedPaths', newSelectedPaths);
     }
 
     const onDelete = async () => {
@@ -406,6 +427,8 @@ export function FileBrowser() {
         } else {
             // Add the new folder to the opened folders.
             newFolders = [...openFolders, folder];
+            // Mark folder as loading so skeleton rows show
+            setLoadingFolders(prev => new Set([...prev, folder]));
             // If folder is selected, mark it for auto-selection of its children
             if (selectedPaths.includes(folder)) {
                 pendingAutoSelectRef.current = folder;
@@ -435,22 +458,21 @@ export function FileBrowser() {
             headers={headers}
             onFolderClick={onFolderClick}
             setPreviewFile={setPreviewFile}
-            selectedPaths={selectedPaths}
-            onSelect={onSelect}
             pending={pending}
+            loadingFolders={loadingFolders}
         />
         {footer}
     </DragSelectionProvider>
 }
 
-function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile, selectedPaths, onSelect, pending}) {
+function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile, pending, loadingFolders}) {
     const {isDragging} = useContext(DragSelectionContext);
     const containerClassName = isDragging ? 'file-browser-dragging' : '';
 
     return (
         <div style={{marginBottom: '4em'}} className={containerClassName}>
             <SortableTable
-                tableProps={{unstackable: true}}
+                tableProps={{unstackable: true, selectable: true, striped: true}}
                 data={browseFiles}
                 tableHeaders={headers}
                 defaultSortColumn='path'
@@ -462,9 +484,8 @@ function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile
                         onFolderClick={onFolderClick}
                         onFileClick={(file) => setPreviewFile(file)}
                         sortData={sortData}
-                        selectedPaths={selectedPaths}
-                        onSelect={onSelect}
                         disabled={pending}
+                        loadingFolders={loadingFolders}
                     />
                 )}
             />

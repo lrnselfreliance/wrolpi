@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=oneshot
+Environment=WROLPI_UPGRADE_SERVICE=1
 EnvironmentFile=/tmp/wrolpi-upgrade.env
 ExecStart=/opt/wrolpi/upgrade.sh -b ${BRANCH}
 User=root

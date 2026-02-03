@@ -52,6 +52,24 @@ if [ "$BRANCH_OVERRIDE" = false ]; then
   fi
 fi
 
+# If not running via the wrolpi-upgrade service, delegate to it so logs are captured.
+if [ -z "$WROLPI_UPGRADE_SERVICE" ]; then
+  trap 'echo ""; echo "Note: The upgrade service is still running in the background."; echo "Monitor with: journalctl -fu wrolpi-upgrade.service"' INT
+  echo "Delegating upgrade to wrolpi-upgrade.service..."
+  # Write branch config for the service.
+  echo "BRANCH=${BRANCH}" >/tmp/wrolpi-upgrade.env
+  # Start following journal in background (new entries only).
+  journalctl -fn0 -u wrolpi-upgrade.service &
+  JOURNAL_PID=$!
+  # Start service (blocks until complete for oneshot).
+  systemctl start wrolpi-upgrade.service
+  EXIT_CODE=$?
+  # Clean up journal follower.
+  kill $JOURNAL_PID 2>/dev/null
+  wait $JOURNAL_PID 2>/dev/null
+  exit $EXIT_CODE
+fi
+
 echo "Upgrading WROLPi from branch: ${BRANCH}"
 
 set -x

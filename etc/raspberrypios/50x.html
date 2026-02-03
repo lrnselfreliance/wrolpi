@@ -6,6 +6,10 @@
 
 <p>nginx could not find WROLPi! Are your services running?</p>
 
+<p>Start by viewing status of your services at the
+    <a id="controller_link" href="http://127.0.0.1:8087">Controller</a>
+</p>
+
 <pre><b>sudo systemctl status wrolpi-app</b></pre>
 <pre><b>sudo systemctl status wrolpi-api</b></pre>
 
@@ -85,6 +89,7 @@
         replaceHref('api_link', `http://${hostname}:8081`);
         replaceHref('map_link', `http://${hostname}:8084`);
         replaceHref('kiwix_link', `http://${hostname}:8085`);
+        replaceHref('controller_link', `http://${hostname}:8087`);
     } else {
         console.error('Refusing to replace services links because window.location.hostname is empty');
     }

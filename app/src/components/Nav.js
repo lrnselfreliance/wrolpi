@@ -8,8 +8,31 @@ import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, u
 import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
 import {Icon, Popup} from "./Theme";
-import {HELP_VIEWER_URI, NAME} from "./Vars";
+import {HELP_VIEWER_URI, NAME, semanticUIColorMap} from "./Vars";
 import _ from "lodash";
+
+function updateFavicon(colorName) {
+    // Fall back to violet if invalid color
+    const safeColor = colorName in semanticUIColorMap ? colorName : 'violet';
+    const faviconPath = `/favicon-${safeColor}.svg`;
+
+    // Update all favicon links
+    const iconLinks = document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]');
+    iconLinks.forEach(link => {
+        link.href = faviconPath;
+    });
+
+    // Also update the 32x32 and 16x16 specific icons if they exist
+    const icon32 = document.querySelector('link[sizes="32x32"]');
+    const icon16 = document.querySelector('link[sizes="16x16"]');
+    if (icon32) icon32.href = faviconPath;
+    if (icon16) icon16.href = faviconPath;
+
+    // Update theme-color meta tag for iOS/Android status bar
+    const hexColor = semanticUIColorMap[safeColor];
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) themeColorMeta.content = hexColor;
+}
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -79,6 +102,13 @@ function useNavColorSetting() {
             setNavColor(settings.nav_color);
         }
     }, [settings.nav_color]);
+
+    // Update favicon to match nav color
+    React.useEffect(() => {
+        if (navColor) {
+            updateFavicon(navColor);
+        }
+    }, [navColor]);
 
     return navColor
 }

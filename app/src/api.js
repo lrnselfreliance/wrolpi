@@ -267,6 +267,7 @@ export async function deleteVideos(videoIds) {
             description: message,
             time: 5000,
         });
+        throw Error(message);
     }
 }
 
@@ -1029,6 +1030,22 @@ export async function getBatchReorganizationStatus(batchJobId) {
         return await response.json();
     } else {
         const message = await getErrorMessage(response, 'Unable to get batch reorganization status.');
+        throw new Error(message);
+    }
+}
+
+export async function fetchCollectionConflicts(collectionId) {
+    const response = await apiGet(`${COLLECTIONS_API}/${collectionId}/reorganize/conflicts`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Unable to fetch conflicts. See server logs.');
+        toast({
+            type: 'error',
+            title: 'Conflict Fetch Error',
+            description: message,
+            time: 5000,
+        });
         throw new Error(message);
     }
 }

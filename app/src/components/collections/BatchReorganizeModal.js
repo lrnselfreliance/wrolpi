@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Grid, Icon, Label, Progress} from 'semantic-ui-react';
+import {Link} from 'react-router';
+import {Grid, Icon, Label, Progress, Button as SButton} from 'semantic-ui-react';
 import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
 import {Button, Modal, Table} from '../Theme';
 import {APIButton} from '../Common';
@@ -180,7 +181,6 @@ export function BatchReorganizeModal({
                     completed_collections: 0,
                     current_collection: null,
                     overall_percent: 0,
-                    completed: [],
                     failed_collection: null,
                     error: null,
                 });
@@ -230,7 +230,7 @@ export function BatchReorganizeModal({
                                         <Table.Row key={idx}>
                                             <Table.Cell>{collection.collection_name}</Table.Cell>
                                             <Table.Cell>
-                                                {collection.files_needing_move} / {collection.total_files}
+                                                {collection.total_files}
                                             </Table.Cell>
                                             <Table.Cell style={{wordBreak: 'break-all', fontSize: '0.9em'}}>
                                                 {collection.sample_move ? (
@@ -313,21 +313,6 @@ export function BatchReorganizeModal({
                     </Grid.Row>
                 )}
 
-                {status.completed && status.completed.length > 0 && (
-                    <Grid.Row>
-                        <Grid.Column>
-                            <strong>Completed:</strong>
-                            <div style={{maxHeight: '150px', overflowY: 'auto'}}>
-                                {status.completed.map((c, idx) => (
-                                    <Label key={idx} color='green' style={{margin: '2px'}}>
-                                        <Icon name='check'/> {c.name}
-                                    </Label>
-                                ))}
-                            </div>
-                        </Grid.Column>
-                    </Grid.Row>
-                )}
-
                 {status.status === 'complete' && (
                     <Grid.Row>
                         <Grid.Column>
@@ -347,7 +332,19 @@ export function BatchReorganizeModal({
                                 <p>
                                     Failed on {kindLabel.toLowerCase()}: <strong>{status.failed_collection.name}</strong>
                                 </p>
-                                {status.error && <p>Error: {status.error}</p>}
+                                <SButton
+                                    as={Link}
+                                    to={kind === 'channel'
+                                        ? `/videos/channel/${status.failed_collection.channel_id || status.failed_collection.id}/edit`
+                                        : `/archive/domain/${status.failed_collection.id}/edit`
+                                    }
+                                    size='small'
+                                >
+                                    <Icon name='eye'/> View {kindLabel}
+                                </SButton>
+                                {status.error && (
+                                    <p style={{whiteSpace: 'pre-wrap'}}>Error: {status.error}</p>
+                                )}
                             </Message>
                         </Grid.Column>
                     </Grid.Row>

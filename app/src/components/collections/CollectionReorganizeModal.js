@@ -1,14 +1,16 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Grid, Icon, Label, Progress} from 'semantic-ui-react';
+import {Button as SButton, Grid, Icon, Label, Progress} from 'semantic-ui-react';
 import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
 import {Button, Modal, Table} from '../Theme';
 import {APIButton} from '../Common';
 import {
     executeCollectionReorganization,
+    fetchCollectionConflicts,
     getReorganizationStatus,
     previewCollectionReorganization
 } from '../../api';
 import {useReorganizationStatus} from '../../contexts/FileWorkerStatusContext';
+import {ConflictResolutionModal} from './ConflictResolutionModal';
 
 /**
  * Modal component for previewing and executing collection file reorganization.
@@ -22,6 +24,7 @@ import {useReorganizationStatus} from '../../contexts/FileWorkerStatusContext';
  * @param {string} collectionName - Name of the collection for display
  * @param {Function} onComplete - Optional callback when reorganization completes
  * @param {boolean} needsReorganization - Whether the collection.needs_reorganization flag is true
+ * @param {string} collectionKind - 'channel' or 'domain' for conflict resolution modal
  */
 export function CollectionReorganizeModal({
                                               open,
@@ -30,6 +33,7 @@ export function CollectionReorganizeModal({
                                               collectionName,
                                               onComplete,
                                               needsReorganization,
+                                              collectionKind,
                                           }) {
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState(null);
@@ -37,6 +41,8 @@ export function CollectionReorganizeModal({
     const [jobId, setJobId] = useState(null);
     const [status, setStatus] = useState(null);
     const [polling, setPolling] = useState(false);
+    const [showConflictModal, setShowConflictModal] = useState(false);
+    const [loadingConflicts, setLoadingConflicts] = useState(false);
 
     // Check if this collection is currently being reorganized
     const {
@@ -51,21 +57,22 @@ export function CollectionReorganizeModal({
         if (open && collectionId) {
             // Check if THIS collection is currently being reorganized
             const isThisActive = isReorganizing &&
-                                taskType === 'reorganize' &&
-                                activeCollectionId === collectionId;
+                taskType === 'reorganize' &&
+                activeCollectionId === collectionId;
 
             if (isThisActive) {
                 // Resume: show current progress from worker status
+                // Don't set a fake job ID - we'll watch context instead
                 setLoading(false);
                 setPreview(null);
-                setJobId('active');  // Marker for active job
+                setJobId(null);
                 setStatus({
                     status: workerStatus.status,
                     total: workerStatus.operation_total,
                     completed: workerStatus.operation_processed,
                     percent: workerStatus.operation_percent,
                 });
-                setPolling(true);
+                setPolling(false);  // Don't poll job endpoint - watch context instead
             } else if (!polling && !jobId) {
                 // Normal: fetch preview (only if not already polling/resuming)
                 setLoading(true);
@@ -137,6 +144,57 @@ export function CollectionReorganizeModal({
         };
     }, [jobId, polling, collectionId, onComplete]);
 
+    // Watch context for status updates when resuming an active reorganization
+    useEffect(() => {
+        const isThisActive = isReorganizing &&
+            taskType === 'reorganize' &&
+            activeCollectionId === collectionId;
+
+        // Only watch when: modal is open, no real job ID, and this collection is active
+        if (!open || jobId || !isThisActive) return;
+
+        // Update status from context (only when values actually change)
+        const newStatus = workerStatus?.status || 'running';
+        const newTotal = workerStatus?.operation_total || 0;
+        const newCompleted = workerStatus?.operation_processed || 0;
+        const newPercent = workerStatus?.operation_percent || 0;
+
+        setStatus(prev => {
+            // Only update if values actually changed to prevent infinite loops
+            if (prev &&
+                prev.status === newStatus &&
+                prev.total === newTotal &&
+                prev.completed === newCompleted &&
+                prev.percent === newPercent) {
+                return prev;  // Return same object to prevent re-render
+            }
+            return {
+                status: newStatus,
+                total: newTotal,
+                completed: newCompleted,
+                percent: newPercent,
+            };
+        });
+    }, [open, jobId, isReorganizing, taskType, activeCollectionId, workerStatus, collectionId]);
+
+    // Detect completion when context indicates reorganization stopped for this collection
+    useEffect(() => {
+        // Only relevant when we have status but no job ID (resumed from context)
+        if (!status || jobId) return;
+
+        const isThisActive = isReorganizing &&
+            taskType === 'reorganize' &&
+            activeCollectionId === collectionId;
+
+        if (!isThisActive && status.status !== 'complete') {
+            // Reorganization completed
+            setStatus(prev => ({...prev, status: 'complete', percent: 100}));
+            if (onComplete) {
+                onComplete();
+            }
+        }
+    }, [isReorganizing, taskType, activeCollectionId, collectionId, status, jobId, onComplete]);
+
     const handleClose = useCallback(() => {
         // Allow closing - user can reopen to resume if needed
         setPreview(null);
@@ -144,8 +202,50 @@ export function CollectionReorganizeModal({
         setJobId(null);
         setStatus(null);
         setPolling(false);
+        setShowConflictModal(false);
         onClose();
     }, [onClose]);
+
+    // Reload preview (used after conflict resolution)
+    const reloadPreview = useCallback(() => {
+        setLoading(true);
+        setError(null);
+
+        previewCollectionReorganization(collectionId)
+            .then(data => {
+                setPreview(data);
+                setLoading(false);
+            })
+            .catch(err => {
+                setError(err.message);
+                setLoading(false);
+            });
+    }, [collectionId]);
+
+    const handleConflictResolved = useCallback(() => {
+        // Reload preview to get updated conflicts
+        // Note: The conflict modal calls onClose() after onResolved(), which handles closing
+        reloadPreview();
+    }, [reloadPreview]);
+
+    const handleResolveConflicts = useCallback(async () => {
+        setLoadingConflicts(true);
+        setError(null);
+        try {
+            const data = await fetchCollectionConflicts(collectionId);
+            // Update preview with fresh conflicts (including updated quality rankings)
+            setPreview(prev => ({
+                ...prev,
+                conflicts: data.conflicts,
+                has_conflicts: data.conflicts.length > 0,
+            }));
+            setShowConflictModal(true);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoadingConflicts(false);
+        }
+    }, [collectionId]);
 
     const handleReorganize = useCallback(async () => {
         try {
@@ -180,7 +280,8 @@ export function CollectionReorganizeModal({
                                 <Message.Header>Collection Appears Organized</Message.Header>
                                 <p>
                                     This collection's format matches the current configuration, but
-                                    {' '}<strong>{preview.files_needing_move}</strong> files don't match the expected layout.
+                                    {' '}<strong>{preview.files_needing_move}</strong> files don't match the expected
+                                    layout.
                                     This can happen if a previous reorganization was interrupted.
                                 </p>
                             </Message>
@@ -203,6 +304,33 @@ export function CollectionReorganizeModal({
                         </p>
                     </Grid.Column>
                 </Grid.Row>
+
+                {/* Conflict warning */}
+                {preview.has_conflicts && (
+                    <Grid.Row>
+                        <Grid.Column>
+                            <Message error>
+                                <Message.Header>
+                                    <Icon name='warning sign'/> Conflicts Detected
+                                </Message.Header>
+                                <p>
+                                    <strong>{preview.conflicts.length}</strong> destination{' '}
+                                    {preview.conflicts.length === 1 ? 'path has' : 'paths have'}{' '}
+                                    multiple files that would collide.
+                                    You must resolve these conflicts before reorganizing.
+                                </p>
+                                <SButton
+                                    color='yellow'
+                                    onClick={handleResolveConflicts}
+                                    loading={loadingConflicts}
+                                    disabled={loadingConflicts}
+                                >
+                                    <Icon name='wrench'/> Resolve Conflicts
+                                </SButton>
+                            </Message>
+                        </Grid.Column>
+                    </Grid.Row>
+                )}
 
                 {preview.sample_moves && preview.sample_moves.length > 0 && (
                     <Grid.Row>
@@ -292,54 +420,67 @@ export function CollectionReorganizeModal({
     };
 
     const isInProgress = polling || (status && status.status !== 'complete' && status.status !== 'error');
-    const canReorganize = preview && preview.files_needing_move > 0 && !isInProgress && !jobId;
+    const hasConflicts = preview && preview.has_conflicts;
+    const canReorganize = preview && preview.files_needing_move > 0 && !isInProgress && !jobId && !hasConflicts;
 
     return (
-        <Modal
-            open={open}
-            onClose={handleClose}
-            closeIcon={true}
-            closeOnDimmerClick={!isInProgress}
-            closeOnEscape={!isInProgress}
-        >
-            <Modal.Header>
-                Reorganize Files: {collectionName}
-            </Modal.Header>
-            <Modal.Content>
-                {loading && (
-                    <Message icon>
-                        <Icon name='circle notched' loading/>
-                        <Message.Content>
-                            <Message.Header>Loading Preview</Message.Header>
-                            Analyzing files...
-                        </Message.Content>
-                    </Message>
-                )}
+        <>
+            <Modal
+                open={open}
+                onClose={handleClose}
+                closeIcon={true}
+                closeOnDimmerClick={!isInProgress}
+                closeOnEscape={!isInProgress}
+                size='fullscreen'
+            >
+                <Modal.Header>
+                    Reorganize Files: {collectionName}
+                </Modal.Header>
+                <Modal.Content>
+                    {loading && (
+                        <Message icon>
+                            <Icon name='circle notched' loading/>
+                            <Message.Content>
+                                <Message.Header>Loading Preview</Message.Header>
+                                Analyzing files...
+                            </Message.Content>
+                        </Message>
+                    )}
 
-                {error && (
-                    <Message negative>
-                        <Message.Header>Error</Message.Header>
-                        <p>{error}</p>
-                    </Message>
-                )}
+                    {error && (
+                        <Message negative>
+                            <Message.Header>Error</Message.Header>
+                            <p style={{whiteSpace: 'pre-wrap'}}>{error}</p>
+                        </Message>
+                    )}
 
-                {!loading && !jobId && renderPreview()}
-                {jobId && renderProgress()}
-            </Modal.Content>
-            <Modal.Actions>
-                <Button onClick={handleClose}>
-                    {status?.status === 'complete' ? 'Close' : isInProgress ? 'Hide' : 'Cancel'}
-                </Button>
-                {canReorganize && (
-                    <APIButton
-                        color='violet'
-                        onClick={handleReorganize}
-                        obeyWROLMode={true}
-                    >
-                        Reorganize Files
-                    </APIButton>
-                )}
-            </Modal.Actions>
-        </Modal>
+                    {!loading && !status && renderPreview()}
+                    {status && renderProgress()}
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button onClick={handleClose}>
+                        {status?.status === 'complete' ? 'Close' : isInProgress ? 'Hide' : 'Cancel'}
+                    </Button>
+                    {canReorganize && (
+                        <APIButton
+                            color='violet'
+                            onClick={handleReorganize}
+                            obeyWROLMode={true}
+                        >
+                            Reorganize Files
+                        </APIButton>
+                    )}
+                </Modal.Actions>
+            </Modal>
+
+            {/* Conflict Resolution Modal */}
+            <ConflictResolutionModal
+                open={showConflictModal}
+                onClose={() => setShowConflictModal(false)}
+                conflicts={preview?.conflicts || []}
+                collectionKind={collectionKind}
+                onResolved={handleConflictResolved}
+            />
+        </>
     );
 }

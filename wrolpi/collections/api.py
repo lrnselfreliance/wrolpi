@@ -275,10 +275,11 @@ async def search_collections_endpoint(request: Request, body: schema.CollectionS
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 async def preview_reorganization_endpoint(request: Request, collection_id: int):
     """
-    Get preview with sample of files to be renamed.
+    Get preview with sample of files to be renamed and conflict detection.
 
-    Returns a preview of what would happen if the collection is reorganized.
-    This is useful for showing users what files would move before they commit.
+    Returns a preview of what would happen if the collection is reorganized,
+    including any destination conflicts that need to be resolved before
+    reorganization can proceed.
 
     Returns:
         - collection_id: The collection ID
@@ -288,13 +289,14 @@ async def preview_reorganization_endpoint(request: Request, collection_id: int):
         - sample_moves: ~10 example moves [{old_path, new_path}, ...]
         - new_file_format: The format template that will be applied
         - current_file_format: The format currently stored on collection
+        - conflicts: List of destination conflicts with file details
+        - has_conflicts: Boolean flag indicating if conflicts exist
     """
     from wrolpi.collections.reorganize import get_reorganization_preview
 
     session = request.ctx.session
     try:
-        # Use exact_count=True for individual collection preview to get accurate count
-        preview = get_reorganization_preview(collection_id, session, exact_count=True)
+        preview = get_reorganization_preview(collection_id, session)
         return json_response({
             'collection_id': preview.collection_id,
             'collection_name': preview.collection_name,
@@ -303,7 +305,37 @@ async def preview_reorganization_endpoint(request: Request, collection_id: int):
             'sample_moves': preview.sample_moves,
             'new_file_format': preview.new_file_format,
             'current_file_format': preview.current_file_format,
+            'conflicts': preview.conflicts or [],
+            'has_conflicts': preview.has_conflicts,
         })
+    except UnknownCollection as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
+    except ValueError as e:
+        return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
+
+
+@collection_bp.get('/<collection_id:int>/reorganize/conflicts')
+@openapi.summary('Get conflict details with ffprobe processing')
+@openapi.response(HTTPStatus.OK, description="Conflict details for resolution UI")
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+async def get_conflicts_endpoint(request: Request, collection_id: int):
+    """
+    Get detailed conflict information for resolution UI.
+
+    Processes ffprobe for any videos missing it to ensure accurate
+    quality rankings (including audio stream bonus).
+
+    Returns:
+        - conflicts: List of conflict details with updated quality rankings
+    """
+    from wrolpi.collections.reorganize import get_conflict_details_with_ffprobe
+
+    session = request.ctx.session
+    try:
+        conflicts = await get_conflict_details_with_ffprobe(collection_id, session)
+        session.commit()
+        return json_response({'conflicts': conflicts})
     except UnknownCollection as e:
         return json_response({'error': str(e)}, status=HTTPStatus.NOT_FOUND)
     except ValueError as e:

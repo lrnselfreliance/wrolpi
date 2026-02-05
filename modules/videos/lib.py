@@ -837,6 +837,54 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     return None, None, None, title.strip()
 
 
+def get_video_metadata(video) -> dict:
+    """Extract video metadata with fallback chain.
+
+    Fallback strategy:
+    1. Primary: info_json + database fields (video.source_id, file_group.published_datetime)
+    2. Secondary: parse_video_file_name() - ALL-OR-NOTHING, only if it provides channel AND date AND source_id
+    3. Tertiary: video.channel.name for uploader only
+
+    Returns:
+        dict with keys: upload_date (datetime|None), uploader (str), source_id (str), title (str)
+    """
+    file_group = video.file_group
+    info_json = video.get_info_json() or {}
+
+    # Primary sources
+    upload_date = file_group.published_datetime
+    if not upload_date and info_json.get('upload_date'):
+        upload_date = dates.strpdate(info_json['upload_date'])
+
+    uploader = info_json.get('uploader') or info_json.get('channel') or ''
+    source_id = video.source_id or info_json.get('id') or ''
+    title = file_group.title or info_json.get('title') or info_json.get('fulltitle') or 'untitled'
+
+    # Fallback: Parse filename - ALL-OR-NOTHING
+    # Only use if it provides ALL three fields: channel, date, source_id
+    if file_group.primary_path and not (upload_date and source_id and uploader):
+        parsed_channel, parsed_date, parsed_source_id, _ = parse_video_file_name(file_group.primary_path)
+
+        if parsed_channel and parsed_date and parsed_source_id:
+            if not upload_date:
+                upload_date = dates.strpdate(parsed_date)
+            if not source_id:
+                source_id = parsed_source_id
+            if not uploader:
+                uploader = parsed_channel
+
+    # Final fallback: Channel.name for uploader only
+    if not uploader and video.channel:
+        uploader = video.channel.name or ''
+
+    return {
+        'upload_date': upload_date,
+        'uploader': uploader,
+        'source_id': source_id,
+        'title': title,
+    }
+
+
 def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path, None, None]:
     """Finds all files which should be associated with a video file, but a video file does not match their stem.
 
@@ -975,20 +1023,12 @@ def format_video_filename(
     config = get_videos_downloader_config()
     template = file_name_format or config.file_name_format
 
-    # Get metadata from video
-    file_group = video.file_group
-    info_json = video.get_info_json() or {}
-
-    # Extract upload date info
-    upload_date = file_group.published_datetime
-    if not upload_date and info_json.get('upload_date'):
-        upload_date = dates.strpdate(info_json['upload_date'])
-
-    # Build variables dict matching yt-dlp's expected variables
-    # Use info_json if available, fall back to derived values
-    uploader = info_json.get('uploader') or info_json.get('channel') or ''
-    title = file_group.title or info_json.get('title') or info_json.get('fulltitle') or 'untitled'
-    source_id = video.source_id or info_json.get('id') or ''
+    # Get metadata with fallback chain
+    metadata = get_video_metadata(video)
+    upload_date = metadata['upload_date']
+    uploader = metadata['uploader']
+    source_id = metadata['source_id']
+    title = metadata['title']
 
     # Get video file extension
     video_path = video.video_path

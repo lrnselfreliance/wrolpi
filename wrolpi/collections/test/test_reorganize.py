@@ -1515,8 +1515,8 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
     # Format requires source_id - needs source_id
     ("%(id)s_%(title)s.%(ext)s", False, False, False, False),
     ("%(id)s_%(title)s.%(ext)s", False, True, False, True),
-    # Format requires uploader - needs uploader
-    ("%(uploader)s_%(title)s.%(ext)s", False, False, False, False),
+    # Format requires uploader - video.channel.name provides fallback, so always True for videos with channel
+    ("%(uploader)s_%(title)s.%(ext)s", False, False, False, True),  # channel.name fallback
     ("%(uploader)s_%(title)s.%(ext)s", False, False, True, True),
     # Format only needs title - always works
     ("%(title)s.%(ext)s", False, False, False, True),
@@ -1526,7 +1526,7 @@ async def test_reorganize_skips_deleted_files_gracefully(async_client, test_dire
     ("%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s", True, True, True, True),
     # Missing some but has others - still fails if format requires the missing one
     ("%(upload_year)s/%(uploader)s_%(title)s.%(ext)s", False, True, True, False),  # missing upload_date
-    ("%(upload_year)s/%(uploader)s_%(title)s.%(ext)s", True, False, False, False),  # missing uploader
+    ("%(upload_year)s/%(uploader)s_%(title)s.%(ext)s", True, False, False, True),  # channel.name fallback for uploader
     ("%(upload_year)s/%(uploader)s_%(title)s.%(ext)s", True, False, True, True),  # has both required
 ])
 def test_reorganize_skips_videos_missing_required_metadata(
@@ -1841,6 +1841,105 @@ async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory
         config._config['yt_dlp_options'] = yt_dlp_options
 
 
+@pytest.mark.asyncio
+async def test_channel_reorganization_preserves_root_level_files(
+    async_client, test_directory, video_factory
+):
+    """Root-level files (like channel info.json and images) should NOT be moved during reorganization.
+
+    This is intentional behavior - only Video files tracked in FileGroups are reorganized.
+    Channel metadata files at the collection root should remain in place.
+    """
+    from datetime import datetime, timezone
+    from wrolpi.files.worker import file_worker
+
+    # Create channel collection with year-based format
+    channel_dir = test_directory / 'videos' / 'TestChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    year_format = '%(upload_year)s/%(title)s.%(ext)s'
+
+    # Create root-level files that should NOT be moved
+    root_json = channel_dir / 'TestChannel.info.json'
+    root_json.write_text('{"channel": "test"}')
+    root_image = channel_dir / 'channel_banner.jpg'
+    root_image.write_bytes(b'\xff\xd8\xff\xe0')  # Minimal JPEG header
+
+    # Temporarily change config to use year format
+    config = get_videos_downloader_config()
+    original_format = config._config['yt_dlp_options']['file_name_format']
+    yt_dlp_options = dict(config._config['yt_dlp_options'])
+    yt_dlp_options['file_name_format'] = year_format
+    config._config['yt_dlp_options'] = yt_dlp_options
+
+    try:
+        with get_db_session(commit=True) as session:
+            collection = Collection(
+                name='TestChannel',
+                kind='channel',
+                directory=channel_dir,
+                file_format=year_format,
+            )
+            session.add(collection)
+            session.flush()
+            channel = Channel(name='TestChannel', collection_id=collection.id, directory=channel_dir)
+            session.add(channel)
+            session.commit()
+            collection_id = collection.id
+            channel_id = channel.id
+
+        # Create videos using factory - files will be in root initially
+        video1 = video_factory(
+            channel_id=channel_id,
+            title='video_one',
+            with_video_file=True,
+            upload_date=datetime(2024, 6, 15, tzinfo=timezone.utc),
+        )
+        video2 = video_factory(
+            channel_id=channel_id,
+            title='video_two',
+            with_video_file=True,
+            upload_date=datetime(2024, 8, 20, tzinfo=timezone.utc),
+        )
+
+        # Verify initial state: videos in root, root files exist
+        with get_db_session() as session:
+            v1 = session.query(Video).get(video1.id)
+            v2 = session.query(Video).get(video2.id)
+            assert v1.file_group.primary_path.parent == channel_dir
+            assert v2.file_group.primary_path.parent == channel_dir
+        assert root_json.exists(), "Root JSON should exist before reorganization"
+        assert root_image.exists(), "Root image should exist before reorganization"
+
+        # Execute reorganization
+        with get_db_session(commit=True) as session:
+            job_id = execute_reorganization(collection_id, session)
+            assert job_id, "Should return job_id for files to move"
+
+        # Process the reorganization
+        file_worker.transfer_queue()
+        await file_worker.process_queue()
+
+        # Verify: videos moved to year subdirectory
+        with get_db_session() as session:
+            v1 = session.query(Video).get(video1.id)
+            v2 = session.query(Video).get(video2.id)
+            assert '/2024/' in str(v1.file_group.primary_path), "Video 1 should be in year subdirectory"
+            assert '/2024/' in str(v2.file_group.primary_path), "Video 2 should be in year subdirectory"
+            assert v1.file_group.primary_path.exists()
+            assert v2.file_group.primary_path.exists()
+
+        # Verify: root-level files were NOT moved (this is the key assertion)
+        assert root_json.exists(), "Root JSON should still exist at original location after reorganization"
+        assert root_image.exists(), "Root image should still exist at original location after reorganization"
+        assert root_json.read_text() == '{"channel": "test"}', "Root JSON content should be unchanged"
+
+    finally:
+        yt_dlp_options = dict(config._config['yt_dlp_options'])
+        yt_dlp_options['file_name_format'] = original_format
+        config._config['yt_dlp_options'] = yt_dlp_options
+
+
 def test_preview_exact_count_computes_actual_moves(test_session, test_directory, archive_factory):
     """With exact_count=True, preview should compute actual files needing move, not total files.
 
@@ -1975,4 +2074,249 @@ async def test_reorganize_fails_on_filename_conflicts(async_client, test_directo
     # Error message should mention the conflict
     assert 'conflict' in str(exc_info.value).lower()
     assert 'Duplicate Title' in str(exc_info.value)
+
+
+# ============================================================================
+# Filename Parsing Fallback Tests
+# ============================================================================
+
+
+@pytest.mark.parametrize("filename,file_format,expected_result", [
+    # Filename with all fields: uploader_date_sourceid_title.ext
+    # Should work with complex formats since filename parsing provides all metadata
+    (
+        "Learning Self-Reliance_20170529_p_MzsCFkUPU_How to Build a Solar Generator.mp4",
+        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
+        True,  # Should work - filename has uploader, date, and source_id
+    ),
+    # Filename without source_id: uploader_date_title.ext pattern
+    # Should NOT work with format requiring %(id)s
+    (
+        "Commsprepper_20130113_110Ah Car Battery connected to 80W Solar Panel.mp4",
+        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
+        False,  # Should fail - filename doesn't have source_id and format requires it
+    ),
+    # Filename without source_id but format doesn't require it
+    (
+        "Commsprepper_20130113_110Ah Car Battery.mp4",
+        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s",
+        False,  # Should still fail - all-or-nothing: no source_id means no fallback
+    ),
+    # Simple title-only format (always works)
+    (
+        "random_video_name.mp4",
+        "%(title)s.%(ext)s",
+        True,  # Should work - format only requires title
+    ),
+])
+def test_video_metadata_fallback_from_filename(
+        test_session, test_directory,
+        filename, file_format, expected_result
+):
+    """Test that _video_has_required_metadata uses filename parsing as all-or-nothing fallback.
+
+    Videos without info.json can use filename parsing to extract metadata,
+    but ONLY if the filename provides ALL three fields: channel, date, source_id.
+    This prevents cherry-picking individual fields which could lead to inconsistent data.
+    """
+    from wrolpi.collections.reorganize import _video_has_required_metadata
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / 'FallbackTestChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    collection = Collection(
+        name='FallbackTestChannel',
+        kind='channel',
+        directory=channel_dir,
+    )
+    test_session.add(collection)
+    test_session.flush()
+    channel = Channel(name='FallbackTestChannel', collection_id=collection.id, directory=channel_dir)
+    test_session.add(channel)
+    test_session.commit()
+
+    # Create video file with specific filename
+    video_path = channel_dir / filename
+    video_path.touch()
+
+    # Create FileGroup
+    fg = FileGroup()
+    fg.directory = channel_dir
+    fg.primary_path = video_path
+    fg.files = [{'path': filename, 'mimetype': 'video/mp4'}]
+    fg.title = video_path.stem  # Title from filename stem
+    # Intentionally NOT setting published_datetime to test fallback
+    test_session.add(fg)
+    test_session.flush()
+
+    # Create Video WITHOUT source_id or info.json - forces filename fallback
+    video = Video(file_group_id=fg.id, channel_id=channel.id)
+    # Intentionally NOT setting source_id to test fallback
+    test_session.add(video)
+    test_session.commit()
+    test_session.refresh(video)
+
+    result = _video_has_required_metadata(video, file_format)
+
+    assert result is expected_result, (
+        f"For filename '{filename}' with format '{file_format}', "
+        f"expected {expected_result} but got {result}"
+    )
+
+
+def test_video_metadata_fallback_uses_channel_name_for_uploader(test_session, test_directory):
+    """Test that video.channel.name is used as final fallback for uploader.
+
+    Even if filename parsing fails (no source_id in filename), we can still
+    use video.channel.name for the uploader field as a separate fallback.
+    """
+    from wrolpi.collections.reorganize import _video_has_required_metadata
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / 'ChannelNameFallback'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    collection = Collection(
+        name='ChannelNameFallback',
+        kind='channel',
+        directory=channel_dir,
+    )
+    test_session.add(collection)
+    test_session.flush()
+    channel = Channel(name='MyChannel', collection_id=collection.id, directory=channel_dir)
+    test_session.add(channel)
+    test_session.commit()
+
+    # Create video file with a title-only filename (no metadata in name)
+    filename = "random_video.mp4"
+    video_path = channel_dir / filename
+    video_path.touch()
+
+    # Create FileGroup with published_datetime
+    from datetime import datetime, timezone
+    fg = FileGroup()
+    fg.directory = channel_dir
+    fg.primary_path = video_path
+    fg.files = [{'path': filename, 'mimetype': 'video/mp4'}]
+    fg.title = 'Random Video'
+    fg.published_datetime = datetime(2024, 6, 15, tzinfo=timezone.utc)
+    test_session.add(fg)
+    test_session.flush()
+
+    # Create Video with source_id but NO uploader in info.json
+    video = Video(file_group_id=fg.id, channel_id=channel.id, source_id='abc123')
+    test_session.add(video)
+    test_session.commit()
+    test_session.refresh(video)
+
+    # Format requires uploader - should use channel.name as fallback
+    file_format = "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
+    result = _video_has_required_metadata(video, file_format)
+
+    assert result is True, (
+        "Should succeed because video.channel.name provides uploader fallback"
+    )
+
+
+@pytest.mark.parametrize(
+    "filename,channel_name,title,db_datetime,db_source_id,expected_year,expected_uploader,expected_source_id,should_not_contain",
+    [
+        # Complete filename with all fields - uses filename fallback values
+        (
+            "TestUploader_20170529_p_MzsCFkUPU_My Test Video.mp4",
+            "FormatFallbackChannel",
+            "My Test Video",
+            None,  # No DB datetime
+            None,  # No DB source_id
+            "2017",
+            "TestUploader",
+            "p_MzsCFkUPU",
+            [],  # No forbidden values
+        ),
+        # Incomplete filename (no source_id) - uses DB values, not filename
+        (
+            "FilenameUploader_20200101_Just A Title.mp4",
+            "ChannelFromDB",
+            "Just A Title",
+            "2024-06-15",  # DB datetime
+            "db_source_id",  # DB source_id
+            "2024",
+            "ChannelFromDB",
+            "db_source_id",
+            ["FilenameUploader", "2020"],  # Should NOT contain these filename-parsed values
+        ),
+    ],
+)
+def test_format_video_filename_fallback_behavior(
+    test_session,
+    test_directory,
+    filename,
+    channel_name,
+    title,
+    db_datetime,
+    db_source_id,
+    expected_year,
+    expected_uploader,
+    expected_source_id,
+    should_not_contain,
+):
+    """Test format_video_filename fallback behavior with various scenarios.
+
+    Tests both:
+    1. Complete filename with all fields → uses filename fallback values
+    2. Incomplete filename (no source_id) with DB values → uses DB values, not filename
+    """
+    from datetime import datetime, timezone
+    from modules.videos.lib import format_video_filename
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / channel_name
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    collection = Collection(
+        name=channel_name,
+        kind='channel',
+        directory=channel_dir,
+    )
+    test_session.add(collection)
+    test_session.flush()
+    channel = Channel(name=channel_name, collection_id=collection.id, directory=channel_dir)
+    test_session.add(channel)
+    test_session.commit()
+
+    # Create video file
+    video_path = channel_dir / filename
+    video_path.touch()
+
+    # Create FileGroup
+    fg = FileGroup()
+    fg.directory = channel_dir
+    fg.primary_path = video_path
+    fg.files = [{'path': filename, 'mimetype': 'video/mp4'}]
+    fg.title = title
+    if db_datetime:
+        year, month, day = map(int, db_datetime.split('-'))
+        fg.published_datetime = datetime(year, month, day, tzinfo=timezone.utc)
+    test_session.add(fg)
+    test_session.flush()
+
+    # Create Video
+    video = Video(file_group_id=fg.id, channel_id=channel.id, source_id=db_source_id)
+    test_session.add(video)
+    test_session.commit()
+    test_session.refresh(video)
+
+    # Format with year subdirectory
+    file_format = "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
+    result = format_video_filename(video, file_format)
+
+    # Verify expected values are present
+    assert f'{expected_year}/' in result, f"Expected year {expected_year}. Got: {result}"
+    assert f'{expected_uploader}_' in result, f"Expected uploader {expected_uploader}. Got: {result}"
+    assert expected_source_id in result, f"Expected source_id {expected_source_id}. Got: {result}"
+
+    # Verify forbidden values are NOT present (for all-or-nothing behavior)
+    for forbidden in should_not_contain:
+        assert forbidden not in result, f"Should NOT contain '{forbidden}'. Got: {result}"
 

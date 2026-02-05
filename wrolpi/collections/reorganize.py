@@ -64,19 +64,16 @@ def _video_has_required_metadata(video, file_format: str) -> bool:
     """Check if video has the metadata required by the format string.
 
     Returns False only if the format requires a variable that the video cannot provide.
+    Uses get_video_metadata() for consistent fallback chain with format_video_filename().
     """
+    from modules.videos.lib import get_video_metadata
+
     required = _get_format_required_variables(file_format)
+    metadata = get_video_metadata(video)
 
-    file_group = video.file_group
-    info_json = video.get_info_json() or {}
-
-    # Check each potentially-missing variable
-    # title and ext are always available (have fallbacks)
-    has_upload_date = bool(
-        file_group.published_datetime or info_json.get('upload_date')
-    )
-    has_source_id = bool(video.source_id or info_json.get('id'))
-    has_uploader = bool(info_json.get('uploader') or info_json.get('channel'))
+    has_upload_date = bool(metadata['upload_date'])
+    has_source_id = bool(metadata['source_id'])
+    has_uploader = bool(metadata['uploader'])
 
     # Map format variables to their metadata availability
     # Variables that depend on upload_date

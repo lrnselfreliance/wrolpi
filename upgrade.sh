@@ -58,6 +58,7 @@ if [ -z "$WROLPI_UPGRADE_SERVICE" ]; then
   echo "Delegating upgrade to wrolpi-upgrade.service..."
   # Write branch config for the service.
   echo "BRANCH=${BRANCH}" >/tmp/wrolpi-upgrade.env
+  chown wrolpi:wrolpi /tmp/wrolpi-upgrade.env
   # Start following journal in background (new entries only).
   journalctl -fn0 -u wrolpi-upgrade.service &
   JOURNAL_PID=$!

@@ -565,11 +565,11 @@ export const useChannel = (channel_id) => {
         };
 
         if (channel_id) {
+            return await updateChannel(channel_id, body);
+        } else {
             // Can create a Channel with a Tag.
             body.tag_name = form.formData.tag_name;
             return await createChannel(body);
-        } else {
-            return await updateChannel(channel_id, body);
         }
     }
 

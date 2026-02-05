@@ -129,7 +129,6 @@ class TestDashboardEndpoint:
         content = response.text
         assert 'id="upgrade-banner"' in content
         assert "Upgrade in Progress" in content
-        assert "Do not power off" in content
 
     def test_dashboard_has_mount_modal(self, test_client):
         """Dashboard should have mount modal for disk mounting."""

@@ -55,6 +55,29 @@ class CollectionTagInfoResponse:
 
 
 @dataclass
+class ConflictFileInfo:
+    """Info about a single file in a reorganization conflict."""
+    file_group_id: int
+    current_path: str
+    title: str
+    model_type: str  # 'video' or 'archive'
+    size: int = 0
+    video_id: Optional[int] = None
+    archive_id: Optional[int] = None
+    poster_path: Optional[str] = None
+    published_datetime: Optional[str] = None
+    source_id: Optional[str] = None
+    quality_rank: Optional[int] = None  # Metadata quality score (videos only)
+
+
+@dataclass
+class ConflictDetail:
+    """Details about a single destination path conflict."""
+    destination_path: str
+    conflicting_files: List[ConflictFileInfo]
+
+
+@dataclass
 class ReorganizationPreviewResponse:
     """Response for reorganization preview."""
     collection_id: int
@@ -64,6 +87,8 @@ class ReorganizationPreviewResponse:
     sample_moves: List[dict]
     new_file_format: str
     current_file_format: Optional[str] = None
+    conflicts: List[ConflictDetail] = field(default_factory=list)
+    has_conflicts: bool = False
 
 
 @dataclass

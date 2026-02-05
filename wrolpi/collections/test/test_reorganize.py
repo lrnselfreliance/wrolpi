@@ -468,7 +468,7 @@ def test_get_collections_needing_reorganization_includes_sample_move(
     # Create a video in this channel using factory
     video = video_factory(channel_id=channel.id)
 
-    result = get_collections_needing_reorganization('channel', test_session, sample_size=1)
+    result = get_collections_needing_reorganization('channel', test_session)
 
     assert len(result['collections']) == 1
     collection_info = result['collections'][0]
@@ -1729,9 +1729,9 @@ async def test_domain_reorganization_moves_files_from_root_to_year_subdirectory(
             assert old_path.parent == domain_dir, \
                 f"Archive should be in root, not year subdir. Got: {old_path.parent}"
 
-        # Get preview with exact_count - should detect files need moving
+        # Get preview - should detect files need moving
         with get_db_session() as session:
-            preview = get_reorganization_preview(collection_id, session, exact_count=True)
+            preview = get_reorganization_preview(collection_id, session)
             assert preview.files_needing_move > 0, \
                 f"Should detect files need moving. Got: {preview.files_needing_move}"
 
@@ -1814,9 +1814,9 @@ async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory
             assert old_path.parent == channel_dir, \
                 f"Video should be in root, not year subdir. Got: {old_path.parent}"
 
-        # Get preview with exact_count - should detect files need moving
+        # Get preview - should detect files need moving
         with get_db_session() as session:
-            preview = get_reorganization_preview(collection_id, session, exact_count=True)
+            preview = get_reorganization_preview(collection_id, session)
             assert preview.files_needing_move > 0, \
                 f"Should detect files need moving. Got: {preview.files_needing_move}"
 
@@ -1940,12 +1940,12 @@ async def test_channel_reorganization_preserves_root_level_files(
         config._config['yt_dlp_options'] = yt_dlp_options
 
 
-def test_preview_exact_count_computes_actual_moves(test_session, test_directory, archive_factory):
-    """With exact_count=True, preview should compute actual files needing move, not total files.
+def test_preview_computes_actual_moves(test_session, test_directory, archive_factory):
+    """Preview should compute actual files needing move by building move mappings.
 
     This test verifies that:
-    - exact_count=False returns total_files as files_needing_move (estimate)
-    - exact_count=True computes the actual count by building move mappings
+    - Preview correctly identifies files in wrong location
+    - After reorganization, preview shows 0 files needing move
     """
     # Create domain collection with a year-based format (different from default)
     domain_dir = test_directory / 'archive' / 'exactcount.com'
@@ -1977,19 +1977,13 @@ def test_preview_exact_count_computes_actual_moves(test_session, test_directory,
             archive_obj.collection_id = collection_id
             session.commit()
 
-        # Without exact_count, preview assumes all files need moving
+        # Preview should detect that the file needs moving (in wrong location)
         with get_db_session() as session:
-            preview_estimate = get_reorganization_preview(collection_id, session, exact_count=False)
-            # This is the current behavior - assumes all need moving
-            assert preview_estimate.files_needing_move == preview_estimate.total_files
-            assert preview_estimate.files_needing_move == 1
-
-        # With exact_count, preview also detects that files need moving (they're in wrong location)
-        with get_db_session() as session:
-            preview_exact = get_reorganization_preview(collection_id, session, exact_count=True)
+            preview = get_reorganization_preview(collection_id, session)
             # Files are in root, but should be in year subdir, so 1 file needs moving
-            assert preview_exact.files_needing_move == 1, \
-                f"File in wrong location should need moving. Got: {preview_exact.files_needing_move}"
+            assert preview.files_needing_move == 1, \
+                f"File in wrong location should need moving. Got: {preview.files_needing_move}"
+            assert preview.total_files == 1
 
         # Now execute the reorganization to move files to correct location
         from wrolpi.files.worker import file_worker
@@ -2001,9 +1995,9 @@ def test_preview_exact_count_computes_actual_moves(test_session, test_directory,
         import asyncio
         asyncio.get_event_loop().run_until_complete(file_worker.process_queue())
 
-        # After reorganization, with exact_count should show 0 files needing move
+        # After reorganization, should show 0 files needing move
         with get_db_session() as session:
-            preview_after = get_reorganization_preview(collection_id, session, exact_count=True)
+            preview_after = get_reorganization_preview(collection_id, session)
             assert preview_after.files_needing_move == 0, \
                 f"After reorganization, no files should need moving. Got: {preview_after.files_needing_move}"
     finally:
@@ -2074,6 +2068,225 @@ async def test_reorganize_fails_on_filename_conflicts(async_client, test_directo
     # Error message should mention the conflict
     assert 'conflict' in str(exc_info.value).lower()
     assert 'Duplicate Title' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_reorganize_preview_returns_conflict_details(async_client, test_directory, video_factory):
+    """Preview should return detailed conflict information for UI display."""
+    from datetime import datetime, timezone
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / 'ConflictPreviewChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_db_session(commit=True) as session:
+        collection = Collection(
+            name='ConflictPreviewChannel',
+            kind='channel',
+            directory=channel_dir,
+            file_format='%(old_format)s.%(ext)s'  # Needs reorganization
+        )
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='ConflictPreviewChannel', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+        collection_id = collection.id
+
+    # Create two videos with DIFFERENT initial filenames but IDENTICAL destination metadata
+    same_date = datetime(2024, 1, 15, tzinfo=timezone.utc)
+    same_source_id = 'preview_duplicate_id'
+
+    video1 = video_factory(
+        channel_id=channel_id,
+        title='video_one',
+        upload_date=same_date,
+        with_video_file=True,
+        with_info_json={'uploader': 'TestUploader', 'id': same_source_id}
+    )
+
+    video2 = video_factory(
+        channel_id=channel_id,
+        title='video_two',
+        upload_date=same_date,
+        with_video_file=True,
+        with_info_json={'uploader': 'TestUploader', 'id': same_source_id}
+    )
+
+    # Update both videos to have the same title and source_id
+    with get_db_session(commit=True) as session:
+        v1 = session.query(Video).get(video1.id)
+        v2 = session.query(Video).get(video2.id)
+        v1.file_group.title = 'Duplicate Preview Title'
+        v2.file_group.title = 'Duplicate Preview Title'
+        v1.source_id = same_source_id
+        v2.source_id = same_source_id
+
+    # Get preview - should show conflicts instead of raising an exception
+    with get_db_session() as session:
+        preview = get_reorganization_preview(collection_id, session)
+
+    # Verify preview has conflict information
+    assert preview.has_conflicts is True, "Preview should indicate conflicts exist"
+    assert len(preview.conflicts) == 1, f"Should have 1 conflict, got {len(preview.conflicts)}"
+
+    conflict = preview.conflicts[0]
+    assert 'destination_path' in conflict
+    assert 'conflicting_files' in conflict
+    assert len(conflict['conflicting_files']) == 2, "Should have 2 conflicting files"
+
+    # Verify file details are included
+    for file_info in conflict['conflicting_files']:
+        assert 'file_group_id' in file_info
+        assert 'video_id' in file_info
+        assert 'current_path' in file_info
+        assert 'title' in file_info
+        assert 'model_type' in file_info
+        assert file_info['model_type'] == 'video'
+        assert file_info['source_id'] == same_source_id
+
+
+@pytest.mark.asyncio
+async def test_reorganize_preview_no_conflicts(async_client, test_directory, video_factory):
+    """Preview should show no conflicts when files have unique destinations."""
+    from datetime import datetime, timezone
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / 'NoConflictChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_db_session(commit=True) as session:
+        collection = Collection(
+            name='NoConflictChannel',
+            kind='channel',
+            directory=channel_dir,
+            file_format='%(old_format)s.%(ext)s'
+        )
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='NoConflictChannel', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+        collection_id = collection.id
+
+    # Create two videos with DIFFERENT titles (unique destinations)
+    video1 = video_factory(
+        channel_id=channel_id,
+        title='Unique Title One',
+        upload_date=datetime(2024, 1, 15, tzinfo=timezone.utc),
+        with_video_file=True,
+        with_info_json={'uploader': 'TestUploader', 'id': 'unique_id_1'}
+    )
+
+    video2 = video_factory(
+        channel_id=channel_id,
+        title='Unique Title Two',
+        upload_date=datetime(2024, 1, 16, tzinfo=timezone.utc),
+        with_video_file=True,
+        with_info_json={'uploader': 'TestUploader', 'id': 'unique_id_2'}
+    )
+
+    # Get preview - should show no conflicts
+    with get_db_session() as session:
+        preview = get_reorganization_preview(collection_id, session)
+
+    assert preview.has_conflicts is False, "Preview should indicate no conflicts"
+    assert preview.conflicts == [], "Conflicts list should be empty"
+
+
+@pytest.mark.asyncio
+async def test_conflict_preview_includes_quality_rank(async_client, test_directory, video_factory):
+    """Conflict preview should include quality_rank for videos based on metadata completeness.
+
+    Videos with more metadata (info_json, captions, poster) should rank higher.
+    Conflicting files should be sorted by quality_rank (highest first).
+    """
+    from datetime import datetime, timezone
+
+    # Create channel collection
+    channel_dir = test_directory / 'videos' / 'QualityRankChannel'
+    channel_dir.mkdir(parents=True, exist_ok=True)
+
+    with get_db_session(commit=True) as session:
+        collection = Collection(
+            name='QualityRankChannel',
+            kind='channel',
+            directory=channel_dir,
+            file_format='%(old_format)s.%(ext)s'  # Needs reorganization
+        )
+        session.add(collection)
+        session.flush()
+        channel = Channel(name='QualityRankChannel', collection_id=collection.id, directory=channel_dir)
+        session.add(channel)
+        session.commit()
+        channel_id = channel.id
+        collection_id = collection.id
+
+    same_date = datetime(2024, 1, 15, tzinfo=timezone.utc)
+    same_source_id = 'quality_rank_test_id'
+
+    # video1 - MINIMAL metadata (lower rank expected)
+    video1 = video_factory(
+        channel_id=channel_id,
+        title='minimal_video',
+        upload_date=same_date,
+        with_video_file=True,
+        # No info_json, no poster, no captions
+    )
+
+    # video2 - RICH metadata (higher rank expected)
+    video2 = video_factory(
+        channel_id=channel_id,
+        title='rich_video',
+        upload_date=same_date,
+        with_video_file=True,
+        with_info_json={'uploader': 'TestUploader', 'id': same_source_id, 'title': 'Rich Video Title'},
+        with_poster_ext='jpg',
+        with_caption_file=True,
+    )
+
+    # Make both videos conflict (same title, same source_id → same destination)
+    with get_db_session(commit=True) as session:
+        v1 = session.query(Video).get(video1.id)
+        v2 = session.query(Video).get(video2.id)
+        v1.file_group.title = 'Same Title'
+        v2.file_group.title = 'Same Title'
+        v1.source_id = same_source_id
+        v2.source_id = same_source_id
+        # Give v1 a URL so it has SOME data, but still less than v2
+        v1.file_group.url = 'https://example.com/video1'
+
+    # Get preview - should detect conflicts with quality_rank
+    with get_db_session() as session:
+        preview = get_reorganization_preview(collection_id, session)
+
+    assert preview.has_conflicts is True, "Should detect conflicts"
+    assert len(preview.conflicts) == 1, "Should have 1 conflict"
+
+    conflict = preview.conflicts[0]
+    files = conflict['conflicting_files']
+    assert len(files) == 2, "Should have 2 conflicting files"
+
+    # Verify quality_rank is present on all video files
+    for file_info in files:
+        assert 'quality_rank' in file_info, f"quality_rank missing from {file_info}"
+        assert file_info['quality_rank'] is not None, f"quality_rank should not be None for videos"
+
+    # Verify files are sorted by quality_rank (highest first)
+    ranks = [f['quality_rank'] for f in files]
+    assert ranks == sorted(ranks, reverse=True), \
+        f"Files should be sorted by quality_rank descending. Got: {ranks}"
+
+    # The video with more metadata (video2) should rank higher
+    video2_info = next(f for f in files if f['video_id'] == video2.id)
+    video1_info = next(f for f in files if f['video_id'] == video1.id)
+    assert video2_info['quality_rank'] > video1_info['quality_rank'], \
+        f"Video with more metadata should rank higher. v2={video2_info['quality_rank']}, v1={video1_info['quality_rank']}"
+
+    # The highest ranked video should be first
+    assert files[0]['video_id'] == video2.id, "Highest ranked video should be first"
 
 
 # ============================================================================

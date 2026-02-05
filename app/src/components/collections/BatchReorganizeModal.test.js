@@ -159,7 +159,6 @@ describe('BatchReorganizeModal', () => {
             completed_collections: 1,
             current_collection: null,
             overall_percent: 100,
-            completed: [{id: 1, name: 'Test', status: 'complete'}],
             failed_collection: null,
             error: null,
         });
@@ -199,7 +198,6 @@ describe('BatchReorganizeModal', () => {
             completed_collections: 0,
             current_collection: {id: 1, name: 'Test', status: 'running', total: 5, completed: 2, percent: 40},
             overall_percent: 40,
-            completed: [],
             failed_collection: null,
             error: null,
         });
@@ -237,7 +235,6 @@ describe('BatchReorganizeModal', () => {
             completed_collections: 0,
             current_collection: {id: 1, name: 'Test Channel', status: 'running', total: 5, completed: 2, percent: 40},
             overall_percent: 20,
-            completed: [],
             failed_collection: null,
             error: null,
         });
@@ -277,7 +274,6 @@ describe('BatchReorganizeModal', () => {
             completed_collections: 1,
             current_collection: null,
             overall_percent: 100,
-            completed: [{id: 1, name: 'Test', status: 'complete'}],
             failed_collection: null,
             error: null,
         });

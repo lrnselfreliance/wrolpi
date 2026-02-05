@@ -2322,9 +2322,18 @@ class FileWorker:
                     except Exception as e:
                         # Collection failed - stop batch processing
                         logger.error(f'Batch reorganize: {collection_name} failed: {e}')
+
+                        # Get the actual channel ID for the UI link (collection_id != channel_id)
+                        channel_id = None
+                        if kind == 'channel':
+                            from modules.videos.models import Channel
+                            channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+                            channel_id = channel.id if channel else None
+
                         batch_status['failed_collection'] = {
                             'id': collection_id,
                             'name': collection_name,
+                            'channel_id': channel_id,
                         }
                         batch_status['error'] = str(e)
                         batch_status['current_collection'] = None

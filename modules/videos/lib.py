@@ -841,9 +841,9 @@ def get_video_metadata(video) -> dict:
     """Extract video metadata with fallback chain.
 
     Fallback strategy:
-    1. Primary: info_json + database fields (video.source_id, file_group.published_datetime)
-    2. Secondary: parse_video_file_name() - ALL-OR-NOTHING, only if it provides channel AND date AND source_id
-    3. Tertiary: video.channel.name for uploader only
+    1. Primary: video.channel.name for uploader (when video belongs to a channel)
+    2. Secondary: info_json + database fields (video.source_id, file_group.published_datetime)
+    3. Tertiary: parse_video_file_name() - ALL-OR-NOTHING, only if it provides channel AND date AND source_id
 
     Returns:
         dict with keys: upload_date (datetime|None), uploader (str), source_id (str), title (str)
@@ -856,7 +856,13 @@ def get_video_metadata(video) -> dict:
     if not upload_date and info_json.get('upload_date'):
         upload_date = dates.strpdate(info_json['upload_date'])
 
-    uploader = info_json.get('uploader') or info_json.get('channel') or ''
+    # Prioritize WROLPi channel name when video belongs to a channel
+    # This ensures reorganized files use the user's channel name, not the YouTube uploader name
+    if video.channel and video.channel.name:
+        uploader = video.channel.name
+    else:
+        uploader = info_json.get('uploader') or info_json.get('channel') or ''
+
     source_id = video.source_id or info_json.get('id') or ''
     title = file_group.title or info_json.get('title') or info_json.get('fulltitle') or 'untitled'
 
@@ -872,10 +878,6 @@ def get_video_metadata(video) -> dict:
                 source_id = parsed_source_id
             if not uploader:
                 uploader = parsed_channel
-
-    # Final fallback: Channel.name for uploader only
-    if not uploader and video.channel:
-        uploader = video.channel.name or ''
 
     return {
         'upload_date': upload_date,

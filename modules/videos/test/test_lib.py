@@ -355,3 +355,35 @@ def test_format_video_filename_without_upload_date(test_session, video_factory, 
     # Template result: '{upload_year}/{uploader}_{upload_date}_{id}_{title}.mp4'
     # With empty year/date: '/__Test Video_Test Video.mp4' (has a slash for subdirectory)
     assert '/' in result  # Confirms template was used (has subdirectory), not fallback
+
+
+def test_format_video_filename_uses_channel_name_over_info_json(test_session, video_factory, channel_factory,
+                                                                test_videos_downloader_config):
+    """When a video belongs to a channel, format_video_filename should use the WROLPi channel name,
+    not the YouTube uploader name from info_json.
+
+    This ensures that when a user renames their channel, reorganized files use the new name.
+    """
+    from modules.videos.lib import format_video_filename
+
+    # Create channel with WROLPi name
+    channel = channel_factory(name='My Custom Channel')
+
+    # Create video in channel with different YouTube uploader name in info_json
+    video = video_factory(
+        channel_id=channel.id,
+        title='My Video Title',
+        with_video_file=True,
+        with_info_json={
+            'id': 'abc123',
+            'uploader': 'Learning Self Reliance',  # Different from channel name!
+            'upload_date': '20240115',
+        }
+    )
+
+    template = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+    result = format_video_filename(video, template)
+
+    # Should use WROLPi channel name, NOT the YouTube uploader
+    assert 'My Custom Channel' in result
+    assert 'Learning Self Reliance' not in result

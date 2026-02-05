@@ -2222,7 +2222,8 @@ def test_video_metadata_fallback_uses_channel_name_for_uploader(test_session, te
 @pytest.mark.parametrize(
     "filename,channel_name,title,db_datetime,db_source_id,expected_year,expected_uploader,expected_source_id,should_not_contain",
     [
-        # Complete filename with all fields - uses filename fallback values
+        # Complete filename with all fields - channel name takes priority over filename
+        # This ensures reorganized files use the WROLPi channel name, not the YouTube uploader
         (
             "TestUploader_20170529_p_MzsCFkUPU_My Test Video.mp4",
             "FormatFallbackChannel",
@@ -2230,9 +2231,9 @@ def test_video_metadata_fallback_uses_channel_name_for_uploader(test_session, te
             None,  # No DB datetime
             None,  # No DB source_id
             "2017",
-            "TestUploader",
+            "FormatFallbackChannel",  # Channel name takes priority
             "p_MzsCFkUPU",
-            [],  # No forbidden values
+            ["TestUploader"],  # Should NOT contain filename uploader
         ),
         # Incomplete filename (no source_id) - uses DB values, not filename
         (

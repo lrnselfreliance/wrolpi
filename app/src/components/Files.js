@@ -648,7 +648,7 @@ export function RefreshSteps({progress}) {
                         completed={isCompleted}
                         disabled={isDisabled}
                     >
-                        <Icon name={isCompleted ? 'check' : phase.icon}/>
+                        <Icon name={phase.icon}/>
                         <Step.Content>
                             <Step.Title>{phase.title}</Step.Title>
                             <Step.Description>{isActive || isCompleted ? description : ''}</Step.Description>

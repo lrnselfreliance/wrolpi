@@ -376,3 +376,27 @@ tr.drag-deselecting td {
     -moz-user-select: none;
     -ms-user-select: none;
 }
+
+/* Ensure step icons are always visible, even when disabled */
+.ui.steps .step.disabled > .icon,
+.ui.steps .step.disabled > i.icon,
+.ui.steps .disabled.step > .icon,
+.ui.steps .disabled.step > i.icon {
+    opacity: 0.45 !important;
+    display: inline-block !important;
+    visibility: visible !important;
+    width: auto !important;
+    height: auto !important;
+    color: rgba(0, 0, 0, 0.87) !important;
+}
+
+/* Ensure the icon glyph (::before) is visible for disabled steps */
+.ui.steps .step.disabled > .icon:before,
+.ui.steps .step.disabled > i.icon:before,
+.ui.steps .disabled.step > .icon:before,
+.ui.steps .disabled.step > i.icon:before {
+    opacity: 0.45 !important;
+    visibility: visible !important;
+    color: rgba(0, 0, 0, 0.87) !important;
+}
+

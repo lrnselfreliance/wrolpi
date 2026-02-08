@@ -659,7 +659,22 @@ export function SettingsPage() {
                     <GridRow columns={2}>
                         <GridColumn>
                             <Form.Field>
-                                <label>Archive Directory</label>
+                                <label>
+                                    Archive Directory
+                                    <InfoPopup
+                                        wide='very'
+                                        content={<>
+                                            <p>Variables:</p>
+                                            <ul>
+                                                <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
+                                                <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no tag)</li>
+                                                <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                                <li><code>%(name)s</code> - Alias for the domain name</li>
+                                            </ul>
+                                        </>}
+                                        position='top left'
+                                    />
+                                </label>
                                 <Input
                                     label={mediaDirectoryLabel}
                                     value={state.archive_destination}
@@ -670,7 +685,23 @@ export function SettingsPage() {
                         </GridColumn>
                         <GridColumn>
                             <Form.Field>
-                                <label>Videos Directory</label>
+                                <label>
+                                    Videos Directory
+                                    <InfoPopup
+                                        wide='very'
+                                        content={<>
+                                            <p>Variables:</p>
+                                            <ul>
+                                                <li><code>%(channel_name)s</code> - Channel name</li>
+                                                <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no tag)</li>
+                                                <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
+                                                <li><code>%(tag)s</code> - Alias for the tag name</li>
+                                                <li><code>%(name)s</code> - Alias for the channel name</li>
+                                            </ul>
+                                        </>}
+                                        position='top left'
+                                    />
+                                </label>
                                 <Input
                                     label={mediaDirectoryLabel}
                                     value={state.videos_destination}

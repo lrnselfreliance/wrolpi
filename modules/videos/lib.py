@@ -703,19 +703,26 @@ def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel,
     Downloads are linked to Collections (via collection_id) rather than directly to Channels.
     This function finds Channels and links their Downloads to the Channel's Collection.
     """
+
+    def get_destination(d):
+        """Get destination from download.destination column or settings['destination']."""
+        if d.destination:
+            return str(d.destination)
+        return (d.settings or dict()).get('destination')
+
     # Only Downloads with a frequency can be a Collection Download.
     downloads = list(session.query(download_).filter(download_.frequency.isnot(None)).all())
     # Download.url is unique and cannot be null.
     downloads_by_url = {i.url: i for i in downloads}
-    # Many Downloads may share the same destination.
-    downloads_with_destination = [i for i in downloads if (i.settings or dict()).get('destination')]
+    # Many Downloads may share the same destination (from either column or settings).
+    downloads_with_destination = [(d, get_destination(d)) for d in downloads if get_destination(d)]
     channels = session.query(channel_).all()
 
     need_commit = False
     for channel in channels:
         directory = str(channel.directory)
-        for download in downloads_with_destination:
-            if download.settings['destination'] == directory and not download.collection_id:
+        for download, destination in downloads_with_destination:
+            if destination == directory and not download.collection_id:
                 download.collection_id = channel.collection_id
                 need_commit = True
 
@@ -737,6 +744,18 @@ def link_channel_and_downloads(session: Session, channel_: Type[Base] = Channel,
         if channel and not download.collection_id:
             download.collection_id = channel.collection_id
             need_commit = True
+
+    # Associate any Download which has info_json channel_id matching a Channel's source_id.
+    for download in downloads:
+        if download.collection_id:
+            continue
+        info_json = download.info_json or {}
+        channel_source_id = info_json.get('channel_id') or info_json.get('id')
+        if channel_source_id:
+            channel = channel_.get_by_source_id(session, channel_source_id)
+            if channel:
+                download.collection_id = channel.collection_id
+                need_commit = True
 
     if need_commit:
         session.commit()

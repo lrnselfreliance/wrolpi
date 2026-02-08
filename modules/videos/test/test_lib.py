@@ -250,6 +250,62 @@ def test_link_channel_and_downloads_migration(async_client, test_session, channe
     assert not d2c.collection_id
 
 
+def test_link_channel_and_downloads_destination_column(test_session, channel_factory, test_download_manager):
+    """Test that link_channel_and_downloads matches by download.destination column, not just settings['destination'].
+
+    This simulates what happens when downloads are imported from config - the destination column is set directly,
+    not via settings['destination'].
+    """
+    channel = channel_factory()
+
+    # Create download with destination COLUMN set (like import_config does)
+    # NOT using settings={'destination': ...}
+    download = Download(
+        url='https://example.com/channel/videos',
+        downloader=ChannelDownloader.name,
+        frequency=99,
+        destination=channel.directory,  # Using column directly
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    assert not download.collection_id, 'Download should not be linked yet'
+
+    lib.link_channel_and_downloads(test_session)
+
+    test_session.refresh(download)
+    assert download.collection_id == channel.collection_id, \
+        'Download should be linked to channel via destination column'
+
+
+def test_link_channel_and_downloads_by_source_id(test_session, channel_factory, test_download_manager):
+    """Test that link_channel_and_downloads matches by info_json channel_id to Channel.source_id.
+
+    When ChannelDownloader runs, it populates download.info_json with channel_id. This should match
+    against Channel.source_id even if the URLs don't match.
+    """
+    channel = channel_factory(source_id='UC123456789')
+
+    # Create download with info_json containing channel_id (like ChannelDownloader sets)
+    # Note: different URL than channel URL, should still match by source_id
+    download = Download(
+        url='https://example.com/different-channel-url',
+        downloader=ChannelDownloader.name,
+        frequency=99,
+        info_json={'channel_id': 'UC123456789', 'id': 'UC123456789', 'uploader': 'Test'},
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    assert not download.collection_id, 'Download should not be linked yet'
+
+    lib.link_channel_and_downloads(test_session)
+
+    test_session.refresh(download)
+    assert download.collection_id == channel.collection_id, \
+        'Download should be linked to channel via source_id matching'
+
+
 @pytest.mark.asyncio
 async def test_format_videos_destination(async_client, test_directory):
     """Videos destination is formatted according to the WROLPiConfig."""

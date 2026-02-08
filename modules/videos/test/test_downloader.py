@@ -706,3 +706,45 @@ async def test_video_download_always_use_cookies(test_session, test_directory, m
 
     assert '--cookies-from-browser' in cmd
     assert 'chromium:some directory' in cmd
+
+
+@pytest.mark.asyncio
+async def test_channel_downloader_sets_collection_id(test_session, channel_factory, mock_video_extract_info,
+                                                     video_download_manager, await_switches):
+    """Test that ChannelDownloader.do_download sets download.collection_id to the channel's collection.
+
+    When a channel download runs, it should link the download to the channel's collection immediately.
+    """
+    channel = channel_factory(url='https://example.com/channel', source_id='UCtest123')
+
+    download = Download(
+        url='https://example.com/channel',
+        downloader=channel_downloader.name,
+        frequency=99,
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    assert not download.collection_id, 'Download should not be linked yet'
+
+    # Mock extract_info to return channel info
+    mock_info = {
+        'id': 'UCtest123',
+        'channel_id': 'UCtest123',
+        'uploader': channel.name,
+        'entries': [],
+        'webpage_url_basename': 'videos',
+    }
+    mock_video_extract_info.return_value = mock_info
+
+    # Mock Channel.refresh_files to avoid background tasks
+    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+         mock.patch.object(Channel, 'refresh_files'):
+        mock_video_do_download.return_value = DownloadResult(success=True)
+        await channel_downloader.do_download(download)
+
+    await await_switches()
+
+    test_session.refresh(download)
+    assert download.collection_id == channel.collection_id, \
+        'ChannelDownloader should link download to channel collection'

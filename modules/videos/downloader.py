@@ -240,6 +240,12 @@ class ChannelDownloader(Downloader, ABC):
         channel = get_or_create_channel(session, channel_source_id, download.url, name, channel_tag_name)
         channel.dict()  # get all attributes while we have the session.
 
+        # Link this channel download to the channel's collection.
+        if channel and channel.collection_id and not download.collection_id:
+            download.collection_id = channel.collection_id
+            if session:
+                session.commit()
+
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
 
         # The settings to send to the VideoDownloader.

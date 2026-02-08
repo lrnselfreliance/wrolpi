@@ -241,18 +241,14 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </Tab.Pane>
     };
 
+    const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));
+
     const {poster_file, info_json_file} = video;
+    const ffprobeJsonFile = getFile('.ffprobe.json');
     const filesPane = {
         menuItem: 'Files', render: () => <Tab.Pane>
             <h3>Video File</h3>
             {videoFileLink(video['video_path'])}
-
-            <h4>Info JSON File</h4>
-            {info_json_file &&
-                <PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']} taggable={false}>
-                    {info_json_file['path']}
-                </PreviewPath>
-            }
 
             <h4>Caption Files</h4>
             {caption_files &&
@@ -266,6 +262,20 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                 <PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']} taggable={false}>
                     {poster_file['path']}
                 </PreviewPath>
+            }
+
+            <h4>Info JSON File</h4>
+            {info_json_file &&
+                <PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']} taggable={false}>
+                    {info_json_file['path']}
+                </PreviewPath>
+            }
+
+            <h4>ffprobe JSON File</h4>
+            {ffprobeJsonFile ?
+                <PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']} taggable={false}>
+                    {ffprobeJsonFile['path']}
+                </PreviewPath> : 'No file'
             }
 
             <h4>Directory</h4>

@@ -353,13 +353,11 @@ async def post_upload(request: Request):
         mkdir = request.form['mkdir'][0]
         mkdir = True if mkdir.strip().lower() == 'true' else False
     except Exception as e:
-        logger.error('Failed to parse mkdir form data', exc_info=e)
         mkdir = False
 
     try:
         destination_str = request.form['destination'][0]
     except Exception as e:
-        logger.error(f'Failed to get upload destination', exc_info=e)
         raise UnknownDirectory('Must provide destination') from e
 
     destination = get_media_directory() / destination_str

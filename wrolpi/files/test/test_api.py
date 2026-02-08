@@ -560,8 +560,11 @@ async def test_post_upload_directory(test_session, async_client, test_directory,
 
 @pytest.mark.asyncio
 async def test_post_upload(test_session, async_client, test_directory, make_files_structure, make_multipart_form,
-                           tag_factory, video_bytes):
+                           tag_factory, video_bytes, test_wrolpi_config):
     """A file can be uploaded in chunks directly to the destination."""
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    get_wrolpi_config().save_ffprobe_json = False
+
     make_files_structure(['uploads/'])
     tag1, tag2 = await tag_factory(), await tag_factory()
 
@@ -689,6 +692,54 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert video.file_group == file_group
     assert not video.info_json_path
     assert not video.channel and not video.channel_id
+
+
+@pytest.mark.asyncio
+async def test_post_upload_video_extracts_ffprobe(test_session, async_client, test_directory, make_files_structure,
+                                                   make_multipart_form, video_bytes):
+    """Uploading a video file should extract and store ffprobe data."""
+    make_files_structure(['uploads/'])
+
+    # Upload video in chunks (same pattern as test_post_upload)
+    part1, part2 = video_bytes[:1_000_000], video_bytes[1_000_000:]
+
+    # First chunk
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='test_ffprobe.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=1_000_000),
+        dict(name='chunk', value=part1, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.OK
+
+    # Second chunk (final)
+    forms = [
+        dict(name='chunkNumber', value='1'),
+        dict(name='filename', value='test_ffprobe.mp4'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value=len(part2)),
+        dict(name='chunk', value=part2, filename='chunk'),
+    ]
+    body = make_multipart_form(forms)
+    request, response = await async_client.post('/api/files/upload', content=body, headers=headers)
+    assert response.status_code == HTTPStatus.CREATED
+
+    # Verify video was created
+    video: Video = test_session.query(Video).one()
+    assert video.video_path
+
+    # THIS IS THE BUG - ffprobe_json should be populated but it's not
+    assert video.ffprobe_json is not None, 'ffprobe_json should be extracted on upload'
+    assert 'streams' in video.ffprobe_json, 'ffprobe_json should contain streams'
+    assert 'format' in video.ffprobe_json, 'ffprobe_json should contain format'
+    assert video.file_group.length, 'Duration should be extracted from ffprobe'
+    assert video.ffprobe_json_path
 
 
 @pytest.mark.asyncio

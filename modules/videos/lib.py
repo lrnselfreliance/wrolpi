@@ -27,7 +27,7 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST, WROLPI_HOME
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, ConfigError, \
-    extract_video_duration
+    extract_video_duration, ffprobe_json_sync, read_ffprobe_json_file, write_ffprobe_json_file
 from .errors import UnknownChannel
 from .models import Channel
 
@@ -153,15 +153,37 @@ def validate_video(session: Session, video: Video, channel_generate_poster: bool
         if duration:
             video.file_group.length = duration
 
+    if video_path and not video.ffprobe_json:
+        # Extract ffprobe data if not already present (e.g., from .ffprobe.json cache file)
+        ffprobe_path = video.ffprobe_json_path
+
+        # Try to read from cache file first
+        if ffprobe_path and ffprobe_path.is_file():
+            video.ffprobe_json = read_ffprobe_json_file(ffprobe_path)
+
+        # If still no data, run ffprobe
+        if not video.ffprobe_json:
+            try:
+                video.ffprobe_json = ffprobe_json_sync(video_path)
+                # Write cache file if enabled
+                if ffprobe_path and get_wrolpi_config().save_ffprobe_json:
+                    try:
+                        write_ffprobe_json_file(ffprobe_path, video.ffprobe_json)
+                        video.file_group.append_files(ffprobe_path)
+                    except IOError as e:
+                        logger.warning(f'Failed to write ffprobe json cache file {ffprobe_path}', exc_info=e)
+            except Exception as e:
+                logger.warning(f'Failed to extract ffprobe data for {video}', exc_info=e)
+
+    # Extract duration from ffprobe data
     if video_path and not video.file_group.length:
-        # Duration was not retrieved during poster generation.
         if video.ffprobe_json:
             if duration := video.ffprobe_json['format'].get('duration'):
                 video.file_group.length = float(duration)
             elif (video_streams := video.get_streams_by_codec_type('video')) and 'duration' in video_streams[0]:
                 video.file_group.length = float(video_streams[0]['duration'])
         else:
-            # Slowest method.
+            # Fallback if ffprobe extraction failed
             video.file_group.length = extract_video_duration(video_path)
 
     if video_path and not video.caption_paths and video.file_group.d_text and not EXTRACT_SUBTITLES:

@@ -15,7 +15,7 @@ from PIL import Image
 
 import wrolpi.common
 from modules.videos import Video
-from wrolpi.common import timer
+from wrolpi.common import timer, get_wrolpi_config
 from wrolpi.conftest import await_switches
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
@@ -1108,8 +1108,12 @@ def test_get_bulk_tag_preview_empty(test_session, test_directory):
     ('multi_file_filegroup', 1),
 ])
 async def test_process_bulk_tag_job_add_tags(test_case, expected_fg_count, async_client, test_session,
-                                             make_files_structure, tag_factory, video_bytes, srt_text):
+                                             make_files_structure, tag_factory, video_bytes, srt_text,
+                                             test_wrolpi_config):
     """_process_bulk_tag_job adds tags to files in various scenarios."""
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    get_wrolpi_config().save_ffprobe_json = False
+
     if test_case == 'existing_filegroups':
         foo, bar = make_files_structure({'foo.txt': 'foo', 'bar.txt': 'bar'})
         FileGroup.from_paths(test_session, foo)

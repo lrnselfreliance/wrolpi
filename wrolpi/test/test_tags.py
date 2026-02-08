@@ -352,8 +352,11 @@ async def test_invalid_tag(async_client, test_session, test_directory):
 
 @pytest.mark.asyncio
 async def test_tags_directory(test_session, test_directory, tag_factory, video_factory, example_pdf, await_switches,
-                              refresh_files):
+                              refresh_files, test_wrolpi_config):
     """Test that Tag Directory is synchronized with database."""
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    get_wrolpi_config().save_ffprobe_json = False
+
     readme = test_directory / 'tags/README.txt'
 
     # Should be deleted on sync.

@@ -1,5 +1,6 @@
 import pytest
 
+from wrolpi.common import get_wrolpi_config
 from wrolpi.errors import UnknownFile
 from wrolpi.files.models import FileGroup
 
@@ -25,8 +26,11 @@ def test_file_group_find_by_id(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_file_group_move(async_client, test_session, test_directory, video_factory):
+async def test_file_group_move(async_client, test_session, test_directory, video_factory, test_wrolpi_config):
     """Any new or renamed files are adopted during FileGroup.move."""
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    get_wrolpi_config().save_ffprobe_json = False
+
     video = video_factory(title='video', with_poster_ext='.webp')
     test_session.commit()
 

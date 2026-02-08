@@ -72,8 +72,13 @@ async def test_video_factory(test_session, video_factory, channel_factory):
     assert video.source_id == 'some id'
 
 
-def test_validate_video(test_session, test_directory, video_factory, image_bytes_factory, video_file):
+def test_validate_video(test_session, test_directory, video_factory, image_bytes_factory, video_file,
+                        test_wrolpi_config):
     """A video poster will be generated only if the channel permits."""
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    # (Directly modify _config to avoid locking issues in sync tests)
+    get_wrolpi_config()._config['save_ffprobe_json'] = False
+
     video_file = video_file.rename(test_directory / 'Channel Name_20050607_1234567890_The Title.mp4')
     vid1 = video_factory(with_video_file=video_file, with_info_json=True)
     # Clear source_id so source_id in the file will be extracted.
@@ -142,7 +147,10 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
 
 @pytest.mark.asyncio
 async def test_orphaned_files(async_client, test_session, make_files_structure, test_directory, video_factory,
-                              refresh_files):
+                              refresh_files, test_wrolpi_config):
+    # Disable ffprobe json file creation to avoid unexpected files in test assertions
+    get_wrolpi_config().save_ffprobe_json = False
+
     # A Video without associated files is not orphaned.
     vid1 = video_factory(title='vid1', with_video_file=True)
     # The video files will be removed...

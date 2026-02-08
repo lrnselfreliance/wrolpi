@@ -244,6 +244,50 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
     return content
 
 
+def ffprobe_json_sync(video_path: Union[Path, str]) -> dict:
+    """Synchronous version of ffprobe_json for use in sync validation code.
+
+    Extract video file metadata using ffprobe.
+
+    >>> ffprobe_json_sync('video.mp4')
+    {
+        'chapters': [],
+        'format': {},
+        'streams': [
+            {},
+        ],
+    }
+    """
+    if not FFPROBE_BIN:
+        raise RuntimeError('ffprobe was not found')
+
+    cmd = [FFPROBE_BIN,
+           '-print_format', 'json',
+           '-loglevel', 'quiet',
+           '-show_streams',
+           '-show_format',
+           '-show_chapters',
+           str(Path(video_path).absolute())]
+
+    proc = subprocess.run(cmd, capture_output=True, timeout=60)
+
+    if proc.returncode != 0:
+        raise RuntimeError(f'Got non-zero exit code: {proc.returncode}')
+
+    try:
+        content = json.loads(proc.stdout.decode().strip())
+    except Exception as e:
+        logger.debug(proc.stdout.decode())
+        logger.error(f'Failed to load ffprobe json', exc_info=e)
+        raise
+
+    if content == dict():
+        # Data is empty, video may be corrupt.
+        raise RuntimeError('ffprobe data was empty')
+
+    return content
+
+
 def read_ffprobe_json_file(path: Path) -> Optional[dict]:
     """Read ffprobe data from .ffprobe.json file if it exists."""
     if not path or not path.is_file():

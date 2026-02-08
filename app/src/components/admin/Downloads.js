@@ -284,7 +284,7 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
 function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
     const [editModalOpen, setEditModalOpen] = React.useState(false);
 
-    const {url, last_successful_download, status, location, error, downloader, settings, id} = download;
+    const {url, last_successful_download, status, location, error, downloader, settings, id, tag_names} = download;
 
     const handleDelete = async () => {
         try {
@@ -404,7 +404,8 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         download={{
                             urls: url,
                             settings: settings || {},
-                            id: id
+                            id: id,
+                            tag_names: tag_names || []
                         }}
                         onCancel={handleEditClose}
                         onSuccess={handleEditSuccess}
@@ -425,7 +426,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                     <EditArchiveDownloadForm
                         download={{
                             urls: url,
-                            tag_names: settings?.tag_names || [],
+                            tag_names: tag_names || [],
                             id: id
                         }}
                         onCancel={handleEditClose}

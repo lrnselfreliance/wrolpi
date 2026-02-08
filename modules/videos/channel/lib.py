@@ -74,8 +74,18 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
         directory = Path(directory)
         if not directory.is_absolute():
             directory = get_media_directory() / directory
-        channel = session.query(Channel).join(Collection).filter(
-            Collection.directory == str(directory)).one_or_none()
+        directory = directory.absolute()
+
+        # Walk up the directory tree to find a matching channel
+        # This allows finding channels for files in subdirectories (e.g., year subdirs)
+        media_dir = get_media_directory()
+        current = directory
+        while current != media_dir and current != current.parent:
+            channel = session.query(Channel).options(joinedload(Channel.collection)).join(Collection).filter(
+                Collection.directory == str(current)).one_or_none()
+            if channel:
+                break
+            current = current.parent
     if not channel and name:
         channel = session.query(Channel).join(Collection).filter(Collection.name == name).one_or_none()
 

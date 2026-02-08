@@ -223,6 +223,15 @@ class Video(ModelHelper, Base):
             logger.error(f'Unable to validate video {self.id} without primary file!')
 
         logger.debug(f'Validating {self}')
+
+        # Look up the channel FIRST so we can use channel settings (like generate_posters)
+        # during validation. Channel.get_by_path walks up the directory tree to find
+        # channels even when videos are in subdirectories (e.g., year subdirs).
+        session: Session = session or Session.object_session(self)
+        if session and not self.channel and (channel := Channel.get_by_path(session, self.video_path.parent)):
+            self.channel = channel
+            logger.debug(f'{self} has Channel {channel}')
+
         from .lib import validate_video
         try:
             validate_video(session, self, self.channel.generate_posters if self.channel else False)
@@ -239,12 +248,6 @@ class Video(ModelHelper, Base):
         if (comments := self.get_comments()) and len(comments) >= 5:
             logger.debug(f'{self} has comments')
             self.have_comments = True
-
-        # If this Video is in a Channel's directory, then it is part of that Channel.
-        session: Session = session or Session.object_session(self)
-        if session and (channel := Channel.get_by_path(session, self.video_path.parent)):
-            self.channel = channel
-            logger.debug(f'{self} has Channel {channel}')
 
         # Set FileGroup.data with cached file paths (stored as relative filenames)
         # Paths are resolved to absolute when accessed via file_group.resolve_path()
@@ -835,14 +838,41 @@ class Channel(ModelHelper, Base):
 
     @staticmethod
     def get_by_path(session: Session, path: pathlib.Path) -> Optional['Channel']:
+        """
+        Find a Channel whose directory contains the given path.
+
+        This method walks up the directory tree from the given path to find
+        a Channel whose directory matches. This allows finding channels for
+        files in subdirectories (e.g., year subdirectories like 2026/).
+
+        Args:
+            session: Database session
+            path: Path to search for (can be a file or directory path)
+
+        Returns:
+            Channel if found, None otherwise
+        """
         if not path:
             raise RuntimeError('Must provide path to get Channel')
         path = pathlib.Path(path) if isinstance(path, str) else path
-        path = str(path.absolute()) if path.is_absolute() else str(get_media_directory() / path)
-        # Query through Collection relationship since directory is now on Collection
+        if not path.is_absolute():
+            path = get_media_directory() / path
+        path = path.absolute()
+
         from wrolpi.collections import Collection
-        channel = session.query(Channel).join(Collection).filter(Collection.directory == path).one_or_none()
-        return channel
+        media_dir = get_media_directory()
+
+        # Walk up the directory tree to find a matching channel
+        current = path
+        while current != media_dir and current != current.parent:
+            channel = session.query(Channel).join(Collection).filter(
+                Collection.directory == str(current)
+            ).one_or_none()
+            if channel:
+                return channel
+            current = current.parent
+
+        return None
 
     def __json__(self) -> dict:
         d = dict(

@@ -721,75 +721,36 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
     return archive
 
 
-def detect_domain_directory(session: Session, collection: Collection) -> Optional[pathlib.Path]:
+def detect_domain_directory(collection: Collection) -> Optional[pathlib.Path]:
     """
-    Detect if all archives for a domain collection share a common directory.
+    Detect directory for domain collection using format_destination template.
+
+    Computes the expected domain directory using the collection's format_destination()
+    method and checks if that directory exists on the filesystem.
 
     Args:
         collection: The domain collection to analyze
-        session: Database session
 
     Returns:
-        Path (relative to media directory) if all archives share a common directory within archive media directory.
-        None if archives are scattered across different directories or if collection has no archives.
+        Path (relative to media directory) if the expected directory exists.
+        None if collection is not a domain or directory doesn't exist.
     """
     if collection.kind != 'domain':
         return None
 
-    # Query all archives for this domain collection
-    archives = session.query(Archive).filter_by(collection_id=collection.id).all()
+    # Get the tag name if collection has a tag
+    tag_name = collection.tag.name if collection.tag else None
 
-    if not archives:
-        # No archives yet, can't determine directory
-        return None
+    # Compute expected directory using archive_destination template
+    expected_directory = collection.format_destination(tag_name)
 
-    # Get all archive file paths
-    paths = []
-    for archive in archives:
-        if archive.file_group and archive.file_group.primary_path:
-            paths.append(pathlib.Path(archive.file_group.primary_path))
+    # Simply check if the directory exists
+    if expected_directory.is_dir():
+        relative_path = get_relative_to_media_directory(expected_directory)
+        logger.debug(f'Detected directory for domain {collection.name}: {relative_path}')
+        return relative_path
 
-    if not paths:
-        return None
-
-    # Find common ancestor directory
-    # Start with the first path's parent directory
-    common_dir = paths[0].parent
-
-    # Check if all other paths are under this directory
-    for path in paths[1:]:
-        try:
-            # Check if path is relative to common_dir
-            path.relative_to(common_dir)
-        except ValueError:
-            # Path is not under common_dir, find the common ancestor
-            # Walk up until we find a common parent
-            while common_dir != common_dir.parent:  # Stop at root
-                try:
-                    path.relative_to(common_dir)
-                    break  # Found common ancestor
-                except ValueError:
-                    common_dir = common_dir.parent
-
-    # Check if common directory is within the media directory
-    media_dir = get_media_directory()
-    try:
-        relative_path = common_dir.relative_to(media_dir)
-    except ValueError:
-        # Common directory is outside media directory
-        return None
-
-    # Check if it's within the archive directory structure
-    archive_base = get_archive_directory()
-    try:
-        archive_base.relative_to(media_dir)  # Verify archive_base is under media_dir
-        common_dir.relative_to(archive_base.parent)  # Verify common_dir is under archive structure
-    except ValueError:
-        # Not in the archive directory structure
-        return None
-
-    logger.debug(f'Detected directory for domain {collection.name}: {relative_path}')
-    return relative_path
+    return None
 
 
 def update_domain_directories(session: Session = None) -> int:
@@ -814,7 +775,7 @@ def update_domain_directories(session: Session = None) -> int:
 
     updated_count = 0
     for collection in collections:
-        detected_dir = detect_domain_directory(session, collection)
+        detected_dir = detect_domain_directory(collection)
         if detected_dir:
             collection.directory = detected_dir
             session.flush([collection])
@@ -866,7 +827,7 @@ def get_or_create_domain_collection(session: Session, url, directory: pathlib.Pa
 
     # Auto-detect directory if not explicitly set and collection doesn't have one
     if not directory and not collection.directory:
-        detected_dir = detect_domain_directory(session, collection)
+        detected_dir = detect_domain_directory(collection)
         if detected_dir:
             collection.directory = detected_dir
             session.flush()

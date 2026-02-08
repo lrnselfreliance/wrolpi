@@ -11,6 +11,7 @@ from controller.lib.disks import (
     BlockDevice,
     get_block_devices,
     get_uuid,
+    get_wrolpi_uid_gid,
     validate_mount_point,
     mount_drive,
     unmount_drive,
@@ -206,6 +207,80 @@ class TestMountDrive:
                     result = mount_drive("/dev/sda1", "/media/test")
                     assert result["success"] is False
                     assert "mount failed" in result["error"]
+
+    def test_exfat_mount_includes_uid_gid(self):
+        """Should add uid/gid options when mounting exfat."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                with mock.patch("pathlib.Path.mkdir"):
+                    with mock.patch("subprocess.run") as mock_run:
+                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+                        result = mount_drive("/dev/sda1", "/media/test", fstype="exfat")
+                        assert result["success"] is True
+                        # Verify mount was called with uid/gid options
+                        call_args = mock_run.call_args[0][0]
+                        assert "-o" in call_args
+                        options_idx = call_args.index("-o") + 1
+                        options = call_args[options_idx]
+                        assert "uid=1001" in options
+                        assert "gid=1001" in options
+
+    def test_ext4_mount_does_not_include_uid_gid(self):
+        """Should not add uid/gid options when mounting ext4."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("pathlib.Path.mkdir"):
+                with mock.patch("subprocess.run") as mock_run:
+                    mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+                    result = mount_drive("/dev/sda1", "/media/test", fstype="ext4")
+                    assert result["success"] is True
+                    # Verify mount was called without uid/gid options
+                    call_args = mock_run.call_args[0][0]
+                    assert "-o" in call_args
+                    options_idx = call_args.index("-o") + 1
+                    options = call_args[options_idx]
+                    assert "uid=" not in options
+                    assert "gid=" not in options
+
+    def test_vfat_mount_includes_uid_gid(self):
+        """Should add uid/gid options when mounting vfat (FAT32)."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                with mock.patch("pathlib.Path.mkdir"):
+                    with mock.patch("subprocess.run") as mock_run:
+                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+                        result = mount_drive("/dev/sda1", "/media/test", fstype="vfat")
+                        assert result["success"] is True
+                        # Verify mount was called with uid/gid options
+                        call_args = mock_run.call_args[0][0]
+                        assert "-o" in call_args
+                        options_idx = call_args.index("-o") + 1
+                        options = call_args[options_idx]
+                        assert "uid=1001" in options
+                        assert "gid=1001" in options
+
+
+class TestGetWrolpiUidGid:
+    """Tests for get_wrolpi_uid_gid function."""
+
+    def test_returns_wrolpi_user_ids(self):
+        """Should return uid/gid for wrolpi user when it exists."""
+        mock_pwd = mock.Mock()
+        mock_pwd.pw_uid = 1001
+        mock_grp = mock.Mock()
+        mock_grp.gr_gid = 1001
+
+        with mock.patch("controller.lib.disks.pwd.getpwnam", return_value=mock_pwd):
+            with mock.patch("controller.lib.disks.grp.getgrnam", return_value=mock_grp):
+                uid, gid = get_wrolpi_uid_gid()
+                assert uid == 1001
+                assert gid == 1001
+
+    def test_returns_fallback_when_user_not_found(self):
+        """Should return 1001:1001 fallback when wrolpi user doesn't exist."""
+        with mock.patch("controller.lib.disks.pwd.getpwnam", side_effect=KeyError("wrolpi")):
+            uid, gid = get_wrolpi_uid_gid()
+            assert uid == 1001
+            assert gid == 1001
 
 
 class TestUnmountDrive:

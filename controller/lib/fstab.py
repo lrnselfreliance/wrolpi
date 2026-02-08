@@ -9,7 +9,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from controller.lib.disks import get_uuid, validate_mount_point
+from controller.lib.disks import get_uuid, get_wrolpi_uid_gid, validate_mount_point
 from controller.lib.wrol_mode import require_normal_mode
 
 FSTAB_PATH = Path("/etc/fstab")
@@ -159,6 +159,12 @@ def add_fstab_entry(
     # Remove any existing entry for this mount point or device (and its WROLPi comment)
     # This ensures we don't get duplicates when remounting the same device to a different location
     entries = _filter_entry_with_comment(entries, mount_point=mount_point, device=device_spec)
+
+    # For exfat/vfat, add uid/gid options to set ownership to wrolpi user
+    # These filesystems don't support POSIX permissions natively
+    if fstype in ("exfat", "vfat"):
+        uid, gid = get_wrolpi_uid_gid()
+        options = f"{options},uid={uid},gid={gid}"
 
     # Build new entry line
     new_entry = f"{device_spec} {mount_point} {fstype} {options} 0 2\n"

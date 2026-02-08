@@ -155,20 +155,92 @@ UUID=5678 /media/64GB exfat defaults,nofail,x-systemd.device-timeout=10s 0 2
         with mock.patch("controller.lib.fstab.require_normal_mode"):
             with mock.patch("controller.lib.fstab.get_uuid", return_value="5678"):
                 with mock.patch("controller.lib.fstab.backup_fstab"):
+                    with mock.patch("controller.lib.fstab.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                        with mock.patch("builtins.open", mock_file):
+                            with mock.patch("subprocess.run"):
+                                # Mount same device to different mount point
+                                result = add_fstab_entry("/dev/sda1", "/media/64GB-2", "exfat")
+                                assert result["success"] is True
+                                written_str = "".join(written_content)
+                                # Should only have ONE entry for UUID=5678 (the new one)
+                                assert written_str.count("UUID=5678") == 1
+                                # Should have the new mount point
+                                assert "/media/64GB-2" in written_str
+                                # Should NOT have the old mount point
+                                assert "/media/64GB " not in written_str
+                                # Should have exactly ONE WROLPi comment
+                                assert written_str.count("WROLPi managed mount") == 1
+
+    def test_exfat_fstab_entry_includes_uid_gid(self):
+        """Should add uid/gid options when adding exfat fstab entry."""
+        fstab_content = "# empty\n"
+        written_content = []
+
+        def mock_write(content):
+            written_content.append(content)
+
+        mock_file = mock.mock_open(read_data=fstab_content)
+        mock_file().write = mock_write
+
+        with mock.patch("controller.lib.fstab.require_normal_mode"):
+            with mock.patch("controller.lib.fstab.get_uuid", return_value="1234-5678"):
+                with mock.patch("controller.lib.fstab.backup_fstab"):
+                    with mock.patch("controller.lib.fstab.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                        with mock.patch("builtins.open", mock_file):
+                            with mock.patch("subprocess.run"):
+                                result = add_fstab_entry("/dev/sda1", "/media/usb", "exfat")
+                                assert result["success"] is True
+                                written_str = "".join(written_content)
+                                # Should have uid/gid options
+                                assert "uid=1001" in written_str
+                                assert "gid=1001" in written_str
+
+    def test_ext4_fstab_entry_does_not_include_uid_gid(self):
+        """Should not add uid/gid options when adding ext4 fstab entry."""
+        fstab_content = "# empty\n"
+        written_content = []
+
+        def mock_write(content):
+            written_content.append(content)
+
+        mock_file = mock.mock_open(read_data=fstab_content)
+        mock_file().write = mock_write
+
+        with mock.patch("controller.lib.fstab.require_normal_mode"):
+            with mock.patch("controller.lib.fstab.get_uuid", return_value="1234-5678"):
+                with mock.patch("controller.lib.fstab.backup_fstab"):
                     with mock.patch("builtins.open", mock_file):
                         with mock.patch("subprocess.run"):
-                            # Mount same device to different mount point
-                            result = add_fstab_entry("/dev/sda1", "/media/64GB-2", "exfat")
+                            result = add_fstab_entry("/dev/sda1", "/media/data", "ext4")
                             assert result["success"] is True
                             written_str = "".join(written_content)
-                            # Should only have ONE entry for UUID=5678 (the new one)
-                            assert written_str.count("UUID=5678") == 1
-                            # Should have the new mount point
-                            assert "/media/64GB-2" in written_str
-                            # Should NOT have the old mount point
-                            assert "/media/64GB " not in written_str
-                            # Should have exactly ONE WROLPi comment
-                            assert written_str.count("WROLPi managed mount") == 1
+                            # Should NOT have uid/gid options
+                            assert "uid=" not in written_str
+                            assert "gid=" not in written_str
+
+    def test_vfat_fstab_entry_includes_uid_gid(self):
+        """Should add uid/gid options when adding vfat (FAT32) fstab entry."""
+        fstab_content = "# empty\n"
+        written_content = []
+
+        def mock_write(content):
+            written_content.append(content)
+
+        mock_file = mock.mock_open(read_data=fstab_content)
+        mock_file().write = mock_write
+
+        with mock.patch("controller.lib.fstab.require_normal_mode"):
+            with mock.patch("controller.lib.fstab.get_uuid", return_value="1234-5678"):
+                with mock.patch("controller.lib.fstab.backup_fstab"):
+                    with mock.patch("controller.lib.fstab.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                        with mock.patch("builtins.open", mock_file):
+                            with mock.patch("subprocess.run"):
+                                result = add_fstab_entry("/dev/sda1", "/media/usb", "vfat")
+                                assert result["success"] is True
+                                written_str = "".join(written_content)
+                                # Should have uid/gid options
+                                assert "uid=1001" in written_str
+                                assert "gid=1001" in written_str
 
 
 class TestRemoveFstabEntry:

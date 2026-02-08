@@ -4,7 +4,9 @@ Disk utilities for WROLPi Controller.
 Provides disk detection, mounting, and WROLPi drive identification.
 """
 
+import grp
 import json
+import pwd
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -14,6 +16,21 @@ from typing import Optional
 from controller.lib.config import get_config, is_docker_mode
 
 SUPPORTED_FILESYSTEMS = {"ext4", "btrfs", "vfat", "exfat"}
+
+
+def get_wrolpi_uid_gid() -> tuple[int, int]:
+    """
+    Get uid and gid for the wrolpi user.
+
+    Returns:
+        Tuple of (uid, gid). Falls back to (1001, 1001) if wrolpi user/group doesn't exist.
+    """
+    try:
+        uid = pwd.getpwnam("wrolpi").pw_uid
+        gid = grp.getgrnam("wrolpi").gr_gid
+        return uid, gid
+    except KeyError:
+        return 1001, 1001  # wrolpi user is typically created after the first user
 
 
 @dataclass
@@ -148,6 +165,12 @@ def mount_drive(
 
     # Create mount point if needed
     Path(mount_point).mkdir(parents=True, exist_ok=True)
+
+    # For exfat/vfat, add uid/gid options to set ownership to wrolpi user
+    # These filesystems don't support POSIX permissions natively
+    if fstype in ("exfat", "vfat"):
+        uid, gid = get_wrolpi_uid_gid()
+        options = f"{options},uid={uid},gid={gid}"
 
     # Build mount command
     cmd = ["mount"]

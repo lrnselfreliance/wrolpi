@@ -528,14 +528,22 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
-def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
+def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
+                  progress_callback: Callable[[int, int], None] = None):
     """Insert/update all records of the provided files.
 
     Any inserted files will be marked with `indexed=false`.  Any existing files will only be updated if their
     size/modification_datetime changed.
 
+    Args:
+        files: List of file paths to upsert
+        idempotency: Timestamp used to track which files were processed in this refresh
+        progress_callback: Optional callback(processed, total) called after each chunk is processed
+
     It is assumed all files exist."""
     idempotency = str(idempotency)
+    total_files = len(files)
+    processed_count = 0
 
     non_primary_files = set()
     for chunk in chunks_by_stem(files, 500):
@@ -620,6 +628,11 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                 # use paths which are not primary.
                 curs.execute('DELETE FROM file_group WHERE primary_path = ANY(%s)',
                              (list(map(str, non_primary_files)),))
+
+        # Report progress after each chunk
+        processed_count += len(chunk)
+        if progress_callback:
+            progress_callback(processed_count, total_files)
 
 
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:

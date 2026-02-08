@@ -10,6 +10,7 @@ import {
     Form,
     Image,
     PlaceholderLine,
+    Step,
     TableCell,
     TableHeaderCell,
 } from "semantic-ui-react";
@@ -549,20 +550,134 @@ function getPhaseLabel(status) {
         case 'comparing':
         case 'upserting':
         case 'deleting':
-            return 'Refreshing';
+            return 'Inserting';
         case 'modeling':
             return 'Modeling';
         case 'indexing':
             return 'Indexing';
+        case 'cleanup':
+            return 'Cleanup';
         case 'planning':
             return 'Move: Planning';
         case 'moving':
             return 'Move: Moving';
         case 'reverting':
             return 'Reverting';
+        case 'reorganizing':
+            return 'Reorganizing';
+        case 'batch_reorganizing':
+            return 'Batch Reorganizing';
+        case 'error':
+            return 'Error';
         default:
             return null;
     }
+}
+
+// Map backend status to refresh phase number (1-5)
+function getRefreshPhase(status) {
+    switch (status) {
+        case 'counting':
+            return 1;
+        case 'comparing':
+        case 'upserting':
+        case 'deleting':
+            return 2;
+        case 'modeling':
+            return 3;
+        case 'indexing':
+            return 4;
+        case 'cleanup':
+            return 5;
+        default:
+            return 0;
+    }
+}
+
+// Check if this is a global refresh (full media directory)
+function isGlobalRefresh(progress) {
+    if (!progress || progress.status === 'idle') return false;
+    if (progress.task_type !== 'refresh') return false;
+
+    // Global refresh has a single path ending with the media directory name
+    const paths = progress.paths || [];
+    return paths.length === 1 && (paths[0].endsWith('/wrolpi') || paths[0] === '/media/wrolpi');
+}
+
+const REFRESH_PHASES = [
+    {key: 1, icon: 'search', title: 'Counting', description: 'Finding files'},
+    {key: 2, icon: 'database', title: 'Inserting', description: 'Updating database'},
+    {key: 3, icon: 'cogs', title: 'Modeling', description: 'Extracting metadata'},
+    {key: 4, icon: 'book', title: 'Indexing', description: 'Building search index'},
+    {key: 5, icon: 'check circle', title: 'Cleanup', description: 'Finalizing'},
+];
+
+export function RefreshSteps({progress}) {
+    const currentPhase = getRefreshPhase(progress?.status);
+    const {operation_processed, operation_total, status} = progress || {};
+
+    if (currentPhase === 0) {
+        return null;
+    }
+
+    return (
+        <Step.Group size='mini' fluid>
+            {REFRESH_PHASES.map(phase => {
+                const isCompleted = phase.key < currentPhase;
+                const isActive = phase.key === currentPhase;
+                const isDisabled = phase.key > currentPhase;
+
+                // Determine description for active phase
+                let description = phase.description;
+                if (isActive) {
+                    if (operation_total > 0) {
+                        description = `${operation_processed?.toLocaleString()} / ${operation_total?.toLocaleString()}`;
+                    } else if (status === 'comparing') {
+                        description = 'Comparing files...';
+                    } else if (status === 'upserting') {
+                        description = 'Updating files...';
+                    } else if (status === 'deleting') {
+                        description = 'Removing deleted...';
+                    }
+                }
+
+                return (
+                    <Step
+                        key={phase.key}
+                        active={isActive}
+                        completed={isCompleted}
+                        disabled={isDisabled}
+                    >
+                        <Icon name={isCompleted ? 'check' : phase.icon}/>
+                        <Step.Content>
+                            <Step.Title>{phase.title}</Step.Title>
+                            <Step.Description>{isActive || isCompleted ? description : ''}</Step.Description>
+                        </Step.Content>
+                    </Step>
+                );
+            })}
+        </Step.Group>
+    );
+}
+
+function RefreshProgressBar({status, operation_total, operation_processed, operation_percent, error}) {
+    const phaseLabel = getPhaseLabel(status);
+
+    if (!phaseLabel) {
+        return null;
+    }
+
+    // Show error state
+    if (status === 'error' && error) {
+        return <Progress error percent={100}>{`Error: ${error}`}</Progress>;
+    }
+
+    let label = `${phaseLabel}`;
+    if (operation_total > 0) {
+        label = `${label} (${operation_processed.toLocaleString()} / ${operation_total.toLocaleString()})`;
+    }
+
+    return <Progress active color='violet' percent={operation_percent || 0} progress>{label}</Progress>;
 }
 
 export function FilesRefreshProgress() {
@@ -572,19 +687,30 @@ export function FilesRefreshProgress() {
         return null;
     }
 
-    const {status, operation_total, operation_processed, operation_percent} = progress;
-    const phaseLabel = getPhaseLabel(status);
+    const {status, operation_total, operation_processed, operation_percent, error} = progress;
 
-    if (!phaseLabel) {
-        return null;
+    // Show Steps component AND progress bar for global refresh operations
+    if (isGlobalRefresh(progress)) {
+        return <>
+            <RefreshSteps progress={progress}/>
+            <RefreshProgressBar
+                status={status}
+                operation_total={operation_total}
+                operation_processed={operation_processed}
+                operation_percent={operation_percent}
+                error={error}
+            />
+        </>;
     }
 
-    let label = `Refresh: ${phaseLabel}`;
-    if (operation_total > 0) {
-        label = `${label} (${operation_processed.toLocaleString()} / ${operation_total.toLocaleString()})`;
-    }
-
-    return <Progress active color='violet' percent={operation_percent || 0} progress>{label}</Progress>;
+    // Show just progress bar for other operations (moves, reorganize, targeted refresh)
+    return <RefreshProgressBar
+        status={status}
+        operation_total={operation_total}
+        operation_processed={operation_processed}
+        operation_percent={operation_percent}
+        error={error}
+    />;
 }
 
 function FilesPage() {

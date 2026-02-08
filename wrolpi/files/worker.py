@@ -466,6 +466,7 @@ async def compare_file_groups(
 async def build_move_plan_bulk(
         sources: list[pathlib.Path],
         destination: pathlib.Path,
+        progress_callback: Callable[[int, int], None] = None,
 ) -> Tuple[Dict[pathlib.Path, pathlib.Path], list[pathlib.Path]]:
     """
     Build move plan using bulk SQL operations instead of per-source queries.
@@ -475,6 +476,7 @@ async def build_move_plan_bulk(
     Args:
         sources: List of file/directory paths to move
         destination: Target directory
+        progress_callback: Optional callback(processed, total) called during file collection
 
     Returns:
         Tuple of (plan dict mapping old_primary_path -> new_primary_path,
@@ -496,8 +498,9 @@ async def build_move_plan_bulk(
     file_sources: list[pathlib.Path] = []
     dir_sources: list[pathlib.Path] = []
     deleted_sources: list[pathlib.Path] = []
+    total_sources = len(sources)
 
-    for source in sources:
+    for i, source in enumerate(sources, 1):
         try:
             st = source.stat()
             if stat_module.S_ISREG(st.st_mode):
@@ -507,6 +510,10 @@ async def build_move_plan_bulk(
             # Other types (symlinks, etc.) are silently skipped
         except FileNotFoundError:
             deleted_sources.append(source)
+
+        # Report progress during source partitioning (first 50% of planning)
+        if progress_callback and i % 100 == 0:
+            progress_callback(i, total_sources * 2)  # *2 because file collection is second half
 
     with get_db_session() as session:
         # Create temp table for source paths
@@ -522,19 +529,36 @@ async def build_move_plan_bulk(
 
         # Collect all paths to insert: file paths + expanded directory contents
         all_file_paths: list[pathlib.Path] = []
+        files_collected = 0
+        # Use total_sources as the denominator for the second half of progress
+        total_items = len(file_sources) + len(dir_sources)
 
         # For files, collect the file and its shared-stem siblings
-        for source in file_sources:
+        for i, source in enumerate(file_sources, 1):
             files = glob_shared_stem(source)
             all_file_paths.extend(files)
+            files_collected += 1
+            # Report progress (second half: 50-100%)
+            if progress_callback and files_collected % 50 == 0:
+                progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+                progress_callback(progress, total_sources * 2)
 
         # For directories, walk and collect all files
         dir_file_mapping: Dict[pathlib.Path, pathlib.Path] = {}  # file -> source_dir
-        for source_dir in dir_sources:
+        for i, source_dir in enumerate(dir_sources, 1):
             for f in walk(source_dir):
                 if f.is_file():
                     all_file_paths.append(f)
                     dir_file_mapping[f] = source_dir
+            files_collected += 1
+            # Report progress during directory walking (every 10 directories)
+            if progress_callback and files_collected % 10 == 0:
+                progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+                progress_callback(progress, total_sources * 2)
+
+        # Final progress update before deduplication
+        if progress_callback:
+            progress_callback(total_sources * 2, total_sources * 2)
 
         # Deduplicate
         all_file_paths = list(set(all_file_paths))
@@ -989,23 +1013,24 @@ class FileWorker:
             operation_percent=0,
         )
 
-        directories = [pathlib.Path(p) for p in task.paths if pathlib.Path(p).is_dir()]
-        files = [pathlib.Path(p) for p in task.paths if pathlib.Path(p).is_file()]
+        with flags.file_worker_counting:
+            directories = [pathlib.Path(p) for p in task.paths if pathlib.Path(p).is_dir()]
+            files = [pathlib.Path(p) for p in task.paths if pathlib.Path(p).is_file()]
 
-        def update_count(count: int):
-            self.update_status(operation_processed=count)
+            def update_count(count: int):
+                self.update_status(operation_processed=count)
 
-        # Count files in directories with progress updates + individual files
-        dir_count = await count_files_with_progress(directories, callback=update_count) if directories else 0
-        file_count = len(files)
-        total_count = dir_count + file_count
+            # Count files in directories with progress updates + individual files
+            dir_count = await count_files_with_progress(directories, callback=update_count) if directories else 0
+            file_count = len(files)
+            total_count = dir_count + file_count
 
-        # Find all directories for tracking in the database
-        found_directories = await find_directories(directories) if directories else set()
+            # Find all directories for tracking in the database
+            found_directories = await find_directories(directories) if directories else set()
 
-        self.update_status(operation_total=total_count, operation_processed=total_count, operation_percent=100)
-        logger.info(
-            f'Counted {total_count} files in {len(task.paths)} paths, found {len(found_directories)} directories')
+            self.update_status(operation_total=total_count, operation_processed=total_count, operation_percent=100)
+            logger.info(
+                f'Counted {total_count} files in {len(task.paths)} paths, found {len(found_directories)} directories')
 
         if task.next_task_type == FileTaskType.refresh:
             next_task = FileTask(
@@ -1077,55 +1102,59 @@ class FileWorker:
         else:
             Events.send_files_refreshed(f'Refreshing {len(task.paths)} paths')
 
-        # Process files directly (fast path)
-        # expand_stems controls whether to expand files to their FileGroup stem-mates.
-        # API callers set expand_stems=False when users explicitly select specific files.
-        # Deleted paths (handled above) will still be processed individually.
+        # Process files and directories within discovery flag context
+        # This covers comparing, upserting, and deleting phases
         file_result = None
-        if file_paths:
-            self.update_status(
-                status='comparing',
-                operation_total=len(file_paths),
-                operation_processed=0,
-                operation_percent=0,
-            )
-            logger.info(f'Refreshing {len(file_paths)} files directly')
-            file_result = await self._refresh_files_directly(file_paths, expand_stems=task.expand_stems)
-
-            # Process file results
-            self._cleanup_modified_models(file_result.modified)
-            await self._upsert_file_groups(file_result.new + file_result.modified)
-            await self._delete_file_groups(file_result.deleted)
-
-        # Process directories with full scan (existing path)
         dir_result = None
-        if dir_paths:
-            self.update_status(
-                status='comparing',
-                operation_total=task.count,
-                operation_processed=0,
-                operation_percent=0,
-            )
-            logger.info(f'Comparing {task.count} files in {len(dir_paths)} directories')
 
-            def on_compare_progress(count: int):
-                percent = int((count / task.count) * 100) if task.count > 0 else 0
-                self.update_status(operation_processed=count, operation_percent=percent)
+        with flags.file_worker_discovery:
+            # Process files directly (fast path)
+            # expand_stems controls whether to expand files to their FileGroup stem-mates.
+            # API callers set expand_stems=False when users explicitly select specific files.
+            # Deleted paths (handled above) will still be processed individually.
+            if file_paths:
+                self.update_status(
+                    status='comparing',
+                    operation_total=len(file_paths),
+                    operation_processed=0,
+                    operation_percent=0,
+                )
+                logger.info(f'Refreshing {len(file_paths)} files directly')
+                file_result = await self._refresh_files_directly(file_paths, expand_stems=task.expand_stems)
 
-            root = dir_paths[0] if len(dir_paths) == 1 else None
-            dir_result = await compare_file_groups(root=root, progress_callback=on_compare_progress)
-            if is_global_refresh:
-                Events.send_global_refresh_discovery_completed()
+                # Process file results
+                self._cleanup_modified_models(file_result.modified)
+                await self._upsert_file_groups(file_result.new + file_result.modified)
+                await self._delete_file_groups(file_result.deleted)
 
-            logger.info(
-                f'Refresh comparison: {len(dir_result.new)} new, {len(dir_result.modified)} modified, '
-                f'{len(dir_result.deleted)} deleted, {len(dir_result.unchanged)} unchanged'
-            )
+            # Process directories with full scan (existing path)
+            if dir_paths:
+                self.update_status(
+                    status='comparing',
+                    operation_total=task.count,
+                    operation_processed=0,
+                    operation_percent=0,
+                )
+                logger.info(f'Comparing {task.count} files in {len(dir_paths)} directories')
 
-            # Process directory results
-            self._cleanup_modified_models(dir_result.modified)
-            await self._upsert_file_groups(dir_result.new + dir_result.modified)
-            await self._delete_file_groups(dir_result.deleted)
+                def on_compare_progress(count: int):
+                    percent = int((count / task.count) * 100) if task.count > 0 else 0
+                    self.update_status(operation_processed=count, operation_percent=percent)
+
+                root = dir_paths[0] if len(dir_paths) == 1 else None
+                dir_result = await compare_file_groups(root=root, progress_callback=on_compare_progress)
+                if is_global_refresh:
+                    Events.send_global_refresh_discovery_completed()
+
+                logger.info(
+                    f'Refresh comparison: {len(dir_result.new)} new, {len(dir_result.modified)} modified, '
+                    f'{len(dir_result.deleted)} deleted, {len(dir_result.unchanged)} unchanged'
+                )
+
+                # Process directory results
+                self._cleanup_modified_models(dir_result.modified)
+                await self._upsert_file_groups(dir_result.new + dir_result.modified)
+                await self._delete_file_groups(dir_result.deleted)
 
         # Run indexers, modelers, and cleanup once for all changes
         await self._apply_post_processing(is_global_refresh=is_global_refresh)
@@ -1237,18 +1266,27 @@ class FileWorker:
                         ([u[0] for u in valid_updates], [u[1] for u in valid_updates])
                     )
 
-        # Collect all file paths from the diffs and report progress
+        # Collect all file paths from the diffs (fast operation, no progress tracking needed)
         all_paths = []
-        for i, diff in enumerate(diffs, 1):
+        for diff in diffs:
             all_paths.extend(_diff_to_paths(diff))
 
-            if i % PROGRESS_UPDATE_INTERVAL == 0 or i == total:
-                percent = int((i / total) * 100)
-                self.update_status(operation_processed=i, operation_percent=percent)
+        # Update total to reflect actual files being processed
+        total_files = len(all_paths)
+        self.update_status(
+            operation_total=total_files,
+            operation_processed=0,
+            operation_percent=0,
+        )
+
+        # Create progress callback for the actual DB upsert operations
+        def on_upsert_progress(processed: int, total: int):
+            percent = int((processed / total) * 100) if total > 0 else 0
+            self.update_status(operation_processed=processed, operation_percent=percent)
 
         # Use existing _upsert_files function which handles grouping and primary file detection
         idempotency = now()
-        await asyncio.to_thread(_upsert_files, all_paths, idempotency)
+        await asyncio.to_thread(_upsert_files, all_paths, idempotency, on_upsert_progress)
         logger.info(f'Upserted {len(diffs)} FileGroups ({len(all_paths)} files)')
 
     async def _delete_file_groups(self, diffs: list[FileGroupDiff]):
@@ -1787,6 +1825,7 @@ class FileWorker:
         if is_global_refresh:
             Events.send_global_refresh_indexing_completed()
 
+        self.update_status(status='cleanup', operation_total=0, operation_processed=0, operation_percent=0)
         with flags.file_worker_cleanup:
             await apply_refresh_cleanup()
             save_tags_config.activate_switch()
@@ -1857,12 +1896,15 @@ class FileWorker:
         if not self._validate_move_paths(sources, destination, media_directory):
             return
 
+        # Estimate total for planning phase based on number of sources
+        planning_total = len(sources) * 2  # Approximation for progress tracking
+
         self.update_status(
             status='planning',
             task_type='move',
             paths=[str(p) for p in sources],
             destination=str(destination),
-            operation_total=0,
+            operation_total=planning_total,
             operation_processed=0,
             operation_percent=0,
             error=None,
@@ -1876,11 +1918,16 @@ class FileWorker:
         created_directories: Set[pathlib.Path] = set()
         plan = {}
 
+        # Progress callback for planning phase
+        def on_planning_progress(processed: int, total: int):
+            percent = int((processed / total) * 100) if total > 0 else 0
+            self.update_status(operation_processed=processed, operation_total=total, operation_percent=percent)
+
         try:
             destination.mkdir(parents=True, exist_ok=True)
 
             # Build the move plan using bulk SQL operations
-            plan, old_directories = await build_move_plan_bulk(sources, destination)
+            plan, old_directories = await build_move_plan_bulk(sources, destination, on_planning_progress)
 
             # Update status with total
             self.update_status(

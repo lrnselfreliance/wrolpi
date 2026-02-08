@@ -251,31 +251,31 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             {videoFileLink(video['video_path'])}
 
             <h4>Caption Files</h4>
-            {caption_files &&
+            {caption_files ?
                 caption_files.map(i => <p key={i['path']}><PreviewPath {...i} taggable={false}>
                     {i['path']}
-                </PreviewPath></p>)
+                </PreviewPath></p>) : 'No caption files'
             }
 
             <h4>Poster File</h4>
-            {poster_file &&
+            {poster_file ?
                 <PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']} taggable={false}>
                     {poster_file['path']}
-                </PreviewPath>
+                </PreviewPath> : 'No poster file'
             }
 
             <h4>Info JSON File</h4>
-            {info_json_file &&
+            {info_json_file ?
                 <PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']} taggable={false}>
                     {info_json_file['path']}
-                </PreviewPath>
+                </PreviewPath> : 'No yt-dlp info json file'
             }
 
             <h4>ffprobe JSON File</h4>
             {ffprobeJsonFile ?
                 <PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']} taggable={false}>
                     {ffprobeJsonFile['path']}
-                </PreviewPath> : 'No file'
+                </PreviewPath> : 'No ffprobe json file'
             }
 
             <h4>Directory</h4>

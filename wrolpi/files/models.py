@@ -264,13 +264,22 @@ class FileGroup(ModelHelper, Base):
         """Add all `paths` to this FileGroup.files.
 
         Paths are stored as filenames only (relative to directory).
+        Also updates modification_datetime to include the new files.
         """
+        from wrolpi.dates import from_timestamp
         from wrolpi.files.lib import get_mimetype
         new_files = list(self.files) if self.files else list()
         for path in paths:
             # Store just the filename, not the full path
             new_files.append(dict(path=path.name, mimetype=get_mimetype(path)))
         self.files = unique_by_predicate(new_files, lambda i: i['path'])
+        # Update modification_datetime to include the new files' mtimes
+        if paths:
+            all_mtimes = [p.stat().st_mtime for p in paths if p.exists()]
+            if self.modification_datetime:
+                all_mtimes.append(self.modification_datetime.timestamp())
+            if all_mtimes:
+                self.modification_datetime = from_timestamp(max(all_mtimes))
 
     def my_files(self, *mimetypes: str) -> List[dict]:
         """Return all files related to this group that match any of the provided mimetypes.

@@ -244,6 +244,24 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
     return content
 
 
+def read_ffprobe_json_file(path: Path) -> Optional[dict]:
+    """Read ffprobe data from .ffprobe.json file if it exists."""
+    if not path or not path.is_file():
+        return None
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning(f'Failed to read ffprobe json file {path}', exc_info=e)
+        return None
+
+
+def write_ffprobe_json_file(path: Path, data: dict):
+    """Write ffprobe data to .ffprobe.json file with human-readable formatting."""
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
 def extract_video_duration(video_path: Path) -> Optional[int]:
     """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):

@@ -277,12 +277,20 @@ class Video(ModelHelper, Base):
     @property
     def info_json_file(self) -> Optional[dict]:
         for file in self.file_group.my_json_files():
-            return file
+            # Only return .info.json files, not .ffprobe.json or other JSON files
+            if file['path'].name.endswith('.info.json'):
+                return file
 
     @property
     def info_json_path(self) -> Optional[pathlib.Path]:
         if info_json_file := self.info_json_file:
             return info_json_file['path']
+
+    @property
+    def ffprobe_json_path(self) -> Optional[pathlib.Path]:
+        """Return the path to the .ffprobe.json file for this video."""
+        if self.video_path:
+            return self.video_path.with_suffix('.ffprobe.json')
 
     @property
     def video_path(self) -> Optional[pathlib.Path]:
@@ -367,13 +375,37 @@ class Video(ModelHelper, Base):
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.
 
-        Runs ffprobe if this data does not yet exist."""
+        Checks for cached .ffprobe.json file before running ffprobe.
+        Runs ffprobe if no cached data exists."""
         if not self.video_path:
             raise RuntimeError(f'Cannot get ffprobe json without video file: {self}')
 
-        if not self.ffprobe_json:
-            from modules.videos.common import ffprobe_json
-            self.ffprobe_json = await ffprobe_json(self.video_path)
+        # 1. Return from DB if already stored
+        if self.ffprobe_json:
+            return self.ffprobe_json
+
+        from modules.videos.common import ffprobe_json, read_ffprobe_json_file, write_ffprobe_json_file
+
+        # 2. Check if .ffprobe.json file exists
+        ffprobe_path = self.ffprobe_json_path
+        if ffprobe_path and ffprobe_path.is_file():
+            cached_data = read_ffprobe_json_file(ffprobe_path)
+            if cached_data:
+                self.ffprobe_json = cached_data
+                return self.ffprobe_json
+
+        # 3. Run ffprobe and cache the result
+        self.ffprobe_json = await ffprobe_json(self.video_path)
+        if ffprobe_path:
+            # Check if saving ffprobe json files is enabled
+            from wrolpi.common import get_wrolpi_config
+            if get_wrolpi_config().save_ffprobe_json:
+                try:
+                    write_ffprobe_json_file(ffprobe_path, self.ffprobe_json)
+                    # Add the new file to the FileGroup so it's tracked
+                    self.file_group.append_files(ffprobe_path)
+                except IOError as e:
+                    logger.warning(f'Failed to write ffprobe json cache file {ffprobe_path}', exc_info=e)
 
         return self.ffprobe_json
 

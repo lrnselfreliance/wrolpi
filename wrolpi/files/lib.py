@@ -330,6 +330,7 @@ def get_mimetype(path: Path) -> str:
 # Special suffixes within WROLPi.
 SUFFIXES = {
     '.info.json',
+    '.ffprobe.json',
     '.live_chat.json',
     '.readability.html',
     '.readability.json',
@@ -349,7 +350,7 @@ EXTRA_SUFFIXES |= {f'.{i}-auto.vtt' for i in ISO_639_CODES}
 _SUFFIXES_LOWER = frozenset(s.lower() for s in SUFFIXES)
 _EXTRA_SUFFIXES_LOWER = frozenset(s.lower() for s in EXTRA_SUFFIXES)
 _HARDCODED_SUFFIXES = frozenset(
-    {'.info.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
+    {'.info.json', '.ffprobe.json', '.live_chat.json', '.readability.html', '.readability.json', '.readability.txt'})
 
 PART_PARSER = re.compile(r'(.+?)(\.f[\d]{2,3})?(\.info)?(\.\w{3,4})(\.part)', re.IGNORECASE)
 

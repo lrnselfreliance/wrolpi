@@ -174,6 +174,7 @@ def get_settings(_: Request):
         'videos_destination': wrolpi_config.videos_destination,
         'wrol_mode': wrolpi_config.wrol_mode,
         'zims_destination': wrolpi_config.zims_destination,
+        'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
     }
     return json_response(settings)
 

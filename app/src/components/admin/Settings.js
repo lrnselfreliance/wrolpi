@@ -462,6 +462,7 @@ export function SettingsPage() {
             throttle_on_startup: settings.throttle_on_startup,
             videos_destination: settings.videos_destination,
             zims_destination: settings.zims_destination,
+            save_ffprobe_json: settings.save_ffprobe_json,
         });
     }, [JSON.stringify(settings)]);
 
@@ -550,6 +551,16 @@ export function SettingsPage() {
                         checked={state.tags_directory === true}
                         onChange={checked => handleInputChange(null, 'tags_directory', checked)}
                         info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
+                    />
+                </div>
+
+                <div style={{margin: '0.5em'}}>
+                    <Toggle
+                        label='Save FFprobe Cache Files'
+                        disabled={disabled || state.save_ffprobe_json === null}
+                        checked={state.save_ffprobe_json === true}
+                        onChange={checked => handleInputChange(null, 'save_ffprobe_json', checked)}
+                        info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
                     />
                 </div>
 

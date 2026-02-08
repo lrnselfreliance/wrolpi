@@ -731,6 +731,7 @@ class WROLPiConfigValidator:
     log_level: str = None
     map_destination: str = None
     nav_color: str = None
+    save_ffprobe_json: bool = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
     version: int = None
@@ -799,6 +800,7 @@ class WROLPiConfig(ConfigFile):
         log_level='info',
         map_destination='map',
         nav_color='violet',
+        save_ffprobe_json=True,
         tags_directory=True,
         throttle_on_startup=False,
         version=0,
@@ -905,6 +907,14 @@ class WROLPiConfig(ConfigFile):
     @ignore_outdated_zims.setter
     def ignore_outdated_zims(self, value: bool):
         self.update({'ignore_outdated_zims': value})
+
+    @property
+    def save_ffprobe_json(self) -> bool:
+        return self._config['save_ffprobe_json']
+
+    @save_ffprobe_json.setter
+    def save_ffprobe_json(self, value: bool):
+        self.update({'save_ffprobe_json': value})
 
     @property
     def log_level(self) -> str:

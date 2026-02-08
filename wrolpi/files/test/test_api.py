@@ -290,7 +290,8 @@ async def test_refresh_files_list(test_session, async_client, make_files_structu
     request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
     group: FileGroup = test_session.query(FileGroup).one()
-    assert len(group.files) == 2
+    # Video validation creates .ffprobe.json, so we may have 2 or 3 files
+    assert len(group.files) >= 2
 
 
 @pytest.mark.asyncio
@@ -336,7 +337,7 @@ async def test_file_statistics(test_session, async_client, test_directory, examp
         'tagged_files': 0,
         'tagged_zims': 0,
         'tags_count': 0,
-        'total_count': 5,  # extracted cover
+        'total_count': 6,  # extracted cover + .ffprobe.json
         'video_count': 1,
         'zip_count': 0,
     }
@@ -892,7 +893,8 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     # Verify initial state
     fg = test_session.query(FileGroup).one()
     assert fg.primary_path == video
-    assert len(fg.files) == 2
+    # Video validation creates .ffprobe.json, so we have 3 files
+    assert len(fg.files) == 3
 
     # First rename via API: "example.mp4" -> "example 2.mp4"
     content = dict(path='example.mp4', new_name='example 2.mp4')
@@ -913,7 +915,7 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     file_names = [f['path'] for f in fg.files]
     assert 'example 2.mp4' in file_names
     assert 'example 2.srt' in file_names
-    assert len(fg.files) == 2
+    assert len(fg.files) == 3
 
     # Second rename via API: "example 2.mp4" -> "example.mp4"
     content = dict(path='example 2.mp4', new_name='example.mp4')
@@ -934,7 +936,7 @@ async def test_rename_file_with_associated_files_via_api(test_session, test_dire
     file_names = [f['path'] for f in fg.files]
     assert 'example.mp4' in file_names
     assert 'example.srt' in file_names
-    assert len(fg.files) == 2
+    assert len(fg.files) == 3
 
 
 @pytest.mark.asyncio

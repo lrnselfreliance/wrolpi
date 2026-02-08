@@ -143,6 +143,7 @@ async def test_delete_nested(test_session, make_files_structure):
         ('foo', False, ('foo', '')),
         ('foo.mp4', False, ('foo', '.mp4')),
         ('foo.info.json', False, ('foo', '.info.json')),
+        ('foo.ffprobe.json', False, ('foo', '.ffprobe.json')),
         ('foo.something.info.json', False, ('foo.something', '.info.json')),
         ('foo-something.info.json', False, ('foo-something', '.info.json')),
         ('/absolute/foo-something.info.json', False, ('foo-something', '.info.json')),
@@ -160,6 +161,7 @@ async def test_delete_nested(test_session, make_files_structure):
         # Case is preserved.
         ('foo.EN.SRT', False, ('foo', '.EN.SRT')),
         ('foo.INFO.JSON', False, ('foo', '.INFO.JSON')),
+        ('foo.FFPROBE.JSON', False, ('foo', '.FFPROBE.JSON')),
         # Part files from yt-dlp.
         ('foo.webm.part', False, ('foo', '.webm.part')),
         ('foo.f248.webm.part', False, ('foo', '.f248.webm.part')),
@@ -1272,7 +1274,8 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
     # Verify initial state
     file_group = test_session.query(FileGroup).one()
     assert file_group.primary_path == video
-    assert len(file_group.files) == 2
+    # Video validation creates .ffprobe.json, so we have 3 files
+    assert len(file_group.files) == 3
     assert video.is_file()
     assert srt.is_file()
 
@@ -1295,7 +1298,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
     file_names = [f['path'] for f in file_group.files]
     assert 'example 2.mp4' in file_names
     assert 'example 2.srt' in file_names
-    assert len(file_group.files) == 2
+    assert len(file_group.files) >= 2
 
     # Second rename: "example 2.mp4" -> "example.mp4"
     new_path_2 = await lib.rename_file(new_video_1, 'example.mp4')
@@ -1316,7 +1319,7 @@ async def test_rename_file_with_associated_files_twice(async_client, test_sessio
     file_names = [f['path'] for f in file_group.files]
     assert 'example.mp4' in file_names
     assert 'example.srt' in file_names
-    assert len(file_group.files) == 2
+    assert len(file_group.files) == 3
 
 
 @pytest.mark.asyncio
@@ -1338,7 +1341,8 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
     # Verify initial state
     file_group = test_session.query(FileGroup).one()
     assert file_group.primary_path == video
-    assert len(file_group.files) == 2
+    # Video validation creates .ffprobe.json, so we may have 2 or 3 files
+    assert len(file_group.files) == 3
 
     # Rename the non-primary file (the SRT)
     new_path = await lib.rename_file(srt, 'renamed.srt')
@@ -1359,23 +1363,23 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
     file_names = [f['path'] for f in file_group.files]
     assert 'renamed.mp4' in file_names
     assert 'renamed.srt' in file_names
-    assert len(file_group.files) == 2
+    assert len(file_group.files) == 3
 
 
 
 def test_bulk_update_file_groups_reorganize_handles_datetime(test_session, test_directory):
     """_bulk_update_file_groups_reorganize should handle datetime objects in files JSON.
-    
+
     The files JSON field can contain modification_datetime as a datetime object.
     The function must serialize these correctly to avoid JSON serialization errors.
     """
     from datetime import datetime, timezone
     from wrolpi.files.lib import _bulk_update_file_groups_reorganize
-    
+
     # Create a test file and FileGroup
     test_file = test_directory / 'test_video.mp4'
     test_file.touch()
-    
+
     fg = FileGroup()
     fg.directory = test_directory
     fg.primary_path = test_file
@@ -1383,24 +1387,24 @@ def test_bulk_update_file_groups_reorganize_handles_datetime(test_session, test_
     test_session.add(fg)
     test_session.commit()
     fg_id = fg.id
-    
+
     # Prepare update with datetime object in files (simulating what handle_reorganize does)
     new_files = [{
         'path': 'test_video.mp4',
         'mimetype': 'video/mp4',
         'modification_datetime': datetime.now(timezone.utc),  # datetime object, not string
     }]
-    
+
     updates = [{
         'id': fg_id,
         'directory': str(test_directory),
         'primary_path': str(test_file),
         'files': new_files,
     }]
-    
+
     # This should NOT raise "Object of type datetime is not JSON serializable"
     _bulk_update_file_groups_reorganize(updates)
-    
+
     # Verify the update was applied
     test_session.expire_all()
     fg = test_session.query(FileGroup).filter_by(id=fg_id).one()

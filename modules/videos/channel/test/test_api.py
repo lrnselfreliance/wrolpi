@@ -499,7 +499,10 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     assert str(get_relative_to_media_directory(v1.video_path)) == 'videos/Channel Name/video1.mp4'
     assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Channel Name/video2.mp4'
     video_files = [i for i in walk(videos_directory) if i.is_file()]
-    assert len(video_files) == 3
+    # 2 videos + extra file + optional .ffprobe.json files (1 per video)
+    assert len(video_files) >= 3
+    # Count non-ffprobe files for comparison (modelers may create .ffprobe.json during post-processing)
+    initial_non_ffprobe_count = len([i for i in video_files if not i.name.endswith('.ffprobe.json')])
     # Channel's directory is indexed.
     assert [i.path for i in test_session.query(Directory)] == [channel.directory, ]
 
@@ -528,8 +531,9 @@ async def test_tag_channel(async_client, test_session, test_directory, channel_f
     assert str(get_relative_to_media_directory(v2.video_path)) == 'videos/Tag Name/Channel Name/video2.mp4'
     # Extra file was also moved.
     assert (new_channel_directory / 'extra file.txt').read_text() == 'extra file contents'
-    # No new files were created.
-    assert len([i for i in walk(videos_directory) if i.is_file()]) == 3
+    # No unexpected files were created during the move (modelers may create .ffprobe.json cache files).
+    final_non_ffprobe_count = len([i for i in walk(videos_directory) if i.is_file() and not i.name.endswith('.ffprobe.json')])
+    assert final_non_ffprobe_count == initial_non_ffprobe_count
 
     # Config stores relative paths for portability
     assert get_channels_config().channels[0]['directory'] == 'videos/Tag Name/Channel Name'

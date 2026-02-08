@@ -439,7 +439,6 @@ class TagsConfig(ConfigFile):
                                                    file_group=file_group)
                                 tag_files[(tag_file.tag_id, tag_file.file_group_id)] = tag_file
                                 session.add(tag_file)
-                                tag_file.flush()
                             tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
                             need_commit = True
                         elif not file_group:

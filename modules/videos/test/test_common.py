@@ -410,6 +410,32 @@ async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
         await common.ffprobe_json(corrupted_video_file)
 
 
+def test_read_write_ffprobe_json_file(test_directory):
+    """Test reading and writing .ffprobe.json files."""
+    ffprobe_path = test_directory / 'video.ffprobe.json'
+    ffprobe_data = {'streams': [{'codec_name': 'h264'}], 'format': {'duration': '5.0'}}
+
+    # File doesn't exist, should return None
+    assert common.read_ffprobe_json_file(ffprobe_path) is None
+    assert common.read_ffprobe_json_file(None) is None
+
+    # Write the file
+    common.write_ffprobe_json_file(ffprobe_path, ffprobe_data)
+    assert ffprobe_path.is_file()
+
+    # File should be human-readable (indented)
+    contents = ffprobe_path.read_text()
+    assert '\n' in contents, 'ffprobe json should be formatted with newlines'
+
+    # Read it back
+    loaded = common.read_ffprobe_json_file(ffprobe_path)
+    assert loaded == ffprobe_data
+
+    # Invalid JSON should return None
+    ffprobe_path.write_text('not valid json')
+    assert common.read_ffprobe_json_file(ffprobe_path) is None
+
+
 @pytest.mark.asyncio
 async def test_video_ffprobe_json(async_client, test_session, video_file, refresh_files):
     """ffprobe data is extracted when a video is modeled."""
@@ -420,6 +446,65 @@ async def test_video_ffprobe_json(async_client, test_session, video_file, refres
     video = test_session.query(Video).one()
     assert video.ffprobe_json
     assert video.file_group.length
+
+
+@pytest.mark.asyncio
+async def test_video_ffprobe_json_caches_to_file(async_client, test_session, video_file, refresh_files):
+    """ffprobe results are cached to .ffprobe.json file."""
+    await refresh_files()
+
+    video = test_session.query(Video).one()
+
+    # .ffprobe.json file should have been created during validation
+    ffprobe_path = video.ffprobe_json_path
+    assert ffprobe_path.is_file(), '.ffprobe.json file should have been created'
+
+    # File should contain the ffprobe data
+    cached_data = common.read_ffprobe_json_file(ffprobe_path)
+    assert cached_data is not None
+    assert 'streams' in cached_data
+    assert 'format' in cached_data
+
+
+@pytest.mark.asyncio
+async def test_video_ffprobe_json_reads_from_cache(async_client, test_session, video_file, refresh_files):
+    """get_ffprobe_json() uses cached .ffprobe.json file instead of running ffprobe."""
+    await refresh_files()
+
+    video = test_session.query(Video).one()
+    ffprobe_path = video.ffprobe_json_path
+
+    # Clear the DB cache to simulate a fresh reindex
+    video.ffprobe_json = None
+    test_session.commit()
+
+    # Write a fake ffprobe cache file with a marker
+    fake_data = {'streams': [{'codec_name': 'cached_marker'}], 'format': {'duration': '999'}}
+    common.write_ffprobe_json_file(ffprobe_path, fake_data)
+
+    # get_ffprobe_json should read from the cached file, not call ffprobe
+    result = await video.get_ffprobe_json()
+    assert result['streams'][0]['codec_name'] == 'cached_marker', \
+        'Should have read cached file instead of running ffprobe'
+    assert video.ffprobe_json == fake_data, 'DB should be updated with cached data'
+
+
+@pytest.mark.asyncio
+async def test_video_ffprobe_json_returns_db_first(async_client, test_session, video_file, refresh_files):
+    """get_ffprobe_json() returns DB data if already populated, without reading file."""
+    await refresh_files()
+
+    video = test_session.query(Video).one()
+    original_data = video.ffprobe_json.copy()
+
+    # Write different data to the file (simulating stale cache)
+    fake_data = {'streams': [{'codec_name': 'stale_data'}], 'format': {}}
+    common.write_ffprobe_json_file(video.ffprobe_json_path, fake_data)
+
+    # Should return DB data, not file data
+    result = await video.get_ffprobe_json()
+    assert result == original_data
+    assert result['streams'][0]['codec_name'] != 'stale_data'
 
 
 def test_get_videos_directory(test_directory):

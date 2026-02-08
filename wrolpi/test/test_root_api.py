@@ -734,6 +734,32 @@ async def test_settings_special_directories(async_client, test_wrolpi_config):
 
 
 @pytest.mark.asyncio
+async def test_settings_save_ffprobe_json(async_client, test_wrolpi_config):
+    """Maintainer can toggle save_ffprobe_json setting."""
+    config = get_wrolpi_config()
+
+    # Default is True.
+    assert config.save_ffprobe_json is True
+
+    # GET returns the setting.
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['save_ffprobe_json'] is True
+
+    # Setting can be disabled.
+    data = {'save_ffprobe_json': False}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.save_ffprobe_json is False
+
+    # Setting can be re-enabled.
+    data = {'save_ffprobe_json': True}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.save_ffprobe_json is True
+
+
+@pytest.mark.asyncio
 async def test_search_other_estimates(async_client, test_session, channel_factory, tag_factory):
     # Can search without Tags or Channels.
     body = dict(tag_names=[])

@@ -351,7 +351,7 @@ async def update_view_counts_and_censored(channel_id: int):
     with get_db_curs(commit=True) as curs:
         # Update the view_count for each video.
         stmt = '''
-               WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count int))
+               WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count bigint))
                UPDATE video
                SET view_count = s.view_count
                FROM source as s

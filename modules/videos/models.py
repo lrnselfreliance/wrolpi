@@ -34,7 +34,7 @@ class Video(ModelHelper, Base):
     id = Column(Integer, primary_key=True)
 
     source_id = Column(String)  # The id from yt-dlp
-    view_count = Column(Integer)  # The view count from the ChannelDownloader (or from initial download)
+    view_count = Column(BigInteger)  # The view count from the ChannelDownloader (or from initial download)
     ffprobe_json = deferred(Column(JSONB))  # Data that is fetched once from ffprobe (ffmpeg)
     have_comments = Column(Boolean, default=False)  # see `get_missing_videos_comments`
     comments_failed = Column(Boolean, default=False)  # see `get_missing_videos_comments`

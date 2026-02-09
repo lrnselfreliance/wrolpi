@@ -571,6 +571,7 @@ export function EditVideosDownloadForm({
         delete settings.channel_id;
 
         const downloadData = {
+            collection_id: download.collection_id,
             destination: formData.destination,
             downloader: formData.downloader,
             settings: settings,
@@ -802,6 +803,7 @@ export function EditChannelDownloadForm({
 
     const submitter = async (formData) => {
         const downloadData = {
+            collection_id: download.collection_id,
             destination: formData.destination,
             downloader: formData.downloader,
             frequency: formData.frequency,
@@ -845,6 +847,7 @@ export function EditArchiveDownloadForm({
                                         }) {
     const submitter = async (formData) => {
         const downloadData = {
+            collection_id: download.collection_id,
             downloader: formData.downloader,
             tag_names: formData.tag_names,
             urls: formData.urls.split(/\r?\n/),
@@ -1093,6 +1096,7 @@ export function EditRSSDownloadForm({download, onDelete, onCancel, actions = Edi
 
     const submitter = async (formData) => {
         const downloadData = {
+            collection_id: download.collection_id,
             destination: formData.destination,
             downloader: formData.downloader,
             frequency: formData.frequency,
@@ -1118,6 +1122,7 @@ export function EditZimDownloadForm({download, onDelete, onCancel, actions = Edi
 
     const submitter = async (formData) => {
         const downloadData = {
+            collection_id: download.collection_id,
             downloader: formData.downloader,
             frequency: formData.frequency,
             settings: formData.settings,
@@ -1364,6 +1369,7 @@ export function ScrapeFilesDownloadForm({
 export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuccess}) {
     const submitter = async (formData) => {
         const downloadData = {
+            collection_id: download.collection_id,
             downloader: Downloaders.ScrapeHtml,
             sub_downloader: Downloaders.File,
             tag_names: formData.tag_names || [],
@@ -1371,7 +1377,7 @@ export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuc
             urls: [formData.url],
             settings: formData.settings,
         }
-        await postDownload(downloadData);
+        await putDownload(download.id, downloadData);
     };
 
     return <ScrapeFilesDownloadForm

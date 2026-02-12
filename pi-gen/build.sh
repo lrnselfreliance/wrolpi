@@ -2,7 +2,7 @@
 # https://github.com/RPI-Distro/pi-gen
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-BUILD_DIR=/tmp/wrolpi-build-pi-gen
+BUILD_DIR=/var/tmp/wrolpi-build-pi-gen
 
 VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
 
@@ -17,15 +17,38 @@ if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/map-db-gis.dump" ]; then
   exit 1
 fi
 
+CHROOTFS="${BUILD_DIR}/work/WROLPi/stage0/rootfs"
+
+cleanup() {
+    [ -f /var/tmp/bookworm-arm64.zip ] && rm /var/tmp/bookworm-arm64.zip
+
+    # Only unmount if it is actually a mountpoint
+    for mp in \
+        "${CHROOTFS}/dev/pts" \
+        "${CHROOTFS}/sys" \
+        "${CHROOTFS}/proc" \
+        "${CHROOTFS}/run" \
+        "${CHROOTFS}/tmp" \
+        "${CHROOTFS}/dev"; do
+
+        if mountpoint -q "${mp}" 2>/dev/null; then
+            umount "${mp}" 2>/dev/null || umount -l "${mp}" 2>/dev/null
+        fi
+    done
+
+    # Final safety net – remove the whole build tree
+    rm -rf "${BUILD_DIR}"
+}
+
+trap cleanup EXIT
+
 set -e
 set -x
 
-# Clear out old builds.
-[ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
-mkdir "${BUILD_DIR}"
-
-# We need the arm64 branch for modern RPi.
-git clone --branch arm64 https://github.com/RPI-Distro/pi-gen.git "${BUILD_DIR}"
+# Get the latest pi-gen code.
+wget https://github.com/RPi-Distro/pi-gen/archive/refs/heads/bookworm-arm64.zip -O /var/tmp/bookworm-arm64.zip
+unzip /var/tmp/bookworm-arm64.zip -d /var/tmp
+mv /var/tmp/pi-gen-bookworm-arm64 /var/tmp/wrolpi-build-pi-gen
 
 # Copy the configuration and build files into the pi-gen directory.
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
@@ -40,7 +63,8 @@ echo 'IMG_SUFFIX="-desktop"' > "${BUILD_DIR}/stage5/EXPORT_IMAGE"
 (cd "${BUILD_DIR}" && time nice -n 18 "${BUILD_DIR}"/build.sh -c "${BUILD_DIR}"/config.txt | \
   tee "${SCRIPT_DIR}"/build.log)
 
-grep "02-run.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 2 failed!" && exit 1)
+grep "00-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 0 failed!" && exit 1)
+grep "03-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 3 failed!" && exit 1)
 grep "03-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 3 failed!" && exit 1)
 grep "04-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 4 failed!" && exit 1)
 

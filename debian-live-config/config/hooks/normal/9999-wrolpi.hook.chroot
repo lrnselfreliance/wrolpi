@@ -6,8 +6,9 @@ set -x
 
 # Generate and set default locale to avoid perl warnings.
 # Users can change this later via: sudo dpkg-reconfigure locales
-locale-gen en_US.UTF-8
-update-locale LANG=en_US.UTF-8
+sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=en_US.UTF-8' > /etc/default/locale
 export LANG=en_US.UTF-8
 
 cat >>/etc/profile <<'EOF'

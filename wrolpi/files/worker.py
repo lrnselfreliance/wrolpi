@@ -10,6 +10,7 @@ import pathlib
 import shlex
 import shutil
 import stat as stat_module
+import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -1092,7 +1093,9 @@ class FileWorker:
             return
 
         # Send appropriate start event based on refresh scope
+        global_refresh_start_time = None
         if is_global_refresh:
+            global_refresh_start_time = time.time()
             logger.info(f'Starting global refresh with {task.count} files')
             Events.send_global_refresh_started()
         elif dir_paths and len(dir_paths) == 1 and not file_paths:
@@ -1177,8 +1180,10 @@ class FileWorker:
 
         # Send appropriate completion event based on refresh scope
         if is_global_refresh:
-            Events.send_global_after_refresh_completed()
-            Events.send_refresh_completed()
+            elapsed = time.time() - global_refresh_start_time
+            message = f'Global refresh completed in {elapsed:.1f} seconds'
+            logger.info(message)
+            Events.send_global_after_refresh_completed(message)
         elif dir_paths and len(dir_paths) == 1 and not file_paths:
             relative_path = self._get_relative_path(dir_paths[0])
             Events.send_directory_refresh(f'Refreshed: {relative_path}')

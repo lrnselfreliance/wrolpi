@@ -29,8 +29,9 @@ function handleEvents(events) {
         if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
             console.debug(`Already handled newer event of "${subject}".`);
             return;
-        } else if (event === 'refresh_completed') {
-            eventToast('Refresh completed', 'Files have been refreshed.', 'success');
+        } else if (event === 'global_after_refresh_completed' || event === '') {
+            let message_ = message || 'Files have been refreshed.';
+            eventToast('Refresh completed', message_, 'success');
         }
 
         if (event === 'shutdown') {

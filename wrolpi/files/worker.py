@@ -1093,6 +1093,7 @@ class FileWorker:
 
         # Send appropriate start event based on refresh scope
         if is_global_refresh:
+            logger.info(f'Starting global refresh with {task.count} files')
             Events.send_global_refresh_started()
         elif dir_paths and len(dir_paths) == 1 and not file_paths:
             relative_path = self._get_relative_path(dir_paths[0])

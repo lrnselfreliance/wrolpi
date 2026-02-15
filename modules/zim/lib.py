@@ -18,6 +18,7 @@ from wrolpi import flags
 from wrolpi.cmd import run_command
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
     register_refresh_cleanup, background_task, get_wrolpi_config, unique_by_predicate, aiohttp_post
+from wrolpi.switches import register_switch_handler
 from wrolpi.dates import Seconds
 from wrolpi.events import Events
 from wrolpi.db import get_db_session, get_db_curs
@@ -41,9 +42,16 @@ __all__ = [
     'get_zim',
     'get_zims',
     'model_zim',
+    'restart_kiwix_handler',
     'zim_download_url_to_name',
     'zim_modeler',
 ]
+
+
+@register_switch_handler('restart_kiwix')
+async def restart_kiwix_handler():
+    """Switch handler that restarts the Kiwix service after zim files are added."""
+    await restart_kiwix()
 
 
 def model_zim(file_group: FileGroup, session: Session) -> Zim:
@@ -54,6 +62,8 @@ def model_zim(file_group: FileGroup, session: Session) -> Zim:
         # Create new Zim if it doesn't exist
         zim = Zim(file_group=file_group, path=file_group.primary_path)
         session.add(zim)
+        # Trigger Kiwix restart so the new zim file is available for browsing.
+        restart_kiwix_handler.activate_switch()
     file_group.title = file_group.primary_path.name
     file_group.a_text = split_file_name_words(file_group.primary_path.name)
     file_group.indexed = True
@@ -560,7 +570,8 @@ async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
     # Refresh synchronously to clean up DB before returning.
     await file_worker.refresh_sync(list(outdated))
 
-    await restart_kiwix()
+    # Trigger Kiwix restart so the deleted zim files are no longer served.
+    restart_kiwix_handler.activate_switch()
 
     return deleted_count
 

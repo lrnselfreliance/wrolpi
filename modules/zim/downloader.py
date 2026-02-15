@@ -106,12 +106,8 @@ class KiwixZimDownloader(Downloader):
             logger.warning(f'Not validating {output_path} because zimcheck is not installed')
 
         # Add the new Zim to the FileGroups, model it.
+        # The model_zim() function triggers a Kiwix restart via switch when a new Zim is created.
         await upsert_file(output_path)
-
-        # Restart Kiwix serve, so it finds the new zim file.
-        return_code = await lib.restart_kiwix()
-        if return_code != 0:
-            logger.error(f'Failed to restart kiwix')
 
         logger.info(f'Successfully downloaded Zim {download.url} to {output_path}')
 

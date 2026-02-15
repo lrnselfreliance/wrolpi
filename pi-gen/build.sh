@@ -17,6 +17,32 @@ if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/map-db-gis.dump" ]; then
   exit 1
 fi
 
+# Validate dump file format - must be PostgreSQL custom format (PGDMP magic)
+DUMP_FILE="${SCRIPT_DIR}/stage2/04-wrolpi/files/map-db-gis.dump"
+DUMP_HEADER=$(head -c 5 "${DUMP_FILE}" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+
+if [[ "${DUMP_HEADER:0:6}" == "504744" ]]; then
+  echo "map-db-gis.dump: Valid PostgreSQL custom format"
+elif [[ "${DUMP_HEADER:0:6}" == "1f8b08" ]]; then
+  # Check if gzipped content is custom format
+  INNER_HEADER=$(gunzip -c "${DUMP_FILE}" 2>/dev/null | head -c 5 | od -An -tx1 | tr -d ' \n')
+  if [[ "${INNER_HEADER:0:6}" == "504744" ]]; then
+    echo "map-db-gis.dump: Valid gzipped PostgreSQL custom format"
+  else
+    echo "ERROR: map-db-gis.dump is gzipped but does NOT contain PostgreSQL custom format!"
+    echo "Inner header: ${INNER_HEADER} (expected to start with 504744 for 'PGDMP')"
+    echo "The dump was likely created incorrectly. Use:"
+    echo "  docker run --rm -v /path/to/file.osm.pbf:/data/region.osm.pbf lrnselfreliance/osm-map-dumper > map-db-gis.dump"
+    exit 1
+  fi
+else
+  echo "ERROR: map-db-gis.dump has invalid format!"
+  echo "Header: ${DUMP_HEADER} (expected to start with 504744 for 'PGDMP' or 1f8b08 for gzip)"
+  echo "Create the dump using:"
+  echo "  docker run --rm -v /path/to/file.osm.pbf:/data/region.osm.pbf lrnselfreliance/osm-map-dumper > map-db-gis.dump"
+  exit 1
+fi
+
 CHROOTFS="${BUILD_DIR}/work/WROLPi/stage0/rootfs"
 
 cleanup() {

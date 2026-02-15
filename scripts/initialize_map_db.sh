@@ -24,8 +24,15 @@ sudo -iu postgres psql -c '\l' --port=5433 | grep gis || (
   sudo -iu postgres psql -d gis --port=5433 -c 'CREATE EXTENSION hstore'
   echo "Created gis database"
 )
-# Restore initial dump.
-sudo -iu postgres pg_restore --port=5433 --no-owner --role=_renderd -d gis -j3 /opt/wrolpi-blobs/map-db-gis.dump
+# Restore initial dump (handle both gzipped and non-gzipped custom format).
+DUMP_FILE=/opt/wrolpi-blobs/map-db-gis.dump
+if file "${DUMP_FILE}" | grep -q "gzip"; then
+  echo "Restoring gzipped dump..."
+  gunzip -c "${DUMP_FILE}" | sudo -iu postgres pg_restore --port=5433 --no-owner --role=_renderd -d gis
+else
+  echo "Restoring dump..."
+  sudo -iu postgres pg_restore --port=5433 --no-owner --role=_renderd -d gis -j3 "${DUMP_FILE}"
+fi
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
 sudo -iu postgres psql --port=5433 -d gis -c 'ALTER TABLE spatial_ref_sys OWNER TO _renderd'

@@ -188,7 +188,18 @@ fi
 # Change owner of the media directory, ignore any errors because the drive may be fat/exfat/etc.
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."
 
+# Remove immutable flag from blob files before chown (may not exist or may not be set).
+chattr -i /opt/wrolpi-blobs/* 2>/dev/null || :
+
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
+
+# Protect blob files from accidental modification or deletion.
+# These files are critical for initializing WROLPi.
+if [ -d /opt/wrolpi-blobs ]; then
+  chown -R root:root /opt/wrolpi-blobs
+  chmod 444 /opt/wrolpi-blobs/*
+  chattr +i /opt/wrolpi-blobs/*
+fi
 
 # Copy MOTD once the repair has been successful.
 cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi.motd /etc/update-motd.d/30-wrolpi

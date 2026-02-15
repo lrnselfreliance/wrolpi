@@ -56,6 +56,12 @@ echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab
 mkdir -p /media/wrolpi
 chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi /opt/wrolpi*
 
+# Protect blob files from accidental modification or deletion.
+# These files are critical for initializing WROLPi.
+chown -R root:root /opt/wrolpi-blobs
+chmod 444 /opt/wrolpi-blobs/*
+chattr +i /opt/wrolpi-blobs/*
+
 set +x
 
 echo

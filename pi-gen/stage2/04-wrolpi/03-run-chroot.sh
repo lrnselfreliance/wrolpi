@@ -68,6 +68,8 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 # Enable first startup script.
 systemctl enable wrolpi-first-startup.service
+# Enable Controller service to start on boot.
+systemctl enable wrolpi-controller.service
 
 # Copy MOTD scripts, delete original.
 cp /opt/wrolpi/etc/raspberrypios/motd/20-wrolpi.motd /etc/update-motd.d/20-wrolpi

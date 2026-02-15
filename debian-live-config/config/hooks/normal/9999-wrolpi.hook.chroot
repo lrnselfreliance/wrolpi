@@ -87,6 +87,8 @@ systemctl enable NetworkManager
 
 # Enable iperf3 for speed testing.
 systemctl enable iperf3
+# Enable Controller service to start on boot.
+systemctl enable wrolpi-controller.service
 
 set +x
 

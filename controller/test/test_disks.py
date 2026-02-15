@@ -293,14 +293,6 @@ class TestUnmountDrive:
             assert result["success"] is False
             assert "Docker" in result["error"]
 
-    def test_protects_primary_wrolpi_mount(self):
-        """Should protect /media/wrolpi from accidental unmount."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.disks.get_config", return_value={"drives": {}}):
-                result = unmount_drive("/media/wrolpi")
-                assert result["success"] is False
-                assert "Cannot unmount /media/wrolpi" in result["error"]
-
     def test_unmounts_successfully(self):
         """Should unmount successfully."""
         with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):

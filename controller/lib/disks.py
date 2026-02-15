@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from controller.lib.config import get_config, is_docker_mode
+from controller.lib.config import is_docker_mode
 
 SUPPORTED_FILESYSTEMS = {"ext4", "btrfs", "vfat", "exfat"}
 
@@ -203,29 +203,6 @@ def unmount_drive(mount_point: str, lazy: bool = False) -> dict:
     """
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
-
-    # Safety rule: Don't unmount /media/wrolpi if no drives configured
-    if mount_point == "/media/wrolpi":
-        config = get_config()
-        configured_mounts = config.get("drives", {}).get("mounts", [])
-
-        if not configured_mounts:
-            return {
-                "success": False,
-                "error": "Cannot unmount /media/wrolpi: No drives are configured. "
-                         "This prevents accidental data loss.",
-            }
-
-        # Check if this is the primary drive
-        primary_mount = next(
-            (m for m in configured_mounts if m.get("is_primary")),
-            None
-        )
-        if primary_mount:
-            return {
-                "success": False,
-                "error": "Cannot unmount /media/wrolpi: This is the primary WROLPi drive.",
-            }
 
     # Check if mount is busy
     if is_mount_busy(mount_point) and not lazy:

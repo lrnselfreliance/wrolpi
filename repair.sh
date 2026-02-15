@@ -194,6 +194,19 @@ chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi.motd /etc/update-motd.d/30-wrolpi
 chmod +x /etc/update-motd.d/*
 
+# Copy desktop shortcuts to existing users (new users get them from /etc/skel).
+if [[ ${rpi} == true ]]; then
+  for user_home in /home/wrolpi /home/pi; do
+    if [ -d "${user_home}/Desktop" ]; then
+      cp /opt/wrolpi/etc/raspberrypios/*.desktop "${user_home}/Desktop/"
+      chown -R "$(basename ${user_home})":"$(basename ${user_home})" "${user_home}/Desktop/"
+    fi
+  done
+  # Update skeleton for future users.
+  mkdir -p /etc/skel/Desktop
+  cp /opt/wrolpi/etc/raspberrypios/*.desktop /etc/skel/Desktop/
+fi
+
 systemctl restart renderd
 systemctl restart wrolpi-help
 systemctl start wrolpi.target

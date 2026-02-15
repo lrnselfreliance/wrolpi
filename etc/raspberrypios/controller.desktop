@@ -1,0 +1,6 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=WROLPi Controller
+Type=Link
+URL=http://127.0.0.1:8087
+Icon=/opt/wrolpi/etc/raspberrypios/controller-logo.png

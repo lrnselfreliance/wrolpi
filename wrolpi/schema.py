@@ -93,6 +93,7 @@ class FlagsStatusResponse:
     file_worker_discovery: bool
     file_worker_indexing: bool
     file_worker_modeling: bool
+    global_refresh_active: bool
     have_internet: bool
     map_importing: bool
     outdated_zims: bool

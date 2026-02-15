@@ -122,6 +122,9 @@ file_worker_modeling = Flag('file_worker_modeling')
 file_worker_indexing = Flag('file_worker_indexing')
 file_worker_cleanup = Flag('file_worker_cleanup')
 
+# A global refresh is currently running.
+global_refresh_active = Flag('global_refresh_active')
+
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
 
@@ -136,6 +139,7 @@ def get_flags() -> dict:
         file_worker_discovery=file_worker_discovery.is_set(),
         file_worker_indexing=file_worker_indexing.is_set(),
         file_worker_modeling=file_worker_modeling.is_set(),
+        global_refresh_active=global_refresh_active.is_set(),
         have_internet=have_internet.is_set(),
         map_importing=map_importing.is_set(),
         outdated_zims=outdated_zims.is_set(),

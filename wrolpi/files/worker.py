@@ -1097,6 +1097,7 @@ class FileWorker:
         if is_global_refresh:
             global_refresh_start_time = time.time()
             logger.info(f'Starting global refresh with {task.count} files')
+            flags.global_refresh_active.set()
             Events.send_global_refresh_started()
         elif dir_paths and len(dir_paths) == 1 and not file_paths:
             relative_path = self._get_relative_path(dir_paths[0])
@@ -1108,8 +1109,6 @@ class FileWorker:
 
         # Process files and directories within discovery flag context
         # This covers comparing, upserting, and deleting phases
-        file_result = None
-        dir_result = None
 
         with flags.file_worker_discovery:
             # Process files directly (fast path)
@@ -1195,6 +1194,7 @@ class FileWorker:
         # Set refresh_complete flag only when refreshing the entire media directory
         if is_global_refresh:
             flags.refresh_complete.set()
+            flags.global_refresh_active.clear()
 
         # Mark job as complete if tracking
         self._complete_job(task.job_id)

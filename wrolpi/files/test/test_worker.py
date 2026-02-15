@@ -1049,7 +1049,6 @@ async def test_global_refresh_sends_global_events(
     events_fixture.assert_has_event('global_refresh_modeling_completed')
     events_fixture.assert_has_event('global_refresh_indexing_completed')
     events_fixture.assert_has_event('global_after_refresh_completed')
-    events_fixture.assert_has_event('refresh_completed')
 
     # Should NOT send directory_refresh or files_refreshed
     events_fixture.assert_no_event('directory_refresh')

@@ -61,7 +61,6 @@ import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import {FileBrowser} from "./FileBrowser";
 import {refreshFiles} from "../api";
-import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
 import {useSearch} from "./Search";
@@ -735,35 +734,54 @@ export function FilesRoute() {
 }
 
 const useRefresh = () => {
-    const refreshing = useStatusFlag('file_worker_busy');
-    const refreshingDirectory = useStatusFlag('refreshing_directory');
     const wrolModeEnabled = useWROLMode();
-
+    const globalRefreshActive = useStatusFlag('global_refresh_active');
     const [loading, setLoading] = React.useState(false);
+    const [globalRefreshLoading, setGlobalRefreshLoading] = React.useState(false);
+    const prevGlobalRefreshActive = React.useRef(false);
 
     const localRefreshFiles = async (paths) => {
         setLoading(true);
-        await refreshFiles(paths);
+        try {
+            await refreshFiles(paths);
+
+            // Check if this was a global refresh (no paths = refresh all)
+            // If so, set globalRefreshLoading and schedule a fallback timeout
+            if (!paths || paths.length === 0) {
+                setGlobalRefreshLoading(true);
+                setTimeout(() => {
+                    setGlobalRefreshLoading(false);
+                }, 10000);
+            }
+        } finally {
+            setLoading(false);
+        }
     }
 
-    // Clear loading when global refresh event completes.
-    useSubscribeEventName('refresh_completed', () => setLoading(false));
+    // Clear globalRefreshLoading when flag transitions from true to false
+    React.useEffect(() => {
+        if (prevGlobalRefreshActive.current && !globalRefreshActive) {
+            setGlobalRefreshLoading(false);
+        }
+        prevGlobalRefreshActive.current = globalRefreshActive;
+    }, [globalRefreshActive]);
+
+    const isGlobalRefreshing = globalRefreshLoading || globalRefreshActive;
 
     return {
-        refreshing,
-        refreshingDirectory,
-        wrolModeEnabled,
+        globalRefreshing: isGlobalRefreshing,
         loading,
+        wrolModeEnabled,
         refreshFiles: localRefreshFiles,
     }
 }
 
 export function FilesRefreshButton({paths}) {
-    const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
+    const {globalRefreshing, loading, wrolModeEnabled, refreshFiles} = useRefresh();
 
     return <Button icon='refresh'
-                   loading={loading || refreshing || refreshingDirectory}
+                   loading={loading || globalRefreshing}
                    onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || loading || refreshing}/>
+                   disabled={wrolModeEnabled || globalRefreshing}/>
         ;
 }

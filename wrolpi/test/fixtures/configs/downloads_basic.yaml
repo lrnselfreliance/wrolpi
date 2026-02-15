@@ -1,0 +1,14 @@
+version: 0
+skip_urls: []
+downloads:
+  - url: 'https://example.com/channel'
+    downloader: video
+    destination: videos/test_channel
+    frequency: 604800
+    last_successful_download: null
+    next_download: null
+    status: new
+    sub_downloader: null
+    settings: null
+    tag_names:
+      - news

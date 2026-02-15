@@ -1,0 +1,11 @@
+version: 0
+skip_urls: []
+downloads:
+  - url: 'https://example.com/minimal'
+    downloader: video
+    frequency: 604800
+    status: new
+    destination: null
+    sub_downloader: null
+    settings: null
+    tag_names: []

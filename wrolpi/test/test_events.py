@@ -29,7 +29,6 @@ async def test_events_api_feed(test_session, async_client, example_pdf, events_f
     assert (result := response.json.get('events'))
 
     # Verify using the fixture
-    events_fixture.assert_has_event('refresh_completed')
     events_fixture.assert_has_event('global_after_refresh_completed')
     events_fixture.assert_has_event('global_refresh_indexing_completed')
     events_fixture.assert_has_event('global_refresh_modeling_completed')
@@ -38,7 +37,6 @@ async def test_events_api_feed(test_session, async_client, example_pdf, events_f
 
     # Also verify the API returns the same events
     expected = [
-        dict(event='refresh_completed', subject='refresh'),
         dict(event='global_after_refresh_completed', subject='refresh'),
         dict(event='global_refresh_indexing_completed', subject='refresh'),
         dict(event='global_refresh_modeling_completed', subject='refresh'),

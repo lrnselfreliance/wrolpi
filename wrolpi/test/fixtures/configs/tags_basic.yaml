@@ -1,0 +1,6 @@
+version: 0
+tags:
+  news:
+    color: '#FF0000'
+  tech:
+    color: '#00FF00'

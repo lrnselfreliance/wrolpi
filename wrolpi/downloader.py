@@ -1402,8 +1402,8 @@ class DownloadManagerConfig(ConfigFile):
                         existing.downloader = download['downloader']
                         existing.destination = download['destination']
                         existing.frequency = download['frequency']
-                        existing.last_successful_download = download['last_successful_download']
-                        existing.next_download = download['next_download']
+                        existing.last_successful_download = download.get('last_successful_download')
+                        existing.next_download = download.get('next_download')
                         existing.status = download['status']
                         existing.sub_downloader = download['sub_downloader']
                         existing.settings = download.get('settings') or dict()
@@ -1426,8 +1426,8 @@ class DownloadManagerConfig(ConfigFile):
                         destination=download['destination'],
                         downloader=download['downloader'],
                         frequency=download['frequency'],
-                        last_successful_download=download['last_successful_download'],
-                        next_download=download['next_download'],
+                        last_successful_download=download.get('last_successful_download'),
+                        next_download=download.get('next_download'),
                         settings=download['settings'] or dict(),
                         status=download['status'],
                         sub_downloader=download['sub_downloader'],

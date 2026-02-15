@@ -1,0 +1,5 @@
+version: 0
+collections:
+  - name: example.com
+    kind: domain
+    tag_name: tech

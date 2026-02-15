@@ -293,3 +293,86 @@ class TestDownloadManagerConfigEdgeCases:
         downloads = test_session.query(Download).all()
         assert len(downloads) == 1
         assert downloads[0].url == 'https://example.com/new'
+
+    async def test_import_config_with_missing_optional_fields(self, test_session, test_directory,
+                                                               test_download_manager_config, async_client):
+        """
+        Config files from older versions or manual edits may be missing optional fields.
+        Import should succeed with None values for missing fields.
+        """
+        config = get_download_manager_config()
+        config_path = config.get_file()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Config with minimal required fields only - intentionally missing last_successful_download and next_download
+        config_path.write_text(yaml.dump({
+            'version': 0,
+            'skip_urls': [],
+            'downloads': [{
+                'url': 'https://example.com/video',
+                'downloader': 'video',
+                'destination': None,
+                'frequency': 604800,
+                'status': 'new',
+                'sub_downloader': None,
+                'settings': None,
+                'tag_names': [],
+                # NOTE: Intentionally missing last_successful_download and next_download
+            }]
+        }))
+
+        config.initialize()
+        config.import_config()
+
+        assert config.successful_import is True
+        downloads = test_session.query(Download).all()
+        assert len(downloads) == 1
+        assert downloads[0].last_successful_download is None
+        assert downloads[0].next_download is None
+
+    async def test_update_existing_download_with_missing_optional_fields(self, test_session, test_directory,
+                                                                          test_download_manager_config, async_client):
+        """
+        When updating an existing download from config, missing optional fields should not cause errors.
+        """
+        config = get_download_manager_config()
+        config_path = config.get_file()
+
+        # Create an existing download in DB
+        download = Download(
+            url='https://example.com/existing',
+            downloader='video',
+            frequency=604800,
+            status='new',
+        )
+        test_session.add(download)
+        test_session.commit()
+
+        # Config with minimal fields - intentionally missing last_successful_download and next_download
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(yaml.dump({
+            'version': 0,
+            'skip_urls': [],
+            'downloads': [{
+                'url': 'https://example.com/existing',
+                'downloader': 'video',
+                'destination': '/new/destination',
+                'frequency': 86400,  # Changed frequency
+                'status': 'new',
+                'sub_downloader': None,
+                'settings': None,
+                'tag_names': [],
+                # NOTE: Intentionally missing last_successful_download and next_download
+            }]
+        }))
+
+        config.initialize()
+        config.import_config()
+
+        assert config.successful_import is True
+        downloads = test_session.query(Download).all()
+        assert len(downloads) == 1
+        assert downloads[0].frequency == 86400
+        assert str(downloads[0].destination) == '/new/destination'
+        assert downloads[0].last_successful_download is None
+        assert downloads[0].next_download is None

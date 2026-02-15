@@ -1,0 +1,6 @@
+version: 0
+channels:
+  - name: Test Channel
+    directory: videos/test_channel
+    url: 'https://example.com/channel'
+    tag_name: news

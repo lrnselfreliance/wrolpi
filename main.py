@@ -9,20 +9,16 @@ from contextlib import contextmanager
 from sanic import Sanic
 from sanic.signals import Event
 
-from modules.archive.lib import import_domains_config
-from modules.inventory import init_inventory
-from modules.inventory.common import import_inventories_config
-from modules.videos.lib import import_channels_config, get_videos_downloader_config
+from modules.videos.lib import get_videos_downloader_config
 from wrolpi import flags
 from wrolpi import root_api  # noqa
-from wrolpi import tags
 from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
     cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config, can_connect_to_server, wrol_mode_enabled, \
     create_empty_config_files, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
-from wrolpi.downloader import import_downloads_config, download_manager, get_download_manager_config
+from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, INTERNET_SERVER
@@ -279,25 +275,8 @@ async def start_single_tasks(app: Sanic):
 
     # Import configs that require the database.
     if wrolpi_config.successful_import and not wrolpi_config.wrol_mode:
-        with log_and_suppress(Exception, message='Failed to import tags config'):
-            tags.import_tags_config()
-            logger.debug('tags config imported')
-        with log_and_suppress(Exception, message='Failed to import downloads config'):
-            await import_downloads_config()
-            logger.debug('downloads config imported')
-        # Channels uses both downloads and tags.
-        with log_and_suppress(Exception, message='Failed to import channels config'):
-            import_channels_config()
-            logger.debug('channels config imported')
-        # Domains config import
-        with log_and_suppress(Exception, message='Failed to import domains config'):
-            import_domains_config()
-            logger.debug('domains config imported')
-        with log_and_suppress(Exception, message='Failed to import inventories config'):
-            import_inventories_config()
-            logger.debug('inventories config imported')
-        with log_and_suppress(Exception, message='Failed to init inventory'):
-            init_inventory()
+        from wrolpi.common import import_all_db_configs
+        await import_all_db_configs()
 
     if flags.refresh_complete.is_set():
         # Set all downloads to new.

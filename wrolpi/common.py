@@ -776,6 +776,78 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     return all_configs
 
 
+async def import_all_db_configs() -> dict[str, bool]:
+    """
+    Import all configs that require the database.
+
+    Returns a dict mapping config name to success status.
+    Used by main.py startup and disaster recovery tests.
+
+    Import order matters:
+    1. Tags - no dependencies
+    2. Downloads - no dependencies
+    3. Channels - uses tags, linked to downloads post-import
+    4. Domains - uses tags, linked to downloads post-import
+    5. Inventories - no dependencies
+    """
+    from wrolpi import tags
+    from wrolpi.downloader import import_downloads_config
+    from modules.videos.lib import import_channels_config
+    from modules.archive.lib import import_domains_config
+    from modules.inventory.common import import_inventories_config
+    from modules.inventory import init_inventory
+
+    results = {}
+
+    # Tags first (channels/domains depend on tags existing)
+    try:
+        tags.import_tags_config()
+        results['tags'] = True
+        logger.debug('tags config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import tags config: {e}')
+        results['tags'] = False
+
+    # Downloads (channels link to downloads post-import)
+    try:
+        await import_downloads_config()
+        results['downloads'] = True
+        logger.debug('downloads config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import downloads config: {e}')
+        results['downloads'] = False
+
+    # Channels (uses tags, links to downloads)
+    try:
+        import_channels_config()
+        results['channels'] = True
+        logger.debug('channels config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import channels config: {e}')
+        results['channels'] = False
+
+    # Domains (uses tags)
+    try:
+        import_domains_config()
+        results['domains'] = True
+        logger.debug('domains config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import domains config: {e}')
+        results['domains'] = False
+
+    # Inventories
+    try:
+        import_inventories_config()
+        init_inventory()
+        results['inventories'] = True
+        logger.debug('inventories config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import inventories config: {e}')
+        results['inventories'] = False
+
+    return results
+
+
 def get_config_by_file_name(file_name: str) -> ConfigFile:
     configs = get_all_configs()
     if file_name not in configs:

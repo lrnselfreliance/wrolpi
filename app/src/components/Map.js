@@ -19,16 +19,14 @@ import {
     Divider,
     Icon as SIcon,
     Loader as SLoader,
-    PlaceholderLine,
-    TableBody,
     TableCell,
     TableFooter,
-    TableHeader,
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
+import {SortableTable} from "./SortableTable";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Header, Loader, Placeholder, Segment, Table} from "./Theme";
+import {Header, Loader, Segment} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
 import _ from "lodash";
 import {MAP_VIEWER_URI} from "./Vars";
@@ -178,34 +176,6 @@ class ManageMap extends React.Component {
         this.setState({selectedPaths});
     }
 
-    tableRow = (pbf, disabled) => {
-        let ref = React.createRef();
-        const {size, path, imported, time_to_import} = pbf;
-        let sizeCells = (<>
-            <TableCell>{humanFileSize(size)}</TableCell>
-            <TableCell>{humanFileSize(size * 25)}</TableCell>
-            <TableCell>{time_to_import}</TableCell>
-        </>);
-        return <TableRow key={path}>
-            <TableCell collapsing>
-                <Checkbox
-                    disabled={disabled}
-                    ref={ref}
-                    onChange={(e, data) => this.handleCheckbox(data.checked, pbf)}
-                />
-            </TableCell>
-            <TableCell>
-                <a href={`/media/${path}`}>{path}</a>
-            </TableCell>
-            <TableCell>
-                {this.state.pending && this.state.pending.indexOf(path) >= 0 ?
-                    <SLoader active inline size='mini'/> :
-                    imported ? 'yes' : 'no'}
-            </TableCell>
-            {size !== null ? sizeCells : <TableCell colSpan={3}/>}
-        </TableRow>
-    }
-
     render() {
         const {files, selectedPaths, import_running, pending, dockerized} = this.state;
 
@@ -222,32 +192,71 @@ class ManageMap extends React.Component {
             {!_.isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
         </APIButton>;
 
-        let rows = <TableRow>
-            <TableCell/>
-            <TableCell colSpan={6}>
-                <Placeholder>
-                    <PlaceholderLine/>
-                    <PlaceholderLine/>
-                </Placeholder>
-            </TableCell>
-        </TableRow>;
-        if (files && files.length === 0) {
-            rows = <TableRow>
-                <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
-            </TableRow>;
-        } else if (files && files.length >= 1) {
-            rows = files.map(i => this.tableRow(i, disabled));
-        } else if (files === undefined) {
-            rows = <TableRow>
-                <TableCell colSpan={6}>
-                    <ErrorMessage>Could not fetch map files</ErrorMessage>
-                </TableCell>
-            </TableRow>
-        }
-
         let spaceInfoPopup = <InfoPopup
             content='Upon importing, a PBF file will consume more disk space than the original file.'/>;
         let timeInfoPopup = <InfoPopup content='Estimated for a Raspberry Pi 4'/>;
+
+        const tableHeaders = [
+            {key: 'select', text: '', sortBy: null},
+            {key: 'path', text: 'PBF File', sortBy: i => i.path.toLowerCase()},
+            {key: 'imported', text: 'Imported', sortBy: i => i.imported ? 1 : 0},
+            {key: 'size', text: 'Size', sortBy: i => i.size || 0},
+            {key: 'space', text: <>Space Required {spaceInfoPopup}</>, sortBy: i => i.size || 0},
+            {key: 'time', text: <>Time to Import {timeInfoPopup}</>, sortBy: i => i.seconds_to_import || 0},
+        ];
+
+        const rowFunc = (pbf) => {
+            let ref = React.createRef();
+            const {size, path, imported, time_to_import} = pbf;
+            let sizeCells = (<>
+                <TableCell>{humanFileSize(size)}</TableCell>
+                <TableCell>{humanFileSize(size * 25)}</TableCell>
+                <TableCell>{time_to_import}</TableCell>
+            </>);
+            return <TableRow>
+                <TableCell collapsing>
+                    <Checkbox
+                        disabled={disabled}
+                        ref={ref}
+                        onChange={(e, data) => this.handleCheckbox(data.checked, pbf)}
+                    />
+                </TableCell>
+                <TableCell>
+                    <a href={`/media/${path}`}>{path}</a>
+                </TableCell>
+                <TableCell>
+                    {pending && pending.indexOf(path) >= 0 ?
+                        <SLoader active inline size='mini'/> :
+                        imported ? 'yes' : 'no'}
+                </TableCell>
+                {size !== null ? sizeCells : <TableCell colSpan={3}/>}
+            </TableRow>;
+        };
+
+        const emptyRow = <TableRow>
+            <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
+        </TableRow>;
+
+        const footer = <TableFooter>
+            <TableRow>
+                <TableHeaderCell/>
+                <TableHeaderCell colSpan={5}>
+                    {importButton}
+                </TableHeaderCell>
+            </TableRow>
+        </TableFooter>;
+
+        // Handle error state (files === undefined)
+        if (files === undefined) {
+            return <PageContainer>
+                <WROLModeMessage content='Cannot modify Map'/>
+                <DockerMapImportWarning/>
+                <SlowImportMessage/>
+                <ErrorMessage>Could not fetch map files</ErrorMessage>
+                <DownloadMessage/>
+                <ViewerMessage/>
+            </PageContainer>;
+        }
 
         return <PageContainer>
             <WROLModeMessage content='Cannot modify Map'/>
@@ -256,29 +265,15 @@ class ManageMap extends React.Component {
             <Loader size='large' active={import_running} inline='centered'>
                 {importingMessage}
             </Loader>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell/>
-                        <TableHeaderCell>PBF File</TableHeaderCell>
-                        <TableHeaderCell>Imported</TableHeaderCell>
-                        <TableHeaderCell>Size</TableHeaderCell>
-                        <TableHeaderCell>Space Required {spaceInfoPopup}</TableHeaderCell>
-                        <TableHeaderCell>Time to Import {timeInfoPopup}</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {rows}
-                </TableBody>
-                <TableFooter>
-                    <TableRow>
-                        <TableHeaderCell/>
-                        <TableHeaderCell colSpan={5}>
-                            {importButton}
-                        </TableHeaderCell>
-                    </TableRow>
-                </TableFooter>
-            </Table>
+            <SortableTable
+                tableHeaders={tableHeaders}
+                data={files}
+                rowFunc={rowFunc}
+                rowKey='path'
+                defaultSortColumn='path'
+                emptyRow={emptyRow}
+                footer={footer}
+            />
             <DownloadMessage/>
             <ViewerMessage/>
         </PageContainer>

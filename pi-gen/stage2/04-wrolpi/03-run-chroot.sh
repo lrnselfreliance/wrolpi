@@ -27,6 +27,14 @@ sed -i 's/port =.*/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 # Install Node console commands.
 npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1.2.0
 
+# Install Deno runtime.
+DENO_VERSION="v2.2.4"
+curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-aarch64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+unzip /tmp/deno.zip -d /usr/local/bin/
+chmod +x /usr/local/bin/deno
+rm /tmp/deno.zip
+deno --version
+
 # Put the latest WROLPi master in /opt/wrolpi.
 git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 git config --global --add safe.directory /opt/wrolpi

@@ -16,6 +16,38 @@ trap cleanup EXIT
 cd /opt/wrolpi/app || exit 1
 npm install || npm install || npm install || npm install # try install multiple times  :(
 
+# Install/upgrade Deno runtime.
+upgrade_deno() {
+    DENO_VERSION="v2.2.4"
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "aarch64" ]; then
+        DENO_ARCH="aarch64-unknown-linux-gnu"
+    elif [ "$ARCH" = "x86_64" ]; then
+        DENO_ARCH="x86_64-unknown-linux-gnu"
+    else
+        echo "Unsupported architecture for Deno: $ARCH"
+        return 1
+    fi
+
+    # Check if Deno is already installed at the correct version.
+    if command -v deno &> /dev/null; then
+        CURRENT_VERSION=$(deno --version | head -n1 | awk '{print "v"$2}')
+        if [ "$CURRENT_VERSION" = "$DENO_VERSION" ]; then
+            echo "Deno ${DENO_VERSION} already installed"
+            return 0
+        fi
+    fi
+
+    echo "Installing Deno ${DENO_VERSION} for ${ARCH}..."
+    curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip
+    unzip -o /tmp/deno.zip -d /usr/local/bin/
+    chmod +x /usr/local/bin/deno
+    rm /tmp/deno.zip
+    deno --version
+}
+
+upgrade_deno || echo "Deno upgrade failed, continuing..."
+
 # Install any new Python requirements.
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
 # Upgrade the WROLPi database.

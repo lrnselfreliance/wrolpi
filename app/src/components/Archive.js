@@ -1018,7 +1018,9 @@ function ArchiveSettingsPage() {
 
             <p {...t}>
                 These are the settings necessary to configure the <a
-                href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install">SingleFile Browser
+                href="https://github.com/gildas-lormeau/SingleFile?tab=readme-ov-file#install"
+                rel='noopener noreferrer'
+                target='_blank'>SingleFile Browser
                 Extension</a> to automatically upload to your WROLPi.
             </p>
 

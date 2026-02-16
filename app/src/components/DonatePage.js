@@ -69,6 +69,8 @@ export function DonatePage() {
                     as='a'
                     color='blue'
                     href='https://www.paypal.com/donate/?hosted_button_id=ZH2CN92SMJ66N'
+                    rel='noopener noreferrer'
+                    target='_blank'
                     label={{
                         basic: true,
                         content: 'Donate on PayPal',

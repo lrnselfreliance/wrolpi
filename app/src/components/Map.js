@@ -71,7 +71,7 @@ function DownloadMessage() {
         <Message.Header>Where do I get map files?</Message.Header>
 
         <p>You can download map files from&nbsp;
-            <a href='https://download.geofabrik.de/'>https://download.geofabrik.de/</a>
+            <a href='https://download.geofabrik.de/' rel='noopener noreferrer' target='_blank'>https://download.geofabrik.de/</a>
         </p>
 
         <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire

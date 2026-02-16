@@ -205,7 +205,7 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
                         <TagsSelector selectedTagNames={tag_names} onAdd={localAddTag} onRemove={localUntag}/>
                     </Grid.Column>
                     <Grid.Column width={2}>
-                        <Button color='blue' as='a' href={url} target='_blank'>Open</Button>
+                        <Button color='blue' as='a' href={url} target='_blank' rel='noopener noreferrer'>Open</Button>
                     </Grid.Column>
                 </Grid>
             </Modal.Actions>
@@ -316,7 +316,7 @@ export const ZimSearchView = ({suggestions, loading}) => {
 const DownloadMessage = () => {
     return <InfoMessage>
         <p>More Zim files are available from the full Kiwix library&nbsp;
-            <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
+            <a href='https://download.kiwix.org/' rel='noopener noreferrer' target='_blank'>https://download.kiwix.org/</a>
         </p>
     </InfoMessage>
 }

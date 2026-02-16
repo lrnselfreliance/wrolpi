@@ -44,6 +44,8 @@ else
 fi
 
 # Clear out old builds.
+# Remove immutable attribute from protected files before cleanup
+chattr -i "${BUILD_DIR}"/chroot/opt/wrolpi-blobs/* 2>/dev/null || :
 [ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
 mkdir "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)

@@ -62,6 +62,9 @@ cleanup() {
         fi
     done
 
+    # Remove immutable attribute from protected files before cleanup
+    chattr -i "${BUILD_DIR}"/work/*/stage*/rootfs/opt/wrolpi-blobs/* 2>/dev/null || :
+
     # Final safety net – remove the whole build tree
     rm -rf "${BUILD_DIR}"
 }

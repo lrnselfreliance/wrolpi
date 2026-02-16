@@ -747,6 +747,14 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
     assert vid_group.mimetype == 'video/mp4'
     assert srt_group.mimetype == 'text/srt'
 
+    # Add srt to vid_group so both groups have it (simulates race condition scenario)
+    vid_group.append_files(srt)
+    test_session.commit()
+
+    # Verify both groups have the srt file
+    assert 'vid.srt' in [f['path'] for f in vid_group.files]
+    assert 'vid.srt' in [f['path'] for f in srt_group.files]
+
     # Both FileGroups are merged.
     vid = FileGroup.from_paths(test_session, vid, srt)
     test_session.commit()
@@ -762,6 +770,10 @@ async def test_file_group_merge(async_client, test_session, test_directory, make
     # Size is combined
     assert vid.size > len(video_bytes)
     assert vid.mimetype == 'video/mp4'
+
+    # Verify no duplicate files were created during merge
+    filenames = [f['path'] for f in vid.files]
+    assert len(filenames) == len(set(filenames)), f"Duplicate files found: {filenames}"
 
 
 @pytest.mark.asyncio

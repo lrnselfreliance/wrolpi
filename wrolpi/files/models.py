@@ -518,14 +518,18 @@ class FileGroup(ModelHelper, Base):
         session = Session.object_session(self)
 
         collected_files = self.files.copy()
+        # Track filenames (strings) for proper deduplication
+        existing_filenames = {f['path'] for f in self.files}
+
         for file_group in file_groups:
             if file_group.primary_path == self.primary_path:
                 # Don't merge myself.
                 continue
 
             for file in file_group.files:
-                if file['path'] not in self.my_paths():
+                if file['path'] not in existing_filenames:
                     collected_files.append(file)
+                    existing_filenames.add(file['path'])  # Track newly added
             # Move any applied Tags.
             for tag_file in file_group.tag_files:
                 if tag_file.tag is not None and tag_file.tag.name not in self.tag_names:

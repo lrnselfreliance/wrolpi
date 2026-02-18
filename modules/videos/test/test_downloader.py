@@ -177,6 +177,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
         'collection_id': simple_channel.collection_id,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
         'destination': str(test_directory),
+        'parent_download_url': url,
     }
 
     reset_downloads()
@@ -195,6 +196,7 @@ async def test_download_channel(test_session, test_directory, simple_channel, vi
         'collection_id': simple_channel.collection_id,
         'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
         'destination': str(test_directory),
+        'parent_download_url': url,
     }
 
 

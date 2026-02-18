@@ -856,6 +856,7 @@ export function EditArchiveDownloadForm({
     }
 
     return <ArchiveDownloadForm
+        singleDownload={true}
         download={download}
         onCancel={onCancel}
         onSuccess={onSuccess}
@@ -864,7 +865,7 @@ export function EditArchiveDownloadForm({
     />
 }
 
-export function ArchiveDownloadForm({download, onCancel, onSuccess: propOnSuccess, submitter: propSubmitter, actions}) {
+export function ArchiveDownloadForm({singleDownload = false, download, onCancel, onSuccess: propOnSuccess, submitter: propSubmitter, actions}) {
     const [showMessage, setShowMessage] = React.useState(false);
 
     const submitter = propSubmitter || (async (formData) => {
@@ -904,6 +905,10 @@ export function ArchiveDownloadForm({download, onCancel, onSuccess: propOnSucces
         }
     }
 
+    const urlInput = singleDownload ?
+        <UrlInput required form={form} path='urls'/>
+        : <UrlsTextarea required form={form}/>;
+
     return <Form>
         <Header as='h3'><Icon name='file text' color='green'/> Archives</Header>
         <p>Create a Singlefile Archive for each of the URLs provided below.</p>
@@ -911,7 +916,7 @@ export function ArchiveDownloadForm({download, onCancel, onSuccess: propOnSucces
         <Grid stackable columns={1}>
             <Grid.Row>
                 <Grid.Column>
-                    <UrlsTextarea required form={form}/>
+                    {urlInput}
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row>

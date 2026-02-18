@@ -285,6 +285,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
     const [editModalOpen, setEditModalOpen] = React.useState(false);
 
     const {url, last_successful_download, status, location, error, downloader, settings, id, tag_names} = download;
+    const parentDownloadUrl = settings?.parent_download_url;
 
     const handleDelete = async () => {
         try {
@@ -328,13 +329,23 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
     if (status === 'pending' || status === 'new') {
         buttonCell = (
             <TableCell>
-                <APIButton
-                    color='red'
-                    onClick={handleStop}
-                    confirmContent='Are you sure you want to stop this download?  It will not be retried.'
-                    confirmButton='Stop'
-                    obeyWROLMode={true}
-                >Stop</APIButton>
+                <ButtonGroup>
+                    <APIButton
+                        color='red'
+                        icon='stop circle'
+                        onClick={handleStop}
+                        confirmContent='Are you sure you want to stop this download?  It will not be retried.'
+                        confirmButton='Stop'
+                        obeyWROLMode={true}
+                    />
+                    {status === 'new' && (downloader === Downloaders.Video || downloader === Downloaders.Archive) && (
+                        <Button
+                            icon='edit'
+                            color='blue'
+                            onClick={handleEditOpen}
+                        />
+                    )}
+                </ButtonGroup>
             </TableCell>
         );
     } else if (status === 'failed' || status === 'deferred') {
@@ -411,6 +422,13 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         onSuccess={handleEditSuccess}
                         onDelete={handleDelete}
                     />
+                    {parentDownloadUrl && (
+                        <p style={{marginTop: '1em', color: '#666'}}>
+                            From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
+                                {parentDownloadUrl}
+                            </a>
+                        </p>
+                    )}
                 </Modal.Content>
             </Modal>
         );
@@ -433,6 +451,13 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                         onSuccess={handleEditSuccess}
                         onDelete={handleDelete}
                     />
+                    {parentDownloadUrl && (
+                        <p style={{marginTop: '1em', color: '#666'}}>
+                            From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
+                                {parentDownloadUrl}
+                            </a>
+                        </p>
+                    )}
                 </Modal.Content>
             </Modal>
         );

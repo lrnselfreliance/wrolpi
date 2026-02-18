@@ -802,3 +802,53 @@ async def test_batch_api_endpoints(async_client, test_session, test_download_man
     body = dict(download_ids=[])
     request, response = await async_client.post('/api/download/batch/delete', content=json.dumps(body))
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_child_downloads_have_parent_download_url(test_session, test_download_manager, test_downloader):
+    """Child downloads spawned by a parent download should have parent_download_url set in their settings."""
+    import asyncio
+    from wrolpi.downloader import DownloadResult
+
+    parent_url = 'https://example.com/parent'
+    child_urls = ['https://example.com/child1', 'https://example.com/child2']
+
+    # Track which URLs have been processed to avoid returning children for child downloads
+    processed_urls = set()
+
+    # Configure the test_downloader to return child downloads only for the parent URL
+    async def download_with_children(download, *a, **kwargs):
+        await asyncio.sleep(0.1)
+        if download.url == parent_url and parent_url not in processed_urls:
+            processed_urls.add(parent_url)
+            return DownloadResult(success=True, downloads=child_urls)
+        # Return success without children for child downloads
+        return DownloadResult(success=True)
+
+    test_downloader.do_download.side_effect = download_with_children
+
+    # Create the parent download with a sub_downloader specified
+    test_download_manager.create_download(test_session, parent_url, test_downloader.name,
+                                          sub_downloader_name=test_downloader.name)
+    test_session.commit()
+
+    # Wait for the parent download to complete and create child downloads
+    await test_download_manager.wait_for_all_downloads()
+
+    # Get all downloads
+    downloads = test_session.query(Download).all()
+    assert len(downloads) == 3, f'Expected 3 downloads (1 parent + 2 children), got {len(downloads)}'
+
+    # Find parent and child downloads
+    parent_download = next((d for d in downloads if d.url == parent_url), None)
+    child_downloads = [d for d in downloads if d.url in child_urls]
+
+    assert parent_download is not None, 'Parent download not found'
+    assert len(child_downloads) == 2, f'Expected 2 child downloads, got {len(child_downloads)}'
+
+    # Verify child downloads have parent_download_url in their settings
+    for child in child_downloads:
+        assert child.settings is not None, f'Child download {child.url} has no settings'
+        assert 'parent_download_url' in child.settings, f'Child download {child.url} missing parent_download_url'
+        assert child.settings['parent_download_url'] == parent_url, \
+            f'Child download {child.url} has wrong parent_download_url: {child.settings.get("parent_download_url")}'

@@ -230,6 +230,7 @@ class DownloadSettings:
     video_count_limit: Optional[int] = None
     video_format: Optional[str] = None
     video_resolutions: List[str] = field(default_factory=list)
+    parent_download_url: Optional[str] = None
 
     def __post_init__(self):
         if self.excluded_urls and self.excluded_urls.endswith(','):

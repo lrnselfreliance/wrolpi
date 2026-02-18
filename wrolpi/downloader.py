@@ -1565,6 +1565,13 @@ class RSSDownloader(Downloader):
             else:
                 logger.warning(f'RSS entry {idx} did not have a link!')
 
+        if download.sub_downloader == 'video':
+            # Normalize video URLs before checking if already downloaded.
+            # YouTube Shorts URLs (e.g., youtube.com/shorts/ABC123) must be converted to watch URLs
+            # (e.g., youtube.com/watch?v=ABC123) to match what is stored in the database.
+            from modules.videos.normalize_video_url import normalize_video_url
+            urls = [normalize_video_url(i) for i in urls]
+
         # Only download new URLs.
         with get_db_session() as session:
             urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(session, *urls)]]

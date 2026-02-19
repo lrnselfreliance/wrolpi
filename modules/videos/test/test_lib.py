@@ -386,6 +386,23 @@ def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected
 
 
+@pytest.mark.parametrize('file_name,expected', [
+    ('/home/wrolpi/.config/chromium/Default', ('chromium', 'Default', None, None)),
+    ('/home/wrolpi/.config/chromium/Profile 1', ('chromium', 'Profile 1', None, None)),
+    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', ('firefox', '29el0wk0.default-release', None, None)),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', ('brave', 'Default', None, None)),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', ('brave', 'Profile 1', None, None)),
+    ('/home/wrolpi/.config/google-chrome/Default', ('chrome', 'Default', None, None)),
+    ('/home/wrolpi/.config/google-chrome/Profile 1', ('chrome', 'Profile 1', None, None)),
+])
+def test_browser_profile_to_yt_dlp_tuple(file_name, expected):
+    """
+    Test the conversion of a browser profile to yt-dlp cookiesfrombrowser tuple.
+    """
+    file_name = pathlib.Path(file_name)
+    assert lib.browser_profile_to_yt_dlp_tuple(file_name) == expected
+
+
 def test_get_browser_profiles(test_directory):
     """Test discovery of browser profiles for all supported browsers."""
     # Create a mock home directory with browser profiles

@@ -1092,6 +1092,22 @@ def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
     return f'{browser}:{profile_name}'
 
 
+def browser_profile_to_yt_dlp_tuple(profile: pathlib.Path) -> tuple:
+    """Takes a Path and returns a tuple that can be used as yt-dlp `cookiesfrombrowser` option in Python API.
+
+    The yt-dlp Python API expects cookiesfrombrowser as a tuple: (browser, profile, keyring, container)
+    """
+    profile_str = str(profile)
+
+    for browser_key, config in BROWSER_CONFIGS.items():
+        if config['config_path'] in profile_str:
+            return (config['yt_dlp_name'], profile.name, None, None)
+
+    # Fallback for unknown browsers
+    *_, browser, profile_name = profile_str.split('/')
+    return (browser, profile_name, None, None)
+
+
 def format_video_filename(
         video: Video,
         file_name_format: str = None,

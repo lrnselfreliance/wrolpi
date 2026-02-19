@@ -1,4 +1,5 @@
 import asyncio
+import pathlib
 import random
 from datetime import timedelta
 from typing import Tuple, Optional, List
@@ -173,13 +174,23 @@ def delete_videos(session: Session, *video_ids: int):
     session.commit()
 
 
-def download_video_info_json(url: str) -> dict:
+def download_video_info_json(url: str, browser_profile: 'pathlib.Path' = None) -> dict:
+    """Download video info JSON, optionally using browser cookies for authentication.
+
+    Args:
+        url: The video URL to fetch info for.
+        browser_profile: Optional path to browser profile for cookie-based authentication.
+    """
     ydl_opts = dict(
         getcomments=True,
         skip_download=True,
         extractor_args={'youtube': {'max_comments': ['all', '20', 'all', '10'], 'comment_sort': ['top']}},
         cachedir=YTDLP_CACHE_DIR,
     )
+
+    if browser_profile and browser_profile.exists():
+        from modules.videos.lib import browser_profile_to_yt_dlp_tuple
+        ydl_opts['cookiesfrombrowser'] = browser_profile_to_yt_dlp_tuple(browser_profile)
 
     ydl_logger = logger.getChild('youtube-dl')
 
@@ -195,7 +206,15 @@ def download_video_info_json(url: str) -> dict:
 async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
     """
     Fetches Video info json for videos without comments, if comments are found then the info json file is replaced.
+    Uses browser profile for authentication if configured.
     """
+    from modules.videos.lib import get_videos_downloader_config
+
+    config = get_videos_downloader_config()
+    browser_profile = None
+    if config.browser_profile and config.always_use_browser_profile:
+        browser_profile = pathlib.Path(config.browser_profile)
+
     one_month_ago = now() - timedelta(days=30)
 
     # Get any videos over a month old that do not have comments.
@@ -262,7 +281,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
 
         try:
             # Get info json about the video.
-            info = download_video_info_json(url)
+            info = download_video_info_json(url, browser_profile=browser_profile)
 
             if not info or not isinstance(info.get('comments'), list):
                 logger.error(f'Unable to get comments for video: {url=}')

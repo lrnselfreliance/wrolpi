@@ -344,6 +344,12 @@ async def perpetual_start_video_missing_comments_download():
         # We can't search for Videos missing comments until the refresh has completed.
         pass
 
+    # Check if download missing video comments is enabled.
+    config = get_videos_downloader_config()
+    if not config.download_missing_video_comments:
+        logger.trace('Download missing video comments is disabled, skipping...')
+        return
+
     # Wait for download manager to startup.
     await asyncio.sleep(5)
 

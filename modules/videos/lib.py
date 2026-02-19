@@ -37,6 +37,31 @@ DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 REQUIRED_OPTIONS = ['name', 'directory']
 
+# Browser profile discovery configuration.
+# Maps browser identifiers to their config paths and yt-dlp names.
+BROWSER_CONFIGS = {
+    'brave': {
+        'yt_dlp_name': 'brave',
+        'config_path': '.config/BraveSoftware/Brave-Browser',
+        'profile_key': 'brave_profiles',
+    },
+    'chrome': {
+        'yt_dlp_name': 'chrome',
+        'config_path': '.config/google-chrome',
+        'profile_key': 'chrome_profiles',
+    },
+    'chromium': {
+        'yt_dlp_name': 'chromium',
+        'config_path': '.config/chromium',
+        'profile_key': 'chromium_profiles',
+    },
+    'firefox': {
+        'yt_dlp_name': 'firefox',
+        'config_path': '.mozilla/firefox',
+        'profile_key': 'firefox_profiles',
+    },
+}
+
 
 @dataclasses.dataclass
 class VideoInfoJSON:
@@ -508,6 +533,7 @@ class VideoDownloaderConfigValidator:
     yt_dlp_extra_args: str = ''
     always_use_browser_profile: bool = False
     browser_profile: str = ''
+    download_missing_video_comments: bool = False
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -536,6 +562,7 @@ class VideoDownloaderConfig(ConfigFile):
         yt_dlp_extra_args='',
         always_use_browser_profile=False,
         browser_profile='',
+        download_missing_video_comments=False,
     )
     validator = VideoDownloaderConfigValidator
 
@@ -618,6 +645,14 @@ class VideoDownloaderConfig(ConfigFile):
     @always_use_browser_profile.setter
     def always_use_browser_profile(self, value: bool):
         self.update({**self._config, 'always_use_browser_profile': value})
+
+    @property
+    def download_missing_video_comments(self) -> bool:
+        return self._config['download_missing_video_comments']
+
+    @download_missing_video_comments.setter
+    def download_missing_video_comments(self, value: bool):
+        self.update({**self._config, 'download_missing_video_comments': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
@@ -1003,42 +1038,58 @@ def format_videos_destination(channel_name: str = None, channel_tag: str = None,
     return videos_destination
 
 
+def _discover_chromium_profiles(browser_dir: pathlib.Path, profile_list: list):
+    """Discover profiles for Chromium-based browsers (Chromium, Chrome, Brave)."""
+    if not browser_dir.is_dir():
+        return
+    default_profile = browser_dir / 'Default'
+    if default_profile.is_dir():
+        profile_list.append(default_profile)
+    for profile in browser_dir.glob('Profile *'):
+        if profile.is_dir():
+            profile_list.append(profile)
+
+
+def _discover_firefox_profiles(browser_dir: pathlib.Path, profile_list: list):
+    """Discover profiles for Firefox using profiles.ini."""
+    profiles_file = browser_dir / 'profiles.ini'
+    if not profiles_file.is_file():
+        return
+    profiles_content = profiles_file.read_text()
+    default_profiles = re.findall(r'Default=(.*)', profiles_content)
+    for profile_path in default_profiles:
+        full_path = browser_dir / profile_path
+        if full_path.is_dir():
+            profile_list.append(full_path)
+
+
 def get_browser_profiles(home: pathlib.Path = WROLPI_HOME) -> dict:
-    """Searches the provided home directory for Chromium and Firefox profiles."""
+    """Searches the provided home directory for browser profiles from all supported browsers."""
     logger.debug(f'Searching for browser profiles in {home}')
 
-    profiles = dict(chromium_profiles=[], firefox_profiles=[])
+    profiles = {config['profile_key']: [] for config in BROWSER_CONFIGS.values()}
 
-    chromium_directory = home / '.config/chromium'
-    default_chromium_profile = chromium_directory / 'Default'
-
-    if default_chromium_profile.is_dir():
-        profiles['chromium_profiles'].append(default_chromium_profile)
-    chromium_profiles = chromium_directory.glob('Profile *')
-    for chromium_profile in chromium_profiles:
-        if chromium_profile.is_dir():
-            profiles['chromium_profiles'].append(chromium_profile)
-
-    firefox_profiles_directory = home / '.mozilla/firefox'
-    firefox_profiles_file = firefox_profiles_directory / 'profiles.ini'
-    if firefox_profiles_file.is_file():
-        # Read the profile.ini and get the default profile path.
-        firefox_profiles_file = firefox_profiles_file.read_text()
-
-        default_firefox_profile = re.findall(r'Default=(.*)', firefox_profiles_file)
-        if default_firefox_profile:
-            default_firefox_profile = firefox_profiles_directory / default_firefox_profile[0]
-
-            if default_firefox_profile.is_dir():
-                profiles['firefox_profiles'].append(default_firefox_profile)
+    for browser_key, config in BROWSER_CONFIGS.items():
+        browser_dir = home / config['config_path']
+        if browser_key == 'firefox':
+            _discover_firefox_profiles(browser_dir, profiles[config['profile_key']])
+        else:
+            _discover_chromium_profiles(browser_dir, profiles[config['profile_key']])
 
     return profiles
 
 
 def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
     """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument."""
-    *_, browser, profile = str(profile).split('/')
-    return f'{browser}:{profile}'
+    profile_str = str(profile)
+
+    for browser_key, config in BROWSER_CONFIGS.items():
+        if config['config_path'] in profile_str:
+            return f"{config['yt_dlp_name']}:{profile.name}"
+
+    # Fallback to original behavior for unknown browsers
+    *_, browser, profile_name = profile_str.split('/')
+    return f'{browser}:{profile_name}'
 
 
 def format_video_filename(

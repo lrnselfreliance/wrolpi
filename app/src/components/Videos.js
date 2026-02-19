@@ -50,6 +50,7 @@ import {
     fetchBrowserProfiles,
     fetchVideoDownloaderConfig,
     postVideoFileFormat,
+    previewBatchReorganization,
     updateVideoDownloaderConfig
 } from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
@@ -58,7 +59,6 @@ import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
 import {VideoResolutionSelectorForm} from "./Download";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
-import {previewBatchReorganization} from "../api";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -322,6 +322,7 @@ function VideosSettingsPage() {
         always_use_browser_profile: false,
         yt_dlp_extra_args: '',
         browser_profile: '',
+        download_missing_video_comments: false,
     };
 
     const configSubmitter = async () => {
@@ -342,13 +343,21 @@ function VideosSettingsPage() {
         let tempProfiles = [];
         let localBrowserProfiles = await fetchBrowserProfiles();
 
-        const chromiumProfiles = localBrowserProfiles['chromium_profiles'];
-        for (const value of Object.values(chromiumProfiles)) {
-            tempProfiles.push({value: value, text: value});
-        }
-        const firefoxProfiles = localBrowserProfiles['firefox_profiles'];
-        for (const value of Object.values(firefoxProfiles)) {
-            tempProfiles.push({value: value, text: value});
+        for (const [browserKey, profilePaths] of Object.entries(localBrowserProfiles)) {
+            if (!profilePaths || profilePaths.length === 0) continue;
+
+            // Extract browser display name from key (e.g., "chromium_profiles" -> "Chromium")
+            const browserName = browserKey.replace('_profiles', '')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+
+            for (const profilePath of profilePaths) {
+                const profileName = profilePath.split('/').pop();
+                tempProfiles.push({
+                    value: profilePath,
+                    text: `${browserName}: ${profileName}`,
+                });
+            }
         }
 
         if (_.isEmpty(tempProfiles)) {
@@ -367,106 +376,119 @@ function VideosSettingsPage() {
         headerContent='Always Use Browser Profile'
         popupContent='Always download videos with the selected browser profile. This is risky, and therefore discouraged.'
     />;
+    const downloadMissingVideoCommentsLabel = <InfoHeader
+        headerSize='h5'
+        headerContent='Download Missing Video Comments'
+        popupContent='When enabled, WROLPi will automatically download comments for videos that are missing them.'
+    />;
 
     return <>
         <Segment>
             <Header as='h3'>Video Downloader Config</Header>
 
             <Form>
-            <Grid>
-                <Grid.Row columns={2}>
-                    <Grid.Column mobile={16} computer={8}>
-                        <VideoResolutionSelectorForm
-                            form={configForm}
-                            name='video_resolutions'
-                            path='video_resolutions'
-                        />
-                    </Grid.Column>
-                    <Grid.Column mobile={16} computer={8}>
-                        <VideoFileNameForm form={configForm}/>
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row columns={2}>
-                    <Grid.Column mobile={16} computer={8}>
-                        <ToggleForm
-                            form={configForm}
-                            label='Do not overwrite existing files'
-                            name='nooverwrites'
-                            path='yt_dlp_options.nooverwrites'
-                            icon='file video'
-                        />
-                    </Grid.Column>
-                    <Grid.Column mobile={16} computer={8}>
-                        <ToggleForm
-                            form={configForm}
-                            label='Download automatic subtitles'
-                            name='writeautomaticsub'
-                            path='yt_dlp_options.writeautomaticsub'
-                            icon='closed captioning'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column mobile={16} computer={8}>
-                        <ToggleForm
-                            form={configForm}
-                            label='Download subtitles'
-                            name='writesubtitles'
-                            path='yt_dlp_options.writesubtitles'
-                            icon='closed captioning outline'
-                        />
-                    </Grid.Column>
-                    <Grid.Column mobile={16} computer={8}>
-                        <ToggleForm
-                            form={configForm}
-                            label='Download thumbnail'
-                            name='writethumbnail'
-                            path='yt_dlp_options.writethumbnail'
-                            icon='image'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column mobile={16} computer={8}>
-                        <InputForm
-                            form={configForm}
-                            name='yt_dlp_extra_args'
-                            path='yt_dlp_extra_args'
-                            label='Extra yt-dlp Arguments'
-                            placeholder='--prefer-free-formats'
-                            icon='terminal'
-                        />
-                    </Grid.Column>
-                    <Grid.Column mobile={16} computer={8}>
-                        <VideoBrowserCookiesSelector form={configForm} options={browserProfilesOptions}/>
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column mobile={16} computer={8}/>
-                    <Grid.Column mobile={16} computer={8}>
-                        <ToggleForm
-                            form={configForm}
-                            label={alwaysUseBrowserProfileLabel}
-                            name='always_use_browser_profile'
-                            path='always_use_browser_profile'
-                            disabled={!configForm.formData.browser_profile}
-                        />
-                    </Grid.Column>
-                </Grid.Row>
+                <Grid>
+                    <Grid.Row columns={2}>
+                        <Grid.Column mobile={16} computer={8}>
+                            <VideoResolutionSelectorForm
+                                form={configForm}
+                                name='video_resolutions'
+                                path='video_resolutions'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <VideoFileNameForm form={configForm}/>
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row columns={2}>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Do not overwrite existing files'
+                                name='nooverwrites'
+                                path='yt_dlp_options.nooverwrites'
+                                icon='file video'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Download automatic subtitles'
+                                name='writeautomaticsub'
+                                path='yt_dlp_options.writeautomaticsub'
+                                icon='closed captioning'
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Download subtitles'
+                                name='writesubtitles'
+                                path='yt_dlp_options.writesubtitles'
+                                icon='closed captioning outline'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Download thumbnail'
+                                name='writethumbnail'
+                                path='yt_dlp_options.writethumbnail'
+                                icon='image'
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column mobile={16} computer={8}>
+                            <InputForm
+                                form={configForm}
+                                name='yt_dlp_extra_args'
+                                path='yt_dlp_extra_args'
+                                label='Extra yt-dlp Arguments'
+                                placeholder='--prefer-free-formats'
+                                icon='terminal'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <VideoBrowserCookiesSelector form={configForm} options={browserProfilesOptions}/>
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label={downloadMissingVideoCommentsLabel}
+                                name='download_missing_video_comments'
+                                path='download_missing_video_comments'
+                                icon='comments'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label={alwaysUseBrowserProfileLabel}
+                                name='always_use_browser_profile'
+                                path='always_use_browser_profile'
+                                disabled={!configForm.formData.browser_profile}
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
 
-                <Grid.Row columns={1}>
-                    <Grid.Column textAlign='right'>
-                        <APIButton
-                            disabled={configForm.disabled || !configForm.ready}
-                            type='submit'
-                            style={{marginTop: '0.5em'}}
-                            onClick={configForm.onSubmit}
-                            id='video_settings_save_button'
-                        >Save</APIButton>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Form>
+                    <Grid.Row columns={1}>
+                        <Grid.Column textAlign='right'>
+                            <APIButton
+                                disabled={configForm.disabled || !configForm.ready}
+                                type='submit'
+                                style={{marginTop: '0.5em'}}
+                                onClick={configForm.onSubmit}
+                                id='video_settings_save_button'
+                            >Save</APIButton>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </Form>
         </Segment>
 
         <Segment>
@@ -479,7 +501,7 @@ function VideosSettingsPage() {
                         {channelsNeedingReorg > 0
                             ? ' have files that do not match the current file name format.'
                             : '. All channels are organized correctly.'}
-                      </>
+                    </>
                 }
             </p>
             <Button

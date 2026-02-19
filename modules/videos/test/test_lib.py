@@ -371,7 +371,12 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
 
 @pytest.mark.parametrize('file_name,expected', [
     ('/home/wrolpi/.config/chromium/Default', 'chromium:Default'),
+    ('/home/wrolpi/.config/chromium/Profile 1', 'chromium:Profile 1'),
     ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', 'firefox:29el0wk0.default-release'),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', 'brave:Default'),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', 'brave:Profile 1'),
+    ('/home/wrolpi/.config/google-chrome/Default', 'chrome:Default'),
+    ('/home/wrolpi/.config/google-chrome/Profile 1', 'chrome:Profile 1'),
 ])
 def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     """
@@ -379,6 +384,60 @@ def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     """
     file_name = pathlib.Path(file_name)
     assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected
+
+
+def test_get_browser_profiles(test_directory):
+    """Test discovery of browser profiles for all supported browsers."""
+    # Create a mock home directory with browser profiles
+    home = test_directory / 'home'
+
+    # Chromium profiles
+    chromium_dir = home / '.config/chromium'
+    (chromium_dir / 'Default').mkdir(parents=True)
+    (chromium_dir / 'Profile 1').mkdir(parents=True)
+
+    # Chrome profiles
+    chrome_dir = home / '.config/google-chrome'
+    (chrome_dir / 'Default').mkdir(parents=True)
+    (chrome_dir / 'Profile 2').mkdir(parents=True)
+
+    # Brave profiles
+    brave_dir = home / '.config/BraveSoftware/Brave-Browser'
+    (brave_dir / 'Default').mkdir(parents=True)
+
+    # Firefox profiles
+    firefox_dir = home / '.mozilla/firefox'
+    firefox_dir.mkdir(parents=True)
+    firefox_profile_dir = firefox_dir / 'abc123.default-release'
+    firefox_profile_dir.mkdir()
+    profiles_ini = firefox_dir / 'profiles.ini'
+    profiles_ini.write_text('[Profile0]\nDefault=abc123.default-release\n')
+
+    profiles = lib.get_browser_profiles(home)
+
+    # Verify all browser profile keys exist
+    assert 'chromium_profiles' in profiles
+    assert 'chrome_profiles' in profiles
+    assert 'brave_profiles' in profiles
+    assert 'firefox_profiles' in profiles
+
+    # Verify Chromium profiles discovered
+    chromium_names = [p.name for p in profiles['chromium_profiles']]
+    assert 'Default' in chromium_names
+    assert 'Profile 1' in chromium_names
+
+    # Verify Chrome profiles discovered
+    chrome_names = [p.name for p in profiles['chrome_profiles']]
+    assert 'Default' in chrome_names
+    assert 'Profile 2' in chrome_names
+
+    # Verify Brave profiles discovered
+    brave_names = [p.name for p in profiles['brave_profiles']]
+    assert 'Default' in brave_names
+
+    # Verify Firefox profiles discovered
+    firefox_names = [p.name for p in profiles['firefox_profiles']]
+    assert 'abc123.default-release' in firefox_names
 
 
 def test_video_location(test_session, video_factory, channel_factory, async_client):

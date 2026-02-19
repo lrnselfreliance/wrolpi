@@ -2534,3 +2534,77 @@ def test_format_video_filename_fallback_behavior(
     for forbidden in should_not_contain:
         assert forbidden not in result, f"Should NOT contain '{forbidden}'. Got: {result}"
 
+
+def test_preview_excludes_files_already_in_correct_location(test_session, test_directory, video_factory):
+    """Files already in the correct location should not appear in preview or be counted as needing move.
+
+    This tests that when a video's current path matches the computed new path, it is excluded from:
+    - files_needing_move count
+    - sample_moves list
+    """
+    from modules.videos.lib import get_videos_downloader_config, format_video_filename
+
+    # Set up a simple format using the correct nested config structure
+    config = get_videos_downloader_config()
+    original_format = config._config['yt_dlp_options']['file_name_format']
+
+    # Use simple title-only format for predictability
+    yt_dlp_options = dict(config._config['yt_dlp_options'])
+    yt_dlp_options['file_name_format'] = '%(title)s.%(ext)s'
+    config._config['yt_dlp_options'] = yt_dlp_options
+
+    try:
+        # Create channel collection
+        channel_dir = test_directory / 'videos' / 'CorrectLocationChannel'
+        channel_dir.mkdir(parents=True, exist_ok=True)
+
+        with get_db_session(commit=True) as session:
+            collection = Collection(
+                name='CorrectLocationChannel',
+                kind='channel',
+                directory=channel_dir,
+                file_format='%(old_format)s.%(ext)s'  # Different from config, so needs_reorganization=True
+            )
+            session.add(collection)
+            session.flush()
+            channel = Channel(name='CorrectLocationChannel', collection_id=collection.id, directory=channel_dir)
+            session.add(channel)
+            session.commit()
+            channel_id = channel.id
+            collection_id = collection.id
+
+        # Create a video with a simple title (no special characters)
+        # The video_factory will place it at channel_dir/SimpleTitle.mp4
+        video = video_factory(
+            channel_id=channel_id,
+            title='SimpleTitle',
+            with_video_file=True,
+        )
+
+        # Verify the video is at the expected location
+        with get_db_session() as session:
+            video_obj = session.query(Video).get(video.id)
+            current_path = video_obj.file_group.primary_path
+
+            # The format_video_filename should produce the same filename
+            expected_filename = format_video_filename(video_obj, '%(title)s.%(ext)s')
+            expected_path = channel_dir / expected_filename
+
+            # Paths should match (this is the precondition for our test)
+            assert str(current_path) == str(expected_path), \
+                f"Test setup error: paths don't match. Current: {current_path}, Expected: {expected_path}"
+
+        # Now get the preview - the file should NOT need moving
+        with get_db_session() as session:
+            preview = get_reorganization_preview(collection_id, session)
+
+            # Since the file is already in the correct location, it should NOT be in the preview
+            assert preview.files_needing_move == 0, \
+                f"File already in correct location should not need moving. Got {preview.files_needing_move} files needing move"
+            assert len(preview.sample_moves) == 0, \
+                f"File already in correct location should not appear in sample_moves. Got: {preview.sample_moves}"
+
+    finally:
+        yt_dlp_options = dict(config._config['yt_dlp_options'])
+        yt_dlp_options['file_name_format'] = original_format
+        config._config['yt_dlp_options'] = yt_dlp_options

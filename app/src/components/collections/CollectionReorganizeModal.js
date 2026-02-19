@@ -374,7 +374,10 @@ export function CollectionReorganizeModal({
                         <Grid.Column>
                             <Message info>
                                 <Message.Header>No Files Need Reorganization</Message.Header>
-                                <p>All files are already organized according to the current format.</p>
+                                <p>
+                                    All files are already organized according to the current format.
+                                    {needsReorganization && ' Click "Mark as Organized" to dismiss the warning.'}
+                                </p>
                             </Message>
                         </Grid.Column>
                     </Grid.Row>
@@ -422,6 +425,7 @@ export function CollectionReorganizeModal({
     const isInProgress = polling || (status && status.status !== 'complete' && status.status !== 'error');
     const hasConflicts = preview && preview.has_conflicts;
     const canReorganize = preview && preview.files_needing_move > 0 && !isInProgress && !jobId && !hasConflicts;
+    const canMarkAsOrganized = preview && preview.files_needing_move === 0 && needsReorganization && !isInProgress && !jobId;
 
     return (
         <>
@@ -468,6 +472,15 @@ export function CollectionReorganizeModal({
                             obeyWROLMode={true}
                         >
                             Reorganize Files
+                        </APIButton>
+                    )}
+                    {canMarkAsOrganized && (
+                        <APIButton
+                            color='green'
+                            onClick={handleReorganize}
+                            obeyWROLMode={true}
+                        >
+                            Mark as Organized
                         </APIButton>
                     )}
                 </Modal.Actions>

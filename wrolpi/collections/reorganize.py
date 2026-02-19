@@ -395,7 +395,8 @@ def get_batch_reorganization_preview(
             if sample_video and sample_video.file_group and sample_video.file_group.primary_path:
                 current_path = pathlib.Path(sample_video.file_group.primary_path)
                 new_path = _compute_new_path_for_video(sample_video, collection_directory)
-                if new_path and current_path != new_path:
+                # Compare resolved paths to handle symlinks and path normalization
+                if new_path and current_path.resolve() != new_path.resolve():
                     try:
                         old_relative = str(current_path.relative_to(media_dir))
                     except ValueError:
@@ -420,7 +421,8 @@ def get_batch_reorganization_preview(
         if sample_archive and sample_archive.file_group and sample_archive.file_group.primary_path:
             current_path = pathlib.Path(sample_archive.file_group.primary_path)
             new_path = _compute_new_path_for_archive(sample_archive, collection_directory)
-            if new_path and current_path != new_path:
+            # Compare resolved paths to handle symlinks and path normalization
+            if new_path and current_path.resolve() != new_path.resolve():
                 try:
                     old_relative = str(current_path.relative_to(media_dir))
                 except ValueError:
@@ -473,7 +475,8 @@ def _build_move_mappings_for_channel(
         current_path = pathlib.Path(video.file_group.primary_path)
         new_path = _compute_new_path_for_video(video, collection_directory)
 
-        if new_path and current_path != new_path:
+        # Compare resolved paths to handle symlinks and path normalization
+        if new_path and current_path.resolve() != new_path.resolve():
             move_mappings.append((current_path, new_path))
 
     return move_mappings
@@ -502,7 +505,8 @@ def _build_move_mappings_for_domain(
         current_path = pathlib.Path(archive.file_group.primary_path)
         new_path = _compute_new_path_for_archive(archive, collection_directory)
 
-        if new_path and current_path != new_path:
+        # Compare resolved paths to handle symlinks and path normalization
+        if new_path and current_path.resolve() != new_path.resolve():
             move_mappings.append((current_path, new_path))
 
     return move_mappings

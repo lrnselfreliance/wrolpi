@@ -711,7 +711,14 @@ async def fetch_channel_source_id(channel_id: int):
         with get_db_session() as session:
             from modules.videos.channel.lib import get_channel
             channel = Channel.find_by_id(session, channel_id)
-            channel.source_id = channel.source_id or get_channel_source_id(channel.url)
+
+            # Get browser profile from config
+            config = get_videos_downloader_config()
+            browser_profile = None
+            if config.browser_profile and config.always_use_browser_profile:
+                browser_profile = pathlib.Path(config.browser_profile)
+
+            channel.source_id = channel.source_id or get_channel_source_id(channel.url, browser_profile=browser_profile)
             if not channel.source_id:
                 channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
             else:
@@ -801,8 +808,19 @@ ydl_logger = YDL.params['logger'] = logger.getChild('youtube-dl')
 YDL.add_default_info_extractors()
 
 
-def get_channel_source_id(url: str) -> str:
-    channel_info = YDL.extract_info(url, download=False, process=False)
+def get_channel_source_id(url: str, browser_profile: pathlib.Path = None) -> str:
+    """Get the source ID for a channel URL."""
+    ydl = YDL
+    if browser_profile and browser_profile.exists():
+        ydl_opts = dict(
+            cachedir=YTDLP_CACHE_DIR,
+            cookiesfrombrowser=browser_profile_to_yt_dlp_tuple(browser_profile),
+        )
+        ydl = YoutubeDL(ydl_opts)
+        ydl.params['logger'] = logger.getChild('youtube-dl')
+        ydl.add_default_info_extractors()
+
+    channel_info = ydl.extract_info(url, download=False, process=False)
     return channel_info.get('channel_id') or channel_info['uploader_id']
 
 

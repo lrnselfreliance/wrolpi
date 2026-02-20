@@ -965,16 +965,19 @@ class Channel(ModelHelper, Base):
         return self.tag
 
     @classmethod
-    def refresh_files(cls, id_: int, send_events: bool = True):
-        """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
+    def refresh_files(cls, id_: int, send_events: bool = True) -> str:
+        """Refresh all files within this Channel's directory.  Returns job_id for awaiting.
+
+        The channel is marked as refreshed after the background task completes post-processing."""
         # Get this Channel's info for later.  Refresh may take a long time.
         with get_db_session() as session:
             directory = cls.find_by_id(session, id_).directory
 
-        # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
+        # Queue refresh immediately so caller can await the job.
+        job_id = file_worker.queue_refresh([directory])
+
+        # Background task handles post-processing after job completes.
         async def _():
-            # Refresh all files within this channel's directory first.
-            job_id = file_worker.queue_refresh([directory])
             await file_worker.wait_for_job(job_id)
             # Update view count second.
             from modules.videos.common import update_view_counts_and_censored
@@ -984,6 +987,7 @@ class Channel(ModelHelper, Base):
                 channel_.refreshed = True
 
         background_task(_())
+        return job_id
 
     @staticmethod
     def get_by_id(session: Session, id_: int) -> Optional['Channel']:

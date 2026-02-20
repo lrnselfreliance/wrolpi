@@ -4,6 +4,7 @@ import {
     Accordion as SAccordion,
     Breadcrumb as SBreadcrumb,
     Button as SButton,
+    ButtonGroup as SButtonGroup,
     Card as SCard,
     Divider as SDivider,
     Form as SForm,
@@ -38,6 +39,7 @@ import {
     AccordionProps,
     BreadcrumbProps,
     ButtonProps,
+    ButtonGroupProps,
     CardProps as SCardProps,
     DividerProps,
     FormProps,
@@ -222,12 +224,30 @@ export function Accordion(props: AccordionProps) {
     return <SAccordion {...mergedProps}/>
 }
 
-export const Button = forwardRef<any, ButtonProps>((props, ref) => {
+// ----------------------------------------------------------------------------
+// Button Compound Component
+// ----------------------------------------------------------------------------
+
+type ButtonGroupComponent = React.FC<ButtonGroupProps>;
+
+interface ButtonComponent extends React.ForwardRefExoticComponent<ButtonProps & React.RefAttributes<any>> {
+    Group: ButtonGroupComponent;
+}
+
+const ButtonGroup: ButtonGroupComponent = (props) => {
+    return <SButtonGroup {...props}/>
+};
+
+const ButtonBase = forwardRef<any, ButtonProps>((props, ref) => {
     const {i, inverted} = useContext(ThemeContext);
     const mergedProps = defaultGrey({...i, ...props}, !!inverted);
     return <SButton ref={ref} {...mergedProps}/>
 });
-Button.displayName = 'Button';
+ButtonBase.displayName = 'ButtonBase';
+
+export const Button: ButtonComponent = Object.assign(ButtonBase, {
+    Group: ButtonGroup,
+});
 
 export function Divider(props: DividerProps) {
     const {i} = useContext(ThemeContext);

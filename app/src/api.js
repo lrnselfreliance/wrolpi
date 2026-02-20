@@ -301,6 +301,7 @@ export async function getSettings() {
             download_manager_stopped: content.download_manager_stopped,
             download_on_startup: content.download_on_startup,
             download_timeout: content.download_timeout,
+            download_wait: content.download_wait,
             hotspot_device: content.hotspot_device,
             hotspot_on_startup: content.hotspot_on_startup,
             hotspot_password: content.hotspot_password,
@@ -467,22 +468,6 @@ export async function getArchiveStatistics() {
         });
     }
     return response
-}
-
-export async function fetchBrowserProfiles() {
-    const response = await apiGet(`${API_URI}/videos/browser-profiles`);
-    if (response.status === 200) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to get browser profiles.');
-        toast({
-            type: 'error',
-            title: 'Fetching Browser Profiles Failed',
-            description: message,
-            time: 5000,
-        });
-        return {}
-    }
 }
 
 export async function updateVideoDownloaderSettings(settings) {
@@ -1930,4 +1915,71 @@ export async function getBulkTagProgress() {
     }
     // Not toasting because this happens often during polling.
     return null;
+}
+
+// Encrypted Cookies API
+
+export async function getCookiesStatus() {
+    const response = await apiGet(`${VIDEOS_API}/cookies/status`);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Failed to get cookies status.');
+    toast({type: 'error', title: 'Cookies Error', description: message, time: 5000});
+    return null;
+}
+
+export async function uploadCookies(cookiesContent, password) {
+    const body = {cookies_content: cookiesContent, password};
+    const response = await apiPost(`${VIDEOS_API}/cookies`, body);
+    if (response.ok) {
+        toast({type: 'success', title: 'Cookies Saved', description: 'Cookies encrypted and saved successfully.', time: 3000});
+        return {success: true};
+    }
+    const message = await getErrorMessage(response, 'Failed to save cookies.');
+    toast({type: 'error', title: 'Cookies Error', description: message, time: 5000});
+    return {success: false, error: message};
+}
+
+export async function deleteCookies() {
+    const response = await apiDelete(`${VIDEOS_API}/cookies`);
+    if (response.status === 204) {
+        toast({type: 'success', title: 'Cookies Deleted', description: 'Encrypted cookies file deleted.', time: 3000});
+        return {success: true};
+    }
+    const message = await getErrorMessage(response, 'Failed to delete cookies.');
+    toast({type: 'error', title: 'Cookies Error', description: message, time: 5000});
+    return {success: false, error: message};
+}
+
+export async function unlockCookies(password) {
+    const body = {password};
+    const response = await apiPost(`${VIDEOS_API}/cookies/unlock`, body);
+    if (response.ok) {
+        toast({type: 'success', title: 'Cookies Unlocked', description: 'Cookies decrypted and ready for downloads.', time: 3000});
+        return {success: true};
+    }
+    const message = await getErrorMessage(response, 'Failed to unlock cookies.');
+    toast({type: 'error', title: 'Cookies Error', description: message, time: 5000});
+    return {success: false, error: message};
+}
+
+export async function lockCookies() {
+    const response = await apiPost(`${VIDEOS_API}/cookies/lock`);
+    if (response.ok) {
+        toast({type: 'success', title: 'Cookies Locked', description: 'Cookies cleared from memory.', time: 3000});
+        return {success: true};
+    }
+    const message = await getErrorMessage(response, 'Failed to lock cookies.');
+    toast({type: 'error', title: 'Cookies Error', description: message, time: 5000});
+    return {success: false, error: message};
+}
+
+export async function fetchSuggestedUserAgent() {
+    const response = await apiGet(`${VIDEOS_API}/suggested-user-agent`);
+    if (response.ok) {
+        const data = await response.json();
+        return data?.user_agent || '';
+    }
+    return '';
 }

@@ -36,7 +36,8 @@ import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
 from wrolpi.cmd import CommandResult
-from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL
+from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL, \
+    get_wrolpi_config
 from wrolpi.common import logger, await_background_tasks as await_background_tasks_, BACKGROUND_TASKS
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
@@ -314,6 +315,9 @@ async def test_download_manager(
         # Needed to use signals in
         manager = DownloadManager()
         await manager.enable()
+
+    # Disable per-domain rate limiting during tests to avoid timeouts.
+    get_wrolpi_config().download_wait = 0
 
     yield manager
 

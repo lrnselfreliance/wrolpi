@@ -128,10 +128,16 @@ global_refresh_active = Flag('global_refresh_active')
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
 
+# Cookies flags for yt-dlp.
+cookies_exist = Flag('cookies_exist')
+cookies_unlocked = Flag('cookies_unlocked')
+
 
 def get_flags() -> dict:
     """Return a list of all Flags which are set."""
     flags = dict(
+        cookies_exist=cookies_exist.is_set(),
+        cookies_unlocked=cookies_unlocked.is_set(),
         db_up=db_up.is_set(),
         file_worker_busy=file_worker_busy.is_set(),
         file_worker_cleanup=file_worker_cleanup.is_set(),
@@ -212,6 +218,13 @@ def init_flags():
                 outdated_zims.set()
             else:
                 outdated_zims.clear()
+
+    # Initialize cookies flags from cookies module state.
+    from modules.videos.cookies import cookies_exist as check_cookies_exist, cookies_unlocked as check_cookies_unlocked
+    if check_cookies_exist():
+        cookies_exist.set()
+    if check_cookies_unlocked():
+        cookies_unlocked.set()
 
     logger.debug('Initialized flags')
 

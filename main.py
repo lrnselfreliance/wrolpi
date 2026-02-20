@@ -18,6 +18,7 @@ from wrolpi.common import logger, check_media_directory, set_log_level, limit_co
     create_empty_config_files, TRACE_LEVEL
 from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
+from modules.videos.cookies import lock_cookies
 from wrolpi.downloader import download_manager, get_download_manager_config
 from wrolpi.errors import WROLModeEnabled
 from wrolpi.files.worker import file_worker
@@ -210,7 +211,7 @@ async def initialize_configs(app: Sanic):
 @api_app.listener('reload_process_stop')
 @limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
-    """Stop downloads when server is shutting down."""
+    """Stop downloads and securely clear sensitive data when server is shutting down."""
     logger.warning('Shutting down')
     try:
         download_manager.stop()
@@ -225,6 +226,11 @@ async def handle_server_shutdown(*args, **kwargs):
         await cancel_background_tasks()
     except Exception as e:
         logger.error('cancel_background_tasks failed. This is probably fine', exc_info=e)
+    # Securely zero cookies memory before shutdown
+    try:
+        lock_cookies()
+    except Exception as e:
+        logger.error('Failed to securely zero cookies memory', exc_info=e)
 
 
 @api_app.signal(Event.SERVER_SHUTDOWN_AFTER)

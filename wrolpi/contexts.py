@@ -37,8 +37,14 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.status = manager.dict()
     app.shared_ctx.map_importing = manager.dict()
     app.shared_ctx.cache = manager.dict()
+    # Secure cookies shared storage
+    app.shared_ctx.secure_cookies = manager.dict()
+    app.shared_ctx.secure_cookies_lock = multiprocessing.Lock()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, LOG_LEVEL_INT)
+
+    # Download timing for per-domain rate limiting
+    app.shared_ctx.domain_last_download = manager.dict()
 
     # Download Manager
     app.shared_ctx.download_manager_data = manager.dict()
@@ -115,8 +121,13 @@ def reset_shared_contexts(app: Sanic):
     ))
     app.shared_ctx.map_importing.clear()
     app.shared_ctx.cache.clear()
+    # Secure cookies
+    app.shared_ctx.secure_cookies.clear()
     # Shared ints
     app.shared_ctx.log_level.value = LOG_LEVEL_INT
+
+    # Download timing
+    app.shared_ctx.domain_last_download.clear()
 
     # Download Manager
     app.shared_ctx.download_manager_data.clear()

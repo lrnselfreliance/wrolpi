@@ -45,8 +45,10 @@ services:
 
   api:
     depends_on:
-      - db
-      - controller
+      db:
+        condition: service_healthy
+      controller:
+        condition: service_started
     build:
       context: .
       dockerfile: docker/api/Dockerfile

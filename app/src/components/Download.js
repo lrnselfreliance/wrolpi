@@ -359,38 +359,6 @@ export function ChannelTagNameForm({form}) {
     </>
 }
 
-export function UseBrowserProfile({form}) {
-    const [config, setConfig] = useState(null);
-
-    const localFetchConfig = async () => {
-        const result = await fetchVideoDownloaderConfig();
-        setConfig(result);
-        if (result?.always_use_browser_profile === true) {
-            // Enable the toggle if "always_use_browser_profile" is set.
-            form.setValue('settings.use_browser_profile', true);
-        }
-    }
-
-    React.useEffect(() => {
-        localFetchConfig();
-    }, []);
-
-    const popupContent = <>Use the browser profile to download videos.
-        This is useful for downloading videos that require a login. See: <i>Videos > Settings</i></>;
-    const label = <InfoHeader
-        headerSize='h4'
-        headerContent='Use Browser Profile'
-        popupContent={popupContent}
-    />;
-    return <ToggleForm
-        form={form}
-        label={label}
-        disabled={!config?.browser_profile}
-        name='use_browser_profile'
-        path='settings.use_browser_profile'
-    />
-}
-
 export function VideosDownloadForm({
                                        singleDownload = true,
                                        onCancel,
@@ -415,7 +383,6 @@ export function VideosDownloadForm({
         tag_names: [],
         downloader: Downloaders.Video,
         settings: {
-            use_browser_profile: false,
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,
         }
@@ -521,11 +488,6 @@ export function VideosDownloadForm({
                 </Grid.Column>
                 <Grid.Column width={4}>
                     <VideoFormatSelectorForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <UseBrowserProfile form={form}/>
                 </Grid.Column>
             </Grid.Row>
             <Grid.Row columns={1}>
@@ -659,7 +621,6 @@ export function ChannelDownloadForm({
             minimum_duration: null,
             title_exclude: null,
             title_include: null,
-            use_browser_profile: false,
             video_count_limit: null,
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,

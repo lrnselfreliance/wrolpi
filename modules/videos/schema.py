@@ -246,3 +246,33 @@ class ChannelSearchRequest:
 @dataclass
 class VideoFileFormatRequest:
     video_file_format: str
+
+
+@dataclass
+class CookiesUploadRequest:
+    """Request to upload and encrypt cookies."""
+    cookies_content: str
+    password: str
+
+    def __post_init__(self):
+        if not self.cookies_content:
+            raise ValidationError('cookies_content cannot be empty')
+        if not self.password or len(self.password) < 8:
+            raise ValidationError('password must be at least 8 characters')
+
+
+@dataclass
+class CookiesUnlockRequest:
+    """Request to unlock cookies with password."""
+    password: str
+
+    def __post_init__(self):
+        if not self.password:
+            raise ValidationError('password cannot be empty')
+
+
+@dataclass
+class CookiesStatusResponse:
+    """Response with cookies status."""
+    cookies_exist: bool
+    cookies_unlocked: bool

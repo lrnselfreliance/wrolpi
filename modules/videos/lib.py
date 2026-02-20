@@ -1098,32 +1098,41 @@ def get_browser_profiles(home: pathlib.Path = WROLPI_HOME) -> dict:
 
 
 def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
-    """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument."""
+    """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument.
+
+    Format: BROWSER+KEYRING:PROFILE
+
+    We explicitly specify GNOMEKEYRING because yt-dlp's auto-detection relies on desktop environment
+    variables which are not available when running as a systemd service.
+    """
     profile_str = str(profile)
 
     for browser_key, config in BROWSER_CONFIGS.items():
         if config['config_path'] in profile_str:
-            return f"{config['yt_dlp_name']}:{profile.name}"
+            return f"{config['yt_dlp_name']}+GNOMEKEYRING:{profile.name}"
 
     # Fallback to original behavior for unknown browsers
     *_, browser, profile_name = profile_str.split('/')
-    return f'{browser}:{profile_name}'
+    return f'{browser}+GNOMEKEYRING:{profile_name}'
 
 
 def browser_profile_to_yt_dlp_tuple(profile: pathlib.Path) -> tuple:
     """Takes a Path and returns a tuple that can be used as yt-dlp `cookiesfrombrowser` option in Python API.
 
     The yt-dlp Python API expects cookiesfrombrowser as a tuple: (browser, profile, keyring, container)
+
+    We explicitly specify GNOMEKEYRING because yt-dlp's auto-detection relies on desktop environment
+    variables which are not available when running as a systemd service.
     """
     profile_str = str(profile)
 
     for browser_key, config in BROWSER_CONFIGS.items():
         if config['config_path'] in profile_str:
-            return (config['yt_dlp_name'], profile.name, None, None)
+            return (config['yt_dlp_name'], profile.name, 'GNOMEKEYRING', None)
 
     # Fallback for unknown browsers
     *_, browser, profile_name = profile_str.split('/')
-    return (browser, profile_name, None, None)
+    return (browser, profile_name, 'GNOMEKEYRING', None)
 
 
 def format_video_filename(

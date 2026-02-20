@@ -370,34 +370,37 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
 
 
 @pytest.mark.parametrize('file_name,expected', [
-    ('/home/wrolpi/.config/chromium/Default', 'chromium:Default'),
-    ('/home/wrolpi/.config/chromium/Profile 1', 'chromium:Profile 1'),
-    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', 'firefox:29el0wk0.default-release'),
-    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', 'brave:Default'),
-    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', 'brave:Profile 1'),
-    ('/home/wrolpi/.config/google-chrome/Default', 'chrome:Default'),
-    ('/home/wrolpi/.config/google-chrome/Profile 1', 'chrome:Profile 1'),
+    ('/home/wrolpi/.config/chromium/Default', 'chromium+GNOMEKEYRING:Default'),
+    ('/home/wrolpi/.config/chromium/Profile 1', 'chromium+GNOMEKEYRING:Profile 1'),
+    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', 'firefox+GNOMEKEYRING:29el0wk0.default-release'),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', 'brave+GNOMEKEYRING:Default'),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', 'brave+GNOMEKEYRING:Profile 1'),
+    ('/home/wrolpi/.config/google-chrome/Default', 'chrome+GNOMEKEYRING:Default'),
+    ('/home/wrolpi/.config/google-chrome/Profile 1', 'chrome+GNOMEKEYRING:Profile 1'),
 ])
 def test_browser_profile_to_yt_dlp_arg(file_name, expected):
     """
     Test the conversion of a browser profile to yt-dlp arguments.
+    Format: BROWSER+KEYRING:PROFILE
+    Explicitly uses GNOMEKEYRING because yt-dlp auto-detection doesn't work in systemd services.
     """
     file_name = pathlib.Path(file_name)
     assert lib.browser_profile_to_yt_dlp_arg(file_name) == expected
 
 
 @pytest.mark.parametrize('file_name,expected', [
-    ('/home/wrolpi/.config/chromium/Default', ('chromium', 'Default', None, None)),
-    ('/home/wrolpi/.config/chromium/Profile 1', ('chromium', 'Profile 1', None, None)),
-    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', ('firefox', '29el0wk0.default-release', None, None)),
-    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', ('brave', 'Default', None, None)),
-    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', ('brave', 'Profile 1', None, None)),
-    ('/home/wrolpi/.config/google-chrome/Default', ('chrome', 'Default', None, None)),
-    ('/home/wrolpi/.config/google-chrome/Profile 1', ('chrome', 'Profile 1', None, None)),
+    ('/home/wrolpi/.config/chromium/Default', ('chromium', 'Default', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.config/chromium/Profile 1', ('chromium', 'Profile 1', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.mozilla/firefox/29el0wk0.default-release', ('firefox', '29el0wk0.default-release', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Default', ('brave', 'Default', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.config/BraveSoftware/Brave-Browser/Profile 1', ('brave', 'Profile 1', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.config/google-chrome/Default', ('chrome', 'Default', 'GNOMEKEYRING', None)),
+    ('/home/wrolpi/.config/google-chrome/Profile 1', ('chrome', 'Profile 1', 'GNOMEKEYRING', None)),
 ])
 def test_browser_profile_to_yt_dlp_tuple(file_name, expected):
     """
     Test the conversion of a browser profile to yt-dlp cookiesfrombrowser tuple.
+    Explicitly uses GNOMEKEYRING because yt-dlp auto-detection doesn't work in systemd services.
     """
     file_name = pathlib.Path(file_name)
     assert lib.browser_profile_to_yt_dlp_tuple(file_name) == expected

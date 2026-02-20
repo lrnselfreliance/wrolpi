@@ -124,6 +124,7 @@ def get_youtube_duration(video_url: str) -> Optional[int]:
     """Get video duration using YouTube's internal API. Returns None if URL is not YouTube or API fails."""
     video_id = get_youtube_video_id(video_url)
     if not video_id:
+        logger.debug(f'Could not extract YouTube video ID from {video_url}')
         return None
 
     payload = {
@@ -145,10 +146,15 @@ def get_youtube_duration(video_url: str) -> Optional[int]:
         response.raise_for_status()
         data = response.json()
         length_seconds = data.get("videoDetails", {}).get("lengthSeconds")
-        if length_seconds:
+        if length_seconds is not None:
             return int(length_seconds)
+        else:
+            # Log why we couldn't get duration
+            status = data.get("playabilityStatus", {}).get("status", "UNKNOWN")
+            reason = data.get("playabilityStatus", {}).get("reason", "")
+            logger.warning(f'YouTube API returned no duration for {video_url}: status={status} reason={reason}')
     except Exception as e:
-        logger.debug(f'YouTube API failed for {video_url}: {e}')
+        logger.debug(f'YouTube API request failed for {video_url}: {e}')
 
     return None
 
@@ -282,7 +288,8 @@ async def fetch_video_duration(url: str) -> int:
             return duration
 
     # Try YouTube API first (faster than yt-dlp)
-    if duration := get_youtube_duration(url):
+    duration = get_youtube_duration(url)
+    if duration is not None:
         logger.info(f'Fetched video duration of {duration} from {url} using YouTube API')
         return duration
 

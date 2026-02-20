@@ -680,7 +680,8 @@ async def test_video_download_cookies(test_session, test_directory, mock_video_e
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     assert '--cookies-from-browser' in cmd
-    assert 'firefox:some directory' in cmd
+    # Format: BROWSER+KEYRING:PROFILE
+    assert 'firefox+GNOMEKEYRING:some directory' in cmd
 
 
 @pytest.mark.asyncio
@@ -707,7 +708,8 @@ async def test_video_download_always_use_cookies(test_session, test_directory, m
         download, cmd, out_dir = mock_video_process_runner.call_args[0]
 
     assert '--cookies-from-browser' in cmd
-    assert 'chromium:some directory' in cmd
+    # Format: BROWSER+KEYRING:PROFILE
+    assert 'chromium+GNOMEKEYRING:some directory' in cmd
 
 
 @pytest.mark.asyncio

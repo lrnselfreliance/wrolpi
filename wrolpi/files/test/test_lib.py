@@ -1383,6 +1383,60 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
 
 
 
+@pytest.mark.asyncio
+async def test_file_search_url(test_session, make_files_structure, refresh_files):
+    """Test searching FileGroups by their URL."""
+    foo, bar, baz = make_files_structure({
+        'foo.txt': 'content',
+        'bar.txt': 'content',
+        'baz.txt': 'content',
+    })
+    await refresh_files()
+
+    foo_fg, bar_fg, baz_fg = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    foo_fg.url = 'https://example.com/foo'
+    bar_fg.url = 'https://example.org/bar'
+    baz_fg.url = 'https://example.com/baz/page'
+    test_session.commit()
+
+    # Search by full URL
+    files, total = lib.search_files('', 10, 0, url='https://example.com/foo')
+    assert total == 1
+    assert files[0]['id'] == foo_fg.id
+
+    # Search by domain (partial match)
+    files, total = lib.search_files('', 10, 0, url='example.com')
+    assert total == 2
+    assert {f['id'] for f in files} == {foo_fg.id, baz_fg.id}
+
+    # Case insensitive search
+    files, total = lib.search_files('', 10, 0, url='EXAMPLE.COM')
+    assert total == 2
+
+    # No results for non-matching URL
+    files, total = lib.search_files('', 10, 0, url='nonexistent.com')
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_file_search_url_with_null(test_session, make_files_structure, refresh_files):
+    """Test that files without URLs are excluded when URL filter is applied."""
+    foo, bar = make_files_structure({
+        'foo.txt': 'content',
+        'bar.txt': 'content',
+    })
+    await refresh_files()
+
+    foo_fg, bar_fg = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    foo_fg.url = 'https://example.com/foo'
+    # bar_fg.url remains None
+    test_session.commit()
+
+    files, total = lib.search_files('', 10, 0, url='example.com')
+    assert total == 1
+    assert files[0]['id'] == foo_fg.id
+
+
 def test_bulk_update_file_groups_reorganize_handles_datetime(test_session, test_directory):
     """_bulk_update_file_groups_reorganize should handle datetime objects in files JSON.
 

@@ -33,6 +33,7 @@ class FilesSearchRequest:
     to_year: Optional[int] = None
     any_tag: bool = False
     order: Optional[str] = None
+    url: Optional[str] = None  # Filter by URL (partial match)
 
     def __post_init__(self):
         if self.any_tag and self.tag_names:

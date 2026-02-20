@@ -889,7 +889,8 @@ async def search_directories_by_name(session: Session, name: str, excluded: List
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
-                 from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None) -> \
+                 from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
+                 url: str = None) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -908,6 +909,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param headline: Includes Postgresql headline if True.
     @param months: A list of integers representing the index of the month of the year, starting at 1.
     @param order: Used to change results from most relevant to recently viewed.
+    @param url: Filter by URL using case-insensitive partial match (ILIKE).
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -929,6 +931,10 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
     wheres, params = months_selector_to_where(wheres, params, months)
     wheres, params = date_range_to_where(wheres, params, from_year, to_year)
+
+    if url:
+        params['url_filter'] = f'%{url}%'
+        wheres.append('fg.url ILIKE %(url_filter)s')
 
     if search_str and headline:
         headline = ''',

@@ -32,7 +32,10 @@ import {
     Container,
     Form,
     FormDropdown,
+    FormInput,
+    FormTextArea,
     Image,
+    Label,
     PlaceholderHeader,
     PlaceholderLine,
     StatisticLabel,
@@ -44,14 +47,19 @@ import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistic
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Card, Header, Loader, Placeholder, Popup, Segment, Statistic} from "./Theme";
+import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
 import {
     deleteVideos,
-    fetchBrowserProfiles,
+    deleteCookies,
+    fetchSuggestedUserAgent,
     fetchVideoDownloaderConfig,
+    getCookiesStatus,
+    lockCookies,
     postVideoFileFormat,
     previewBatchReorganization,
-    updateVideoDownloaderConfig
+    unlockCookies,
+    updateVideoDownloaderConfig,
+    uploadCookies,
 } from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
@@ -319,10 +327,10 @@ function VideosSettingsPage() {
             writesubtitles: true,
             writethumbnail: true,
         },
-        always_use_browser_profile: false,
         yt_dlp_extra_args: '',
-        browser_profile: '',
         download_missing_video_comments: false,
+        user_agent: '',
+        sleep_requests: 0.75,
     };
 
     const configSubmitter = async () => {
@@ -335,47 +343,16 @@ function VideosSettingsPage() {
         emptyFormData,
     });
 
-    const emptyProfilesOptions = [{key: null, text: 'No profiles found'}];
-    const loadingProfilesOptions = [{key: null, text: 'Loading profiles, please wait...'}];
-    const [browserProfilesOptions, setBrowserProfilesOptions] = useState(loadingProfilesOptions);
-
-    const localFetchBrowserProfiles = async () => {
-        let tempProfiles = [];
-        let localBrowserProfiles = await fetchBrowserProfiles();
-
-        for (const [browserKey, profilePaths] of Object.entries(localBrowserProfiles)) {
-            if (!profilePaths || profilePaths.length === 0) continue;
-
-            // Extract browser display name from key (e.g., "chromium_profiles" -> "Chromium")
-            const browserName = browserKey.replace('_profiles', '')
-                .replace(/_/g, ' ')
-                .replace(/\b\w/g, c => c.toUpperCase());
-
-            for (const profilePath of profilePaths) {
-                const profileName = profilePath.split('/').pop();
-                tempProfiles.push({
-                    value: profilePath,
-                    text: `${browserName}: ${profileName}`,
-                });
-            }
-        }
-
-        if (_.isEmpty(tempProfiles)) {
-            tempProfiles = emptyProfilesOptions;
-        }
-        console.debug('VideosSettingsPage: Got browser profiles:', tempProfiles);
-        setBrowserProfilesOptions(tempProfiles);
-    };
+    const [suggestedUserAgent, setSuggestedUserAgent] = useState('');
 
     React.useEffect(() => {
-        localFetchBrowserProfiles();
+        const fetchSuggested = async () => {
+            const ua = await fetchSuggestedUserAgent();
+            setSuggestedUserAgent(ua);
+        };
+        fetchSuggested();
     }, []);
 
-    const alwaysUseBrowserProfileLabel = <InfoHeader
-        headerSize='h5'
-        headerContent='Always Use Browser Profile'
-        popupContent='Always download videos with the selected browser profile. This is risky, and therefore discouraged.'
-    />;
     const downloadMissingVideoCommentsLabel = <InfoHeader
         headerSize='h5'
         headerContent='Download Missing Video Comments'
@@ -451,8 +428,47 @@ function VideosSettingsPage() {
                                 icon='terminal'
                             />
                         </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column mobile={16} computer={16}>
+                            <Form.Field>
+                                <InfoHeader
+                                    headerSize='h5'
+                                    headerContent='User Agent'
+                                    popupContent='Custom user-agent string for yt-dlp. Should match the browser used to export cookies. Click "Use Current Browser" to auto-fill with your browser&apos;s user-agent.'
+                                />
+                                <FormInput
+                                    value={configForm.formData.user_agent || ''}
+                                    onChange={(e) => configForm.setValue('user_agent', e.target.value)}
+                                    placeholder='Leave empty to use yt-dlp default'
+                                    action={{
+                                        content: 'Use Current Browser',
+                                        onClick: () => configForm.setValue('user_agent', suggestedUserAgent),
+                                    }}
+                                />
+                            </Form.Field>
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
                         <Grid.Column mobile={16} computer={8}>
-                            <VideoBrowserCookiesSelector form={configForm} options={browserProfilesOptions}/>
+                            <Form.Field>
+                                <InfoHeader
+                                    headerSize='h5'
+                                    headerContent='Sleep Between Requests'
+                                    popupContent='Seconds to sleep between yt-dlp API requests. Helps avoid rate limiting and bot detection. Set to 0 to disable. Does not affect video download speed.'
+                                />
+                                <FormInput
+                                    type='number'
+                                    step='0.25'
+                                    min='0'
+                                    max='10'
+                                    value={configForm.formData.sleep_requests ?? 0.75}
+                                    onChange={(e) => configForm.setValue('sleep_requests', parseFloat(e.target.value) || 0)}
+                                    placeholder='0.75'
+                                    label={{basic: true, content: 'seconds'}}
+                                    labelPosition='right'
+                                />
+                            </Form.Field>
                         </Grid.Column>
                     </Grid.Row>
                     <Grid.Row>
@@ -463,15 +479,6 @@ function VideosSettingsPage() {
                                 name='download_missing_video_comments'
                                 path='download_missing_video_comments'
                                 icon='comments'
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label={alwaysUseBrowserProfileLabel}
-                                name='always_use_browser_profile'
-                                path='always_use_browser_profile'
-                                disabled={!configForm.formData.browser_profile}
                             />
                         </Grid.Column>
                     </Grid.Row>
@@ -515,6 +522,8 @@ function VideosSettingsPage() {
             </Button>
         </Segment>
 
+        <CookiesSettingsSection/>
+
         <BatchReorganizeModal
             open={batchModalOpen}
             onClose={() => setBatchModalOpen(false)}
@@ -527,37 +536,230 @@ function VideosSettingsPage() {
     </>
 }
 
+function CookiesSettingsSection() {
+    const [status, setStatus] = useState({cookies_exist: false, cookies_unlocked: false});
+    const [loading, setLoading] = useState(true);
+    const [uploadModalOpen, setUploadModalOpen] = useState(false);
+    const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+    const [cookiesContent, setCookiesContent] = useState('');
+    const [password, setPassword] = useState('');
+    const [unlockPassword, setUnlockPassword] = useState('');
+    const [submitting, setSubmitting] = useState(false);
 
-export function VideoBrowserCookiesSelector({
-                                                form,
-                                                options,
-                                                name = 'browser_profile',
-                                                path = 'browser_profile',
-                                            }) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({name, path});
+    const fetchStatus = async () => {
+        setLoading(true);
+        const result = await getCookiesStatus();
+        if (result) {
+            setStatus(result);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        fetchStatus();
+    }, []);
+
+    const handleUpload = async () => {
+        if (password.length < 8) {
+            return;
+        }
+        setSubmitting(true);
+        const result = await uploadCookies(cookiesContent, password);
+        setSubmitting(false);
+        if (result.success) {
+            setUploadModalOpen(false);
+            setCookiesContent('');
+            setPassword('');
+            fetchStatus();
+        }
+    };
+
+    const handleUnlock = async () => {
+        setSubmitting(true);
+        const result = await unlockCookies(unlockPassword);
+        setSubmitting(false);
+        if (result.success) {
+            setUnlockModalOpen(false);
+            setUnlockPassword('');
+            fetchStatus();
+        }
+    };
+
+    const handleLock = async () => {
+        setSubmitting(true);
+        await lockCookies();
+        setSubmitting(false);
+        fetchStatus();
+    };
+
+    const handleDelete = async () => {
+        setSubmitting(true);
+        await deleteCookies();
+        setSubmitting(false);
+        fetchStatus();
+    };
+
+    const getStatusLabel = () => {
+        if (loading) return <Label color='grey'>Loading...</Label>;
+        if (!status.cookies_exist) return <Label color='grey'>No cookies stored</Label>;
+        if (status.cookies_unlocked) return <Label color='green'>Unlocked</Label>;
+        return <Label color='yellow'>Locked</Label>;
+    };
 
     const popupContent = <div>
-        Select a browser profile to use for cookies. This is useful for sites that require login to download videos.
-        <br/>
-        <br/>
-        <p><a href={HELP_VIEWER_URI + '/modules/videos/#how-to-use-browser-profiles'}>Help page</a></p>
+        <p>Upload cookies exported from your browser to allow yt-dlp to download videos that require authentication.</p>
+        <p><strong>Browser extensions for exporting cookies:</strong></p>
+        <ul>
+            <li><strong>Chrome/Brave:</strong> <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer">Get cookies.txt LOCALLY</a></li>
+            <li><strong>Firefox:</strong> <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/" target="_blank" rel="noopener noreferrer">Get cookies.txt LOCALLY</a></li>
+        </ul>
+        <p>Cookies are encrypted with AES-128 and stored securely. You'll need to unlock them with your password after each restart.</p>
     </div>;
 
-    return <>
-        <InfoHeader
-            headerSize='h5'
-            headerContent='Browser Profile'
-            popupContent={popupContent}
-        />
-        <FormDropdown
-            selection
-            placeholder='Select Browser Profile'
-            options={options}
-            name={name}
-            id='browser_profile_dropdown'
-            {...inputProps}
-        />
-    </>
+    return <Segment>
+        <Header as='h4'>
+            <InfoHeader
+                headerSize='h4'
+                headerContent='Encrypted Cookies'
+                popupContent={popupContent}
+            />
+        </Header>
+
+        <p>Use this feature at your own risk! You may be suspended or blocked if abused!
+        </p>
+
+        <div style={{marginBottom: '1em'}}>
+            <strong>Status:</strong> {getStatusLabel()}
+        </div>
+
+        <Button.Group>
+            {!status.cookies_exist && (
+                <Button
+                    color='blue'
+                    onClick={() => setUploadModalOpen(true)}
+                    disabled={loading}
+                >
+                    <Icon name='upload'/> Upload Cookies
+                </Button>
+            )}
+
+            {status.cookies_exist && !status.cookies_unlocked && (
+                <Button
+                    color='green'
+                    onClick={() => setUnlockModalOpen(true)}
+                    disabled={loading}
+                >
+                    <Icon name='unlock'/> Unlock Cookies
+                </Button>
+            )}
+
+            {status.cookies_exist && status.cookies_unlocked && (
+                <Button
+                    color='yellow'
+                    onClick={handleLock}
+                    loading={submitting}
+                    disabled={loading || submitting}
+                >
+                    <Icon name='lock'/> Lock Cookies
+                </Button>
+            )}
+
+            {status.cookies_exist && (
+                <>
+                    <Button
+                        color='blue'
+                        onClick={() => setUploadModalOpen(true)}
+                        disabled={loading}
+                    >
+                        <Icon name='refresh'/> Replace
+                    </Button>
+                    <APIButton
+                        color='red'
+                        onClick={handleDelete}
+                        confirmButton='Delete'
+                        confirmContent='Are you sure you want to delete the stored cookies? This cannot be undone.'
+                        disabled={loading || submitting}
+                    >
+                        <Icon name='trash'/> Delete
+                    </APIButton>
+                </>
+            )}
+        </Button.Group>
+
+        {/* Upload Modal */}
+        <Modal
+            open={uploadModalOpen}
+            onClose={() => setUploadModalOpen(false)}
+            size='small'
+        >
+            <Modal.Header>Upload Cookies</Modal.Header>
+            <Modal.Content>
+                <Form>
+                    <FormTextArea
+                        label='Cookies Content'
+                        placeholder='Paste your cookies.txt content here (Netscape/Mozilla format)'
+                        value={cookiesContent}
+                        onChange={(e) => setCookiesContent(e.target.value)}
+                        rows={10}
+                    />
+                    <FormInput
+                        label='Encryption Password'
+                        type='password'
+                        placeholder='Minimum 8 characters'
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        error={password.length > 0 && password.length < 8 ? 'Password must be at least 8 characters' : null}
+                    />
+                    <p style={{color: 'grey', fontSize: '0.9em'}}>
+                        Remember this password - you'll need it to unlock cookies after each restart.
+                    </p>
+                </Form>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setUploadModalOpen(false)}>Cancel</Button>
+                <Button
+                    color='blue'
+                    onClick={handleUpload}
+                    loading={submitting}
+                    disabled={!cookiesContent || password.length < 8 || submitting}
+                >
+                    <Icon name='lock'/> Encrypt & Save
+                </Button>
+            </Modal.Actions>
+        </Modal>
+
+        {/* Unlock Modal */}
+        <Modal
+            open={unlockModalOpen}
+            onClose={() => setUnlockModalOpen(false)}
+            size='tiny'
+        >
+            <Modal.Header>Unlock Cookies</Modal.Header>
+            <Modal.Content>
+                <Form>
+                    <FormInput
+                        label='Password'
+                        type='password'
+                        placeholder='Enter your encryption password'
+                        value={unlockPassword}
+                        onChange={(e) => setUnlockPassword(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
+                    />
+                </Form>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setUnlockModalOpen(false)}>Cancel</Button>
+                <Button
+                    color='green'
+                    onClick={handleUnlock}
+                    loading={submitting}
+                    disabled={!unlockPassword || submitting}
+                >
+                    <Icon name='unlock'/> Unlock
+                </Button>
+            </Modal.Actions>
+        </Modal>
+    </Segment>;
 }
 
 function VideosStatistics() {

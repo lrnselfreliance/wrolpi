@@ -1,5 +1,4 @@
 import asyncio
-import pathlib
 import random
 from datetime import timedelta
 from typing import Tuple, Optional, List
@@ -17,7 +16,9 @@ from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
+from ..cookies import cookies_unlocked, cookies_for_download
 from ..errors import UnknownVideo
+from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 
 logger.getChild(__name__)
 
@@ -174,25 +175,32 @@ def delete_videos(session: Session, *video_ids: int):
     session.commit()
 
 
-def download_video_info_json(url: str, browser_profile: 'pathlib.Path' = None) -> dict:
-    """Download video info JSON, optionally using browser cookies for authentication.
-
-    Args:
-        url: The video URL to fetch info for.
-        browser_profile: Optional path to browser profile for cookie-based authentication.
-    """
+def download_video_info_json(url: str) -> dict:
+    """Download video info JSON, using encrypted cookies for authentication if available."""
     ydl_opts = dict(
         getcomments=True,
         skip_download=True,
         extractor_args={'youtube': {'max_comments': ['all', '20', 'all', '10'], 'comment_sort': ['top']}},
         cachedir=YTDLP_CACHE_DIR,
+        **get_yt_dlp_sleep_opts(),
     )
 
-    if browser_profile and browser_profile.exists():
-        from modules.videos.lib import browser_profile_to_yt_dlp_tuple
-        ydl_opts['cookiesfrombrowser'] = browser_profile_to_yt_dlp_tuple(browser_profile)
-
     ydl_logger = logger.getChild('youtube-dl')
+
+    if cookies_unlocked():
+        logger.info(f'Using encrypted cookies for video info: {url}')
+        with cookies_for_download() as cookies_path:
+            ydl_opts['cookiefile'] = str(cookies_path)
+            http_headers = get_yt_dlp_http_headers()
+            if http_headers:
+                ydl_opts['http_headers'] = http_headers
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.params['logger'] = ydl_logger
+                info = ydl.extract_info(url, download=False)
+                ydl.sanitize_info(info)
+                return info
+
+    logger.info(f'No cookies available for video info: {url}')
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.params['logger'] = ydl_logger
@@ -206,15 +214,8 @@ def download_video_info_json(url: str, browser_profile: 'pathlib.Path' = None) -
 async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
     """
     Fetches Video info json for videos without comments, if comments are found then the info json file is replaced.
-    Uses browser profile for authentication if configured.
+    Uses encrypted cookies for authentication if available.
     """
-    from modules.videos.lib import get_videos_downloader_config
-
-    config = get_videos_downloader_config()
-    browser_profile = None
-    if config.browser_profile and config.always_use_browser_profile:
-        browser_profile = pathlib.Path(config.browser_profile)
-
     one_month_ago = now() - timedelta(days=30)
 
     # Get any videos over a month old that do not have comments.
@@ -281,7 +282,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
 
         try:
             # Get info json about the video.
-            info = download_video_info_json(url, browser_profile=browser_profile)
+            info = download_video_info_json(url)
 
             if not info or not isinstance(info.get('comments'), list):
                 logger.error(f'Unable to get comments for video: {url=}')

@@ -5,7 +5,9 @@ import logging
 import multiprocessing
 import os
 import pathlib
+import random
 import tempfile
+import time
 import traceback
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -726,16 +728,40 @@ class DownloadManager:
                 Download.frequency,
                 Download.id))
             count = 0
+            download_wait = get_wrolpi_config().download_wait
+            rate_limited_domains = {}  # Track domains we've already checked for rate limiting
             for download in new_downloads:
                 domain = download.domain
                 if domain not in self.processing_domains and len(
                         self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
+                    # Per-domain rate limiting.
+                    if download_wait and download_wait > 0:
+                        try:
+                            last_completed = api_app.shared_ctx.domain_last_download.get(domain, 0)
+                            if last_completed > 0:
+                                elapsed = time.time() - last_completed
+                                if elapsed < download_wait:
+                                    # Track this domain as rate-limited (count pending downloads)
+                                    rate_limited_domains[domain] = rate_limited_domains.get(domain, 0) + 1
+                                    continue  # Skip this domain, try next
+                        except (AttributeError, RuntimeError):
+                            pass  # shared_ctx not initialized
+
                     self._add_processing_domain(domain)
                     context = dict(download_id=download.id, download_url=download.url)
                     await api_app.dispatch('wrolpi.download.download', context=context)
                     count += 1
             if count:
                 self.log_debug(f'Added {count} downloads to queue.')
+            # Log rate-limited domains once per dispatch cycle.
+            for domain, pending_count in rate_limited_domains.items():
+                try:
+                    last_completed = api_app.shared_ctx.domain_last_download.get(domain, 0)
+                    elapsed = time.time() - last_completed
+                    remaining = download_wait - elapsed
+                    self.log_debug(f'Rate limiting {domain}: {remaining:.1f}s remaining ({pending_count} pending)')
+                except (AttributeError, RuntimeError):
+                    pass
 
     async def do_downloads(self):
         """Schedule any downloads that are new.
@@ -1284,6 +1310,13 @@ async def signal_download_download(download_id: int, download_url: str):
             download_manager.unkill_download(download_id)
             # Save the config now that the Download has finished.
             save_downloads_config.activate_switch()
+
+            # Record completion time for per-domain rate limiting.
+            if download_domain:
+                try:
+                    api_app.shared_ctx.domain_last_download[download_domain] = time.time()
+                except (AttributeError, RuntimeError):
+                    pass  # shared_ctx not initialized
         except asyncio.CancelledError as e:
             worker_logger.warning('Canceled!', exc_info=e)
             return
@@ -1577,6 +1610,9 @@ class RSSDownloader(Downloader):
         # Only download new URLs.
         with get_db_session() as session:
             urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(session, *urls)]]
+            # Filter out URLs already in the Download table (pending downloads).
+            existing_download_urls = {d[0] for d in session.query(Download.url).filter(Download.url.in_(urls))}
+            urls = [url for url in urls if url not in existing_download_urls]
         # Remove skipped URLs before duration checks. (Typically done after this by the download worker).
         urls = [i for i in urls if not download_manager.is_skipped(i)]
 
@@ -1632,6 +1668,8 @@ class RSSDownloader(Downloader):
                     logger.error(f'Failed to fetch duration: {url}', exc_info=e)
                 # Download videos even if we fail to fetch their duration.
                 new_urls.append(url)
+                # Sleep between fetches to prevent rate limiting.
+                await asyncio.sleep(random.randint(1, 3))
             urls = new_urls
             if urls_before != urls:
                 logger.info(f'Filtered videos using min/maximum_duration from {len(urls_before)} to {len(urls)}')

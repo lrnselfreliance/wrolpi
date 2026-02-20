@@ -362,6 +362,7 @@ export function SettingsPage() {
         setDisabled(true);
         setPendingSave(true);
         newSettings.download_timeout = parseInt(newSettings.download_timeout);
+        newSettings.download_wait = parseInt(newSettings.download_wait);
         newSettings.log_level = toApiLogLevel(newSettings.log_level);
         try {
             await saveSettings(newSettings);
@@ -448,6 +449,7 @@ export function SettingsPage() {
             archive_destination: settings.archive_destination,
             download_on_startup: settings.download_on_startup,
             download_timeout: settings.download_timeout,
+            download_wait: settings.download_wait,
             hotspot_device: settings.hotspot_device,
             hotspot_on_startup: settings.hotspot_on_startup,
             hotspot_password: settings.hotspot_password,
@@ -563,6 +565,18 @@ export function SettingsPage() {
                         info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
                     />
                 </div>
+
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Wait Between Downloads</b>
+                            <InfoPopup content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
+                        </>}
+                        value={state.download_wait}
+                        disabled={disabled || state.download_wait === null}
+                        onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
+                    />
+                </Form.Group>
 
                 <Form.Group inline>
                     <Form.Input

@@ -1,4 +1,5 @@
 import {
+    CookiesLockedMessage,
     ErrorMessage,
     LoadStatistic,
     PageContainer,
@@ -91,6 +92,7 @@ function FlagsMessages() {
         {settings && settings['ignore_outdated_zims'] === false && flags.outdated_zims ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
         {internetDownMessage}
+        <CookiesLockedMessage/>
     </>
 }
 

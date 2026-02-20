@@ -24,10 +24,11 @@ from wrolpi.errors import UnknownDirectory
 from wrolpi.events import Events
 from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
-from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST, WROLPI_HOME
+from wrolpi.vars import YTDLP_CACHE_DIR, PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, ConfigError, \
     extract_video_duration, ffprobe_json_sync, read_ffprobe_json_file, write_ffprobe_json_file
+from .cookies import cookies_unlocked, cookies_for_download
 from .errors import UnknownChannel
 from .models import Channel
 
@@ -36,32 +37,6 @@ logger = logger.getChild(__name__)
 DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 REQUIRED_OPTIONS = ['name', 'directory']
-
-# Browser profile discovery configuration.
-# Maps browser identifiers to their config paths and yt-dlp names.
-BROWSER_CONFIGS = {
-    'brave': {
-        'yt_dlp_name': 'brave',
-        'config_path': '.config/BraveSoftware/Brave-Browser',
-        'profile_key': 'brave_profiles',
-    },
-    'chrome': {
-        'yt_dlp_name': 'chrome',
-        'config_path': '.config/google-chrome',
-        'profile_key': 'chrome_profiles',
-    },
-    'chromium': {
-        'yt_dlp_name': 'chromium',
-        'config_path': '.config/chromium',
-        'profile_key': 'chromium_profiles',
-    },
-    'firefox': {
-        'yt_dlp_name': 'firefox',
-        'config_path': '.mozilla/firefox',
-        'profile_key': 'firefox_profiles',
-    },
-}
-
 
 @dataclasses.dataclass
 class VideoInfoJSON:
@@ -531,9 +506,9 @@ class VideoDownloaderConfigValidator:
     version: int = None
     yt_dlp_options: VideoDownloaderConfigYtDlpOptionsValidator = field(default_factory=dict)
     yt_dlp_extra_args: str = ''
-    always_use_browser_profile: bool = False
-    browser_profile: str = ''
     download_missing_video_comments: bool = False
+    user_agent: str = ''
+    sleep_requests: float = 0.75
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -560,9 +535,9 @@ class VideoDownloaderConfig(ConfigFile):
             youtube_include_dash_manifest=False,
         ),
         yt_dlp_extra_args='',
-        always_use_browser_profile=False,
-        browser_profile='',
         download_missing_video_comments=False,
+        user_agent='',
+        sleep_requests=0.75,
     )
     validator = VideoDownloaderConfigValidator
 
@@ -631,28 +606,28 @@ class VideoDownloaderConfig(ConfigFile):
         self.update({**self._config, 'yt_dlp_extra_args': value})
 
     @property
-    def browser_profile(self) -> str:
-        return self._config['browser_profile']
-
-    @browser_profile.setter
-    def browser_profile(self, value: str):
-        self.update({**self._config, 'browser_profile': value})
-
-    @property
-    def always_use_browser_profile(self) -> bool:
-        return self._config['always_use_browser_profile']
-
-    @always_use_browser_profile.setter
-    def always_use_browser_profile(self, value: bool):
-        self.update({**self._config, 'always_use_browser_profile': value})
-
-    @property
     def download_missing_video_comments(self) -> bool:
         return self._config['download_missing_video_comments']
 
     @download_missing_video_comments.setter
     def download_missing_video_comments(self, value: bool):
         self.update({**self._config, 'download_missing_video_comments': value})
+
+    @property
+    def user_agent(self) -> str:
+        return self._config.get('user_agent', '')
+
+    @user_agent.setter
+    def user_agent(self, value: str):
+        self.update({**self._config, 'user_agent': value})
+
+    @property
+    def sleep_requests(self) -> float:
+        return self._config.get('sleep_requests', 0.75)
+
+    @sleep_requests.setter
+    def sleep_requests(self, value: float):
+        self.update({**self._config, 'sleep_requests': value})
 
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
@@ -675,6 +650,28 @@ def get_videos_downloader_config() -> VideoDownloaderConfig:
 def set_test_downloader_config(enabled: bool):
     global TEST_VIDEOS_DOWNLOADER_CONFIG
     TEST_VIDEOS_DOWNLOADER_CONFIG = VideoDownloaderConfig() if enabled else None
+
+
+def get_yt_dlp_http_headers() -> dict:
+    """Get HTTP headers for yt-dlp, including user-agent if configured.
+
+    This should be used when cookies are being used to ensure the user-agent
+    matches the browser that exported the cookies."""
+    config = get_videos_downloader_config()
+    if config.user_agent:
+        return {'User-Agent': config.user_agent}
+    return {}
+
+
+def get_yt_dlp_sleep_opts() -> dict:
+    """Get sleep options for yt-dlp to avoid rate limiting.
+
+    This adds a delay between HTTP requests during metadata extraction,
+    helping avoid bot detection. Does not affect video file download speed."""
+    config = get_videos_downloader_config()
+    if config.sleep_requests > 0:
+        return {'sleep_requests': config.sleep_requests}
+    return {}
 
 
 def get_channels_config_from_db(session: Session) -> dict:
@@ -712,13 +709,7 @@ async def fetch_channel_source_id(channel_id: int):
             from modules.videos.channel.lib import get_channel
             channel = Channel.find_by_id(session, channel_id)
 
-            # Get browser profile from config
-            config = get_videos_downloader_config()
-            browser_profile = None
-            if config.browser_profile and config.always_use_browser_profile:
-                browser_profile = pathlib.Path(config.browser_profile)
-
-            channel.source_id = channel.source_id or get_channel_source_id(channel.url, browser_profile=browser_profile)
+            channel.source_id = channel.source_id or get_channel_source_id(channel.url)
             if not channel.source_id:
                 channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
             else:
@@ -808,17 +799,33 @@ ydl_logger = YDL.params['logger'] = logger.getChild('youtube-dl')
 YDL.add_default_info_extractors()
 
 
-def get_channel_source_id(url: str, browser_profile: pathlib.Path = None) -> str:
+def get_channel_source_id(url: str) -> str:
     """Get the source ID for a channel URL."""
-    ydl = YDL
-    if browser_profile and browser_profile.exists():
-        ydl_opts = dict(
-            cachedir=YTDLP_CACHE_DIR,
-            cookiesfrombrowser=browser_profile_to_yt_dlp_tuple(browser_profile),
-        )
-        ydl = YoutubeDL(ydl_opts)
-        ydl.params['logger'] = logger.getChild('youtube-dl')
-        ydl.add_default_info_extractors()
+    if cookies_unlocked():
+        logger.info(f'Using encrypted cookies for channel source id: {url}')
+        with cookies_for_download() as cookies_path:
+            ydl_opts = dict(
+                cachedir=YTDLP_CACHE_DIR,
+                cookiefile=str(cookies_path),
+                **get_yt_dlp_sleep_opts(),
+            )
+            http_headers = get_yt_dlp_http_headers()
+            if http_headers:
+                ydl_opts['http_headers'] = http_headers
+            ydl = YoutubeDL(ydl_opts)
+            ydl.params['logger'] = logger.getChild('youtube-dl')
+            ydl.add_default_info_extractors()
+            channel_info = ydl.extract_info(url, download=False, process=False)
+            return channel_info.get('channel_id') or channel_info['uploader_id']
+
+    logger.info(f'No cookies available for channel source id: {url}')
+    ydl_opts = dict(
+        cachedir=YTDLP_CACHE_DIR,
+        **get_yt_dlp_sleep_opts(),
+    )
+    ydl = YoutubeDL(ydl_opts)
+    ydl.params['logger'] = logger.getChild('youtube-dl')
+    ydl.add_default_info_extractors()
 
     channel_info = ydl.extract_info(url, download=False, process=False)
     return channel_info.get('channel_id') or channel_info['uploader_id']
@@ -1054,85 +1061,6 @@ def format_videos_destination(channel_name: str = None, channel_tag: str = None,
     videos_destination = get_media_directory() / videos_destination.lstrip('/')
 
     return videos_destination
-
-
-def _discover_chromium_profiles(browser_dir: pathlib.Path, profile_list: list):
-    """Discover profiles for Chromium-based browsers (Chromium, Chrome, Brave)."""
-    if not browser_dir.is_dir():
-        return
-    default_profile = browser_dir / 'Default'
-    if default_profile.is_dir():
-        profile_list.append(default_profile)
-    for profile in browser_dir.glob('Profile *'):
-        if profile.is_dir():
-            profile_list.append(profile)
-
-
-def _discover_firefox_profiles(browser_dir: pathlib.Path, profile_list: list):
-    """Discover profiles for Firefox using profiles.ini."""
-    profiles_file = browser_dir / 'profiles.ini'
-    if not profiles_file.is_file():
-        return
-    profiles_content = profiles_file.read_text()
-    default_profiles = re.findall(r'Default=(.*)', profiles_content)
-    for profile_path in default_profiles:
-        full_path = browser_dir / profile_path
-        if full_path.is_dir():
-            profile_list.append(full_path)
-
-
-def get_browser_profiles(home: pathlib.Path = WROLPI_HOME) -> dict:
-    """Searches the provided home directory for browser profiles from all supported browsers."""
-    logger.debug(f'Searching for browser profiles in {home}')
-
-    profiles = {config['profile_key']: [] for config in BROWSER_CONFIGS.values()}
-
-    for browser_key, config in BROWSER_CONFIGS.items():
-        browser_dir = home / config['config_path']
-        if browser_key == 'firefox':
-            _discover_firefox_profiles(browser_dir, profiles[config['profile_key']])
-        else:
-            _discover_chromium_profiles(browser_dir, profiles[config['profile_key']])
-
-    return profiles
-
-
-def browser_profile_to_yt_dlp_arg(profile: pathlib.Path) -> str:
-    """Takes a Path and returns a string that can be used as a yt-dlp `--cookies-from-browser` argument.
-
-    Format: BROWSER+KEYRING:PROFILE
-
-    We explicitly specify GNOMEKEYRING because yt-dlp's auto-detection relies on desktop environment
-    variables which are not available when running as a systemd service.
-    """
-    profile_str = str(profile)
-
-    for browser_key, config in BROWSER_CONFIGS.items():
-        if config['config_path'] in profile_str:
-            return f"{config['yt_dlp_name']}+GNOMEKEYRING:{profile.name}"
-
-    # Fallback to original behavior for unknown browsers
-    *_, browser, profile_name = profile_str.split('/')
-    return f'{browser}+GNOMEKEYRING:{profile_name}'
-
-
-def browser_profile_to_yt_dlp_tuple(profile: pathlib.Path) -> tuple:
-    """Takes a Path and returns a tuple that can be used as yt-dlp `cookiesfrombrowser` option in Python API.
-
-    The yt-dlp Python API expects cookiesfrombrowser as a tuple: (browser, profile, keyring, container)
-
-    We explicitly specify GNOMEKEYRING because yt-dlp's auto-detection relies on desktop environment
-    variables which are not available when running as a systemd service.
-    """
-    profile_str = str(profile)
-
-    for browser_key, config in BROWSER_CONFIGS.items():
-        if config['config_path'] in profile_str:
-            return (config['yt_dlp_name'], profile.name, 'GNOMEKEYRING', None)
-
-    # Fallback for unknown browsers
-    *_, browser, profile_name = profile_str.split('/')
-    return (browser, profile_name, 'GNOMEKEYRING', None)
 
 
 def format_video_filename(

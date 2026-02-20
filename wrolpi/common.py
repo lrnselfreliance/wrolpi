@@ -723,6 +723,7 @@ class WROLPiConfigValidator:
     check_for_upgrades: bool = None
     download_on_startup: bool = None
     download_timeout: int = None
+    download_wait: int = None
     hotspot_device: str = None
     hotspot_on_startup: bool = None
     hotspot_password: str = None
@@ -862,6 +863,7 @@ class WROLPiConfig(ConfigFile):
         archive_destination='archive/%(domain_tag)s/%(domain)s',
         download_on_startup=True,
         download_timeout=0,
+        download_wait=60,
         hotspot_device='wlan0',
         hotspot_on_startup=True,
         hotspot_password='wrolpi hotspot',
@@ -939,6 +941,14 @@ class WROLPiConfig(ConfigFile):
     @download_timeout.setter
     def download_timeout(self, value: int):
         self.update({'download_timeout': value})
+
+    @property
+    def download_wait(self) -> int:
+        return self._config.get('download_wait', 60)
+
+    @download_wait.setter
+    def download_wait(self, value: int):
+        self.update({'download_wait': value})
 
     @property
     def hotspot_device(self) -> str:

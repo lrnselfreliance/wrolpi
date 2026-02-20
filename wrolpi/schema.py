@@ -18,6 +18,7 @@ class SettingsResponse:
     download_manager_stopped: bool
     download_on_startup: bool
     download_timeout: int
+    download_wait: int
     hotspot_device: str
     hotspot_on_startup: bool
     hotspot_password: str
@@ -59,6 +60,7 @@ class SettingsRequest:
     archive_destination: Optional[str] = None
     download_on_startup: Optional[bool] = None
     download_timeout: Optional[int] = None
+    download_wait: Optional[int] = None
     hotspot_device: Optional[str] = None
     hotspot_on_startup: Optional[bool] = None
     hotspot_password: Optional[str] = None
@@ -226,7 +228,6 @@ class DownloadSettings:
     suffix: Optional[str] = None
     title_exclude: Optional[str] = None
     title_include: Optional[str] = None
-    use_browser_profile: Optional[bool] = False
     video_count_limit: Optional[int] = None
     video_format: Optional[str] = None
     video_resolutions: List[str] = field(default_factory=list)
@@ -244,9 +245,6 @@ class DownloadSettings:
         self.title_include = self.title_include or None
         if not self.download_metadata_only:
             del self.download_metadata_only
-
-        if not self.use_browser_profile:
-            del self.use_browser_profile
 
         if self.download_order not in (None, 'newest', 'oldest', 'views'):
             raise ValidationError(f'Download order must be one of newest, oldest, views, or null.')

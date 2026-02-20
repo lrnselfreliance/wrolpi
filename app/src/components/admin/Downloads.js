@@ -13,6 +13,7 @@ import {
 import {Link} from "react-router";
 import {
     APIButton,
+    CookiesLockedMessage,
     DisableDownloadsToggle,
     ErrorMessage,
     formatFrequency,
@@ -24,6 +25,7 @@ import {
     Button as SButton,
     ButtonGroup,
     Checkbox,
+    Icon,
     Label,
     Loader,
     PlaceholderLine,
@@ -625,6 +627,7 @@ export function DownloadsPage() {
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
         <DisableDownloadsToggle/>
+        <CookiesLockedMessage/>
 
         <Header as='h1'>Downloads {pendingOnceDownloadsSpan}</Header>
         <OnceDownloadsTable downloads={onceDownloads} fetchDownloads={fetchDownloads}/>

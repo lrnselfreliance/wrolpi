@@ -781,8 +781,9 @@ async def test_batch_api_endpoints(async_client, test_session, test_download_man
     assert response.status_code == HTTPStatus.OK
     assert response.json['retried_count'] == 1
     test_session.refresh(d1)
-    # Status may be 'new' or 'pending' depending on whether the download worker picked it up
-    assert d1.status in ('new', 'pending')
+    # Status may be 'new', 'pending', or 'complete' depending on whether the download worker
+    # picked it up and completed before the assertion is checked.
+    assert d1.status in ('new', 'pending', 'complete')
 
     # Test batch clear endpoint
     body = dict(download_ids=[d2_id])

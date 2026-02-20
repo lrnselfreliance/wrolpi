@@ -12,7 +12,6 @@ from typing import Tuple, List, Dict, Optional
 from urllib.parse import urlparse, parse_qs
 
 import cachetools
-import requests
 import yt_dlp.utils
 from cachetools.keys import hashkey
 from sqlalchemy.orm import Session
@@ -21,20 +20,22 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    trim_file_name, cached_multiprocessing_result, get_absolute_media_path
+    trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
+from wrolpi.files.worker import file_worker
 from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
 from .errors import UnknownChannel
-from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination, browser_profile_to_yt_dlp_arg, \
-    browser_profile_to_yt_dlp_tuple
+from .cookies import cookies_unlocked, cookies_for_download
+from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination, get_yt_dlp_http_headers, \
+    get_yt_dlp_sleep_opts
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
@@ -120,7 +121,7 @@ def get_youtube_video_id(url: str) -> Optional[str]:
     return None
 
 
-def get_youtube_duration(video_url: str) -> Optional[int]:
+async def get_youtube_duration(video_url: str) -> Optional[int]:
     """Get video duration using YouTube's internal API. Returns None if URL is not YouTube or API fails."""
     video_id = get_youtube_video_id(video_url)
     if not video_id:
@@ -138,68 +139,71 @@ def get_youtube_duration(video_url: str) -> Optional[int]:
     }
 
     try:
-        response = requests.post(
-            "https://www.youtube.com/youtubei/v1/player",
-            json=payload,
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
-        length_seconds = data.get("videoDetails", {}).get("lengthSeconds")
-        if length_seconds is not None:
-            return int(length_seconds)
-        else:
-            # Log why we couldn't get duration
-            status = data.get("playabilityStatus", {}).get("status", "UNKNOWN")
-            reason = data.get("playabilityStatus", {}).get("reason", "")
-            logger.warning(f'YouTube API returned no duration for {video_url}: status={status} reason={reason}')
+        async with aiohttp_post("https://www.youtube.com/youtubei/v1/player", payload, timeout=10) as response:
+            response.raise_for_status()
+            data = await response.json()
+            length_seconds = data.get("videoDetails", {}).get("lengthSeconds")
+            if length_seconds is not None:
+                return int(length_seconds)
+            else:
+                # Log why we couldn't get duration
+                status = data.get("playabilityStatus", {}).get("status", "UNKNOWN")
+                reason = data.get("playabilityStatus", {}).get("reason", "")
+                logger.warning(f'YouTube API returned no duration for {video_url}: status={status} reason={reason}')
     except Exception as e:
         logger.debug(f'YouTube API request failed for {video_url}: {e}')
 
     return None
 
 
-def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False,
-                     browser_profile: pathlib.Path = None):
-    # Include browser_profile presence in cache key (not the path itself, just whether it's used)
-    return hashkey(url, process=process, use_browser_profile=browser_profile is not None)
+def extract_info_key(url: str, ydl: YoutubeDL = YDL, process: bool = False):
+    return hashkey(url, process=process)
 
 
 extract_info_cache = cachetools.TTLCache(maxsize=1_000, ttl=timedelta(minutes=5).total_seconds())
 
 
-def get_browser_profile_from_config() -> Optional[pathlib.Path]:
-    """Get browser profile path if configured and always_use_browser_profile is enabled."""
-    config = get_videos_downloader_config()
-    if config.browser_profile and config.always_use_browser_profile:
-        profile = pathlib.Path(config.browser_profile)
-        if profile.exists():
-            return profile
-    return None
-
-
 # Cache results for each URL for a few minutes.
 @cachetools.cached(cache=extract_info_cache, key=extract_info_key)
-def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False,
-                 browser_profile: pathlib.Path = None) -> dict:
+def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False) -> dict:
     """Get info about a video, channel, or playlist.  Separated for testing."""
     if PYTEST:
         raise RuntimeError(f'Refusing to download {url} during testing! {ydl}')
 
-    if browser_profile and browser_profile.exists():
-        # Create a new YDL instance with browser profile, preserving custom ydl options if provided
-        ydl_opts = dict(
-            cachedir=YTDLP_CACHE_DIR,
-            cookiesfrombrowser=browser_profile_to_yt_dlp_tuple(browser_profile),
-        )
-        # If a custom ydl was passed, copy its relevant options for format selection and output
-        if ydl != YDL:
-            for key in ['outtmpl', 'format', 'merge_output_format']:
-                if key in ydl.params:
-                    ydl_opts[key] = ydl.params[key]
-        ydl = YoutubeDL(ydl_opts)
-        ydl.params['logger'] = logger.getChild('youtube-dl')
-        ydl.add_default_info_extractors()
+    if cookies_unlocked():
+        logger.info(f'Using encrypted cookies for extract_info: {url}')
+        with cookies_for_download() as cookies_path:
+            ydl_opts = dict(
+                cachedir=YTDLP_CACHE_DIR,
+                cookiefile=str(cookies_path),
+                **get_yt_dlp_sleep_opts(),
+            )
+            http_headers = get_yt_dlp_http_headers()
+            if http_headers:
+                ydl_opts['http_headers'] = http_headers
+            # If a custom ydl was passed, copy its relevant options for format selection and output
+            if ydl != YDL:
+                for key in ['outtmpl', 'format', 'merge_output_format']:
+                    if key in ydl.params:
+                        ydl_opts[key] = ydl.params[key]
+            ydl_with_cookies = YoutubeDL(ydl_opts)
+            ydl_with_cookies.params['logger'] = logger.getChild('youtube-dl')
+            ydl_with_cookies.add_default_info_extractors()
+            return ydl_with_cookies.extract_info(url, download=False, process=process)
+
+    logger.info(f'No cookies available for extract_info: {url}')
+    # Create a new YDL instance with sleep options
+    ydl_opts = dict(
+        cachedir=YTDLP_CACHE_DIR,
+        **get_yt_dlp_sleep_opts(),
+    )
+    if ydl != YDL:
+        for key in ['outtmpl', 'format', 'merge_output_format']:
+            if key in ydl.params:
+                ydl_opts[key] = ydl.params[key]
+    ydl = YoutubeDL(ydl_opts)
+    ydl.params['logger'] = logger.getChild('youtube-dl')
+    ydl.add_default_info_extractors()
 
     return ydl.extract_info(url, download=False, process=process)
 
@@ -288,14 +292,14 @@ async def fetch_video_duration(url: str) -> int:
             return duration
 
     # Try YouTube API first (faster than yt-dlp)
-    duration = get_youtube_duration(url)
+    duration = await get_youtube_duration(url)
     if duration is not None:
         logger.info(f'Fetched video duration of {duration} from {url} using YouTube API')
         return duration
 
     # Fall back to yt-dlp for non-YouTube URLs or API failures
     logger.debug(f'Fetching video duration from {url} using yt-dlp')
-    info = extract_info(url, process=False, browser_profile=get_browser_profile_from_config())
+    info = extract_info(url, process=False)
     duration = info['duration']
     logger.info(f'Fetched video duration of {duration} from {url}')
     return duration
@@ -317,7 +321,7 @@ class ChannelDownloader(Downloader, ABC):
 
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
-        info = extract_info(download.url, process=False, browser_profile=get_browser_profile_from_config())
+        info = extract_info(download.url, process=False)
         # Resolve the "entries" generator.
         info: dict = resolve_generators(info)
         entries = info.get('entries')
@@ -402,8 +406,9 @@ class ChannelDownloader(Downloader, ABC):
         with get_db_session() as session:
             channel = get_channel(session, channel_id=channel_id, return_dict=False)
             if not channel.videos or not channel.refreshed:
-                logger.warning(f'Refreshing videos in {channel.directory} because {channel} has no video records!')
-                channel.refresh_files(channel.id, send_events=False)
+                logger.warning(f'Refreshing videos in {channel.directory} for channel {channel}')
+                job_id = channel.refresh_files(channel.id, send_events=False)
+                await file_worker.wait_for_job(job_id)  # Wait for files to be indexed
                 session.refresh(channel)
 
     @staticmethod
@@ -511,8 +516,7 @@ class VideoDownloader(Downloader, ABC):
             location = video_.location if video_ else None
 
             try:
-                download.info_json = download.info_json or extract_info(
-                    url, browser_profile=get_browser_profile_from_config())
+                download.info_json = download.info_json or extract_info(url)
             except yt_dlp.utils.DownloadError as e:
                 # Video may be private.
                 try:
@@ -592,24 +596,23 @@ class VideoDownloader(Downloader, ABC):
                 cmd = (*cmd, '--write-info-json')
             if config.yt_dlp_extra_args:
                 cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
-            if config.browser_profile and (
-                    (i := settings.get('use_browser_profile')) or (config.always_use_browser_profile and i != False)):
-                # Use the browser profile to get cookies, but only if "always_use_browser_profile" is set and
-                # "use_browser_profile" is not False, or if "use_browser_profile" is set.
-                browser_profile = pathlib.Path(config.browser_profile)
-                if browser_profile.exists():
-                    browser_profile = browser_profile_to_yt_dlp_arg(browser_profile)
-                    cmd = (*cmd, '--cookies-from-browser', browser_profile)
-                else:
-                    logger.error(f'Browser profile {config.browser_profile} does not exist')
+            if config.sleep_requests > 0:
+                cmd = (*cmd, '--sleep-requests', str(config.sleep_requests))
 
-            # Add destination and the video's URL to the command.
-            cmd = (*cmd,
-                   '-o', video_path,
-                   url,
-                   )
-            # Do the real download.
-            result = await self.process_runner(download, cmd, out_dir, debug=True)
+            if cookies_unlocked():
+                # Use encrypted cookies file
+                logger.info(f'Using encrypted cookies for video download: {url}')
+                with cookies_for_download() as cookies_path:
+                    cmd = (*cmd, '--cookies', str(cookies_path))
+                    if config.user_agent:
+                        cmd = (*cmd, '--add-headers', f'User-Agent:{config.user_agent}')
+                    cmd = (*cmd, '-o', video_path, url)
+                    result = await self.process_runner(download, cmd, out_dir, debug=True)
+            else:
+                # No cookies available
+                logger.info(f'No cookies available for video download: {url}')
+                cmd = (*cmd, '-o', video_path, url)
+                result = await self.process_runner(download, cmd, out_dir, debug=True)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
 
@@ -838,8 +841,7 @@ class VideoDownloader(Downloader, ABC):
 
         # Get the path where the video will be saved.
         try:
-            entry = extract_info(url, ydl=ydl, process=True,
-                                 browser_profile=get_browser_profile_from_config())
+            entry = extract_info(url, ydl=ydl, process=True)
             final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         except DownloadError as e:
             if ' Cannot write ' in str(e):
@@ -868,8 +870,7 @@ class VideoDownloader(Downloader, ABC):
             ydl = YoutubeDL(copy.deepcopy(options))
             ydl.params['logger'] = ydl_logger
             ydl.add_default_info_extractors()
-            entry = extract_info(url, ydl=ydl, process=True,
-                                 browser_profile=get_browser_profile_from_config())
+            entry = extract_info(url, ydl=ydl, process=True)
 
         logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
         return final_filename, entry
@@ -897,8 +898,7 @@ class VideoDownloader(Downloader, ABC):
 
         # Download video info json directly using yt-dlp.
         try:
-            browser_profile = get_browser_profile_from_config()
-            info_json = download_video_info_json(url, browser_profile=browser_profile)
+            info_json = download_video_info_json(url)
         except Exception as e:
             logger.error('Failed to download video info json', exc_info=e)
             return DownloadResult(success=False, error='Failed to download video info json')
@@ -1030,7 +1030,7 @@ def update_channel_catalog(channel: Channel, info: dict):
         for entry in entries:
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
-                info = extract_info(entry['url'], browser_profile=get_browser_profile_from_config())
+                info = extract_info(entry['url'])
                 break
 
     with get_db_session(commit=True) as session:

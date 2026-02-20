@@ -589,6 +589,27 @@ export function WROLModeMessage({content}) {
     return null;
 }
 
+export function CookiesLockedMessage() {
+    const {settings} = React.useContext(SettingsContext);
+    const {status} = React.useContext(StatusContext);
+    const flags = status?.flags || {};
+
+    if (!flags.cookies_exist || flags.cookies_unlocked || settings?.wrol_mode) {
+        return null;
+    }
+
+    return <Message warning icon>
+        <SIcon name='lock'/>
+        <Message.Content>
+            <Message.Header>Cookies Locked</Message.Header>
+            You have encrypted cookies stored, but they are currently locked.
+            <Link to='/videos/settings' style={{marginLeft: '0.5em'}}>
+                <SIcon name='unlock'/> Unlock in Video Settings
+            </Link>
+        </Message.Content>
+    </Message>;
+}
+
 // Thanks https://www.npmjs.com/package/text-ellipsis
 export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..."} = {}) {
     if (str && str.length > maxLength) {

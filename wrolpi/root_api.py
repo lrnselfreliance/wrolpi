@@ -156,6 +156,7 @@ def get_settings(_: Request):
         'download_manager_stopped': download_manager.is_stopped,
         'download_on_startup': wrolpi_config.download_on_startup,
         'download_timeout': wrolpi_config.download_timeout,
+        'download_wait': wrolpi_config.download_wait,
         'hotspot_device': wrolpi_config.hotspot_device,
         'hotspot_on_startup': wrolpi_config.hotspot_on_startup,
         'hotspot_password': wrolpi_config.hotspot_password,

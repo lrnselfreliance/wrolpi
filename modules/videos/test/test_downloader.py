@@ -655,64 +655,6 @@ def test_normalize_video_file_names(test_directory, video_download_manager):
 
 
 @pytest.mark.asyncio
-async def test_video_download_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                      video_download_manager, mock_video_process_runner, image_file,
-                                      test_videos_downloader_config):
-    config = get_videos_downloader_config()
-
-    config.browser_profile = str(test_directory / 'firefox/some directory')
-    (test_directory / 'firefox/some directory').mkdir(parents=True)
-
-    video_path = test_directory / 'a video.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
-
-    # Request video download with cookies.
-    settings = {'use_browser_profile': True}
-
-    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
-        mock_video_extract_info.return_value = example_video_json
-        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-
-        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
-        await video_download_manager.wait_for_all_downloads()
-
-        download, cmd, out_dir = mock_video_process_runner.call_args[0]
-
-    assert '--cookies-from-browser' in cmd
-    # Format: BROWSER+KEYRING:PROFILE
-    assert 'firefox+GNOMEKEYRING:some directory' in cmd
-
-
-@pytest.mark.asyncio
-async def test_video_download_always_use_cookies(test_session, test_directory, mock_video_extract_info, await_switches,
-                                                 video_download_manager, mock_video_process_runner, image_file,
-                                                 test_videos_downloader_config):
-    config = get_videos_downloader_config()
-
-    config.always_use_browser_profile = True
-    config.browser_profile = str(test_directory / 'chromium/some directory')
-    (test_directory / 'chromium/some directory').mkdir(parents=True)
-
-    video_path = test_directory / 'a video.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
-
-    url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
-        mock_video_extract_info.return_value = example_video_json
-        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-
-        video_download_manager.create_download(test_session, url, video_downloader.name)
-        await video_download_manager.wait_for_all_downloads()
-
-        download, cmd, out_dir = mock_video_process_runner.call_args[0]
-
-    assert '--cookies-from-browser' in cmd
-    # Format: BROWSER+KEYRING:PROFILE
-    assert 'chromium+GNOMEKEYRING:some directory' in cmd
-
-
-@pytest.mark.asyncio
 async def test_channel_downloader_sets_collection_id(test_session, channel_factory, mock_video_extract_info,
                                                      video_download_manager, await_switches):
     """Test that ChannelDownloader.do_download sets download.collection_id to the channel's collection.
@@ -741,9 +683,10 @@ async def test_channel_downloader_sets_collection_id(test_session, channel_facto
     }
     mock_video_extract_info.return_value = mock_info
 
-    # Mock Channel.refresh_files to avoid background tasks
+    # Mock Channel.refresh_files and file_worker.wait_for_job to avoid background tasks
     with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
-         mock.patch.object(Channel, 'refresh_files'):
+         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+         mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
         mock_video_do_download.return_value = DownloadResult(success=True)
         await channel_downloader.do_download(download)
 

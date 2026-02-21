@@ -419,6 +419,17 @@ function VideosSettingsPage() {
                     </Grid.Row>
                     <Grid.Row>
                         <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label={downloadMissingVideoCommentsLabel}
+                                name='download_missing_video_comments'
+                                path='download_missing_video_comments'
+                                icon='comments'
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row>
+                        <Grid.Column mobile={16} computer={8}>
                             <InputForm
                                 form={configForm}
                                 name='yt_dlp_extra_args'
@@ -428,29 +439,7 @@ function VideosSettingsPage() {
                                 icon='terminal'
                             />
                         </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column mobile={16} computer={16}>
-                            <Form.Field>
-                                <InfoHeader
-                                    headerSize='h5'
-                                    headerContent='User Agent'
-                                    popupContent='Custom user-agent string for yt-dlp. Should match the browser used to export cookies. Click "Use Current Browser" to auto-fill with your browser&apos;s user-agent.'
-                                />
-                                <FormInput
-                                    value={configForm.formData.user_agent || ''}
-                                    onChange={(e) => configForm.setValue('user_agent', e.target.value)}
-                                    placeholder='Leave empty to use yt-dlp default'
-                                    action={{
-                                        content: 'Use Current Browser',
-                                        onClick: () => configForm.setValue('user_agent', suggestedUserAgent),
-                                    }}
-                                />
-                            </Form.Field>
-                        </Grid.Column>
-                    </Grid.Row>
-                    <Grid.Row>
-                        <Grid.Column mobile={16} computer={8}>
+                        <Grid.Column mobile={16} computer={4}>
                             <Form.Field>
                                 <InfoHeader
                                     headerSize='h5'
@@ -472,14 +461,23 @@ function VideosSettingsPage() {
                         </Grid.Column>
                     </Grid.Row>
                     <Grid.Row>
-                        <Grid.Column mobile={16} computer={8}>
-                            <ToggleForm
-                                form={configForm}
-                                label={downloadMissingVideoCommentsLabel}
-                                name='download_missing_video_comments'
-                                path='download_missing_video_comments'
-                                icon='comments'
-                            />
+                        <Grid.Column mobile={16} computer={16}>
+                            <Form.Field>
+                                <InfoHeader
+                                    headerSize='h5'
+                                    headerContent='User Agent'
+                                    popupContent='Custom user-agent string for yt-dlp. Should match the browser used to export cookies. Click "Use Current Browser" to auto-fill with your browser&apos;s user-agent.'
+                                />
+                                <FormInput
+                                    value={configForm.formData.user_agent || ''}
+                                    onChange={(e) => configForm.setValue('user_agent', e.target.value)}
+                                    placeholder='Leave empty to use yt-dlp default'
+                                    action={{
+                                        content: 'Use Current Browser',
+                                        onClick: () => configForm.setValue('user_agent', suggestedUserAgent),
+                                    }}
+                                />
+                            </Form.Field>
                         </Grid.Column>
                     </Grid.Row>
 

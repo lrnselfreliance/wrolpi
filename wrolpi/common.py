@@ -863,7 +863,7 @@ class WROLPiConfig(ConfigFile):
         archive_destination='archive/%(domain_tag)s/%(domain)s',
         download_on_startup=True,
         download_timeout=0,
-        download_wait=60,
+        download_wait=20,
         hotspot_device='wlan0',
         hotspot_on_startup=True,
         hotspot_password='wrolpi hotspot',
@@ -944,7 +944,7 @@ class WROLPiConfig(ConfigFile):
 
     @property
     def download_wait(self) -> int:
-        return self._config.get('download_wait', 60)
+        return self._config.get('download_wait', 20)
 
     @download_wait.setter
     def download_wait(self, value: int):

@@ -6,7 +6,7 @@ aiohttp==3.13.3
 alembic==1.10.4
 beautifulsoup4==4.12.3
 cachetools==5.5.0
-cryptography==45.0.3
+cryptography==46.0.5
 ebooklib==0.18
 feedparser==6.0.11
 jc==1.25.3

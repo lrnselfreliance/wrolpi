@@ -8,14 +8,12 @@ Security features:
 - Encryption: Fernet (AES-128-CBC + HMAC-SHA256)
 - Key derivation: PBKDF2-SHA256 with 480k iterations (OWASP 2024 minimum)
 - Password handling: Decrypt once to memory, forget password immediately
-- In-memory storage: Decrypted cookies only in Python memory, not on disk
+- In-memory storage: Decrypted cookies in shared memory across workers
 - Per-download temp files: Unique file per download, deleted immediately after
 - Temp file permissions: chmod 600 (owner only)
 - Secure deletion: Overwrite temp file with zeros before unlinking
-- Memory zeroing: Secure clearing of decrypted cookies using ctypes memset
 """
 import base64
-import ctypes
 import os
 import pathlib
 import secrets
@@ -40,71 +38,24 @@ MIN_PASSWORD_LENGTH = 8
 # Encrypted cookies file path relative to config directory
 COOKIES_FILENAME = 'cookies.txt.enc'
 
-# Module-level session state (in-memory only)
-# Uses bytearray for mutable storage that can be securely zeroed
-_session_cookies_content: Optional[bytearray] = None
-
-
 def _get_shared_cookies() -> Optional[bytes]:
-    """Get cookies from shared context (set by another worker)."""
-    try:
-        from wrolpi.root_api import api_app
-        return api_app.shared_ctx.secure_cookies.get('content')
-    except (AttributeError, RuntimeError):
-        # shared_ctx not initialized (during testing or startup)
-        return None
+    """Get cookies from shared context."""
+    from wrolpi.root_api import api_app
+    return api_app.shared_ctx.secure_cookies.get('content')
 
 
 def _set_shared_cookies(content: bytes) -> None:
     """Store cookies in shared context for cross-worker access."""
-    try:
-        from wrolpi.root_api import api_app
-        with api_app.shared_ctx.secure_cookies_lock:
-            api_app.shared_ctx.secure_cookies['content'] = content
-    except (AttributeError, RuntimeError):
-        # shared_ctx not initialized (during testing or startup)
-        pass
+    from wrolpi.root_api import api_app
+    with api_app.shared_ctx.secure_cookies_lock:
+        api_app.shared_ctx.secure_cookies['content'] = content
 
 
 def _clear_shared_cookies() -> None:
     """Clear cookies from shared context."""
-    try:
-        from wrolpi.root_api import api_app
-        with api_app.shared_ctx.secure_cookies_lock:
-            api_app.shared_ctx.secure_cookies.clear()
-    except (AttributeError, RuntimeError):
-        pass
-
-
-def _get_memset():
-    """Get the memset function from the C library."""
-    # Linux (including Raspberry Pi), macOS, Docker - all Unix-like
-    return ctypes.CDLL(None).memset
-
-
-def _secure_zero_memory(data: bytearray) -> None:
-    """
-    Securely zero memory containing sensitive data.
-
-    Uses ctypes to call C's memset, ensuring the memory is actually
-    overwritten rather than just dereferenced.
-    """
-    if data is None or len(data) == 0:
-        return
-
-    try:
-        memset = _get_memset()
-        # Get the address of the bytearray's buffer
-        # bytearray objects expose their buffer via ctypes
-        buftype = ctypes.c_char * len(data)
-        buf = buftype.from_buffer(data)
-        memset(buf, 0, len(data))
-    except Exception as e:
-        # Fallback: overwrite with zeros using Python
-        # Less secure but better than nothing
-        logger.warning(f'ctypes memset failed, using fallback: {e}')
-        for i in range(len(data)):
-            data[i] = 0
+    from wrolpi.root_api import api_app
+    with api_app.shared_ctx.secure_cookies_lock:
+        api_app.shared_ctx.secure_cookies.clear()
 
 
 def get_cookies_file_path() -> pathlib.Path:
@@ -204,9 +155,6 @@ def validate_cookies_format(content: str) -> Tuple[bool, Optional[str]]:
         return False, 'Cookies content is empty'
 
     lines = content.strip().split('\n')
-
-    # Check for Netscape header (optional but common)
-    has_header = False
     valid_cookie_lines = 0
 
     for line in lines:
@@ -218,9 +166,6 @@ def validate_cookies_format(content: str) -> Tuple[bool, Optional[str]]:
 
         # Skip comments (lines starting with #)
         if line.startswith('#'):
-            # Check for Netscape header
-            if 'Netscape' in line or 'HTTP Cookie File' in line:
-                has_header = True
             continue
 
         # Each cookie line should have at least 7 tab-separated fields:
@@ -256,8 +201,6 @@ def save_encrypted_cookies(content: str, password: str) -> pathlib.Path:
     Raises:
         ValueError: If cookies format is invalid or password is too short
     """
-    global _session_cookies_content
-
     # Validate format
     is_valid, error = validate_cookies_format(content)
     if not is_valid:
@@ -274,10 +217,8 @@ def save_encrypted_cookies(content: str, password: str) -> pathlib.Path:
     os.chmod(cookies_path, 0o600)
 
     # Set flags and auto-unlock (user just provided the password)
-    # Store as bytearray for secure clearing later
     flags.cookies_exist.set()
-    _session_cookies_content = bytearray(content.encode('utf-8'))
-    _set_shared_cookies(content.encode('utf-8'))  # Share with other workers
+    _set_shared_cookies(content.encode('utf-8'))
     flags.cookies_unlocked.set()
 
     logger.info(f'Saved encrypted cookies to {cookies_path}')
@@ -329,8 +270,6 @@ def unlock_cookies(password: str) -> None:
         FileNotFoundError: If no encrypted cookies file exists
         ValueError: If password is wrong or data is corrupted
     """
-    global _session_cookies_content
-
     cookies_path = get_cookies_file_path()
     if not cookies_path.is_file():
         raise FileNotFoundError('No encrypted cookies file found')
@@ -340,44 +279,21 @@ def unlock_cookies(password: str) -> None:
 
     # Store in shared context for cross-worker access
     _set_shared_cookies(decrypted.encode('utf-8'))
-
-    # Store locally for this worker (as bytearray for secure clearing later)
-    _session_cookies_content = bytearray(decrypted.encode('utf-8'))
     flags.cookies_unlocked.set()
-    logger.info('Cookies unlocked to memory (shared)')
+    logger.info('Cookies unlocked to shared memory')
 
 
 def lock_cookies() -> None:
-    """Clear session - securely remove decrypted cookies from memory."""
-    global _session_cookies_content
-
-    if _session_cookies_content is not None:
-        _secure_zero_memory(_session_cookies_content)
-    _session_cookies_content = None
-
-    # Clear shared context
+    """Clear cookies from shared memory."""
     _clear_shared_cookies()
-
     flags.cookies_unlocked.clear()
-    logger.info('Cookies locked (memory securely cleared)')
+    logger.info('Cookies locked')
 
 
 def cookies_unlocked() -> bool:
-    """Check if cookies are decrypted in memory (local or shared)."""
-    global _session_cookies_content
-
-    # Check local first (fast path)
-    if _session_cookies_content is not None and len(_session_cookies_content) > 0:
-        return True
-
-    # Check shared context (other worker may have unlocked)
+    """Check if cookies are decrypted in shared memory."""
     shared_content = _get_shared_cookies()
-    if shared_content:
-        # Copy to local for this worker
-        _session_cookies_content = bytearray(shared_content)
-        return True
-
-    return False
+    return shared_content is not None and len(shared_content) > 0
 
 
 def _get_secure_temp_dir() -> Optional[str]:
@@ -403,7 +319,7 @@ def cookies_for_download():
     """
     Context manager providing a unique temp file for one download.
 
-    Writes in-memory cookies to a unique temp file, yields the path for yt-dlp,
+    Writes shared cookies to a unique temp file, yields the path for yt-dlp,
     then securely deletes the temp file.
 
     Uses /dev/shm (RAM-based tmpfs) when available to prevent cookies from
@@ -424,6 +340,9 @@ def cookies_for_download():
     if not cookies_unlocked():
         raise RuntimeError('Cookies not unlocked')
 
+    # Get cookies from shared context
+    cookies_content = _get_shared_cookies()
+
     # Create unique temp file, prefer /dev/shm (RAM) over /tmp (disk)
     # Use opaque prefix to avoid revealing file purpose
     fd, temp_path = tempfile.mkstemp(
@@ -438,9 +357,9 @@ def cookies_for_download():
         # Set restrictive permissions
         os.chmod(temp_path, 0o600)
 
-        # Write cookies content (decode bytearray to string)
+        # Write cookies content
         with os.fdopen(fd, 'w') as f:
-            f.write(_session_cookies_content.decode('utf-8'))
+            f.write(cookies_content.decode('utf-8'))
 
         yield temp_file
     finally:

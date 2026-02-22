@@ -226,11 +226,11 @@ async def handle_server_shutdown(*args, **kwargs):
         await cancel_background_tasks()
     except Exception as e:
         logger.error('cancel_background_tasks failed. This is probably fine', exc_info=e)
-    # Securely zero cookies memory before shutdown
+    # Clear cookies from shared memory before shutdown
     try:
         lock_cookies()
     except Exception as e:
-        logger.error('Failed to securely zero cookies memory', exc_info=e)
+        logger.error('Failed to clear cookies from shared memory', exc_info=e)
 
 
 @api_app.signal(Event.SERVER_SHUTDOWN_AFTER)

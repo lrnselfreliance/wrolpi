@@ -395,8 +395,11 @@ class TestGetCookiesStatus:
 
 # Fixture to reset module state between tests
 @pytest.fixture(autouse=True)
-def reset_cookies_state():
-    """Reset cookies module state before and after each test."""
+def reset_cookies_state(async_client):
+    """Reset cookies module state before and after each test.
+
+    Depends on async_client to ensure shared_ctx is initialized.
+    """
     lock_cookies()
     yield
     lock_cookies()

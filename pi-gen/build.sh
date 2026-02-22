@@ -103,8 +103,6 @@ mv "${BUILD_DIR}"/deploy/*desktop*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch6
 chmod 644 "${SCRIPT_DIR}"/*xz
 chown -R 1000:1000 "${SCRIPT_DIR}"
 
-rm -rf "${BUILD_DIR}"
-
 set +x
 
 echo "Build completed successfully"

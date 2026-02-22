@@ -6,6 +6,25 @@ BUILD_DIR=/var/tmp/wrolpi-build-pi-gen
 
 VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
 
+Help() {
+  echo "Build WROLPi Raspberry Pi OS image."
+  echo
+  echo "Syntax: build.sh [-h] [-b BRANCH]"
+  echo "options:"
+  echo "h     Print this help."
+  echo "b     Build from this git BRANCH (default: 'release')."
+  echo
+}
+
+BRANCH="release"
+while getopts ":hb:" option; do
+  case $option in
+  h) Help; exit ;;
+  b) BRANCH="${OPTARG}" ;;
+  *) echo "Error: Invalid option"; exit 1 ;;
+  esac
+done
+
 # Re-execute this script if it wasn't called with sudo.
 if [ $EUID != 0 ]; then
   sudo "$0" "$@"
@@ -81,6 +100,7 @@ mv /var/tmp/pi-gen-bookworm-arm64 /var/tmp/wrolpi-build-pi-gen
 
 # Copy the configuration and build files into the pi-gen directory.
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
+echo "WROLPI_BRANCH=${BRANCH}" >> "${BUILD_DIR}/config.txt"
 rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
 
 # We only need to build the Lite and Desktop images.

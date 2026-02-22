@@ -19,12 +19,12 @@ See https://github.com/RPI-Distro/pi-gen
 
 2. Run the build (or, with a specific git branch)
 
-   * Build master branch
+   * Build release branch (default)
 
          sudo ./build.sh
 
    * Build specific branch
 
-         sudo ./build.sh -b release-candidate
+         sudo ./build.sh -b master
 
 3. The images are now in the `pi-gen` directory.

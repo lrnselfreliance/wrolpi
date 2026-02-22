@@ -6,6 +6,25 @@ BUILD_DIR=/var/tmp/wrolpi-build-debian
 
 VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
 
+Help() {
+  echo "Build WROLPi Debian Live ISO image."
+  echo
+  echo "Syntax: build.sh [-h] [-b BRANCH]"
+  echo "options:"
+  echo "h     Print this help."
+  echo "b     Build from this git BRANCH (default: 'release')."
+  echo
+}
+
+BRANCH="release"
+while getopts ":hb:" option; do
+  case $option in
+  h) Help; exit ;;
+  b) BRANCH="${OPTARG}" ;;
+  *) echo "Error: Invalid option"; exit 1 ;;
+  esac
+done
+
 # Re-execute this script if it wasn't called with sudo.
 if [ $EUID != 0 ]; then
   sudo "$0" "$@"
@@ -77,6 +96,9 @@ lb config \
  --iso-publisher https://wrolpi.org
 
 rsync -a "${SCRIPT_DIR}/config" "${BUILD_DIR}/"
+
+# Write branch config for hook script.
+echo "${BRANCH}" > "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-branch"
 
 time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
 

@@ -35,8 +35,8 @@ chmod +x /usr/local/bin/deno
 rm /tmp/deno.zip
 deno --version
 
-# Put the latest WROLPi master in /opt/wrolpi.
-git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+# Put the latest WROLPi in /opt/wrolpi.
+git clone -b "${WROLPI_BRANCH:-release}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 git config --global --add safe.directory /opt/wrolpi
 
 # Install Python requirements.  Try multiple times because pypi may stop responding.

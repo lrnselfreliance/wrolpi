@@ -18,7 +18,10 @@ EOF
 
 git --version
 
-git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+WROLPI_BRANCH="release"
+[ -f /opt/wrolpi-branch ] && WROLPI_BRANCH=$(cat /opt/wrolpi-branch)
+git clone -b "${WROLPI_BRANCH}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+rm -f /opt/wrolpi-branch
 
 # Install webapp.
 cd /opt/wrolpi/app

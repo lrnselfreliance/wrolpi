@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {Link, Route, Routes, useNavigate} from "react-router";
 import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
+import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateFiles, searchEstimateOthers, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
@@ -408,6 +409,7 @@ export function SearchIconButton() {
     return (
         <a className='item' style={{paddingRight: '0.7em'}} onClick={openSearchModal}>
             <Icon name='search'/>
+            <ShortcutHint shortcutKey="K"/>
         </a>
     );
 }

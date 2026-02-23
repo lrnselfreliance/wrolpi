@@ -3,6 +3,7 @@ import {Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} fro
 import {Button, Header, Modal} from "./Theme";
 import {ThemeContext} from "../contexts/contexts";
 import {SHORTCUTS} from "./KeyboardShortcutsProvider";
+import {usePlatformModifier} from "../hooks/customHooks";
 
 // Format keyboard keys for display
 function KeyboardKey({children}) {
@@ -27,9 +28,27 @@ function KeyboardKey({children}) {
 }
 
 // Parse shortcut keys string and render as keyboard keys
-function ShortcutKeys({keys}) {
+function ShortcutKeys({keys, isMac}) {
     // Handle multiple key combinations (e.g., "meta+k, ctrl+k")
-    const combinations = keys.split(', ');
+    let combinations = keys.split(', ');
+
+    // Filter to show only platform-appropriate shortcuts when there are multiple combinations
+    if (combinations.length > 1) {
+        const hasMeta = combinations.some(c => c.toLowerCase().includes('meta'));
+        const hasCtrl = combinations.some(c => c.toLowerCase().includes('ctrl'));
+
+        // If we have both meta and ctrl variants, show only the platform-appropriate one
+        if (hasMeta && hasCtrl) {
+            combinations = combinations.filter(c => {
+                const lowerCombo = c.toLowerCase();
+                if (isMac) {
+                    return lowerCombo.includes('meta');
+                } else {
+                    return lowerCombo.includes('ctrl');
+                }
+            });
+        }
+    }
 
     return (
         <span>
@@ -98,6 +117,7 @@ function groupShortcutsByCategory(shortcuts) {
 
 export default function HelpModal({open, onClose}) {
     const {i, t} = useContext(ThemeContext);
+    const {isMac} = usePlatformModifier();
     const groupedShortcuts = groupShortcutsByCategory(SHORTCUTS);
 
     // Order categories
@@ -116,7 +136,7 @@ export default function HelpModal({open, onClose}) {
                                 {groupedShortcuts[category].map((shortcut, idx) => (
                                     <TableRow key={idx}>
                                         <TableCell width={6}>
-                                            <ShortcutKeys keys={shortcut.keys}/>
+                                            <ShortcutKeys keys={shortcut.keys} isMac={isMac}/>
                                         </TableCell>
                                         <TableCell {...t}>{shortcut.description}</TableCell>
                                     </TableRow>

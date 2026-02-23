@@ -52,11 +52,16 @@ import {useForm} from "./useForm";
 export const useIsTouchDevice = () => {
     // Detects if the device has a coarse pointer (touch screen).
     // Used to disable drag selection on mobile devices.
-    const [isTouchDevice, setIsTouchDevice] = useState(false);
+    // Initialize synchronously to avoid race conditions with dependent hooks.
+    const [isTouchDevice, setIsTouchDevice] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return window.matchMedia('(pointer: coarse)').matches;
+        }
+        return false;
+    });
 
     useEffect(() => {
         const touchQuery = window.matchMedia('(pointer: coarse)');
-        setIsTouchDevice(touchQuery.matches);
 
         const handleChange = (e) => setIsTouchDevice(e.matches);
         touchQuery.addEventListener('change', handleChange);
@@ -65,6 +70,58 @@ export const useIsTouchDevice = () => {
     }, []);
 
     return isTouchDevice;
+};
+
+export const usePlatformModifier = () => {
+    // Detects if the user is on macOS to display the correct keyboard shortcut modifier.
+    const [isMac, setIsMac] = useState(false);
+
+    useEffect(() => {
+        // Modern API (Chrome 90+)
+        if (navigator.userAgentData?.platform) {
+            setIsMac(navigator.userAgentData.platform === 'macOS');
+        } else {
+            // Fallback for older browsers
+            setIsMac(/Mac|iPhone|iPad|iPod/.test(navigator.platform));
+        }
+    }, []);
+
+    return {
+        isMac,
+        modifierKey: isMac ? '\u2318' : 'Ctrl',
+        modifierKeyLong: isMac ? 'Cmd' : 'Ctrl',
+    };
+};
+
+export const useKeyboardDetected = () => {
+    // Detects if a hardware keyboard is present by listening for key presses.
+    // On desktop devices, returns true immediately.
+    // On touch devices (iPad with Bluetooth keyboard), returns true after the first key press
+    // outside of input fields. This allows showing keyboard shortcuts to iPad users with
+    // external keyboards while hiding them for pure touch users.
+    const [keyboardDetected, setKeyboardDetected] = useState(false);
+    const isTouchDevice = useIsTouchDevice();
+
+    useEffect(() => {
+        // Desktop devices always have a keyboard.
+        if (!isTouchDevice) {
+            setKeyboardDetected(true);
+            return;
+        }
+
+        const handleKeyDown = (e) => {
+            // A key press outside of input fields indicates a hardware keyboard is connected.
+            if (!e.target.matches('input, textarea, [contenteditable]')) {
+                setKeyboardDetected(true);
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isTouchDevice]);
+
+    return keyboardDetected;
 };
 
 const calculatePage = (offset, limit) => {

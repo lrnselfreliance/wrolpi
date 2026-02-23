@@ -218,7 +218,10 @@ class EchoResponse:
 class DownloadSettings:
     channel_id: Optional[int] = None
     channel_tag_name: List[str] = field(default_factory=list)
+    channel_url: Optional[str] = None
+    collection_id: Optional[int] = None
     depth: Optional[int] = None
+    destination: Optional[str] = None  # Legacy support
     download_metadata_only: bool = False
     download_order: Optional[str] = None
     excluded_urls: Optional[str] = None
@@ -226,6 +229,7 @@ class DownloadSettings:
     maximum_duration: Optional[int] = None
     minimum_duration: Optional[int] = None
     suffix: Optional[str] = None
+    tag_names: Optional[List[str]] = None  # Legacy support
     title_exclude: Optional[str] = None
     title_include: Optional[str] = None
     video_count_limit: Optional[int] = None

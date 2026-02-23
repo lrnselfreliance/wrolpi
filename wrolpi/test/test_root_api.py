@@ -429,6 +429,52 @@ async def test_download_crud(test_session, async_client, test_download_manager_c
 
 
 @pytest.mark.asyncio
+async def test_update_download_with_settings_collection_id(test_session, async_client, test_download_manager_config,
+                                                           test_directory):
+    """Updating a download should accept collection_id and other legacy fields in settings.
+
+    The frontend sends collection_id inside settings when editing a download, even though it's also at the top level.
+    This should not cause a validation error."""
+
+    async def dispatch_downloads(*a, **kw):
+        pass
+
+    with mock.patch('wrolpi.downloader.DownloadManager.dispatch_downloads', dispatch_downloads):
+        # Create a recurring download first.
+        body = dict(
+            urls=['https://www.youtube.com/watch?v=r9pF8CdUbD0'],
+            frequency=86400,
+            downloader='video',
+        )
+        request, response = await async_client.post('/api/download', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.CREATED
+
+        download = test_session.query(Download).one()
+
+        # Update the download with collection_id in settings (mimics frontend behavior).
+        # This is the exact payload from the bug report.
+        body = dict(
+            destination='',
+            downloader='video',
+            settings=dict(
+                video_format='mp4',
+                video_resolutions=['360p'],
+                collection_id=195,  # This was causing ValidationError
+                parent_download_url='https://youtube.com/@cheimerdinger/videos',
+                channel_tag_name=None,
+                channel_url='https://youtube.com/@cheimerdinger',  # Also stored in settings
+                destination='videos/test',  # Legacy field
+                tag_names=['test'],  # Legacy field
+            ),
+            tag_names=[],
+            urls=['https://www.youtube.com/watch?v=r9pF8CdUbD0'],
+        )
+        request, response = await async_client.put(f'/api/download/{download.id}', json=body)
+        assert response.status_code == HTTPStatus.NO_CONTENT, \
+            f'Expected NO_CONTENT but got {response.status_code}: {response.json}'
+
+
+@pytest.mark.asyncio
 async def test_get_downloaders(async_client):
     """A list of Downloaders the user can use can be gotten."""
     request, response = await async_client.get('/api/downloaders')

@@ -422,8 +422,9 @@ export function VideosDownloadForm({
                 setConfig(result);
 
                 // Update form with video resolutions from config only if user hasn't changed them
-                // and if no download object was provided (this is a new download, not an edit)
-                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                // and if the download doesn't already have video_resolutions set
+                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
                     form.setValue('settings.video_resolutions', result.video_resolutions);
                 }
             } catch (error) {
@@ -646,8 +647,9 @@ export function ChannelDownloadForm({
                 setIsConfigLoaded(true);
 
                 // Update form with video resolutions from config only if user hasn't changed them
-                // and if no download object was provided (this is a new download, not an edit)
-                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                // and if the download doesn't already have video_resolutions set
+                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
                     form.setValue('settings.video_resolutions', result.video_resolutions);
                 }
             } catch (error) {
@@ -953,8 +955,9 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
                 setIsConfigLoaded(true);
 
                 // Update form with video resolutions from config only if user hasn't changed them
-                // and if no download object was provided (this is a new download, not an edit)
-                if (result && result.video_resolutions && !userChangedResolutions && !download) {
+                // and if the download doesn't already have video_resolutions set
+                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
                     form.setValue('settings.video_resolutions', result.video_resolutions);
                 }
             } catch (error) {

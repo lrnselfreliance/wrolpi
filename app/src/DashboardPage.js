@@ -8,6 +8,7 @@ import {
     useTitle
 } from "./components/Common";
 import React, {useContext, useState} from "react";
+import {useHotkeys} from "react-hotkeys-hook";
 import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
@@ -308,6 +309,14 @@ function DashboardRecentFiles() {
 
 export function DashboardPage() {
     const navigate = useNavigate();
+    const searchInputRef = React.useRef();
+
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     // The search the user submitted.
     const {searchStr, setSearchStr, activeTags, isEmpty, anyTag} = useSearch();
@@ -384,6 +393,7 @@ export function DashboardPage() {
                                    handleResultSelect={handleResultSelect}
                                    resultRenderer={resultRenderer}
                                    loading={loading}
+                                   inputRef={searchInputRef}
                                    {...props}
         />;
     };

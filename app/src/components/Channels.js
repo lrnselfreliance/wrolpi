@@ -1,4 +1,5 @@
 import React, {useState} from "react";
+import {useHotkeys} from "react-hotkeys-hook";
 import {Grid, StatisticLabel, StatisticValue,} from "semantic-ui-react";
 import {createChannel, deleteChannel, refreshChannel, tagChannel, tagChannelInfo} from "../api";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
@@ -523,6 +524,14 @@ export function ChannelsPage() {
 
     const [channels] = useChannels();
     const [searchStr, setSearchStr] = useOneQuery('name');
+    const searchInputRef = React.useRef();
+
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     // Header section matching DomainsPage pattern
     const header = <div style={{marginBottom: '1em'}}>
@@ -537,6 +546,7 @@ export function ChannelsPage() {
                         onClear={() => setSearchStr('')}
                         onChange={setSearchStr}
                         onSubmit={null}
+                        inputRef={searchInputRef}
                     />
                 </Grid.Column>
                 <Grid.Column textAlign='right'>

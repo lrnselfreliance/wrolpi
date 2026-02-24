@@ -1,4 +1,5 @@
 import React, {useContext, useState} from "react";
+import {useHotkeys} from "react-hotkeys-hook";
 import {
     CardContent,
     CardDescription,
@@ -453,6 +454,14 @@ export function DomainsPage() {
 
     const [domains] = useDomains();
     const [searchStr, setSearchStr] = useOneQuery('domain');
+    const searchInputRef = React.useRef();
+
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     // Header section matching ChannelsPage pattern
     const header = <div style={{marginBottom: '1em'}}>
@@ -467,6 +476,7 @@ export function DomainsPage() {
                         onClear={() => setSearchStr('')}
                         onChange={setSearchStr}
                         onSubmit={null}
+                        inputRef={searchInputRef}
                     />
                 </Grid.Column>
                 <Grid.Column textAlign='right'>
@@ -1045,6 +1055,14 @@ function ArchiveSettingsPage() {
 
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
+    const searchInputRef = React.useRef();
+
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     const {domain, domains} = useSearchDomain();
 
@@ -1150,6 +1168,7 @@ function ArchivesPage() {
         searchStr={localSearchStr}
         onSubmit={setSearchStr}
         placeholder='Search Archives...'
+        inputRef={searchInputRef}
     />;
 
     // Domain header with edit link when filtering by domain

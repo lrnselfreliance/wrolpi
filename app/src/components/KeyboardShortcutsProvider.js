@@ -24,6 +24,16 @@ export const SHORTCUTS = [
     {keys: 'g f', description: 'Go to Files', category: 'Navigation', path: '/files'},
     {keys: 'g s', description: 'Go to Settings', category: 'Navigation', path: '/admin'},
     {keys: 'g i', description: 'Go to Inventory', category: 'Navigation', path: '/inventory'},
+
+    // Page Search
+    {keys: 'f', description: 'Focus search input', category: 'Page Search'},
+
+    // Video Player
+    {keys: 'k', description: 'Play/pause video', category: 'Video Player'},
+    {keys: 'j', description: 'Jump back 15 seconds', category: 'Video Player'},
+    {keys: 'l', description: 'Jump forward 30 seconds', category: 'Video Player'},
+    {keys: 'n', description: 'Navigate to newer video', category: 'Video Player'},
+    {keys: 'p', description: 'Navigate to older video', category: 'Video Player'},
 ];
 
 function SearchModal({open, onClose}) {

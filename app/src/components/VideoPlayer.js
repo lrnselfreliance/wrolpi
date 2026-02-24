@@ -1,4 +1,5 @@
 import React, {useContext} from 'react';
+import {useHotkeys} from 'react-hotkeys-hook';
 import {deleteVideos, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router";
 import _ from "lodash";
@@ -172,6 +173,21 @@ const Comments = ({comments, video}) => {
     </CommentGroup>
 }
 
+// Generate a video page URL for a file object.
+function getVideoLink(file) {
+    if (!file || !file.video) return null;
+    const {video} = file;
+    const channel = video.channel ? video.channel : null;
+
+    if (file.slug) {
+        return `/videos/video/${file.slug}`;
+    } else if (channel) {
+        return `/videos/channel/${channel.id}/video/${video.id}`;
+    } else {
+        return `/videos/video/${video.id}`;
+    }
+}
+
 function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const {theme} = useContext(ThemeContext);
 
@@ -193,6 +209,51 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const {channelId} = useParams();
     const {channel} = useChannel(video && video.channel_id ? video.channel_id : channelId);
     const {comments, captions} = useVideoExtras(videoFile?.video?.id);
+
+    // Keyboard shortcuts for video player controls
+    // k: Play/pause
+    useHotkeys('k', () => {
+        if (videoRef.current) {
+            if (videoRef.current.paused) {
+                videoRef.current.play();
+            } else {
+                videoRef.current.pause();
+            }
+        }
+    }, {enableOnFormTags: false});
+
+    // j: Jump back 15 seconds
+    useHotkeys('j', () => {
+        if (videoRef.current) {
+            videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 15);
+        }
+    }, {enableOnFormTags: false});
+
+    // l: Jump forward 30 seconds
+    useHotkeys('l', () => {
+        if (videoRef.current) {
+            videoRef.current.currentTime = Math.min(
+                videoRef.current.duration || Infinity,
+                videoRef.current.currentTime + 30
+            );
+        }
+    }, {enableOnFormTags: false});
+
+    // n: Navigate to newer video
+    useHotkeys('n', () => {
+        const link = getVideoLink(nextFile);
+        if (link) {
+            navigate(link);
+        }
+    }, {enableOnFormTags: false}, [nextFile, navigate]);
+
+    // p: Navigate to older video
+    useHotkeys('p', () => {
+        const link = getVideoLink(prevFile);
+        if (link) {
+            navigate(link);
+        }
+    }, {enableOnFormTags: false}, [prevFile, navigate]);
 
     if (videoFile === null) {
         return <VideoPlaceholder/>;

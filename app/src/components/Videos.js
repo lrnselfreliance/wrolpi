@@ -1,5 +1,6 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useContext, useEffect, useRef, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router";
+import {useHotkeys} from "react-hotkeys-hook";
 import {
     APIButton,
     CardLink,
@@ -33,7 +34,8 @@ import {
     Form,
     FormDropdown,
     FormInput,
-    FormTextArea,
+    FormField,
+    TextArea,
     Image,
     Label,
     PlaceholderHeader,
@@ -84,6 +86,14 @@ function VideosPage() {
     const {channelId} = useParams();
     const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
+    const searchInputRef = React.useRef();
+
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     let searchOrder = defaultFileOrder;
     if (searchParams.get('order')) {
@@ -206,6 +216,7 @@ function VideosPage() {
         onClear={() => setLocalSearchStr(null)}
         onSubmit={setSearchStr}
         placeholder='Search Videos...'
+        inputRef={searchInputRef}
     />;
 
     return <>
@@ -543,6 +554,31 @@ function CookiesSettingsSection() {
     const [password, setPassword] = useState('');
     const [unlockPassword, setUnlockPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const unlockPasswordRef = useRef(null);
+    const cookiesContentRef = useRef(null);
+
+    useEffect(() => {
+        if (uploadModalOpen) {
+            const timer = setTimeout(() => {
+                if (cookiesContentRef.current) {
+                    cookiesContentRef.current.focus();
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [uploadModalOpen]);
+
+    useEffect(() => {
+        if (unlockModalOpen) {
+            // Delay focus to allow modal animation to complete
+            const timer = setTimeout(() => {
+                if (unlockPasswordRef.current) {
+                    unlockPasswordRef.current.focus();
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [unlockModalOpen]);
 
     const fetchStatus = async () => {
         setLoading(true);
@@ -693,13 +729,16 @@ function CookiesSettingsSection() {
             <Modal.Header>Upload Cookies</Modal.Header>
             <Modal.Content>
                 <Form>
-                    <FormTextArea
-                        label='Cookies Content'
-                        placeholder='Paste your cookies.txt content here (Netscape/Mozilla format)'
-                        value={cookiesContent}
-                        onChange={(e) => setCookiesContent(e.target.value)}
-                        rows={10}
-                    />
+                    <FormField>
+                        <label>Cookies Content</label>
+                        <TextArea
+                            ref={cookiesContentRef}
+                            placeholder='Paste your cookies.txt content here (Netscape/Mozilla format)'
+                            value={cookiesContent}
+                            onChange={(e) => setCookiesContent(e.target.value)}
+                            rows={10}
+                        />
+                    </FormField>
                     <FormInput
                         label='Encryption Password'
                         type='password'
@@ -736,6 +775,7 @@ function CookiesSettingsSection() {
             <Modal.Content>
                 <Form>
                     <FormInput
+                        input={{ref: unlockPasswordRef}}
                         label='Password'
                         type='password'
                         placeholder='Enter your encryption password'

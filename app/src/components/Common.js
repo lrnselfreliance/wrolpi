@@ -421,7 +421,7 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', clearDisabled = null) => {
+const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', clearDisabled = null, inputRef = null) => {
     const [value, setValue] = useState(searchStr || '');
     const [submitted, setSubmitted] = useState(false);
 
@@ -497,6 +497,7 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
                          size={size}
                          className='search-input'
                          action={action}
+                         ref={inputRef}
     />;
 
     return {value, submitted, clearButton, input, localOnSubmit, handleChange}
@@ -510,10 +511,11 @@ export function SearchInput({
                                 size = 'small',
                                 placeholder = 'Search...',
                                 icon = 'search',
+                                inputRef = null,
                                 ...props
                             }) {
     // A Semantic <Input> with a Clear button as the action.
-    let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon);
+    let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, null, inputRef);
 
     return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
         {input}

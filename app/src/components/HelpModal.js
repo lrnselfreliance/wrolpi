@@ -65,7 +65,7 @@ function ShortcutKeys({keys, isMac}) {
                         case 'escape':
                             return 'Esc';
                         default:
-                            return part.toUpperCase();
+                            return part.toLowerCase();
                     }
                 });
 
@@ -78,7 +78,7 @@ function ShortcutKeys({keys, isMac}) {
                             {idx > 0 && ' / '}
                             {seqParts.map((p, i) => (
                                 <React.Fragment key={i}>
-                                    <KeyboardKey>{p.toUpperCase()}</KeyboardKey>
+                                    <KeyboardKey>{p.toLowerCase()}</KeyboardKey>
                                     {i < seqParts.length - 1 && ' then '}
                                 </React.Fragment>
                             ))}
@@ -121,7 +121,7 @@ export default function HelpModal({open, onClose}) {
     const groupedShortcuts = groupShortcutsByCategory(SHORTCUTS);
 
     // Order categories
-    const categoryOrder = ['Search', 'General', 'Help', 'Navigation'];
+    const categoryOrder = ['Search', 'General', 'Help', 'Navigation', 'Page Search', 'Video Player'];
     const orderedCategories = categoryOrder.filter(cat => groupedShortcuts[cat]);
 
     return (

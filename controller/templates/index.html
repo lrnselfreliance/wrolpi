@@ -547,6 +547,110 @@
             color: #888;
         }
 
+        /* Scripts section */
+        .scripts-list {
+            background: #16213e;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .script-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .script-row:last-child {
+            border-bottom: none;
+        }
+
+        .script-row:hover {
+            background: #1a3a5c;
+        }
+
+        .script-info h4 {
+            margin: 0 0 0.25rem 0;
+            color: #4ecca3;
+            font-size: 1rem;
+        }
+
+        .script-info p {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .script-row.unavailable {
+            opacity: 0.6;
+        }
+
+        .script-row.unavailable .btn {
+            cursor: not-allowed;
+        }
+
+        .script-running-banner {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            display: none;
+        }
+
+        .script-running-banner.show {
+            display: block;
+        }
+
+        .script-running-banner h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+        }
+
+        .script-running-banner .loading {
+            width: 2rem;
+            height: 2rem;
+            border-color: rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            margin: 0.5rem auto;
+        }
+
+        .script-running-banner .actions {
+            margin-top: 1rem;
+        }
+
+        .warning-list {
+            background: #1a1a2e;
+            border: 1px solid #ff6b6b;
+            border-radius: 4px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .warning-list h4 {
+            color: #ff6b6b;
+            margin: 0 0 0.75rem 0;
+            font-size: 0.95rem;
+        }
+
+        .warning-list ul {
+            margin: 0;
+            padding-left: 1.25rem;
+            color: #ccc;
+        }
+
+        .warning-list li {
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .warning-list li:last-child {
+            margin-bottom: 0;
+        }
+
         /* Responsive */
         @media (max-width: 600px) {
             header {
@@ -730,6 +834,22 @@
             <p style="color: #888; text-align: center;"><span class="loading"></span> Loading...</p>
         </div>
     </section>
+
+    {% if not docker_mode %}
+    <section id="scripts">
+        <h2>Maintenance Scripts</h2>
+        <div id="script-running-banner" class="script-running-banner">
+            <h2 id="script-running-name">Script Running</h2>
+            <span class="loading"></span>
+            <div class="actions">
+                <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
+            </div>
+        </div>
+        <div id="scripts-content">
+            <p style="color: #888; text-align: center;"><span class="loading"></span> Loading...</p>
+        </div>
+    </section>
+    {% endif %}
 </main>
 
 <!-- Logs Modal -->
@@ -793,6 +913,54 @@
             <div id="smart-modal-content">
                 <span class="loading"></span> Loading...
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script Confirmation Modal -->
+<div id="script-confirm-modal" class="modal" onclick="if(event.target===this)closeScriptConfirmModal()">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3 id="script-confirm-title">Run Script</h3>
+            <button class="modal-close" onclick="closeScriptConfirmModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="script-confirm-description" style="color: #ccc; margin-bottom: 1rem;"></p>
+            <div id="script-params-container" class="modal-form">
+                <!-- Parameter inputs are dynamically generated here -->
+            </div>
+            <div id="script-confirm-warnings" class="warning-list">
+                <h4>Warning: This script will:</h4>
+                <ul id="script-warnings-list"></ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeScriptConfirmModal()">Cancel</button>
+                <button id="script-confirm-btn" class="btn btn-danger" onclick="confirmRunScript()">Run Script</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script Output Modal -->
+<div id="script-output-modal" class="modal" onclick="if(event.target===this)closeScriptOutputModal()">
+    <div class="modal-content" style="width: 90%; max-width: none;">
+        <div class="modal-header">
+            <h3 id="script-output-title">Script Output</h3>
+            <button class="modal-close" onclick="closeScriptOutputModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <pre id="script-output-content"><span class="loading"></span> Loading output...</pre>
+        </div>
+        <div class="modal-footer">
+            <span id="script-output-countdown" style="color: #888; margin-right: 0.5rem;">10s</span>
+            <select id="script-output-lines-select" class="logs-select" onchange="changeScriptOutputLines()">
+                <option value="100">100 lines</option>
+                <option value="250" selected>250 lines</option>
+                <option value="500">500 lines</option>
+                <option value="1000">1000 lines</option>
+            </select>
+            <button class="btn btn-info" onclick="refreshScriptOutput()">Refresh</button>
+            <button class="btn btn-secondary" onclick="closeScriptOutputModal()">Close</button>
         </div>
     </div>
 </div>
@@ -1030,6 +1198,8 @@
             closeLogsModal();
             closeMountModal();
             closeSmartModal();
+            closeScriptConfirmModal();
+            closeScriptOutputModal();
         }
     });
 
@@ -1392,89 +1562,392 @@
     // Load SMART data on page load
     loadSmart();
 
-    // ===== FALLBACK / UPGRADE MODE =====
+    // ===== SCRIPTS MANAGEMENT =====
 
-    // Check URL parameters for special modes
-    const urlParams = new URLSearchParams(window.location.search);
-    const isFallback = urlParams.get('fallback') === 'true';
-    const isUpgrade = urlParams.get('upgrade') === 'true';
+    let scriptsData = [];
+    let pendingScriptName = null;
+    let scriptStatusInterval = null;
+    let scriptOutputCountdown = 10;
+    let scriptOutputInterval = null;
+    let currentScriptOutput = null;
 
-    if (isUpgrade) {
-        // ===== UPGRADE MODE =====
-        // Show upgrade banner
-        document.getElementById('upgrade-banner').classList.add('show');
+    async function loadScripts() {
+        const container = document.getElementById('scripts-content');
+        if (!container) return;  // Docker mode - section doesn't exist
 
-        // Track elapsed time
-        const startTime = Date.now();
-        const elapsedEl = document.getElementById('upgrade-elapsed');
+        try {
+            const scripts = await apiCall('api/scripts');
+            scriptsData = scripts;
 
-        const updateElapsed = () => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            elapsedEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        };
-        setInterval(updateElapsed, 1000);
-
-        // Poll main API to check if upgrade is complete
-        const checkUpgradeComplete = async () => {
-            try {
-                const resp = await fetch('/api/status', {
-                    method: 'GET',
-                    headers: {'Accept': 'application/json'},
-                    signal: AbortSignal.timeout(5000)
-                });
-                if (resp.ok) {
-                    // Upgrade complete!
-                    document.getElementById('upgrade-spinner').style.display = 'none';
-                    document.getElementById('upgrade-success').style.display = 'inline';
-                    document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
-                    document.getElementById('upgrade-banner').classList.add('complete');
-
-                    // Redirect to home after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 2000);
-                }
-            } catch (e) {
-                // Still upgrading, continue polling
+            if (scripts.length === 0) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">No scripts available</p>';
+                return;
             }
-        };
 
-        // Check every 3 seconds (same as old maintenance page)
-        setInterval(checkUpgradeComplete, 3000);
-        // Also check immediately
-        checkUpgradeComplete();
+            let html = '<div class="scripts-list">';
+            for (const script of scripts) {
+                const unavailableClass = script.available ? '' : 'unavailable';
+                const btnDisabled = script.available ? '' : 'disabled';
 
-    } else if (isFallback) {
-        // ===== FALLBACK MODE =====
-        // Show fallback banner
-        document.getElementById('fallback-banner').classList.add('show');
-
-        // Poll main API to check if it's back up
-        const checkMainApp = async () => {
-            try {
-                // Check main API status endpoint (not Controller)
-                const resp = await fetch('/api/status', {method: 'HEAD'});
-                if (resp.ok) {
-                    // Main app is back, redirect to home
-                    window.location.href = '/';
-                }
-            } catch (e) {
-                // Still down, continue polling
+                html += `
+                    <div class="script-row ${unavailableClass}">
+                        <div class="script-info">
+                            <h4>${script.display_name}</h4>
+                            <p>${script.description}</p>
+                        </div>
+                        <button class="btn btn-warning" ${btnDisabled} onclick="showScriptConfirmation('${script.name}')">Run</button>
+                    </div>
+                `;
             }
-        };
+            html += '</div>';
+            container.innerHTML = html;
 
-        // Check every 5 seconds
-        setInterval(checkMainApp, 5000);
-        // Also check immediately
-        checkMainApp();
+        } catch (e) {
+            if (e.message.includes('501')) {
+                container.innerHTML = '<p style="color: #888; text-align: center;">Scripts not available in Docker mode</p>';
+            } else {
+                container.innerHTML = `<p style="color: #ff6b6b; text-align: center;">Error loading scripts: ${e.message}</p>`;
+            }
+        }
     }
 
-    // Always fetch stats - Controller is independent and can provide stats during upgrade/fallback
-    startPeriodicUpdates();
+    async function checkScriptStatus() {
+        const banner = document.getElementById('script-running-banner');
+        if (!banner) return;  // Docker mode
+
+        try {
+            const status = await apiCall('api/scripts/status');
+
+            if (status.running) {
+                // Show banner
+                banner.classList.add('show');
+                const script = scriptsData.find(s => s.name === status.script_name);
+                document.getElementById('script-running-name').textContent =
+                    script ? `${script.display_name} Running` : 'Script Running';
+
+                currentScriptOutput = status.script_name;
+
+                // Disable run buttons while script is running
+                document.querySelectorAll('.script-row .btn').forEach(btn => {
+                    btn.disabled = true;
+                });
+            } else {
+                // Hide banner
+                banner.classList.remove('show');
+                currentScriptOutput = null;
+
+                // Re-enable run buttons
+                document.querySelectorAll('.script-row').forEach(row => {
+                    if (!row.classList.contains('unavailable')) {
+                        row.querySelector('.btn').disabled = false;
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Failed to check script status:', e);
+        }
+    }
+
+    async function showScriptConfirmation(name) {
+        const script = scriptsData.find(s => s.name === name);
+        if (!script) return;
+
+        pendingScriptName = name;
+
+        document.getElementById('script-confirm-title').textContent = `Run ${script.display_name}?`;
+        document.getElementById('script-confirm-description').textContent = script.description;
+
+        const warningsList = document.getElementById('script-warnings-list');
+        warningsList.innerHTML = script.warnings.map(w => `<li>${w}</li>`).join('');
+
+        // Generate parameter inputs dynamically
+        const paramsContainer = document.getElementById('script-params-container');
+        paramsContainer.innerHTML = '';
+
+        const parameters = script.parameters || [];
+        for (const param of parameters) {
+            const inputId = `script-param-${param.name}`;
+            let defaultValue = '';
+
+            // For branch type, fetch current branch
+            if (param.type === 'branch') {
+                try {
+                    const data = await apiCall('api/scripts/branch');
+                    if (data.branch) {
+                        defaultValue = data.branch;
+                    }
+                } catch (e) {
+                    defaultValue = 'release';
+                }
+            }
+
+            const html = `
+                <label for="${inputId}">${param.label}:</label>
+                <input type="text" id="${inputId}" data-param-name="${param.name}"
+                       value="${defaultValue}" placeholder="${param.label.toLowerCase()}" />
+            `;
+            paramsContainer.innerHTML += html;
+        }
+
+        document.getElementById('script-confirm-modal').classList.add('show');
+    }
+
+    function closeScriptConfirmModal() {
+        document.getElementById('script-confirm-modal').classList.remove('show');
+        pendingScriptName = null;
+    }
+
+    async function confirmRunScript() {
+        if (!pendingScriptName) return;
+
+        const btn = document.getElementById('script-confirm-btn');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+
+        const script = scriptsData.find(s => s.name === pendingScriptName);
+        const isUpgrade = pendingScriptName === 'upgrade';
+
+        // Collect all parameter values from dynamic inputs
+        let body = null;
+        const paramsContainer = document.getElementById('script-params-container');
+        const paramInputs = paramsContainer.querySelectorAll('input[data-param-name]');
+
+        if (paramInputs.length > 0) {
+            const params = {};
+            paramInputs.forEach(input => {
+                const value = input.value.trim();
+                if (value) {
+                    params[input.dataset.paramName] = value;
+                }
+            });
+            if (Object.keys(params).length > 0) {
+                body = { params: params };
+            }
+        }
+
+        try {
+            await apiCall(`api/scripts/${pendingScriptName}/start`, 'POST', body);
+            closeScriptConfirmModal();
+
+            // For upgrade script, redirect to upgrade mode
+            if (isUpgrade) {
+                window.location.href = `?upgrade=true`;
+                return;
+            }
+
+            // Immediately check status to show banner
+            await checkScriptStatus();
+
+            // Start polling for status updates
+            if (!scriptStatusInterval) {
+                scriptStatusInterval = setInterval(checkScriptStatus, 3000);
+            }
+        } catch (e) {
+            alert(`Failed to start script: ${e.message}`);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
+
+    function showScriptOutput() {
+        const name = currentScriptOutput || (scriptsData[0] && scriptsData[0].name);
+        if (!name) return;
+
+        const script = scriptsData.find(s => s.name === name);
+        document.getElementById('script-output-title').textContent =
+            script ? `${script.display_name} Output` : 'Script Output';
+        document.getElementById('script-output-content').innerHTML =
+            '<span class="loading"></span> Loading output...';
+
+        document.getElementById('script-output-modal').classList.add('show');
+        refreshScriptOutput();
+        startScriptOutputCountdown();
+    }
+
+    function startScriptOutputCountdown() {
+        if (scriptOutputInterval) clearInterval(scriptOutputInterval);
+        scriptOutputCountdown = 10;
+        document.getElementById('script-output-countdown').textContent = '10s';
+
+        scriptOutputInterval = setInterval(() => {
+            scriptOutputCountdown--;
+            document.getElementById('script-output-countdown').textContent = scriptOutputCountdown + 's';
+
+            if (scriptOutputCountdown <= 0) {
+                // Check if scrolled to bottom
+                const modalBody = document.getElementById('script-output-content').closest('.modal-body');
+                const isAtBottom = modalBody.scrollHeight - modalBody.scrollTop - modalBody.clientHeight < 50;
+
+                if (isAtBottom) {
+                    refreshScriptOutput();
+                }
+                scriptOutputCountdown = 10;
+                document.getElementById('script-output-countdown').textContent = '10s';
+            }
+        }, 1000);
+    }
+
+    function stopScriptOutputCountdown() {
+        if (scriptOutputInterval) {
+            clearInterval(scriptOutputInterval);
+            scriptOutputInterval = null;
+        }
+    }
+
+    async function refreshScriptOutput() {
+        const name = currentScriptOutput || (scriptsData[0] && scriptsData[0].name);
+        if (!name) return;
+
+        const lines = document.getElementById('script-output-lines-select').value;
+        const content = document.getElementById('script-output-content');
+        const modalBody = content.closest('.modal-body');
+
+        try {
+            const data = await apiCall(`api/scripts/${name}/output?lines=${lines}`);
+            content.textContent = data.output || 'No output available';
+            // Scroll to bottom
+            modalBody.scrollTop = modalBody.scrollHeight;
+        } catch (e) {
+            content.textContent = `Error loading output: ${e.message}`;
+        }
+    }
+
+    function changeScriptOutputLines() {
+        refreshScriptOutput();
+    }
+
+    function closeScriptOutputModal() {
+        stopScriptOutputCountdown();
+        document.getElementById('script-output-modal').classList.remove('show');
+    }
+
+    // ===== INITIALIZATION =====
+    // Each section is wrapped in try-catch to prevent one failure from breaking the entire page
+
+    // Check URL parameters for special modes
+    let isFallback = false;
+    let isUpgradeMode = false;
+    let urlParams = null;
+    try {
+        urlParams = new URLSearchParams(window.location.search);
+        isFallback = urlParams.get('fallback') === 'true';
+        isUpgradeMode = urlParams.get('upgrade') === 'true';
+    } catch (e) {
+        console.error('Failed to parse URL parameters:', e);
+    }
+
+    // ===== SCRIPTS SECTION =====
+    try {
+        // Always load scripts list (shows available scripts)
+        if (document.getElementById('scripts-content')) {
+            loadScripts();
+        }
+
+        // Only poll status when NOT in upgrade mode (upgrade banner handles status display)
+        if (document.getElementById('scripts-content') && !isUpgradeMode) {
+            checkScriptStatus();
+            // Poll for script status every 5 seconds
+            scriptStatusInterval = setInterval(checkScriptStatus, 5000);
+        }
+    } catch (e) {
+        console.error('Failed to initialize scripts section:', e);
+    }
+
+    // ===== UPGRADE MODE =====
+    try {
+        if (isUpgradeMode) {
+            // Show upgrade banner
+            document.getElementById('upgrade-banner').classList.add('show');
+
+            // Track elapsed time
+            const startTime = Date.now();
+            const elapsedEl = document.getElementById('upgrade-elapsed');
+
+            const updateElapsed = () => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                elapsedEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            };
+            updateElapsed();
+            setInterval(updateElapsed, 1000);
+
+            // Poll main API to check if upgrade is complete
+            // Use absolute URL to main WROLPi API (HTTPS on port 443), not Controller
+            const mainApiUrl = `https://${window.location.hostname}/api/status`;
+            const checkUpgradeComplete = async () => {
+                try {
+                    const resp = await fetch(mainApiUrl, {
+                        method: 'GET',
+                        headers: {'Accept': 'application/json'},
+                        signal: AbortSignal.timeout(5000)
+                    });
+                    if (resp.ok) {
+                        // Upgrade complete!
+                        document.getElementById('upgrade-spinner').style.display = 'none';
+                        document.getElementById('upgrade-success').style.display = 'inline';
+                        document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
+                        document.getElementById('upgrade-banner').classList.add('complete');
+
+                        // Redirect to main app after 2 seconds
+                        setTimeout(() => {
+                            window.location.href = `https://${window.location.hostname}/`;
+                        }, 2000);
+                    }
+                } catch (e) {
+                    // Still upgrading, continue polling
+                }
+            };
+
+            // Check every 3 seconds (same as old maintenance page)
+            setInterval(checkUpgradeComplete, 3000);
+            // Also check immediately
+            checkUpgradeComplete();
+        }
+    } catch (e) {
+        console.error('Failed to initialize upgrade mode:', e);
+    }
+
+    // ===== FALLBACK MODE =====
+    try {
+        if (isFallback && !isUpgradeMode) {
+            // Show fallback banner
+            document.getElementById('fallback-banner').classList.add('show');
+
+            // Poll main API to check if it's back up
+            // Use absolute URL to main WROLPi API (HTTPS on port 443), not Controller
+            const mainApiUrl = `https://${window.location.hostname}/api/status`;
+            const checkMainApp = async () => {
+                try {
+                    // Check main API status endpoint (not Controller)
+                    const resp = await fetch(mainApiUrl, {method: 'HEAD'});
+                    if (resp.ok) {
+                        // Main app is back, redirect to main app
+                        window.location.href = `https://${window.location.hostname}/`;
+                    }
+                } catch (e) {
+                    // Still down, continue polling
+                }
+            };
+
+            // Check every 5 seconds
+            setInterval(checkMainApp, 5000);
+            // Also check immediately
+            checkMainApp();
+        }
+    } catch (e) {
+        console.error('Failed to initialize fallback mode:', e);
+    }
 
     // ===== PERIODIC UPDATES =====
+    // Always fetch stats - Controller is independent and can provide stats during upgrade/fallback
+    try {
+        startPeriodicUpdates();
+    } catch (e) {
+        console.error('Failed to start periodic updates:', e);
+    }
 
     function formatUptime(seconds) {
         if (!seconds || seconds < 0) return '--';

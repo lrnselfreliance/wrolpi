@@ -263,3 +263,65 @@ class ServicesListErrorResponse(BaseModel):
 
     error: str = Field(description="Error message")
     reason: Optional[str] = Field(default=None, description="Detailed reason")
+
+
+# ============================================================================
+# Scripts
+# ============================================================================
+
+class ScriptParameter(BaseModel):
+    """Definition of a script input parameter."""
+
+    name: str = Field(description="Parameter name (used as env var name)")
+    label: str = Field(description="Display label for the input field")
+    type: str = Field(description="Parameter type: 'branch' or 'text'")
+    required: bool = Field(default=False, description="Whether the parameter must have a value")
+
+
+class ScriptInfo(BaseModel):
+    """Information about an available script."""
+
+    name: str = Field(description="Script identifier")
+    display_name: str = Field(description="Human-readable script name")
+    description: str = Field(description="What the script does")
+    warnings: list[str] = Field(description="Warnings to show before running")
+    available: bool = Field(description="Whether the script can be run")
+    parameters: list[ScriptParameter] = Field(default_factory=list, description="Input parameters for the script")
+
+
+class ScriptStatusResponse(BaseModel):
+    """Response model for script running status."""
+
+    running: bool = Field(description="Whether a script is currently running")
+    script_name: Optional[str] = Field(default=None, description="Name of running script")
+    service_name: Optional[str] = Field(default=None, description="Systemd service name")
+    started_at: Optional[str] = Field(default=None, description="ISO timestamp when started")
+    elapsed_seconds: Optional[int] = Field(default=None, description="Seconds since start")
+
+
+class ScriptStartResponse(BaseModel):
+    """Response model for starting a script."""
+
+    success: bool = Field(description="Whether the script started successfully")
+    message: Optional[str] = Field(default=None, description="Success message")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class ScriptOutputResponse(BaseModel):
+    """Response model for script output."""
+
+    output: str = Field(description="Script log output")
+    lines: int = Field(description="Number of lines requested")
+    script_name: str = Field(description="Script name")
+
+
+class ScriptStartRequest(BaseModel):
+    """Request model for starting a script."""
+
+    params: Optional[dict[str, str]] = Field(default=None, description="Parameter values (e.g., {'branch': 'release'})")
+
+
+class BranchResponse(BaseModel):
+    """Response model for current git branch."""
+
+    branch: Optional[str] = Field(description="Current git branch, or null if unavailable")

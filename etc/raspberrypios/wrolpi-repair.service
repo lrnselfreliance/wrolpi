@@ -1,0 +1,10 @@
+[Unit]
+Description=WROLPi Repair Service
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/wrolpi/repair.sh
+User=root
+StandardOutput=journal
+StandardError=journal

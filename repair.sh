@@ -46,12 +46,7 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 
 # Generate nginx certificate for HTTPS.
-if [[ ! -f /etc/nginx/cert.crt || ! -f /etc/nginx/cert.key ]]; then
-  openssl genrsa -out /etc/nginx/cert.key 2048
-  openssl req -new -x509 -nodes -key /etc/nginx/cert.key -out /etc/nginx/cert.crt -days 3650  \
-      -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=$(hostname).local"
-  chmod 640 /etc/nginx/cert.key /etc/nginx/cert.crt
-fi
+/opt/wrolpi/scripts/generate_certificates.sh
 
 # Start nginx quickly so user can access Controller from React UI
 systemctl start nginx || :

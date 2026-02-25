@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# This script is run once on the first startup of a Raspberry Pi.
+# This script is run once on the first startup of a Raspberry Pi or Debian Live.
+
+set -x
+
+# Generate nginx certificate for HTTPS if it doesn't exist.
+/opt/wrolpi/scripts/generate_certificates.sh
+
+# Enable and start nginx now that certificates exist.
+systemctl enable nginx
+systemctl start nginx || echo "Warning: nginx failed to start"
 
 # Copy skeleton files to first users home directory.
 USER_HOME=$(getent passwd 1000 | cut -d: -f6)

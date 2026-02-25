@@ -62,6 +62,9 @@ chown -R wrolpi:wrolpi /opt/wrolpi
 # Configure nginx.
 cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+# Copy wrolpi.conf which defines the location blocks for reverse proxy.
+[ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi

@@ -4,8 +4,6 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 BUILD_DIR=/var/tmp/wrolpi-build-debian
 
-VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
-
 Help() {
   echo "Build WROLPi Debian Live ISO image."
   echo
@@ -24,6 +22,14 @@ while getopts ":hb:" option; do
   *) echo "Error: Invalid option"; exit 1 ;;
   esac
 done
+
+# Get version from the target git branch (not local checkout) so output filename matches actual content.
+VERSION=$(curl -sL "https://raw.githubusercontent.com/lrnselfreliance/wrolpi/${BRANCH}/wrolpi/version.txt")
+if [ -z "${VERSION}" ]; then
+  echo "ERROR: Could not fetch version from branch '${BRANCH}'"
+  exit 1
+fi
+echo "Building WROLPi version: ${VERSION} from branch: ${BRANCH}"
 
 # Re-execute this script if it wasn't called with sudo.
 if [ $EUID != 0 ]; then

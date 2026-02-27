@@ -6,6 +6,14 @@ set -x
 # Generate nginx certificate for HTTPS if it doesn't exist.
 /opt/wrolpi/scripts/generate_certificates.sh
 
+# Ensure nginx config files are in place (safeguard in case build didn't complete this).
+if [ ! -f /etc/nginx/conf.d/wrolpi.conf ]; then
+    echo "wrolpi.conf missing, copying from /opt/wrolpi..."
+    cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
+fi
+# Remove default site if it exists (WROLPi nginx.conf doesn't use sites-enabled).
+rm -f /etc/nginx/sites-enabled/default
+
 # Enable and start nginx now that certificates exist.
 systemctl enable nginx
 systemctl start nginx || echo "Warning: nginx failed to start"

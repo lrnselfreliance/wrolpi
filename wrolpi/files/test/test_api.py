@@ -1246,3 +1246,61 @@ async def test_bulk_tag_progress_api(test_session, async_client):
     assert 'total' in response.json
     assert 'completed' in response.json
     assert 'queued_jobs' in response.json
+
+
+# --- File Tracking Tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_file_skip_tracking(test_session, async_client, test_directory, make_files_structure, refresh_files):
+    """Can get info about a single file without tracking the view."""
+    make_files_structure({'foo/bar.txt': 'foo contents'})
+    await refresh_files()
+
+    # Request the file with skip_tracking=True
+    content = dict(file='foo/bar.txt', skip_tracking=True)
+    request, response = await async_client.post('/api/files/file', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file']
+    assert response.json['file']['path'] == 'foo/bar.txt'
+
+    # FileGroup.viewed should not be set
+    fg, = test_session.query(FileGroup).all()
+    assert fg.primary_path == test_directory / 'foo/bar.txt'
+    assert fg.viewed is None, "FileGroup.viewed should not be set when skip_tracking=True"
+
+
+@pytest.mark.asyncio
+async def test_get_file_ignored_directory_not_tracked(test_session, async_client, test_directory, make_files_structure,
+                                                       refresh_files, test_wrolpi_config, await_switches):
+    """Files in ignored directories do not get their viewed timestamp set."""
+    # Create files in a directory that will be ignored
+    foo, bar = make_files_structure({'config/settings.txt': 'settings', 'normal/file.txt': 'contents'})
+
+    # Ignore the config directory
+    get_wrolpi_config().ignored_directories = [str(test_directory / 'config')]
+    await await_switches()
+
+    # Refresh only the normal directory (config is ignored)
+    await refresh_files()
+
+    # The normal file should be in the database
+    normal_fg = test_session.query(FileGroup).filter(FileGroup.primary_path.like('%normal%')).one()
+    assert normal_fg.viewed is None
+
+    # Request the normal file - it should be tracked
+    content = dict(file='normal/file.txt')
+    request, response = await async_client.post('/api/files/file', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    test_session.refresh(normal_fg)
+    assert normal_fg.viewed is not None, "Normal files should be tracked"
+
+    # Request a file in the ignored directory - it should return the file data
+    # but should not be tracked (since it's in an ignored directory)
+    content = dict(file='config/settings.txt')
+    request, response = await async_client.post('/api/files/file', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+
+    # Verify the ignored file is not in the database (because it was never refreshed)
+    ignored_fgs = test_session.query(FileGroup).filter(FileGroup.primary_path.like('%config%')).all()
+    assert len(ignored_fgs) == 0, "Files in ignored directories should not be in the database"

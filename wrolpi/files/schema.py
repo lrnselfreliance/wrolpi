@@ -12,6 +12,7 @@ class FilesRequest:
 @dataclass
 class FileRequest:
     file: str
+    skip_tracking: bool = False
 
 
 @dataclass

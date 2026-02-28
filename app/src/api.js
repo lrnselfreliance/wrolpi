@@ -1289,8 +1289,8 @@ export async function getFiles(directories) {
     return files;
 }
 
-export async function getFile(path) {
-    let body = {file: path};
+export async function getFile(path, skipTracking = false) {
+    let body = {file: path, skip_tracking: skipTracking};
     const response = await apiPost(`${API_URI}/files/file`, body);
     if (response.ok) {
         const {file} = await response.json();

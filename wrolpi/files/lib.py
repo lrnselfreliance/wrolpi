@@ -131,7 +131,15 @@ def get_file_dict(session: Session, file: str) -> Dict:
 
 
 async def set_file_viewed(session: Session, file: pathlib.Path):
-    """Change FileGroup.viewed to the current datetime."""
+    """Change FileGroup.viewed to the current datetime.
+
+    Files in ignored directories are not tracked.
+    """
+    # Check if file is in an ignored directory
+    remaining = remove_files_in_ignored_directories([file])
+    if not remaining:
+        return
+
     try:
         fg = FileGroup.find_by_path(session, file)
     except UnknownFile:

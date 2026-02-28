@@ -12,6 +12,18 @@ import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 import {pathDirectory} from "./FileBrowser";
 import {InlineErrorBoundary} from "./ErrorBoundary";
+import {useLocation} from "react-router";
+
+// Routes where file views should not be tracked
+const EXCLUDED_TRACKING_ROUTES = [
+    /^\/videos\/video\//,
+    /^\/videos\/channel\/[^/]+\/video\//,
+    /^\/archive\/\d+/
+];
+
+function shouldSkipTracking(pathname) {
+    return EXCLUDED_TRACKING_ROUTES.some(pattern => pattern.test(pathname));
+}
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -157,6 +169,10 @@ export function FilePreviewProvider({children}) {
     // The file path from the `preview` URL query.
     const [previewQuery, setPreviewQuery] = useOneQuery('preview');
     const [errorModalOpen, setErrorModalOpen] = React.useState(false);
+    const location = useLocation();
+
+    // Determine if tracking should be skipped based on current route
+    const skipTracking = shouldSkipTracking(location.pathname);
 
     const handleErrorModalClose = () => {
         setPreviewQuery(null);
@@ -184,7 +200,7 @@ export function FilePreviewProvider({children}) {
     const initPreviewFile = async () => {
         // Get simple information about the file, preview the file.
         try {
-            const file = await getFile(previewQuery);
+            const file = await getFile(previewQuery, skipTracking);
             setPreviewFile(file);
         } catch (e) {
             console.error(e);
@@ -209,7 +225,7 @@ export function FilePreviewProvider({children}) {
         // Get the file again with its Tags.
         const {path, primary_path} = previewFile;
         try {
-            const file = await getFile(primary_path ?? path);
+            const file = await getFile(primary_path ?? path, skipTracking);
             setPreviewFile(file);
         } finally {
             await handleCallbacks();
@@ -349,15 +365,15 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path, taggable);
             }
 
-            // Fetch the file so `FileGroup.viewed` is set.
-            try {
-                getFile(path);
-            } catch (e) {
-                console.error(e);
-                console.error('Failed to get file to set FileGroup.viewed');
+            // Trigger tracking for the file view (unless on an excluded route)
+            if (!skipTracking) {
+                getFile(path).catch(e => {
+                    console.error(e);
+                    console.error('Failed to get file to set FileGroup.viewed');
+                });
             }
         }
-    }, [previewFile]);
+    }, [previewFile, skipTracking]);
 
     const value = {previewFile, setPreviewFile, previewModal, setPreviewModal, setCallbacks};
 

@@ -51,7 +51,8 @@ async def get_file(request: Request, body: schema.FileRequest):
     except FileNotFoundError:
         raise InvalidFile()
 
-    background_task(lib.set_file_viewed(session, get_media_directory() / body.file))
+    if not body.skip_tracking:
+        background_task(lib.set_file_viewed(session, get_media_directory() / body.file))
     return json_response({'file': file})
 
 

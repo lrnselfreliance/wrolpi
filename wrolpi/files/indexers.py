@@ -9,12 +9,6 @@ import docx
 
 from wrolpi.cmd import CATDOC_PATH, TEXTUTIL_PATH
 from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
-
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
-
 from wrolpi.common import logger, split_lines_by_length, truncate_object_bytes, extract_html_text, get_title_from_html
 
 logger = logger.getChild(__name__)

@@ -26,6 +26,15 @@ systemctl stop nginx || :
 systemctl stop renderd || :
 systemctl stop apache2 || :
 
+# Clear Python bytecode cache from virtual environments to fix potential corruption.
+echo "Clearing Python bytecode cache..."
+find /opt/wrolpi/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
+find /opt/wrolpi/controller/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+find /opt/wrolpi/controller/venv -name "*.pyc" -delete 2>/dev/null || :
+find /opt/wrolpi-help/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+find /opt/wrolpi-help/venv -name "*.pyc" -delete 2>/dev/null || :
+
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 [ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'

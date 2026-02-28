@@ -48,6 +48,11 @@ upgrade_deno() {
 
 upgrade_deno || echo "Deno upgrade failed, continuing..."
 
+# Clear Python bytecode cache before upgrading packages.
+echo "Clearing Python bytecode cache..."
+find /opt/wrolpi/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
+
 # Install any new Python requirements.
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
 # Upgrade the WROLPi database.
@@ -65,6 +70,10 @@ upgrade_controller() {
         echo "Creating Controller virtual environment..."
         python3 -m venv /opt/wrolpi/controller/venv
     fi
+
+    # Clear bytecode cache before upgrading.
+    find /opt/wrolpi/controller/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+    find /opt/wrolpi/controller/venv -name "*.pyc" -delete 2>/dev/null || :
 
     # Update dependencies
     echo "Updating Controller dependencies..."

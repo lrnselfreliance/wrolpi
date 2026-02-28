@@ -55,7 +55,7 @@ python3 -m venv /opt/wrolpi/controller/venv
 echo "Controller pre-installed"
 
 # Install webapp.
-(cd /opt/wrolpi/app && npm install && npm run build)
+(cd /opt/wrolpi/app && npm install)
 
 chown -R wrolpi:wrolpi /opt/wrolpi
 

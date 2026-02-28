@@ -14,9 +14,9 @@ from wrolpi.files.models import FileGroup
 from wrolpi.vars import FILE_MAX_PDF_SIZE, PYTEST, FILE_MAX_TEXT_SIZE
 
 try:
-    from pypdf import PdfReader
+    import pymupdf
 except ImportError:
-    PdfReader = None
+    pymupdf = None
 
 logger = logger.getChild(__name__)
 
@@ -31,57 +31,57 @@ class PDFMetadata:
     modification_datetime: str = None
 
 
-def get_pdf_metadata(reader: PdfReader, path: pathlib.Path) -> PDFMetadata:
+def _parse_pdf_date(date_str: str):
+    """Parse PDF date format 'D:YYYYMMDDHHmmSS+HH'mm'' to datetime."""
+    if not date_str:
+        return None
+    try:
+        parsed = dates.strpdate(date_str)
+        if parsed and not parsed.tzinfo:
+            parsed = parsed.astimezone(pytz.UTC)
+        return parsed
+    except Exception:
+        return None
+
+
+def get_pdf_metadata(doc, path: pathlib.Path) -> PDFMetadata:
     """Extract title/author from the PDF metadata."""
     data = PDFMetadata()
 
-    if reader is None or reader.metadata is None:
-        logger.error(f'Cannot get title of {path} PyPDF2 is not installed.')
+    if doc is None or doc.metadata is None:
+        logger.error(f'Cannot get title of {path} PyMuPDF is not installed.')
         data.title = Indexer.get_title(path)
         return data
 
-    if (title := reader.metadata.title) and title.lower() != 'unknown':
+    metadata = doc.metadata
+
+    if (title := metadata.get('title')) and title.lower() != 'unknown':
         data.title = title
-    if (author := reader.metadata.author) and author.lower() != 'unknown':
+    if (author := metadata.get('author')) and author.lower() != 'unknown':
         data.author = author
 
-    if reader.metadata.creation_date_raw:
-        try:
-            str(reader.metadata.creation_date)
-            data.published_datetime = reader.metadata.creation_date
-        except ValueError:
-            # pypdf could not parse the date, lets give it a try...
-            data.published_datetime = dates.strpdate(reader.metadata.creation_date_raw)
-        if not data.published_datetime.tzinfo:
-            data.published_datetime = data.published_datetime.astimezone(pytz.UTC)
+    if creation_date := metadata.get('creationDate'):
+        data.published_datetime = _parse_pdf_date(creation_date)
 
-    if reader.metadata.modification_date_raw:
-        try:
-            str(reader.metadata.modification_date)
-            data.modification_datetime = reader.metadata.modification_date
-        except ValueError:
-            # pypdf could not parse the date, lets give it a try...
-            data.modification_datetime = dates.strpdate(reader.metadata.modification_date_raw)
-        if not data.modification_datetime.tzinfo:
-            data.modification_datetime = data.modification_datetime.astimezone(pytz.UTC)
+    if mod_date := metadata.get('modDate'):
+        data.modification_datetime = _parse_pdf_date(mod_date)
 
     return data
 
 
-def get_words(reader: PdfReader, path: pathlib.Path) -> Generator[str, None, None]:
+def get_words(doc, path: pathlib.Path) -> Generator[str, None, None]:
     """
-    Reads all text facing up in a PDF.
+    Reads all text in a PDF.
 
     Note, may return more than can be stored in Postgres.  See: truncate_generator_bytes
     """
-    if PdfReader is None:
-        logger.error(f'Cannot index {path} PyPDF2 is not installed.')
+    if pymupdf is None:
+        logger.error(f'Cannot index {path} PyMuPDF is not installed.')
         yield ''
         return
 
-    for page in reader.pages:
-        # Get all text facing up.
-        text = page.extract_text(0)
+    for page in doc:
+        text = page.get_text()
         # Postgres does not allow null characters.
         text = text.replace('\x00', '\uFFFD').strip()
         if text:
@@ -95,8 +95,8 @@ PDF_PROCESSING_LIMIT = 10
 @register_modeler
 async def pdf_modeler(progress_callback: Callable[[int], None] = None):
     """Queries for any PDF files that have not been indexed.  Each PDF found will be indexed."""
-    if not PdfReader:
-        logger.warning(f'Cannot index PDF without PyPDF2')
+    if not pymupdf:
+        logger.warning(f'Cannot index PDF without PyMuPDF')
         return
 
     total_processed = 0
@@ -121,14 +121,15 @@ async def pdf_modeler(progress_callback: Callable[[int], None] = None):
 
                 # Assume the first PDF is the only PDF.
                 pdf_file = pdf_files[0]['path']
+                doc = None
                 try:
                     file_title = Indexer.get_title(pdf_file)
 
-                    reader = PdfReader(pdf_file)
+                    doc = pymupdf.open(pdf_file)
 
                     with slow_logger(2, f'Modeling PDF took %(elapsed)s seconds: {file_group}',
                                      logger__=logger):
-                        metadata = get_pdf_metadata(reader, pdf_file)
+                        metadata = get_pdf_metadata(doc, pdf_file)
 
                         words = ''
                         if pdf_file.stat().st_size > FILE_MAX_PDF_SIZE:
@@ -137,7 +138,7 @@ async def pdf_modeler(progress_callback: Callable[[int], None] = None):
                             try:
                                 # PDFs are complex, don't fail to create title index if text extraction fails.
                                 words = '\n'.join(
-                                    truncate_generator_bytes(get_words(reader, pdf_file), FILE_MAX_TEXT_SIZE))
+                                    truncate_generator_bytes(get_words(doc, pdf_file), FILE_MAX_TEXT_SIZE))
                                 words = truncate_object_bytes(words, FILE_MAX_TEXT_SIZE)
                                 words = split_lines_by_length(words)
                             except Exception as e:
@@ -163,6 +164,9 @@ async def pdf_modeler(progress_callback: Callable[[int], None] = None):
                     logger.error(f'Failed to index PDF {pdf_file}', exc_info=e)
                     if PYTEST:
                         raise
+                finally:
+                    if doc:
+                        doc.close()
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True

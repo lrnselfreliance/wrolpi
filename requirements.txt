@@ -15,7 +15,7 @@ mock==5.1.0
 psutil==6.0.0
 psycopg2-binary==2.9.9
 pydantic>=2.0.0
-pypdf==6.7.4
+PyMuPDF>=1.27.0
 pytest-asyncio==0.24.0
 pytest-xdist==3.5.0
 pytest==8.3.3

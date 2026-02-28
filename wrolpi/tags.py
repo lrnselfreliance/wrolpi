@@ -559,9 +559,43 @@ def _sync_tags_directory_tag_files(tags_directory: pathlib.Path, session: Sessio
         .outerjoin(Tag, FileGroup).all()
     links = list()
     for tag, tag_file, file_group in tag_files:
-        for file, link in file_group.get_tag_directory_paths_map().items():
+        paths_map = file_group.get_tag_directory_paths_map()
+
+        # Check if ANY source file still exists in this FileGroup.
+        any_source_exists = any(file.is_file() for file in paths_map.keys())
+
+        for file, link in paths_map.items():
             link = tags_directory / link
+
+            if not file.is_file():
+                if any_source_exists:
+                    # Partial deletion - remove stale hardlink for this file.
+                    if link.is_file():
+                        logger.debug(f'Removing stale hardlink (source deleted): {link}')
+                        link.unlink()
+                    # Don't add to links - nothing should exist here.
+                    continue
+                else:
+                    # ALL files deleted - preserve hardlinks as safety measure.
+                    if link.is_file():
+                        links.append(link)
+                    continue
+
+            need_create = False
             if not link.is_file():
+                need_create = True
+            else:
+                # Check if existing link points to the correct file (same inode).
+                # When a source file is replaced, the hardlink becomes stale.
+                try:
+                    if link.stat().st_ino != file.stat().st_ino:
+                        # Hardlink is stale - points to old version of file.
+                        link.unlink()
+                        need_create = True
+                except FileNotFoundError:
+                    need_create = True
+
+            if need_create:
                 try:
                     link.parent.mkdir(parents=True, exist_ok=True)
                     link.hardlink_to(file)

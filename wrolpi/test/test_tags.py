@@ -513,6 +513,113 @@ async def test_tag_rename_with_channel(test_session, test_directory, video_facto
 
 
 @pytest.mark.asyncio
+async def test_tags_directory_file_replaced(test_session, test_directory, tag_factory, video_bytes, await_switches):
+    """Tags directory hardlinks should update when source file is replaced."""
+    from wrolpi import tags as tags_module
+
+    # Create a video file and its FileGroup.
+    video_file = test_directory / 'video.mp4'
+    video_file.write_bytes(video_bytes)
+    fg = FileGroup.from_paths(test_session, video_file)
+    test_session.add(fg)
+    test_session.commit()
+    original_inode = video_file.stat().st_ino
+
+    # Tag the FileGroup.
+    tag = await tag_factory('favorite')
+    fg.add_tag(test_session, tag.id)
+    await await_switches()
+
+    # Verify hardlink points to original inode.
+    tag_link = test_directory / 'tags' / tag.name / video_file.name
+    assert tag_link.is_file(), 'Tag link should exist'
+    assert tag_link.stat().st_ino == original_inode, 'Hardlink should point to original file'
+
+    # Replace the source file (same name, different inode).
+    video_file.unlink()
+    video_file.write_bytes(b'new content')
+    new_inode = video_file.stat().st_ino
+    assert new_inode != original_inode, 'New file should have different inode'
+
+    # Sync and verify hardlink points to new inode.
+    tags_module.sync_tags_directory()
+    assert tag_link.stat().st_ino == new_inode, 'Hardlink should point to new file after sync'
+
+
+@pytest.mark.asyncio
+async def test_tags_directory_partial_file_deleted(test_session, test_directory, tag_factory, video_bytes,
+                                                    image_bytes_factory, await_switches):
+    """When one file in a FileGroup is deleted, its hardlink should be removed."""
+    from wrolpi import tags as tags_module
+
+    # Create a video with poster.
+    video_file = test_directory / 'video.mp4'
+    poster_file = test_directory / 'video.jpg'
+    video_file.write_bytes(video_bytes)
+    poster_file.write_bytes(image_bytes_factory())
+
+    fg = FileGroup.from_paths(test_session, video_file, poster_file)
+    test_session.add(fg)
+    test_session.commit()
+
+    # Tag the FileGroup.
+    tag = await tag_factory('favorite')
+    fg.add_tag(test_session, tag.id)
+    await await_switches()
+
+    # Verify both hardlinks exist.
+    video_link = test_directory / 'tags' / tag.name / 'video.mp4'
+    poster_link = test_directory / 'tags' / tag.name / 'video.jpg'
+    assert video_link.is_file()
+    assert poster_link.is_file()
+
+    # Delete the poster file from source (partial deletion).
+    poster_file.unlink()
+
+    # Sync and verify poster hardlink is removed, video link preserved.
+    tags_module.sync_tags_directory()
+    assert video_link.is_file(), 'Video link should still exist'
+    assert not poster_link.exists(), 'Poster link should be removed after source deleted'
+
+
+@pytest.mark.asyncio
+async def test_tags_directory_all_files_deleted(test_session, test_directory, tag_factory, video_bytes,
+                                                 image_bytes_factory, await_switches):
+    """When ALL files in a FileGroup are deleted, hardlinks should be preserved."""
+    from wrolpi import tags as tags_module
+
+    # Create a video with poster.
+    video_file = test_directory / 'video.mp4'
+    poster_file = test_directory / 'video.jpg'
+    video_file.write_bytes(video_bytes)
+    poster_file.write_bytes(image_bytes_factory())
+
+    fg = FileGroup.from_paths(test_session, video_file, poster_file)
+    test_session.add(fg)
+    test_session.commit()
+
+    # Tag the FileGroup.
+    tag = await tag_factory('favorite')
+    fg.add_tag(test_session, tag.id)
+    await await_switches()
+
+    # Verify both hardlinks exist.
+    video_link = test_directory / 'tags' / tag.name / 'video.mp4'
+    poster_link = test_directory / 'tags' / tag.name / 'video.jpg'
+    assert video_link.is_file()
+    assert poster_link.is_file()
+
+    # Delete ALL source files.
+    video_file.unlink()
+    poster_file.unlink()
+
+    # Sync and verify ALL hardlinks are preserved (safety measure).
+    tags_module.sync_tags_directory()
+    assert video_link.is_file(), 'Video link should be preserved when all sources deleted'
+    assert poster_link.is_file(), 'Poster link should be preserved when all sources deleted'
+
+
+@pytest.mark.asyncio
 async def test_tags_directory_disabled(test_session, test_directory, tag_factory, video_factory, await_switches):
     """Test that Tag Directory is NOT synchronized when tags_directory setting is disabled."""
     tags_dir = test_directory / 'tags'

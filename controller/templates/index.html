@@ -1736,6 +1736,12 @@
                 return;
             }
 
+            // For repair script, redirect to fallback mode
+            if (pendingScriptName === 'repair') {
+                window.location.href = `?fallback=true`;
+                return;
+            }
+
             // Immediately check status to show banner
             await checkScriptStatus();
 

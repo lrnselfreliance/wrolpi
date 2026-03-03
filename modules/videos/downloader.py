@@ -49,13 +49,13 @@ VIDEO_RESOLUTION_MAP = {
         'hls-175+bestaudio',  # 360p avc1 + best audio
         '396+bestaudio', '243+bestaudio',  # Vertical
         'hls-655+bestaudio', 'hls-655',
-        'bestvideo[height=360]+bestaudio/best[height=360]',
+        'bestvideo[height=360]+bestaudio/bestvideo[width=360]+bestaudio/best[height=360]',
     ],
     '480p': [
         '135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
         'hls-312+bestaudio',  # 480p avc1 + best audio
         '788+bestaudio', '780+bestaudio', '397+bestaudio',  # Vertical
-        'bestvideo[height=480]+bestaudio/best[height=480]',
+        'bestvideo[height=480]+bestaudio/bestvideo[width=480]+bestaudio/best[height=480]',
     ],
     '720p': [
         '136+bestaudio', '22', '311+bestaudio', 'res:720',
@@ -63,7 +63,7 @@ VIDEO_RESOLUTION_MAP = {
         'hls-517+bestaudio', 'hls-637+bestaudio',  # 720p avc1 + best audio
         '398+bestaudio', '247+bestaudio',  # Vertical
         'hls-2890+bestaudio', 'hls-2890',
-        'bestvideo[height=720]+bestaudio/best[height=720]',
+        'bestvideo[height=720]+bestaudio/bestvideo[width=720]+bestaudio/best[height=720]',
     ],
     '1080p': [
         '137+bestaudio', '614+bestaudio', 'res:1080',
@@ -71,19 +71,19 @@ VIDEO_RESOLUTION_MAP = {
         'hls-899+bestaudio', 'hls-1271+bestaudio',  # 1080p avc1 + best audio
         '399+bestaudio', '616+bestaudio',  # Vertical
         'hls-4026+bestaudio', 'hls-4026',
-        'bestvideo[height=1080]+bestaudio/best[height=1080]',
+        'bestvideo[height=1080]+bestaudio/bestvideo[width=1080]+bestaudio/best[height=1080]',
     ],
     '1440p': [
         '639+bestaudio',  # vp9, best audio, hdr
         '623+bestaudio',  # vp9, best audio, no hdr
         '620+bestaudio', 'res:1440',
-        'bestvideo[height=1440]+bestaudio/best[height=1440]',
+        'bestvideo[height=1440]+bestaudio/bestvideo[width=1440]+bestaudio/best[height=1440]',
     ],
     '2160p': [
         '642+bestaudio',  # vp9, best audio, hdr
         '628+bestaudio',  # vp9, best audio, no hdr
         '625+bestaudio', 'res:2160',
-        'bestvideo[height=2160]+bestaudio/best[height=2160]',
+        'bestvideo[height=2160]+bestaudio/bestvideo[width=2160]+bestaudio/best[height=2160]',
     ],
     'maximum': ['bestvideo*+bestaudio/best'],
 }

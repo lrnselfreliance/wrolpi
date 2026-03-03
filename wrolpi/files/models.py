@@ -1,4 +1,5 @@
 import copy
+import json
 import pathlib
 import shutil
 import urllib.parse
@@ -11,7 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import deferred, relationship, Session
 
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
-    get_relative_to_media_directory, unique_by_predicate
+    get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
@@ -355,6 +356,92 @@ class FileGroup(ModelHelper, Base):
 
     def my_html_paths(self) -> List[pathlib.Path]:
         return [i['path'] for i in self.my_html_files()]
+
+    def _find_unique_json(self, suffix: str) -> pathlib.Path | None:
+        """Find a JSON file ending with `suffix` in this FileGroup's files.
+
+        @raise ValueError: If multiple files matching the suffix are found."""
+        matches = [f for f in self.my_json_files() if f['path'].name.endswith(suffix)]
+        if len(matches) > 1:
+            raise ValueError(f'{self} has multiple {suffix} files: {[f["path"] for f in matches]}')
+        if matches:
+            return matches[0]['path']
+        return None
+
+    @property
+    def info_json_path(self) -> pathlib.Path | None:
+        """Find the .info.json file in this FileGroup's files.
+
+        @raise ValueError: If multiple .info.json files are found."""
+        return self._find_unique_json('.info.json')
+
+    @property
+    def readability_json_path(self) -> pathlib.Path | None:
+        """Find the .readability.json file in this FileGroup's files.
+
+        @raise ValueError: If multiple .readability.json files are found."""
+        return self._find_unique_json('.readability.json')
+
+    @property
+    def metadata_json_path(self) -> pathlib.Path | None:
+        """Find the primary metadata JSON file for this FileGroup.
+
+        Returns .info.json if it exists, otherwise .readability.json.
+        @raise ValueError: If multiple files of either type are found."""
+        return self.info_json_path or self.readability_json_path
+
+    def replace_info_json(self, info_json: dict, format_: bool = True):
+        """Write `info_json` to this FileGroup's .info.json file.
+
+        Finds the .info.json via self.  Creates the file if it doesn't exist.
+        Raises ValueError if multiple .info.json files are tracked.
+        """
+        json_path = self.info_json_path or self.primary_path.with_suffix('.info.json')
+        self._write_json(json_path, info_json, format_=format_)
+
+    def replace_readability_json(self, data: dict, format_: bool = True):
+        """Write `data` to this FileGroup's .readability.json file.
+
+        Finds the .readability.json via self.  Creates the file if it doesn't exist.
+        Raises ValueError if multiple .readability.json files are tracked.
+        """
+        json_path = self.readability_json_path or self.primary_path.with_suffix('.readability.json')
+        self._write_json(json_path, data, format_=format_)
+
+    def _write_json(self, json_path: pathlib.Path, data: dict, format_: bool = True):
+        """Write `data` as JSON to `json_path` and register the file with this FileGroup."""
+        if format_:
+            contents = json.dumps(data, indent=2, sort_keys=True)
+        else:
+            contents = json.dumps(data)
+
+        replace_file(json_path, contents, missing_ok=True)
+
+        # Register the file if not already tracked.
+        tracked_paths = {f['path'] for f in self.files} if self.files else set()
+        if json_path.name not in tracked_paths:
+            self.append_files(json_path)
+
+    def update_wrolpi_json(self, data: dict):
+        """Read this FileGroup's metadata JSON, merge `data` into its `wrolpi` section, and write back.
+
+        Uses .info.json if it exists, otherwise .readability.json.
+        No-op if no metadata JSON file exists.
+        """
+        json_path = self.metadata_json_path
+        if not json_path or not json_path.is_file():
+            return
+
+        contents = json.loads(json_path.read_text())
+        wrolpi_section = contents.get('wrolpi', {})
+        wrolpi_section.update(data)
+        contents['wrolpi'] = wrolpi_section
+
+        # Write back using the appropriate method based on file type.
+        if json_path.name.endswith('.readability.json'):
+            self.replace_readability_json(contents)
+        else:
+            self.replace_info_json(contents)
 
     def delete(self, add_to_skip_list: bool = True):
         """Delete this FileGroup record, and all of its files.

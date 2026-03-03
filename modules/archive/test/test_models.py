@@ -1,11 +1,13 @@
+import json
 import pathlib
 from datetime import datetime
 
 import pytest
 
 from modules.archive import Archive
-from wrolpi.common import get_wrolpi_config
+from wrolpi.common import get_media_directory, get_wrolpi_config
 from wrolpi.errors import UnknownArchive
+from wrolpi.files.models import FileGroup
 
 
 def test_archive_get_by_id(test_session, archive_factory):
@@ -178,3 +180,42 @@ async def test_archive_validate_rebuilds_data_after_filename_change(async_client
     archive.validate()
 
     assert archive.file_group.data['singlefile_path'] == new_filename
+
+
+def test_update_wrolpi_json_prefers_info_json(test_session, make_files_structure):
+    """FileGroup.update_wrolpi_json prefers .info.json over .readability.json when both exist."""
+    make_files_structure({'page.html': '<html>test</html>'})
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'page.html')
+    test_session.add(fg)
+    test_session.flush()
+
+    fg.replace_info_json({'title': 'Info Title'})
+    fg.replace_readability_json({'title': 'Readability Title'})
+
+    fg.update_wrolpi_json({'key': 'value'})
+
+    # wrolpi section should be in .info.json, not .readability.json.
+    info_json = json.loads((get_media_directory() / 'page.info.json').read_text())
+    assert info_json['wrolpi'] == {'key': 'value'}
+
+    readability_json = json.loads((get_media_directory() / 'page.readability.json').read_text())
+    assert 'wrolpi' not in readability_json
+
+
+def test_metadata_json_path(test_session, make_files_structure):
+    """FileGroup.metadata_json_path returns .info.json first, then .readability.json."""
+    make_files_structure({'page.html': '<html>test</html>'})
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'page.html')
+    test_session.add(fg)
+    test_session.flush()
+
+    # No metadata JSON yet.
+    assert fg.metadata_json_path is None
+
+    # Add readability JSON.
+    fg.replace_readability_json({'title': 'Test'})
+    assert fg.metadata_json_path == get_media_directory() / 'page.readability.json'
+
+    # Add info JSON - it should now be preferred.
+    fg.replace_info_json({'title': 'Test'})
+    assert fg.metadata_json_path == get_media_directory() / 'page.info.json'

@@ -672,6 +672,12 @@ class VideoDownloader(Downloader, ABC):
                 if video_info_json_path and (new_info_json := video.clean_info_json()):
                     video.replace_info_json(new_info_json, clean=False)
 
+                if parent_download_url := settings.get('parent_download_url'):
+                    try:
+                        video.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
+                    except ValueError as e:
+                        logger.warning(f'Failed to update wrolpi json for {video}: {e}')
+
                 # Update channel's collection's file_format to track the format used
                 if channel_id:
                     from modules.videos.models import Channel
@@ -903,10 +909,18 @@ class VideoDownloader(Downloader, ABC):
             logger.error('Failed to download video info json', exc_info=e)
             return DownloadResult(success=False, error='Failed to download video info json')
 
+        settings = download.settings or dict()
+
         with get_db_session(commit=True) as session:
             # Find the existing video, replace its info json.
             video = Video.get_by_url(url, session)
             video.replace_info_json(info_json)
+
+            if parent_download_url := settings.get('parent_download_url'):
+                try:
+                    video.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
+                except ValueError as e:
+                    logger.warning(f'Failed to update wrolpi json for {video}: {e}')
 
             if video.get_comments():
                 video.have_comments = True

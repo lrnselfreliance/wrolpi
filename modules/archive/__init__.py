@@ -69,6 +69,8 @@ class ArchiveDownloader(Downloader, ABC):
             archive = await lib.singlefile_to_archive(singlefile, destination=destination)
             archive_id = archive.id
 
+        settings = download.settings or dict()
+
         with get_db_session() as session:
             archive = Archive.find_by_id(session, archive_id)
             need_commit = False
@@ -79,6 +81,12 @@ class ArchiveDownloader(Downloader, ABC):
 
                 if need_commit:
                     session.commit()
+
+            if parent_download_url := settings.get('parent_download_url'):
+                try:
+                    archive.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
+                except ValueError as e:
+                    logger.warning(f'Failed to update wrolpi json for {archive}: {e}')
 
             logger.info(f'Successfully downloaded Archive {download.url} {archive}')
 

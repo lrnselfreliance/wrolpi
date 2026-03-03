@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from modules.videos.models import Video
-from wrolpi.common import get_relative_to_media_directory
+from wrolpi.common import get_media_directory, get_relative_to_media_directory
+from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio()
@@ -47,3 +50,51 @@ async def test_channel_move(async_client, test_session, test_directory, channel_
     assert not extra_file.is_file()
     assert (test_directory / 'foo/New Channel Directory/extra.txt').is_file()
     assert (test_directory / 'foo/New Channel Directory/extra.txt').read_text() == 'extra stuff'
+
+
+def test_replace_info_json_compact(test_session, make_files_structure):
+    """FileGroup.replace_info_json can write compact JSON."""
+    make_files_structure({'video.mp4': 'fake video'})
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'video.mp4')
+    test_session.add(fg)
+    test_session.flush()
+
+    info = {'title': 'Test', 'id': '123'}
+    fg.replace_info_json(info, format_=False)
+
+    json_path = get_media_directory() / 'video.info.json'
+    content = json_path.read_text()
+    assert '\n' not in content
+    assert json.loads(content) == info
+
+
+def test_replace_info_json_multiple_json_files(test_session, make_files_structure):
+    """FileGroup.replace_info_json raises ValueError when multiple .info.json files are tracked."""
+    make_files_structure({
+        'video.mp4': 'fake video',
+        'video.info.json': '{"title": "one"}',
+        'video.other.info.json': '{"title": "two"}',
+    })
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'video.mp4')
+    test_session.add(fg)
+    test_session.flush()
+
+    fg.append_files(get_media_directory() / 'video.info.json', get_media_directory() / 'video.other.info.json')
+
+    with pytest.raises(ValueError, match='multiple .info.json files'):
+        fg.replace_info_json({'title': 'new'})
+
+
+def test_update_wrolpi_json_merges(test_session, make_files_structure):
+    """FileGroup.update_wrolpi_json merges new keys without clobbering existing ones."""
+    make_files_structure({'video.mp4': 'fake video'})
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'video.mp4')
+    test_session.add(fg)
+    test_session.flush()
+
+    fg.replace_info_json({'title': 'Test', 'wrolpi': {'existing_key': 'keep'}})
+    fg.update_wrolpi_json({'new_key': 'new_value'})
+
+    json_path = get_media_directory() / 'video.info.json'
+    written = json.loads(json_path.read_text())
+    assert written['wrolpi'] == {'existing_key': 'keep', 'new_key': 'new_value'}

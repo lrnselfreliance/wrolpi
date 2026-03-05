@@ -32,4 +32,4 @@ srt==3.5.3
 tqdm==4.67.1
 vininfo[cli]==1.8.0
 webvtt-py==0.5.1
-yt-dlp[default,curl-cffi]==2026.02.21
+yt-dlp[default,curl-cffi]==2026.03.03

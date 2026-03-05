@@ -89,9 +89,9 @@ async def test_compare_file_groups_unchanged(test_session, test_directory, make_
         'docs/file1.json',
     ])
 
-    # Create FileGroup in DB
+    # Create FileGroup in DB with both files
     fg = FileGroup.from_paths(test_session, file1)
-    fg.files.append({'path': 'file1.json', 'mimetype': 'application/json', 'size': 0})
+    fg.append_files(file1_json)
     test_session.commit()
 
     result = await compare_file_groups(test_directory)

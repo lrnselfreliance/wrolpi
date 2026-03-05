@@ -197,6 +197,11 @@ textarea.otp {
     color: #DDDDDD !important;
 }
 
+.ui.inverted.accordion .title,
+.ui.inverted.accordion .content {
+    background-color: #171616 !important;
+}
+
 /* Mobile-responsive Confirm modal */
 .ui.modal.themed-confirm {
     max-width: 95vw;

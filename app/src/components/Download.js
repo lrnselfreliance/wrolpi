@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {fetchVideoDownloaderConfig, getDownloaders, postDownload, putDownload} from "../api";
+import {fetchVideoDownloadDefaults, getDownloaders, postDownload, putDownload} from "../api";
 import {
     APIButton,
     DirectorySearch,
@@ -11,7 +11,7 @@ import {
 } from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Form, Header} from "./Theme";
+import {Accordion, Button, Form, Header} from "./Theme";
 import {Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router";
 import {TagsSelector} from "../Tags";
@@ -298,7 +298,7 @@ export function VideoResolutionSelectorForm({
     </>
 }
 
-function VideoFormatSelectorForm({form, name = 'video_format', path = 'settings.video_format'}) {
+export function VideoFormatSelectorForm({form, name = 'video_format', path = 'settings.video_format'}) {
     const [inputProps, inputAttrs] = form.getSelectionProps({
         name,
         path,
@@ -359,6 +359,116 @@ export function ChannelTagNameForm({form}) {
     </>
 }
 
+function AdvancedVideoSettings({form, isVideoLevel = false, isConfigLoaded = true}) {
+    const [active, setActive] = React.useState(false);
+
+    if (!isConfigLoaded) return null;
+
+    return <Accordion fluid>
+        <Accordion.Title active={active} onClick={() => setActive(!active)}>
+            <Icon name='dropdown'/>
+            Advanced Settings
+        </Accordion.Title>
+        <Accordion.Content active={active}>
+            <Grid stackable>
+                <Grid.Row columns={2}>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download subtitles'
+                            name='writesubtitles'
+                            path='settings.writesubtitles'
+                            icon='closed captioning outline'
+                        />
+                    </Grid.Column>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download automatic subtitles'
+                            name='writeautomaticsub'
+                            path='settings.writeautomaticsub'
+                            icon='closed captioning'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row columns={2}>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download thumbnail'
+                            name='writethumbnail'
+                            path='settings.writethumbnail'
+                            icon='image'
+                        />
+                    </Grid.Column>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Download info JSON'
+                            name='writeinfojson'
+                            path='settings.writeinfojson'
+                            icon='file code'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                {isVideoLevel &&
+                    <Grid.Row columns={2}><Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Continue partial downloads'
+                            name='continue_dl'
+                            path='settings.continue_dl'
+                            icon='play'
+                        />
+                    </Grid.Column>
+                        <Grid.Column>
+                            <ToggleForm
+                                form={form}
+                                label='Do not overwrite existing files'
+                                name='nooverwrites'
+                                path='settings.nooverwrites'
+                                icon='file video'
+                            />
+                        </Grid.Column>
+                    </Grid.Row>}
+                <Grid.Row columns={2}>
+                    <Grid.Column>
+                        <NumberInputForm
+                            form={form}
+                            label='Sleep between requests (seconds)'
+                            name='sleep_requests'
+                            path='settings.sleep_requests'
+                            placeholder='0.75'
+                            min={0}
+                            max={60}
+                        />
+                    </Grid.Column>
+                    <Grid.Column>
+                        <InputForm
+                            form={form}
+                            label='User agent'
+                            name='user_agent'
+                            path='settings.user_agent'
+                            placeholder='Mozilla/5.0...'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row columns={1}>
+                    <Grid.Column>
+                        <InputForm
+                            form={form}
+                            label='Extra yt-dlp arguments'
+                            name='yt_dlp_extra_args'
+                            path='settings.yt_dlp_extra_args'
+                            placeholder='--no-playlist --geo-bypass'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Accordion.Content>
+    </Accordion>
+}
+
 export function VideosDownloadForm({
                                        singleDownload = true,
                                        onCancel,
@@ -370,6 +480,7 @@ export function VideosDownloadForm({
     const [showMessage, setShowMessage] = React.useState(false);
     const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
     const [config, setConfig] = React.useState(null);
+    const [isConfigLoaded, setIsConfigLoaded] = React.useState(false);
 
     // Keep video format in session to help user start downloads consistently.
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
@@ -385,6 +496,15 @@ export function VideosDownloadForm({
         settings: {
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,
+            writesubtitles: false,
+            writeautomaticsub: false,
+            writethumbnail: false,
+            writeinfojson: false,
+            yt_dlp_extra_args: '',
+            sleep_requests: '',
+            user_agent: '',
+            continue_dl: false,
+            nooverwrites: false,
         }
     }
 
@@ -414,25 +534,43 @@ export function VideosDownloadForm({
         onSuccess,
     });
 
-    // Fetch video downloader config when the modal opens
+    // Fetch global defaults to pre-fill the form
     React.useEffect(() => {
-        const fetchConfig = async () => {
+        const fetchDefaults = async () => {
             try {
-                const result = await fetchVideoDownloaderConfig();
-                setConfig(result);
+                const defaults = await fetchVideoDownloadDefaults();
+                setConfig(defaults);
 
-                // Update form with video resolutions from config only if user hasn't changed them
-                // and if the download doesn't already have video_resolutions set
-                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
-                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
-                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                if (defaults && download) {
+                    // Edit mode: only fill settings not already in the download
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (download.settings?.[key] === undefined || download.settings?.[key] === null) {
+                            form.setValue(`settings.${key}`, value);
+                        }
+                    }
+                } else if (defaults) {
+                    // New download: pre-fill all settings from global defaults
+                    const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (key === 'video_resolutions' && (userChangedResolutions || downloadHasResolutions)) {
+                            continue;
+                        }
+                        if (key === 'video_format') {
+                            continue; // Handled by localStorage default
+                        }
+                        form.setValue(`settings.${key}`, value);
+                    }
+                    if (!userChangedResolutions && !downloadHasResolutions && defaults.video_resolutions) {
+                        form.setValue('settings.video_resolutions', defaults.video_resolutions);
+                    }
                 }
             } catch (error) {
-                console.error('Failed to fetch video downloader config:', error);
+                console.error('Failed to fetch video download defaults:', error);
             }
+            setIsConfigLoaded(true);
         };
 
-        fetchConfig();
+        fetchDefaults();
     }, []);
 
     React.useEffect(() => {
@@ -494,6 +632,11 @@ export function VideosDownloadForm({
             <Grid.Row columns={1}>
                 <Grid.Column>
                     <ChannelTagNameForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <AdvancedVideoSettings form={form} isVideoLevel={true} isConfigLoaded={isConfigLoaded}/>
                 </Grid.Column>
             </Grid.Row>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
@@ -625,6 +768,13 @@ export function ChannelDownloadForm({
             video_count_limit: null,
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,
+            writesubtitles: false,
+            writeautomaticsub: false,
+            writethumbnail: false,
+            writeinfojson: false,
+            yt_dlp_extra_args: '',
+            sleep_requests: '',
+            user_agent: '',
         },
         sub_downloader: Downloaders.Video,
         tag_names: [],
@@ -638,27 +788,42 @@ export function ChannelDownloadForm({
         clearOnSuccess,
     });
 
-    // Fetch video downloader config when the modal opens
+    // Fetch global defaults to pre-fill the form
     React.useEffect(() => {
-        const fetchConfig = async () => {
+        const fetchDefaults = async () => {
             try {
-                const result = await fetchVideoDownloaderConfig();
-                setConfig(result);
+                const defaults = await fetchVideoDownloadDefaults();
+                setConfig(defaults);
                 setIsConfigLoaded(true);
 
-                // Update form with video resolutions from config only if user hasn't changed them
-                // and if the download doesn't already have video_resolutions set
-                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
-                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
-                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                if (defaults && download) {
+                    // Edit mode: only fill settings not already in the download
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (key === 'continue_dl' || key === 'nooverwrites') continue;
+                        if (download.settings?.[key] === undefined || download.settings?.[key] === null) {
+                            form.setValue(`settings.${key}`, value);
+                        }
+                    }
+                } else if (defaults) {
+                    // New download: pre-fill all inheritable settings from global defaults
+                    const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (key === 'continue_dl' || key === 'nooverwrites') continue;
+                        if (key === 'video_resolutions' && (userChangedResolutions || downloadHasResolutions)) continue;
+                        if (key === 'video_format') continue;
+                        form.setValue(`settings.${key}`, value);
+                    }
+                    if (!userChangedResolutions && !downloadHasResolutions && defaults.video_resolutions) {
+                        form.setValue('settings.video_resolutions', defaults.video_resolutions);
+                    }
                 }
             } catch (error) {
-                console.error('Failed to fetch video downloader config:', error);
+                console.error('Failed to fetch video download defaults:', error);
                 setIsConfigLoaded(true);
             }
         };
 
-        fetchConfig();
+        fetchDefaults();
     }, []);
 
     React.useEffect(() => {
@@ -745,6 +910,11 @@ export function ChannelDownloadForm({
                     <ChannelTagNameForm form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
+                </Grid.Column>
+            </Grid.Row>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
             <Grid.Row>
                 <Grid.Column textAlign='right'>
@@ -828,7 +998,14 @@ export function EditArchiveDownloadForm({
     />
 }
 
-export function ArchiveDownloadForm({singleDownload = false, download, onCancel, onSuccess: propOnSuccess, submitter: propSubmitter, actions}) {
+export function ArchiveDownloadForm({
+                                        singleDownload = false,
+                                        download,
+                                        onCancel,
+                                        onSuccess: propOnSuccess,
+                                        submitter: propSubmitter,
+                                        actions
+                                    }) {
     const [showMessage, setShowMessage] = React.useState(false);
 
     const submitter = propSubmitter || (async (formData) => {
@@ -933,6 +1110,13 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             title_include: null,
             video_resolutions: configResolutions,
             video_format: defaultVideoFormat,
+            writesubtitles: false,
+            writeautomaticsub: false,
+            writethumbnail: false,
+            writeinfojson: false,
+            yt_dlp_extra_args: '',
+            sleep_requests: '',
+            user_agent: '',
         },
         tag_names: [],
         url: '',
@@ -946,27 +1130,40 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         onSuccess: async () => setShowMessage(true),
     });
 
-    // Fetch video downloader config when the modal opens
+    // Fetch global defaults to pre-fill the form
     React.useEffect(() => {
-        const fetchConfig = async () => {
+        const fetchDefaults = async () => {
             try {
-                const result = await fetchVideoDownloaderConfig();
-                setConfig(result);
+                const defaults = await fetchVideoDownloadDefaults();
+                setConfig(defaults);
                 setIsConfigLoaded(true);
 
-                // Update form with video resolutions from config only if user hasn't changed them
-                // and if the download doesn't already have video_resolutions set
-                const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
-                if (result && result.video_resolutions && !userChangedResolutions && !downloadHasResolutions) {
-                    form.setValue('settings.video_resolutions', result.video_resolutions);
+                if (defaults && download) {
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (key === 'continue_dl' || key === 'nooverwrites') continue;
+                        if (download.settings?.[key] === undefined || download.settings?.[key] === null) {
+                            form.setValue(`settings.${key}`, value);
+                        }
+                    }
+                } else if (defaults) {
+                    const downloadHasResolutions = download?.settings?.video_resolutions?.length > 0;
+                    for (const [key, value] of Object.entries(defaults)) {
+                        if (key === 'continue_dl' || key === 'nooverwrites') continue;
+                        if (key === 'video_resolutions' && (userChangedResolutions || downloadHasResolutions)) continue;
+                        if (key === 'video_format') continue;
+                        form.setValue(`settings.${key}`, value);
+                    }
+                    if (!userChangedResolutions && !downloadHasResolutions && defaults.video_resolutions) {
+                        form.setValue('settings.video_resolutions', defaults.video_resolutions);
+                    }
                 }
             } catch (error) {
-                console.error('Failed to fetch video downloader config:', error);
+                console.error('Failed to fetch video download defaults:', error);
                 setIsConfigLoaded(true);
             }
         };
 
-        fetchConfig();
+        fetchDefaults();
     }, []);
 
     React.useEffect(() => {
@@ -1016,6 +1213,11 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
                 </Grid.Column>
                 <Grid.Column tablet={8} computer={4}>
                     <VideoMaximumDurationForm form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row columns={1}>
+                <Grid.Column>
+                    <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
                 </Grid.Column>
             </Grid.Row>
         </>;

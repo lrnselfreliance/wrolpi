@@ -2,6 +2,8 @@ import React, {useContext, useEffect, useState, forwardRef, HTMLAttributes, CSSP
 import {ThemeContext} from "../contexts/contexts";
 import {
     Accordion as SAccordion,
+    AccordionContent as SAccordionContent,
+    AccordionTitle as SAccordionTitle,
     Breadcrumb as SBreadcrumb,
     Button as SButton,
     ButtonGroup as SButtonGroup,
@@ -36,7 +38,9 @@ import {
     TableRow as STableRow,
     TabPane as STabPane,
     TextArea as STextArea,
+    AccordionContentProps,
     AccordionProps,
+    AccordionTitleProps,
     BreadcrumbProps,
     ButtonProps,
     ButtonGroupProps,
@@ -218,11 +222,36 @@ const defaultGrey = <T extends object>(props: T, inverted: boolean): T => {
     return props;
 }
 
-export function Accordion(props: AccordionProps) {
+// ----------------------------------------------------------------------------
+// Accordion Compound Component
+// ----------------------------------------------------------------------------
+
+type AccordionTitleComponent = React.FC<AccordionTitleProps>;
+type AccordionContentComponent = React.FC<AccordionContentProps>;
+
+interface AccordionComponent extends React.FC<AccordionProps> {
+    Title: AccordionTitleComponent;
+    Content: AccordionContentComponent;
+}
+
+const AccordionTitle: AccordionTitleComponent = (props) => {
+    return <SAccordionTitle {...props}/>
+};
+
+const AccordionContent: AccordionContentComponent = (props) => {
+    return <SAccordionContent {...props}/>
+};
+
+const AccordionBase: React.FC<AccordionProps> = (props) => {
     const {i, inverted} = useContext(ThemeContext);
     const mergedProps = defaultGrey({...i, ...props}, !!inverted);
     return <SAccordion {...mergedProps}/>
-}
+};
+
+export const Accordion: AccordionComponent = Object.assign(AccordionBase, {
+    Title: AccordionTitle,
+    Content: AccordionContent,
+});
 
 // ----------------------------------------------------------------------------
 // Button Compound Component

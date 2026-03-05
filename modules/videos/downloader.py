@@ -34,8 +34,8 @@ from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
 from .errors import UnknownChannel
 from .cookies import cookies_unlocked, cookies_for_download
-from .lib import get_videos_downloader_config, YDL, ydl_logger, format_videos_destination, get_yt_dlp_http_headers, \
-    get_yt_dlp_sleep_opts
+from .lib import get_videos_downloader_config, get_effective_video_settings, CHANNEL_INHERITABLE_SETTINGS, YDL, \
+    ydl_logger, format_videos_destination, get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
@@ -364,10 +364,10 @@ class ChannelDownloader(Downloader, ABC):
             settings['destination'] = str(destination)  # Need str for JSON conversion
         if download.tag_names:
             settings['tag_names'] = download.tag_names
-        if video_resolutions := download_settings.get('video_resolutions'):
-            settings['video_resolutions'] = video_resolutions
-        if video_format := download_settings.get('video_format'):
-            settings['video_format'] = video_format
+        # Pass all channel-level inheritable settings to child video downloads.
+        for key in CHANNEL_INHERITABLE_SETTINGS:
+            if key in download_settings:
+                settings[key] = download_settings[key]
 
         is_a_playlist = self.is_a_playlist(info)
         try:
@@ -554,16 +554,16 @@ class VideoDownloader(Downloader, ABC):
                 logger.debug(f'Downloading {url} with {tag_names=}')
 
         config = get_videos_downloader_config()
+        effective = get_effective_video_settings(settings)
 
         logs = None  # noqa
         try:
-            # Use user-provided/channel-provided first, or fallback to defaults from config.
-            video_resolutions = settings.get('video_resolutions') or config.video_resolutions
+            video_resolutions = effective['video_resolutions']
             # yt-dlp expects a string like so: 299+140,298+140,bestvideo*+bestaudio/best
-            video_resolutions = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
+            video_resolutions_str = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
 
-            video_format = settings.get('video_format') or config.merge_output_format
-            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions, video_format)
+            video_format = effective['video_format']
+            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions_str, video_format)
 
             if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
@@ -571,13 +571,12 @@ class VideoDownloader(Downloader, ABC):
 
             cmd = (
                 str(YT_DLP_BIN),
-                '-f', video_resolutions,
+                '-f', video_resolutions_str,
                 '--match-filter', '!is_live',  # Do not attempt to download Live videos.
                 '--sub-format', DEFAULT_CAPTION_FORMAT,
                 '--convert-subs', DEFAULT_CAPTION_FORMAT,
                 '--convert-thumbnails', DEFAULT_POSTER_FORMAT,
                 '--merge-output-format', video_format,
-                # '--remux-video', video_format,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
                 # Get top 20 comments, 10 replies per parent.
@@ -586,26 +585,26 @@ class VideoDownloader(Downloader, ABC):
                 # Use experimental feature to merge files.
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
             )
-            if config.continue_dl:
+            if effective['continue_dl']:
                 cmd = (*cmd, '--continue')
-            if config.writesubtitles:
+            if effective['writesubtitles']:
                 cmd = (*cmd, '--write-subs', '--write-auto-subs')
-            if config.writethumbnail:
+            if effective['writethumbnail']:
                 cmd = (*cmd, '--write-thumbnail')
-            if config.writeinfojson:
+            if effective['writeinfojson']:
                 cmd = (*cmd, '--write-info-json')
-            if config.yt_dlp_extra_args:
-                cmd = (*cmd, *config.yt_dlp_extra_args.split(' '))
-            if config.sleep_requests > 0:
-                cmd = (*cmd, '--sleep-requests', str(config.sleep_requests))
+            if effective['yt_dlp_extra_args']:
+                cmd = (*cmd, *effective['yt_dlp_extra_args'].split(' '))
+            if effective['sleep_requests'] > 0:
+                cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
 
             if cookies_unlocked():
                 # Use encrypted cookies file
                 logger.info(f'Using encrypted cookies for video download: {url}')
                 with cookies_for_download() as cookies_path:
                     cmd = (*cmd, '--cookies', str(cookies_path))
-                    if config.user_agent:
-                        cmd = (*cmd, '--add-headers', f'User-Agent:{config.user_agent}')
+                    if effective['user_agent']:
+                        cmd = (*cmd, '--add-headers', f'User-Agent:{effective["user_agent"]}')
                     cmd = (*cmd, '-o', video_path, url)
                     result = await self.process_runner(download, cmd, out_dir, debug=True)
             else:

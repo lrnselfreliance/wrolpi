@@ -50,6 +50,14 @@ async def channel_tag_info(request: Request, body: schema.ChannelTagInfoRequest)
     return json_response(ret)
 
 
+@content_bp.get('/download-defaults')
+@openapi.description('Get flattened global inheritable video download settings for form pre-fill.')
+async def get_download_defaults(_: Request):
+    config = lib.get_videos_downloader_config()
+    defaults = lib._extract_global_inheritable(config)
+    return json_response(defaults)
+
+
 @content_bp.post('/file_format')
 @openapi.definition(
     description='Preview the video file format',

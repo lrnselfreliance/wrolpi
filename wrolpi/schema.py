@@ -236,6 +236,16 @@ class DownloadSettings:
     video_format: Optional[str] = None
     video_resolutions: List[str] = field(default_factory=list)
     parent_download_url: Optional[str] = None
+    # Inheritable video settings (Optional so they're only set when user overrides)
+    writesubtitles: Optional[bool] = None
+    writeautomaticsub: Optional[bool] = None
+    writethumbnail: Optional[bool] = None
+    writeinfojson: Optional[bool] = None
+    yt_dlp_extra_args: Optional[str] = None
+    sleep_requests: Optional[float] = None
+    user_agent: Optional[str] = None
+    continue_dl: Optional[bool] = None
+    nooverwrites: Optional[bool] = None
 
     def __post_init__(self):
         if self.excluded_urls and self.excluded_urls.endswith(','):

@@ -562,8 +562,13 @@ class VideoDownloaderConfig(ConfigFile):
         return self._config['yt_dlp_options']['nooverwrites']
 
     @property
-    def merge_output_format(self) -> bool:
+    def merge_output_format(self) -> str:
         return self._config['yt_dlp_options']['merge_output_format']
+
+    @property
+    def video_format(self) -> str:
+        """Alias for merge_output_format, matching the name used in Download.settings."""
+        return self.merge_output_format
 
     @property
     def quiet(self) -> bool:
@@ -650,6 +655,51 @@ def get_videos_downloader_config() -> VideoDownloaderConfig:
 def set_test_downloader_config(enabled: bool):
     global TEST_VIDEOS_DOWNLOADER_CONFIG
     TEST_VIDEOS_DOWNLOADER_CONFIG = VideoDownloaderConfig() if enabled else None
+
+
+# Names of settings that can be overridden at channel/RSS or video level.
+# Actual default values come from VideoDownloaderConfig.
+INHERITABLE_VIDEO_SETTINGS = {
+    'video_resolutions', 'video_format', 'writesubtitles', 'writeautomaticsub',
+    'writethumbnail', 'writeinfojson', 'yt_dlp_extra_args', 'sleep_requests',
+    'user_agent', 'continue_dl', 'nooverwrites',
+}
+
+# Subset of inheritable settings allowed at channel/RSS level.
+# continue_dl and nooverwrites are global+video only.
+CHANNEL_INHERITABLE_SETTINGS = INHERITABLE_VIDEO_SETTINGS - {'continue_dl', 'nooverwrites'}
+
+
+def _extract_global_inheritable(config: VideoDownloaderConfig) -> dict:
+    """Read current global config values for all inheritable settings, flattened."""
+    return {
+        'video_resolutions': config.video_resolutions,
+        'video_format': config.merge_output_format,
+        'writesubtitles': config.writesubtitles,
+        'writeautomaticsub': config.writeautomaticsub,
+        'writethumbnail': config.writethumbnail,
+        'writeinfojson': config.writeinfojson,
+        'yt_dlp_extra_args': config.yt_dlp_extra_args,
+        'sleep_requests': config.sleep_requests,
+        'user_agent': config.user_agent,
+        'continue_dl': config.continue_dl,
+        'nooverwrites': config.nooverwrites,
+    }
+
+
+def get_effective_video_settings(download_settings: dict = None) -> dict:
+    """Merge global defaults with download-level overrides.
+
+    At download time: effective = {**global, **download_settings}
+    Only inheritable keys present in download_settings override the global value.
+    """
+    config = get_videos_downloader_config()
+    effective = _extract_global_inheritable(config)
+    if download_settings:
+        for key in INHERITABLE_VIDEO_SETTINGS:
+            if key in download_settings:
+                effective[key] = download_settings[key]
+    return effective
 
 
 def get_yt_dlp_http_headers() -> dict:

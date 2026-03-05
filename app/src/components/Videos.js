@@ -67,7 +67,7 @@ import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
-import {VideoResolutionSelectorForm} from "./Download";
+import {VideoFormatSelectorForm, VideoResolutionSelectorForm} from "./Download";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
 
 export function VideoWrapper() {
@@ -332,9 +332,12 @@ function VideosSettingsPage() {
     const emptyFormData = {
         video_resolutions: ['1080p', '720p', '480p', 'maximum'],
         yt_dlp_options: {
+            continue_dl: true,
             file_name_format: '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+            merge_output_format: 'mp4',
             nooverwrites: true,
             writeautomaticsub: true,
+            writeinfojson: true,
             writesubtitles: true,
             writethumbnail: true,
         },
@@ -384,7 +387,14 @@ function VideosSettingsPage() {
                                 path='video_resolutions'
                             />
                         </Grid.Column>
-                        <Grid.Column mobile={16} computer={8}>
+                        <Grid.Column mobile={16} computer={4}>
+                            <VideoFormatSelectorForm
+                                form={configForm}
+                                name='merge_output_format'
+                                path='yt_dlp_options.merge_output_format'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={4}>
                             <VideoFileNameForm form={configForm}/>
                         </Grid.Column>
                     </Grid.Row>
@@ -408,7 +418,7 @@ function VideosSettingsPage() {
                             />
                         </Grid.Column>
                     </Grid.Row>
-                    <Grid.Row>
+                    <Grid.Row columns={2}>
                         <Grid.Column mobile={16} computer={8}>
                             <ToggleForm
                                 form={configForm}
@@ -425,6 +435,26 @@ function VideosSettingsPage() {
                                 name='writethumbnail'
                                 path='yt_dlp_options.writethumbnail'
                                 icon='image'
+                            />
+                        </Grid.Column>
+                    </Grid.Row>
+                    <Grid.Row columns={2}>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Download info JSON'
+                                name='writeinfojson'
+                                path='yt_dlp_options.writeinfojson'
+                                icon='file code'
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={16} computer={8}>
+                            <ToggleForm
+                                form={configForm}
+                                label='Continue partial downloads'
+                                name='continue_dl'
+                                path='yt_dlp_options.continue_dl'
+                                icon='play'
                             />
                         </Grid.Column>
                     </Grid.Row>

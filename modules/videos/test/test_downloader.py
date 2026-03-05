@@ -695,3 +695,129 @@ async def test_channel_downloader_sets_collection_id(test_session, channel_facto
     test_session.refresh(download)
     assert download.collection_id == channel.collection_id, \
         'ChannelDownloader should link download to channel collection'
+
+
+@pytest.mark.asyncio
+async def test_channel_passes_all_inheritable_settings_to_video(test_session, channel_factory,
+                                                                 mock_video_extract_info,
+                                                                 video_download_manager, await_switches):
+    """ChannelDownloader passes all CHANNEL_INHERITABLE_SETTINGS to child video downloads."""
+    from modules.videos.lib import CHANNEL_INHERITABLE_SETTINGS
+
+    channel = channel_factory(url='https://example.com/channel', source_id='UCtest456')
+
+    channel_settings = {
+        'video_resolutions': ['720p'],
+        'video_format': 'mkv',
+        'writesubtitles': False,
+        'sleep_requests': 3.0,
+        'user_agent': 'TestBot/1.0',
+    }
+
+    download = Download(
+        url='https://example.com/channel',
+        downloader=channel_downloader.name,
+        frequency=99,
+        settings=channel_settings,
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    mock_info = {
+        'id': 'UCtest456',
+        'channel_id': 'UCtest456',
+        'uploader': channel.name,
+        'entries': [{'id': 'vid1', 'url': 'https://youtube.com/watch?v=vid1', 'title': 'Video 1'}],
+        'webpage_url_basename': 'videos',
+    }
+    mock_video_extract_info.return_value = mock_info
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+         mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
+        mock_video_do_download.return_value = DownloadResult(success=True)
+        result = await channel_downloader.do_download(download)
+
+    # Verify all channel-level inheritable settings are passed through
+    for key in ('video_resolutions', 'video_format', 'writesubtitles', 'sleep_requests', 'user_agent'):
+        assert key in result.settings, f'{key} missing from DownloadResult.settings'
+        assert result.settings[key] == channel_settings[key], \
+            f'{key}: expected {channel_settings[key]}, got {result.settings[key]}'
+
+
+@pytest.mark.asyncio
+async def test_channel_does_not_pass_continue_dl_nooverwrites(test_session, channel_factory,
+                                                               mock_video_extract_info,
+                                                               video_download_manager, await_switches):
+    """continue_dl and nooverwrites should NOT be passed from channel to video."""
+    channel = channel_factory(url='https://example.com/channel', source_id='UCtest789')
+
+    channel_settings = {
+        'continue_dl': False,
+        'nooverwrites': False,
+        'video_format': 'mkv',
+    }
+
+    download = Download(
+        url='https://example.com/channel',
+        downloader=channel_downloader.name,
+        frequency=99,
+        settings=channel_settings,
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    mock_info = {
+        'id': 'UCtest789',
+        'channel_id': 'UCtest789',
+        'uploader': channel.name,
+        'entries': [{'id': 'vid2', 'url': 'https://youtube.com/watch?v=vid2', 'title': 'Video 2'}],
+        'webpage_url_basename': 'videos',
+    }
+    mock_video_extract_info.return_value = mock_info
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+         mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
+        mock_video_do_download.return_value = DownloadResult(success=True)
+        result = await channel_downloader.do_download(download)
+
+    assert 'continue_dl' not in result.settings, 'continue_dl should not be passed to child video downloads'
+    assert 'nooverwrites' not in result.settings, 'nooverwrites should not be passed to child video downloads'
+    assert result.settings['video_format'] == 'mkv', 'video_format should be passed through'
+
+
+@pytest.mark.asyncio
+async def test_video_download_uses_effective_settings(test_session, test_directory, mock_video_extract_info,
+                                                      video_download_manager, mock_video_process_runner,
+                                                      image_file, simple_channel, test_videos_downloader_config):
+    """VideoDownloader uses merged effective settings from global + download overrides."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    image_file.rename(video_path.with_suffix('.jpg'))
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+
+    # Download with writesubtitles=False override (global default is True)
+    settings = {'writesubtitles': False, 'sleep_requests': 5.0}
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_video_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+        mock_video_process_runner.assert_called_once()
+        download, cmd, out_dir = mock_video_process_runner.call_args[0]
+
+    # writesubtitles=False means no --write-subs in command
+    assert '--write-subs' not in cmd, 'writesubtitles=False should prevent --write-subs'
+    # sleep_requests=5.0 should appear
+    assert '--sleep-requests' in cmd, 'sleep_requests override should appear in command'
+    sleep_idx = cmd.index('--sleep-requests')
+    assert cmd[sleep_idx + 1] == '5.0', f'Expected sleep_requests=5.0, got {cmd[sleep_idx + 1]}'

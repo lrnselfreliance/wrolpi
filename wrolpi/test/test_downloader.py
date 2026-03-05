@@ -853,3 +853,72 @@ async def test_child_downloads_have_parent_download_url(test_session, test_downl
         assert 'parent_download_url' in child.settings, f'Child download {child.url} missing parent_download_url'
         assert child.settings['parent_download_url'] == parent_url, \
             f'Child download {child.url} has wrong parent_download_url: {child.settings.get("parent_download_url")}'
+
+
+def test_yaml_dump_filters_default_settings(test_session, test_download_manager, test_download_manager_config,
+                                            test_downloader):
+    """Settings matching global defaults should be stripped from YAML."""
+    from modules.videos.lib import set_test_downloader_config, get_videos_downloader_config
+
+    set_test_downloader_config(True)
+    try:
+        config = get_videos_downloader_config()
+
+        # Create a download with settings that match global defaults
+        download = test_download_manager.create_download(
+            test_session, 'https://example.com/channel', test_downloader.name,
+            settings={
+                'video_resolutions': config.video_resolutions,
+                'video_format': config.merge_output_format,
+                'writesubtitles': config.writesubtitles,
+                'title_include': 'important',  # non-inheritable, should be kept
+            },
+        )
+        download.frequency = 99
+        test_session.commit()
+
+        get_download_manager_config().dump_config()
+
+        # Read the YAML and check
+        yaml_data = get_download_manager_config()._config
+        download_entry = next(d for d in yaml_data['downloads'] if d['url'] == 'https://example.com/channel')
+
+        # Inheritable defaults should be filtered out
+        settings = download_entry['settings']
+        assert 'video_resolutions' not in settings, 'Default video_resolutions should be filtered from YAML'
+        assert 'video_format' not in settings, 'Default video_format should be filtered from YAML'
+        assert 'writesubtitles' not in settings, 'Default writesubtitles should be filtered from YAML'
+        # Non-inheritable settings should be preserved
+        assert settings['title_include'] == 'important', 'Non-inheritable settings should be kept in YAML'
+    finally:
+        set_test_downloader_config(False)
+
+
+def test_yaml_dump_keeps_overrides(test_session, test_download_manager, test_download_manager_config,
+                                   test_downloader):
+    """Settings that differ from global defaults should be kept in YAML."""
+    from modules.videos.lib import set_test_downloader_config
+
+    set_test_downloader_config(True)
+    try:
+        # Create a download with settings that differ from global defaults
+        download = test_download_manager.create_download(
+            test_session, 'https://example.com/channel2', test_downloader.name,
+            settings={
+                'video_resolutions': ['720p'],  # differs from default
+                'writesubtitles': False,  # differs from default True
+            },
+        )
+        download.frequency = 99
+        test_session.commit()
+
+        get_download_manager_config().dump_config()
+
+        yaml_data = get_download_manager_config()._config
+        download_entry = next(d for d in yaml_data['downloads'] if d['url'] == 'https://example.com/channel2')
+        settings = download_entry['settings']
+
+        assert settings['video_resolutions'] == ['720p'], 'Non-default video_resolutions should be kept'
+        assert settings['writesubtitles'] is False, 'Non-default writesubtitles should be kept'
+    finally:
+        set_test_downloader_config(False)

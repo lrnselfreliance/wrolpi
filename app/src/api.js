@@ -421,6 +421,11 @@ export async function fetchVideoDownloaderConfig() {
     return await getConfig('videos_downloader.yaml');
 }
 
+export async function fetchVideoDownloadDefaults() {
+    const response = await apiGet(`${VIDEOS_API}/download-defaults`);
+    return await response.json();
+}
+
 export async function updateConfig(fileName, config) {
     const body = {config};
     const response = await apiPost(`${API_URI}/config?file_name=${fileName}`, body);

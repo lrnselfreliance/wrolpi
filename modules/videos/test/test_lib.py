@@ -439,3 +439,65 @@ def test_format_video_filename_uses_channel_name_over_info_json(test_session, vi
     # Should use WROLPi channel name, NOT the YouTube uploader
     assert 'My Custom Channel' in result
     assert 'Learning Self Reliance' not in result
+
+
+def test_extract_global_inheritable(test_directory, test_videos_downloader_config):
+    """Verify _extract_global_inheritable returns all expected keys with correct mapping."""
+    config = lib.get_videos_downloader_config()
+    result = lib._extract_global_inheritable(config)
+    assert set(result.keys()) == lib.INHERITABLE_VIDEO_SETTINGS
+    # merge_output_format maps to video_format
+    assert result['video_format'] == config.merge_output_format
+    assert result['video_resolutions'] == config.video_resolutions
+    assert result['writesubtitles'] == config.writesubtitles
+    assert result['continue_dl'] == config.continue_dl
+
+
+def test_get_effective_video_settings_no_overrides(test_directory, test_videos_downloader_config):
+    """With no download settings, effective settings equal global defaults."""
+    config = lib.get_videos_downloader_config()
+    effective = lib.get_effective_video_settings()
+    assert effective['video_resolutions'] == config.video_resolutions
+    assert effective['video_format'] == config.merge_output_format
+    assert effective['writesubtitles'] == config.writesubtitles
+
+
+def test_get_effective_video_settings_partial_override(test_directory, test_videos_downloader_config):
+    """Download settings override only the keys they specify."""
+    config = lib.get_videos_downloader_config()
+    overrides = {'writesubtitles': False, 'sleep_requests': 2.0}
+    effective = lib.get_effective_video_settings(overrides)
+    assert effective['writesubtitles'] is False
+    assert effective['sleep_requests'] == 2.0
+    # Everything else stays at global default
+    assert effective['video_resolutions'] == config.video_resolutions
+    assert effective['writethumbnail'] == config.writethumbnail
+
+
+def test_get_effective_video_settings_global_change_propagates(test_directory, test_videos_downloader_config):
+    """Changing global config propagates to downloads without overrides."""
+    config = lib.get_videos_downloader_config()
+    # Change global
+    config.update({**config._config, 'sleep_requests': 5.0})
+    # Download with no override should pick up new global
+    effective = lib.get_effective_video_settings({})
+    assert effective['sleep_requests'] == 5.0
+    # Download with override should keep its value
+    effective = lib.get_effective_video_settings({'sleep_requests': 1.0})
+    assert effective['sleep_requests'] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_get_download_defaults_endpoint(async_client, test_directory, test_videos_downloader_config):
+    """GET /api/videos/download-defaults returns flattened global settings."""
+    request, response = await async_client.get('/api/videos/download-defaults')
+    assert response.status == HTTPStatus.OK
+    data = response.json
+    assert 'video_resolutions' in data
+    assert 'video_format' in data
+    assert 'writesubtitles' in data
+    assert 'continue_dl' in data
+    assert 'nooverwrites' in data
+    # Should NOT contain global-only settings
+    assert 'file_name_format' not in data
+    assert 'quiet' not in data

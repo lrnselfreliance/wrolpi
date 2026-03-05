@@ -1372,6 +1372,22 @@ class DownloadManagerConfig(ConfigFile):
     def downloads(self, value: List[dict]):
         self.update({'downloads': value})
 
+    @staticmethod
+    def _filter_settings_for_yaml(settings: dict) -> dict:
+        """Remove inheritable video settings that match current global defaults.
+        Keeps YAML minimal — only overrides are persisted."""
+        if not settings:
+            return settings
+        from modules.videos.lib import INHERITABLE_VIDEO_SETTINGS, _extract_global_inheritable, \
+            get_videos_downloader_config
+        global_defaults = _extract_global_inheritable(get_videos_downloader_config())
+        filtered = {}
+        for k, v in settings.items():
+            if k in INHERITABLE_VIDEO_SETTINGS and v == global_defaults.get(k):
+                continue
+            filtered[k] = v
+        return filtered or None
+
     def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
         try:
             with get_db_session() as session:
@@ -1388,7 +1404,7 @@ class DownloadManagerConfig(ConfigFile):
                         frequency=download.frequency,
                         last_successful_download=download.last_successful_download,
                         next_download=download.next_download,
-                        settings=download.settings,
+                        settings=self._filter_settings_for_yaml(download.settings),
                         status=download.status,
                         sub_downloader=download.sub_downloader,
                         tag_names=download.tag_names,
@@ -1622,12 +1638,13 @@ class RSSDownloader(Downloader):
         logger.info(f'Successfully got {len(urls)} new URLs from RSS {download.url}')
 
         # Pass settings onto the next Downloader.
+        from modules.videos.lib import CHANNEL_INHERITABLE_SETTINGS
         next_download_settings = dict()
         settings = download.settings or dict()
-        if i := settings.get('video_resolutions'):
-            next_download_settings['video_resolutions'] = i
-        if i := settings.get('video_format'):
-            next_download_settings['video_format'] = i
+        # Pass all channel-level inheritable settings to child video downloads.
+        for key in CHANNEL_INHERITABLE_SETTINGS:
+            if key in settings:
+                next_download_settings[key] = settings[key]
         # Use download.destination column (settings['destination'] is legacy)
         if download.destination:
             next_download_settings['destination'] = str(download.destination)

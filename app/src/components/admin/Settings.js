@@ -1,16 +1,8 @@
 import React from "react";
 import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {checkUpgrade, postRestart, postShutdown, saveSettings as saveSettingsApi, triggerUpgrade} from "../../api";
-import {getServices, stopService, startService} from "../../api/controller";
-import {
-    Button,
-    Divider,
-    Form,
-    Header,
-    Loader,
-    Modal,
-    Segment
-} from "../Theme";
+import {getServices, startService, stopService} from "../../api/controller";
+import {Button, Divider, Form, Header, Loader, Modal, Segment} from "../Theme";
 import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
 import {
     APIButton,
@@ -510,123 +502,140 @@ export function SettingsPage() {
             <p>Any changes will be written to <i>{settings.media_directory}/config/wrolpi.yaml</i>.</p>
 
             <Form id="settings">
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='Download on Startup'
-                        disabled={disabled || state.download_on_startup === null}
-                        checked={state.download_on_startup === true}
-                        onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
-                    />
-                </div>
+                <Grid columns={2} stackable>
+                    <Grid.Row>
+                        <Grid.Column>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='Download on Startup'
+                                    disabled={disabled || state.download_on_startup === null}
+                                    checked={state.download_on_startup === true}
+                                    onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
+                                />
+                            </div>
 
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='CPU Power-save on Startup'
-                        disabled={disabled || state.throttle_on_startup === null}
-                        checked={state.throttle_on_startup === true}
-                        onChange={checked => handleInputChange(null, 'throttle_on_startup', checked)}
-                    />
-                </div>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='CPU Power-save on Startup'
+                                    disabled={disabled || state.throttle_on_startup === null}
+                                    checked={state.throttle_on_startup === true}
+                                    onChange={checked => handleInputChange(null, 'throttle_on_startup', checked)}
+                                />
+                            </div>
 
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='Ignore outdated Zims'
-                        disabled={disabled || state.ignore_outdated_zims === null}
-                        checked={state.ignore_outdated_zims === true}
-                        onChange={checked => handleInputChange(null, 'ignore_outdated_zims', checked)}
-                    />
-                </div>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='Ignore outdated Zims'
+                                    disabled={disabled || state.ignore_outdated_zims === null}
+                                    checked={state.ignore_outdated_zims === true}
+                                    onChange={checked => handleInputChange(null, 'ignore_outdated_zims', checked)}
+                                />
+                            </div>
 
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='Check for upgrades hourly'
-                        disabled={disabled || dockerized || state.check_for_upgrades === null}
-                        checked={!dockerized && state.check_for_upgrades === true}
-                        onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
-                    />
-                </div>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='Check for upgrades hourly'
+                                    disabled={disabled || dockerized || state.check_for_upgrades === null}
+                                    checked={!dockerized && state.check_for_upgrades === true}
+                                    onChange={checked => handleInputChange(null, 'check_for_upgrades', checked)}
+                                />
+                            </div>
 
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='Tags Directory'
-                        disabled={disabled || state.tags_directory === null}
-                        checked={state.tags_directory === true}
-                        onChange={checked => handleInputChange(null, 'tags_directory', checked)}
-                        info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
-                    />
-                </div>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='Tags Directory'
+                                    disabled={disabled || state.tags_directory === null}
+                                    checked={state.tags_directory === true}
+                                    onChange={checked => handleInputChange(null, 'tags_directory', checked)}
+                                    info='When enabled, WROLPi creates a "tags" directory with hardlinks to all tagged files, organized by tag name.'
+                                />
+                            </div>
 
-                <div style={{margin: '0.5em'}}>
-                    <Toggle
-                        label='Save FFprobe Cache Files'
-                        disabled={disabled || state.save_ffprobe_json === null}
-                        checked={state.save_ffprobe_json === true}
-                        onChange={checked => handleInputChange(null, 'save_ffprobe_json', checked)}
-                        info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
-                    />
-                </div>
+                            <div style={{margin: '0.5em'}}>
+                                <Toggle
+                                    label='Save FFprobe Cache Files'
+                                    disabled={disabled || state.save_ffprobe_json === null}
+                                    checked={state.save_ffprobe_json === true}
+                                    onChange={checked => handleInputChange(null, 'save_ffprobe_json', checked)}
+                                    info='When enabled, FFprobe results are saved as .ffprobe.json files alongside videos. This speeds up reindexing but uses additional disk space (~5KB per video).'
+                                />
+                            </div>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Wait Between Downloads</b>
-                            <InfoPopup content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
-                        </>}
-                        value={state.download_wait}
-                        disabled={disabled || state.download_wait === null}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
-                    />
-                </Form.Group>
+                            <Form.Group inline>
+                                <Form.Input
+                                    label={<>
+                                        <b>Wait Between Downloads</b>
+                                        <InfoPopup
+                                            content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
+                                    </>}
+                                    value={state.download_wait}
+                                    disabled={disabled || state.download_wait === null}
+                                    onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
+                                />
+                            </Form.Group>
 
-                <Form.Group inline>
-                    <Form.Input
-                        label={<>
-                            <b>Download Timeout</b>
-                            <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
+                            <Form.Group inline>
+                                <Form.Input
+                                    label={<>
+                                        <b>Download Timeout</b>
+                                        <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
-                        </>}
-                        value={state.download_timeout}
-                        disabled={disabled || state.download_timeout === null}
-                        onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
-                    />
-                </Form.Group>
+                                    </>}
+                                    value={state.download_timeout}
+                                    disabled={disabled || state.download_timeout === null}
+                                    onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
+                                />
+                            </Form.Group>
+                        </Grid.Column>
+                        <Grid.Column>
+                            <Segment>
+                                <Form.Input
+                                    label='Hotspot SSID'
+                                    value={state.hotspot_ssid}
+                                    disabled={disabled || state.hotspot_ssid === null}
+                                    onChange={(e, i) => setState({...state, hotspot_ssid: i.value})}
+                                    style={{marginBottom: '0.5em'}}
+                                />
+                                <Form.Input
+                                    label='Hotspot Password'
+                                    disabled={disabled || state.hotspot_password === null}
+                                    value={state.hotspot_password}
+                                    onChange={(e, i) => setState({...state, hotspot_password: i.value})}
+                                    style={{marginBottom: '0.5em'}}
+                                />
+                                <Form.Input
+                                    label='Hotspot Device'
+                                    disabled={disabled || state.hotspot_password === null}
+                                    value={state.hotspot_device}
+                                    onChange={(e, i) => handleInputChange(e, 'hotspot_device', i.value)}
+                                    style={{marginBottom: '0.5em'}}
+                                />
 
-                <Form.Group inline>
-                    <Form.Input
-                        label='Hotspot SSID'
-                        value={state.hotspot_ssid}
-                        disabled={disabled || state.hotspot_ssid === null}
-                        onChange={(e, i) => setState({...state, hotspot_ssid: i.value})}
-                    />
-                    <Form.Input
-                        label='Hotspot Password'
-                        disabled={disabled || state.hotspot_password === null}
-                        value={state.hotspot_password}
-                        onChange={(e, i) => setState({...state, hotspot_password: i.value})}
-                    />
-                    <Form.Input
-                        label='Hotspot Device'
-                        disabled={disabled || state.hotspot_password === null}
-                        value={state.hotspot_device}
-                        onChange={(e, i) => handleInputChange(e, 'hotspot_device', i.value)}
-                    />
-                </Form.Group>
+                                <Modal closeIcon
+                                       onClose={() => setQrOpen(false)}
+                                       onOpen={handleQrOpen}
+                                       open={qrOpen}
+                                       trigger={qrButton}
+                                >
+                                    <Modal.Header>
+                                        Scan this code to join the hotspot
+                                    </Modal.Header>
+                                    <Modal.Content>
+                                        <div style={{
+                                            display: 'inline-block',
+                                            backgroundColor: '#ffffff',
+                                            padding: '1em'
+                                        }}>
+                                            <QRCode value={qrCodeValue} size={300}/>
+                                        </div>
+                                    </Modal.Content>
+                                </Modal>
 
-                <Modal closeIcon
-                       onClose={() => setQrOpen(false)}
-                       onOpen={handleQrOpen}
-                       open={qrOpen}
-                       trigger={qrButton}
-                >
-                    <Modal.Header>
-                        Scan this code to join the hotspot
-                    </Modal.Header>
-                    <Modal.Content>
-                        <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
-                            <QRCode value={qrCodeValue} size={300}/>
-                        </div>
-                    </Modal.Content>
-                </Modal>
+                            </Segment>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+
 
                 <br/>
 
@@ -681,7 +690,9 @@ export function SettingsPage() {
                                             <p>Variables:</p>
                                             <ul>
                                                 <li><code>%(domain)s</code> - Domain name (e.g., "example.com")</li>
-                                                <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no tag)</li>
+                                                <li><code>%(domain_tag)s</code> - Tag name for the domain (empty if no
+                                                    tag)
+                                                </li>
                                                 <li><code>%(tag)s</code> - Alias for the tag name</li>
                                                 <li><code>%(name)s</code> - Alias for the domain name</li>
                                             </ul>
@@ -707,7 +718,9 @@ export function SettingsPage() {
                                             <p>Variables:</p>
                                             <ul>
                                                 <li><code>%(channel_name)s</code> - Channel name</li>
-                                                <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no tag)</li>
+                                                <li><code>%(channel_tag)s</code> - Tag name for the channel (empty if no
+                                                    tag)
+                                                </li>
                                                 <li><code>%(channel_domain)s</code> - Domain from the channel URL</li>
                                                 <li><code>%(tag)s</code> - Alias for the tag name</li>
                                                 <li><code>%(name)s</code> - Alias for the channel name</li>

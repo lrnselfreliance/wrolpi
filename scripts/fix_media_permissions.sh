@@ -20,15 +20,32 @@ if [ ! -d "${MEDIA_DIRECTORY}" ]; then
   exit 1
 fi
 
+# Detect the filesystem type of the media directory.
+fstype=$(findmnt -n -o FSTYPE --target "${MEDIA_DIRECTORY}" 2>/dev/null)
+
+if [[ "${fstype}" == "vfat" || "${fstype}" == "exfat" || "${fstype}" == "ntfs" || "${fstype}" == "fuseblk" ]]; then
+  echo "ERROR: ${MEDIA_DIRECTORY} is on a ${fstype} filesystem."
+  echo ""
+  echo "FAT, exFAT, and NTFS filesystems do not support Unix file permissions."
+  echo "Ownership and permissions are controlled by mount options instead."
+  echo ""
+  echo "To fix permissions, remount the drive with the correct options:"
+  echo "  sudo mount -o remount,uid=wrolpi,gid=wrolpi ${MEDIA_DIRECTORY}"
+  echo ""
+  echo "Or add to /etc/fstab for a permanent fix:"
+  echo "  UUID=<your-drive-uuid> ${MEDIA_DIRECTORY} ${fstype} uid=wrolpi,gid=wrolpi,nofail 0 0"
+  exit 1
+fi
+
 echo "Fixing permissions on ${MEDIA_DIRECTORY}..."
 
 errors=0
 dirs_fixed=0
 files_fixed=0
 
-# Fix ownership. FAT/exFAT filesystems do not support chown, so warn and continue.
+# Fix ownership.
 if ! chown -R wrolpi:wrolpi "${MEDIA_DIRECTORY}" 2>/dev/null; then
-  echo "WARNING: Could not change ownership (filesystem may not support Unix ownership, e.g. FAT/exFAT)."
+  echo "WARNING: Could not change ownership."
   errors=$((errors + 1))
 fi
 
@@ -54,7 +71,7 @@ echo "Errors:            ${errors}"
 
 if [ "$errors" -gt 0 ]; then
   echo ""
-  echo "Some operations failed. This may be expected on FAT/exFAT filesystems."
+  echo "Some operations failed."
 fi
 
 echo ""

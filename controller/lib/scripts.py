@@ -47,6 +47,18 @@ AVAILABLE_SCRIPTS = {
             "UI will be unavailable during upgrade",
         ],
     },
+    "fix-permissions": {
+        "name": "fix-permissions",
+        "display_name": "Fix Media Permissions",
+        "description": "Fixes ownership and permissions on the media directory so WROLPi can read and write all files.",
+        "service_name": "wrolpi-fix-media-permissions.service",
+        "warnings": [
+            "Changes ownership of all media files to wrolpi:wrolpi",
+            "Ensures all files are readable and directories are traversable",
+            "May take a long time on large media libraries",
+            "Some filesystems (FAT/exFAT) do not support Unix permissions",
+        ],
+    },
 }
 
 

@@ -23,7 +23,8 @@ import {
     SortButton,
     TabLinks,
     textEllipsis,
-    useTitle
+    useTitle,
+    CookiesUnlockModal
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {
@@ -59,7 +60,6 @@ import {
     lockCookies,
     postVideoFileFormat,
     previewBatchReorganization,
-    unlockCookies,
     updateVideoDownloaderConfig,
     uploadCookies,
 } from "../api";
@@ -582,9 +582,7 @@ function CookiesSettingsSection() {
     const [unlockModalOpen, setUnlockModalOpen] = useState(false);
     const [cookiesContent, setCookiesContent] = useState('');
     const [password, setPassword] = useState('');
-    const [unlockPassword, setUnlockPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const unlockPasswordRef = useRef(null);
     const cookiesContentRef = useRef(null);
 
     useEffect(() => {
@@ -597,18 +595,6 @@ function CookiesSettingsSection() {
             return () => clearTimeout(timer);
         }
     }, [uploadModalOpen]);
-
-    useEffect(() => {
-        if (unlockModalOpen) {
-            // Delay focus to allow modal animation to complete
-            const timer = setTimeout(() => {
-                if (unlockPasswordRef.current) {
-                    unlockPasswordRef.current.focus();
-                }
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [unlockModalOpen]);
 
     const fetchStatus = async () => {
         setLoading(true);
@@ -634,17 +620,6 @@ function CookiesSettingsSection() {
             setUploadModalOpen(false);
             setCookiesContent('');
             setPassword('');
-            fetchStatus();
-        }
-    };
-
-    const handleUnlock = async () => {
-        setSubmitting(true);
-        const result = await unlockCookies(unlockPassword);
-        setSubmitting(false);
-        if (result.success) {
-            setUnlockModalOpen(false);
-            setUnlockPassword('');
             fetchStatus();
         }
     };
@@ -795,38 +770,11 @@ function CookiesSettingsSection() {
             </Modal.Actions>
         </Modal>
 
-        {/* Unlock Modal */}
-        <Modal
+        <CookiesUnlockModal
             open={unlockModalOpen}
             onClose={() => setUnlockModalOpen(false)}
-            size='tiny'
-        >
-            <Modal.Header>Unlock Cookies</Modal.Header>
-            <Modal.Content>
-                <Form>
-                    <FormInput
-                        input={{ref: unlockPasswordRef}}
-                        label='Password'
-                        type='password'
-                        placeholder='Enter your encryption password'
-                        value={unlockPassword}
-                        onChange={(e) => setUnlockPassword(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
-                    />
-                </Form>
-            </Modal.Content>
-            <Modal.Actions>
-                <Button onClick={() => setUnlockModalOpen(false)}>Cancel</Button>
-                <Button
-                    color='green'
-                    onClick={handleUnlock}
-                    loading={submitting}
-                    disabled={!unlockPassword || submitting}
-                >
-                    <Icon name='unlock'/> Unlock
-                </Button>
-            </Modal.Actions>
-        </Modal>
+            onSuccess={fetchStatus}
+        />
     </Segment>;
 }
 

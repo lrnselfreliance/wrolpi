@@ -43,7 +43,7 @@ import {
 } from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
-import {killDownloads, startDownloads} from "../api";
+import {killDownloads, startDownloads, unlockCookies} from "../api";
 import {allFrequencyOptions, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
@@ -591,25 +591,88 @@ export function WROLModeMessage({content}) {
     return null;
 }
 
+export function CookiesUnlockModal({open, onClose, onSuccess}) {
+    const [password, setPassword] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const passwordRef = React.useRef(null);
+
+    useEffect(() => {
+        if (open) {
+            const timer = setTimeout(() => {
+                if (passwordRef.current) {
+                    passwordRef.current.focus();
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [open]);
+
+    const handleUnlock = async () => {
+        setSubmitting(true);
+        const result = await unlockCookies(password);
+        setSubmitting(false);
+        if (result.success) {
+            setPassword('');
+            if (onSuccess) onSuccess();
+            onClose();
+        }
+    };
+
+    return <Modal open={open} onClose={onClose} size='tiny'>
+        <Modal.Header>Unlock Cookies</Modal.Header>
+        <Modal.Content>
+            <Form>
+                <Form.Input
+                    input={{ref: passwordRef}}
+                    label='Password'
+                    type='password'
+                    placeholder='Enter your encryption password'
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleUnlock()}
+                />
+            </Form>
+        </Modal.Content>
+        <Modal.Actions>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+                color='green'
+                onClick={handleUnlock}
+                loading={submitting}
+                disabled={!password || submitting}
+            >
+                <SIcon name='unlock'/> Unlock
+            </Button>
+        </Modal.Actions>
+    </Modal>;
+}
+
 export function CookiesLockedMessage() {
     const {settings} = React.useContext(SettingsContext);
     const {status} = React.useContext(StatusContext);
     const flags = status?.flags || {};
 
+    const [modalOpen, setModalOpen] = useState(false);
+
     if (!flags.cookies_exist || flags.cookies_unlocked || settings?.wrol_mode) {
         return null;
     }
 
-    return <Message warning icon>
-        <SIcon name='lock'/>
-        <Message.Content>
-            <Message.Header>Cookies Locked</Message.Header>
-            You have encrypted cookies stored, but they are currently locked.
-            <Link to='/videos/settings' style={{marginLeft: '0.5em'}}>
-                <SIcon name='unlock'/> Unlock in Video Settings
-            </Link>
-        </Message.Content>
-    </Message>;
+    return <>
+        <Message warning icon>
+            <SIcon name='lock'/>
+            <Message.Content>
+                <Message.Header>Cookies Locked</Message.Header>
+                You have encrypted cookies stored, but they are currently locked.
+                <a style={{marginLeft: '0.5em', cursor: 'pointer'}}
+                   onClick={() => setModalOpen(true)}>
+                    <SIcon name='unlock'/> Unlock Cookies
+                </a>
+            </Message.Content>
+        </Message>
+
+        <CookiesUnlockModal open={modalOpen} onClose={() => setModalOpen(false)}/>
+    </>;
 }
 
 // Thanks https://www.npmjs.com/package/text-ellipsis

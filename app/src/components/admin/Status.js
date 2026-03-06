@@ -303,9 +303,9 @@ export function StatusPage() {
                 {cpuProgress}
                 {memoryUsageProgress}
                 <Statistic.Group size='mini'>
-                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores} style={{margin: '1em'}}/>
+                    <LoadStatistic label='5 Min. Load' value={minute_5} cores={cores} style={{margin: '1m'}}/>
+                    <LoadStatistic label='15 Min. Load' value={minute_15} cores={cores} style={{margin: '1em'}}/>
                     <CPUTemperatureStatistic
                         id='cpu_temperature_statistic'
                         temperature={temperature}

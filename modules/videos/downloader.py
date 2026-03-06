@@ -639,14 +639,18 @@ class VideoDownloader(Downloader, ABC):
             if not video_path.is_file():
                 error = f'{stdout}\n\n\n{stderr}\n\n' \
                         f'Video file could not be found!  {video_path}'
+                retry_seconds = None
                 if '!is_live' in stdout:
                     error = f'{stdout}\n\nVideo was live and did not finish downloading.'
+                    retry_seconds = 3600
                 if ' live event ' in stdout:
                     error = f'{stdout}\n\nVideo will be live and did not finish downloading.'
+                    retry_seconds = 3600
                 return DownloadResult(
                     success=False,
                     error=error,
                     location=location,
+                    retry_seconds=retry_seconds,
                 )
 
             if not ffmpeg_video_complete(video_path):

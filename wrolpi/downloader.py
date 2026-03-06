@@ -87,6 +87,7 @@ class DownloadResult:
     error: str = None
     info_json: dict = field(default_factory=dict)
     location: str = None
+    retry_seconds: int = None
     success: bool = False
     settings: dict = field(default_factory=dict)
 
@@ -1286,7 +1287,10 @@ async def signal_download_download(download_id: int, download_url: str):
                 download.location = result.location or download.location or None
                 # Clear any old errors if the download succeeded.
                 download.error = result.error if result.error else None
-                download.next_download = download_manager.calculate_next_download(session, download)
+                if isinstance(result.retry_seconds, int):
+                    download.next_download = now() + timedelta(seconds=result.retry_seconds)
+                else:
+                    download.next_download = download_manager.calculate_next_download(session, download)
 
                 urls = download.filter_excluded(result.downloads) if result.downloads else None
                 if urls:

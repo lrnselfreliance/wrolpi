@@ -821,3 +821,35 @@ async def test_video_download_uses_effective_settings(test_session, test_directo
     assert '--sleep-requests' in cmd, 'sleep_requests override should appear in command'
     sleep_idx = cmd.index('--sleep-requests')
     assert cmd[sleep_idx + 1] == '5.0', f'Expected sleep_requests=5.0, got {cmd[sleep_idx + 1]}'
+
+
+@pytest.mark.asyncio
+async def test_live_video_retry_seconds(test_session, test_directory, mock_video_extract_info,
+                                        video_download_manager, mock_video_process_runner,
+                                        simple_channel):
+    """A live video download should return retry_seconds=3600 so it retries in 1 hour."""
+    from wrolpi.cmd import CommandResult
+
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    # Simulate yt-dlp output when a video is live.
+    mock_video_process_runner.return_value = CommandResult(
+        return_code=0, cancelled=False,
+        stdout=b'does not pass filter (!is_live), skipping ..', stderr=b'', elapsed=0,
+    )
+
+    url = 'https://www.youtube.com/watch?v=live_video'
+    mock_video_extract_info.return_value = example_video_json
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        # Return a path that won't exist (video wasn't downloaded because it's live).
+        mock_prepare_filename.return_value = (simple_channel.directory / 'live video.mp4', {'id': 'foo'})
+
+        download = Download(url=url, downloader='video', attempts=0)
+        result = await video_downloader.do_download(download)
+
+    assert result.success is False
+    assert result.retry_seconds == 3600
+    assert 'live' in result.error.lower()

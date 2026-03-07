@@ -1020,9 +1020,12 @@ export const useSettings = () => {
         }
         setPending(true);
         try {
-            setSettings(await getSettings())
+            const newSettings = await getSettings();
+            if (newSettings) {
+                setSettings(newSettings);
+            }
         } catch (e) {
-            setSettings({});
+            // Don't clear settings on error — keep the last known good values.
         } finally {
             setPending(false);
         }
@@ -1056,7 +1059,10 @@ export const useStatus = () => {
         try {
             // Fetch from both endpoints in parallel
             const [appStatus, controllerStats] = await Promise.all([
-                getStatus().catch(e => {
+                getStatus().then(result => {
+                    window.apiDown = false;
+                    return result;
+                }).catch(e => {
                     if (e instanceof ApiDownError) {
                         window.apiDown = true;
                         return {};
@@ -1072,7 +1078,6 @@ export const useStatus = () => {
 
             // Merge both responses - controller stats override app status for system info
             setStatus({...appStatus, ...controllerStats});
-            window.apiDown = false;
         } catch (e) {
             if (e instanceof ApiDownError) {
                 // API is down, do not log this error.

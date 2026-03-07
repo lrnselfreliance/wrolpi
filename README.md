@@ -27,6 +27,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 * [Demo](#demo)
 * [Download](#download)
 * [Try WROLPi](#try-wrolpi)
+* [Docker Documentation](docker/README.md)
 * [Debian 12 Install](#debian-12-install)
 * [Raspberry Pi Install](#raspberrypi-install)
 * [Charter](#charter)
@@ -92,6 +93,8 @@ You can try out WROLPi by running the docker containers.
     * `docker-compose up`
 10. Browse to WROLPi.
     * https://0.0.0.0:8443
+
+More Docker documentation is available in [docker/README.md](docker/README.md)
 
 # Debian 12 Install
 

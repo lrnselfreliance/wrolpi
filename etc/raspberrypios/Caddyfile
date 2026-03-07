@@ -1,0 +1,132 @@
+# Caddy config for WROLPi services (RPi/Debian bare metal).
+
+{
+	# No ACME - WROLPi is designed for offline use.
+	auto_https disable_redirects
+}
+
+:80 {
+	handle / {
+		root * /var/www
+		rewrite * /landing.html
+		file_server
+	}
+	handle /ca.crt {
+		root * /media/wrolpi/config/ssl
+		header Content-Type "application/x-x509-ca-cert"
+		header Content-Disposition "attachment; filename=\"wrolpi-ca.crt\""
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
+
+:443 {
+	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
+
+	header Access-Control-Allow-Origin "*"
+	header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+	header Access-Control-Allow-Headers "Content-Type, Accept"
+
+	handle /favicon.ico {
+		root * /opt/wrolpi
+		rewrite * /icon.ico
+		file_server
+	}
+
+	handle /apple-touch-icon.png {
+		root * /opt/wrolpi
+		rewrite * /icon.png
+		file_server
+	}
+
+	# WebSocket for React dev server.
+	handle /ws {
+		reverse_proxy 0.0.0.0:3000
+	}
+
+	# Controller - system management API and UI.
+	handle_path /controller/* {
+		reverse_proxy 0.0.0.0:8087
+	}
+	handle /controller {
+		redir * /controller/ 301
+	}
+
+	# Main API.
+	handle /api/* {
+		reverse_proxy 0.0.0.0:8081
+	}
+
+	# API docs.
+	handle /docs/* {
+		reverse_proxy 0.0.0.0:8081
+	}
+	handle /docs {
+		redir * /docs/ 301
+	}
+
+	# Static media files with directory browsing.
+	handle_path /media/* {
+		root * /media/wrolpi
+		file_server browse
+	}
+	handle /media {
+		redir * /media/ 301
+	}
+
+	# Downloads with Content-Disposition header.
+	handle_path /download/* {
+		root * /media/wrolpi
+		header Content-Disposition "attachment"
+		file_server browse
+	}
+	handle /download {
+		redir * /download/ 301
+	}
+
+	# React app with fallback to Controller.
+	handle {
+		reverse_proxy 0.0.0.0:3000 {
+			@bad status 502 503 504
+			handle_response @bad {
+				header Location /controller/?fallback=true
+				respond "" 302
+			}
+		}
+	}
+
+	handle_errors {
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+		header Access-Control-Allow-Headers "Content-Type, Accept"
+		root * /var/www
+		rewrite * /50x.html
+		file_server
+	}
+}
+
+# Kiwix HTTPS proxy.
+:8085 {
+	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy 0.0.0.0:9085
+}
+
+# Help HTTPS proxy.
+:8086 {
+	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy 0.0.0.0:9086
+}
+
+# Map HTTPS proxy (Apache2 HTTP-only on 9084).
+:8084 {
+	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy 0.0.0.0:9084
+}

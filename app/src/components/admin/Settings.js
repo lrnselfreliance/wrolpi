@@ -814,6 +814,15 @@ export function SettingsPage() {
             saveConfig={saveConfig}
             fetchConfigs={fetchConfigs}
         />
+
+        <Divider/>
+
+        <Header as='h3'>Root CA Certificate</Header>
+        <p>Install the WROLPi Root CA certificate on your devices to trust all HTTPS connections to this WROLPi.
+            You only need to do this once per device.</p>
+        <a href='/ca.crt' download='wrolpi-ca.crt'>
+            <Button primary><Icon name='download'/> Download Root CA Certificate</Button>
+        </a>
     </Segment>;
 
     return <Container fluid>

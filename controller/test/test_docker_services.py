@@ -196,7 +196,7 @@ class TestGetAllContainersStatus:
                 assert result[0].get("use_https", False) is False
 
     def test_web_container_uses_https(self):
-        """Web container (nginx proxy) should have use_https=True."""
+        """Web container (Caddy proxy) should have use_https=True."""
         mock_container = mock.Mock()
         mock_container.name = f"{CONTAINER_PREFIX}-web-1"
         mock_container.status = "running"

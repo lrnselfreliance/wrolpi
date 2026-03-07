@@ -39,6 +39,14 @@ if [[ ! -f /opt/wrolpi-blobs/map-db-gis.dump || ! -s /opt/wrolpi-blobs/map-db-gi
   wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/map-db-gis.dump -O /opt/wrolpi-blobs/map-db-gis.dump
 fi
 
+# Install Caddy from official apt repo if not already installed.
+if ! command -v caddy &>/dev/null; then
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+  apt-get update
+  apt-get install -y caddy
+fi
+
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh
 

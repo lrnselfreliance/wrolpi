@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly check for WROLPi TLS certificate renewal
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=3600
+
+[Install]
+WantedBy=timers.target

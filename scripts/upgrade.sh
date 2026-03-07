@@ -104,5 +104,18 @@ fi
 # Migrate map DB if necessary.  Do this before repair because it will reset map if map db is empty.
 /opt/wrolpi/wrolpi/scripts/migrate_map_db.sh || echo "Map DB migration failed."
 
+# Migrate from nginx to Caddy if necessary.
+if ! command -v caddy &>/dev/null; then
+  echo "Installing Caddy (replacing nginx)..."
+  # Disable and stop nginx if it was previously used.
+  systemctl stop nginx 2>/dev/null || :
+  systemctl disable nginx 2>/dev/null || :
+  # Install Caddy from official apt repo.
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+  apt-get update
+  apt-get install -y caddy
+fi
+
 # Install any configs, restart services.
 /opt/wrolpi/repair.sh

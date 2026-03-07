@@ -22,7 +22,7 @@ systemctl stop wrolpi-controller.service || :
 systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
-systemctl stop nginx || :
+systemctl stop caddy || :
 systemctl stop renderd || :
 systemctl stop apache2 || :
 
@@ -49,16 +49,16 @@ git reset HEAD --hard
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Copy configs to system.
-cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
-[ -f /etc/nginx/conf.d/default.conf ] && rm /etc/nginx/conf.d/default.conf
-cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
+mkdir -p /etc/caddy
+cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
-# Generate nginx certificate for HTTPS.
+# Generate certificate for HTTPS.
 /opt/wrolpi/scripts/generate_certificates.sh
 
-# Start nginx quickly so user can access Controller from React UI
-systemctl start nginx || :
+# Start Caddy quickly so user can access Controller from React UI
+systemctl start caddy || :
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
@@ -68,12 +68,14 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi*.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.timer /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 systemctl enable wrolpi-controller.service
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
+systemctl enable wrolpi-cert-renew.timer
 
 # Repair Controller (offline-safe - no pip install)
 repair_controller() {
@@ -128,7 +130,6 @@ cp /opt/wrolpi/etc/raspberrypios/index.html \
   /opt/wrolpi/modules/map/leaflet.js \
   /opt/wrolpi/modules/map/leaflet.css /var/www/html/
 chmod 644 /var/www/html/*
-a2enmod ssl
 a2enmod headers
 
 systemctl enable renderd

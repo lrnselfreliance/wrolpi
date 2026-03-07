@@ -65,8 +65,6 @@ lua5.1
 mapnik-utils
 netcat-openbsd
 network-manager
-nginx-doc
-nginx-full
 nicstat
 nodejs
 npm

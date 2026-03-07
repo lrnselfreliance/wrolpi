@@ -26,7 +26,7 @@ CONTAINER_PREFIX = os.environ.get("COMPOSE_PROJECT_NAME", "wrolpi")
 # Containers that should not have a "View" button (non-HTTP services)
 NON_VIEWABLE_CONTAINERS = {"db", "postgres", "postgresql", "redis", "memcached"}
 
-# Containers that should use HTTPS (in addition to *_https suffix detection)
+# Containers that should use HTTPS
 HTTPS_CONTAINERS = {"web"}
 
 

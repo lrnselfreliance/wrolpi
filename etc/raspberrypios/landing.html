@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome to WROLPi</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e; color: #eee; min-height: 100vh;
+    display: flex; justify-content: center; padding: 2rem 1rem;
+  }
+  .container { max-width: 640px; width: 100%; }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; color: #fff; }
+  .subtitle { color: #aaa; margin-bottom: 2rem; }
+  .card {
+    background: #16213e; border-radius: 12px; padding: 1.5rem;
+    margin-bottom: 1.5rem; border: 1px solid #1a3a5c;
+  }
+  .card h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #4cc9f0; }
+  .card p { line-height: 1.6; color: #ccc; margin-bottom: 1rem; }
+  .btn {
+    display: inline-block; padding: 0.75rem 1.5rem; border-radius: 8px;
+    text-decoration: none; font-weight: 600; font-size: 1rem;
+    cursor: pointer; border: none; text-align: center;
+  }
+  .btn-primary { background: #4cc9f0; color: #1a1a2e; }
+  .btn-primary:hover { background: #3ab8df; }
+  .btn-continue { background: #2ecc71; color: #fff; width: 100%; font-size: 1.1rem; }
+  .btn-continue:hover { background: #27ae60; }
+  details { margin-bottom: 0.75rem; }
+  summary {
+    cursor: pointer; padding: 0.5rem 0; font-weight: 600;
+    color: #4cc9f0; list-style: none;
+  }
+  summary::before { content: "\25b6\00a0"; font-size: 0.8rem; }
+  details[open] > summary::before { content: "\25bc\00a0"; }
+  .instructions { padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7; }
+  .instructions ol { padding-left: 1.25rem; }
+  .instructions li { margin-bottom: 0.3rem; }
+  code { background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
+  #auto-redirect { display: none; text-align: center; color: #2ecc71; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Welcome to WROLPi</h1>
+  <p class="subtitle">Your offline library needs a one-time certificate setup.</p>
+
+  <div id="auto-redirect" class="card">
+    <p>Certificate already trusted! Redirecting...</p>
+  </div>
+
+  <div class="card">
+    <h2>Step 1: Download the Root CA Certificate</h2>
+    <p>Install this certificate on your device to trust all WROLPi HTTPS services permanently.</p>
+    <a class="btn btn-primary" href="/ca.crt" download="wrolpi-ca.crt">Download WROLPi Root CA</a>
+  </div>
+
+  <div class="card">
+    <h2>Step 2: Trust the Certificate</h2>
+    <p>Follow the instructions for your device:</p>
+
+    <details>
+      <summary>iOS / iPadOS</summary>
+      <div class="instructions">
+        <ol>
+          <li>Tap the download button above, then tap <strong>Allow</strong> when prompted.</li>
+          <li>Open <strong>Settings</strong> &rarr; <strong>General</strong> &rarr; <strong>VPN &amp; Device Management</strong>.</li>
+          <li>Tap <strong>WROLPi Root CA</strong> &rarr; <strong>Install</strong> &rarr; enter your passcode.</li>
+          <li>Go to <strong>Settings</strong> &rarr; <strong>General</strong> &rarr; <strong>About</strong> &rarr; <strong>Certificate Trust Settings</strong>.</li>
+          <li>Enable full trust for <strong>WROLPi Root CA</strong>.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>Android</summary>
+      <div class="instructions">
+        <ol>
+          <li>Tap the download button above.</li>
+          <li>Open <strong>Settings</strong> &rarr; <strong>Security &amp; privacy</strong> &rarr; <strong>More security settings</strong> &rarr; <strong>Encryption &amp; credentials</strong> &rarr; <strong>Install a certificate</strong> &rarr; <strong>CA certificate</strong>.</li>
+          <li>Select the downloaded <code>wrolpi-ca.crt</code> file and confirm.</li>
+        </ol>
+        <p style="margin-top:0.5rem;font-size:0.9em;color:#999;">Menu paths vary by manufacturer. If you can't find it, search for <em>"certificate"</em> in Settings.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>macOS</summary>
+      <div class="instructions">
+        <ol>
+          <li>Double-click the downloaded <code>wrolpi-ca.crt</code> file to open Keychain Access.</li>
+          <li>Add it to the <strong>System</strong> or <strong>login</strong> keychain.</li>
+          <li>Find <strong>WROLPi Root CA</strong> in the keychain, double-click it.</li>
+          <li>Expand <strong>Trust</strong>, set <em>When using this certificate</em> to <strong>Always Trust</strong>.</li>
+          <li>Close and enter your password to confirm.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>Windows</summary>
+      <div class="instructions">
+        <ol>
+          <li>Double-click the downloaded <code>wrolpi-ca.crt</code> file.</li>
+          <li>Click <strong>Install Certificate</strong> &rarr; <strong>Local Machine</strong> &rarr; <strong>Next</strong>.</li>
+          <li>Select <strong>Place all certificates in the following store</strong> &rarr; <strong>Browse</strong> &rarr; <strong>Trusted Root Certification Authorities</strong>.</li>
+          <li>Click <strong>Finish</strong>.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details>
+      <summary>Linux (Debian / Ubuntu)</summary>
+      <div class="instructions">
+        <ol>
+          <li>Copy the certificate (the <code>.crt</code> extension is required): <code>sudo cp wrolpi-ca.crt /usr/local/share/ca-certificates/</code></li>
+          <li>Update the trust store: <code>sudo update-ca-certificates</code></li>
+          <li>Restart your browser. Chromium-based browsers (Chrome, Edge) will use the system store automatically.</li>
+        </ol>
+        <p style="margin-top:0.5rem;font-size:0.9em;color:#999;">Firefox on Linux does <em>not</em> use the system trust store by default &mdash; see the Firefox section below.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Firefox (all platforms)</summary>
+      <div class="instructions">
+        <p style="margin-bottom:0.5rem;">Since Firefox 120, Firefox <strong>automatically trusts</strong> root certificates installed in the OS certificate store on <strong>Windows, macOS, and Android</strong>. If you've already installed the certificate above, Firefox should work with no extra steps on those platforms.</p>
+        <p style="margin-bottom:0.5rem;">On <strong>Linux</strong> (or if auto-trust is disabled), import manually:</p>
+        <ol>
+          <li>Open Firefox, go to <strong>Settings</strong> &rarr; <strong>Privacy &amp; Security</strong>.</li>
+          <li>Scroll to <strong>Certificates</strong> &rarr; click <strong>View Certificates</strong>.</li>
+          <li>In the <strong>Authorities</strong> tab, click <strong>Import</strong>.</li>
+          <li>Select the downloaded <code>wrolpi-ca.crt</code> file.</li>
+          <li>Check <strong>Trust this CA to identify websites</strong> &rarr; <strong>OK</strong>.</li>
+        </ol>
+        <p style="margin-top:0.5rem;font-size:0.9em;color:#999;">Alternatively, enable auto-trust: go to <code>about:config</code> and set <code>security.enterprise_roots.enabled</code> to <code>true</code>.</p>
+      </div>
+    </details>
+  </div>
+
+  <div class="card" style="text-align:center;">
+    <a class="btn btn-continue" id="continue-btn" href="#">Continue to WROLPi</a>
+  </div>
+</div>
+
+<script>
+(function() {
+  var host = window.location.hostname;
+  var port = window.location.port;
+  // Docker maps HTTP 8080 → HTTPS 8443; native uses default 443.
+  var httpsPort = (port === '8080') ? ':8443' : '';
+  var httpsBase = 'https://' + host + httpsPort;
+
+  document.getElementById('continue-btn').href = httpsBase;
+
+  // Auto-redirect if cert is already trusted.
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, 3000);
+  fetch(httpsBase + '/api/echo', { signal: controller.signal })
+    .then(function(r) {
+      if (r.ok) {
+        document.getElementById('auto-redirect').style.display = 'block';
+        setTimeout(function() { window.location.href = httpsBase; }, 1500);
+      }
+    })
+    .catch(function() {})
+    .finally(function() { clearTimeout(timeout); });
+})();
+</script>
+</body>
+</html>

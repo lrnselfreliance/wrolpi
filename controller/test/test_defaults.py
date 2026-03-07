@@ -66,7 +66,7 @@ class TestManagedServicesConfig:
          {"systemd_name": "wrolpi-api-dev", "port": 8081, "viewable": True, "show_only_when_running": True}),
         ("wrolpi-app", {"port": 3000, "viewable": False}),
         ("wrolpi-app-dev", {"port": 3000, "viewable": False, "show_only_when_running": True}),
-        ("nginx", {"port": 80}),
+        ("caddy", {"port": 80}),
         ("postgresql", {"port": 5432, "viewable": False}),
         ("wrolpi-upgrade", {"port": None, "viewable": False, "show_only_when_running": True}),
     ])

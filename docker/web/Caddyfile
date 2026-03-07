@@ -1,0 +1,119 @@
+# Caddy config for WROLPi services (Docker).
+
+{
+	# No ACME - WROLPi is designed for offline use.
+	auto_https disable_redirects
+}
+
+:80 {
+	handle / {
+		root * /var/www
+		rewrite * /landing.html
+		file_server
+	}
+	handle /ca.crt {
+		root * /opt/media/config/ssl
+		header Content-Type "application/x-x509-ca-cert"
+		header Content-Disposition "attachment; filename=\"wrolpi-ca.crt\""
+		file_server
+	}
+	handle {
+		redir https://{host}:8443{uri} permanent
+	}
+}
+
+:443 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+
+	handle /favicon.ico {
+		root * /etc/caddy
+		rewrite * /favicon.ico
+		file_server
+	}
+
+	handle /apple-touch-icon.png {
+		root * /etc/caddy
+		rewrite * /icon.png
+		file_server
+	}
+
+	# WebSocket for React dev server.
+	handle /ws {
+		reverse_proxy app:3000
+	}
+
+	# Controller - system management API and UI.
+	handle_path /controller/* {
+		reverse_proxy controller:8087
+	}
+	handle /controller {
+		redir * /controller/ 301
+	}
+
+	# Main API.
+	handle /api/* {
+		reverse_proxy api:8081
+	}
+
+	# API docs.
+	handle /docs/* {
+		reverse_proxy api:8081
+	}
+	handle /docs {
+		redir * /docs/ 301
+	}
+
+	# Static media files with directory browsing.
+	handle_path /media/* {
+		root * /opt/media
+		file_server browse
+	}
+	handle /media {
+		redir * /media/ 301
+	}
+
+	# Downloads with Content-Disposition header.
+	handle_path /download/* {
+		root * /opt/media
+		header Content-Disposition "attachment"
+		file_server browse
+	}
+	handle /download {
+		redir * /download/ 301
+	}
+
+	# React app with fallback to Controller.
+	handle {
+		reverse_proxy app:3000 {
+			@bad status 502 503 504
+			handle_response @bad {
+				header Location /controller/?fallback=true
+				respond "" 302
+			}
+		}
+	}
+}
+
+# Kiwix HTTPS proxy (replaces zim_https container).
+:8085 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy zim:80
+}
+
+# Help HTTPS proxy (replaces help_https container).
+:8086 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy help:80
+}
+
+# Map HTTPS proxy (replaces map_https container).
+:8084 {
+	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
+	header ?Access-Control-Allow-Origin "*"
+	header ?Access-Control-Allow-Methods "GET, OPTIONS"
+	reverse_proxy map:80
+}

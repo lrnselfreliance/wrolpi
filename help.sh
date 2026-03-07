@@ -238,16 +238,53 @@ else
   echo "FAILED: WROLPi app did not respond with ebook interface"
 fi
 
-if netstat -ant | grep LISTEN | grep 0.0.0.0:80 >/dev/null; then
-  echo "OK: Port 80 is occupied"
+echo
+# Caddy
+
+if command -v caddy &>/dev/null; then
+  echo "OK: Caddy is installed ($(caddy version 2>/dev/null | head -1))"
 else
-  echo "FAILED: Port 80 is not occupied"
+  echo "FAILED: Caddy is not installed"
 fi
 
-if systemctl list-unit-files "*nginx*" >/dev/null; then
-  echo "OK: nginx systemd exists"
+if systemctl list-unit-files "*caddy*" >/dev/null 2>&1; then
+  echo "OK: Caddy systemd exists"
+  if systemctl status caddy >/dev/null 2>&1; then
+    echo "OK: Caddy service is running"
+  else
+    echo "FAILED: Caddy service is not running"
+  fi
 else
-  echo "FAILED: nginx does not exist"
+  echo "FAILED: Caddy systemd does not exist"
+fi
+
+check_file /etc/caddy/Caddyfile "Caddyfile exists" "Caddyfile does not exist at /etc/caddy/Caddyfile"
+check_file /etc/ssl/wrolpi/cert.crt "TLS certificate exists" "TLS certificate does not exist at /etc/ssl/wrolpi/cert.crt"
+check_file /etc/ssl/wrolpi/cert.key "TLS key exists" "TLS key does not exist at /etc/ssl/wrolpi/cert.key"
+check_file ${MEDIA_DIRECTORY}/config/ssl/ca.crt "Root CA certificate exists" "Root CA certificate does not exist at ${MEDIA_DIRECTORY}/config/ssl/ca.crt"
+check_file ${MEDIA_DIRECTORY}/config/ssl/ca.key "Root CA key exists" "Root CA key does not exist at ${MEDIA_DIRECTORY}/config/ssl/ca.key"
+check_file /var/www/landing.html "Landing page exists" "Landing page does not exist at /var/www/landing.html"
+
+if [ -f ${MEDIA_DIRECTORY}/config/ssl/ca.crt ] && [ -f /etc/ssl/wrolpi/cert.crt ]; then
+  if openssl verify -CAfile ${MEDIA_DIRECTORY}/config/ssl/ca.crt /etc/ssl/wrolpi/cert.crt >/dev/null 2>&1; then
+    echo "OK: Leaf certificate is signed by root CA"
+  else
+    echo "FAILED: Leaf certificate is NOT signed by root CA (regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  fi
+fi
+
+for port in 80 443 8084 8085 8086; do
+  if netstat -ant | grep LISTEN | grep "0.0.0.0:${port}" >/dev/null; then
+    echo "OK: Caddy port ${port} is occupied"
+  else
+    echo "FAILED: Caddy port ${port} is not occupied"
+  fi
+done
+
+if curl -k -s https://0.0.0.0/ --max-time 5 | grep -i wrolpi >/dev/null; then
+  echo "OK: Caddy HTTPS proxy responded on :443"
+else
+  echo "FAILED: Caddy HTTPS proxy did not respond on :443"
 fi
 
 echo
@@ -314,10 +351,10 @@ else
   echo "FAILED: Media directory is not a mounted drive.  (This is fine if you don't have an external drive.)"
 fi
 
-if curl -k -s https://0.0.0.0/media/ --max-time 5 | grep "Index of /media/" >/dev/null; then
-  echo "OK: Media directory files are served by nginx"
+if curl -k -s https://0.0.0.0/media/ --max-time 5 | grep -i "media" >/dev/null; then
+  echo "OK: Media directory files are served by caddy"
   if curl -k -s -I https://0.0.0.0/media/config/wrolpi.yaml --max-time 5 | grep '200 OK' >/dev/null; then
-    echo "OK: Config can be fetched from nginx"
+    echo "OK: Config can be fetched from caddy"
   else
     echo "FAILED: Media directory files are not being served"
   fi
@@ -325,10 +362,10 @@ else
   echo "FAILED: Media directory files are not being served"
 fi
 
-if curl -k -s https://0.0.0.0/download/ --max-time 5 | grep "Index of /download/" >/dev/null; then
-  echo "OK: Media download directory files are served by nginx"
+if curl -k -s https://0.0.0.0/download/ --max-time 5 | grep -i "download" >/dev/null; then
+  echo "OK: Media download directory files are served by caddy"
   if curl -k -s -I https://0.0.0.0/download/config/wrolpi.yaml --max-time 5 | grep '200 OK' >/dev/null; then
-    echo "OK: Config can be downloaded from nginx"
+    echo "OK: Config can be downloaded from caddy"
   else
     echo "FAILED: Media download directory files are not being served"
   fi

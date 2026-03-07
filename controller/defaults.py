@@ -102,8 +102,8 @@ DEFAULT_CONFIG = {
             "description": "PostgreSQL database",
         },
         {
-            "name": "nginx",
-            "systemd_name": "nginx",
+            "name": "caddy",
+            "systemd_name": "caddy",
             "port": 80,
             "viewable": True,
             "use_https": False,

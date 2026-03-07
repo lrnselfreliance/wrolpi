@@ -3,20 +3,22 @@
 
 set -x
 
-# Generate nginx certificate for HTTPS if it doesn't exist.
+# Generate certificate for HTTPS.
 /opt/wrolpi/scripts/generate_certificates.sh
 
-# Ensure nginx config files are in place (safeguard in case build didn't complete this).
-if [ ! -f /etc/nginx/conf.d/wrolpi.conf ]; then
-    echo "wrolpi.conf missing, copying from /opt/wrolpi..."
-    cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/conf.d/wrolpi.conf
-fi
-# Remove default site if it exists (WROLPi nginx.conf doesn't use sites-enabled).
-rm -f /etc/nginx/sites-enabled/default
+# Copy landing page for HTTP certificate download.
+cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
-# Enable and start nginx now that certificates exist.
-systemctl enable nginx
-systemctl start nginx || echo "Warning: nginx failed to start"
+# Ensure Caddy config is in place (safeguard in case build didn't complete this).
+if [ ! -f /etc/caddy/Caddyfile ]; then
+    echo "Caddyfile missing, copying from /opt/wrolpi..."
+    mkdir -p /etc/caddy
+    cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+fi
+
+# Enable and start Caddy now that certificates exist.
+systemctl enable caddy
+systemctl start caddy || echo "Warning: caddy failed to start"
 
 # Copy skeleton files to first users home directory.
 USER_HOME=$(getent passwd 1000 | cut -d: -f6)

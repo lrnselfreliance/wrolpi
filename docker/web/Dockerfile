@@ -1,11 +1,13 @@
-FROM nginx:latest
+FROM caddy:latest
 
-# Create a self-signed cert and key pair for HTTPS.
-RUN openssl genrsa -out /cert.key 2048
-RUN openssl req -new -x509 -nodes -key /cert.key -out /cert.crt -days 3650  \
-    -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=wrolpi.local"
-RUN chmod 777 /cert.key /cert.crt
+RUN apk add --no-cache openssl bash
 
-RUN rm /etc/nginx/conf.d/default.conf
-COPY docker/web/nginx.dev.conf /etc/nginx/nginx.conf
-COPY docker/web/wrolpi.dev.conf /etc/nginx/conf.d/wrolpi.conf
+# Copy scripts and static files.
+COPY docker/web/Caddyfile /etc/caddy/Caddyfile
+COPY docker/web/entrypoint.sh /entrypoint.sh
+COPY scripts/generate_certificates.sh /opt/wrolpi/scripts/generate_certificates.sh
+COPY etc/raspberrypios/landing.html /var/www/landing.html
+
+RUN chmod +x /entrypoint.sh /opt/wrolpi/scripts/generate_certificates.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -645,3 +645,108 @@ async def test_tags_directory_disabled(test_session, test_directory, tag_factory
     # Now the tags directory should exist with the linked file.
     assert tags_dir.is_dir(), 'Tags directory should exist after enabling setting'
     assert (tags_dir / tag.name / 'video.mp4').is_file(), 'Video should be linked in tags directory'
+
+
+@pytest.mark.asyncio
+async def test_get_recent_tags(test_session, make_files_structure, tag_factory, video_bytes, image_bytes_factory,
+                               refresh_files):
+    """Recent tags are returned in order of most recently used."""
+    from datetime import timedelta
+    from wrolpi.dates import now as dates_now
+
+    make_files_structure({'a.mp4': video_bytes, 'b.mp4': video_bytes, 'c.mp4': video_bytes})
+    await refresh_files()
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+
+    tag1 = await tag_factory('alpha')
+    tag2 = await tag_factory('beta')
+    tag3 = await tag_factory('gamma')
+
+    base = dates_now()
+    tf1 = file_groups[0].add_tag(test_session, tag1.id)
+    tf1.created_at = base - timedelta(hours=3)
+    tf2 = file_groups[1].add_tag(test_session, tag2.id)
+    tf2.created_at = base - timedelta(hours=1)
+    tf3 = file_groups[2].add_tag(test_session, tag3.id)
+    tf3.created_at = base
+    test_session.commit()
+
+    result = tags.get_recent_tags(limit=5)
+    assert result == ['gamma', 'beta', 'alpha']
+
+    # Limit is respected.
+    result = tags.get_recent_tags(limit=2)
+    assert result == ['gamma', 'beta']
+
+
+@pytest.mark.asyncio
+async def test_get_cooccurring_tags(test_session, make_files_structure, tag_factory, video_bytes, refresh_files):
+    """Tags that frequently co-occur with a given tag are returned."""
+    make_files_structure({'a.mp4': video_bytes, 'b.mp4': video_bytes})
+    await refresh_files()
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+
+    tag1 = await tag_factory('alpha')
+    tag2 = await tag_factory('beta')
+    tag3 = await tag_factory('gamma')
+
+    # Both files tagged with alpha and beta.
+    file_groups[0].add_tag(test_session, tag1.id)
+    file_groups[0].add_tag(test_session, tag2.id)
+    file_groups[0].add_tag(test_session, tag3.id)
+    file_groups[1].add_tag(test_session, tag1.id)
+    file_groups[1].add_tag(test_session, tag2.id)
+    test_session.commit()
+
+    result = tags.get_cooccurring_tags('alpha')
+    # beta co-occurs with alpha twice, gamma once.
+    assert result == ['beta', 'gamma']
+
+
+@pytest.mark.asyncio
+async def test_get_cooccurring_tags_empty(test_session, tag_factory):
+    """No co-occurrences returns an empty list."""
+    await tag_factory('lonely')
+    result = tags.get_cooccurring_tags('lonely')
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_recent_tags_api(async_client, test_session, make_files_structure, tag_factory, video_bytes,
+                               refresh_files):
+    """The recent tags API endpoint returns tag names."""
+    make_files_structure({'a.mp4': video_bytes})
+    await refresh_files()
+    fg = test_session.query(FileGroup).one()
+    tag1 = await tag_factory('alpha')
+    fg.add_tag(test_session, tag1.id)
+    test_session.commit()
+
+    _, response = await async_client.get('/api/tag/recent')
+    assert response.status == 200
+    body = response.json
+    assert 'alpha' in body['tag_names']
+
+
+@pytest.mark.asyncio
+async def test_cooccurring_tags_api(async_client, test_session, make_files_structure, tag_factory, video_bytes,
+                                    refresh_files):
+    """The co-occurring tags API endpoint returns tag names."""
+    make_files_structure({'a.mp4': video_bytes})
+    await refresh_files()
+    fg = test_session.query(FileGroup).one()
+    tag1 = await tag_factory('alpha')
+    tag2 = await tag_factory('beta')
+    fg.add_tag(test_session, tag1.id)
+    fg.add_tag(test_session, tag2.id)
+    test_session.commit()
+
+    _, response = await async_client.get('/api/tag/cooccurring/alpha')
+    assert response.status == 200
+    body = response.json
+    assert body['tag_names'] == ['beta']
+
+    # Unknown tag returns empty.
+    _, response = await async_client.get('/api/tag/cooccurring/nonexistent')
+    assert response.status == 200
+    assert response.json['tag_names'] == []

@@ -528,6 +528,24 @@ async def get_tags_request(_: Request):
     return json_response(dict(tags=tags_))
 
 
+@api_bp.get('/tag/recent')
+@openapi.definition(
+    description='Get the most recently used tags',
+)
+async def get_recent_tags_request(_: Request):
+    tag_names = tags.get_recent_tags()
+    return json_response(dict(tag_names=tag_names))
+
+
+@api_bp.get('/tag/cooccurring/<tag_name:str>')
+@openapi.definition(
+    description='Get tags that frequently co-occur with the given tag',
+)
+async def get_cooccurring_tags_request(_: Request, tag_name: str):
+    tag_names = tags.get_cooccurring_tags(tag_name)
+    return json_response(dict(tag_names=tag_names))
+
+
 @api_bp.post('/tag', name='tag_crate')
 @api_bp.post('/tag/<tag_id:int>', name='tag_update')
 @openapi.definition(

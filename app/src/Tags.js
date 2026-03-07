@@ -1,6 +1,6 @@
 import React, {useEffect} from "react";
-import {ApiDownError, deleteTag, getTags, saveTag} from "./api";
-import {Dimmer, Divider, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
+import {ApiDownError, deleteTag, getCooccurringTags, getRecentTags, getTags, saveTag} from "./api";
+import {Dimmer, Divider, Grid, GridColumn, GridRow, Input, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {
     APIButton,
     contrastingColor,
@@ -410,11 +410,31 @@ export function AddTagsButton({
     const [open, setOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
     const [localTags, setLocalTags] = React.useState(selectedTagNames);
+    const [filterText, setFilterText] = React.useState('');
+    const [frequentTags, setFrequentTags] = React.useState([]);
+    const [frequentTagsLabel, setFrequentTagsLabel] = React.useState('Recent Tags');
+    const [hasSelectedTag, setHasSelectedTag] = React.useState(false);
+    const filterInputRef = React.useRef(null);
 
     // Sync localTags with selectedTagNames when it changes from parent
     React.useEffect(() => {
         setLocalTags(selectedTagNames);
     }, [selectedTagNames]);
+
+    React.useEffect(() => {
+        if (open) {
+            setFilterText('');
+            setHasSelectedTag(false);
+            setFrequentTagsLabel('Recent Tags');
+            getRecentTags().then(names => setFrequentTags(names));
+            const timeout = setTimeout(() => {
+                if (filterInputRef.current && window.innerWidth >= 700) {
+                    filterInputRef.current.focus();
+                }
+            }, 100);
+            return () => clearTimeout(timeout);
+        }
+    }, [open]);
 
     const active = anyTag || (selectedTagNames && selectedTagNames.length > 0);
 
@@ -433,8 +453,18 @@ export function AddTagsButton({
                 return;
             }
             setLocalTags(newTags);
+            setFilterText('');
             onAdd(name);
             onChange(newTags, null);
+            if (!hasSelectedTag && newTags.length === 1) {
+                setHasSelectedTag(true);
+                getCooccurringTags(name).then(coTags => {
+                    if (coTags && coTags.length > 0) {
+                        setFrequentTags(coTags);
+                        setFrequentTagsLabel('Frequent Tags');
+                    }
+                });
+            }
             if (closeAfterLimit && newTags && limit && newTags.length >= limit) {
                 setOpen(false);
             }
@@ -475,8 +505,12 @@ export function AddTagsButton({
 
     const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
     const unusedTags = _.difference(tagNames, localTags);
-    const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
+    const filteredUnusedTags = filterText
+        ? unusedTags.filter(name => name.toLowerCase().includes(filterText.toLowerCase()))
+        : unusedTags;
+    const unusedTagsGroup = <TagsGroup tagNames={filteredUnusedTags} onClick={addTag}/>;
     const emptySelectedTags = limit === 1 ? 'Add only one tag below' : 'Add one or more tags below';
+    const visibleFrequentTags = frequentTags.filter(name => !(localTags || []).includes(name));
 
     return <>
         <Button
@@ -496,7 +530,23 @@ export function AddTagsButton({
 
                 {localTags && localTags.length > 0 ? selectedTagsGroup : emptySelectedTags}
 
+                {visibleFrequentTags.length > 0 && <>
+                    <Divider/>
+                    <Header as='h5'>{frequentTagsLabel}</Header>
+                    <TagsGroup tagNames={visibleFrequentTags} onClick={addTag}/>
+                </>}
+
                 <Divider/>
+
+                <Input
+                    ref={filterInputRef}
+                    placeholder='Filter tags...'
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    icon='search'
+                    fluid
+                    style={{marginBottom: '0.5em'}}
+                />
 
                 {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
             </Modal.Content>

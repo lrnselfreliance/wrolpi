@@ -698,6 +698,46 @@ def get_tags() -> List[dict]:
     return tags
 
 
+def get_recent_tags(limit: int = 5) -> List[str]:
+    with get_db_curs() as curs:
+        curs.execute('''
+                     SELECT t.name FROM (
+                         SELECT tag_id, MAX(created_at) AS latest FROM (
+                             SELECT tag_id, created_at FROM tag_file
+                             UNION ALL
+                             SELECT tag_id, created_at FROM tag_zim
+                         ) AS combined
+                         GROUP BY tag_id ORDER BY latest DESC LIMIT %(limit)s
+                     ) AS recent
+                     JOIN tag t ON t.id = recent.tag_id ORDER BY recent.latest DESC
+                     ''', dict(limit=limit))
+        return [row['name'] for row in curs.fetchall()]
+
+
+def get_cooccurring_tags(tag_name: str, limit: int = 5) -> List[str]:
+    with get_db_curs() as curs:
+        curs.execute('''
+                     WITH target_tag AS (SELECT id FROM tag WHERE name = %(tag_name)s),
+                     file_cooccur AS (
+                         SELECT tf.tag_id, COUNT(*) AS cnt FROM tag_file tf
+                         WHERE tf.file_group_id IN (SELECT file_group_id FROM tag_file WHERE tag_id = (SELECT id FROM target_tag))
+                         AND tf.tag_id != (SELECT id FROM target_tag) GROUP BY tf.tag_id
+                     ),
+                     zim_cooccur AS (
+                         SELECT tz.tag_id, COUNT(*) AS cnt FROM tag_zim tz
+                         WHERE (tz.zim_id, tz.zim_entry) IN (SELECT zim_id, zim_entry FROM tag_zim WHERE tag_id = (SELECT id FROM target_tag))
+                         AND tz.tag_id != (SELECT id FROM target_tag) GROUP BY tz.tag_id
+                     ),
+                     combined AS (
+                         SELECT tag_id, SUM(cnt) AS total FROM (
+                             SELECT tag_id, cnt FROM file_cooccur UNION ALL SELECT tag_id, cnt FROM zim_cooccur
+                         ) AS all_cooccur GROUP BY tag_id
+                     )
+                     SELECT t.name FROM combined c JOIN tag t ON t.id = c.tag_id ORDER BY c.total DESC LIMIT %(limit)s
+                     ''', dict(tag_name=tag_name, limit=limit))
+        return [row['name'] for row in curs.fetchall()]
+
+
 async def upsert_tag(session: Session, name: str, color: str, tag_id: int = None) -> Tag:
     if tag_id:
         tag = Tag.find_by_id(session, tag_id)

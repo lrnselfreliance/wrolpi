@@ -1498,6 +1498,26 @@ export async function getTags() {
     return response
 }
 
+export async function getRecentTags() {
+    const uri = `${API_URI}/tag/recent`;
+    const response = await apiGet(uri);
+    if (response.ok) {
+        const body = await response.json();
+        return body['tag_names'] || [];
+    }
+    return [];
+}
+
+export async function getCooccurringTags(tagName) {
+    const uri = `${API_URI}/tag/cooccurring/${encodeURIComponent(tagName)}`;
+    const response = await apiGet(uri);
+    if (response.ok) {
+        const body = await response.json();
+        return body['tag_names'] || [];
+    }
+    return [];
+}
+
 export async function tagFileGroup(fileGroup, name) {
     const body = {tag_name: name};
 

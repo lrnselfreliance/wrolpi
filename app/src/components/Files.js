@@ -468,6 +468,7 @@ export function TagsQuerySelector({onChange, showAny = true}) {
                          selectedTagNames={activeTags}
                          anyTag={anyTag}
                          onChange={localOnChange}
+                         filterByOverlap={true}
                          style={{marginLeft: '0.3em', marginTop: '0.3em'}}
     />
 }

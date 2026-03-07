@@ -3,7 +3,7 @@ import contextlib
 import pathlib
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 
 import cachetools
 from cachetools.keys import hashkey
@@ -714,27 +714,44 @@ def get_recent_tags(limit: int = 5) -> List[str]:
         return [row['name'] for row in curs.fetchall()]
 
 
-def get_cooccurring_tags(tag_name: str, limit: int = 5) -> List[str]:
+def get_overlapping_tags(tag_names: Union[str, List[str]], limit: int = 5) -> List[str]:
+    if isinstance(tag_names, str):
+        tag_names = [tag_names]
+
+    limit_clause = 'LIMIT %(limit)s' if limit is not None else ''
+
     with get_db_curs() as curs:
-        curs.execute('''
-                     WITH target_tag AS (SELECT id FROM tag WHERE name = %(tag_name)s),
-                     file_cooccur AS (
-                         SELECT tf.tag_id, COUNT(*) AS cnt FROM tag_file tf
-                         WHERE tf.file_group_id IN (SELECT file_group_id FROM tag_file WHERE tag_id = (SELECT id FROM target_tag))
-                         AND tf.tag_id != (SELECT id FROM target_tag) GROUP BY tf.tag_id
+        curs.execute(f'''
+                     WITH target_tags AS (SELECT id FROM tag WHERE name = ANY(%(tag_names)s::TEXT[])),
+                     file_matching AS (
+                         SELECT tf.file_group_id FROM tag_file tf
+                         WHERE tf.tag_id IN (SELECT id FROM target_tags)
+                         GROUP BY tf.file_group_id
+                         HAVING COUNT(DISTINCT tf.tag_id) = %(tag_count)s
                      ),
-                     zim_cooccur AS (
+                     zim_matching AS (
+                         SELECT tz.zim_id, tz.zim_entry FROM tag_zim tz
+                         WHERE tz.tag_id IN (SELECT id FROM target_tags)
+                         GROUP BY tz.zim_id, tz.zim_entry
+                         HAVING COUNT(DISTINCT tz.tag_id) = %(tag_count)s
+                     ),
+                     file_overlap AS (
+                         SELECT tf.tag_id, COUNT(*) AS cnt FROM tag_file tf
+                         WHERE tf.file_group_id IN (SELECT file_group_id FROM file_matching)
+                         AND tf.tag_id NOT IN (SELECT id FROM target_tags) GROUP BY tf.tag_id
+                     ),
+                     zim_overlap AS (
                          SELECT tz.tag_id, COUNT(*) AS cnt FROM tag_zim tz
-                         WHERE (tz.zim_id, tz.zim_entry) IN (SELECT zim_id, zim_entry FROM tag_zim WHERE tag_id = (SELECT id FROM target_tag))
-                         AND tz.tag_id != (SELECT id FROM target_tag) GROUP BY tz.tag_id
+                         WHERE (tz.zim_id, tz.zim_entry) IN (SELECT zim_id, zim_entry FROM zim_matching)
+                         AND tz.tag_id NOT IN (SELECT id FROM target_tags) GROUP BY tz.tag_id
                      ),
                      combined AS (
                          SELECT tag_id, SUM(cnt) AS total FROM (
-                             SELECT tag_id, cnt FROM file_cooccur UNION ALL SELECT tag_id, cnt FROM zim_cooccur
-                         ) AS all_cooccur GROUP BY tag_id
+                             SELECT tag_id, cnt FROM file_overlap UNION ALL SELECT tag_id, cnt FROM zim_overlap
+                         ) AS all_overlap GROUP BY tag_id
                      )
-                     SELECT t.name FROM combined c JOIN tag t ON t.id = c.tag_id ORDER BY c.total DESC LIMIT %(limit)s
-                     ''', dict(tag_name=tag_name, limit=limit))
+                     SELECT t.name FROM combined c JOIN tag t ON t.id = c.tag_id ORDER BY c.total DESC {limit_clause}
+                     ''', dict(tag_names=tag_names, tag_count=len(tag_names), limit=limit))
         return [row['name'] for row in curs.fetchall()]
 
 

@@ -1,7 +1,6 @@
 import asyncio
 import pathlib
 import re
-import urllib.parse
 from http import HTTPStatus
 
 import vininfo.exceptions
@@ -524,9 +523,15 @@ async def feed(request: Request, query: schema.EventsRequest):
 @openapi.definition(
     description='Get a list of all Tags',
 )
-async def get_tags_request(_: Request):
+async def get_tags_request(request: Request):
     tags_ = tags.get_tags()
-    return json_response(dict(tags=tags_))
+    tag_names = request.args.getlist('tag_names')
+    result = dict(tags=tags_)
+    if tag_names:
+        limit = request.args.get('limit')
+        limit = int(limit) if limit is not None else None
+        result['overlapping_tag_names'] = tags.get_overlapping_tags(tag_names, limit=limit)
+    return json_response(result)
 
 
 @api_bp.get('/tag/recent')
@@ -535,16 +540,6 @@ async def get_tags_request(_: Request):
 )
 async def get_recent_tags_request(_: Request):
     tag_names = tags.get_recent_tags()
-    return json_response(dict(tag_names=tag_names))
-
-
-@api_bp.get('/tag/cooccurring/<tag_name:str>')
-@openapi.definition(
-    description='Get tags that frequently co-occur with the given tag',
-)
-async def get_cooccurring_tags_request(_: Request, tag_name: str):
-    tag_name = urllib.parse.unquote(tag_name)
-    tag_names = tags.get_cooccurring_tags(tag_name)
     return json_response(dict(tag_names=tag_names))
 
 

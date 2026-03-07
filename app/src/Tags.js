@@ -1,5 +1,5 @@
 import React, {useEffect} from "react";
-import {ApiDownError, deleteTag, getCooccurringTags, getRecentTags, getTags, saveTag} from "./api";
+import {ApiDownError, deleteTag, getRecentTags, getTags, saveTag} from "./api";
 import {Dimmer, Divider, Grid, GridColumn, GridRow, Input, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {
     APIButton,
@@ -49,7 +49,8 @@ export function useTags() {
             return;
         }
         try {
-            const t = await getTags();
+            const body = await getTags();
+            const t = body['tags'];
             setTags(t);
             setTagNames(t.map(i => i['name']));
         } catch (e) {
@@ -403,6 +404,7 @@ export function AddTagsButton({
                                   closeAfterLimit = true,
                                   limit = null,
                                   disabled = false,
+                                  filterByOverlap = false,
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
 
@@ -414,6 +416,7 @@ export function AddTagsButton({
     const [frequentTags, setFrequentTags] = React.useState([]);
     const [frequentTagsLabel, setFrequentTagsLabel] = React.useState('Recent Tags');
     const [hasSelectedTag, setHasSelectedTag] = React.useState(false);
+    const [overlappingTags, setOverlappingTags] = React.useState(null);
     const filterInputRef = React.useRef(null);
 
     // Sync localTags with selectedTagNames when it changes from parent
@@ -421,26 +424,40 @@ export function AddTagsButton({
         setLocalTags(selectedTagNames);
     }, [selectedTagNames]);
 
+    const fetchOverlappingFilter = React.useCallback((currentTags) => {
+        if (filterByOverlap && currentTags && currentTags.length > 0) {
+            getTags(currentTags).then(body => {
+                setOverlappingTags(body['overlapping_tag_names'] || []);
+            });
+        } else {
+            setOverlappingTags(null);
+        }
+    }, [filterByOverlap]);
+
     React.useEffect(() => {
         if (open) {
             setFilterText('');
             setHasSelectedTag(false);
-            if (selectedTagNames && selectedTagNames.length === 1) {
-                setHasSelectedTag(true);
-                getCooccurringTags(selectedTagNames[0]).then(coTags => {
-                    if (coTags && coTags.length > 0) {
-                        setFrequentTags(coTags);
-                        setFrequentTagsLabel('Frequent Tags');
-                    } else {
-                        setFrequentTags([]);
-                        setFrequentTagsLabel('Recent Tags');
-                    }
-                });
-            } else if (!selectedTagNames || selectedTagNames.length === 0) {
-                setFrequentTagsLabel('Recent Tags');
-                getRecentTags().then(names => setFrequentTags(names));
-            } else {
-                setFrequentTags([]);
+            fetchOverlappingFilter(selectedTagNames);
+            if (!filterByOverlap) {
+                if (selectedTagNames && selectedTagNames.length === 1) {
+                    setHasSelectedTag(true);
+                    getTags(selectedTagNames[0]).then(body => {
+                        const coTags = body['overlapping_tag_names'] || [];
+                        if (coTags.length > 0) {
+                            setFrequentTags(coTags);
+                            setFrequentTagsLabel('Frequent Tags');
+                        } else {
+                            setFrequentTags([]);
+                            setFrequentTagsLabel('Recent Tags');
+                        }
+                    });
+                } else if (!selectedTagNames || selectedTagNames.length === 0) {
+                    setFrequentTagsLabel('Recent Tags');
+                    getRecentTags().then(names => setFrequentTags(names));
+                } else {
+                    setFrequentTags([]);
+                }
             }
             const timeout = setTimeout(() => {
                 if (filterInputRef.current && window.innerWidth >= 700) {
@@ -471,10 +488,12 @@ export function AddTagsButton({
             setFilterText('');
             onAdd(name);
             onChange(newTags, null);
-            if (!hasSelectedTag) {
+            fetchOverlappingFilter(newTags);
+            if (!filterByOverlap && !hasSelectedTag) {
                 setHasSelectedTag(true);
-                getCooccurringTags(name).then(coTags => {
-                    if (coTags && coTags.length > 0) {
+                getTags(name).then(body => {
+                    const coTags = body['overlapping_tag_names'] || [];
+                    if (coTags.length > 0) {
                         setFrequentTags(coTags);
                         setFrequentTagsLabel('Frequent Tags');
                     } else {
@@ -497,6 +516,7 @@ export function AddTagsButton({
             setLocalTags(newTags)
             onRemove(name);
             onChange(newTags, null);
+            fetchOverlappingFilter(newTags);
         } finally {
             setLoading(false);
         }
@@ -521,13 +541,17 @@ export function AddTagsButton({
     }
 
     const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
-    const unusedTags = _.difference(tagNames, localTags);
+    let unusedTags = _.difference(tagNames, localTags);
+    if (overlappingTags !== null) {
+        unusedTags = unusedTags.filter(name => overlappingTags.includes(name));
+    }
     const filteredUnusedTags = filterText
         ? unusedTags.filter(name => name.toLowerCase().includes(filterText.toLowerCase()))
         : unusedTags;
     const unusedTagsGroup = <TagsGroup tagNames={filteredUnusedTags} onClick={addTag}/>;
     const emptySelectedTags = limit === 1 ? 'Add only one tag below' : 'Add one or more tags below';
     const visibleFrequentTags = frequentTags.filter(name => !(localTags || []).includes(name));
+    const hideFrequentTags = filterByOverlap && localTags && localTags.length > 0;
 
     return <>
         <Button
@@ -547,7 +571,7 @@ export function AddTagsButton({
 
                 {localTags && localTags.length > 0 ? selectedTagsGroup : emptySelectedTags}
 
-                {visibleFrequentTags.length > 0 && <>
+                {!hideFrequentTags && visibleFrequentTags.length > 0 && <>
                     <Divider/>
                     <Header as='h5'>{frequentTagsLabel}</Header>
                     <TagsGroup tagNames={visibleFrequentTags} onClick={addTag}/>
@@ -565,7 +589,11 @@ export function AddTagsButton({
                     style={{marginBottom: '0.5em'}}
                 />
 
-                {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
+                {unusedTags && unusedTags.length > 0
+                    ? unusedTagsGroup
+                    : (overlappingTags !== null && tagNames.length > 0
+                        ? 'No overlapping tags'
+                        : 'You have no tags')}
             </Modal.Content>
             <Modal.Actions>
                 <Grid textAlign='left'>
@@ -599,6 +627,7 @@ export const TagsSelector = ({
                                  closeAfterLimit = true,
                                  limit = null,
                                  disabled = false,
+                                 filterByOverlap = false,
                              }) => {
     // Provides a button to add tags to a list.  Displays the tags of that list.
     const {TagsLinkGroup} = React.useContext(TagsContext);
@@ -619,6 +648,7 @@ export const TagsSelector = ({
         anyTag={anyTag}
         limit={limit}
         disabled={disabled}
+        filterByOverlap={filterByOverlap}
     />;
 
     if (hideGroup) {

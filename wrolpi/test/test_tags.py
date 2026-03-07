@@ -680,8 +680,8 @@ async def test_get_recent_tags(test_session, make_files_structure, tag_factory, 
 
 
 @pytest.mark.asyncio
-async def test_get_cooccurring_tags(test_session, make_files_structure, tag_factory, video_bytes, refresh_files):
-    """Tags that frequently co-occur with a given tag are returned."""
+async def test_get_overlapping_tags(test_session, make_files_structure, tag_factory, video_bytes, refresh_files):
+    """Tags that frequently overlap with a given tag are returned."""
     make_files_structure({'a.mp4': video_bytes, 'b.mp4': video_bytes})
     await refresh_files()
     file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
@@ -698,16 +698,16 @@ async def test_get_cooccurring_tags(test_session, make_files_structure, tag_fact
     file_groups[1].add_tag(test_session, tag2.id)
     test_session.commit()
 
-    result = tags.get_cooccurring_tags('alpha')
-    # beta co-occurs with alpha twice, gamma once.
+    result = tags.get_overlapping_tags('alpha')
+    # beta overlaps with alpha twice, gamma once.
     assert result == ['beta', 'gamma']
 
 
 @pytest.mark.asyncio
-async def test_get_cooccurring_tags_empty(test_session, tag_factory):
-    """No co-occurrences returns an empty list."""
+async def test_get_overlapping_tags_empty(test_session, tag_factory):
+    """No overlaps returns an empty list."""
     await tag_factory('lonely')
-    result = tags.get_cooccurring_tags('lonely')
+    result = tags.get_overlapping_tags('lonely')
     assert result == []
 
 
@@ -728,25 +728,106 @@ async def test_recent_tags_api(async_client, test_session, make_files_structure,
     assert 'alpha' in body['tag_names']
 
 
+
+
 @pytest.mark.asyncio
-async def test_cooccurring_tags_api(async_client, test_session, make_files_structure, tag_factory, video_bytes,
-                                    refresh_files):
-    """The co-occurring tags API endpoint returns tag names."""
+async def test_get_overlapping_tags_multiple(test_session, make_files_structure, tag_factory, video_bytes,
+                                             refresh_files):
+    """When multiple tag names are provided, only tags overlapping with ALL given tags are returned."""
+    make_files_structure({'a.mp4': video_bytes, 'b.mp4': video_bytes, 'c.mp4': video_bytes})
+    await refresh_files()
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+
+    tag1 = await tag_factory('alpha')
+    tag2 = await tag_factory('beta')
+    tag3 = await tag_factory('gamma')
+    tag4 = await tag_factory('delta')
+
+    # File a: alpha, beta, gamma
+    file_groups[0].add_tag(test_session, tag1.id)
+    file_groups[0].add_tag(test_session, tag2.id)
+    file_groups[0].add_tag(test_session, tag3.id)
+    # File b: alpha, beta, delta
+    file_groups[1].add_tag(test_session, tag1.id)
+    file_groups[1].add_tag(test_session, tag2.id)
+    file_groups[1].add_tag(test_session, tag4.id)
+    # File c: alpha, gamma
+    file_groups[2].add_tag(test_session, tag1.id)
+    file_groups[2].add_tag(test_session, tag3.id)
+    test_session.commit()
+
+    # Overlapping with both alpha AND beta: gamma (file a), delta (file b).
+    result = tags.get_overlapping_tags(['alpha', 'beta'])
+    assert set(result) == {'gamma', 'delta'}
+
+    # Overlapping with both alpha AND gamma: beta (file a only, since file c has no beta).
+    result = tags.get_overlapping_tags(['alpha', 'gamma'])
+    assert 'beta' in result
+
+
+@pytest.mark.asyncio
+async def test_get_overlapping_tags_no_limit(test_session, make_files_structure, tag_factory, video_bytes,
+                                             refresh_files):
+    """When limit is None, all overlapping tags are returned."""
     make_files_structure({'a.mp4': video_bytes})
     await refresh_files()
     fg = test_session.query(FileGroup).one()
+
     tag1 = await tag_factory('alpha')
-    tag2 = await tag_factory('beta')
+    tags_list = []
+    for i in range(10):
+        t = await tag_factory(f'tag{i}')
+        tags_list.append(t)
+
     fg.add_tag(test_session, tag1.id)
-    fg.add_tag(test_session, tag2.id)
+    for t in tags_list:
+        fg.add_tag(test_session, t.id)
     test_session.commit()
 
-    _, response = await async_client.get('/api/tag/cooccurring/alpha')
-    assert response.status == 200
-    body = response.json
-    assert body['tag_names'] == ['beta']
+    # Default limit of 5 returns only 5.
+    result = tags.get_overlapping_tags('alpha')
+    assert len(result) == 5
 
-    # Unknown tag returns empty.
-    _, response = await async_client.get('/api/tag/cooccurring/nonexistent')
+    # No limit returns all 10.
+    result = tags.get_overlapping_tags('alpha', limit=None)
+    assert len(result) == 10
+
+
+@pytest.mark.asyncio
+async def test_overlapping_tags_multi_api(async_client, test_session, make_files_structure, tag_factory, video_bytes,
+                                          refresh_files):
+    """The /api/tag endpoint supports optional tag_names query params to return overlapping tags."""
+    make_files_structure({'a.mp4': video_bytes, 'b.mp4': video_bytes})
+    await refresh_files()
+    file_groups = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+
+    tag1 = await tag_factory('alpha')
+    tag2 = await tag_factory('beta')
+    tag3 = await tag_factory('gamma')
+
+    # File a: alpha, beta, gamma
+    file_groups[0].add_tag(test_session, tag1.id)
+    file_groups[0].add_tag(test_session, tag2.id)
+    file_groups[0].add_tag(test_session, tag3.id)
+    # File b: alpha, beta
+    file_groups[1].add_tag(test_session, tag1.id)
+    file_groups[1].add_tag(test_session, tag2.id)
+    test_session.commit()
+
+    # Multiple tag_names returns overlapping tags alongside full tags list.
+    _, response = await async_client.get('/api/tag?tag_names=alpha&tag_names=beta')
     assert response.status == 200
-    assert response.json['tag_names'] == []
+    assert response.json['overlapping_tag_names'] == ['gamma']
+    assert 'tags' in response.json
+
+    # Single tag_name still works.
+    _, response = await async_client.get('/api/tag?tag_names=alpha')
+    assert response.status == 200
+    assert 'beta' in response.json['overlapping_tag_names']
+    assert 'tags' in response.json
+
+    # No tag_names returns tags without overlapping_tag_names.
+    _, response = await async_client.get('/api/tag')
+    assert response.status == 200
+    assert 'tags' in response.json
+    assert 'overlapping_tag_names' not in response.json

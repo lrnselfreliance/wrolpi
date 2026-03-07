@@ -1487,12 +1487,17 @@ export async function getEvents(after) {
     return response
 }
 
-export async function getTags() {
-    const uri = `${API_URI}/tag`;
+export async function getTags(tagNames) {
+    let uri = `${API_URI}/tag`;
+    if (tagNames && tagNames.length > 0) {
+        const params = new URLSearchParams();
+        (typeof tagNames === 'string' ? [tagNames] : tagNames).forEach(name => params.append('tag_names', name));
+        uri = `${uri}?${params.toString()}`;
+    }
     const response = await apiGet(uri);
     if (response.ok) {
         const body = await response.json();
-        return body['tags'];
+        return body;
     }
     // Not toasting because this happens often.
     return response
@@ -1508,15 +1513,6 @@ export async function getRecentTags() {
     return [];
 }
 
-export async function getCooccurringTags(tagName) {
-    const uri = `${API_URI}/tag/cooccurring/${encodeURIComponent(tagName)}`;
-    const response = await apiGet(uri);
-    if (response.ok) {
-        const body = await response.json();
-        return body['tag_names'] || [];
-    }
-    return [];
-}
 
 export async function tagFileGroup(fileGroup, name) {
     const body = {tag_name: name};

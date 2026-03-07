@@ -1,6 +1,7 @@
 import asyncio
 import pathlib
 import re
+import urllib.parse
 from http import HTTPStatus
 
 import vininfo.exceptions
@@ -542,6 +543,7 @@ async def get_recent_tags_request(_: Request):
     description='Get tags that frequently co-occur with the given tag',
 )
 async def get_cooccurring_tags_request(_: Request, tag_name: str):
+    tag_name = urllib.parse.unquote(tag_name)
     tag_names = tags.get_cooccurring_tags(tag_name)
     return json_response(dict(tag_names=tag_names))
 

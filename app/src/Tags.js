@@ -425,8 +425,23 @@ export function AddTagsButton({
         if (open) {
             setFilterText('');
             setHasSelectedTag(false);
-            setFrequentTagsLabel('Recent Tags');
-            getRecentTags().then(names => setFrequentTags(names));
+            if (selectedTagNames && selectedTagNames.length === 1) {
+                setHasSelectedTag(true);
+                getCooccurringTags(selectedTagNames[0]).then(coTags => {
+                    if (coTags && coTags.length > 0) {
+                        setFrequentTags(coTags);
+                        setFrequentTagsLabel('Frequent Tags');
+                    } else {
+                        setFrequentTags([]);
+                        setFrequentTagsLabel('Recent Tags');
+                    }
+                });
+            } else if (!selectedTagNames || selectedTagNames.length === 0) {
+                setFrequentTagsLabel('Recent Tags');
+                getRecentTags().then(names => setFrequentTags(names));
+            } else {
+                setFrequentTags([]);
+            }
             const timeout = setTimeout(() => {
                 if (filterInputRef.current && window.innerWidth >= 700) {
                     filterInputRef.current.focus();
@@ -456,12 +471,14 @@ export function AddTagsButton({
             setFilterText('');
             onAdd(name);
             onChange(newTags, null);
-            if (!hasSelectedTag && newTags.length === 1) {
+            if (!hasSelectedTag) {
                 setHasSelectedTag(true);
                 getCooccurringTags(name).then(coTags => {
                     if (coTags && coTags.length > 0) {
                         setFrequentTags(coTags);
                         setFrequentTagsLabel('Frequent Tags');
+                    } else {
+                        setFrequentTags([]);
                     }
                 });
             }

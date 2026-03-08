@@ -1882,8 +1882,16 @@
             setInterval(updateElapsed, 1000);
 
             // Poll main API to check if upgrade is complete
-            // Use absolute URL to main WROLPi API (HTTPS on port 443), not Controller
-            const mainApiUrl = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}/api/status`;
+            const upgradeIsDocker = {{ 'true' if docker_mode else 'false' }};
+            let upgradeHttpsBase;
+            if (window.location.protocol === 'https:') {
+                upgradeHttpsBase = `https://${window.location.hostname}`;
+            } else if (upgradeIsDocker) {
+                upgradeHttpsBase = `https://${window.location.hostname}:8443`;
+            } else {
+                upgradeHttpsBase = `https://${window.location.hostname}`;
+            }
+            const mainApiUrl = `${upgradeHttpsBase}/api/status`;
             const checkUpgradeComplete = async () => {
                 try {
                     const resp = await fetch(mainApiUrl, {
@@ -1900,7 +1908,7 @@
 
                         // Redirect to main app after 2 seconds
                         setTimeout(() => {
-                            window.location.href = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}/`;
+                            window.location.href = `${upgradeHttpsBase}/`;
                         }, 2000);
                     }
                 } catch (e) {
@@ -1926,7 +1934,19 @@
             // Poll main API and React app to check if they're back up
             const checkMainApp = async () => {
                 try {
-                    const httpsBase = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}`;
+                    // Determine the HTTPS base URL for the main app.
+                    // - If already on HTTPS (via /controller path), use same origin without port.
+                    // - If on HTTP:8087 in Docker mode, HTTPS is on 8443.
+                    // - If on HTTP:8087 in production (systemd), HTTPS is on 443 (default).
+                    const isDocker = {{ 'true' if docker_mode else 'false' }};
+                    let httpsBase;
+                    if (window.location.protocol === 'https:') {
+                        httpsBase = `https://${window.location.hostname}`;
+                    } else if (isDocker) {
+                        httpsBase = `https://${window.location.hostname}:8443`;
+                    } else {
+                        httpsBase = `https://${window.location.hostname}`;
+                    }
                     // Check both API and React app are up before redirecting.
                     // API check uses fetch; app check uses an Image probe to avoid CORS (http→https).
                     // When the app is down, Caddy redirects to the controller, so the image src won't

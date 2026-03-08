@@ -67,9 +67,20 @@
 		redir * /docs/ 301
 	}
 
+	# Custom MIME types not in Caddy's defaults.
+	@yaml path *.yaml *.yml
+	header @yaml Content-Type "text/yaml"
+
+	@epub path *.epub
+	header @epub Content-Type "application/epub+zip"
+
+	@mobi path *.mobi
+	header @mobi Content-Type "application/x-mobipocket-ebook"
+
 	# Static media files with directory browsing.
 	handle_path /media/* {
 		root * /media/wrolpi
+		header Content-Disposition "inline"
 		file_server browse
 	}
 	handle /media {

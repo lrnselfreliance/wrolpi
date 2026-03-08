@@ -18,8 +18,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from controller import __version__
+from fastapi.middleware.cors import CORSMiddleware
+
 from controller.api.admin import router as admin_router
 from controller.api.disks import router as disks_router
+from controller.api.ready import router as ready_router
 from controller.api.schemas import HealthResponse
 from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
@@ -93,9 +96,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS middleware - matches Caddy's permissive policy for offline/local use.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers
 app.include_router(admin_router)
 app.include_router(disks_router)
+app.include_router(ready_router)
 app.include_router(scripts_router)
 app.include_router(services_router)
 app.include_router(status_router)

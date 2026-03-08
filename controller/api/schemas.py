@@ -325,3 +325,14 @@ class BranchResponse(BaseModel):
     """Response model for current git branch."""
 
     branch: Optional[str] = Field(description="Current git branch, or null if unavailable")
+
+
+# ============================================================================
+# Readiness
+# ============================================================================
+
+class ReadyResponse(BaseModel):
+    """Response model for /api/ready endpoint."""
+
+    api: bool = Field(description="Whether the main WROLPi API is responding")
+    app: bool = Field(description="Whether the React app is responding")

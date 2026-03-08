@@ -1881,7 +1881,7 @@
             updateElapsed();
             setInterval(updateElapsed, 1000);
 
-            // Poll main API to check if upgrade is complete
+            // Poll controller's readiness endpoint (same-origin, avoids CORS/cert issues).
             const upgradeIsDocker = {{ 'true' if docker_mode else 'false' }};
             let upgradeHttpsBase;
             if (window.location.protocol === 'https:') {
@@ -1891,25 +1891,27 @@
             } else {
                 upgradeHttpsBase = `https://${window.location.hostname}`;
             }
-            const mainApiUrl = `${upgradeHttpsBase}/api/status`;
             const checkUpgradeComplete = async () => {
                 try {
-                    const resp = await fetch(mainApiUrl, {
+                    const resp = await fetch('/api/ready', {
                         method: 'GET',
                         headers: {'Accept': 'application/json'},
                         signal: AbortSignal.timeout(5000)
                     });
                     if (resp.ok) {
-                        // Upgrade complete!
-                        document.getElementById('upgrade-spinner').style.display = 'none';
-                        document.getElementById('upgrade-success').style.display = 'inline';
-                        document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
-                        document.getElementById('upgrade-banner').classList.add('complete');
+                        const data = await resp.json();
+                        if (data.api && data.app) {
+                            // Upgrade complete!
+                            document.getElementById('upgrade-spinner').style.display = 'none';
+                            document.getElementById('upgrade-success').style.display = 'inline';
+                            document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
+                            document.getElementById('upgrade-banner').classList.add('complete');
 
-                        // Redirect to main app after 2 seconds
-                        setTimeout(() => {
-                            window.location.href = `${upgradeHttpsBase}/`;
-                        }, 2000);
+                            // Redirect to main app after 2 seconds
+                            setTimeout(() => {
+                                window.location.href = `${upgradeHttpsBase}/`;
+                            }, 2000);
+                        }
                     }
                 } catch (e) {
                     // Still upgrading, continue polling
@@ -1931,40 +1933,28 @@
             // Show fallback banner
             document.getElementById('fallback-banner').classList.add('show');
 
-            // Poll main API and React app to check if they're back up
+            // Poll controller's readiness endpoint (same-origin, avoids CORS/cert issues).
             const checkMainApp = async () => {
                 try {
-                    // Determine the HTTPS base URL for the main app.
-                    // - If already on HTTPS (via /controller path), use same origin without port.
-                    // - If on HTTP:8087 in Docker mode, HTTPS is on 8443.
-                    // - If on HTTP:8087 in production (systemd), HTTPS is on 443 (default).
-                    const isDocker = {{ 'true' if docker_mode else 'false' }};
-                    let httpsBase;
-                    if (window.location.protocol === 'https:') {
-                        httpsBase = `https://${window.location.hostname}`;
-                    } else if (isDocker) {
-                        httpsBase = `https://${window.location.hostname}:8443`;
-                    } else {
-                        httpsBase = `https://${window.location.hostname}`;
-                    }
-                    // Check both API and React app are up before redirecting.
-                    // API check uses fetch; app check uses an Image probe to avoid CORS (http→https).
-                    // When the app is down, Caddy redirects to the controller, so the image src won't
-                    // resolve to a valid image and will error.
-                    const appUp = new Promise((resolve) => {
-                        const img = new Image();
-                        img.onload = () => resolve(true);
-                        img.onerror = () => resolve(false);
-                        img.src = `${httpsBase}/favicon.ico?_=${Date.now()}`;
-                        setTimeout(() => resolve(false), 5000);
+                    const resp = await fetch('/api/ready', {
+                        method: 'GET',
+                        headers: {'Accept': 'application/json'},
+                        signal: AbortSignal.timeout(5000)
                     });
-                    const [apiResp, isAppUp] = await Promise.all([
-                        fetch(`${httpsBase}/api/status`, {method: 'HEAD', signal: AbortSignal.timeout(5000)}),
-                        appUp
-                    ]);
-                    // API must respond OK; app must serve its favicon (not redirect to controller).
-                    if (apiResp.ok && isAppUp) {
-                        window.location.href = `${httpsBase}/`;
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data.api && data.app) {
+                            const isDocker = {{ 'true' if docker_mode else 'false' }};
+                            let httpsBase;
+                            if (window.location.protocol === 'https:') {
+                                httpsBase = `https://${window.location.hostname}`;
+                            } else if (isDocker) {
+                                httpsBase = `https://${window.location.hostname}:8443`;
+                            } else {
+                                httpsBase = `https://${window.location.hostname}`;
+                            }
+                            window.location.href = `${httpsBase}/`;
+                        }
                     }
                 } catch (e) {
                     // Still down, continue polling

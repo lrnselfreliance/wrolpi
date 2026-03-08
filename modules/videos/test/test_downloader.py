@@ -880,3 +880,32 @@ def test_skip_download_excludes_bot_blocked():
     # Other unrecoverable errors should still be skipped.
     assert _skip_download("404: Not Found") is True
     assert _skip_download("requires payment") is True
+
+
+@pytest.mark.asyncio
+async def test_video_download_playlist_appended_extension(test_session, test_directory, mock_video_extract_info,
+                                                          video_download_manager, mock_video_process_runner,
+                                                          simple_channel, image_file):
+    """A video download from a playlist (e.g. Twitter/X) where yt-dlp appends the real extension to a bogus .NA
+    extension should still find the file."""
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    # Simulate yt-dlp saving a file with .NA.mp4 (appended extension from playlist entry with ext=NA).
+    video_path_na = simple_channel.directory / 'uploader name_20190707_some long id_The video title.NA.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path_na)
+
+    url = 'https://x.com/example/status/123'
+    mock_video_extract_info.return_value = example_video_json
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        # prepare_filename returns the path without the real extension (ending in .NA).
+        bogus_path = video_path_na.parent / video_path_na.stem  # Removes .mp4, leaving .NA as "extension"
+        mock_prepare_filename.return_value = (bogus_path, {'id': 'foo'})
+
+        video_download_manager.create_download(test_session, url, video_downloader.name)
+        await video_download_manager.wait_for_all_downloads()
+
+    video: Video = test_session.query(Video).one()
+    assert video.video_path == video_path_na

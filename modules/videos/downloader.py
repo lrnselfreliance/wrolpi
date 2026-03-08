@@ -639,6 +639,13 @@ class VideoDownloader(Downloader, ABC):
                 video_path = preferred_path
                 logger.info(f'Using preferred video file which exists: {preferred_path}')
 
+            if not video_path.is_file():
+                # yt-dlp may have appended the real extension to a bogus one (e.g. .NA.mp4 from a playlist entry).
+                appended_path = video_path.parent / f'{video_path.name}.{video_format}'
+                if appended_path.is_file():
+                    video_path = appended_path
+                    logger.info(f'Using video file with appended extension: {appended_path}')
+
             if video_path.suffix == '.part':
                 return DownloadResult(
                     success=False,
@@ -864,6 +871,12 @@ class VideoDownloader(Downloader, ABC):
         # Get the path where the video will be saved.
         try:
             entry = extract_info(url, ydl=ydl, process=True)
+            # If the entry is a playlist (e.g. Twitter/X post with multiple videos),
+            # use the first video entry for filename preparation.
+            if entry.get('entries'):
+                entries = list(entry['entries']) if not isinstance(entry['entries'], list) else entry['entries']
+                if entries:
+                    entry = entries[0]
             final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         except DownloadError as e:
             if ' Cannot write ' in str(e):

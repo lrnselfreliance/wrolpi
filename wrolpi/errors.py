@@ -63,6 +63,12 @@ class UnrecoverableDownloadError(APIError):
     status_code = HTTPStatus.BAD_REQUEST
 
 
+class BotBlockedDownloadError(UnrecoverableDownloadError):
+    code = 'BOT_BLOCKED_DOWNLOAD_ERROR'
+    summary = 'Download was blocked by bot detection or invalid cookies.  All pending downloads will be stopped.'
+    status_code = HTTPStatus.BAD_REQUEST
+
+
 class InvalidFile(APIError):
     code = 'INVALID_FILE'
     summary = 'File does not exist or is a directory'

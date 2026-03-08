@@ -9,7 +9,7 @@ import pytest
 
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
-    prepare_filename, convert_wrolpi_filename_format
+    prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -853,3 +853,30 @@ async def test_live_video_retry_seconds(test_session, test_directory, mock_video
     assert result.success is False
     assert result.retry_seconds == 3600
     assert 'live' in result.error.lower()
+
+
+def test_bot_blocked_detection():
+    """Bot detection errors should be identified by _bot_blocked."""
+    assert _bot_blocked("Sign in to confirm you're not a bot") is True
+    assert _bot_blocked("Sign in to confirm you\u2019re not a bot") is True
+    assert _bot_blocked("cookies are no longer valid") is True
+    assert _bot_blocked("ERROR: Sign in to confirm you're not a bot. Use --cookies") is True
+
+    # These should NOT be detected as bot-blocked.
+    assert _bot_blocked("404: Not Found") is False
+    assert _bot_blocked("requires payment") is False
+    assert _bot_blocked("some random error") is False
+
+
+def test_skip_download_excludes_bot_blocked():
+    """Bot-blocked errors should NOT cause a video to be skipped (added to skip list)."""
+    # Bot-blocked errors should not be skipped (they should stop all downloads instead).
+    assert _skip_download("Sign in to confirm you're not a bot") is False
+    assert _skip_download("cookies are no longer valid") is False
+
+    # Regular "Sign in" errors that are NOT bot-related should still be skipped.
+    assert _skip_download("Sign in to view this video") is True
+
+    # Other unrecoverable errors should still be skipped.
+    assert _skip_download("404: Not Found") is True
+    assert _skip_download("requires payment") is True

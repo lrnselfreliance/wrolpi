@@ -35,7 +35,8 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, UnknownDownload, ValidationError, DownloadError
+from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
+    ValidationError, DownloadError
 from wrolpi.events import Events
 from wrolpi.media_path import MediaPathType
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod, await_switches
@@ -1262,6 +1263,25 @@ async def signal_download_download(download_id: int, download_url: str):
                     raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
                 coro = downloader.do_download(download)
                 result = await downloader.cancel_wrapper(coro, download)
+            except BotBlockedDownloadError as e:
+                # Bot detection or invalid cookies - stop all pending downloads from this domain.
+                worker_logger.warning(f'BotBlockedDownloadError for {url}', exc_info=e)
+                result = DownloadResult(success=False, error=str(traceback.format_exc()))
+                try_again = False
+                # Fail all pending/new downloads from the same domain.
+                with get_db_session(commit=True) as fail_session:
+                    domain = urlparse(url).netloc
+                    siblings = fail_session.query(Download).filter(
+                        Download.status.in_(('new', 'pending')),
+                        Download.url.contains(f'://{domain}'),
+                        Download.id != download_id,
+                    ).all()
+                    for sibling in siblings:
+                        sibling.error = f'Stopped: bot detection or invalid cookies on {domain}'
+                        sibling.fail()
+                    if siblings:
+                        worker_logger.warning(
+                            f'Failed {len(siblings)} pending downloads from {domain} due to bot detection')
             except UnrecoverableDownloadError as e:
                 # Download failed and should not be retried.
                 worker_logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)

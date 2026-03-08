@@ -24,7 +24,7 @@ from wrolpi.common import logger, get_media_directory, escape_file_name, resolve
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
-from wrolpi.errors import UnrecoverableDownloadError
+from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import file_worker
@@ -321,7 +321,12 @@ class ChannelDownloader(Downloader, ABC):
 
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
-        info = extract_info(download.url, process=False)
+        try:
+            info = extract_info(download.url, process=False)
+        except Exception as e:
+            if _bot_blocked(e):
+                raise BotBlockedDownloadError(str(e)) from e
+            raise
         # Resolve the "entries" generator.
         info: dict = resolve_generators(info)
         entries = info.get('entries')
@@ -518,6 +523,8 @@ class VideoDownloader(Downloader, ABC):
             try:
                 download.info_json = download.info_json or extract_info(url)
             except yt_dlp.utils.DownloadError as e:
+                if _bot_blocked(e):
+                    raise BotBlockedDownloadError(str(e)) from e
                 # Video may be private.
                 try:
                     raise RuntimeError('Failed to extract_info') from e
@@ -617,6 +624,8 @@ class VideoDownloader(Downloader, ABC):
 
             if result.return_code != 0:
                 error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {result.return_code}'
+                if _bot_blocked(error):
+                    raise BotBlockedDownloadError(f'Bot detection or invalid cookies: {error}')
                 return DownloadResult(
                     success=False,
                     error=error,
@@ -723,12 +732,16 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 await Video.delete_duplicate_videos(session, download.url, entry['id'], video_path)
 
+        except BotBlockedDownloadError:
+            raise
         except UnrecoverableDownloadError:
             raise
         except yt_dlp.utils.UnsupportedError as e:
             raise UnrecoverableDownloadError('URL is not supported by yt-dlp') from e
         except Exception as e:
             logger.warning(f'VideoDownloader failed to download: {url}', exc_info=e)
+            if _bot_blocked(e):
+                raise BotBlockedDownloadError(str(e)) from e
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 try:
@@ -1085,9 +1098,28 @@ UNRECOVERABLE_ERRORS = {
     "You've asked yt-dlp to download the URL",
 }
 
+# Errors that indicate bot detection or invalid cookies.  All pending downloads should be stopped.
+BOT_BLOCKED_ERRORS = {
+    "Sign in to confirm you're not a bot",
+    'Sign in to confirm you\u2019re not a bot',
+    'cookies are no longer valid',
+}
+
+
+def _bot_blocked(error):
+    """Return True if the error indicates bot detection or invalid cookies."""
+    error_str = str(error)
+    for msg in BOT_BLOCKED_ERRORS:
+        if msg in error_str:
+            return True
+    return False
+
 
 def _skip_download(error):
     """Return True if the error is unrecoverable and the video should be skipped in the future."""
+    if _bot_blocked(error):
+        # Bot detection errors should stop all downloads, not skip individual videos.
+        return False
     error_str = str(error)
     for msg in UNRECOVERABLE_ERRORS:
         if msg in error_str:

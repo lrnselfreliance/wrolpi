@@ -14,6 +14,7 @@ import {
     MultilineText,
     PageContainer,
     PreviewPath,
+    useMediaSession,
     useTitle
 } from "./Common";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -209,6 +210,10 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const {channelId} = useParams();
     const {channel} = useChannel(video && video.channel_id ? video.channel_id : channelId);
     const {comments, captions} = useVideoExtras(videoFile?.video?.id);
+
+    const mediaTitle = videoFile ? (videoFile.title || videoFile.stem || videoFile.name) : null;
+    const mediaArtworkUrl = video && video.poster_path ? `${MEDIA_PATH}/${encodeMediaPath(video.poster_path)}` : null;
+    useMediaSession(mediaTitle, channel ? channel.name : null, mediaArtworkUrl);
 
     // Keyboard shortcuts for video player controls
     // k: Play/pause

@@ -1272,6 +1272,23 @@ export function HotspotStatusIcon() {
     </>
 }
 
+export function useMediaSession(title, artist, artworkUrl) {
+    useEffect(() => {
+        if ('mediaSession' in navigator && title) {
+            const artwork = [];
+            if (artworkUrl) {
+                artwork.push({src: artworkUrl, type: 'image/jpeg'});
+            }
+
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title,
+                artist: artist || '',
+                artwork: artwork,
+            });
+        }
+    }, [title, artist, artworkUrl]);
+}
+
 export function useTitle(title) {
     const documentDefined = typeof document !== 'undefined';
     const originalTitle = React.useRef(documentDefined ? document.title : null);

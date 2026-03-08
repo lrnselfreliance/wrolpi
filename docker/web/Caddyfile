@@ -25,6 +25,10 @@
 :443 {
 	tls /etc/ssl/caddy/cert.crt /etc/ssl/caddy/cert.key
 
+	header Access-Control-Allow-Origin "*"
+	header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+	header Access-Control-Allow-Headers "Content-Type, Accept"
+
 	handle /favicon.ico {
 		root * /etc/caddy
 		rewrite * /favicon.ico
@@ -84,13 +88,11 @@
 
 	# React app with fallback to Controller.
 	handle {
-		reverse_proxy app:3000 {
-			@bad status 502 503 504
-			handle_response @bad {
-				header Location /controller/?fallback=true
-				respond "" 302
-			}
-		}
+		reverse_proxy app:3000
+	}
+
+	handle_errors 502 503 504 {
+		redir * "http://{host}:8087/?fallback=true" 302
 	}
 }
 

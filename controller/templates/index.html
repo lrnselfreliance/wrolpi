@@ -1883,7 +1883,7 @@
 
             // Poll main API to check if upgrade is complete
             // Use absolute URL to main WROLPi API (HTTPS on port 443), not Controller
-            const mainApiUrl = `https://${window.location.hostname}/api/status`;
+            const mainApiUrl = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}/api/status`;
             const checkUpgradeComplete = async () => {
                 try {
                     const resp = await fetch(mainApiUrl, {
@@ -1900,7 +1900,7 @@
 
                         // Redirect to main app after 2 seconds
                         setTimeout(() => {
-                            window.location.href = `https://${window.location.hostname}/`;
+                            window.location.href = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}/`;
                         }, 2000);
                     }
                 } catch (e) {
@@ -1923,16 +1923,28 @@
             // Show fallback banner
             document.getElementById('fallback-banner').classList.add('show');
 
-            // Poll main API to check if it's back up
-            // Use absolute URL to main WROLPi API (HTTPS on port 443), not Controller
-            const mainApiUrl = `https://${window.location.hostname}/api/status`;
+            // Poll main API and React app to check if they're back up
             const checkMainApp = async () => {
                 try {
-                    // Check main API status endpoint (not Controller)
-                    const resp = await fetch(mainApiUrl, {method: 'HEAD'});
-                    if (resp.ok) {
-                        // Main app is back, redirect to main app
-                        window.location.href = `https://${window.location.hostname}/`;
+                    const httpsBase = `https://${window.location.hostname}${window.location.port === '8087' ? ':8443' : ''}`;
+                    // Check both API and React app are up before redirecting.
+                    // API check uses fetch; app check uses an Image probe to avoid CORS (http→https).
+                    // When the app is down, Caddy redirects to the controller, so the image src won't
+                    // resolve to a valid image and will error.
+                    const appUp = new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => resolve(true);
+                        img.onerror = () => resolve(false);
+                        img.src = `${httpsBase}/favicon.ico?_=${Date.now()}`;
+                        setTimeout(() => resolve(false), 5000);
+                    });
+                    const [apiResp, isAppUp] = await Promise.all([
+                        fetch(`${httpsBase}/api/status`, {method: 'HEAD', signal: AbortSignal.timeout(5000)}),
+                        appUp
+                    ]);
+                    // API must respond OK; app must serve its favicon (not redirect to controller).
+                    if (apiResp.ok && isAppUp) {
+                        window.location.href = `${httpsBase}/`;
                     }
                 } catch (e) {
                     // Still down, continue polling

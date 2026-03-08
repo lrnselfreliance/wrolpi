@@ -88,22 +88,11 @@
 
 	# React app with fallback to Controller.
 	handle {
-		reverse_proxy 0.0.0.0:3000 {
-			@bad status 502 503 504
-			handle_response @bad {
-				header Location /controller/?fallback=true
-				respond "" 302
-			}
-		}
+		reverse_proxy 0.0.0.0:3000
 	}
 
-	handle_errors {
-		header Access-Control-Allow-Origin "*"
-		header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-		header Access-Control-Allow-Headers "Content-Type, Accept"
-		root * /var/www
-		rewrite * /50x.html
-		file_server
+	handle_errors 502 503 504 {
+		redir * "http://{host}:8087/?fallback=true" 302
 	}
 }
 

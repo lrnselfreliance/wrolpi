@@ -449,6 +449,9 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
+DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml', 'inventories.yaml'}
+
+
 class ConfigFile:
     """
     This is used to keep the DB and config files in sync.  Importing the config reads the config from file, then
@@ -491,11 +494,13 @@ class ConfigFile:
         return f'<{self.__class__.__name__} file={self.get_file()}>'
 
     def config_status(self) -> dict:
+        has_backup_import = self.file_name in DB_CONFIG_FILE_NAMES
         d = dict(
             file_name=self.file_name,
             rel_path=get_relative_to_media_directory(self.get_file()),
             successful_import=self.successful_import,
             valid=self.is_valid(),
+            has_backup_import=has_backup_import,
         )
         return d
 
@@ -532,7 +537,7 @@ class ConfigFile:
     def read_config_file(self, file: pathlib.Path = None) -> dict:
         file = file or self.get_file()
         with file.open('rt') as fh:
-            config_data = yaml.load(fh, Loader=yaml.Loader)
+            config_data = yaml.load(fh, Loader=yaml.CSafeLoader)
             if not isinstance(config_data, dict):
                 raise InvalidConfig(f'Config file is invalid: {file}')
             return config_data
@@ -545,6 +550,53 @@ class ConfigFile:
         name = f'{path.stem}-{date_str}{path.suffix}'
         path = path.with_name(name)
         return path
+
+    def get_backup_dates(self) -> list:
+        """Scan config/backup/ for backup files matching this config, return sorted dates (newest first)."""
+        backup_dir = get_media_directory() / 'config/backup'
+        if not backup_dir.is_dir():
+            return []
+        stem = pathlib.Path(self.file_name).stem
+        suffix = pathlib.Path(self.file_name).suffix
+        dates = []
+        for f in backup_dir.iterdir():
+            if f.is_file() and f.name.startswith(f'{stem}-') and f.name.endswith(suffix):
+                # Extract date string between stem- and suffix
+                date_str = f.name[len(stem) + 1:-len(suffix)]
+                if len(date_str) == 8 and date_str.isdigit():
+                    dates.append(date_str)
+        dates.sort(reverse=True)
+        return dates
+
+    def _get_backup_file(self, backup_date: str) -> pathlib.Path:
+        """Return path to a specific backup file."""
+        stem = pathlib.Path(self.file_name).stem
+        suffix = pathlib.Path(self.file_name).suffix
+        return get_media_directory() / f'config/backup/{stem}-{backup_date}{suffix}'
+
+
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        """Preview what a backup import would do. Subclasses override this."""
+        raise NotImplementedError(f'{self.__class__.__name__} does not support backup import')
+
+    def _preserve_current_config(self):
+        """Back up the current config file to today's backup slot before a restore overwrites it.
+
+        This ensures the user can undo a backup restore by restoring today's backup.
+        If today's backup already exists (from an earlier save), it is not overwritten.
+        """
+        config_file = self.get_file()
+        if not config_file.is_file():
+            return
+        todays_backup = self._get_backup_filename()
+        if todays_backup.is_file():
+            return
+        todays_backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(config_file, todays_backup)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        """Import a backup file. Subclasses override this."""
+        raise NotImplementedError(f'{self.__class__.__name__} does not support backup import')
 
     def save(self, file: pathlib.Path = None, send_events: bool = False, overwrite: bool = False):
         """
@@ -612,8 +664,19 @@ class ConfigFile:
                 raise e
 
     def write_config_data(self, config: dict, config_file: pathlib.Path):
+        from decimal import Decimal
+
+        class _ConfigDumper(yaml.CSafeDumper):
+            """CSafeDumper that converts Decimal to str.  All other Python objects are rejected."""
+            pass
+
+        _ConfigDumper.add_representer(Decimal, lambda dumper, data: dumper.represent_str(str(data)))
+
         with config_file.open('wt') as fh:
-            yaml.dump(config, fh, width=self.width, sort_keys=True)
+            try:
+                yaml.dump(config, fh, Dumper=_ConfigDumper, width=self.width, sort_keys=True)
+            except yaml.representer.RepresenterError as e:
+                raise ValueError(f'Config contains a Python object that cannot be serialized: {e}') from e
             # Wait for data to be written before releasing lock.
             fh.flush()
             os.fsync(fh.fileno())

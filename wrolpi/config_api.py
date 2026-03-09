@@ -4,7 +4,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import config_schema
 from wrolpi.api_utils import json_response
-from wrolpi.common import get_all_configs, get_config_by_file_name
+from wrolpi.common import get_all_configs, get_config_by_file_name, DB_CONFIG_FILE_NAMES
 from wrolpi.common import logger
 from wrolpi.errors import InvalidConfig
 
@@ -68,5 +68,62 @@ def post_config_dump(_: Request, body: config_schema.ConfigsRequest):
     except Exception as e:
         logger.error(f'Failed to dump config: {body.file_name}', exc_info=e)
         raise InvalidConfig(f'Failed to dump config {body.file_name}')
+
+    return response.empty()
+
+
+@config_bp.get('/backups')
+@openapi.description('Get available backup dates for a config file.')
+@openapi.parameter('file_name', str, location='query')
+def get_config_backups(request: Request):
+    file_name = request.args.get('file_name')
+    if not file_name:
+        raise InvalidConfig('file_name is required')
+    config = get_config_by_file_name(file_name)
+    if file_name not in DB_CONFIG_FILE_NAMES:
+        raise InvalidConfig(f'{file_name} does not support backup import')
+    dates = config.get_backup_dates()
+    return json_response(dict(dates=dates))
+
+
+@config_bp.post('/backup/preview')
+@openapi.definition(
+    description='Preview what a backup import would change.',
+    body=config_schema.ConfigBackupPreviewRequest,
+    validate=True,
+)
+def post_config_backup_preview(_: Request, body: config_schema.ConfigBackupPreviewRequest):
+    if body.mode not in ('merge', 'overwrite'):
+        raise InvalidConfig('mode must be "merge" or "overwrite"')
+    config = get_config_by_file_name(body.file_name)
+    if body.file_name not in DB_CONFIG_FILE_NAMES:
+        raise InvalidConfig(f'{body.file_name} does not support backup import')
+    backup_file = config._get_backup_file(body.backup_date)
+    if not backup_file.is_file():
+        raise InvalidConfig(f'Backup file not found for date {body.backup_date}')
+    preview = config.preview_backup_import(body.backup_date, body.mode)
+    return json_response(dict(preview=preview))
+
+
+@config_bp.post('/backup/import')
+@openapi.definition(
+    description='Import a backup config file.',
+    body=config_schema.ConfigBackupImportRequest,
+    validate=True,
+)
+def post_config_backup_import(_: Request, body: config_schema.ConfigBackupImportRequest):
+    if body.mode not in ('merge', 'overwrite'):
+        raise InvalidConfig('mode must be "merge" or "overwrite"')
+    config = get_config_by_file_name(body.file_name)
+    if body.file_name not in DB_CONFIG_FILE_NAMES:
+        raise InvalidConfig(f'{body.file_name} does not support backup import')
+    backup_file = config._get_backup_file(body.backup_date)
+    if not backup_file.is_file():
+        raise InvalidConfig(f'Backup file not found for date {body.backup_date}')
+    try:
+        config.import_backup(body.backup_date, body.mode, send_events=True)
+    except Exception as e:
+        logger.error(f'Failed to import backup: {body.file_name} {body.backup_date}', exc_info=e)
+        raise InvalidConfig(f'Failed to import backup {body.file_name}')
 
     return response.empty()

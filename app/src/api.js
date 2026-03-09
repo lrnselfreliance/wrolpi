@@ -417,6 +417,35 @@ export async function getConfig(fileName) {
     return (await response.json())['config'];
 }
 
+export async function getConfigBackups(fileName) {
+    const response = await apiGet(`${API_URI}/config/backups?file_name=${fileName}`);
+    if (response.ok) {
+        return await response.json();
+    }
+    return {dates: []};
+}
+
+export async function postConfigBackupPreview(fileName, backupDate, mode) {
+    const body = {file_name: fileName, backup_date: backupDate, mode};
+    const response = await apiPost(`${API_URI}/config/backup/preview`, body);
+    if (response.ok) {
+        return await response.json();
+    }
+    const message = await getErrorMessage(response, 'Could not preview backup.');
+    toast({type: 'error', title: 'Preview failed', description: message, time: 5000});
+    return null;
+}
+
+export async function postConfigBackupImport(fileName, backupDate, mode) {
+    const body = {file_name: fileName, backup_date: backupDate, mode};
+    const response = await apiPost(`${API_URI}/config/backup/import`, body);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not import backup.');
+        toast({type: 'error', title: 'Backup import failed', description: message, time: 5000});
+    }
+    return response;
+}
+
 export async function fetchVideoDownloaderConfig() {
     return await getConfig('videos_downloader.yaml');
 }

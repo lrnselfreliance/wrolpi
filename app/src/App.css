@@ -382,6 +382,12 @@ tr.drag-deselecting td {
     -ms-user-select: none;
 }
 
+@media only screen and (max-width: 700px) {
+    .hide-on-mobile {
+        display: none !important;
+    }
+}
+
 /* Ensure step icons are always visible, even when disabled */
 .ui.steps .step.disabled > .icon,
 .ui.steps .step.disabled > i.icon,

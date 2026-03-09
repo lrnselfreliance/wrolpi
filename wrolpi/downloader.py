@@ -1552,6 +1552,78 @@ class DownloadManagerConfig(ConfigFile):
 
             self.successful_import = True
 
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(downloads=[], version=0)
+
+        backup_downloads = backup_data.get('downloads', [])
+        current_downloads = current_data.get('downloads', [])
+
+        current_urls = {dl.get('url') for dl in current_downloads if dl.get('url')}
+        backup_urls = {dl.get('url') for dl in backup_downloads if dl.get('url')}
+
+        add = []
+        remove = []
+        unchanged = 0
+
+        for dl in backup_downloads:
+            url = dl.get('url')
+            if not url:
+                continue
+            # In merge mode, skip once-downloads (no frequency)
+            if mode == 'merge' and not dl.get('frequency'):
+                continue
+            if url not in current_urls:
+                add.append(dict(type='download', url=url, downloader=dl.get('downloader', '')))
+            else:
+                unchanged += 1
+        if mode == 'overwrite':
+            current_url_to_dl = {dl.get('url'): dl for dl in current_downloads}
+            for url in sorted(current_urls - backup_urls):
+                dl = current_url_to_dl[url]
+                remove.append(dict(type='download', url=url, downloader=dl.get('downloader', '')))
+
+        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        self._preserve_current_config()
+        import shutil
+        backup_file = self._get_backup_file(backup_date)
+        config_file = self.get_file()
+
+        if mode == 'overwrite':
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, config_file)
+        elif mode == 'merge':
+            backup_data = self.read_config_file(backup_file)
+            current_data = self.read_config_file() if config_file.is_file() else dict(downloads=[], skip_urls=[], version=0)
+
+            current_urls = {dl.get('url') for dl in current_data.get('downloads', []) if dl.get('url')}
+            merged_downloads = list(current_data.get('downloads', []))
+            for dl in backup_data.get('downloads', []):
+                url = dl.get('url')
+                # Only merge recurring downloads
+                if url and url not in current_urls and dl.get('frequency'):
+                    merged_downloads.append(dl)
+
+            # Merge skip_urls
+            current_skip = set(current_data.get('skip_urls', []))
+            merged_skip = list(current_data.get('skip_urls', []))
+            for url in backup_data.get('skip_urls', []):
+                if url not in current_skip:
+                    merged_skip.append(url)
+
+            merged_data = dict(
+                downloads=merged_downloads,
+                skip_urls=merged_skip,
+                version=current_data.get('version', 0) + 1,
+            )
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.write_config_data(merged_data, config_file)
+
+        self.import_config(send_events=send_events)
+
 
 DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
 TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None

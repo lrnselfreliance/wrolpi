@@ -180,6 +180,70 @@ class DomainsConfig(ConfigFile):
         logger.info(f'Dumping {len(collections_data)} domain collections to config')
         self.save(file, send_events, overwrite)
 
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(collections=[], version=0)
+
+        backup_collections = backup_data.get('collections', [])
+        current_collections = current_data.get('collections', [])
+
+        # Identity key for domains is the directory (if present) or name
+        def get_key(c):
+            return c.get('directory') or c.get('name', '')
+
+        current_keys = {get_key(c) for c in current_collections}
+        backup_keys = {get_key(c) for c in backup_collections}
+
+        add = []
+        remove = []
+        unchanged = 0
+
+        for c in backup_collections:
+            key = get_key(c)
+            if key not in current_keys:
+                add.append(dict(type='domain', name=c.get('name', ''), directory=c.get('directory', '')))
+            else:
+                unchanged += 1
+        if mode == 'overwrite':
+            current_key_to_coll = {get_key(c): c for c in current_collections}
+            for key in sorted(current_keys - backup_keys):
+                c = current_key_to_coll[key]
+                remove.append(dict(type='domain', name=c.get('name', ''), directory=c.get('directory', '')))
+
+        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        self._preserve_current_config()
+        import shutil
+        backup_file = self._get_backup_file(backup_date)
+        config_file = self.get_file()
+
+        if mode == 'overwrite':
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, config_file)
+        elif mode == 'merge':
+            backup_data = self.read_config_file(backup_file)
+            current_data = self.read_config_file() if config_file.is_file() else dict(collections=[], version=0)
+
+            def get_key(c):
+                return c.get('directory') or c.get('name', '')
+
+            current_keys = {get_key(c) for c in current_data.get('collections', [])}
+            merged_collections = list(current_data.get('collections', []))
+            for c in backup_data.get('collections', []):
+                if get_key(c) not in current_keys:
+                    merged_collections.append(c)
+
+            merged_data = dict(
+                collections=merged_collections,
+                version=current_data.get('version', 0) + 1,
+            )
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.write_config_data(merged_data, config_file)
+
+        self.import_config(send_events=send_events)
+
 
 # Global instance
 domains_config = DomainsConfig()

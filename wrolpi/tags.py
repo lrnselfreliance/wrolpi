@@ -514,6 +514,111 @@ class TagsConfig(ConfigFile):
                 Events.send_config_import_failed(message)
             raise
 
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(tags={}, tag_files=[], tag_zims=[])
+
+        backup_tags = backup_data.get('tags', {})
+        current_tags = current_data.get('tags', {})
+        backup_tag_files = backup_data.get('tag_files', [])
+        current_tag_files = current_data.get('tag_files', [])
+        backup_tag_zims = backup_data.get('tag_zims', [])
+        current_tag_zims = current_data.get('tag_zims', [])
+
+        # Build identity sets
+        current_tag_names = set(current_tags.keys())
+        current_tf_keys = {(tf[0], tf[1]) for tf in current_tag_files if len(tf) >= 2}
+        current_tz_keys = {(tz[0], tz[1], tz[2]) for tz in current_tag_zims if len(tz) >= 3}
+
+        backup_tag_names = set(backup_tags.keys())
+        backup_tf_keys = {(tf[0], tf[1]) for tf in backup_tag_files if len(tf) >= 2}
+        backup_tz_keys = {(tz[0], tz[1], tz[2]) for tz in backup_tag_zims if len(tz) >= 3}
+
+        add = []
+        remove = []
+        unchanged = 0
+
+        # Tags
+        for name in sorted(backup_tag_names):
+            if name not in current_tag_names:
+                add.append(dict(type='tag', name=name))
+            else:
+                unchanged += 1
+        if mode == 'overwrite':
+            for name in sorted(current_tag_names - backup_tag_names):
+                remove.append(dict(type='tag', name=name))
+
+        # Tag files
+        for tf in backup_tag_files:
+            if len(tf) >= 2:
+                key = (tf[0], tf[1])
+                if key not in current_tf_keys:
+                    add.append(dict(type='tag_file', tag=tf[0], path=tf[1]))
+                else:
+                    unchanged += 1
+        if mode == 'overwrite':
+            for key in sorted(current_tf_keys - backup_tf_keys):
+                remove.append(dict(type='tag_file', tag=key[0], path=key[1]))
+
+        # Tag zims
+        for tz in backup_tag_zims:
+            if len(tz) >= 3:
+                key = (tz[0], tz[1], tz[2])
+                if key not in current_tz_keys:
+                    add.append(dict(type='tag_zim', tag=tz[0], zim=tz[1], entry=tz[2]))
+                else:
+                    unchanged += 1
+        if mode == 'overwrite':
+            for key in sorted(current_tz_keys - backup_tz_keys):
+                remove.append(dict(type='tag_zim', tag=key[0], zim=key[1], entry=key[2]))
+
+        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        self._preserve_current_config()
+        import shutil
+        backup_file = self._get_backup_file(backup_date)
+        config_file = self.get_file()
+
+        if mode == 'overwrite':
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, config_file)
+        elif mode == 'merge':
+            backup_data = self.read_config_file(backup_file)
+            current_data = self.read_config_file() if config_file.is_file() else dict(tags={}, tag_files=[], tag_zims=[], version=0)
+
+            # Merge tags: add missing tags only
+            merged_tags = dict(current_data.get('tags', {}))
+            for name, value in backup_data.get('tags', {}).items():
+                if name not in merged_tags:
+                    merged_tags[name] = value
+
+            # Merge tag_files: add missing by (tag_name, path)
+            current_tf_keys = {(tf[0], tf[1]) for tf in current_data.get('tag_files', []) if len(tf) >= 2}
+            merged_tag_files = list(current_data.get('tag_files', []))
+            for tf in backup_data.get('tag_files', []):
+                if len(tf) >= 2 and (tf[0], tf[1]) not in current_tf_keys:
+                    merged_tag_files.append(tf)
+
+            # Merge tag_zims: add missing by (tag_name, zim_path, entry)
+            current_tz_keys = {(tz[0], tz[1], tz[2]) for tz in current_data.get('tag_zims', []) if len(tz) >= 3}
+            merged_tag_zims = list(current_data.get('tag_zims', []))
+            for tz in backup_data.get('tag_zims', []):
+                if len(tz) >= 3 and (tz[0], tz[1], tz[2]) not in current_tz_keys:
+                    merged_tag_zims.append(tz)
+
+            merged_data = dict(
+                tags=merged_tags,
+                tag_files=merged_tag_files,
+                tag_zims=merged_tag_zims,
+                version=current_data.get('version', 0) + 1,
+            )
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.write_config_data(merged_data, config_file)
+
+        self.import_config(send_events=send_events)
+
 
 TAGS_CONFIG: TagsConfig = TagsConfig()
 TEST_TAGS_CONFIG: TagsConfig = None  # noqa

@@ -173,7 +173,7 @@ async def test_import_channel_downloads(await_switches, test_session, channel_fa
     channels_config = get_channels_config()
     update_channel_config(channels_config, 'foo',
                           {'downloads': [
-                              {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly}
+                              {'url': 'https://example.com/channel1', 'frequency': DownloadFrequency.weekly.value}
                           ]})
     await await_switches()
 

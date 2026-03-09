@@ -20,3 +20,17 @@ class ConfigsRequest:
 @dataclass
 class ConfigUpdateRequest:
     config: dict
+
+
+@dataclass
+class ConfigBackupPreviewRequest:
+    file_name: str
+    backup_date: str
+    mode: str
+
+
+@dataclass
+class ConfigBackupImportRequest:
+    file_name: str
+    backup_date: str
+    mode: str

@@ -452,6 +452,62 @@ class ChannelsConfig(ConfigFile):
         channel_import_logger.info(f'Dumping {len(channels_data)} channels to config')
         self.save(file, send_events, overwrite)
 
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(channels=[], version=0)
+
+        backup_channels = backup_data.get('channels', [])
+        current_channels = current_data.get('channels', [])
+
+        current_dirs = {ch.get('directory') for ch in current_channels if ch.get('directory')}
+        backup_dirs = {ch.get('directory') for ch in backup_channels if ch.get('directory')}
+
+        add = []
+        remove = []
+        unchanged = 0
+
+        for ch in backup_channels:
+            d = ch.get('directory')
+            if d and d not in current_dirs:
+                add.append(dict(type='channel', name=ch.get('name', ''), directory=d))
+            elif d:
+                unchanged += 1
+        if mode == 'overwrite':
+            backup_dir_to_name = {ch.get('directory'): ch.get('name', '') for ch in current_channels}
+            for d in sorted(current_dirs - backup_dirs):
+                remove.append(dict(type='channel', name=backup_dir_to_name.get(d, ''), directory=d))
+
+        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        self._preserve_current_config()
+        import shutil
+        backup_file = self._get_backup_file(backup_date)
+        config_file = self.get_file()
+
+        if mode == 'overwrite':
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, config_file)
+        elif mode == 'merge':
+            backup_data = self.read_config_file(backup_file)
+            current_data = self.read_config_file() if config_file.is_file() else dict(channels=[], version=0)
+
+            current_dirs = {ch.get('directory') for ch in current_data.get('channels', []) if ch.get('directory')}
+            merged_channels = list(current_data.get('channels', []))
+            for ch in backup_data.get('channels', []):
+                if ch.get('directory') and ch['directory'] not in current_dirs:
+                    merged_channels.append(ch)
+
+            merged_data = dict(
+                channels=merged_channels,
+                version=current_data.get('version', 0) + 1,
+            )
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.write_config_data(merged_data, config_file)
+
+        self.import_config(send_events=send_events)
+
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()
 TEST_CHANNELS_CONFIG: ChannelsConfig = None

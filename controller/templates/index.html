@@ -1893,7 +1893,10 @@
             }
             const checkUpgradeComplete = async () => {
                 try {
-                    const resp = await fetch('/api/ready', {
+                    // WARNING: This must be a relative URL (no leading slash) so it resolves to
+                    // /controller/api/ready behind Caddy, or /api/ready when accessed directly.
+                    // An absolute '/api/ready' would be routed to Sanic by Caddy, not the Controller.
+                    const resp = await fetch('api/ready', {
                         method: 'GET',
                         headers: {'Accept': 'application/json'},
                         signal: AbortSignal.timeout(5000)
@@ -1936,7 +1939,10 @@
             // Poll controller's readiness endpoint (same-origin, avoids CORS/cert issues).
             const checkMainApp = async () => {
                 try {
-                    const resp = await fetch('/api/ready', {
+                    // WARNING: This must be a relative URL (no leading slash) so it resolves to
+                    // /controller/api/ready behind Caddy, or /api/ready when accessed directly.
+                    // An absolute '/api/ready' would be routed to Sanic by Caddy, not the Controller.
+                    const resp = await fetch('api/ready', {
                         method: 'GET',
                         headers: {'Accept': 'application/json'},
                         signal: AbortSignal.timeout(5000)

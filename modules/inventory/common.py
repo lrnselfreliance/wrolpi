@@ -212,6 +212,61 @@ class InventoriesConfig(ConfigFile):
                 Events.send_config_import_failed(message)
             raise
 
+    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
+        backup_file = self._get_backup_file(backup_date)
+        backup_data = self.read_config_file(backup_file)
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(inventories=[], version=0)
+
+        backup_inventories = backup_data.get('inventories', [])
+        current_inventories = current_data.get('inventories', [])
+
+        current_names = {inv.get('name') for inv in current_inventories if inv.get('name')}
+        backup_names = {inv.get('name') for inv in backup_inventories if inv.get('name')}
+
+        add = []
+        remove = []
+        unchanged = 0
+
+        for inv in backup_inventories:
+            name = inv.get('name')
+            if name and name not in current_names:
+                add.append(dict(type='inventory', name=name))
+            elif name:
+                unchanged += 1
+        if mode == 'overwrite':
+            for name in sorted(current_names - backup_names):
+                remove.append(dict(type='inventory', name=name))
+
+        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
+
+    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
+        self._preserve_current_config()
+        import shutil
+        backup_file = self._get_backup_file(backup_date)
+        config_file = self.get_file()
+
+        if mode == 'overwrite':
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup_file, config_file)
+        elif mode == 'merge':
+            backup_data = self.read_config_file(backup_file)
+            current_data = self.read_config_file() if config_file.is_file() else dict(inventories=[], version=0)
+
+            current_names = {inv.get('name') for inv in current_data.get('inventories', []) if inv.get('name')}
+            merged_inventories = list(current_data.get('inventories', []))
+            for inv in backup_data.get('inventories', []):
+                if inv.get('name') and inv['name'] not in current_names:
+                    merged_inventories.append(inv)
+
+            merged_data = dict(
+                inventories=merged_inventories,
+                version=current_data.get('version', 0) + 1,
+            )
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.write_config_data(merged_data, config_file)
+
+        self.import_config(send_events=send_events)
+
 
 INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig()
 TEST_INVENTORIES_CONFIG: InventoriesConfig = None

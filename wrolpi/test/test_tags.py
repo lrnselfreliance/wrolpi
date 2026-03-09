@@ -237,8 +237,8 @@ async def test_import_tags_config(async_client, test_session, test_directory, te
             # Tag names can contain Unicode characters.
             tags={'🔫': {'color': '#123456'}},
             tag_files=[
-                ('🔫', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
-                ('🔫', 'does not exist', None),
+                ['🔫', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'],
+                ['🔫', 'does not exist', None],
             ],
         )
         yaml.dump(data, fh)
@@ -270,7 +270,7 @@ async def test_import_tags_config_missing_file(test_session, test_directory, tes
             # Tag names can contain Unicode characters.
             tags={'🦄': {'color': '#654321'}},
             tag_files=[
-                ('🦄', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
+                ['🦄', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'],
             ],
         )
         yaml.dump(data, fh)

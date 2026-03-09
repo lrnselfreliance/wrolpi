@@ -994,14 +994,16 @@ class VideoDownloader(Downloader, ABC):
         new_files = []
         for file in files:
             suffix = file.name[len(video_stem):]
-            if suffix.endswith('.vtt'):
+            if suffix.endswith('.vtt') or suffix.endswith('.srt'):
                 _, normal_suffix = split_path_stem_and_suffix(file.name)
                 if suffix != normal_suffix:
                     # Video captions file has extra characters in the suffix from yt-dlp.
                     # Example:  .en-uYU-mmqFLq8.vtt -> .en.vtt
-                    lang, _, suffix = VTT_SUFFIX_PARSER.match(suffix.strip()).groups()
-                    suffix = f'.{lang}.{suffix}'
-                    file = file.rename(video_path.with_suffix(suffix))
+                    match = VTT_SUFFIX_PARSER.match(suffix.strip())
+                    if match:
+                        lang, _, suffix = match.groups()
+                        suffix = f'.{lang}.{suffix}'
+                        file = file.rename(video_path.with_suffix(suffix))
             new_files.append(file)
 
         return new_files

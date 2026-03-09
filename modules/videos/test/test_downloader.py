@@ -653,6 +653,12 @@ def test_normalize_video_file_names(test_directory, video_download_manager):
     }
     assert not vtt.exists()
 
+    # VTT suffix that does not match expected pattern is left unchanged.
+    vtt = test_directory / 'video.unknown_format.vtt'
+    vtt.touch()
+    assert set(downloader.normalize_video_file_names(mp4, [mp4, vtt, info_json])) == {mp4, vtt, info_json}
+    assert vtt.exists()
+
 
 @pytest.mark.asyncio
 async def test_channel_downloader_sets_collection_id(test_session, channel_factory, mock_video_extract_info,

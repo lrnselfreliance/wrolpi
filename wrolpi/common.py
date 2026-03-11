@@ -537,7 +537,12 @@ class ConfigFile:
     def read_config_file(self, file: pathlib.Path = None) -> dict:
         file = file or self.get_file()
         with file.open('rt') as fh:
-            config_data = yaml.load(fh, Loader=yaml.CSafeLoader)
+            try:
+                config_data = yaml.load(fh, Loader=yaml.CSafeLoader)
+            except yaml.constructor.ConstructorError:
+                logger_.warning(f'Config file contains Python objects, using slow loader: {file}')
+                fh.seek(0)
+                config_data = yaml.load(fh, Loader=yaml.Loader)
             if not isinstance(config_data, dict):
                 raise InvalidConfig(f'Config file is invalid: {file}')
             return config_data

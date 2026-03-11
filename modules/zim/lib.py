@@ -595,7 +595,7 @@ async def restart_kiwix():
     if DOCKERIZED:
         logger.info('Restarting Kiwix via controller API')
         try:
-            async with aiohttp_post(f'{CONTROLLER_SERVICE}/api/services/zim/restart',
+            async with aiohttp_post(f'{CONTROLLER_SERVICE}/api/services/zim/restart', None,
                                     timeout=Seconds.minute) as response:
                 if response.status == 200:
                     logger.info('Successfully restarted Kiwix container')

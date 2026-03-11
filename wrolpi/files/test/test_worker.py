@@ -1389,6 +1389,81 @@ async def test_upsert_file_groups_tracks_actual_db_progress(async_client, test_s
 
 
 @pytest.mark.asyncio
+async def test_compare_file_groups_duplicate_deleted_filegroups(test_session, test_directory, make_files_structure):
+    """When multiple FileGroups share the same (directory, stem) and all files are deleted,
+    all duplicates should appear in the deleted diffs — not just the last one processed."""
+    make_files_structure([
+        'docs/file1.txt',
+        'docs/file1.json',
+    ])
+
+    docs_dir = str(test_directory / 'docs')
+
+    # Create 3 separate FileGroups for the same (directory, stem) — simulating a botched move.
+    # Use different primary_paths (unique constraint) but same directory and stem.
+    fg1 = FileGroup(directory=docs_dir, primary_path=str(test_directory / 'docs/file1.txt'),
+                    files=[{'path': 'file1.txt', 'mimetype': 'text/plain', 'size': 0}])
+    fg2 = FileGroup(directory=docs_dir, primary_path=str(test_directory / 'docs/file1.json'),
+                    files=[{'path': 'file1.json', 'mimetype': 'application/json', 'size': 0}])
+    # Third ghost with empty files list — use a unique primary_path
+    (test_directory / 'docs/file1.bak').touch()
+    fg3 = FileGroup(directory=docs_dir, primary_path=str(test_directory / 'docs/file1.bak'),
+                    files=[])
+    test_session.add_all([fg1, fg2, fg3])
+    test_session.commit()
+
+    fg1_id, fg2_id, fg3_id = fg1.id, fg2.id, fg3.id
+
+    # Delete all files from disk
+    for f in (test_directory / 'docs').iterdir():
+        f.unlink()
+
+    result = await compare_file_groups(test_directory)
+
+    # ALL 3 FileGroup IDs must appear in deleted diffs
+    deleted_ids = {d.file_group_id for d in result.deleted}
+    assert fg1_id in deleted_ids, f'fg1 ({fg1_id}) missing from deleted: {deleted_ids}'
+    assert fg2_id in deleted_ids, f'fg2 ({fg2_id}) missing from deleted: {deleted_ids}'
+    assert fg3_id in deleted_ids, f'fg3 ({fg3_id}) missing from deleted: {deleted_ids}'
+    assert len(result.new) == 0
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_duplicate_keeps_one(test_session, test_directory, make_files_structure):
+    """When duplicate FileGroups exist and files are on disk, one should be kept (modified/unchanged)
+    and the others should be marked for deletion."""
+    make_files_structure([
+        'docs/file1.txt',
+    ])
+
+    docs_dir = str(test_directory / 'docs')
+
+    # Create 2 FileGroups with same (directory, stem)
+    fg1 = FileGroup(directory=docs_dir, primary_path=str(test_directory / 'docs/file1.txt'),
+                    files=[{'path': 'file1.txt', 'mimetype': 'text/plain', 'size': 0}])
+    (test_directory / 'docs/file1.json').touch()
+    fg2 = FileGroup(directory=docs_dir, primary_path=str(test_directory / 'docs/file1.json'),
+                    files=[{'path': 'file1.json', 'mimetype': 'application/json', 'size': 0}])
+    test_session.add_all([fg1, fg2])
+    test_session.commit()
+
+    fg1_id, fg2_id = fg1.id, fg2.id
+    # Remove the .json so only .txt remains
+    (test_directory / 'docs/file1.json').unlink()
+
+    result = await compare_file_groups(test_directory)
+
+    # One FG should have the file on disk, the other should be deleted as duplicate
+    deleted_ids = {d.file_group_id for d in result.deleted}
+    all_diff_ids = {d.file_group_id for d in result.deleted + result.modified + result.unchanged}
+    assert fg1_id in all_diff_ids
+    assert fg2_id in all_diff_ids
+    # At least one must be in deleted (the duplicate)
+    assert len(deleted_ids) >= 1
+    assert deleted_ids & {fg1_id, fg2_id}
+
+
+@pytest.mark.asyncio
 async def test_move_planning_tracks_progress(async_client, test_session, test_directory, make_files_structure):
     """Move planning phase tracks progress."""
     files = make_files_structure(['docs/file1.txt', 'docs/file2.txt', 'docs/file3.txt'])

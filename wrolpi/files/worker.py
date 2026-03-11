@@ -11,7 +11,7 @@ import shlex
 import shutil
 import stat as stat_module
 import time
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from multiprocessing.queues import Queue
@@ -38,6 +38,10 @@ logger = logger.getChild(__name__)
 
 # Update status every N items to avoid excessive overhead
 PROGRESS_UPDATE_INTERVAL = 100
+
+# Maximum mtime difference (seconds) before a file is considered "modified".
+# 0.5s accommodates SD card / FAT32 / exFAT timestamp granularity on Pi 4.
+MTIME_TOLERANCE_SECONDS = 0.5
 
 __all__ = [
     'FileGroupDiff',
@@ -97,6 +101,31 @@ class FileComparisonResult:
     new: list  # FileGroupDiff where is_new
     deleted: list  # FileGroupDiff where is_deleted
     modified: list  # FileGroupDiff where needs_update
+
+
+def _deduplicate_db_groups(
+        db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]],
+) -> Tuple[Dict[Tuple[str, str], Tuple[int, Set[str], float]], List[FileGroupDiff]]:
+    """Pick one FileGroup per (directory, stem) key, mark the rest for deletion.
+
+    Prefers the FG that has files (non-empty), then highest ID as a stable tiebreaker.
+    """
+    deduplicated: Dict[Tuple[str, str], Tuple[int, Set[str], float]] = {}
+    duplicate_diffs: List[FileGroupDiff] = []
+    for key, entries in db_groups.items():
+        # Sort: prefer non-empty files first, then highest ID
+        entries.sort(key=lambda e: (bool(e[1]), e[0]), reverse=True)
+        deduplicated[key] = entries[0]
+        for fg_id, fg_files, _ in entries[1:]:
+            directory, stem = key
+            duplicate_diffs.append(FileGroupDiff(
+                directory=Path(directory),
+                stem=stem,
+                db_files=fg_files or {'__empty__'},
+                fs_files=set(),
+                file_group_id=fg_id,
+            ))
+    return deduplicated, duplicate_diffs
 
 
 def _diff_to_paths(diff: FileGroupDiff) -> list[pathlib.Path]:
@@ -352,15 +381,9 @@ async def compare_file_groups(
         logger.info(f'Found {len(fs_groups)} file groups on filesystem')
 
         # Get all DB FileGroups within root directory (both with files and empty)
-        # Include modification_datetime for mtime comparison
-        db_groups: Dict[Tuple[str, str], Tuple[int, Set[str], float]] = {}  # key -> (id, files, mtime_timestamp)
+        # Collect ALL FileGroups per (directory, stem) key — duplicates are deduped after.
+        db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]] = defaultdict(list)
         root_str = str(root)
-
-        # Initialize result lists before the loop so empty FileGroups can be processed inline
-        unchanged = []
-        new = []
-        deleted = []
-        modified = []
         empty_count = 0
 
         result = session.execute(text("""
@@ -383,41 +406,34 @@ async def compare_file_groups(
 
         for row in result:
             if row.is_empty:
-                # Process empty FileGroup immediately (no intermediate list)
                 empty_count += 1
                 stem, _ = split_path_stem_and_suffix(Path(row.primary_path))
                 key = (row.directory, stem)
-                fs_files = fs_groups.pop(key, set())  # Remove from fs_groups to avoid double-processing
-                diff = FileGroupDiff(
-                    directory=Path(row.directory),
-                    stem=stem,
-                    db_files=set(),
-                    fs_files=fs_files,
-                    file_group_id=row.id,
-                )
-                if fs_files:
-                    # Files exist on disk but not in DB - update the FileGroup
-                    modified.append(diff)
-                else:
-                    # No files on disk and no files in DB - delete the FileGroup
-                    deleted.append(diff)
+                db_groups[key].append((row.id, set(), row.mtime_epoch or 0))
             elif row.files:
-                # Compute stem from first file (all files in group share stem)
                 first_file = row.files[0]
                 stem, _ = split_path_stem_and_suffix(Path(row.directory) / first_file)
-                db_groups[(row.directory, stem)] = (row.id, set(row.files), row.mtime_epoch or 0)
+                key = (row.directory, stem)
+                db_groups[key].append((row.id, set(row.files), row.mtime_epoch or 0))
 
         logger.info(f'Found {len(db_groups)} file groups in database')
         if empty_count:
             logger.debug(f'Found {empty_count} FileGroups with empty files arrays')
 
-        # Recompute all_keys after removing empty FileGroup keys from fs_groups
-        all_keys = set(fs_groups.keys()) | set(db_groups.keys())
+        # Deduplicate: keep one FileGroup per key, mark the rest for deletion
+        deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
+
+        unchanged = []
+        new = []
+        deleted = list(duplicate_diffs)
+        modified = []
+
+        all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
 
         for key in all_keys:
             directory, stem = key
             fs_files = fs_groups.get(key, set())
-            db_id, db_files, db_mtime = db_groups.get(key, (None, set(), 0))
+            db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
 
             diff = FileGroupDiff(
                 directory=Path(directory),
@@ -443,13 +459,16 @@ async def compare_file_groups(
                         for filename in fs_files
                     )
                     # If filesystem mtime is newer than DB mtime, content changed
-                    if fs_mtime > float(db_mtime) + 0.001:  # small tolerance for float comparison
+                    if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
                         modified.append(diff)
                     else:
                         unchanged.append(diff)
                 except (OSError, ValueError):
                     # If we can't stat files, treat as unchanged
                     unchanged.append(diff)
+            elif db_id is not None and not fs_files and not db_files:
+                # Empty FileGroup with no files on disk — orphan, delete it
+                deleted.append(diff)
 
         logger.info(
             f'Comparison complete: {len(unchanged)} unchanged, {len(new)} new, '
@@ -1683,7 +1702,8 @@ class FileWorker:
         # Query existing FileGroups that might match our files
         directories = list(set(str(f.parent) for f in all_fs_files))
 
-        db_groups: Dict[Tuple[str, str], Tuple[int, Set[str], float]] = {}
+        # Collect ALL FileGroups per (directory, stem) key — duplicates are deduped after.
+        db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]] = defaultdict(list)
 
         with get_db_session() as session:
             # Query FileGroups in our directories
@@ -1692,75 +1712,78 @@ class FileWorker:
 
             for fg in file_groups:
                 if not fg.files:
-                    # Empty FileGroup - compute stem from primary_path
                     stem, _ = split_path_stem_and_suffix(fg.primary_path)
                     key = (fg.directory, stem)
                     if key in fs_groups:
                         mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key] = (fg.id, set(), mtime)
+                        db_groups[key].append((fg.id, set(), mtime))
                 else:
-                    # Compute stem from first file
                     first_file = fg.files[0]['path']
                     stem, _ = split_path_stem_and_suffix(pathlib.Path(fg.directory) / first_file)
                     key = (fg.directory, stem)
-
-                    # Include this FileGroup if its stem matches our targets
                     if key in fs_groups:
                         fg_filenames = {pathlib.Path(f['path']).name for f in fg.files}
                         mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key] = (fg.id, fg_filenames, mtime)
+                        db_groups[key].append((fg.id, fg_filenames, mtime))
+
+            # Track FG IDs already loaded by the directory query to avoid double-appending
+            seen_fg_ids: set[int] = set()
+            for entries in db_groups.values():
+                for fg_id, _, _ in entries:
+                    seen_fg_ids.add(fg_id)
 
             # Also query for FileGroups by primary_path for deleted files
             # This handles cases where the file was deleted and no related files exist
             if deleted_paths:
                 deleted_path_strs = [str(p) for p in deleted_paths]
                 deleted_fgs = session.query(FileGroup).filter(
-                    FileGroup.primary_path.in_(deleted_path_strs)
+                    FileGroup.primary_path.in_(deleted_path_strs),
+                    ~FileGroup.id.in_(seen_fg_ids) if seen_fg_ids else True,
                 ).all()
                 for fg in deleted_fgs:
+                    seen_fg_ids.add(fg.id)
                     stem, _ = split_path_stem_and_suffix(fg.primary_path)
                     key = (fg.directory, stem)
-                    if key not in db_groups:
-                        fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
-                        mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                        db_groups[key] = (fg.id, fg_filenames, mtime)
-                        # Ensure the key is in fs_groups (with empty set for deleted)
-                        if key not in fs_groups:
-                            fs_groups[key] = set()
+                    fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
+                    mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
+                    db_groups[key].append((fg.id, fg_filenames, mtime))
+                    if key not in fs_groups:
+                        fs_groups[key] = set()
 
                 # Also query for FileGroups contained in deleted directories
-                # This handles cases where a directory was deleted with files inside
                 for deleted_path in deleted_paths:
                     deleted_path_str = str(deleted_path)
                     dir_deleted_fgs = session.query(FileGroup).filter(
                         or_(
                             FileGroup.directory == deleted_path_str,
                             FileGroup.directory.like(f'{deleted_path_str}/%')
-                        )
+                        ),
+                        ~FileGroup.id.in_(seen_fg_ids) if seen_fg_ids else True,
                     ).all()
                     for fg in dir_deleted_fgs:
+                        seen_fg_ids.add(fg.id)
                         stem, _ = split_path_stem_and_suffix(fg.primary_path)
                         key = (fg.directory, stem)
-                        if key not in db_groups:
-                            fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
-                            mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
-                            db_groups[key] = (fg.id, fg_filenames, mtime)
-                            # Ensure the key is in fs_groups (with empty set for deleted)
-                            if key not in fs_groups:
-                                fs_groups[key] = set()
+                        fg_filenames = {pathlib.Path(f['path']).name for f in fg.files} if fg.files else set()
+                        mtime = fg.modification_datetime.timestamp() if fg.modification_datetime else 0
+                        db_groups[key].append((fg.id, fg_filenames, mtime))
+                        if key not in fs_groups:
+                            fs_groups[key] = set()
 
-        # Build diffs by comparing fs_groups with db_groups
+        # Deduplicate: keep one FileGroup per key, mark the rest for deletion
+        deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
+
         unchanged = []
         new = []
-        deleted = []
+        deleted = list(duplicate_diffs)
         modified = []
 
-        all_keys = set(fs_groups.keys()) | set(db_groups.keys())
+        all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
 
         for key in all_keys:
             directory, stem = key
             fs_files = fs_groups.get(key, set())
-            db_id, db_files, db_mtime = db_groups.get(key, (None, set(), 0))
+            db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
 
             diff = FileGroupDiff(
                 directory=Path(directory),
@@ -1784,12 +1807,15 @@ class FileWorker:
                         (dir_path / filename).stat().st_mtime
                         for filename in fs_files
                     )
-                    if fs_mtime > db_mtime + 1:
+                    if fs_mtime > db_mtime + MTIME_TOLERANCE_SECONDS:
                         modified.append(diff)
                     else:
                         unchanged.append(diff)
                 except (OSError, ValueError):
                     unchanged.append(diff)
+            elif db_id is not None and not fs_files and not db_files:
+                # Empty FileGroup with no files on disk — orphan, delete it
+                deleted.append(diff)
 
         logger.info(
             f'Direct file refresh: {len(unchanged)} unchanged, {len(new)} new, '

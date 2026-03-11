@@ -1,4 +1,5 @@
-describe('Caddy Media Serving Tests', () => {
+// These tests require Caddy (not available in CI where only React dev server runs)
+(Cypress.env('CI') ? describe.skip : describe)('Caddy Media Serving Tests', () => {
 
     describe('/media/ Content-Disposition inline', () => {
         it('sets Content-Disposition inline on /media/ file requests', () => {

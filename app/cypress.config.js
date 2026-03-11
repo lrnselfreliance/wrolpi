@@ -8,6 +8,9 @@ module.exports = defineConfig({
     supportFile: 'cypress/support/e2e.js',
     video: process.env.CI ? true : false,
     screenshotOnRunFailure: true,
+    env: {
+      CI: !!process.env.CI,
+    },
   },
   component: {
     devServer: {

@@ -12,6 +12,7 @@ import {
     findPosterPath,
     humanFileSize,
     humanNumber,
+    HelpHeader,
     InfoHeader,
     isoDatetimeToAgoPopup,
     mimetypeColor,
@@ -65,7 +66,7 @@ import {
 } from "../api";
 import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
-import {defaultFileOrder, defaultSearchOrder, HELP_VIEWER_URI} from "./Vars";
+import {defaultFileOrder, defaultSearchOrder} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
 import {VideoFormatSelectorForm, VideoResolutionSelectorForm} from "./Download";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
@@ -645,24 +646,12 @@ function CookiesSettingsSection() {
         return <Label color='yellow'>Locked</Label>;
     };
 
-    const popupContent = <div>
-        <p>Upload cookies exported from your browser to allow yt-dlp to download videos that require authentication.</p>
-        <p><strong>Browser extensions for exporting cookies:</strong></p>
-        <ul>
-            <li><strong>Chrome/Brave:</strong> <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer">Get cookies.txt LOCALLY</a></li>
-            <li><strong>Firefox:</strong> <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/" target="_blank" rel="noopener noreferrer">Get cookies.txt LOCALLY</a></li>
-        </ul>
-        <p>Cookies are encrypted with AES-128 and stored securely. You'll need to unlock them with your password after each restart.</p>
-    </div>;
-
     return <Segment>
-        <Header as='h4'>
-            <InfoHeader
-                headerSize='h4'
-                headerContent='Encrypted Cookies'
-                popupContent={popupContent}
-            />
-        </Header>
+        <HelpHeader
+            headerSize='h4'
+            headerContent='Encrypted Cookies'
+            helpPath='/modules/videos/cookies/'
+        />
 
         <p>Use this feature at your own risk! You may be suspended or blocked if abused!
         </p>

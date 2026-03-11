@@ -7,6 +7,7 @@ import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Inp
 import {
     APIButton,
     ErrorMessage,
+    HelpHeader,
     InfoPopup,
     RefreshHeader,
     Toggle,
@@ -817,7 +818,11 @@ export function SettingsPage() {
 
         <Divider/>
 
-        <Header as='h3'>Root CA Certificate</Header>
+        <HelpHeader
+            headerSize={'h3'}
+            headerContent='Root CA Certificate'
+            helpPath='/system/certificates/'
+        />
         <p>Install the WROLPi Root CA certificate on your devices to trust all HTTPS connections to this WROLPi.
             You only need to do this once per device.</p>
         <a href='/ca.crt' download='wrolpi-ca.crt'>

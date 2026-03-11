@@ -44,7 +44,7 @@ import {
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads, unlockCookies} from "../api";
-import {allFrequencyOptions, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
+import {allFrequencyOptions, HELP_VIEWER_URI, NAME, semanticUIColorMap, validUrlRegex} from "./Vars";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
@@ -899,6 +899,51 @@ export function InfoHeader({
         </label>
         <span>
             <InfoPopup content={popupContent} iconSize={iconSize} icon={icon} position={popupPosition} {...popupProps}/>
+        </span>
+    </div>
+}
+
+export function HelpModal({
+                              icon = 'help circle',
+                              iconSize = null,
+                              iconStyle = {margin: '0.5em'},
+                              helpPath,
+                              title = null,
+                              modalSize = 'fullscreen',
+                          }) {
+    const [open, setOpen] = useState(false);
+    const src = `${HELP_VIEWER_URI}${helpPath}`;
+    const style = {position: 'relative', height: '75vh', width: '100%', border: 'none'};
+
+    return <>
+        <Icon link name={icon} size={iconSize} style={iconStyle} onClick={() => setOpen(true)}/>
+        <Modal open={open} onClose={() => setOpen(false)} size={modalSize} closeIcon>
+            {title && <Modal.Header>{title}</Modal.Header>}
+            <Modal.Content>
+                <IframeViewer title={title} src={src} style={style}/>
+            </Modal.Content>
+        </Modal>
+    </>
+}
+
+export function HelpHeader({
+                                icon,
+                                headerSize = 'h2',
+                                iconSize,
+                                headerContent,
+                                helpPath,
+                                helpTitle,
+                                helpModalProps = {},
+                                for_ = null,
+                                required = false,
+                                ...props
+                            }) {
+    return <div className='inline-header' {...props}>
+        <label htmlFor={for_}>
+            <Header as={headerSize}>{headerContent} {required && <RequiredAsterisk/>}</Header>
+        </label>
+        <span>
+            <HelpModal helpPath={helpPath} iconSize={iconSize} icon={icon} title={helpTitle} {...helpModalProps}/>
         </span>
     </div>
 }

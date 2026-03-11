@@ -1,7 +1,9 @@
 import hashlib
 from http import HTTPStatus
+from unittest import mock
 
 from wrolpi import common
+from wrolpi.common import DownloadFileInfo
 from wrolpi.downloader import Download
 from wrolpi.files.downloader import FileDownloader
 from wrolpi.test.common import skip_circleci
@@ -88,3 +90,99 @@ async def test_file_downloader_meta4(test_session, make_files_structure, test_di
     assert (test_directory / f'downloads/{video_file.name}').read_bytes() == video_bytes
     # The meta4 was saved to a temporary file, but not saved.
     assert not (test_directory / 'downloads/foo.txt.meta4').exists()
+
+
+async def test_get_download_info_uuid_fallback():
+    """get_download_info falls back to the original URL's filename when the resolved name has no extension."""
+
+    class FakeResponse:
+        headers = {
+            'Content-Type': 'application/octet-stream',
+        }
+        status = 200
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def mock_head(url, timeout):
+        # Simulate a CDN redirect where Location is a UUID path.
+        resp = FakeResponse()
+        resp.headers = {**resp.headers, 'Location': 'https://cdn.example.com/6f21bc74-aaa8-47f6-ae98-2aebf359df94'}
+        yield resp
+
+    with mock.patch('wrolpi.common.aiohttp_head', mock_head):
+        info = await common.get_download_info('https://github.com/user/repo/releases/download/v1.0/somefile.tar.gz')
+
+    # The UUID name should be replaced with the original URL's filename.
+    assert info.name == 'somefile.tar.gz'
+
+
+async def test_file_downloader_aria2c_uses_output_flag(test_directory):
+    """The aria2c command includes -o with the predicted filename when not using metalink."""
+    file_downloader = FileDownloader()
+
+    destination = test_directory / 'downloads'
+    destination.mkdir()
+
+    captured_cmd = None
+
+    async def fake_process_runner(download, cmd, dest):
+        nonlocal captured_cmd
+        captured_cmd = cmd
+        # Create the expected output file so the downloader doesn't raise.
+        (destination / 'somefile.tar.gz').touch()
+
+        class FakeResult:
+            return_code = 0
+            stderr = b''
+
+        return FakeResult()
+
+    fake_info = DownloadFileInfo(name='somefile.tar.gz', size=1024, status=200)
+
+    with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
+        download = mock.MagicMock()
+        url = 'https://github.com/user/repo/releases/download/v1.0/somefile.tar.gz'
+        await file_downloader.download_file(download, url, destination)
+
+    # The command should include -o with the expected filename.
+    assert '-o' in captured_cmd
+    o_index = captured_cmd.index('-o')
+    assert captured_cmd[o_index + 1] == 'somefile.tar.gz'
+
+
+async def test_file_downloader_meta4_no_output_flag(test_directory):
+    """The aria2c command should NOT include -o when using a metalink file."""
+    file_downloader = FileDownloader()
+
+    destination = test_directory / 'downloads'
+    destination.mkdir()
+
+    captured_cmd = None
+
+    async def fake_process_runner(download, cmd, dest):
+        nonlocal captured_cmd
+        captured_cmd = cmd
+        # Create the expected output file.
+        (destination / 'somefile.tar.gz').touch()
+
+        class FakeResult:
+            return_code = 0
+            stderr = b''
+
+        return FakeResult()
+
+    fake_info = DownloadFileInfo(name='somefile.tar.gz', size=1024, status=200)
+
+    with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
+            mock.patch.object(file_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=b'<metalink/>')), \
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
+        download = mock.MagicMock()
+        url = 'https://example.com/somefile.tar.gz'
+        await file_downloader.download_file(download, url, destination)
+
+    # When metalink is used, -o should NOT be in the command.
+    assert '-o' not in captured_cmd
+    # But -M should be present.
+    assert '-M' in captured_cmd

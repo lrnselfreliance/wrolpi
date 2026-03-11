@@ -1732,6 +1732,12 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
             parsed = urlparse(url)
         info.name = parsed.path.split('/')[-1]
 
+    # If the resolved name has no extension but the original URL does, prefer the URL's filename.
+    # This prevents UUID-like names from CDN redirects.
+    url_name = urlparse(url).path.split('/')[-1]
+    if info.name and '.' not in info.name and '.' in url_name:
+        info.name = url_name
+
     return info
 
 

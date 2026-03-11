@@ -419,6 +419,10 @@ class Downloader:
                     cmd = (*cmd,
                            '-M', meta4_path,
                            )
+                else:
+                    # Force aria2c to use our predicted filename.  This avoids mismatches when
+                    # the URL redirects to a CDN path that doesn't match the original filename.
+                    cmd = (*cmd, '-o', output_path.name)
 
                 result = await self.process_runner(download, cmd, destination)
                 error = result.stderr.decode()

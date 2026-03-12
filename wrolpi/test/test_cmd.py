@@ -67,3 +67,44 @@ async def test_run_command_cancel(test_directory):
     assert result.stdout == b''
     assert result.stderr == b''
     assert result.elapsed == 1
+
+
+STREAMING_SCRIPT = '''#!/bin/sh
+echo "line one"
+echo "line two"
+echo "line three"
+echo stderr >&2
+'''
+
+
+async def test_run_command_streaming(test_directory):
+    """run_command_streaming captures stdout line-by-line and calls callback."""
+    (test_directory / 'stream.sh').write_text(STREAMING_SCRIPT)
+    lines = []
+    result = await cmd.run_command(
+        ('sh', 'stream.sh'),
+        cwd=test_directory,
+        stdout_callback=lambda line: lines.append(line),
+    )
+    assert result.return_code == 0
+    assert result.cancelled is False
+    assert result.stdout == b'line one\nline two\nline three\n'
+    assert result.stderr == b'stderr\n'
+    assert lines == ['line one', 'line two', 'line three']
+
+
+async def test_run_command_streaming_no_callback(test_directory):
+    """run_command_streaming works without a callback."""
+    (test_directory / 'stream.sh').write_text(STREAMING_SCRIPT)
+    result = await cmd.run_command(('sh', 'stream.sh'), cwd=test_directory)
+    assert result.return_code == 0
+    assert result.stdout == b'line one\nline two\nline three\n'
+    assert result.stderr == b'stderr\n'
+
+
+async def test_run_command_streaming_timeout(test_directory):
+    """Timeout is obeyed for streaming."""
+    result = await cmd.run_command(('sleep', '10'), timeout=2)
+    assert result.return_code == -9
+    assert result.cancelled is False
+    assert result.elapsed >= 2

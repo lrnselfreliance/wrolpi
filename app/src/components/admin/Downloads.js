@@ -17,7 +17,10 @@ import {
     DisableDownloadsToggle,
     ErrorMessage,
     formatFrequency,
+    humanBandwidth,
+    humanFileSize,
     isoDatetimeToElapsedPopup,
+    useLocalStorage,
     useTitle,
     WROLModeMessage
 } from "../Common";
@@ -25,7 +28,6 @@ import {
     Button as SButton,
     ButtonGroup,
     Checkbox,
-    Icon,
     Label,
     Loader,
     PlaceholderLine,
@@ -36,7 +38,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Modal, Placeholder, Segment, Table} from "../Theme";
+import {Button, Header, Modal, Placeholder, Progress, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import {
     EditArchiveDownloadForm,
@@ -48,6 +50,57 @@ import {
 } from "../Download";
 import {Downloaders} from "../Vars";
 import {SortableTable} from "../SortableTable";
+
+function DownloadProgressModal({progress, url}) {
+    const [open, setOpen] = React.useState(false);
+    const [navColor] = useLocalStorage('nav_color', 'violet');
+
+    const speedText = humanBandwidth(progress.speed);
+    const etaText = progress.eta || '...';
+    const buttonLabel = `${speedText} / ${etaText}`;
+
+    return <>
+        <Button size='small' onClick={() => setOpen(true)} style={{marginLeft: '0.5em'}}>
+            {buttonLabel}
+        </Button>
+        <Modal closeIcon open={open} onClose={() => setOpen(false)} size='small'>
+            <Modal.Header>Download Progress</Modal.Header>
+            <Modal.Content>
+                <Progress
+                    percent={progress.percent}
+                    progress
+                    indicating
+                    color={navColor}
+                >
+                    {humanFileSize(progress.bytes_downloaded)} / {humanFileSize(progress.total_bytes)}
+                </Progress>
+                <Table definition>
+                    <TableBody>
+                        <TableRow>
+                            <TableCell width={4}>Speed</TableCell>
+                            <TableCell>{speedText}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                            <TableCell>ETA</TableCell>
+                            <TableCell>{progress.eta || 'Calculating...'}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                            <TableCell>Downloaded</TableCell>
+                            <TableCell>{humanFileSize(progress.bytes_downloaded)} / {humanFileSize(progress.total_bytes)}</TableCell>
+                        </TableRow>
+                        {url && <TableRow>
+                            <TableCell>URL</TableCell>
+                            <TableCell style={{wordBreak: 'break-all'}}>{url}</TableCell>
+                        </TableRow>}
+                    </TableBody>
+                </Table>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setOpen(false)}>Close</Button>
+            </Modal.Actions>
+        </Modal>
+    </>;
+}
 
 function ClearDownloadsButton({callback, selectedIds, clearSelection}) {
     const hasSelection = selectedIds && selectedIds.length > 0;
@@ -271,11 +324,12 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         <TableCell>{formatFrequency(frequency)}</TableCell>
         <TableCell>
             {last_successful_download && isoDatetimeToElapsedPopup(last_successful_download)}
-            {status === 'pending' && <Loader active inline size='tiny'/>}
+            {status === 'pending' && !download.progress && <Loader active inline size='tiny'/>}
+            {download.progress && <DownloadProgressModal progress={download.progress} url={download.url}/>}
         </TableCell>
         <TableCell>{next}</TableCell>
         <TableCell textAlign='right'>
-            {error && errorModal}
+            {error && !download.progress && errorModal}
             {editButton}
             {restartButton}
         </TableCell>
@@ -387,7 +441,7 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
             </TableCell>
         );
     }
-    if (error) {
+    if (error && !download.progress) {
         completedAtCell = (
             <Modal
                 closeIcon
@@ -427,8 +481,8 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                     {parentDownloadUrl && (
                         <p style={{marginTop: '1em', color: '#666'}}>
                             From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
-                                {parentDownloadUrl}
-                            </a>
+                            {parentDownloadUrl}
+                        </a>
                         </p>
                     )}
                 </Modal.Content>
@@ -456,8 +510,8 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
                     {parentDownloadUrl && (
                         <p style={{marginTop: '1em', color: '#666'}}>
                             From: <a href={parentDownloadUrl} target='_blank' rel='noopener noreferrer'>
-                                {parentDownloadUrl}
-                            </a>
+                            {parentDownloadUrl}
+                        </a>
                         </p>
                     )}
                 </Modal.Content>
@@ -477,7 +531,8 @@ function OnceDownloadRow({download, fetchDownloads, isSelected, onSelect}) {
         </TableCell>
         <TableCell>
             {completedAtCell}
-            {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+            {status === 'pending' && !download.progress ? <Loader active inline size='tiny'/> : null}
+            {download.progress && <DownloadProgressModal progress={download.progress} url={download.url}/>}
         </TableCell>
         {buttonCell}
         {editModal}

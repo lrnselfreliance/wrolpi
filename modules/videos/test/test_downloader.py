@@ -9,7 +9,8 @@ import pytest
 
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
-    prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download
+    prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download, \
+    parse_ytdlp_progress
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -915,3 +916,50 @@ async def test_video_download_playlist_appended_extension(test_session, test_dir
 
     video: Video = test_session.query(Video).one()
     assert video.video_path == video_path_na
+
+
+def test_parse_ytdlp_progress():
+    """yt-dlp progress lines are parsed correctly."""
+    line = '[download]  50.0% of ~  45.67MiB at  2.34MiB/s ETA 00:19'
+    result = parse_ytdlp_progress(line)
+    assert result is not None
+    total = int(45.67 * 1024 ** 2)
+    assert result['total_bytes'] == total
+    assert result['percent'] == 50
+    assert result['bytes_downloaded'] == int(0.5 * total)
+    assert result['speed'] == int(2.34 * 1024 ** 2)
+    assert result['eta'] == '00:19'
+
+
+def test_parse_ytdlp_progress_no_estimated():
+    """yt-dlp progress lines without ~ estimated marker are parsed."""
+    line = '[download] 100% of   45.67MiB at  3.45MiB/s ETA 00:00'
+    result = parse_ytdlp_progress(line)
+    assert result is not None
+    assert result['percent'] == 100
+    assert result['total_bytes'] == int(45.67 * 1024 ** 2)
+    assert result['speed'] == int(3.45 * 1024 ** 2)
+    assert result['eta'] == '00:00'
+
+
+def test_parse_ytdlp_progress_small_percent():
+    """yt-dlp progress lines with small percentages are parsed."""
+    line = '[download]   0.1% of ~  45.67MiB at  1.23MiB/s ETA 00:37'
+    result = parse_ytdlp_progress(line)
+    assert result is not None
+    assert result['percent'] == 0
+    assert result['eta'] == '00:37'
+
+
+def test_parse_ytdlp_progress_completion_line():
+    """The final yt-dlp line with 'in' instead of 'at/ETA' returns None (no speed/ETA)."""
+    line = '[download] 100% of   45.67MiB in 00:13'
+    result = parse_ytdlp_progress(line)
+    assert result is None
+
+
+def test_parse_ytdlp_progress_not_progress_line():
+    """Non-progress lines return None."""
+    assert parse_ytdlp_progress('[info] Downloading video 1 of 1') is None
+    assert parse_ytdlp_progress('') is None
+    assert parse_ytdlp_progress('[download] Destination: video.mp4') is None

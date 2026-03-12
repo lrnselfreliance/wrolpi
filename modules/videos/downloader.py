@@ -5,6 +5,7 @@ import logging
 import os.path
 import pathlib
 import re
+import time
 import traceback
 from abc import ABC
 from datetime import timedelta
@@ -23,7 +24,8 @@ from wrolpi.common import logger, get_media_directory, escape_file_name, resolve
     trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.downloader import Downloader, Download, DownloadResult
+from wrolpi.downloader import Downloader, Download, DownloadResult, \
+    clear_download_progress, _parse_size, make_progress_callback
 from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
@@ -42,6 +44,36 @@ from .schema import ChannelPostRequest
 from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
+
+YTDLP_PROGRESS_RE = re.compile(
+    r'\[download\]\s+'
+    r'([\d.]+)%\s+'              # percent
+    r'of\s+~?\s*([\d.]+\w+)\s+' # total size (with optional ~)
+    r'at\s+([\d.]+\w+/s)\s+'    # speed
+    r'ETA\s+(\S+)'              # ETA
+)
+
+
+def parse_ytdlp_progress(line: str) -> dict | None:
+    """Parse a yt-dlp progress line (with --newline) and return a dict, or None if not a progress line."""
+    m = YTDLP_PROGRESS_RE.search(line)
+    if not m:
+        return None
+    percent = float(m.group(1))
+    total_bytes = _parse_size(m.group(2))
+    speed_str = m.group(3).rstrip('/s')
+    speed = _parse_size(speed_str)
+    eta = m.group(4)
+    if eta == 'Unknown':
+        eta = None
+    return dict(
+        bytes_downloaded=int(percent / 100.0 * total_bytes),
+        total_bytes=total_bytes,
+        percent=int(percent),
+        speed=speed,
+        eta=eta,
+    )
+
 
 VIDEO_RESOLUTION_MAP = {
     '360p': [
@@ -585,6 +617,7 @@ class VideoDownloader(Downloader, ABC):
                 '--convert-thumbnails', DEFAULT_POSTER_FORMAT,
                 '--merge-output-format', video_format,
                 '--no-cache-dir',
+                '--newline',
                 '--compat-options', 'no-live-chat',
                 # Get top 20 comments, 10 replies per parent.
                 '--write-comments',
@@ -605,20 +638,27 @@ class VideoDownloader(Downloader, ABC):
             if effective['sleep_requests'] > 0:
                 cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
 
-            if cookies_unlocked():
-                # Use encrypted cookies file
-                logger.info(f'Using encrypted cookies for video download: {url}')
-                with cookies_for_download() as cookies_path:
-                    cmd = (*cmd, '--cookies', str(cookies_path))
-                    if effective['user_agent']:
-                        cmd = (*cmd, '--add-headers', f'User-Agent:{effective["user_agent"]}')
+            on_stdout = make_progress_callback(download.id, parse_ytdlp_progress)
+
+            try:
+                if cookies_unlocked():
+                    # Use encrypted cookies file
+                    logger.info(f'Using encrypted cookies for video download: {url}')
+                    with cookies_for_download() as cookies_path:
+                        cmd = (*cmd, '--cookies', str(cookies_path))
+                        if effective['user_agent']:
+                            cmd = (*cmd, '--add-headers', f'User-Agent:{effective["user_agent"]}')
+                        cmd = (*cmd, '-o', video_path, url)
+                        result = await self.process_runner(download, cmd, out_dir, debug=True,
+                                                          stdout_callback=on_stdout)
+                else:
+                    # No cookies available
+                    logger.info(f'No cookies available for video download: {url}')
                     cmd = (*cmd, '-o', video_path, url)
-                    result = await self.process_runner(download, cmd, out_dir, debug=True)
-            else:
-                # No cookies available
-                logger.info(f'No cookies available for video download: {url}')
-                cmd = (*cmd, '-o', video_path, url)
-                result = await self.process_runner(download, cmd, out_dir, debug=True)
+                    result = await self.process_runner(download, cmd, out_dir, debug=True,
+                                                      stdout_callback=on_stdout)
+            finally:
+                clear_download_progress(download.id)
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
 

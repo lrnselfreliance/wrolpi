@@ -955,6 +955,17 @@ class Channel(ModelHelper, Base):
         self.tag_id = self.tag.id if self.tag else None
         return self.tag
 
+    @staticmethod
+    def _get_external_file_paths(session, channel_id: int, directory: pathlib.Path) -> list[pathlib.Path]:
+        """Return primary_path for all Videos in this channel whose FileGroup is outside the channel directory."""
+        dir_str = f'{directory}/'
+        file_groups = session.query(FileGroup).join(Video, Video.file_group_id == FileGroup.id).filter(
+            Video.channel_id == channel_id,
+            FileGroup.directory != str(directory),
+            ~FileGroup.directory.startswith(dir_str),
+        ).all()
+        return [fg.primary_path for fg in file_groups]
+
     @classmethod
     def refresh_files(cls, id_: int, send_events: bool = True) -> str:
         """Refresh all files within this Channel's directory.  Returns job_id for awaiting.
@@ -962,10 +973,13 @@ class Channel(ModelHelper, Base):
         The channel is marked as refreshed after the background task completes post-processing."""
         # Get this Channel's info for later.  Refresh may take a long time.
         with get_db_session() as session:
-            directory = cls.find_by_id(session, id_).directory
+            channel = cls.find_by_id(session, id_)
+            directory = channel.directory
+            # Find files associated with this channel but outside its directory.
+            external_paths = cls._get_external_file_paths(session, id_, directory)
 
         # Queue refresh immediately so caller can await the job.
-        job_id = file_worker.queue_refresh([directory])
+        job_id = file_worker.queue_refresh([directory] + external_paths)
 
         # Background task handles post-processing after job completes.
         async def _():

@@ -603,7 +603,7 @@ async def test_execute_batch_reorganization(async_client, test_directory, kind, 
     assert result['collection_count'] >= 0  # May be 0 if no files to move
 
 
-def test_batch_reorganization_status_tracking(test_session):
+def test_batch_reorganization_status_tracking(async_client, test_session):
     """Status should show overall + per-collection progress."""
     # Test with a non-existent batch job
     status = get_batch_reorganization_status('nonexistent-batch-job')

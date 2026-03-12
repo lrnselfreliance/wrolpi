@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import pathlib
 import random
+import re
 import tempfile
 import time
 import traceback
@@ -29,6 +30,7 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
+
 from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
@@ -45,6 +47,79 @@ from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 logger = logger.getChild(__name__)
 
 ARIA2C_PATH = which('aria2c', '/usr/bin/aria2c')
+
+ARIA2C_PROGRESS_RE = re.compile(
+    r'\[#\w+\s+'
+    r'([\d.]+\w+)/([\d.]+\w+)'  # downloaded/total
+    r'\((\d+)%\)'  # percent
+    r'.*?DL:([\d.]+\w+)'  # speed
+    r'(?:.*?ETA:([^\s\]]+))?'  # optional ETA
+)
+
+_SIZE_UNITS = [('TiB', 1024 ** 4), ('GiB', 1024 ** 3), ('MiB', 1024 ** 2), ('KiB', 1024), ('B', 1)]
+
+
+def _parse_size(s: str) -> int:
+    """Convert a size string like '4.5MiB' to bytes (int)."""
+    for suffix, multiplier in _SIZE_UNITS:
+        if s.endswith(suffix):
+            return int(float(s[:-len(suffix)]) * multiplier)
+    # Fallback: try parsing as pure number.
+    return int(float(s))
+
+
+def parse_aria2c_progress(line: str) -> dict | None:
+    """Parse an aria2c progress line and return a dict, or None if not a progress line."""
+    m = ARIA2C_PROGRESS_RE.search(line)
+    if not m:
+        return None
+    return dict(
+        bytes_downloaded=_parse_size(m.group(1)),
+        total_bytes=_parse_size(m.group(2)),
+        percent=int(m.group(3)),
+        speed=_parse_size(m.group(4)),
+        eta=m.group(5),
+    )
+
+
+def set_download_progress(download_id: int, progress: dict):
+    """Store download progress in shared_ctx."""
+    data = dict(api_app.shared_ctx.download_manager_data)
+    dp = dict(data.get('download_progress', {}))
+    dp[download_id] = progress
+    data['download_progress'] = dp
+    api_app.shared_ctx.download_manager_data.update(data)
+
+
+def clear_download_progress(download_id: int):
+    """Remove download progress from shared_ctx."""
+    data = dict(api_app.shared_ctx.download_manager_data)
+    dp = dict(data.get('download_progress', {}))
+    dp.pop(download_id, None)
+    data['download_progress'] = dp
+    api_app.shared_ctx.download_manager_data.update(data)
+
+
+def make_progress_callback(download_id: int, parse_fn: callable) -> callable:
+    """Create a stdout callback that parses progress lines and updates shared_ctx.
+
+    The callback throttles updates to at most once per second.
+
+    :param download_id: The download ID to update progress for.
+    :param parse_fn: A function that takes a line string and returns a progress dict or None.
+    """
+    last_update = [0.0]
+
+    def on_stdout(line: str):
+        now_ = time.monotonic()
+        if now_ - last_update[0] < 1.0:
+            return
+        progress = parse_fn(line)
+        if progress:
+            last_update[0] = now_
+            set_download_progress(download_id, progress)
+
+    return on_stdout
 
 
 @perpetual_signal(sleep=1 if PYTEST else 5)
@@ -314,7 +389,8 @@ class Downloader:
         raise NotImplementedError()
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
-                             timeout: int = None, debug: bool = True) -> CommandResult:
+                             timeout: int = None, debug: bool = True,
+                             stdout_callback: callable = None) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
@@ -324,7 +400,8 @@ class Downloader:
             raise RuntimeError('cwd directory does not exist')
 
         timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
-        coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug)
+        coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug,
+                           stdout_callback=stdout_callback)
         result = await self.cancel_wrapper(coro, download)
 
         if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
@@ -343,23 +420,33 @@ class Downloader:
         """
         download_id = download.id
         task = asyncio.create_task(coro)
-        while not task.done():
-            if download_manager.download_is_killed(download_id) or not download_manager.can_download:
-                logger.warning(f'Cancel download of {download.url}')
+        try:
+            while not task.done():
+                if download_manager.download_is_killed(download_id) or not download_manager.can_download:
+                    logger.warning(f'Cancel download of {download.url}')
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError as e:
+                        logger.info(f'Successful cancel of {download.url}', exc_info=e)
+                        return DownloadResult(
+                            success=False,
+                            error='Download was canceled',
+                        )
+                    finally:
+                        download_manager.unkill_download(download_id)
+                else:
+                    # Wait for the download to complete.  Cancel if requested.
+                    await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            # Outer cancellation (e.g. from a parent cancel_wrapper). Ensure the inner task is also cancelled.
+            if not task.done():
                 task.cancel()
                 try:
                     await task
-                except asyncio.CancelledError as e:
-                    logger.info(f'Successful cancel of {download.url}', exc_info=e)
-                    return DownloadResult(
-                        success=False,
-                        error='Download was canceled',
-                    )
-                finally:
-                    download_manager.unkill_download(download_id)
-            else:
-                # Wait for the download to complete.  Cancel if requested.
-                await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    pass
+            raise
 
         # Return the result of the download attempt.
         return task.result()
@@ -424,7 +511,12 @@ class Downloader:
                     # the URL redirects to a CDN path that doesn't match the original filename.
                     cmd = (*cmd, '-o', output_path.name)
 
-                result = await self.process_runner(download, cmd, destination)
+                on_stdout = make_progress_callback(download.id, parse_aria2c_progress)
+
+                try:
+                    result = await self.process_runner(download, cmd, destination, stdout_callback=on_stdout)
+                finally:
+                    clear_download_progress(download.id)
                 error = result.stderr.decode()
 
                 if result.return_code != 0:
@@ -1034,6 +1126,14 @@ class DownloadManager:
             curs.execute(stmt)
             pending_once_downloads = curs.fetchone()[0]
 
+        try:
+            progress_data = dict(api_app.shared_ctx.download_manager_data.get('download_progress', {}))
+        except Exception:
+            progress_data = {}
+        for download in once_downloads + recurring_downloads:
+            if download['id'] in progress_data:
+                download['progress'] = progress_data[download['id']]
+
         data = dict(
             recurring_downloads=recurring_downloads,
             once_downloads=once_downloads,
@@ -1354,6 +1454,8 @@ async def signal_download_download(download_id: int, download_url: str):
             # Remove this domain from the running list.
             if download_domain:
                 download_manager._delete_processing_domain(download_domain)
+            # Ensure download progress is always cleaned up.
+            clear_download_progress(download_id)
 
 
 @dataclass

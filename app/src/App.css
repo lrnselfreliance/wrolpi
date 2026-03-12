@@ -111,6 +111,17 @@ input:checked + .slider:before {
     transform: translateX(26px);
 }
 
+.inverted-progress-text.ui.indicating.progress .bar > .progress,
+.inverted-progress-text.ui.progress > .label {
+    color: white !important;
+}
+
+/* Light bar colors (yellow, olive) need dark text on the bar — must override inverted-progress-text. */
+.light-bar-progress-text.ui.indicating.progress .bar > .progress,
+.light-bar-progress-text.ui.progress .bar > .progress {
+    color: rgba(0, 0, 0, 0.85) !important;
+}
+
 div.full-height {
     overflow: hidden;
     padding-top: 100%;

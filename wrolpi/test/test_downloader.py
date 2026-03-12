@@ -15,9 +15,129 @@ from wrolpi.common import get_wrolpi_config
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
-    get_download_manager_config, RSSDownloader
+    get_download_manager_config, RSSDownloader, parse_aria2c_progress, _parse_size, \
+    set_download_progress, clear_download_progress, make_progress_callback, download_manager
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
+
+
+def test_parse_size():
+    """Size strings are parsed to bytes."""
+    assert _parse_size('0B') == 0
+    assert _parse_size('1024B') == 1024
+    assert _parse_size('1.0KiB') == 1024
+    assert _parse_size('4.5MiB') == int(4.5 * 1024 ** 2)
+    assert _parse_size('1.0GiB') == 1024 ** 3
+    assert _parse_size('2.5TiB') == int(2.5 * 1024 ** 4)
+
+
+def test_parse_aria2c_progress():
+    """aria2c progress lines are parsed correctly."""
+    line = '[#c52705 1.0MiB/1.0GiB(0%) CN:1 DL:4.5MiB ETA:3m44s]'
+    result = parse_aria2c_progress(line)
+    assert result is not None
+    assert result['bytes_downloaded'] == int(1.0 * 1024 ** 2)
+    assert result['total_bytes'] == 1024 ** 3
+    assert result['percent'] == 0
+    assert result['speed'] == int(4.5 * 1024 ** 2)
+    assert result['eta'] == '3m44s'
+
+
+def test_parse_aria2c_progress_no_eta():
+    """aria2c progress lines without ETA are parsed."""
+    line = '[#abc123 500.0MiB/1.0GiB(48%) CN:3 DL:10.0MiB]'
+    result = parse_aria2c_progress(line)
+    assert result is not None
+    assert result['percent'] == 48
+    assert result['speed'] == int(10.0 * 1024 ** 2)
+    assert result['eta'] is None
+
+
+def test_parse_aria2c_progress_not_progress_line():
+    """Non-progress lines return None."""
+    assert parse_aria2c_progress('03/12 10:00:00 [NOTICE] Download complete') is None
+    assert parse_aria2c_progress('') is None
+    assert parse_aria2c_progress('some random text') is None
+
+
+@pytest.mark.asyncio
+async def test_set_and_clear_download_progress(async_client):
+    """set_download_progress stores progress in shared_ctx and clear_download_progress removes it."""
+    from wrolpi.api_utils import api_app
+    # No progress initially.
+    data = dict(api_app.shared_ctx.download_manager_data)
+    assert data.get('download_progress', {}) == {}
+
+    # Set progress for a download.
+    progress = dict(bytes_downloaded=1024, total_bytes=2048, percent=50, speed=512, eta='2s')
+    set_download_progress(42, progress)
+    data = dict(api_app.shared_ctx.download_manager_data)
+    assert data['download_progress'][42] == progress
+
+    # Clear it.
+    clear_download_progress(42)
+    data = dict(api_app.shared_ctx.download_manager_data)
+    assert 42 not in data.get('download_progress', {})
+
+
+@pytest.mark.asyncio
+async def test_make_progress_callback(async_client):
+    """make_progress_callback creates a callback that throttles and updates shared_ctx."""
+    from wrolpi.api_utils import api_app
+
+    def fake_parse(line):
+        if 'progress' in line:
+            return dict(percent=50)
+        return None
+
+    callback = make_progress_callback(99, fake_parse)
+
+    # Non-matching line does nothing.
+    callback('some other line')
+    data = dict(api_app.shared_ctx.download_manager_data)
+    assert 99 not in data.get('download_progress', {})
+
+    # Matching line updates shared_ctx.
+    with mock.patch('wrolpi.downloader.time') as mock_time:
+        mock_time.monotonic.return_value = 100.0
+        callback('progress line')
+        data = dict(api_app.shared_ctx.download_manager_data)
+        assert data['download_progress'][99] == dict(percent=50)
+
+        # A call within 1 second is throttled (uses a different progress value to verify).
+        mock_time.monotonic.return_value = 100.5
+        callback('progress line')  # Would update, but throttled.
+
+    # Clean up.
+    clear_download_progress(99)
+
+
+@pytest.mark.asyncio
+async def test_cancel_wrapper_outer_cancellation(test_session, test_download_manager, test_downloader):
+    """cancel_wrapper propagates outer CancelledError and cancels the inner task."""
+    download = test_download_manager.create_download(test_session, 'https://example.com/cancel', test_downloader.name)
+    test_session.commit()
+
+    inner_cancelled = asyncio.Event()
+
+    async def slow_coro():
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            inner_cancelled.set()
+            raise
+
+    wrapper_task = asyncio.create_task(Downloader.cancel_wrapper(slow_coro(), download))
+    # Give the wrapper time to start polling.
+    await asyncio.sleep(0.3)
+
+    # Cancel the wrapper from outside (simulating parent cancellation).
+    wrapper_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await wrapper_task
+
+    # The inner coroutine should have been cancelled too.
+    assert inner_cancelled.is_set()
 
 
 @pytest.mark.asyncio

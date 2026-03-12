@@ -313,9 +313,20 @@ export function Popup(props: PopupProps) {
     return <SPopup {...i} style={{border: '1px solid grey'}} {...props}/>
 }
 
+// Bar colors that always need dark percent text (light bars in any theme).
+const PROGRESS_BAR_COLORS = ['yellow', 'olive', 'teal'];
+// Bar colors that need dark percent text only in dark mode (inverted makes bar lighter).
+const DARK_MODE_PROGRESS_BAR_COLORS = ['grey', 'blue'];
+
 export function Progress(props: ProgressProps) {
-    const {i} = useContext(ThemeContext);
-    return <SProgress {...i} {...props}/>
+    const {i, inverted} = useContext(ThemeContext);
+    const classes = [props.className || ''];
+    if (inverted) classes.push('inverted-progress-text');
+    const color = props.color as string;
+    if (PROGRESS_BAR_COLORS.includes(color) || (inverted && DARK_MODE_PROGRESS_BAR_COLORS.includes(color))) {
+        classes.push('light-bar-progress-text');
+    }
+    return <SProgress {...i} {...props} className={classes.join(' ').trim()}/>
 }
 
 export function Segment(props: SegmentProps) {

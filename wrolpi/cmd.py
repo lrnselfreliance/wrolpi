@@ -155,10 +155,15 @@ TESTING_RUN_COMMAND_RESULT = None
 
 
 async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
-                      timeout: int = 600, log_command: bool = True) -> CommandResult:
+                      timeout: int = 600, log_command: bool = True,
+                      stdout_callback: callable = None) -> CommandResult:
     """Run a shell command, return the results (stdout/stderr/return code).
 
+    When stdout_callback is provided, stdout is piped and each line is passed to the callback
+    in real-time.  Otherwise, stdout is written to a temporary file.
+
     :param log_command: Enable debug logging.
+    :param stdout_callback: Called with each decoded stdout line (str). May be None.
     """
     if not isinstance(cmd, (list, tuple)):
         raise RuntimeError('Command must be a list or tuple')
@@ -167,61 +172,102 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         logger.debug('run_command: returning mock result')
         return TESTING_RUN_COMMAND_RESULT()  # call the mock
 
-    with tempfile.NamedTemporaryFile() as stdout_fh, tempfile.NamedTemporaryFile() as stderr_fh:
-        stdout_file, stderr_file = pathlib.Path(stdout_fh.name), pathlib.Path(stderr_fh.name)
+    streaming = stdout_callback is not None
+
+    with tempfile.NamedTemporaryFile() as stderr_fh:
+        stderr_file = pathlib.Path(stderr_fh.name)
         cmd = tuple(str(i) for i in cmd)
         cmd_str = ' '.join(shlex.quote(i) for i in cmd)
         if log_command:
             logger.info(f'run_command: running ({timeout=}): {cmd_str}')
         elif __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             logger.trace(f'run_command: running ({timeout=}): {cmd_str}')
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=stdout_fh,  # Use stdout/stderr files to avoid buffer filling up.
-            stderr=stderr_fh,
-            cwd=cwd,
-        )
-        pid = proc.pid
 
-        cancelled = False
-        start = time()
+        stdout_fh = None
+        stdout_file = None
+        reader_task = None
+        stdout_buf = None
+
+        if streaming:
+            stdout_arg = asyncio.subprocess.PIPE
+            stdout_buf = bytearray()
+        else:
+            stdout_fh = tempfile.NamedTemporaryFile()
+            stdout_file = pathlib.Path(stdout_fh.name)
+            stdout_arg = stdout_fh
+
         try:
-            while True:
-                elapsed = int(time() - start)
-                if timeout and elapsed >= timeout:
-                    logger.warning(f'run_command: timeout exceeded, killing... {cmd=}')
-                    proc.kill()
-                    await proc.wait()
-                    break
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=stdout_arg,
+                stderr=stderr_fh,
+                cwd=cwd,
+            )
+            pid = proc.pid
 
+            if streaming:
+                async def _read_stdout():
+                    while True:
+                        line = await proc.stdout.readline()
+                        if not line:
+                            break
+                        stdout_buf.extend(line)
+                        try:
+                            stdout_callback(line.decode(errors='replace').rstrip('\n'))
+                        except Exception as e:
+                            logger.warning(f'run_command: stdout_callback error: {e}')
+
+                reader_task = asyncio.create_task(_read_stdout())
+
+            cancelled = False
+            start = time()
+            try:
+                while True:
+                    elapsed = int(time() - start)
+                    if timeout and elapsed >= timeout:
+                        logger.warning(f'run_command: timeout exceeded, killing... {cmd=}')
+                        proc.kill()
+                        await proc.wait()
+                        break
+
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=1)
+                        break
+                    except asyncio.TimeoutError:
+                        continue
+            except CancelledError as e:
+                logger.warning(f'run_command: cancelled, killing... {cmd=}', exc_info=e)
+                cancelled = True
+                proc.kill()
+                await proc.wait()
+
+            if reader_task:
+                reader_task.cancel()
                 try:
-                    # Wait for the process to finish.
-                    await asyncio.wait_for(proc.wait(), timeout=1)
-                    break
-                except asyncio.TimeoutError:
-                    # Task is not done, keep waiting...
-                    continue
-        except CancelledError as e:
-            logger.warning(f'run_command: cancelled, killing... {cmd=}', exc_info=e)
-            cancelled = True
-            proc.kill()
-            await proc.wait()
+                    await reader_task
+                except (CancelledError, asyncio.CancelledError):
+                    pass
 
-        elapsed = int(time() - start)
-        stdout = stdout_file.read_bytes() or b''
-        stderr = stderr_file.read_bytes() or b''
-        # Logs details of the call, but only if it took a long time or TRACE is enabled.
-        if log_command:
-            logger.debug(
-                f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
-        elif __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(
-                f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
-        return CommandResult(
-            return_code=proc.returncode,
-            cancelled=cancelled,
-            stdout=stdout,
-            stderr=stderr,
-            elapsed=elapsed,
-            pid=pid,
-        )
+            elapsed = int(time() - start)
+            if streaming:
+                stdout = bytes(stdout_buf)
+            else:
+                stdout = stdout_file.read_bytes() or b''
+            stderr = stderr_file.read_bytes() or b''
+            if log_command:
+                logger.debug(
+                    f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
+            elif __debug__ and logger.isEnabledFor(TRACE_LEVEL):
+                logger.trace(
+                    f'run_command: finished ({elapsed=}s) with stdout={len(stdout)} stderr={len(stderr)}: {cmd_str=}')
+            return CommandResult(
+                return_code=proc.returncode,
+                cancelled=cancelled,
+                stdout=stdout,
+                stderr=stderr,
+                elapsed=elapsed,
+                pid=pid,
+            )
+        finally:
+            if stdout_fh:
+                stdout_fh.close()

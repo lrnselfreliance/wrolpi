@@ -273,6 +273,43 @@ def update_collection(
     return collection
 
 
+def _get_external_collection_file_paths(session, collection_id: int, directory: pathlib.Path) -> list[pathlib.Path]:
+    """Return primary_path for FileGroups associated with a collection but outside its directory.
+
+    Checks both CollectionItem relationships and kind-specific relationships (e.g. Channel → Video)."""
+    from wrolpi.files.models import FileGroup
+    from .models import CollectionItem
+    dir_str = f'{directory}/'
+
+    external_paths = []
+
+    # Check CollectionItems.
+    item_fgs = session.query(FileGroup).join(
+        CollectionItem, CollectionItem.file_group_id == FileGroup.id
+    ).filter(
+        CollectionItem.collection_id == collection_id,
+        FileGroup.directory != str(directory),
+        ~FileGroup.directory.startswith(dir_str),
+    ).all()
+    for fg in item_fgs:
+        external_paths.append(fg.primary_path)
+
+    # For channel-kind collections, also check Videos linked via Channel.
+    collection = session.query(Collection).filter_by(id=collection_id).one()
+    if collection.kind == 'channel':
+        from modules.videos.models import Channel
+        channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+        if channel:
+            channel_paths = Channel._get_external_file_paths(session, channel.id, directory)
+            # Deduplicate against paths already found via CollectionItems.
+            seen = set(external_paths)
+            for p in channel_paths:
+                if p not in seen:
+                    external_paths.append(p)
+
+    return external_paths
+
+
 def refresh_collection(collection_id: int, send_events: bool = True) -> None:
     """
     Refresh all files in a collection's directory.
@@ -301,9 +338,11 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
             )
 
         directory = collection.directory
+        # Find files associated with this collection but outside its directory.
+        external_paths = _get_external_collection_file_paths(session, collection_id, directory)
 
     # Refresh files asynchronously
-    file_worker.queue_refresh([directory])
+    file_worker.queue_refresh([directory] + external_paths)
 
     if send_events:
         relative_dir = get_relative_to_media_directory(directory)

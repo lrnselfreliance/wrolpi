@@ -134,6 +134,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.download_manager_data.update(dict(
         processing_domains=[],
         killed_downloads=[],
+        download_progress={},
     ))
 
     # Configs

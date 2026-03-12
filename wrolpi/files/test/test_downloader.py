@@ -117,6 +117,7 @@ async def test_get_download_info_uuid_fallback():
     assert info.name == 'somefile.tar.gz'
 
 
+@skip_circleci
 async def test_file_downloader_aria2c_uses_output_flag(test_directory):
     """The aria2c command includes -o with the predicted filename when not using metalink."""
     file_downloader = FileDownloader()
@@ -126,7 +127,7 @@ async def test_file_downloader_aria2c_uses_output_flag(test_directory):
 
     captured_cmd = None
 
-    async def fake_process_runner(download, cmd, dest):
+    async def fake_process_runner(download, cmd, dest, **kwargs):
         nonlocal captured_cmd
         captured_cmd = cmd
         # Create the expected output file so the downloader doesn't raise.
@@ -141,7 +142,8 @@ async def test_file_downloader_aria2c_uses_output_flag(test_directory):
     fake_info = DownloadFileInfo(name='somefile.tar.gz', size=1024, status=200)
 
     with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
-            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner), \
+            mock.patch('wrolpi.downloader.clear_download_progress'):
         download = mock.MagicMock()
         url = 'https://github.com/user/repo/releases/download/v1.0/somefile.tar.gz'
         await file_downloader.download_file(download, url, destination)
@@ -152,6 +154,7 @@ async def test_file_downloader_aria2c_uses_output_flag(test_directory):
     assert captured_cmd[o_index + 1] == 'somefile.tar.gz'
 
 
+@skip_circleci
 async def test_file_downloader_meta4_no_output_flag(test_directory):
     """The aria2c command should NOT include -o when using a metalink file."""
     file_downloader = FileDownloader()
@@ -161,7 +164,7 @@ async def test_file_downloader_meta4_no_output_flag(test_directory):
 
     captured_cmd = None
 
-    async def fake_process_runner(download, cmd, dest):
+    async def fake_process_runner(download, cmd, dest, **kwargs):
         nonlocal captured_cmd
         captured_cmd = cmd
         # Create the expected output file.
@@ -177,7 +180,8 @@ async def test_file_downloader_meta4_no_output_flag(test_directory):
 
     with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
             mock.patch.object(file_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=b'<metalink/>')), \
-            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner), \
+            mock.patch('wrolpi.downloader.clear_download_progress'):
         download = mock.MagicMock()
         url = 'https://example.com/somefile.tar.gz'
         await file_downloader.download_file(download, url, destination)

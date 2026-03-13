@@ -510,15 +510,6 @@ export function SettingsPage() {
                         <Grid.Column>
                             <div style={{margin: '0.5em'}}>
                                 <Toggle
-                                    label='Download on Startup'
-                                    disabled={disabled || state.download_on_startup === null}
-                                    checked={state.download_on_startup === true}
-                                    onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
-                                />
-                            </div>
-
-                            <div style={{margin: '0.5em'}}>
-                                <Toggle
                                     label='CPU Power-save on Startup'
                                     disabled={disabled || state.throttle_on_startup === null}
                                     checked={state.throttle_on_startup === true}
@@ -653,7 +644,17 @@ export function SettingsPage() {
 
 
                 <Divider/>
+
                 <Header as='h3'>Download settings</Header>
+
+                <div style={{margin: '0.5em'}}>
+                    <Toggle
+                        label='Download on Startup'
+                        disabled={disabled || state.download_on_startup === null}
+                        checked={state.download_on_startup === true}
+                        onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
+                    />
+                </div>
 
                 <Form.Group inline>
                     <Form.Input

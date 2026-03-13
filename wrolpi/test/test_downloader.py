@@ -2,7 +2,7 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from datetime import datetime
+from datetime import datetime, time
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
@@ -1061,58 +1061,58 @@ def test_is_within_download_window_no_config(test_download_manager):
     assert test_download_manager.is_within_download_window() is True
 
 
-def test_is_within_download_window_same_day(test_download_manager, fake_now):
+def test_is_within_download_window_same_day(test_download_manager):
     """Same-day window (e.g. 08:00-17:00) boundary checks."""
     config = get_wrolpi_config()
     config.download_window_start = '08:00'
     config.download_window_end = '17:00'
 
     # Before window
-    fake_now(datetime(2000, 1, 1, 7, 59))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(7, 59)):
+        assert test_download_manager.is_within_download_window() is False
 
     # Start of window
-    fake_now(datetime(2000, 1, 1, 8, 0))
-    assert test_download_manager.is_within_download_window() is True
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(8, 0)):
+        assert test_download_manager.is_within_download_window() is True
 
     # Middle of window
-    fake_now(datetime(2000, 1, 1, 12, 0))
-    assert test_download_manager.is_within_download_window() is True
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(12, 0)):
+        assert test_download_manager.is_within_download_window() is True
 
     # End of window (exclusive)
-    fake_now(datetime(2000, 1, 1, 17, 0))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(17, 0)):
+        assert test_download_manager.is_within_download_window() is False
 
     # After window
-    fake_now(datetime(2000, 1, 1, 23, 0))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(23, 0)):
+        assert test_download_manager.is_within_download_window() is False
 
 
-def test_is_within_download_window_overnight(test_download_manager, fake_now):
+def test_is_within_download_window_overnight(test_download_manager):
     """Overnight window (e.g. 22:00-06:00) wrapping."""
     config = get_wrolpi_config()
     config.download_window_start = '22:00'
     config.download_window_end = '06:00'
 
     # Before window (daytime)
-    fake_now(datetime(2000, 1, 1, 12, 0))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(12, 0)):
+        assert test_download_manager.is_within_download_window() is False
 
     # Just before window start
-    fake_now(datetime(2000, 1, 1, 21, 59))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(21, 59)):
+        assert test_download_manager.is_within_download_window() is False
 
     # Start of window
-    fake_now(datetime(2000, 1, 1, 22, 0))
-    assert test_download_manager.is_within_download_window() is True
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(22, 0)):
+        assert test_download_manager.is_within_download_window() is True
 
     # Middle of night
-    fake_now(datetime(2000, 1, 2, 3, 0))
-    assert test_download_manager.is_within_download_window() is True
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(3, 0)):
+        assert test_download_manager.is_within_download_window() is True
 
     # End of window (exclusive)
-    fake_now(datetime(2000, 1, 2, 6, 0))
-    assert test_download_manager.is_within_download_window() is False
+    with mock.patch.object(type(test_download_manager), '_get_local_time', return_value=time(6, 0)):
+        assert test_download_manager.is_within_download_window() is False
 
 
 def test_download_window_renews_download(test_session, test_download_manager, test_downloader):
@@ -1138,3 +1138,40 @@ def test_download_window_renews_download(test_session, test_download_manager, te
 
     assert download.status == 'new'
     assert 'outside download window' in download.error
+
+
+def test_download_window_yaml_sexagesimal():
+    """YAML parses some HH:MM values as sexagesimal integers.  The config normalizes them back to strings."""
+    from wrolpi.common import WROLPiConfig
+    assert WROLPiConfig._normalize_time_value(None) is None
+    assert WROLPiConfig._normalize_time_value('07:00') == '07:00'
+    assert WROLPiConfig._normalize_time_value('21:00') == '21:00'
+    # YAML parses 21:00 as 1260 (sexagesimal)
+    assert WROLPiConfig._normalize_time_value(1260) == '21:00'
+    # YAML parses 17:00 as 1020
+    assert WROLPiConfig._normalize_time_value(1020) == '17:00'
+    # YAML parses 22:30 as 1350
+    assert WROLPiConfig._normalize_time_value(1350) == '22:30'
+
+
+def test_is_within_download_window_uses_local_time(test_download_manager):
+    """Download window should compare against local time, not UTC.
+
+    Bug: now() returns UTC. At 1:00 AM MDT (UTC-6), UTC is 07:00.
+    With a window of 07:00-20:00, the old code incorrectly returned True
+    because it compared UTC 07:00 against the window. The local time is
+    01:00, which is outside the window.
+    """
+    config = get_wrolpi_config()
+    config.download_window_start = '07:00'
+    config.download_window_end = '20:00'
+
+    # Simulate local time of 01:00 AM (outside the 07:00-20:00 window).
+    with mock.patch.object(type(test_download_manager), '_get_local_time',
+                           return_value=time(1, 0)):
+        assert test_download_manager.is_within_download_window() is False
+
+    # Simulate local time of 12:00 PM (inside the window).
+    with mock.patch.object(type(test_download_manager), '_get_local_time',
+                           return_value=time(12, 0)):
+        assert test_download_manager.is_within_download_window() is True

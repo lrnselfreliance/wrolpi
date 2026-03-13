@@ -595,6 +595,11 @@ class DownloadManager:
         self.stopped.clear()
         self.disabled.clear()
 
+    @staticmethod
+    def _get_local_time():
+        """Return the current local time, converting from UTC."""
+        return now().astimezone().time()
+
     def is_within_download_window(self) -> bool:
         """Returns True if current time is within the configured download window, or no window is configured."""
         config = get_wrolpi_config()
@@ -603,7 +608,7 @@ class DownloadManager:
         if not start or not end:
             return True
 
-        current = now().time()
+        current = self._get_local_time()
         start_time = datetime.strptime(start, "%H:%M").time()
         end_time = datetime.strptime(end, "%H:%M").time()
 

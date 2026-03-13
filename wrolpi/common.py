@@ -1022,9 +1022,19 @@ class WROLPiConfig(ConfigFile):
     def download_wait(self, value: int):
         self.update({'download_wait': value})
 
+    @staticmethod
+    def _normalize_time_value(value) -> str:
+        """YAML may parse HH:MM values as sexagesimal integers (e.g. 21:00 -> 1260).  Convert back to HH:MM."""
+        if value is None:
+            return None
+        if isinstance(value, int):
+            hours, minutes = divmod(value, 60)
+            return f'{hours:02d}:{minutes:02d}'
+        return str(value)
+
     @property
     def download_window_start(self) -> str:
-        return self._config.get('download_window_start')
+        return self._normalize_time_value(self._config.get('download_window_start'))
 
     @download_window_start.setter
     def download_window_start(self, value: str):
@@ -1032,7 +1042,7 @@ class WROLPiConfig(ConfigFile):
 
     @property
     def download_window_end(self) -> str:
-        return self._config.get('download_window_end')
+        return self._normalize_time_value(self._config.get('download_window_end'))
 
     @download_window_end.setter
     def download_window_end(self, value: str):

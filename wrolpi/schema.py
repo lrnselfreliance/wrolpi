@@ -19,6 +19,8 @@ class SettingsResponse:
     download_on_startup: bool
     download_timeout: int
     download_wait: int
+    download_window_start: Optional[str]
+    download_window_end: Optional[str]
     hotspot_device: str
     hotspot_on_startup: bool
     hotspot_password: str
@@ -61,6 +63,8 @@ class SettingsRequest:
     download_on_startup: Optional[bool] = None
     download_timeout: Optional[int] = None
     download_wait: Optional[int] = None
+    download_window_start: Optional[str] = None
+    download_window_end: Optional[str] = None
     hotspot_device: Optional[str] = None
     hotspot_on_startup: Optional[bool] = None
     hotspot_password: Optional[str] = None

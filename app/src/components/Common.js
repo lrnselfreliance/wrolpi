@@ -591,6 +591,17 @@ export function WROLModeMessage({content}) {
     return null;
 }
 
+export function DownloadWindowMessage() {
+    const {status} = React.useContext(StatusContext);
+    const downloads = status ? status.downloads : null;
+
+    if (downloads && downloads.outside_download_window) {
+        return <Message icon='clock outline' header='Outside Download Window'
+                        content='Downloads are paused because the current time is outside the configured download window.'/>
+    }
+    return null;
+}
+
 export function CookiesUnlockModal({open, onClose, onSuccess}) {
     const [password, setPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);

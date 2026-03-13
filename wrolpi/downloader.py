@@ -423,15 +423,18 @@ class Downloader:
         try:
             while not task.done():
                 if download_manager.download_is_killed(download_id) or not download_manager.can_download:
+                    outside_window = download_manager.outside_download_window
                     logger.warning(f'Cancel download of {download.url}')
                     task.cancel()
                     try:
                         await task
                     except asyncio.CancelledError as e:
                         logger.info(f'Successful cancel of {download.url}', exc_info=e)
+                        error = 'Download paused: outside download window' if outside_window \
+                            else 'Download was canceled'
                         return DownloadResult(
                             success=False,
-                            error='Download was canceled',
+                            error=error,
                         )
                     finally:
                         download_manager.unkill_download(download_id)
@@ -592,6 +595,28 @@ class DownloadManager:
         self.stopped.clear()
         self.disabled.clear()
 
+    def is_within_download_window(self) -> bool:
+        """Returns True if current time is within the configured download window, or no window is configured."""
+        config = get_wrolpi_config()
+        start = config.download_window_start
+        end = config.download_window_end
+        if not start or not end:
+            return True
+
+        current = now().time()
+        start_time = datetime.strptime(start, "%H:%M").time()
+        end_time = datetime.strptime(end, "%H:%M").time()
+
+        if start_time <= end_time:
+            return start_time <= current < end_time
+        else:
+            # Overnight window (e.g., 22:00-06:00)
+            return current >= start_time or current < end_time
+
+    @property
+    def outside_download_window(self) -> bool:
+        return not self.is_within_download_window()
+
     @property
     def can_download(self) -> bool:
         """Returns True only if all steps necessary for downloading have been met."""
@@ -608,6 +633,9 @@ class DownloadManager:
             return False
         if wrol_mode_enabled():
             # Do not download with WROL Mode enabled.
+            return False
+        if not self.is_within_download_window():
+            # Do not download outside the configured time window.
             return False
         if get_download_manager_config().successful_import:
             # Finally, allow downloading because config was valid and imported.
@@ -1158,6 +1186,7 @@ class DownloadManager:
             recurring=counts['recurring_downloads'],
             disabled=self.is_disabled,
             stopped=self.is_stopped,
+            outside_download_window=self.outside_download_window,
         )
         return summary
 
@@ -1424,7 +1453,11 @@ async def signal_download_download(download_id: int, download_url: str):
                     download_manager.create_downloads(session, urls, downloader_name=download.sub_downloader,
                                                       settings=child_settings)
 
-                if try_again is False and not download.frequency:
+                if result.error and 'outside download window' in result.error:
+                    # Download was paused due to window closing; reset to new so it resumes later.
+                    download.renew()
+                    download.error = result.error
+                elif try_again is False and not download.frequency:
                     # Only once-downloads can fail.
                     download.fail()
                 elif result.success:

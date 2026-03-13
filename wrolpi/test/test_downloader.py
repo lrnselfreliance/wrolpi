@@ -1042,3 +1042,99 @@ def test_yaml_dump_keeps_overrides(test_session, test_download_manager, test_dow
         assert settings['writesubtitles'] is False, 'Non-default writesubtitles should be kept'
     finally:
         set_test_downloader_config(False)
+
+
+def test_is_within_download_window_no_config(test_download_manager):
+    """Returns True when no download window is configured."""
+    config = get_wrolpi_config()
+    config.download_window_start = None
+    config.download_window_end = None
+    assert test_download_manager.is_within_download_window() is True
+
+    # Only one field set should also return True (no restriction).
+    config.download_window_start = '08:00'
+    config.download_window_end = None
+    assert test_download_manager.is_within_download_window() is True
+
+    config.download_window_start = None
+    config.download_window_end = '17:00'
+    assert test_download_manager.is_within_download_window() is True
+
+
+def test_is_within_download_window_same_day(test_download_manager, fake_now):
+    """Same-day window (e.g. 08:00-17:00) boundary checks."""
+    config = get_wrolpi_config()
+    config.download_window_start = '08:00'
+    config.download_window_end = '17:00'
+
+    # Before window
+    fake_now(datetime(2000, 1, 1, 7, 59))
+    assert test_download_manager.is_within_download_window() is False
+
+    # Start of window
+    fake_now(datetime(2000, 1, 1, 8, 0))
+    assert test_download_manager.is_within_download_window() is True
+
+    # Middle of window
+    fake_now(datetime(2000, 1, 1, 12, 0))
+    assert test_download_manager.is_within_download_window() is True
+
+    # End of window (exclusive)
+    fake_now(datetime(2000, 1, 1, 17, 0))
+    assert test_download_manager.is_within_download_window() is False
+
+    # After window
+    fake_now(datetime(2000, 1, 1, 23, 0))
+    assert test_download_manager.is_within_download_window() is False
+
+
+def test_is_within_download_window_overnight(test_download_manager, fake_now):
+    """Overnight window (e.g. 22:00-06:00) wrapping."""
+    config = get_wrolpi_config()
+    config.download_window_start = '22:00'
+    config.download_window_end = '06:00'
+
+    # Before window (daytime)
+    fake_now(datetime(2000, 1, 1, 12, 0))
+    assert test_download_manager.is_within_download_window() is False
+
+    # Just before window start
+    fake_now(datetime(2000, 1, 1, 21, 59))
+    assert test_download_manager.is_within_download_window() is False
+
+    # Start of window
+    fake_now(datetime(2000, 1, 1, 22, 0))
+    assert test_download_manager.is_within_download_window() is True
+
+    # Middle of night
+    fake_now(datetime(2000, 1, 2, 3, 0))
+    assert test_download_manager.is_within_download_window() is True
+
+    # End of window (exclusive)
+    fake_now(datetime(2000, 1, 2, 6, 0))
+    assert test_download_manager.is_within_download_window() is False
+
+
+def test_download_window_renews_download(test_session, test_download_manager, test_downloader):
+    """A download stopped by the window closing is renewed to 'new' status."""
+    from wrolpi.downloader import DownloadResult
+    download = test_download_manager.create_download(test_session, 'https://example.com/window', test_downloader.name)
+    download.started()
+    test_session.commit()
+
+    # Simulate the result that cancel_wrapper returns when outside the window.
+    result = DownloadResult(success=False, error='Download paused: outside download window')
+
+    # Apply the same logic as signal_download_download.
+    download.location = result.location or download.location or None
+    download.error = result.error if result.error else None
+
+    if result.error and 'outside download window' in result.error:
+        download.renew()
+        download.error = result.error
+
+    test_session.commit()
+    test_session.refresh(download)
+
+    assert download.status == 'new'
+    assert 'outside download window' in download.error

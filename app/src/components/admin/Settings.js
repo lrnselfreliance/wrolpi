@@ -443,6 +443,8 @@ export function SettingsPage() {
             download_on_startup: settings.download_on_startup,
             download_timeout: settings.download_timeout,
             download_wait: settings.download_wait,
+            download_window_start: settings.download_window_start || '',
+            download_window_end: settings.download_window_end || '',
             hotspot_device: settings.hotspot_device,
             hotspot_on_startup: settings.hotspot_on_startup,
             hotspot_password: settings.hotspot_password,
@@ -562,34 +564,46 @@ export function SettingsPage() {
                                 />
                             </div>
 
-                            <Form.Group inline>
-                                <Form.Input
-                                    label={<>
-                                        <b>Wait Between Downloads</b>
-                                        <InfoPopup
-                                            content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
-                                    </>}
-                                    value={state.download_wait}
-                                    disabled={disabled || state.download_wait === null}
-                                    onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
-                                />
-                            </Form.Group>
+                            <br/>
 
-                            <Form.Group inline>
-                                <Form.Input
-                                    label={<>
-                                        <b>Download Timeout</b>
-                                        <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
-                                Downloads will never timeout if this is empty.'/>
-                                    </>}
-                                    value={state.download_timeout}
-                                    disabled={disabled || state.download_timeout === null}
-                                    onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
+                            <label htmlFor='log_levels_input'>Log Level: {logLevelToName(state.log_level)}</label>
+                            <br/>
+                            <input type='range'
+                                   id='log_levels_input'
+                                   list='log_levels'
+                                   min='1'
+                                   max='5'
+                                   value={state.log_level}
+                                   onChange={e => setState({...state, log_level: parseInt(e.target.value)})}
+                                   style={{marginBottom: '1em'}}
+                            />
+                            <datalist id='log_levels'>
+                                <option value='1'>Critical</option>
+                                <option value='2'>Warning</option>
+                                <option value='3'>Info</option>
+                                <option value='4'>Debug</option>
+                                <option value='5'>Trace</option>
+                            </datalist>
+
+                            <br/>
+
+                            <ButtonGroup>
+                                <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
+                                <Dropdown
+                                    id='settings_navbar_color_dropdown'
+                                    className='button icon'
+                                    floating
+                                    options={navColorOptions}
+                                    onChange={(e, {value}) => setState({...state, nav_color: value})}
+                                    value={state.nav_color}
                                 />
-                            </Form.Group>
+                            </ButtonGroup>
+
                         </Grid.Column>
                         <Grid.Column>
                             <Segment>
+                                <Header as='h3'>Hotspot Settings</Header>
+
                                 <Form.Input
                                     label='Hotspot SSID'
                                     value={state.hotspot_ssid}
@@ -638,40 +652,61 @@ export function SettingsPage() {
                 </Grid>
 
 
-                <br/>
+                <Divider/>
+                <Header as='h3'>Download settings</Header>
 
-                <label htmlFor='log_levels_input'>Log Level: {logLevelToName(state.log_level)}</label>
-                <br/>
-                <input type='range'
-                       id='log_levels_input'
-                       list='log_levels'
-                       min='1'
-                       max='5'
-                       value={state.log_level}
-                       onChange={e => setState({...state, log_level: parseInt(e.target.value)})}
-                       style={{marginBottom: '1em'}}
-                />
-                <datalist id='log_levels'>
-                    <option value='1'>Critical</option>
-                    <option value='2'>Warning</option>
-                    <option value='3'>Info</option>
-                    <option value='4'>Debug</option>
-                    <option value='5'>Trace</option>
-                </datalist>
-
-                <br/>
-
-                <ButtonGroup>
-                    <Button color={state.nav_color} onClick={e => e.preventDefault()}>Navbar Color</Button>
-                    <Dropdown
-                        id='settings_navbar_color_dropdown'
-                        className='button icon'
-                        floating
-                        options={navColorOptions}
-                        onChange={(e, {value}) => setState({...state, nav_color: value})}
-                        value={state.nav_color}
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Wait Between Downloads</b>
+                            <InfoPopup
+                                content='Number of seconds to wait after each download completes. This helps download "nicely" by being polite to servers. Set to 0 to disable waiting.'/>
+                        </>}
+                        value={state.download_wait}
+                        disabled={disabled || state.download_wait === null}
+                        onChange={(e, i) => handleTimeoutChange(e, 'download_wait', i.value)}
                     />
-                </ButtonGroup>
+                </Form.Group>
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Download Timeout</b>
+                            <InfoPopup content='Downloads will be stopped after this many seconds have elapsed.
+                                Downloads will never timeout if this is empty.'/>
+                        </>}
+                        value={state.download_timeout}
+                        disabled={disabled || state.download_timeout === null}
+                        onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
+                    />
+                </Form.Group>
+
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Download Window Start</b>
+                            <InfoPopup
+                                content='Start time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
+                        </>}
+                        type='time'
+                        value={state.download_window_start}
+                        disabled={disabled}
+                        onChange={(e, i) => handleInputChange(e, 'download_window_start', i.value)}
+                    />
+                </Form.Group>
+
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Download Window End</b>
+                            <InfoPopup
+                                content='End time for allowed download window (HH:MM, 24-hour). Leave both empty for no restriction.'/>
+                        </>}
+                        type='time'
+                        value={state.download_window_end}
+                        disabled={disabled}
+                        onChange={(e, i) => handleInputChange(e, 'download_window_end', i.value)}
+                    />
+                </Form.Group>
 
                 <Divider/>
 

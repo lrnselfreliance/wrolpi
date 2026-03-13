@@ -157,6 +157,8 @@ def get_settings(_: Request):
         'download_on_startup': wrolpi_config.download_on_startup,
         'download_timeout': wrolpi_config.download_timeout,
         'download_wait': wrolpi_config.download_wait,
+        'download_window_start': wrolpi_config.download_window_start,
+        'download_window_end': wrolpi_config.download_window_end,
         'hotspot_device': wrolpi_config.hotspot_device,
         'hotspot_on_startup': wrolpi_config.hotspot_on_startup,
         'hotspot_password': wrolpi_config.hotspot_password,
@@ -229,6 +231,17 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
         raise InvalidConfig('Zims directory must be relative to media directory')
     elif not body.zims_destination:
         new_config['zims_destination'] = wrolpi_config.default_config['zims_destination']
+
+    # Handle download window fields: empty string clears the value.
+    for field_name in ('download_window_start', 'download_window_end'):
+        value = getattr(body, field_name, None)
+        if value is not None:
+            if value == '':
+                new_config[field_name] = None
+            else:
+                if not re.match(r'^\d{2}:\d{2}$', value):
+                    raise InvalidConfig(f'{field_name} must be in HH:MM format')
+                new_config[field_name] = value
 
     log_level = new_config.pop('log_level', None)
     if isinstance(log_level, int):

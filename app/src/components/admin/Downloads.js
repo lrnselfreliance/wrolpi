@@ -15,6 +15,7 @@ import {
     APIButton,
     CookiesLockedMessage,
     DisableDownloadsToggle,
+    DownloadWindowMessage,
     ErrorMessage,
     formatFrequency,
     humanBandwidth,
@@ -681,6 +682,7 @@ export function DownloadsPage() {
 
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
+        <DownloadWindowMessage/>
         <DisableDownloadsToggle/>
         <CookiesLockedMessage/>
 

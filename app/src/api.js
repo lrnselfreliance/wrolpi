@@ -302,6 +302,8 @@ export async function getSettings() {
             download_on_startup: content.download_on_startup,
             download_timeout: content.download_timeout,
             download_wait: content.download_wait,
+            download_window_start: content.download_window_start,
+            download_window_end: content.download_window_end,
             hotspot_device: content.hotspot_device,
             hotspot_on_startup: content.hotspot_on_startup,
             hotspot_password: content.hotspot_password,

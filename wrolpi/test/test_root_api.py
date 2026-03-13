@@ -355,6 +355,21 @@ async def test_get_status(async_client, test_session):
     assert isinstance(response.json.get('memory_stats'), dict), 'memory_stats should be a dict'
     assert isinstance(response.json.get('flags'), dict), 'flags should be a dict'
     assert isinstance(response.json.get('sanic_workers'), dict), 'Sanic worker status should be a dict'
+    assert isinstance(response.json.get('local_time'), str), 'local_time should be a str'
+
+
+@pytest.mark.asyncio
+async def test_status_local_time_with_timezone(async_client, test_session, test_wrolpi_config):
+    """Status endpoint includes local_time using configured timezone."""
+    from wrolpi.common import get_wrolpi_config
+    config = get_wrolpi_config()
+    config.timezone = 'America/Denver'
+
+    request, response = await async_client.get('/api/status')
+    assert response.status_code == HTTPStatus.OK
+    local_time = response.json['local_time']
+    # ISO 8601 with timezone offset for Denver (UTC-7 or UTC-6).
+    assert '+' in local_time or '-' in local_time[10:], 'local_time should include timezone offset'
 
 
 @pytest.mark.asyncio
@@ -803,6 +818,42 @@ async def test_settings_save_ffprobe_json(async_client, test_wrolpi_config):
     request, response = await async_client.patch('/api/settings', content=json.dumps(data))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert config.save_ffprobe_json is True
+
+
+@pytest.mark.asyncio
+async def test_settings_timezone(async_client, test_wrolpi_config):
+    """Maintainer can set and clear the timezone setting."""
+    config = get_wrolpi_config()
+
+    # Default is None.
+    assert config.timezone is None
+
+    # GET returns the setting.
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['timezone'] is None
+
+    # Setting a valid timezone.
+    data = {'timezone': 'America/Denver'}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.timezone == 'America/Denver'
+
+    # GET reflects the change.
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['timezone'] == 'America/Denver'
+
+    # Empty string clears the timezone.
+    data = {'timezone': ''}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert config.timezone is None
+
+    # Invalid timezone is rejected.
+    data = {'timezone': 'Not/A/Timezone'}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio

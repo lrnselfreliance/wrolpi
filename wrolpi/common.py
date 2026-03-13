@@ -805,6 +805,7 @@ class WROLPiConfigValidator:
     save_ffprobe_json: bool = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
+    timezone: str = None
     version: int = None
     videos_destination: str = None
     wrol_mode: bool = None
@@ -949,6 +950,7 @@ class WROLPiConfig(ConfigFile):
         save_ffprobe_json=True,
         tags_directory=True,
         throttle_on_startup=False,
+        timezone=None,
         version=0,
         videos_destination='videos/%(channel_tag)s/%(channel_name)s',
         wrol_mode=False,
@@ -1183,6 +1185,14 @@ class WROLPiConfig(ConfigFile):
     @tags_directory.setter
     def tags_directory(self, value: bool):
         self.update({'tags_directory': value})
+
+    @property
+    def timezone(self) -> str:
+        return self._config.get('timezone')
+
+    @timezone.setter
+    def timezone(self, value: str):
+        self.update({'timezone': value})
 
 
 WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()

@@ -2,7 +2,7 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from datetime import datetime, time
+from datetime import datetime, time, timezone, timedelta
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
@@ -1175,3 +1175,38 @@ def test_is_within_download_window_uses_local_time(test_download_manager):
     with mock.patch.object(type(test_download_manager), '_get_local_time',
                            return_value=time(12, 0)):
         assert test_download_manager.is_within_download_window() is True
+
+
+def test_get_local_time_with_configured_timezone(test_download_manager):
+    """When config.timezone is set, _get_local_time() converts to that timezone."""
+    from zoneinfo import ZoneInfo
+
+    config = get_wrolpi_config()
+    config.timezone = 'America/Denver'
+
+    # Mock now() to return a known UTC time: 2024-01-15 18:00:00 UTC
+    # Denver is UTC-7 in January (MST), so local time should be 11:00:00.
+    mock_utc = datetime(2024, 1, 15, 18, 0, 0, tzinfo=timezone.utc)
+    with mock.patch('wrolpi.downloader.now', return_value=mock_utc):
+        result = test_download_manager._get_local_time()
+    assert result == time(11, 0, 0)
+
+    # Summer time: 2024-07-15 18:00:00 UTC
+    # Denver is UTC-6 in July (MDT), so local time should be 12:00:00.
+    mock_utc_summer = datetime(2024, 7, 15, 18, 0, 0, tzinfo=timezone.utc)
+    with mock.patch('wrolpi.downloader.now', return_value=mock_utc_summer):
+        result = test_download_manager._get_local_time()
+    assert result == time(12, 0, 0)
+
+
+def test_get_local_time_without_configured_timezone(test_download_manager):
+    """When config.timezone is None, _get_local_time() falls back to system timezone."""
+    config = get_wrolpi_config()
+    config.timezone = None
+
+    mock_utc = datetime(2024, 1, 15, 18, 0, 0, tzinfo=timezone.utc)
+    with mock.patch('wrolpi.downloader.now', return_value=mock_utc):
+        result = test_download_manager._get_local_time()
+    # Should return the system's local time conversion.
+    expected = mock_utc.astimezone().time()
+    assert result == expected

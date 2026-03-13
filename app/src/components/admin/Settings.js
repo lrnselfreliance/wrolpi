@@ -3,7 +3,17 @@ import {SettingsContext, StatusContext} from "../../contexts/contexts";
 import {checkUpgrade, postRestart, postShutdown, saveSettings as saveSettingsApi, triggerUpgrade} from "../../api";
 import {getServices, startService, stopService} from "../../api/controller";
 import {Button, Divider, Form, Header, Loader, Modal, Segment} from "../Theme";
-import {ButtonGroup, Container, Dimmer, Dropdown, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
+import {
+    ButtonGroup,
+    Container,
+    Dimmer,
+    Dropdown,
+    FormDropdown,
+    GridColumn,
+    GridRow,
+    Icon,
+    Input
+} from "semantic-ui-react";
 import {
     APIButton,
     ErrorMessage,
@@ -301,6 +311,7 @@ export function SettingsPage() {
 
     // Get current settings from the API.
     const {settings, saveSettings, fetchSettings} = React.useContext(SettingsContext);
+    const {status} = React.useContext(StatusContext);
     // Used to track changes to the settings form between saves/loads.
     const [state, setState] = React.useState({});
 
@@ -445,6 +456,7 @@ export function SettingsPage() {
             download_wait: settings.download_wait,
             download_window_start: settings.download_window_start || '',
             download_window_end: settings.download_window_end || '',
+            timezone: settings.timezone || '',
             hotspot_device: settings.hotspot_device,
             hotspot_on_startup: settings.hotspot_on_startup,
             hotspot_password: settings.hotspot_password,
@@ -491,6 +503,10 @@ export function SettingsPage() {
     const qrButton = <Button icon color='violet' style={{marginBottom: '1em'}}>
         <Icon name='qrcode' size='big'/>
     </Button>;
+
+    const timezoneOptions = Intl.supportedValuesOf('timeZone').map(tz => (
+        {key: tz, value: tz, text: tz}
+    ));
 
     const navColorOptions = Object.keys(semanticUIColorMap).map(i => {
         return {key: i, value: i, text: i.charAt(0).toUpperCase() + i.slice(1)}
@@ -708,6 +724,25 @@ export function SettingsPage() {
                         onChange={(e, i) => handleInputChange(e, 'download_window_end', i.value)}
                     />
                 </Form.Group>
+
+                <Form.Field width={3}>
+                    <label><b>Timezone</b>
+                        <InfoPopup
+                            content='IANA timezone (e.g. America/Denver). Leave empty to use system timezone.'/>
+                    </label>
+                    <FormDropdown
+                        placeholder='System default'
+                        options={timezoneOptions}
+                        value={state.timezone || ''}
+                        disabled={disabled}
+                        search
+                        selection
+                        clearable
+                        onChange={(e, {value}) => setState({...state, timezone: value || ''})}
+                    />
+                </Form.Field>
+                {status && status.local_time &&
+                    <p>Current local time: <b>{status.local_time.slice(0, 16).replace('T', ' ')}</b></p>}
 
                 <Divider/>
 

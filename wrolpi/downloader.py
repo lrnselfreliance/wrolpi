@@ -18,6 +18,7 @@ from http import HTTPStatus
 from itertools import filterfalse
 from typing import List, Dict, Generator, Iterable, Coroutine, Any
 from typing import Tuple, Optional
+from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 
 import feedparser
@@ -597,7 +598,12 @@ class DownloadManager:
 
     @staticmethod
     def _get_local_time():
-        """Return the current local time, converting from UTC."""
+        """Return the current local time, using configured timezone or system default."""
+        from wrolpi.common import get_wrolpi_config
+        config = get_wrolpi_config()
+        if config.timezone:
+            tz = ZoneInfo(config.timezone)
+            return now().astimezone(tz).time()
         return now().astimezone().time()
 
     def is_within_download_window(self) -> bool:

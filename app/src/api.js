@@ -320,6 +320,7 @@ export async function getSettings() {
             tags_directory: content.tags_directory,
             throttle_on_startup: content.throttle_on_startup,
             throttle_status: content.throttle_status,
+            timezone: content.timezone,
             videos_destination: content.videos_destination,
             wrol_mode: content.wrol_mode,
             zims_destination: content.zims_destination,

@@ -83,6 +83,7 @@ class SettingsRequest:
     wrol_mode: Optional[bool] = None
     zims_destination: Optional[str] = None
     save_ffprobe_json: Optional[bool] = None
+    timezone: Optional[str] = None
 
     def __post_init__(self):
         self.nav_color = self.nav_color.lower() if self.nav_color else None

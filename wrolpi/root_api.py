@@ -2,6 +2,7 @@ import asyncio
 import pathlib
 import re
 from http import HTTPStatus
+from zoneinfo import ZoneInfo
 
 import vininfo.exceptions
 from sanic import response, Blueprint, __version__ as sanic_version
@@ -178,6 +179,7 @@ def get_settings(_: Request):
         'wrol_mode': wrolpi_config.wrol_mode,
         'zims_destination': wrolpi_config.zims_destination,
         'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
+        'timezone': wrolpi_config.timezone,
     }
     return json_response(settings)
 
@@ -231,6 +233,16 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
         raise InvalidConfig('Zims directory must be relative to media directory')
     elif not body.zims_destination:
         new_config['zims_destination'] = wrolpi_config.default_config['zims_destination']
+
+    # Validate timezone if provided; empty string clears it.
+    if body.timezone is not None:
+        if body.timezone == '':
+            new_config['timezone'] = None
+        else:
+            try:
+                ZoneInfo(body.timezone)
+            except (KeyError, Exception):
+                raise InvalidConfig(f'Invalid timezone: {body.timezone}')
 
     # Handle download window fields: empty string clears the value.
     for field_name in ('download_window_start', 'download_window_end'):
@@ -488,6 +500,13 @@ async def get_status(request: Request):
             if i.startswith('Sanic-Server')
         }
 
+    wrolpi_config = get_wrolpi_config()
+    if wrolpi_config.timezone:
+        tz = ZoneInfo(wrolpi_config.timezone)
+        local_time = now().astimezone(tz).isoformat()
+    else:
+        local_time = now().astimezone().isoformat()
+
     ret = dict(
         dockerized=DOCKERIZED,
         downloads=downloads,
@@ -496,6 +515,7 @@ async def get_status(request: Request):
         is_rpi4=IS_RPI4,
         is_rpi5=IS_RPI5,
         is_rpi=IS_RPI,
+        local_time=local_time,
         sanic_workers=sanic_workers,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),

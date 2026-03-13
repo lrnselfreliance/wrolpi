@@ -7,14 +7,17 @@ from unittest import mock
 import pytest
 
 from controller.lib.admin import (
+    apply_timezone_from_config,
     disable_hotspot,
     disable_throttle,
     enable_hotspot,
     enable_throttle,
     get_hotspot_status,
     get_throttle_status,
+    get_timezone_status_dict,
     reboot_system,
     restart_all_services,
+    set_timezone,
     shutdown_system,
     HotspotStatus,
     GovernorStatus,
@@ -279,3 +282,145 @@ class TestRestartAllServices:
                         assert "services" in result
                         # Should include controller as pending
                         assert result["services"]["wrolpi-controller"]["pending"] is True
+
+
+class TestGetTimezoneStatus:
+    """Tests for get_timezone_status_dict function."""
+
+    def test_returns_unavailable_in_docker_mode(self):
+        """Should return unavailable when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = get_timezone_status_dict()
+            assert result["available"] is False
+            assert result["timezone"] is None
+            assert "Docker" in result["reason"]
+
+    def test_returns_timezone_from_timedatectl(self):
+        """Should return the current system timezone."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "America/Denver\n"
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", return_value=mock_result):
+                result = get_timezone_status_dict()
+                assert result["available"] is True
+                assert result["timezone"] == "America/Denver"
+                assert result["reason"] is None
+
+    def test_handles_timedatectl_not_found(self):
+        """Should handle timedatectl not being available."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+                result = get_timezone_status_dict()
+                assert result["available"] is False
+                assert "not found" in result["reason"]
+
+    def test_handles_timeout(self):
+        """Should handle subprocess timeout."""
+        import subprocess
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("timedatectl", 5)):
+                result = get_timezone_status_dict()
+                assert result["available"] is False
+                assert "timed out" in result["reason"]
+
+
+class TestSetTimezone:
+    """Tests for set_timezone function."""
+
+    def test_returns_error_in_docker_mode(self):
+        """Should return error when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = set_timezone("America/Denver")
+            assert result["success"] is False
+            assert "Docker" in result["error"]
+
+    def test_sets_timezone_successfully(self):
+        """Should set timezone via timedatectl."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+                result = set_timezone("America/Denver")
+                assert result["success"] is True
+                assert result["timezone"] == "America/Denver"
+                mock_run.assert_called_once_with(
+                    ["timedatectl", "set-timezone", "America/Denver"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+
+    def test_handles_invalid_timezone(self):
+        """Should handle timedatectl rejecting an invalid timezone."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 1
+        mock_result.stderr = "Failed to set time zone: Invalid time zone"
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", return_value=mock_result):
+                result = set_timezone("Invalid/Timezone")
+                assert result["success"] is False
+                assert "Invalid" in result["error"]
+
+    def test_handles_empty_timezone(self):
+        """Should reject empty timezone strings."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = set_timezone("")
+            assert result["success"] is False
+            assert "empty" in result["error"].lower()
+
+    def test_handles_timedatectl_not_found(self):
+        """Should handle timedatectl not being available."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+                result = set_timezone("America/Denver")
+                assert result["success"] is False
+                assert "not found" in result["error"]
+
+
+class TestApplyTimezoneFromConfig:
+    """Tests for apply_timezone_from_config function."""
+
+    def test_skips_in_docker_mode(self):
+        """Should do nothing in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            with mock.patch("controller.lib.admin.set_timezone") as mock_set:
+                apply_timezone_from_config()
+                mock_set.assert_not_called()
+
+    def test_applies_timezone_from_config(self, tmp_path):
+        """Should read timezone from wrolpi.yaml and apply it."""
+        config_dir = tmp_path / 'config'
+        config_dir.mkdir()
+        config_file = config_dir / 'wrolpi.yaml'
+        config_file.write_text("timezone: America/New_York\n")
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_media_directory", return_value=tmp_path):
+                with mock.patch("controller.lib.admin.set_timezone", return_value={"success": True}) as mock_set:
+                    apply_timezone_from_config()
+                    mock_set.assert_called_once_with("America/New_York")
+
+    def test_skips_when_no_timezone_in_config(self, tmp_path):
+        """Should do nothing when timezone is not set in config."""
+        config_dir = tmp_path / 'config'
+        config_dir.mkdir()
+        config_file = config_dir / 'wrolpi.yaml'
+        config_file.write_text("download_wait: 60\n")
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_media_directory", return_value=tmp_path):
+                with mock.patch("controller.lib.admin.set_timezone") as mock_set:
+                    apply_timezone_from_config()
+                    mock_set.assert_not_called()
+
+    def test_skips_when_config_file_missing(self, tmp_path):
+        """Should do nothing when wrolpi.yaml doesn't exist."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_media_directory", return_value=tmp_path):
+                with mock.patch("controller.lib.admin.set_timezone") as mock_set:
+                    apply_timezone_from_config()
+                    mock_set.assert_not_called()

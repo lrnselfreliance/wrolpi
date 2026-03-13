@@ -12,6 +12,9 @@ from controller.api.schemas import (
     SystemActionResponse,
     ThrottleActionResponse,
     ThrottleStatusResponse,
+    TimezoneSetRequest,
+    TimezoneSetResponse,
+    TimezoneStatusResponse,
 )
 from controller.lib.admin import (
     disable_hotspot,
@@ -20,8 +23,10 @@ from controller.lib.admin import (
     enable_throttle,
     get_hotspot_status_dict,
     get_throttle_status_dict,
+    get_timezone_status_dict,
     reboot_system,
     restart_all_services,
+    set_timezone,
     shutdown_system,
 )
 from controller.lib.config import is_docker_mode
@@ -79,6 +84,23 @@ async def throttle_disable() -> ThrottleActionResponse:
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return ThrottleActionResponse(**result)
+
+
+# --- Timezone ---
+
+@router.get("/api/timezone/status", response_model=TimezoneStatusResponse)
+async def timezone_status() -> TimezoneStatusResponse:
+    """Get current system timezone."""
+    return TimezoneStatusResponse(**get_timezone_status_dict())
+
+
+@router.post("/api/timezone/set", response_model=TimezoneSetResponse)
+async def timezone_set(request: TimezoneSetRequest) -> TimezoneSetResponse:
+    """Set the system timezone."""
+    result = set_timezone(request.timezone)
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return TimezoneSetResponse(**result)
 
 
 # --- System Control ---

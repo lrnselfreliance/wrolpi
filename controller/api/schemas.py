@@ -217,6 +217,32 @@ class RestartServicesResponse(BaseModel):
 
 
 # ============================================================================
+# Admin - Timezone
+# ============================================================================
+
+class TimezoneStatusResponse(BaseModel):
+    """Response model for /api/timezone/status endpoint."""
+
+    available: bool = Field(description="Whether system timezone control is available")
+    timezone: Optional[str] = Field(default=None, description="Current system timezone (IANA)")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+
+
+class TimezoneSetRequest(BaseModel):
+    """Request model for setting the system timezone."""
+
+    timezone: str = Field(description="IANA timezone string (e.g. America/Denver)")
+
+
+class TimezoneSetResponse(BaseModel):
+    """Response model for setting the system timezone."""
+
+    success: bool = Field(description="Whether the timezone was set")
+    timezone: Optional[str] = Field(default=None, description="New timezone if successful")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
 # Services - Status
 # ============================================================================
 

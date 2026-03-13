@@ -24,7 +24,7 @@ from wrolpi.api_utils import json_response, api_app
 from wrolpi.collections.api import collection_bp
 from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
-    set_global_log_level, get_relative_to_media_directory, search_other_estimates
+    set_global_log_level, get_relative_to_media_directory, search_other_estimates, set_system_timezone
 from wrolpi.config_api import config_bp
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
@@ -263,6 +263,12 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
 
     # Save config settings (hotspot control is now through Controller endpoints)
     wrolpi_config.update(new_config)
+
+    # Apply timezone to the system via Controller (native deployments only).
+    if body.timezone is not None and not DOCKERIZED:
+        timezone_value = new_config.get('timezone')
+        if timezone_value:
+            await set_system_timezone(timezone_value)
 
     return response.empty()
 

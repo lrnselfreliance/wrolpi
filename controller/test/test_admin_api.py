@@ -117,6 +117,38 @@ class TestRestartEndpoint:
         assert "Docker" in response.json()["detail"]
 
 
+class TestTimezoneStatusEndpoint:
+    """Tests for /api/timezone/status endpoint."""
+
+    def test_timezone_status_returns_200(self, test_client):
+        """Timezone status endpoint should return 200 OK."""
+        response = test_client.get("/api/timezone/status")
+        assert response.status_code == 200
+
+    def test_timezone_status_returns_expected_fields(self, test_client):
+        """Timezone status should return available and timezone fields."""
+        response = test_client.get("/api/timezone/status")
+        data = response.json()
+        assert "available" in data
+        assert "timezone" in data
+
+    def test_timezone_status_shows_unavailable_in_docker(self, test_client_docker_mode):
+        """Timezone should be unavailable in Docker mode."""
+        response = test_client_docker_mode.get("/api/timezone/status")
+        data = response.json()
+        assert data["available"] is False
+
+
+class TestTimezoneSetEndpoint:
+    """Tests for /api/timezone/set endpoint."""
+
+    def test_timezone_set_fails_in_docker(self, test_client_docker_mode):
+        """Timezone set should fail in Docker mode."""
+        response = test_client_docker_mode.post("/api/timezone/set", json={"timezone": "America/Denver"})
+        assert response.status_code == 500
+        assert "Docker" in response.json()["detail"]
+
+
 class TestOpenAPIIncludesAdminEndpoints:
     """Tests that OpenAPI documentation includes admin endpoints."""
 
@@ -135,6 +167,13 @@ class TestOpenAPIIncludesAdminEndpoints:
         assert "/api/throttle/status" in data["paths"]
         assert "/api/throttle/enable" in data["paths"]
         assert "/api/throttle/disable" in data["paths"]
+
+    def test_openapi_has_timezone_paths(self, test_client):
+        """OpenAPI schema should include timezone paths."""
+        response = test_client.get("/openapi.json")
+        data = response.json()
+        assert "/api/timezone/status" in data["paths"]
+        assert "/api/timezone/set" in data["paths"]
 
     def test_openapi_has_system_control_paths(self, test_client):
         """OpenAPI schema should include system control paths."""

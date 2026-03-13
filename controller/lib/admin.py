@@ -9,7 +9,9 @@ import enum
 import subprocess
 from pathlib import Path
 
-from controller.lib.config import is_docker_mode, get_config_value
+import yaml
+
+from controller.lib.config import is_docker_mode, get_config_value, get_media_directory
 
 # Constants - use controller's own config instead of wrolpi module
 DEFAULT_CPU_FREQUENCY = get_config_value('throttle.default_governor', 'ondemand')
@@ -503,3 +505,128 @@ def _restart_self():
     except Exception:
         # If we can't restart ourselves, not much we can do
         pass
+
+
+# --- Timezone ---
+
+
+def get_timezone_status_dict() -> dict:
+    """
+    Get current system timezone status.
+
+    Returns dict matching TimezoneStatusResponse schema:
+        available: bool - Whether system timezone control is available
+        timezone: Optional[str] - Current system timezone (IANA)
+        reason: Optional[str] - Reason if unavailable
+    """
+    if is_docker_mode():
+        return {
+            "available": False,
+            "timezone": None,
+            "reason": "Docker mode",
+        }
+
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show", "--property=Timezone", "--value"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return {
+                "available": True,
+                "timezone": result.stdout.strip(),
+                "reason": None,
+            }
+        else:
+            return {
+                "available": False,
+                "timezone": None,
+                "reason": result.stderr.strip() or "timedatectl returned an error",
+            }
+    except FileNotFoundError:
+        return {
+            "available": False,
+            "timezone": None,
+            "reason": "timedatectl not found",
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "available": False,
+            "timezone": None,
+            "reason": "timedatectl timed out",
+        }
+    except subprocess.SubprocessError as e:
+        return {
+            "available": False,
+            "timezone": None,
+            "reason": str(e),
+        }
+
+
+def set_timezone(timezone: str) -> dict:
+    """
+    Set the system timezone using timedatectl.
+
+    Args:
+        timezone: IANA timezone string (e.g. "America/Denver")
+
+    Returns:
+        dict with success status
+    """
+    if is_docker_mode():
+        return {"success": False, "timezone": None, "error": "Not available in Docker mode"}
+
+    if not timezone or not timezone.strip():
+        return {"success": False, "timezone": None, "error": "Timezone must not be empty"}
+
+    try:
+        result = subprocess.run(
+            ["timedatectl", "set-timezone", timezone],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode == 0:
+            return {"success": True, "timezone": timezone, "error": None}
+        else:
+            return {"success": False, "timezone": None, "error": result.stderr.strip() or "Unknown error"}
+
+    except FileNotFoundError:
+        return {"success": False, "timezone": None, "error": "timedatectl not found"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "timezone": None, "error": "Timeout setting timezone"}
+    except subprocess.SubprocessError as e:
+        return {"success": False, "timezone": None, "error": str(e)}
+
+
+def apply_timezone_from_config():
+    """
+    Read the timezone from wrolpi.yaml and apply it to the system.
+    Called on Controller startup to ensure system timezone matches config.
+    """
+    if is_docker_mode():
+        return
+
+    config_path = get_media_directory() / 'config' / 'wrolpi.yaml'
+    if not config_path.exists():
+        return
+
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+    except (IOError, yaml.YAMLError) as e:
+        print(f"Warning: Failed to read wrolpi.yaml for timezone: {e}")
+        return
+
+    timezone = config.get('timezone')
+    if not timezone:
+        return
+
+    result = set_timezone(timezone)
+    if result.get('success'):
+        print(f"Applied system timezone: {timezone}")
+    else:
+        print(f"Warning: Failed to apply system timezone '{timezone}': {result.get('error')}")

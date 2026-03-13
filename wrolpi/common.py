@@ -318,6 +318,7 @@ __all__ = [
     'run_after',
     'set_global_log_level',
     'set_log_level',
+    'set_system_timezone',
     'set_test_config',
     'set_test_media_directory',
     'slow_logger',
@@ -1730,6 +1731,24 @@ async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> A
     async with aiohttp_session(timeout) as session:
         async with session.head(url, headers=headers) as response:
             yield response
+
+
+CONTROLLER_URL = 'http://127.0.0.1:8087'
+
+
+async def set_system_timezone(timezone: str):
+    """Ask the Controller to apply the timezone to the system.
+
+    This is best-effort: if the Controller is unavailable or rejects the change,
+    the application-level timezone in wrolpi.yaml still takes effect."""
+    try:
+        async with aiohttp_post(f'{CONTROLLER_URL}/api/timezone/set',
+                                json_={'timezone': timezone}, timeout=10) as resp:
+            if resp.status != 200:
+                contents = await resp.json()
+                logger.warning(f'Controller failed to set system timezone: {contents}')
+    except Exception as e:
+        logger.warning(f'Could not reach Controller to set system timezone: {e}')
 
 
 @dataclass

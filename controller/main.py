@@ -68,6 +68,10 @@ async def lifespan(app: FastAPI):
             print("Loaded configuration from drive")
         else:
             print("Using default configuration (no controller.yaml found)")
+
+        # Apply timezone from wrolpi.yaml to the system.
+        from controller.lib.admin import apply_timezone_from_config
+        apply_timezone_from_config()
     else:
         print("Primary drive not mounted - using default configuration")
 

@@ -1,9 +1,7 @@
-import asyncio
 import json
 import pathlib
 import shutil
 import zipfile
-from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import List
@@ -418,6 +416,7 @@ async def test_refresh_many_files(async_client, test_session, make_files_structu
         await refresh_files()
     assert test_session.query(FileGroup).count() == file_count
 
+
 @pytest.mark.asyncio
 async def test_mime_type(async_client, test_session, make_files_structure, test_directory, assert_files, refresh_files):
     """Files module uses the `file` command to get the mimetype of each file."""
@@ -453,7 +452,8 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
 
 
 @pytest.mark.asyncio
-async def test_files_indexer(async_client, test_session, make_files_structure, test_directory, refresh_files):
+async def test_files_indexer(async_client, test_session, make_files_structure, test_directory, refresh_files,
+                             await_background_tasks):
     """An Indexer is provided for each file based on it's mimetype or contents."""
     source_files: List[str] = [
         'a text file.txt',
@@ -510,6 +510,7 @@ async def test_files_indexer(async_client, test_session, make_files_structure, t
     # Change the contents, the file should be re-indexed.
     text_path.write_text('new text contents')
     await refresh_files()
+    await await_background_tasks()
     files, total = lib.search_files('new', 10, 0)
     assert total == 1
 
@@ -1380,7 +1381,6 @@ async def test_rename_non_primary_file_renames_filegroup(async_client, test_sess
     assert 'renamed.mp4' in file_names
     assert 'renamed.srt' in file_names
     assert len(file_group.files) == 3
-
 
 
 @pytest.mark.asyncio

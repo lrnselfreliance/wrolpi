@@ -361,8 +361,15 @@ class FileGroup(ModelHelper, Base):
         """Find a JSON file ending with `suffix` in this FileGroup's files.
 
         @raise ValueError: If multiple files matching the suffix are found."""
+        from wrolpi.files.lib import split_path_stem_and_suffix
         matches = [f for f in self.my_json_files() if f['path'].name.endswith(suffix)]
         if len(matches) > 1:
+            # Prefer the file whose stem has no extra extension (e.g. video.info.json over video.mp4.info.json).
+            clean = [f for f in matches if '.' not in split_path_stem_and_suffix(f['path'].name)[0]]
+            if len(clean) == 1:
+                duplicates = [f['path'] for f in matches if f not in clean]
+                logger.warning(f'{self} has duplicate {suffix} files which will be ignored: {duplicates}')
+                return clean[0]['path']
             raise ValueError(f'{self} has multiple {suffix} files: {[f["path"] for f in matches]}')
         if matches:
             return matches[0]['path']

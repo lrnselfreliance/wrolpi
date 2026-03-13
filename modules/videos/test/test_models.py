@@ -69,20 +69,41 @@ def test_replace_info_json_compact(test_session, make_files_structure):
 
 
 def test_replace_info_json_multiple_json_files(test_session, make_files_structure):
-    """FileGroup.replace_info_json raises ValueError when multiple .info.json files are tracked."""
+    """FileGroup.replace_info_json raises ValueError when multiple ambiguous .info.json files are tracked."""
     make_files_structure({
         'video.mp4': 'fake video',
-        'video.info.json': '{"title": "one"}',
-        'video.other.info.json': '{"title": "two"}',
+        'video.a.info.json': '{"title": "one"}',
+        'video.b.info.json': '{"title": "two"}',
     })
     fg = FileGroup.from_paths(test_session, get_media_directory() / 'video.mp4')
     test_session.add(fg)
     test_session.flush()
 
-    fg.append_files(get_media_directory() / 'video.info.json', get_media_directory() / 'video.other.info.json')
+    fg.append_files(get_media_directory() / 'video.a.info.json', get_media_directory() / 'video.b.info.json')
 
+    # Both have dots in their stems, so neither is "clean" — still raises ValueError.
     with pytest.raises(ValueError, match='multiple .info.json files'):
         fg.replace_info_json({'title': 'new'})
+
+
+def test_find_unique_json_cleans_double_extension(test_session, make_files_structure):
+    """When both stem.info.json and stem.mp4.info.json exist, the clean one is preferred and duplicates are ignored."""
+    make_files_structure({
+        'video.mp4': 'fake video',
+        'video.info.json': '{"title": "clean"}',
+        'video.mp4.info.json': '{"title": "double"}',
+    })
+    fg = FileGroup.from_paths(test_session, get_media_directory() / 'video.mp4')
+    test_session.add(fg)
+    test_session.flush()
+
+    fg.append_files(get_media_directory() / 'video.info.json', get_media_directory() / 'video.mp4.info.json')
+
+    # Should return the clean one and ignore the double-extension file.
+    result = fg.info_json_path
+    assert result == get_media_directory() / 'video.info.json'
+    # The duplicate file still exists on disk, it's just ignored.
+    assert (get_media_directory() / 'video.mp4.info.json').exists()
 
 
 def test_update_wrolpi_json_merges(test_session, make_files_structure):

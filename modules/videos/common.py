@@ -345,7 +345,7 @@ async def update_view_counts_and_censored(channel_id: int):
         logger.info(f'No info_json for channel {channel.name}')
         return
 
-    view_counts = [{'id': i['id'], 'view_count': i['view_count']} for i in info['entries']]
+    view_counts = [{'id': i['id'], 'view_count': i['view_count']} for i in info['entries'] if i.get('view_count') is not None]
     view_counts_str = json.dumps(view_counts)
 
     with get_db_curs(commit=True) as curs:

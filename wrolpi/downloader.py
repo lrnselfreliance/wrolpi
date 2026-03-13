@@ -1532,7 +1532,7 @@ class DownloadManagerConfig(ConfigFile):
 
     @property
     def skip_urls(self) -> List[str]:
-        return self._config['skip_urls']
+        return self._config['skip_urls'] or []
 
     @skip_urls.setter
     def skip_urls(self, value: List[str]):

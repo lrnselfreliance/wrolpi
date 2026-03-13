@@ -129,6 +129,26 @@ async def test_update_view_count(test_session, channel_factory, video_factory):
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 
+@pytest.mark.asyncio
+async def test_update_view_count_missing_view_count(test_session, channel_factory, video_factory):
+    """Entries without a view_count key (e.g. private/unavailable videos) are skipped without error."""
+    channel = channel_factory()
+    video_factory(channel_id=channel.id, with_poster_ext='jpg', title='vid1')
+    channel.info_json = {'entries': [
+        {'id': 'vid1', 'view_count': 42},
+        {'id': 'vid_private'},  # No view_count key.
+        {'id': 'vid_null', 'view_count': None},
+    ]}
+    test_session.commit()
+
+    # Should not raise KeyError.
+    await update_view_counts_and_censored(channel.id)
+
+    test_session.expire_all()
+    video = test_session.query(Video).filter_by(source_id='vid1').one()
+    assert video.view_count == 42
+
+
 def test_generate_video_poster(video_file):
     """
     A poster can be generated from a video file.

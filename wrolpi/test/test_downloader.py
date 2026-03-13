@@ -510,6 +510,23 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
 
 
 @pytest.mark.asyncio
+async def test_skip_urls_none(test_session, test_download_manager, test_downloader, test_download_manager_config):
+    """The DownloadManager does not crash when skip_urls is None in the config."""
+    config = get_download_manager_config()
+    config._config['skip_urls'] = None
+
+    test_downloader.set_test_success()
+
+    # Should not raise TypeError.
+    test_download_manager.create_downloads(test_session, [
+        'https://example.com/1',
+    ], downloader_name=test_downloader.name)
+
+    downloads = test_session.query(Download).all()
+    assert len(downloads) == 1
+
+
+@pytest.mark.asyncio
 async def test_process_runner_timeout(async_client, test_session, test_directory):
     """A Downloader can cancel its download using a timeout."""
     # Default timeout of 3 seconds.

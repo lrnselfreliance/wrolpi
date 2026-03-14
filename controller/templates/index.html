@@ -59,6 +59,102 @@
             text-align: center;
         }
 
+        /* Onboarding */
+        .onboarding-banner {
+            background: linear-gradient(135deg, #4ecca3, #2ecc71);
+            color: #000;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .onboarding-banner h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+        }
+
+        .onboarding-banner p {
+            margin: 0.5rem 0;
+        }
+
+        .drive-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+
+        .drive-card {
+            background: rgba(0, 0, 0, 0.15);
+            border: 2px solid rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            text-align: left;
+            min-width: 220px;
+            max-width: 300px;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .drive-card:hover {
+            border-color: #16213e;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .drive-card .drive-name {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .drive-card .drive-detail {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 0.25rem;
+        }
+
+        .onboarding-banner .btn {
+            display: inline-block;
+            padding: 0.5rem 1.5rem;
+            border-radius: 4px;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 0.25rem;
+        }
+
+        .onboarding-banner .btn-primary {
+            background: #16213e;
+            color: #fff;
+        }
+
+        .onboarding-banner .btn-primary:hover {
+            background: #1a2a4e;
+        }
+
+        .onboarding-banner .btn-secondary {
+            background: rgba(0, 0, 0, 0.15);
+            color: #000;
+            border: 1px solid rgba(0, 0, 0, 0.3);
+        }
+
+        .onboarding-banner .btn-secondary:hover {
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .onboarding-banner .error-msg {
+            color: #c0392b;
+            font-weight: bold;
+        }
+
+        .onboarding-banner .warning-msg {
+            background: rgba(0, 0, 0, 0.1);
+            padding: 0.75rem;
+            border-radius: 4px;
+            margin: 0.75rem 0;
+        }
+
         .fallback-banner {
             background: #f39c12;
             color: #000;
@@ -681,7 +777,59 @@
 </div>
 {% endif %}
 
-{% if not drive_mounted %}
+{% if not drive_mounted and not docker_mode %}
+<div id="onboarding-banner" class="onboarding-banner">
+    <!-- Step 1: Select drive -->
+    <div id="onboarding-select" style="display: block;">
+        <h2>Welcome to WROLPi</h2>
+        <p>Select your primary WROLPi drive to get started.</p>
+        <div id="onboarding-drives" class="drive-cards">
+            <span class="loading"></span>
+        </div>
+        <p id="onboarding-no-drives" style="display: none;">No unmounted drives detected. Plug in a USB drive and refresh.</p>
+    </div>
+
+    <!-- Step 2: Confirm -->
+    <div id="onboarding-confirm" style="display: none;">
+        <h2>Confirm Drive Setup</h2>
+        <div id="onboarding-config-found" style="display: none;">
+            <p>Found WROLPi configuration on this drive.</p>
+            <p id="onboarding-mounts-info"></p>
+            <button class="btn btn-primary" onclick="commitOnboarding(false)">Set Up This Drive</button>
+            <button class="btn btn-secondary" onclick="cancelOnboarding()">Choose Different Drive</button>
+        </div>
+        <div id="onboarding-no-config" style="display: none;">
+            <div class="warning-msg">
+                <p><strong>No WROLPi configuration found on this drive.</strong></p>
+                <p>This may be a new drive or the wrong drive. You can still use it as a fresh WROLPi drive.</p>
+            </div>
+            <button class="btn btn-primary" onclick="commitOnboarding(true)">Use Anyway</button>
+            <button class="btn btn-secondary" onclick="cancelOnboarding()">Choose Different Drive</button>
+        </div>
+    </div>
+
+    <!-- Step 3: Progress -->
+    <div id="onboarding-progress" style="display: none;">
+        <h2>Setting Up Drives...</h2>
+        <span class="loading"></span>
+        <p>Mounting drives and starting repair. Please wait...</p>
+    </div>
+
+    <!-- Step 4: Complete -->
+    <div id="onboarding-complete" style="display: none;">
+        <h2>Setup Complete!</h2>
+        <p id="onboarding-complete-msg">Repair is running. The main UI will be available shortly.</p>
+        <p>You will be redirected automatically, or you can continue using this page.</p>
+    </div>
+
+    <!-- Step 5: Error -->
+    <div id="onboarding-error" style="display: none;">
+        <h2>Setup Failed</h2>
+        <p class="error-msg" id="onboarding-error-msg"></p>
+        <button class="btn btn-primary" onclick="resetOnboarding()">Try Again</button>
+    </div>
+</div>
+{% elif not drive_mounted %}
 <div class="info-banner">
     Primary drive not mounted. Some features may be limited.
 </div>
@@ -1830,6 +1978,164 @@
         document.getElementById('script-output-modal').classList.remove('show');
     }
 
+    // ===== ONBOARDING =====
+    let onboardingDevicePath = null;
+    let onboardingFstype = null;
+
+    function showOnboardingStep(step) {
+        ['select', 'confirm', 'progress', 'complete', 'error'].forEach(s => {
+            const el = document.getElementById('onboarding-' + s);
+            if (el) el.style.display = (s === step) ? 'block' : 'none';
+        });
+    }
+
+    async function loadOnboardingCandidates() {
+        const container = document.getElementById('onboarding-drives');
+        const noDrives = document.getElementById('onboarding-no-drives');
+        if (!container) return;
+
+        try {
+            const resp = await fetch('api/onboarding/candidates', {
+                headers: {'Accept': 'application/json'},
+                signal: AbortSignal.timeout(10000)
+            });
+            if (!resp.ok) {
+                // Drive already mounted or other precondition — hide wizard
+                document.getElementById('onboarding-banner').style.display = 'none';
+                return;
+            }
+
+            const candidates = await resp.json();
+            container.innerHTML = '';
+
+            if (candidates.length === 0) {
+                noDrives.style.display = 'block';
+                return;
+            }
+
+            noDrives.style.display = 'none';
+            candidates.forEach(drive => {
+                const card = document.createElement('div');
+                card.className = 'drive-card';
+                card.onclick = () => probeDrive(drive.path, drive.fstype);
+
+                let details = '';
+                if (drive.size) details += `<div class="drive-detail">Size: ${drive.size}</div>`;
+                if (drive.label) details += `<div class="drive-detail">Label: ${drive.label}</div>`;
+                if (drive.model) details += `<div class="drive-detail">Model: ${drive.model}</div>`;
+                if (drive.fstype) details += `<div class="drive-detail">Type: ${drive.fstype}</div>`;
+                if (drive.uuid) details += `<div class="drive-detail">UUID: ${drive.uuid}</div>`;
+                if (drive.mountpoint) details += `<div class="drive-detail">Mounted at: ${drive.mountpoint}</div>`;
+
+                card.innerHTML = `<div class="drive-name">${drive.path}</div>${details}`;
+                container.appendChild(card);
+            });
+        } catch (e) {
+            console.error('Failed to load onboarding candidates:', e);
+        }
+    }
+
+    async function probeDrive(path, fstype) {
+        onboardingDevicePath = path;
+        onboardingFstype = fstype;
+        showOnboardingStep('progress');
+        document.querySelector('#onboarding-progress p').textContent = 'Checking drive for configuration...';
+
+        try {
+            const resp = await fetch('api/onboarding/probe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({device_path: path, fstype: fstype}),
+                signal: AbortSignal.timeout(30000)
+            });
+
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.detail || 'Probe failed');
+            }
+
+            const data = await resp.json();
+            showOnboardingStep('confirm');
+
+            if (data.config_found) {
+                document.getElementById('onboarding-config-found').style.display = 'block';
+                document.getElementById('onboarding-no-config').style.display = 'none';
+                const mountCount = (data.mounts || []).length;
+                document.getElementById('onboarding-mounts-info').textContent =
+                    mountCount > 0
+                        ? `Configuration includes ${mountCount} mount(s).`
+                        : '';
+            } else {
+                document.getElementById('onboarding-config-found').style.display = 'none';
+                document.getElementById('onboarding-no-config').style.display = 'block';
+            }
+        } catch (e) {
+            document.getElementById('onboarding-error-msg').textContent = e.message;
+            showOnboardingStep('error');
+        }
+    }
+
+    async function commitOnboarding(force) {
+        showOnboardingStep('progress');
+        document.querySelector('#onboarding-progress p').textContent = 'Mounting drives and starting repair. Please wait...';
+
+        try {
+            const resp = await fetch('api/onboarding/commit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({
+                    device_path: onboardingDevicePath,
+                    fstype: onboardingFstype,
+                    force: force
+                }),
+                signal: AbortSignal.timeout(60000)
+            });
+
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.detail || 'Setup failed');
+            }
+
+            const data = await resp.json();
+            showOnboardingStep('complete');
+
+            if (data.repair_started) {
+                document.getElementById('onboarding-complete-msg').textContent =
+                    'Drives mounted and repair started. The main UI will be available shortly.';
+                // 10s delay so user sees "Setup Complete!" before redirect
+                setTimeout(() => {
+                    window.location.href = '?fallback=true';
+                }, 10000);
+            } else {
+                document.getElementById('onboarding-complete-msg').textContent =
+                    'Drives mounted successfully. You may need to start repair manually.';
+            }
+        } catch (e) {
+            document.getElementById('onboarding-error-msg').textContent = e.message;
+            showOnboardingStep('error');
+        }
+    }
+
+    async function cancelOnboarding() {
+        try {
+            await fetch('api/onboarding/cancel', {
+                method: 'POST',
+                headers: {'Accept': 'application/json'},
+                signal: AbortSignal.timeout(10000)
+            });
+        } catch (e) {
+            // Ignore cancel errors
+        }
+        onboardingDevicePath = null;
+        onboardingFstype = null;
+        showOnboardingStep('select');
+        loadOnboardingCandidates();
+    }
+
+    function resetOnboarding() {
+        cancelOnboarding();
+    }
+
     // ===== INITIALIZATION =====
     // Each section is wrapped in try-catch to prevent one failure from breaking the entire page
 
@@ -1843,6 +2149,18 @@
         isUpgradeMode = urlParams.get('upgrade') === 'true';
     } catch (e) {
         console.error('Failed to parse URL parameters:', e);
+    }
+
+    // ===== ONBOARDING INIT =====
+    try {
+        const onboardingEl = document.getElementById('onboarding-banner');
+        if (onboardingEl && !isUpgradeMode) {
+            loadOnboardingCandidates();
+        } else if (onboardingEl && isUpgradeMode) {
+            onboardingEl.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Failed to initialize onboarding:', e);
     }
 
     // ===== SCRIPTS SECTION =====

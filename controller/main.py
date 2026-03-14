@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from controller.api.admin import router as admin_router
 from controller.api.disks import router as disks_router
+from controller.api.onboarding import router as onboarding_router
 from controller.api.ready import router as ready_router
 from controller.api.schemas import HealthResponse
 from controller.api.scripts import router as scripts_router
@@ -115,6 +116,7 @@ app.add_middleware(
 # Include routers
 app.include_router(admin_router)
 app.include_router(disks_router)
+app.include_router(onboarding_router)
 app.include_router(ready_router)
 app.include_router(scripts_router)
 app.include_router(services_router)

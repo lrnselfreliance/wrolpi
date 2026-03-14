@@ -83,32 +83,21 @@ class TestIsDockerMode:
 class TestIsPrimaryDriveMounted:
     """Tests for is_primary_drive_mounted function."""
 
-    def test_drive_mounted_when_config_dir_exists(self, test_config_directory):
-        """Should return True when /media/wrolpi/config exists."""
-        # We need to mock the path check to use our test directory
-        from unittest import mock
+    def test_drive_mounted_when_controller_yaml_exists(self, mock_config_path):
+        """Should return True when controller.yaml exists."""
+        mock_config_path.write_text("{}")
+        assert is_primary_drive_mounted() is True
 
-        with mock.patch(
-                "controller.lib.config.Path"
-        ) as mock_path:
-            mock_path.return_value.exists.return_value = True
-            # Re-import to get fresh function
-            # Actually test with real path
+    def test_drive_not_mounted_when_controller_yaml_missing(self, mock_config_path):
+        """Should return False when controller.yaml doesn't exist."""
+        # mock_config_path points to a non-existent file by default
+        assert is_primary_drive_mounted() is False
 
-        # The real test - check that the function works correctly
+    def test_drive_not_mounted_when_only_config_dir_exists(self, test_config_directory, mock_config_path):
+        """Should return False when config/ dir exists but controller.yaml doesn't."""
+        # test_config_directory creates the config dir but not controller.yaml
         assert test_config_directory.exists()
-
-    def test_drive_not_mounted_when_config_dir_missing(self, test_directory):
-        """Should return False when config dir doesn't exist."""
-        from unittest import mock
-
-        with mock.patch(
-                "controller.lib.config.Path"
-        ) as mock_path:
-            mock_instance = mock.MagicMock()
-            mock_instance.exists.return_value = False
-            mock_path.return_value = mock_instance
-            assert is_primary_drive_mounted() is False
+        assert is_primary_drive_mounted() is False
 
 
 class TestReloadConfigFromDrive:
@@ -175,12 +164,18 @@ class TestReloadConfigFromDrive:
 class TestSaveConfig:
     """Tests for save_config function."""
 
-    def test_save_config_raises_when_drive_not_mounted(
-            self, reset_runtime_config, mock_drive_not_mounted
+    def test_save_config_raises_when_config_dir_missing(
+            self, reset_runtime_config, test_directory
     ):
-        """Should raise RuntimeError when drive not mounted."""
-        with pytest.raises(RuntimeError, match="primary drive not mounted"):
-            save_config()
+        """Should raise RuntimeError when config directory doesn't exist."""
+        from unittest import mock
+        from pathlib import Path
+
+        # Point CONFIG_PATH_ON_DRIVE to a non-existent directory
+        fake_path = Path(str(test_directory)) / "nonexistent" / "controller.yaml"
+        with mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", fake_path):
+            with pytest.raises(RuntimeError, match="primary drive not mounted"):
+                save_config()
 
     def test_save_config_creates_file(
             self, reset_runtime_config, mock_config_path, mock_drive_mounted
@@ -205,10 +200,10 @@ class TestSaveConfig:
         # Only port should be in the file
         assert saved == {"port": 9999}
 
-    def test_save_config_removes_file_when_matches_defaults(
+    def test_save_config_writes_empty_when_matches_defaults(
             self, reset_runtime_config, mock_config_path, mock_drive_mounted
     ):
-        """Should remove config file when config matches defaults."""
+        """Should still write file when config matches defaults (marker behavior)."""
         # First create a config file with non-default value
         update_config("port", 9999)
         save_config()
@@ -218,22 +213,20 @@ class TestSaveConfig:
         update_config("port", 8087)  # Default port
         save_config()
 
-        # File should be removed since config matches defaults
-        assert not mock_config_path.exists()
+        # File should still exist (serves as marker that drive is set up)
+        assert mock_config_path.exists()
+        saved = yaml.safe_load(mock_config_path.read_text())
+        assert saved == {} or saved is None
 
-    def test_save_config_removes_stale_file(
+    def test_save_config_always_writes_file(
             self, reset_runtime_config, mock_config_path, mock_drive_mounted
     ):
-        """Should remove existing config file when config is reset to defaults."""
-        # Simulate an existing stale config file
-        mock_config_path.write_text("drives:\n  mounts:\n  - device: UUID=1234\n")
-        assert mock_config_path.exists()
-
+        """Should always write controller.yaml even with default config."""
         # Runtime config matches defaults (no changes made)
         save_config()
 
-        # File should be removed
-        assert not mock_config_path.exists()
+        # File should exist as a marker
+        assert mock_config_path.exists()
 
 
 class TestUpdateConfig:

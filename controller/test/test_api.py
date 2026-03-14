@@ -211,8 +211,19 @@ class TestDriveMountedStatus:
                 data = response.json()
                 assert data["drive_mounted"] is expected
 
-    def test_dashboard_shows_drive_not_mounted_banner(self, reset_runtime_config, mock_docker_mode):
-        """Dashboard should show banner when drive is not mounted."""
+    def test_dashboard_shows_onboarding_when_drive_not_mounted(self, reset_runtime_config, mock_docker_mode):
+        """Dashboard should show onboarding banner in native mode when drive is not mounted."""
+        from controller.main import app
+
+        with mock.patch(
+                "controller.main.is_primary_drive_mounted", return_value=False
+        ):
+            with TestClient(app) as client:
+                response = client.get("/")
+                assert "Welcome to WROLPi" in response.text
+
+    def test_dashboard_shows_drive_not_mounted_banner_in_docker(self, reset_runtime_config, mock_docker_mode_enabled):
+        """Dashboard should show info banner in Docker mode when drive is not mounted."""
         from controller.main import app
 
         with mock.patch(

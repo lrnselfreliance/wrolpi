@@ -224,7 +224,7 @@ async def delete(*paths: Union[str, pathlib.Path]):
         raise InvalidFile(f'Cannot delete the media directory')
     for path in paths:
         if not path.is_dir() and not path.is_file():
-            raise InvalidFile(f'Cannot delete {path} because it is not a file or a directory.')
+            logger.warning(f'Cannot delete {path} because it is not a file or a directory.')
     if len(paths) > 1:
         for p1 in paths:
             for p2 in paths:
@@ -259,7 +259,7 @@ async def delete(*paths: Union[str, pathlib.Path]):
             remove_ignored_directory(path)
         if path.is_dir():
             delete_directory(path, recursive=True)
-        else:
+        elif path.exists():
             path.unlink()
 
     # Refresh synchronously to clean up DB before returning.

@@ -125,9 +125,10 @@ describe('Domains List Page', () => {
 
     it('filters domains with search', () => {
         cy.get('input[placeholder="Domain filter..."]').type('example');
-        // Increase timeout to handle slower CI environments where React state updates may take longer
-        cy.get('table tbody tr', {timeout: 10000}).should('have.length', 1);
-        cy.get('table tbody tr').should('contain', 'example.com');
+        // Chain assertions so they retry together with the extended timeout
+        cy.get('table tbody tr', {timeout: 10000})
+            .should('have.length', 1)
+            .and('contain', 'example.com');
     });
 
     it('shows empty message when no domains', () => {

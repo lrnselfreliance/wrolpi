@@ -75,6 +75,10 @@ fi
 trap '
   EXIT_STATUS=$?
   rm -f /tmp/wrolpi-upgrade.env
+  # Clean up temporary GPG keyring if it exists.
+  if [ -n "$GNUPGHOME" ] && [ -d "$GNUPGHOME" ]; then
+    rm -rf "$GNUPGHOME"
+  fi
   if [ $EXIT_STATUS -eq 0 ]; then
     echo "WROLPi upgrade has completed"
   else
@@ -91,8 +95,33 @@ set -o pipefail
 systemctl stop wrolpi-api
 systemctl stop wrolpi-app
 
-# Pull the latest commit of the requested branch.
-(cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+# Fetch the latest commits without modifying the working tree.
+git -C /opt/wrolpi fetch || exit 4
+
+# Import the trusted GPG key from the current (pre-upgrade) working tree into a temporary keyring.
+GNUPGHOME=$(mktemp -d)
+export GNUPGHOME
+gpg --batch --quiet --import /opt/wrolpi/wrolpi/roland@learningselfreliance.com.gpg
+
+# Verify the fetched commit is signed by the trusted key before checking it out.
+if ! git -C /opt/wrolpi verify-commit origin/"${BRANCH}" 2>&1; then
+  echo "ERROR: origin/${BRANCH} is not signed by the trusted WROLPi GPG key. Aborting upgrade."
+  rm -rf "$GNUPGHOME"
+  exit 5
+fi
+
+# Signature verified, safe to apply.
+(cd /opt/wrolpi && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+
+# Verify HEAD again after checkout in case the branch was swapped between fetch and checkout.
+if ! git -C /opt/wrolpi verify-commit HEAD 2>&1; then
+  echo "ERROR: HEAD commit signature verification failed after checkout. Aborting upgrade."
+  rm -rf "$GNUPGHOME"
+  exit 6
+fi
+
+rm -rf "$GNUPGHOME"
+unset GNUPGHOME
 
 /opt/wrolpi/scripts/upgrade.sh 2>&1 | tee /opt/wrolpi/upgrade.log
 

@@ -3,8 +3,13 @@
 
 set -x
 
-# Generate certificate for HTTPS.
-/opt/wrolpi/scripts/generate_certificates.sh
+# Generate certificate for HTTPS — only if primary drive is mounted.
+# If not mounted, onboarding + repair will generate certs after drive setup.
+if mountpoint -q /media/wrolpi; then
+  /opt/wrolpi/scripts/generate_certificates.sh
+else
+  echo "Primary drive not mounted, skipping certificate generation (onboarding will handle this)"
+fi
 
 # Copy landing page for HTTP certificate download.
 cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html

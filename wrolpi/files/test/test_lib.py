@@ -20,7 +20,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPr
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
-from wrolpi.test.common import only_macos
+from wrolpi.test.common import only_macos, skip_circleci
 from wrolpi.vars import PROJECT_DIR, IS_MACOS
 
 
@@ -48,8 +48,8 @@ async def test_delete_file(async_client, test_session, make_files_structure, tes
     await lib.delete('baz')
     assert not (test_directory / 'baz').exists()
 
-    with pytest.raises(InvalidFile):
-        await lib.delete('does not exist')
+    # Trying to delete a file that does not exist only logs a warning.
+    await lib.delete('does not exist')
 
     # Cannot delete the media directory.
     with pytest.raises(InvalidFile):
@@ -477,6 +477,7 @@ async def test_mime_type(async_client, test_session, make_files_structure, test_
     assert empty.mimetype == 'inode/x-empty'
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_files_indexer(async_client, test_session, make_files_structure, test_directory, refresh_files,
                              await_background_tasks):

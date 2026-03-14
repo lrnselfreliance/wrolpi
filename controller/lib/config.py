@@ -72,8 +72,13 @@ def get_media_directory() -> Path:
 
 
 def is_primary_drive_mounted() -> bool:
-    """Check if the primary WROLPi drive is mounted."""
-    return Path("/media/wrolpi/config").exists()
+    """Check if the primary WROLPi drive is mounted.
+
+    Checks for controller.yaml rather than just the config directory,
+    because generate_certificates.sh may create /media/wrolpi/config/ssl/
+    on the root filesystem before the real drive is mounted.
+    """
+    return CONFIG_PATH_ON_DRIVE.exists()
 
 
 def reload_config_from_drive() -> bool:
@@ -106,23 +111,20 @@ def save_config() -> None:
     """
     Save current runtime config to the WROLPi drive.
     Only saves the diff from defaults to keep the file clean.
-    If config matches defaults, removes the config file.
+    Always writes controller.yaml (even if empty) so it serves as a
+    marker that the primary drive has been set up.
     """
-    if not is_primary_drive_mounted():
+    # Check that the config directory exists (drive must be mounted)
+    config_dir = CONFIG_PATH_ON_DRIVE.parent
+    if not config_dir.exists():
         raise RuntimeError("Cannot save config: primary drive not mounted")
 
     # Calculate diff from defaults
     diff = _get_config_diff(_runtime_config, DEFAULT_CONFIG)
 
-    if not diff:
-        # Config matches defaults - remove config file if it exists
-        if CONFIG_PATH_ON_DRIVE.exists():
-            CONFIG_PATH_ON_DRIVE.unlink()
-        return
-
-    CONFIG_PATH_ON_DRIVE.parent.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH_ON_DRIVE, "w") as f:
-        yaml.dump(diff, f, default_flow_style=False, sort_keys=False)
+        yaml.dump(diff if diff else {}, f, default_flow_style=False, sort_keys=False)
 
 
 def update_config(key: str, value: Any) -> None:

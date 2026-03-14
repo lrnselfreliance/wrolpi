@@ -362,3 +362,53 @@ class ReadyResponse(BaseModel):
 
     api: bool = Field(description="Whether the main WROLPi API is responding")
     app: bool = Field(description="Whether the React app is responding")
+
+
+# ============================================================================
+# Onboarding
+# ============================================================================
+
+class OnboardingCandidateResponse(BaseModel):
+    """A drive that could be selected as the primary WROLPi drive."""
+
+    path: str = Field(description="Device path (e.g., /dev/sda1)")
+    name: str = Field(description="Device name (e.g., sda1)")
+    size: str = Field(description="Human-readable size (e.g., 1.8T)")
+    fstype: Optional[str] = Field(default=None, description="Filesystem type")
+    label: Optional[str] = Field(default=None, description="Filesystem label")
+    uuid: Optional[str] = Field(default=None, description="Filesystem UUID")
+    model: Optional[str] = Field(default=None, description="Drive model")
+    mountpoint: Optional[str] = Field(default=None, description="Current mount point if auto-mounted (e.g., /media/pi/MyDrive)")
+
+
+class OnboardingProbeRequest(BaseModel):
+    """Request to probe a drive for WROLPi configuration."""
+
+    device_path: str = Field(description="Device path to probe (e.g., /dev/sda1)")
+    fstype: str = Field(description="Filesystem type (e.g., ext4)")
+
+
+class OnboardingProbeResponse(BaseModel):
+    """Result of probing a drive for WROLPi configuration."""
+
+    config_found: bool = Field(description="Whether a controller.yaml was found on the drive")
+    mounts: list = Field(default_factory=list, description="Mount entries from config if found")
+    device_path: str = Field(description="Device path that was probed")
+    fstype: str = Field(description="Filesystem type")
+
+
+class OnboardingCommitRequest(BaseModel):
+    """Request to execute onboarding setup."""
+
+    device_path: str = Field(description="Device path to use as primary drive")
+    fstype: str = Field(description="Filesystem type")
+    force: bool = Field(default=False, description="Proceed even if no config found on drive")
+
+
+class OnboardingCommitResponse(BaseModel):
+    """Result of onboarding setup."""
+
+    success: bool = Field(description="Whether onboarding completed successfully")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    mounts: list[str] = Field(default_factory=list, description="Mount points that were mounted")
+    repair_started: bool = Field(default=False, description="Whether repair script was started")

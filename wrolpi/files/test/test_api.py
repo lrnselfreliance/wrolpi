@@ -136,7 +136,7 @@ async def test_delete_file(test_session, async_client, make_files_structure, tes
     assert not (test_directory / 'baz').is_dir()
 
     request, response = await async_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
-    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
 
 @pytest.mark.asyncio

@@ -31,6 +31,7 @@ class SettingsResponse:
     log_level: str
     nav_color: str
     media_directory: str
+    require_cookies_unlocked: bool
     tags_directory: bool
     throttle_on_startup: bool
     throttle_status: str
@@ -82,6 +83,7 @@ class SettingsRequest:
     videos_destination: Optional[str] = None
     wrol_mode: Optional[bool] = None
     zims_destination: Optional[str] = None
+    require_cookies_unlocked: Optional[bool] = None
     save_ffprobe_json: Optional[bool] = None
     timezone: Optional[str] = None
 

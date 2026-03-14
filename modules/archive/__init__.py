@@ -76,7 +76,7 @@ class ArchiveDownloader(Downloader, ABC):
             need_commit = False
             if tag_names := download.tag_names:
                 for name in tag_names:
-                    archive.add_tag(name, session)
+                    archive.add_tag(session, name)
                     need_commit = True
 
                 if need_commit:

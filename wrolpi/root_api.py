@@ -178,6 +178,7 @@ def get_settings(_: Request):
         'videos_destination': wrolpi_config.videos_destination,
         'wrol_mode': wrolpi_config.wrol_mode,
         'zims_destination': wrolpi_config.zims_destination,
+        'require_cookies_unlocked': wrolpi_config.require_cookies_unlocked,
         'save_ffprobe_json': wrolpi_config.save_ffprobe_json,
         'timezone': wrolpi_config.timezone,
     }

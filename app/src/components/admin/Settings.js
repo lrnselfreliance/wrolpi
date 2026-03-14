@@ -452,6 +452,7 @@ export function SettingsPage() {
             // Only these settings can be changed on the SettingsPage.
             archive_destination: settings.archive_destination,
             download_on_startup: settings.download_on_startup,
+            require_cookies_unlocked: settings.require_cookies_unlocked,
             download_timeout: settings.download_timeout,
             download_wait: settings.download_wait,
             download_window_start: settings.download_window_start || '',
@@ -669,6 +670,19 @@ export function SettingsPage() {
                         disabled={disabled || state.download_on_startup === null}
                         checked={state.download_on_startup === true}
                         onChange={checked => handleInputChange(null, 'download_on_startup', checked)}
+                    />
+                </div>
+
+                <div style={{margin: '0.5em'}}>
+                    <Toggle
+                        label={<>
+                            Do not download while cookies are locked
+                            <InfoPopup
+                                content='When enabled, downloads will wait until cookies are unlocked. If no cookies are configured, downloads proceed normally.'/>
+                        </>}
+                        disabled={disabled || state.require_cookies_unlocked === null}
+                        checked={state.require_cookies_unlocked === true}
+                        onChange={checked => handleInputChange(null, 'require_cookies_unlocked', checked)}
                     />
                 </div>
 

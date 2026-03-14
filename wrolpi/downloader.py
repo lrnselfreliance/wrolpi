@@ -645,6 +645,11 @@ class DownloadManager:
         if wrol_mode_enabled():
             # Do not download with WROL Mode enabled.
             return False
+        if get_wrolpi_config().require_cookies_unlocked \
+                and flags.cookies_exist.is_set() \
+                and not flags.cookies_unlocked.is_set():
+            # Do not download when cookies exist but are not unlocked.
+            return False
         if not self.is_within_download_window():
             # Do not download outside the configured time window.
             return False

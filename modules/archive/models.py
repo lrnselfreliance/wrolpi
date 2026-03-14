@@ -393,8 +393,8 @@ class Archive(Base, ModelHelper):
         archive = model_archive(session, file_group)
         return archive
 
-    def add_tag(self, tag_id_or_name: int | str, session: Session = None) -> TagFile:
-        return self.file_group.add_tag(tag_id_or_name, session)
+    def add_tag(self, session: Session, tag_id_or_name: int | str) -> TagFile:
+        return self.file_group.add_tag(session, tag_id_or_name)
 
     @property
     def location(self):

@@ -803,6 +803,7 @@ class WROLPiConfigValidator:
     log_level: str = None
     map_destination: str = None
     nav_color: str = None
+    require_cookies_unlocked: bool = None
     save_ffprobe_json: bool = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
@@ -948,6 +949,7 @@ class WROLPiConfig(ConfigFile):
         log_level='info',
         map_destination='map',
         nav_color='violet',
+        require_cookies_unlocked=True,
         save_ffprobe_json=True,
         tags_directory=True,
         throttle_on_startup=False,
@@ -1008,6 +1010,14 @@ class WROLPiConfig(ConfigFile):
     @download_on_startup.setter
     def download_on_startup(self, value: bool):
         self.update({'download_on_startup': value})
+
+    @property
+    def require_cookies_unlocked(self) -> bool:
+        return self._config.get('require_cookies_unlocked', True)
+
+    @require_cookies_unlocked.setter
+    def require_cookies_unlocked(self, value: bool):
+        self.update({'require_cookies_unlocked': value})
 
     @property
     def download_timeout(self) -> int:

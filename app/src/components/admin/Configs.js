@@ -3,8 +3,7 @@ import {Button, Header, Icon, Loader, Modal, Popup, Table} from "../Theme";
 import React, {useContext, useEffect, useState} from "react";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {TableRowPlaceholder} from "../Placeholder";
-import {useNavigate} from "react-router";
-import {getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
+import {getConfig, getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
 import {ThemeContext} from "../../contexts/contexts";
 
 function WarningIcon({ok}) {
@@ -292,10 +291,47 @@ function BackupsModal({open, onClose, fileName, fetchConfigs}) {
     </Modal>;
 }
 
+function ConfigContentModal({open, onClose, fileName}) {
+    const [content, setContent] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        setLoading(true);
+        setContent(null);
+        getConfig(fileName).then(result => {
+            if (cancelled) return;
+            setContent(result);
+            setLoading(false);
+        }).catch(() => {
+            if (cancelled) return;
+            setContent(null);
+            setLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [open, fileName]);
+
+    return <Modal open={open} onClose={onClose} closeIcon size='large'>
+        <Modal.Header>{fileName}</Modal.Header>
+        <Modal.Content scrolling>
+            {loading
+                ? <Loader active inline='centered'/>
+                : content
+                    ? <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{JSON.stringify(content, null, 2)}</pre>
+                    : <p>Failed to load config contents.</p>
+            }
+        </Modal.Content>
+        <Modal.Actions>
+            <Button onClick={onClose}>Close</Button>
+        </Modal.Actions>
+    </Modal>;
+}
+
 function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
-    const {file_name, rel_path, valid, successful_import, has_backup_import} = config;
-    const navigate = useNavigate();
+    const {file_name, valid, successful_import, has_backup_import} = config;
     const [backupsModalOpen, setBackupsModalOpen] = useState(false);
+    const [contentModalOpen, setContentModalOpen] = useState(false);
 
     const localImportConfig = async () => {
         await importConfig(file_name);
@@ -332,7 +368,7 @@ function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
     }
 
     return <TableRow>
-        <TableCell><span onClick={() => navigate(`?preview=${rel_path}`)}>{file_name}</span></TableCell>
+        <TableCell><span style={{cursor: 'pointer'}} onClick={() => setContentModalOpen(true)}>{file_name}</span></TableCell>
         <TableCell><WarningIcon ok={successful_import}/></TableCell>
         <TableCell><WarningIcon ok={valid}/></TableCell>
         <TableCell className="hide-on-mobile">
@@ -350,6 +386,11 @@ function ConfigTableRow({config, importConfig, saveConfig, fetchConfigs}) {
             onClose={() => setBackupsModalOpen(false)}
             fileName={file_name}
             fetchConfigs={fetchConfigs}
+        />}
+        {contentModalOpen && <ConfigContentModal
+            open={contentModalOpen}
+            onClose={() => setContentModalOpen(false)}
+            fileName={file_name}
         />}
     </TableRow>
 }

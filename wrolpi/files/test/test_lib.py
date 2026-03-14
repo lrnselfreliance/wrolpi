@@ -75,6 +75,19 @@ async def test_delete_file_multiple(async_client, test_session, make_files_struc
 
 
 @pytest.mark.asyncio
+async def test_delete_file_missing(async_client, test_session, make_files_structure, test_directory):
+    """Deleting a mix of existing and nonexistent files should succeed, deleting only the existing files."""
+    foo, bar = make_files_structure([
+        'config/foo.txt',
+        'config/bar.txt',
+    ])
+
+    await lib.delete('config/foo.txt', 'config/._bar.txt', 'config/._baz.txt')
+    assert not foo.is_file()
+    assert bar.is_file()
+
+
+@pytest.mark.asyncio
 async def test_delete_file_names(async_client, test_session, make_files_structure, test_directory, tag_factory):
     """Will not refuse to delete a file that shares the name of a nearby file when they are in different FileGroups."""
     foo, foo1 = make_files_structure({
@@ -133,6 +146,19 @@ async def test_delete_nested(test_session, make_files_structure):
 
     with pytest.raises(InvalidFile):
         await lib.delete('foo', 'foo/bar')
+
+
+@pytest.mark.asyncio
+async def test_delete_similar_names(async_client, test_session, make_files_structure):
+    """Deleting sibling files where one filename is a prefix of another should not be considered nested."""
+    make_files_structure([
+        'config/._wrolpi.yaml',
+        'config/._wrolpi.yaml.sb-98fa34a1-MG7phT',
+        'config/._wrolpi.yaml.sb-98fa34a1-N4k8NB',
+    ])
+
+    await lib.delete('config/._wrolpi.yaml', 'config/._wrolpi.yaml.sb-98fa34a1-MG7phT',
+                      'config/._wrolpi.yaml.sb-98fa34a1-N4k8NB')
 
 
 @pytest.mark.parametrize(

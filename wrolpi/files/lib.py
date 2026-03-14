@@ -230,7 +230,7 @@ async def delete(*paths: Union[str, pathlib.Path]):
             for p2 in paths:
                 if p1 == p2:
                     continue
-                if str(p2).startswith(str(p1)):
+                if p1 != p2 and p1 in p2.parents:
                     raise InvalidFile(f'Cannot deleted nested paths')
     with get_db_session() as session:
         # Search for any files that have been tagged.

@@ -5,11 +5,14 @@ Manages maintenance scripts that run as systemd services (like repair.sh).
 Uses systemd oneshot services for process survival across controller restarts.
 """
 
+import logging
 import subprocess
 from datetime import datetime
 from typing import Optional
 
 from controller.lib.config import is_docker_mode
+
+logger = logging.getLogger(__name__)
 
 # Available scripts with their configurations
 # Parameters define inputs that scripts accept:
@@ -244,6 +247,7 @@ def start_script(name: str, params: Optional[dict] = None) -> dict:
                 "error": f"Failed to write script config: {e}",
             }
 
+    logger.info("Starting script '%s' (service: %s)", name, service)
     try:
         # Start the service (non-blocking via Popen)
         # No sudo needed - Controller runs as root
@@ -253,16 +257,19 @@ def start_script(name: str, params: Optional[dict] = None) -> dict:
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
         )
+        logger.info("Script '%s' started successfully", name)
         return {
             "success": True,
             "message": f"Script '{name}' started",
         }
     except FileNotFoundError:
+        logger.warning("systemctl not found, cannot start script '%s'", name)
         return {
             "success": False,
             "error": "systemctl not found",
         }
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to start script '%s': %s", name, e)
         return {
             "success": False,
             "error": str(e),

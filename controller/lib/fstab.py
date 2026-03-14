@@ -4,6 +4,7 @@ fstab management for WROLPi Controller.
 Provides persistent mount configuration via /etc/fstab.
 """
 
+import logging
 import shutil
 import subprocess
 from datetime import datetime
@@ -11,6 +12,8 @@ from pathlib import Path
 
 from controller.lib.disks import get_uuid, get_wrolpi_uid_gid, validate_mount_point
 from controller.lib.wrol_mode import require_normal_mode
+
+logger = logging.getLogger(__name__)
 
 FSTAB_PATH = Path("/etc/fstab")
 
@@ -24,6 +27,7 @@ def backup_fstab() -> Path:
     # Also keep a known backup location for easy recovery
     shutil.copy(FSTAB_PATH, Path("/etc/fstab.wrolpi.backup"))
 
+    logger.info("Created fstab backup at %s", backup_path)
     return backup_path
 
 
@@ -186,6 +190,7 @@ def add_fstab_entry(
     # Reload systemd
     subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
 
+    logger.info("Added fstab entry: %s -> %s (fstype=%s)", device_spec, mount_point, fstype)
     return {
         "success": True,
         "device": device_spec,
@@ -241,6 +246,7 @@ def remove_fstab_entry(mount_point: str) -> dict:
 
     subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
 
+    logger.info("Removed fstab entry for %s", mount_point)
     return {"success": True, "mount_point": mount_point}
 
 

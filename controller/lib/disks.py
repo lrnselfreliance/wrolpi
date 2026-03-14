@@ -6,6 +6,7 @@ Provides disk detection, mounting, and WROLPi drive identification.
 
 import grp
 import json
+import logging
 import pwd
 import subprocess
 import tempfile
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Optional
 
 from controller.lib.config import is_docker_mode
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_FILESYSTEMS = {"ext4", "btrfs", "vfat", "exfat"}
 
@@ -180,13 +183,17 @@ def mount_drive(
         cmd.extend(["-o", options])
     cmd.extend([device, mount_point])
 
+    logger.info("Mounting %s to %s (fstype=%s)", device, mount_point, fstype)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
+            logger.info("Mounted %s to %s successfully", device, mount_point)
             return {"success": True, "mount_point": mount_point}
         else:
+            logger.warning("Failed to mount %s to %s: %s", device, mount_point, result.stderr.strip())
             return {"success": False, "error": result.stderr.strip()}
     except subprocess.TimeoutExpired:
+        logger.warning("Mount timed out for %s to %s", device, mount_point)
         return {"success": False, "error": "Mount timed out"}
 
 
@@ -217,13 +224,17 @@ def unmount_drive(mount_point: str, lazy: bool = False) -> dict:
         cmd.append("-l")
     cmd.append(mount_point)
 
+    logger.info("Unmounting %s (lazy=%s)", mount_point, lazy)
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
+            logger.info("Unmounted %s successfully", mount_point)
             return {"success": True, "mount_point": mount_point}
         else:
+            logger.warning("Failed to unmount %s: %s", mount_point, result.stderr.strip())
             return {"success": False, "error": result.stderr.strip()}
     except subprocess.TimeoutExpired:
+        logger.warning("Unmount timed out for %s", mount_point)
         return {"success": False, "error": "Unmount timed out"}
 
 

@@ -4,9 +4,12 @@ Docker container management for WROLPi Controller.
 Used when running in Docker mode instead of systemd.
 """
 
+import logging
 import os
 
 from controller.lib.config import is_docker_mode
+
+logger = logging.getLogger(__name__)
 
 # Import docker only if available (optional dependency)
 try:
@@ -173,15 +176,19 @@ def start_container(name: str) -> dict:
     if not can_manage_containers():
         return {"success": False, "error": "Docker management not available"}
 
+    logger.info("Starting container %s", name)
     try:
         client = _get_client()
         container_name = _get_container_name(name)
         container = client.containers.get(container_name)
         container.start()
+        logger.info("Container %s started successfully", name)
         return {"success": True, "service": name, "action": "start"}
     except NotFound:
+        logger.warning("Container not found: %s", name)
         return {"success": False, "error": f"Container not found: {name}"}
     except Exception as e:
+        logger.warning("Failed to start container %s: %s", name, e)
         return {"success": False, "error": str(e)}
 
 
@@ -190,15 +197,19 @@ def stop_container(name: str) -> dict:
     if not can_manage_containers():
         return {"success": False, "error": "Docker management not available"}
 
+    logger.info("Stopping container %s", name)
     try:
         client = _get_client()
         container_name = _get_container_name(name)
         container = client.containers.get(container_name)
         container.stop(timeout=30)
+        logger.info("Container %s stopped successfully", name)
         return {"success": True, "service": name, "action": "stop"}
     except NotFound:
+        logger.warning("Container not found: %s", name)
         return {"success": False, "error": f"Container not found: {name}"}
     except Exception as e:
+        logger.warning("Failed to stop container %s: %s", name, e)
         return {"success": False, "error": str(e)}
 
 
@@ -207,15 +218,19 @@ def restart_container(name: str) -> dict:
     if not can_manage_containers():
         return {"success": False, "error": "Docker management not available"}
 
+    logger.info("Restarting container %s", name)
     try:
         client = _get_client()
         container_name = _get_container_name(name)
         container = client.containers.get(container_name)
         container.restart(timeout=30)
+        logger.info("Container %s restarted successfully", name)
         return {"success": True, "service": name, "action": "restart"}
     except NotFound:
+        logger.warning("Container not found: %s", name)
         return {"success": False, "error": f"Container not found: {name}"}
     except Exception as e:
+        logger.warning("Failed to restart container %s: %s", name, e)
         return {"success": False, "error": str(e)}
 
 

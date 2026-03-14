@@ -6,6 +6,7 @@ from controller.yaml on the WROLPi drive after it's mounted.
 """
 
 import copy
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ from typing import Any
 import yaml
 
 from controller.defaults import DEFAULT_CONFIG
+
+logger = logging.getLogger(__name__)
 
 # Path to config file on the WROLPi drive
 CONFIG_PATH_ON_DRIVE = Path("/media/wrolpi/config/controller.yaml")
@@ -91,7 +94,7 @@ def reload_config_from_drive() -> bool:
             drive_config = yaml.safe_load(f) or {}
     except (IOError, yaml.YAMLError) as e:
         # Failed to load - keep defaults
-        print(f"Warning: Failed to load controller.yaml: {e}")
+        logger.warning("Failed to load controller.yaml: %s", e)
         return False
 
     # Deep merge: drive_config overrides defaults

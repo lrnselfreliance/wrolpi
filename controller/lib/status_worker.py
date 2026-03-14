@@ -6,9 +6,12 @@ for O(1) response times on API endpoints.
 """
 
 import asyncio
+import logging
 import multiprocessing
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from controller.lib.status import (
     get_cpu_status,
@@ -109,7 +112,7 @@ async def status_worker_loop(app, base_sleep: float = 5.0):
         app: FastAPI application instance
         base_sleep: Base sleep interval in seconds (default 5s)
     """
-    print("Status worker started")
+    logger.info("Status worker started")
 
     while True:
         try:
@@ -123,10 +126,10 @@ async def status_worker_loop(app, base_sleep: float = 5.0):
             sleep_time = get_adaptive_sleep(status.get("load_stats"), base_sleep)
 
         except asyncio.CancelledError:
-            print("Status worker cancelled")
+            logger.info("Status worker cancelled")
             raise
         except Exception as e:
-            print(f"Status worker error: {e}")
+            logger.error("Status worker error: %s", e)
             sleep_time = base_sleep
 
         await asyncio.sleep(sleep_time)

@@ -4,10 +4,13 @@ Systemd service management for WROLPi Controller.
 Provides start/stop/restart/status/logs for systemd services.
 """
 
+import logging
 import subprocess
 from typing import Optional
 
 from controller.lib.config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 def get_managed_services() -> list[dict]:
@@ -300,7 +303,12 @@ def start_service(name: str) -> dict:
     systemd_name = _get_systemd_name(name)
     if not systemd_name:
         return {"success": False, "error": f"Unknown service: {name}"}
+    logger.info("Starting service %s (systemd: %s)", name, systemd_name)
     result = _run_systemctl("start", systemd_name)
+    if result["success"]:
+        logger.info("Service %s started successfully", name)
+    else:
+        logger.warning("Failed to start service %s: %s", name, result.get("error"))
 
     return {
         "success": result["success"],
@@ -323,7 +331,12 @@ def stop_service(name: str) -> dict:
     systemd_name = _get_systemd_name(name)
     if not systemd_name:
         return {"success": False, "error": f"Unknown service: {name}"}
+    logger.info("Stopping service %s (systemd: %s)", name, systemd_name)
     result = _run_systemctl("stop", systemd_name)
+    if result["success"]:
+        logger.info("Service %s stopped successfully", name)
+    else:
+        logger.warning("Failed to stop service %s: %s", name, result.get("error"))
 
     return {
         "success": result["success"],
@@ -347,11 +360,14 @@ def restart_service(name: str) -> dict:
     if not systemd_name:
         return {"success": False, "error": f"Unknown service: {name}"}
 
+    logger.info("Restarting service %s (systemd: %s)", name, systemd_name)
+
     # Special handling for self-restart: use Popen to avoid blocking
     # (the process will be killed before subprocess.run can return)
     if systemd_name == "wrolpi-controller":
         try:
             subprocess.Popen(["systemctl", "restart", systemd_name])
+            logger.info("Service %s self-restart initiated", name)
             return {
                 "success": True,
                 "service": name,
@@ -359,6 +375,7 @@ def restart_service(name: str) -> dict:
                 "pending": True,
             }
         except Exception as e:
+            logger.warning("Failed to restart service %s: %s", name, e)
             return {
                 "success": False,
                 "service": name,
@@ -367,6 +384,10 @@ def restart_service(name: str) -> dict:
             }
 
     result = _run_systemctl("restart", systemd_name)
+    if result["success"]:
+        logger.info("Service %s restarted successfully", name)
+    else:
+        logger.warning("Failed to restart service %s: %s", name, result.get("error"))
 
     return {
         "success": result["success"],
@@ -389,7 +410,12 @@ def enable_service(name: str) -> dict:
     systemd_name = _get_systemd_name(name)
     if not systemd_name:
         return {"success": False, "error": f"Unknown service: {name}"}
+    logger.info("Enabling service %s (systemd: %s)", name, systemd_name)
     result = _run_systemctl("enable", systemd_name)
+    if result["success"]:
+        logger.info("Service %s enabled successfully", name)
+    else:
+        logger.warning("Failed to enable service %s: %s", name, result.get("error"))
 
     return {
         "success": result["success"],
@@ -412,7 +438,12 @@ def disable_service(name: str) -> dict:
     systemd_name = _get_systemd_name(name)
     if not systemd_name:
         return {"success": False, "error": f"Unknown service: {name}"}
+    logger.info("Disabling service %s (systemd: %s)", name, systemd_name)
     result = _run_systemctl("disable", systemd_name)
+    if result["success"]:
+        logger.info("Service %s disabled successfully", name)
+    else:
+        logger.warning("Failed to disable service %s: %s", name, result.get("error"))
 
     return {
         "success": result["success"],

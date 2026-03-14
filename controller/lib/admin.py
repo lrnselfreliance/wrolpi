@@ -6,12 +6,15 @@ Migrated from wrolpi/admin.py - provides system control functions.
 
 import asyncio
 import enum
+import logging
 import subprocess
 from pathlib import Path
 
 import yaml
 
 from controller.lib.config import is_docker_mode, get_config_value, get_media_directory
+
+logger = logging.getLogger(__name__)
 
 # Constants - use controller's own config instead of wrolpi module
 DEFAULT_CPU_FREQUENCY = get_config_value('throttle.default_governor', 'ondemand')
@@ -164,6 +167,7 @@ def enable_hotspot() -> dict:
         )
 
         # Create hotspot using NetworkManager
+        logger.info("Enabling hotspot on %s with SSID %s", device, ssid)
         result = subprocess.run(
             [
                 "nmcli", "device", "wifi", "hotspot",
@@ -177,15 +181,20 @@ def enable_hotspot() -> dict:
         )
 
         if result.returncode == 0:
+            logger.info("Hotspot enabled successfully on %s", device)
             return {"success": True, "ssid": ssid, "device": device}
         else:
+            logger.warning("Failed to enable hotspot: %s", result.stderr.strip())
             return {"success": False, "error": result.stderr.strip() or "Unknown error"}
 
     except subprocess.TimeoutExpired:
+        logger.warning("Timeout enabling hotspot on %s", device)
         return {"success": False, "error": "Timeout enabling hotspot"}
     except FileNotFoundError:
+        logger.warning("nmcli not found, cannot enable hotspot")
         return {"success": False, "error": "nmcli not found"}
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to enable hotspot: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -199,6 +208,7 @@ def disable_hotspot() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
+    logger.info("Disabling hotspot")
     try:
         # Turn off the radio to disconnect hotspot
         result = subprocess.run(
@@ -209,13 +219,17 @@ def disable_hotspot() -> dict:
         )
 
         # Success even if already off
+        logger.info("Hotspot disabled successfully")
         return {"success": True}
 
     except subprocess.TimeoutExpired:
+        logger.warning("Timeout disabling hotspot")
         return {"success": False, "error": "Timeout disabling hotspot"}
     except FileNotFoundError:
+        logger.warning("nmcli not found, cannot disable hotspot")
         return {"success": False, "error": "nmcli not found"}
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to disable hotspot: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -310,6 +324,7 @@ def enable_throttle() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
+    logger.info("Enabling CPU throttle (powersave)")
     try:
         # Try cpufreq-set first
         result = subprocess.run(
@@ -320,8 +335,10 @@ def enable_throttle() -> dict:
         )
 
         if result.returncode == 0:
+            logger.info("CPU throttle enabled (powersave)")
             return {"success": True, "governor": "powersave"}
         else:
+            logger.warning("Failed to enable CPU throttle: %s", result.stderr.strip())
             return {"success": False, "error": result.stderr.strip() or "Unknown error"}
 
     except FileNotFoundError:
@@ -329,12 +346,16 @@ def enable_throttle() -> dict:
         try:
             for cpu_path in Path("/sys/devices/system/cpu/").glob("cpu[0-9]*/cpufreq/scaling_governor"):
                 cpu_path.write_text("powersave")
+            logger.info("CPU throttle enabled (powersave) via sysfs")
             return {"success": True, "governor": "powersave"}
         except IOError as e:
+            logger.warning("Failed to enable CPU throttle via sysfs: %s", e)
             return {"success": False, "error": str(e)}
     except subprocess.TimeoutExpired:
+        logger.warning("Timeout enabling CPU throttle")
         return {"success": False, "error": "Timeout enabling throttle"}
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to enable CPU throttle: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -350,6 +371,7 @@ def disable_throttle() -> dict:
 
     default_governor = DEFAULT_CPU_FREQUENCY
 
+    logger.info("Disabling CPU throttle (setting governor to %s)", default_governor)
     try:
         result = subprocess.run(
             ["cpufreq-set", "-g", default_governor],
@@ -359,8 +381,10 @@ def disable_throttle() -> dict:
         )
 
         if result.returncode == 0:
+            logger.info("CPU throttle disabled (governor: %s)", default_governor)
             return {"success": True, "governor": default_governor}
         else:
+            logger.warning("Failed to disable CPU throttle: %s", result.stderr.strip())
             return {"success": False, "error": result.stderr.strip() or "Unknown error"}
 
     except FileNotFoundError:
@@ -368,12 +392,16 @@ def disable_throttle() -> dict:
         try:
             for cpu_path in Path("/sys/devices/system/cpu/").glob("cpu[0-9]*/cpufreq/scaling_governor"):
                 cpu_path.write_text(default_governor)
+            logger.info("CPU throttle disabled (governor: %s) via sysfs", default_governor)
             return {"success": True, "governor": default_governor}
         except IOError as e:
+            logger.warning("Failed to disable CPU throttle via sysfs: %s", e)
             return {"success": False, "error": str(e)}
     except subprocess.TimeoutExpired:
+        logger.warning("Timeout disabling CPU throttle")
         return {"success": False, "error": "Timeout disabling throttle"}
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to disable CPU throttle: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -405,8 +433,10 @@ def shutdown_system(delay: int = 10) -> dict:
         import threading
         thread = threading.Thread(target=_delayed_shutdown, daemon=True)
         thread.start()
+        logger.info("System shutdown scheduled in %d seconds", delay)
         return {"success": True, "message": f"System shutting down in {delay} seconds"}
     except Exception as e:
+        logger.warning("Failed to schedule system shutdown: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -438,8 +468,10 @@ def reboot_system(delay: int = 10) -> dict:
         import threading
         thread = threading.Thread(target=_delayed_reboot, daemon=True)
         thread.start()
+        logger.info("System reboot scheduled in %d seconds", delay)
         return {"success": True, "message": f"System rebooting in {delay} seconds"}
     except Exception as e:
+        logger.warning("Failed to schedule system reboot: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -471,7 +503,9 @@ async def restart_all_services() -> dict:
 
     results = {}
 
+    logger.info("Restarting all WROLPi services")
     for service in services_to_restart:
+        logger.info("Restarting service %s", service)
         try:
             result = subprocess.run(
                 ["systemctl", "restart", service],
@@ -483,11 +517,18 @@ async def restart_all_services() -> dict:
                 "success": result.returncode == 0,
                 "error": result.stderr.strip() if result.returncode != 0 else None,
             }
+            if result.returncode == 0:
+                logger.info("Service %s restarted successfully", service)
+            else:
+                logger.warning("Failed to restart service %s: %s", service, result.stderr.strip())
         except subprocess.TimeoutExpired:
+            logger.warning("Timeout restarting service %s", service)
             results[service] = {"success": False, "error": "Timeout"}
         except FileNotFoundError:
+            logger.warning("systemctl not found while restarting %s", service)
             results[service] = {"success": False, "error": "systemctl not found"}
         except Exception as e:
+            logger.warning("Failed to restart service %s: %s", service, e)
             results[service] = {"success": False, "error": str(e)}
 
     # Schedule Controller self-restart after response is sent
@@ -581,6 +622,7 @@ def set_timezone(timezone: str) -> dict:
     if not timezone or not timezone.strip():
         return {"success": False, "timezone": None, "error": "Timezone must not be empty"}
 
+    logger.info("Setting system timezone to %s", timezone)
     try:
         result = subprocess.run(
             ["timedatectl", "set-timezone", timezone],
@@ -590,15 +632,20 @@ def set_timezone(timezone: str) -> dict:
         )
 
         if result.returncode == 0:
+            logger.info("System timezone set to %s", timezone)
             return {"success": True, "timezone": timezone, "error": None}
         else:
+            logger.warning("Failed to set timezone to %s: %s", timezone, result.stderr.strip())
             return {"success": False, "timezone": None, "error": result.stderr.strip() or "Unknown error"}
 
     except FileNotFoundError:
+        logger.warning("timedatectl not found, cannot set timezone")
         return {"success": False, "timezone": None, "error": "timedatectl not found"}
     except subprocess.TimeoutExpired:
+        logger.warning("Timeout setting timezone to %s", timezone)
         return {"success": False, "timezone": None, "error": "Timeout setting timezone"}
     except subprocess.SubprocessError as e:
+        logger.warning("Failed to set timezone: %s", e)
         return {"success": False, "timezone": None, "error": str(e)}
 
 
@@ -618,7 +665,7 @@ def apply_timezone_from_config():
         with open(config_path) as f:
             config = yaml.safe_load(f) or {}
     except (IOError, yaml.YAMLError) as e:
-        print(f"Warning: Failed to read wrolpi.yaml for timezone: {e}")
+        logger.warning("Failed to read wrolpi.yaml for timezone: %s", e)
         return
 
     timezone = config.get('timezone')
@@ -627,6 +674,6 @@ def apply_timezone_from_config():
 
     result = set_timezone(timezone)
     if result.get('success'):
-        print(f"Applied system timezone: {timezone}")
+        logger.info("Applied system timezone from config: %s", timezone)
     else:
-        print(f"Warning: Failed to apply system timezone '{timezone}': {result.get('error')}")
+        logger.warning("Failed to apply system timezone '%s': %s", timezone, result.get('error'))

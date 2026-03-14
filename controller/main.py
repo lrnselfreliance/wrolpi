@@ -10,8 +10,12 @@ The Controller provides:
 """
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -59,21 +63,21 @@ async def lifespan(app: FastAPI):
     Runs on startup and shutdown.
     """
     # Startup
-    print(f"WROLPi Controller v{__version__} starting...")
-    print(f"Docker mode: {is_docker_mode()}")
+    logger.info("WROLPi Controller v%s starting...", __version__)
+    logger.info("Docker mode: %s", is_docker_mode())
 
     # Try to load config from drive if mounted
     if is_primary_drive_mounted():
         if reload_config_from_drive():
-            print("Loaded configuration from drive")
+            logger.info("Loaded configuration from drive")
         else:
-            print("Using default configuration (no controller.yaml found)")
+            logger.info("Using default configuration (no controller.yaml found)")
 
         # Apply timezone from wrolpi.yaml to the system.
         from controller.lib.admin import apply_timezone_from_config
         apply_timezone_from_config()
     else:
-        print("Primary drive not mounted - using default configuration")
+        logger.info("Primary drive not mounted - using default configuration")
 
     # Initialize cached status
     app.state.cached_status = {}
@@ -84,7 +88,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    print("WROLPi Controller shutting down...")
+    logger.info("WROLPi Controller shutting down...")
     status_task.cancel()
     try:
         await status_task

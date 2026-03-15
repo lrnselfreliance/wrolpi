@@ -3,8 +3,9 @@ import _ from "lodash";
 import {Grid, Header as SHeader, Image,} from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
-import {encodeMediaPath} from "./Common";
+import {encodeMediaPath, isSupportedArchive} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
+import {ArchivePreviewContent} from "./ArchivePreview";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
@@ -360,6 +361,8 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
                 setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
+            } else if (isSupportedArchive(mimetype, lowerPath)) {
+                setModalContent(<ArchivePreviewContent previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else {
                 // No special handler for this file type, just open it.
                 setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path, taggable);

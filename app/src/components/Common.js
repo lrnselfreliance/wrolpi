@@ -1115,6 +1115,15 @@ export function isZipMimetype(mimetype) {
     return mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz') || mimetype.startsWith('application/gzip') || mimetype.startsWith('application/x-rar');
 }
 
+export function isSupportedArchive(mimetype, lowerPath) {
+    // Zip is always supported.
+    if (mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib')) return true;
+    if (mimetype.startsWith('application/x-tar')) return true;
+    // Suffix-based detection for tar variants whose mimetype may be the compression type.
+    if (lowerPath.endsWith('.tar') || lowerPath.endsWith('.tar.gz') || lowerPath.endsWith('.tgz') || lowerPath.endsWith('.tar.bz2') || lowerPath.endsWith('.tar.xz')) return true;
+    return false;
+}
+
 export function mimetypeIconName(mimetype, lowerPath = '') {
     if (mimetype) {
         if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml') || mimetype.startsWith('text/xml')) {
@@ -1175,6 +1184,52 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
     }
     if (lowerPath.endsWith('.pem')) {
         return 'certificate';
+    }
+    return 'file';
+}
+
+const SUFFIX_ICON_MAP = {
+    // Code
+    html: 'file code', htm: 'file code', json: 'file code', xml: 'file code',
+    yaml: 'file code', yml: 'file code', js: 'file code', css: 'file code',
+    py: 'file code', sh: 'file code', c: 'file code', cpp: 'file code',
+    h: 'file code', java: 'file code', rs: 'file code', go: 'file code',
+    ts: 'file code', tsx: 'file code', jsx: 'file code',
+    // Documents
+    pdf: 'file pdf',
+    txt: 'file text', md: 'file text', csv: 'file text', log: 'file text', rst: 'file text',
+    doc: 'file word', docx: 'file word', odt: 'file word',
+    xls: 'file excel', xlsx: 'file excel', ods: 'file excel',
+    ppt: 'file powerpoint', pptx: 'file powerpoint', odp: 'file powerpoint',
+    // Media
+    jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', svg: 'image',
+    bmp: 'image', webp: 'image', ico: 'image', tiff: 'image',
+    mp4: 'film', mkv: 'film', avi: 'film', mov: 'film', wmv: 'film', webm: 'film', flv: 'film',
+    mp3: 'file audio', wav: 'file audio', flac: 'file audio', ogg: 'file audio',
+    aac: 'file audio', wma: 'file audio', m4a: 'file audio',
+    vtt: 'closed captioning', srt: 'closed captioning',
+    // Archives
+    zip: 'file archive', tar: 'file archive', gz: 'file archive', bz2: 'file archive',
+    xz: 'file archive', '7z': 'file archive', rar: 'file archive', tgz: 'file archive',
+    // Books
+    epub: 'book', mobi: 'book', azw3: 'book',
+    // 3D
+    stl: 'cube', blend: 'cube', scad: 'cube',
+    // Platform
+    exe: 'windows', msi: 'windows',
+    dmg: 'apple',
+    iso: 'dot circle', img: 'dot circle',
+    // Certs
+    pem: 'certificate', crt: 'certificate', cer: 'certificate',
+    // Email
+    eml: 'mail',
+};
+
+export function fileSuffixIconName(filename) {
+    const dot = filename.lastIndexOf('.');
+    if (dot >= 0) {
+        const ext = filename.substring(dot + 1).toLowerCase();
+        return SUFFIX_ICON_MAP[ext] || 'file';
     }
     return 'file';
 }

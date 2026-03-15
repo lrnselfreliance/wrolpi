@@ -1359,6 +1359,21 @@ export async function deleteFile(paths) {
     return response
 }
 
+export async function getArchiveContents(path) {
+    const response = await apiPost(`${API_URI}/files/zip/contents`, {path});
+    if (response.ok) {
+        const {contents} = await response.json();
+        return contents;
+    }
+    const message = await getErrorMessage(response, 'Could not read archive contents.');
+    toast({type: 'error', title: 'Archive Error', description: message, time: 5000});
+}
+
+export function downloadArchiveMember(path, member) {
+    const params = new URLSearchParams({path, member});
+    window.open(`${API_URI}/files/zip/download?${params}`, '_blank');
+}
+
 export async function fetchFilesProgress() {
     const response = await apiGet(`${API_URI}/files/worker_status`);
     if (response.ok) {

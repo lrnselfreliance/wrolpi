@@ -98,3 +98,10 @@ class BulkTagApplyRequest:
     paths: List[str] = field(default_factory=list)
     add_tag_names: List[str] = field(default_factory=list)
     remove_tag_names: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ArchiveContentsRequest:
+    path: str
+
+

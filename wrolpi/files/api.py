@@ -11,7 +11,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
     background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
-from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
+from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict, UnsupportedArchive
 from . import lib, schema
 from .worker import file_worker
 from ..api_utils import json_response, api_app
@@ -517,3 +517,33 @@ async def post_bulk_tag_apply(_: Request, body: schema.BulkTagApplyRequest):
 async def get_bulk_tag_progress(_: Request):
     progress = lib.get_bulk_tag_progress()
     return json_response(progress.__json__())
+
+
+@files_bp.post('/zip/contents')
+@openapi.definition(
+    summary='List the contents of an archive file (zip, tar, tar.gz, etc.)',
+    body=schema.ArchiveContentsRequest,
+)
+@validate(schema.ArchiveContentsRequest)
+async def post_archive_contents(_: Request, body: schema.ArchiveContentsRequest):
+    path = get_media_directory() / body.path
+    contents = lib.list_archive_contents(path)
+    return json_response({'contents': contents})
+
+
+@files_bp.get('/zip/download')
+@openapi.definition(
+    summary='Download a single file from inside an archive.',
+)
+async def get_archive_download(request: Request):
+    archive_path = request.args.get('path')
+    member = request.args.get('member')
+    if not archive_path or not member:
+        raise InvalidFile('path and member query parameters are required')
+    path = get_media_directory() / archive_path
+    file_bytes, content_type, filename = lib.stream_archive_member(path, member)
+    return response.raw(
+        file_bytes,
+        content_type=content_type,
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )

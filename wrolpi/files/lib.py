@@ -4,12 +4,15 @@ import datetime
 import functools
 import glob
 import json
+import mimetypes
 import os
 import pathlib
 import re
 import shutil
 import subprocess
+import tarfile
 import urllib.parse
+import zipfile
 from itertools import zip_longest
 from pathlib import Path
 from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
@@ -31,7 +34,7 @@ from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_ran
 from wrolpi.db import get_db_session, get_db_curs, mogrify
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
-    NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError
+    NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError, UnsupportedArchive, InvalidArchiveMember
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES, ISO_3166_CODES
@@ -2076,3 +2079,172 @@ async def bulk_tag_worker():
 from wrolpi.api_utils import perpetual_signal
 
 bulk_tag_worker = perpetual_signal(sleep=1)(bulk_tag_worker)
+
+
+def _detect_archive_type(path: pathlib.Path) -> str:
+    """Detect archive type from file suffix. Returns 'zip', 'tar', or raises UnsupportedArchive."""
+    name = path.name.lower()
+    if name.endswith('.zip'):
+        return 'zip'
+    if name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tar.xz')):
+        return 'tar'
+    raise UnsupportedArchive(f'Unsupported archive format: {path.name}')
+
+
+def _build_tree(entries: list) -> list:
+    """Build a hierarchical tree from a flat list of archive entries.
+
+    Each entry is a dict with 'path', 'name', 'is_dir', 'size'.
+    Returns a nested list with 'children' on directory entries.
+    """
+    root_children = []
+    # Map from directory path to its children list.
+    dir_map = {}
+
+    # Sort entries so parents come before children.
+    entries.sort(key=lambda e: e['path'])
+
+    for entry in entries:
+        parts = entry['path'].strip('/').split('/')
+        if len(parts) == 1:
+            # Top-level entry.
+            if entry['is_dir']:
+                entry['children'] = []
+                dir_map[entry['path'].rstrip('/') + '/'] = entry['children']
+            root_children.append(entry)
+        else:
+            # Find parent directory.
+            parent_path = '/'.join(parts[:-1]) + '/'
+            if parent_path not in dir_map:
+                # Create implicit parent directories.
+                current = ''
+                for part in parts[:-1]:
+                    current += part + '/'
+                    if current not in dir_map:
+                        parent_entry = {
+                            'path': current,
+                            'name': part,
+                            'is_dir': True,
+                            'size': 0,
+                            'children': [],
+                        }
+                        dir_map[current] = parent_entry['children']
+                        # Attach to grandparent or root.
+                        grandparent = '/'.join(current.rstrip('/').split('/')[:-1])
+                        grandparent_key = grandparent + '/' if grandparent else None
+                        if grandparent_key and grandparent_key in dir_map:
+                            dir_map[grandparent_key].append(parent_entry)
+                        else:
+                            root_children.append(parent_entry)
+
+            if entry['is_dir']:
+                entry['children'] = []
+                dir_map[entry['path'].rstrip('/') + '/'] = entry['children']
+
+            parent_list = dir_map.get(parent_path)
+            if parent_list is not None:
+                parent_list.append(entry)
+            else:
+                root_children.append(entry)
+
+    return root_children
+
+
+def list_archive_contents(path: pathlib.Path) -> dict:
+    """List the contents of an archive file as a hierarchical tree.
+
+    Returns: {"entries": [...], "total_size": int, "total_files": int}
+    """
+    media_directory = get_media_directory()
+    if not str(path).startswith(str(media_directory)):
+        raise InvalidFile('Path must be within the media directory')
+    if not path.is_file():
+        raise InvalidFile(f'Archive file does not exist: {path}')
+
+    archive_type = _detect_archive_type(path)
+    flat_entries = []
+    total_size = 0
+    total_files = 0
+
+    try:
+        if archive_type == 'zip':
+            with zipfile.ZipFile(path, 'r') as zf:
+                for info in zf.infolist():
+                    is_dir = info.is_dir()
+                    entry = {
+                        'path': info.filename,
+                        'name': info.filename.rstrip('/').split('/')[-1],
+                        'is_dir': is_dir,
+                        'size': info.file_size,
+                    }
+                    flat_entries.append(entry)
+                    if not is_dir:
+                        total_size += info.file_size
+                        total_files += 1
+        elif archive_type == 'tar':
+            with tarfile.open(path, 'r:*') as tf:
+                for member in tf.getmembers():
+                    is_dir = member.isdir()
+                    entry = {
+                        'path': member.name + ('/' if is_dir else ''),
+                        'name': member.name.rstrip('/').split('/')[-1],
+                        'is_dir': is_dir,
+                        'size': member.size,
+                    }
+                    flat_entries.append(entry)
+                    if not is_dir:
+                        total_size += member.size
+                        total_files += 1
+    except (zipfile.BadZipFile, tarfile.TarError, EOFError, OSError) as e:
+        raise UnsupportedArchive(f'Cannot read archive: {e}')
+
+    tree = _build_tree(flat_entries)
+    return {'entries': tree, 'total_size': total_size, 'total_files': total_files}
+
+
+def stream_archive_member(archive_path: pathlib.Path, member_path: str) -> Tuple[bytes, str, str]:
+    """Read a single member from an archive and return its bytes, mimetype, and filename.
+
+    Security: validates member_path has no '..' components.
+    """
+    media_directory = get_media_directory()
+    if not str(archive_path).startswith(str(media_directory)):
+        raise InvalidFile('Path must be within the media directory')
+    if not archive_path.is_file():
+        raise InvalidFile(f'Archive file does not exist: {archive_path}')
+
+    # Security: reject path traversal.
+    if '..' in member_path.split('/'):
+        raise InvalidArchiveMember('Invalid member path: contains ".."')
+
+    archive_type = _detect_archive_type(archive_path)
+    filename = member_path.rstrip('/').split('/')[-1]
+    guessed_type, _ = mimetypes.guess_type(filename)
+    content_type = guessed_type or 'application/octet-stream'
+
+    try:
+        if archive_type == 'zip':
+            with zipfile.ZipFile(archive_path, 'r') as zf:
+                try:
+                    info = zf.getinfo(member_path)
+                except KeyError:
+                    raise InvalidArchiveMember(f'Member not found in archive: {member_path}')
+                if info.is_dir():
+                    raise InvalidArchiveMember(f'Cannot download a directory: {member_path}')
+                file_bytes = zf.read(member_path)
+        elif archive_type == 'tar':
+            with tarfile.open(archive_path, 'r:*') as tf:
+                try:
+                    member = tf.getmember(member_path)
+                except KeyError:
+                    raise InvalidArchiveMember(f'Member not found in archive: {member_path}')
+                if member.isdir():
+                    raise InvalidArchiveMember(f'Cannot download a directory: {member_path}')
+                f = tf.extractfile(member)
+                if f is None:
+                    raise InvalidArchiveMember(f'Cannot extract member: {member_path}')
+                file_bytes = f.read()
+    except (zipfile.BadZipFile, tarfile.TarError, EOFError, OSError) as e:
+        raise UnsupportedArchive(f'Cannot read archive: {e}')
+
+    return file_bytes, content_type, filename

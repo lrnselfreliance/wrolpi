@@ -199,3 +199,15 @@ class UnknownCollection(APIError):
     code = 'UNKNOWN_COLLECTION'
     summary = 'Unable to find the collection'
     status_code = HTTPStatus.NOT_FOUND
+
+
+class UnsupportedArchive(APIError):
+    code = 'UNSUPPORTED_ARCHIVE'
+    summary = 'The file is not a supported archive format.'
+    status_code = HTTPStatus.BAD_REQUEST
+
+
+class InvalidArchiveMember(APIError):
+    code = 'INVALID_ARCHIVE_MEMBER'
+    summary = 'The requested member does not exist in the archive.'
+    status_code = HTTPStatus.BAD_REQUEST

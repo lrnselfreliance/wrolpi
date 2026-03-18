@@ -583,9 +583,10 @@ class Channel(ModelHelper, Base):
     collection = relationship('Collection', foreign_keys=[collection_id])
 
     @property
-    def downloads(self) -> InstrumentedList:
-        """Get downloads from associated Collection."""
-        return self.collection.downloads if self.collection else []
+    def downloads(self) -> list:
+        """Get recurring downloads from associated Collection.  Once-downloads are excluded because they are not
+        Channel downloads."""
+        return [d for d in self.collection.downloads if d.frequency] if self.collection else []
 
     def __repr__(self):
         return f'<Channel id={self.id} name={repr(self.name)} url={self.url} directory={self.directory}>'

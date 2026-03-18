@@ -1392,7 +1392,7 @@ class FileWorker:
         logger.info(f'Deleted {deleted_count} FileGroups ({len(all_urls)} URLs added to skip list)')
 
     def _cleanup_modified_models(self, diffs: list[FileGroupDiff]):
-        """Delete Videos/Archives/EBooks for modified FileGroups where primary file was removed.
+        """Delete Videos/Archives/Docs for modified FileGroups where primary file was removed.
 
         Optimized: uses a single UNION ALL query to fetch all model types at once,
         reducing 3 SELECT queries to 1.
@@ -1421,16 +1421,16 @@ class FileWorker:
                                   JOIN file_group fg ON a.file_group_id = fg.id
                          WHERE fg.id = ANY (%s)
                          UNION ALL
-                         SELECT 'ebook', e.id, fg.id, fg.primary_path
-                         FROM ebook e
-                                  JOIN file_group fg ON e.file_group_id = fg.id
+                         SELECT 'doc', d.id, fg.id, fg.primary_path
+                         FROM doc d
+                                  JOIN file_group fg ON d.file_group_id = fg.id
                          WHERE fg.id = ANY (%s)
                          ''', (file_group_ids, file_group_ids, file_group_ids))
 
             # Group results by model type
             video_ids_to_delete = []
             archive_ids_to_delete = []
-            ebook_ids_to_delete = []
+            doc_ids_to_delete = []
 
             for model_type, model_id, fg_id, primary_path in curs.fetchall():
                 basename = pathlib.Path(primary_path).name
@@ -1439,8 +1439,8 @@ class FileWorker:
                         video_ids_to_delete.append(model_id)
                     elif model_type == 'archive':
                         archive_ids_to_delete.append(model_id)
-                    elif model_type == 'ebook':
-                        ebook_ids_to_delete.append(model_id)
+                    elif model_type == 'doc':
+                        doc_ids_to_delete.append(model_id)
 
             # Batch delete each model type
             if video_ids_to_delete:
@@ -1461,14 +1461,14 @@ class FileWorker:
                              ''', (archive_ids_to_delete,))
                 curs.execute('DELETE FROM archive WHERE id = ANY(%s)', (archive_ids_to_delete,))
 
-            if ebook_ids_to_delete:
-                logger.info(f'Deleting {len(ebook_ids_to_delete)} EBooks whose primary file was removed')
+            if doc_ids_to_delete:
+                logger.info(f'Deleting {len(doc_ids_to_delete)} Docs whose primary file was removed')
                 curs.execute('''
                              UPDATE file_group
                              SET model = NULL
-                             WHERE id IN (SELECT file_group_id FROM ebook WHERE id = ANY (%s))
-                             ''', (ebook_ids_to_delete,))
-                curs.execute('DELETE FROM ebook WHERE id = ANY(%s)', (ebook_ids_to_delete,))
+                             WHERE id IN (SELECT file_group_id FROM doc WHERE id = ANY (%s))
+                             ''', (doc_ids_to_delete,))
+                curs.execute('DELETE FROM doc WHERE id = ANY(%s)', (doc_ids_to_delete,))
 
     def _validate_move_paths(
             self,

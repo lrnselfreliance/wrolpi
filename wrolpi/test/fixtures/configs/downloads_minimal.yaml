@@ -1,5 +1,5 @@
 version: 0
-skip_urls: []
+skip_urls: [ ]
 downloads:
   - url: 'https://example.com/minimal'
     downloader: video
@@ -8,4 +8,4 @@ downloads:
     destination: null
     sub_downloader: null
     settings: null
-    tag_names: []
+    tag_names: [ ]

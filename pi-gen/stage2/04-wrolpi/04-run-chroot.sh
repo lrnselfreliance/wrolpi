@@ -52,7 +52,6 @@ chown -R _renderd:_renderd /var/cache/renderd/tiles
 /opt/wrolpi/scripts/install_help_service.sh
 
 # Create the media directory for the wrolpi user.
-echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab
 mkdir -p /media/wrolpi
 chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi /opt/wrolpi*
 

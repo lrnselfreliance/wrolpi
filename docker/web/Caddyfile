@@ -59,13 +59,6 @@
 		reverse_proxy api:8081
 	}
 
-	# API docs.
-	handle /docs/* {
-		reverse_proxy api:8081
-	}
-	handle /docs {
-		redir * /docs/ 301
-	}
 
 	# Custom MIME types not in Caddy's defaults.
 	@yaml path *.yaml *.yml

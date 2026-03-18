@@ -22,6 +22,7 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
+import {DocsRoute} from "./components/Docs";
 import ErrorBoundary from "./components/ErrorBoundary";
 import {KeyboardShortcutsProvider} from "./components/KeyboardShortcutsProvider";
 
@@ -90,6 +91,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path="more/*" element={<ErrorBoundary><MoreRoute/></ErrorBoundary>}/>
     <Route path="inventory/*" element={<ErrorBoundary><InventoryRoute/></ErrorBoundary>}/>
     <Route path='archive/*' element={<ErrorBoundary><ArchiveRoute/></ErrorBoundary>}/>
+    <Route path='docs/*' element={<ErrorBoundary><DocsRoute/></ErrorBoundary>}/>
     <Route path='map/*' element={<ErrorBoundary><MapRoute/></ErrorBoundary>}/>
     <Route path='zim/*' element={<ErrorBoundary><ZimRoute/></ErrorBoundary>}/>
     <Route path='files/*' element={<ErrorBoundary><FilesRoute/></ErrorBoundary>}/>

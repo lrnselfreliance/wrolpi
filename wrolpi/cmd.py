@@ -127,6 +127,7 @@ def get_installed_browsers() -> list:
 
     return browsers
 
+
 # Videos
 YT_DLP_BIN = which(
     '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location

@@ -811,6 +811,38 @@ export async function fetchDomains() {
     }
 }
 
+export async function fetchAuthors() {
+    const response = await apiGet(`${COLLECTIONS_API}?kind=author`);
+    if (response.ok) {
+        let data = await response.json();
+        return [data['collections'], data['totals']['collections']];
+    } else {
+        const message = await getErrorMessage(response, 'Unable to fetch Authors.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Authors Error',
+            description: message,
+            time: 5000,
+        });
+    }
+}
+
+export async function fetchSubjects() {
+    const response = await apiGet(`${COLLECTIONS_API}?kind=subject`);
+    if (response.ok) {
+        let data = await response.json();
+        return [data['collections'], data['totals']['collections']];
+    } else {
+        const message = await getErrorMessage(response, 'Unable to fetch Subjects.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Subjects Error',
+            description: message,
+            time: 5000,
+        });
+    }
+}
+
 export async function fetchChannels() {
     const response = await apiGet(`${COLLECTIONS_API}?kind=channel`);
     if (response.ok) {
@@ -1378,6 +1410,11 @@ export function downloadArchiveMember(path, member) {
     window.open(`${API_URI}/files/zip/download?${params}`, '_blank');
 }
 
+export function getArchiveMemberUrl(path, member) {
+    const params = new URLSearchParams({path, member});
+    return `${API_URI}/files/zip/download?${params}`;
+}
+
 export async function fetchFilesProgress() {
     const response = await apiGet(`${API_URI}/files/worker_status`);
     if (response.ok) {
@@ -1817,6 +1854,8 @@ export async function searchSuggestions(search_str) {
         return {
             channels: content.channels,
             domains: content.domains,
+            authors: content.authors || [],
+            subjects: content.subjects || [],
         }
     } else {
         console.error('Failed to get file search suggestions!');
@@ -2055,4 +2094,61 @@ export async function fetchSuggestedUserAgent() {
         return data?.user_agent || '';
     }
     return '';
+}
+
+// Docs API
+const DOCS_API = '/api/docs';
+
+export async function getDocStatistics() {
+    return await apiGet(`${DOCS_API}/statistics`);
+}
+
+export async function getDoc(docId) {
+    return await apiGet(`${DOCS_API}/${docId}`);
+}
+
+export async function getDocByFileGroup(fileGroupId) {
+    return await apiGet(`${DOCS_API}/view/${fileGroupId}`);
+}
+
+export async function deleteDocs(docIds) {
+    const ids = Array.isArray(docIds) ? docIds.join(',') : docIds;
+    return await apiDelete(`${DOCS_API}/${ids}`);
+}
+
+export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject) {
+    offset = parseInt(offset || 0);
+    limit = parseInt(limit || DEFAULT_LIMIT);
+    let body = {offset, limit};
+    if (searchStr) {
+        body['search_str'] = searchStr;
+    }
+    if (order) {
+        body['order_by'] = order;
+    }
+    if (tagNames && tagNames.length > 0) {
+        body['tag_names'] = tagNames;
+    }
+    if (author) {
+        body['author'] = author;
+    }
+    if (subject) {
+        body['subject'] = subject;
+    }
+
+    console.debug('searching docs', body);
+    const response = await apiPost(`${DOCS_API}/search`, body);
+    if (response.ok) {
+        let data = await response.json();
+        return [data['file_groups'], data['totals']['file_groups']];
+    } else {
+        const message = await getErrorMessage(response, 'Cannot search docs.  See server logs.');
+        toast({
+            type: 'error',
+            title: 'Unable to search docs',
+            description: message,
+            time: 5000,
+        });
+        throw Error(message);
+    }
 }

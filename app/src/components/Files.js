@@ -37,12 +37,13 @@ import {
     usePages,
     useSearchFiles,
     useSearchFilter,
+    useSearchOrder,
     useSearchView,
     useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
 import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
-import {Route, Routes} from "react-router";
+import {Link, Route, Routes} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -66,20 +67,23 @@ import {Headlines} from "./Headline";
 import {useSearch} from "./Search";
 import {FILES_MEDIA_URI} from "./Vars";
 
-function EbookCard({file}) {
-    const {s} = useContext(ThemeContext);
+function EbookCard({file, sortField}) {
+    const {s, t} = useContext(ThemeContext);
 
     const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
-    const isEpub = file['mimetype'].startsWith('application/epub');
+    const isEpub = file['mimetype'] && file['mimetype'].startsWith('application/epub');
     const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
 
-    const color = mimetypeColor(file.mimetype);
+    // Link to doc detail page if this is a modeled doc.
+    const detailUrl = file.model === 'doc' ? `/docs/view/${file.id}` : null;
+
+    const color = mimetypeColor(file.mimetype, file.primary_path);
     const title = file.title || file.stem || file.name;
-    const header = <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>
-        {title}
-    </ExternalCardLink>;
+    const header = detailUrl
+        ? <Link to={detailUrl} className='no-link-underscore card-link card-title-ellipsis' {...t}>{title}</Link>
+        : <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
     return <Card color={color}>
-        <CardPoster file={file} preview={true}/>
+        <CardPoster file={file} to={detailUrl}/>
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
@@ -90,7 +94,10 @@ function EbookCard({file}) {
             </CardHeader>
             <CardMeta>
                 {file.author ? <b {...s}>{file.author}</b> : null}
-                {file.size && <p {...s}>{humanFileSize(file.size)}</p>}
+                {sortField === 'published_datetime'
+                    ? <p {...s}>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</p>
+                    : file.size && <p {...s}>{humanFileSize(file.size)}</p>
+                }
             </CardMeta>
         </CardContent>
     </Card>
@@ -128,10 +135,14 @@ function ImageCard({file}) {
 
 function FileCard({file}) {
     const {s} = useContext(ThemeContext);
+    const {sort} = useSearchOrder();
+    const sortField = sort ? sort.replace(/^-/, '') : null;
 
-    const isEbookType = file.mimetype && (
+    const isDocType = file.model === 'doc' || (file.mimetype && (
         file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
-    );
+    ));
+    // Default doc sort is published_datetime when no order query param is set.
+    const docSortField = sortField || 'published_datetime';
 
     if (file.model === 'video' && 'video' in file) {
         return <VideoCard key={file['primary_path']} file={file}/>;
@@ -139,12 +150,12 @@ function FileCard({file}) {
         return <ArchiveCard key={file['primary_path']} file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageCard key={file['primary_path']} file={file}/>;
-    } else if (isEbookType) {
-        return <EbookCard key={file['primary_path']} file={file}/>;
+    } else if (isDocType) {
+        return <EbookCard key={file['primary_path']} file={file} sortField={docSortField}/>;
     }
 
     const author = file.author;
-    const color = mimetypeColor(file.mimetype);
+    const color = mimetypeColor(file.mimetype, file.primary_path);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
     const title = file.title || file.name || file.primary_path;
@@ -160,8 +171,13 @@ function FileCard({file}) {
                 </PreviewLink>
             </CardHeader>
             {author && <b {...s}>{author}</b>}
-            <p>{isoDatetimeToAgoPopup(dt, false)}</p>
-            <p>{size}</p>
+            {sortField === 'published_datetime'
+                ? <p>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</p>
+                : <>
+                    <p>{isoDatetimeToAgoPopup(dt, false)}</p>
+                    <p>{size}</p>
+                </>
+            }
         </CardContent>
     </Card>
 }
@@ -206,7 +222,7 @@ function ImageRowCells({file}) {
 }
 
 export function EbookRowCells({file}) {
-    let cover = <Card.Icon><FileIcon file={file}/></Card.Icon>;
+    let cover = <FileIcon file={file} size='large'/>;
     const posterPath = findPosterPath(file);
     if (posterPath) {
         const coverSrc = `/media/${encodeMediaPath(posterPath)}`;
@@ -229,9 +245,9 @@ export function EbookRowCells({file}) {
 }
 
 function FileRow({file}) {
-    const isEbookType = file.mimetype && (
+    const isDocType = file.model === 'doc' || (file.mimetype && (
         file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
-    );
+    ));
 
     if (file.model === 'video' && 'video' in file) {
         return <VideoRowCells file={file}/>;
@@ -239,7 +255,7 @@ function FileRow({file}) {
         return <ArchiveRowCells file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageRowCells file={file}/>;
-    } else if (isEbookType) {
+    } else if (isDocType) {
         return <EbookRowCells key={file['primary_path']} file={file}/>;
     }
 
@@ -480,6 +496,7 @@ export function FileSearchFilterButton({size = 'medium'}) {
         {key: 'archive', text: 'Archive', value: 'archive'},
         {key: 'pdf', text: 'PDF', value: 'pdf'},
         {key: 'ebook', text: 'eBook', value: 'ebook'},
+        {key: 'doc', text: 'Document', value: 'doc'},
         {key: 'audio', text: 'Audio', value: 'audio'},
         {key: 'image', text: 'Image', value: 'image'},
         {key: 'zip', text: 'ZIP', value: 'zip'},

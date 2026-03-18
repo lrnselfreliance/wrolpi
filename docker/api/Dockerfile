@@ -3,7 +3,7 @@ ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
-RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unzip
+RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip
 RUN ffmpeg -version
 
 # Install Deno runtime for yt-dlp

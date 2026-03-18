@@ -1,4 +1,4 @@
-import copy
+import json
 import json
 import pathlib
 import shutil
@@ -98,7 +98,7 @@ class FileGroup(ModelHelper, Base):
     indexed = Column(Boolean, default=lambda: False)  # wrolpi.files.lib.apply_indexers
     length = Column(BigInteger)  # video duration, article words, etc.
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
-    model = Column(String)  # "video", "archive", "ebook", etc.
+    model = Column(String)  # "video", "archive", "doc", etc.
     modification_datetime = Column(TZDateTime)  # the modification date of the file on disk
     primary_path: pathlib.Path = Column(MediaPathType, nullable=False, unique=True)
     published_datetime = Column(TZDateTime)  # the date the creator published this file
@@ -551,7 +551,6 @@ class FileGroup(ModelHelper, Base):
         This method first checks if the path is a primary_path, and if not,
         searches for a FileGroup where the file is in the files list.
         """
-        from sqlalchemy import text
 
         path = pathlib.Path(path)
         directory = str(path.parent)
@@ -725,13 +724,13 @@ class FileGroup(ModelHelper, Base):
         """Return the class that is suitable for this FileGroup (usually based on mimetype), if any."""
         from modules.videos.models import Video
         from modules.archive.models import Archive
-        from wrolpi.files.ebooks import EBook
+        from modules.docs.models import Doc
         from modules.zim.models import Zim
 
         if Video.can_model(self):
             return Video
-        elif EBook.can_model(self):
-            return EBook
+        elif Doc.can_model(self):
+            return Doc
         elif Archive.can_model(self):
             return Archive
         elif Zim.can_model(self):

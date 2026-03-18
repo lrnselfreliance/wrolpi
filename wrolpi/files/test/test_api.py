@@ -8,7 +8,6 @@ import pytest
 
 from modules.videos import Video
 from wrolpi.common import get_wrolpi_config
-from wrolpi.files import lib
 from wrolpi.files.lib import get_mimetype
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.tags import TagFile
@@ -337,7 +336,7 @@ async def test_file_statistics(test_session, async_client, test_directory, examp
         'tagged_files': 0,
         'tagged_zims': 0,
         'tags_count': 0,
-        'total_count': 6,  # extracted cover + .ffprobe.json
+        'total_count': 7,  # extracted covers (epub + pdf) + .ffprobe.json
         'video_count': 1,
         'zip_count': 0,
     }
@@ -696,7 +695,7 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
 
 @pytest.mark.asyncio
 async def test_post_upload_video_extracts_ffprobe(test_session, async_client, test_directory, make_files_structure,
-                                                   make_multipart_form, video_bytes):
+                                                  make_multipart_form, video_bytes):
     """Uploading a video file should extract and store ffprobe data."""
     make_files_structure(['uploads/'])
 
@@ -929,7 +928,7 @@ async def test_rename_file(test_session, test_directory, make_files_structure, a
 
 @pytest.mark.asyncio
 async def test_rename_file_with_associated_files_via_api(test_session, test_directory, make_files_structure,
-                                                          async_client, video_bytes, srt_text, refresh_files):
+                                                         async_client, video_bytes, srt_text, refresh_files):
     """Renaming a FileGroup via API should rename all associated files.
 
     Regression test: When renaming "example.mp4" to "example 2.mp4" and back via API,
@@ -1272,7 +1271,7 @@ async def test_get_file_skip_tracking(test_session, async_client, test_directory
 
 @pytest.mark.asyncio
 async def test_get_file_ignored_directory_not_tracked(test_session, async_client, test_directory, make_files_structure,
-                                                       refresh_files, test_wrolpi_config, await_switches):
+                                                      refresh_files, test_wrolpi_config, await_switches):
     """Files in ignored directories do not get their viewed timestamp set."""
     # Create files in a directory that will be ignored
     foo, bar = make_files_structure({'config/settings.txt': 'settings', 'normal/file.txt': 'contents'})

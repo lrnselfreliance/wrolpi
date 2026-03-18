@@ -854,6 +854,8 @@ export function VideosRoute(props) {
 export function VideoCard({file}) {
     const {video} = file;
     const {s} = useContext(ThemeContext);
+    const {sort} = useSearchOrder();
+    const sortField = sort ? sort.replace(/^-/, '') : null;
 
     // Default to video FilePreview for lone video files.
     let video_url;
@@ -904,7 +906,18 @@ export function VideoCard({file}) {
                     {channel && <Link to={channel_url} className="no-link-underscore card-link">
                         <b {...s}>{channel.name}</b>
                     </Link>}
-                    <p {...s}>{isoDatetimeToAgoPopup(file.published_datetime, false)}</p>
+                    {sortField === 'length'
+                        ? <p {...s}>{secondsToFullDuration(file.length || 0)}</p>
+                        : sortField === 'size'
+                        ? <p {...s}>{humanFileSize(file.size)}</p>
+                        : sortField === 'view_count'
+                        ? <p {...s}>{humanNumber(video.view_count || 0)} views</p>
+                        : sortField === 'viewed'
+                        ? <p {...s}>{isoDatetimeToAgoPopup(file.viewed, false)}</p>
+                        : sortField === 'download_datetime'
+                        ? <p {...s}>{isoDatetimeToAgoPopup(file.download_datetime, false)}</p>
+                        : <p {...s}>{isoDatetimeToAgoPopup(file.published_datetime, false)}</p>
+                    }
                 </Container>
             </CardDescription>
         </CardContent>

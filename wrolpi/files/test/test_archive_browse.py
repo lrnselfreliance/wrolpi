@@ -240,3 +240,103 @@ async def test_download_traversal_attack(test_session, async_client, test_direct
     _, response = await async_client.get('/api/files/zip/download?path=test.zip&member=../../../etc/passwd')
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'INVALID_ARCHIVE_MEMBER' in response.text
+
+
+# ---- Comic book archive format tests using real sample files ----
+
+
+@pytest.mark.asyncio
+async def test_list_cbt_contents(test_session, async_client, test_directory, example_cbt):
+    """CBT (TAR) archive contents can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cbt.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+
+
+@pytest.mark.asyncio
+async def test_list_cbt_dir_contents(test_session, async_client, test_directory, example_cbt_dir):
+    """CBT (TAR) archive with nested directories can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cbt_dir.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+    # Files are in a nested directory.
+    entry_names = [e['name'] for e in contents['entries']]
+    assert 'images' in entry_names
+
+
+@pytest.mark.asyncio
+async def test_download_cbt_member(test_session, async_client, test_directory, example_cbt):
+    """A single image can be downloaded from a CBT archive."""
+    _, response = await async_client.get(
+        f'/api/files/zip/download?path={example_cbt.name}&member=Bobby-Make-Believe_1915__0.jpg')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.body) > 0
+    assert response.body[:2] == b'\xff\xd8'  # JPEG magic bytes
+
+
+@pytest.mark.asyncio
+async def test_list_cbr_contents(test_session, async_client, test_directory, example_cbr):
+    """CBR (RAR) archive contents can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cbr.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+
+
+@pytest.mark.asyncio
+async def test_download_cbr_member(test_session, async_client, test_directory, example_cbr):
+    """A single image can be downloaded from a CBR archive."""
+    _, response = await async_client.get(
+        f'/api/files/zip/download?path={example_cbr.name}&member=Bobby-Make-Believe_1915__0.jpg')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.body) > 0
+    assert response.body[:2] == b'\xff\xd8'  # JPEG magic bytes
+
+
+@pytest.mark.asyncio
+async def test_list_cb7_contents(test_session, async_client, test_directory, example_cb7):
+    """CB7 (7z) archive contents can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cb7.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+
+
+@pytest.mark.asyncio
+async def test_list_cb7_dir_contents(test_session, async_client, test_directory, example_cb7_dir):
+    """CB7 (7z) archive with nested directories can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cb7_dir.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+    entry_names = [e['name'] for e in contents['entries']]
+    assert 'images' in entry_names
+
+
+@pytest.mark.asyncio
+async def test_download_cb7_member(test_session, async_client, test_directory, example_cb7):
+    """A single image can be downloaded from a CB7 archive."""
+    _, response = await async_client.get(
+        f'/api/files/zip/download?path={example_cb7.name}&member=Bobby-Make-Believe_1915__0.jpg')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.body) > 0
+    assert response.body[:2] == b'\xff\xd8'  # JPEG magic bytes
+
+
+@pytest.mark.asyncio
+async def test_list_cbz_dir_contents(test_session, async_client, test_directory, example_cbz_dir):
+    """CBZ (ZIP) archive with nested directories can be listed."""
+    _, response = await async_client.post('/api/files/zip/contents',
+                                          content=json.dumps({'path': example_cbz_dir.name}))
+    assert response.status_code == HTTPStatus.OK
+    contents = response.json['contents']
+    assert contents['total_files'] == 4
+    entry_names = [e['name'] for e in contents['entries']]
+    assert 'images' in entry_names

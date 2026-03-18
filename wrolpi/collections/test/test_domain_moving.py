@@ -331,7 +331,6 @@ async def test_tag_domain_comprehensive(
     8. Tagging without directory doesn't move files
     """
     from modules.archive.lib import save_domains_config, get_domains_config
-    from wrolpi.downloader import Download
     from wrolpi.common import walk
 
     # Create domain collection directory in the usual archive directory

@@ -70,7 +70,7 @@ def test_collection_format_destination_domain(test_session, test_directory):
 
 @pytest.mark.asyncio
 async def test_collection_format_destination_domain_with_tag_template(async_client, test_session, test_directory,
-                                                                       test_wrolpi_config):
+                                                                      test_wrolpi_config):
     """Collection.format_destination uses tag when template includes %(domain_tag)s."""
     # Update config to include tag in template
     config = get_wrolpi_config()

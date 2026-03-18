@@ -295,7 +295,7 @@ class TestDownloadManagerConfigEdgeCases:
         assert downloads[0].url == 'https://example.com/new'
 
     async def test_import_config_with_missing_optional_fields(self, test_session, test_directory,
-                                                               test_download_manager_config, async_client):
+                                                              test_download_manager_config, async_client):
         """
         Config files from older versions or manual edits may be missing optional fields.
         Import should succeed with None values for missing fields.
@@ -331,7 +331,7 @@ class TestDownloadManagerConfigEdgeCases:
         assert downloads[0].next_download is None
 
     async def test_update_existing_download_with_missing_optional_fields(self, test_session, test_directory,
-                                                                          test_download_manager_config, async_client):
+                                                                         test_download_manager_config, async_client):
         """
         When updating an existing download from config, missing optional fields should not cause errors.
         """

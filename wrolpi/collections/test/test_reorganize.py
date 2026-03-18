@@ -18,7 +18,6 @@ from wrolpi.collections.reorganize import (
     get_batch_reorganization_status,
     ReorganizationPreview,
 )
-from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
 
@@ -874,7 +873,6 @@ async def test_reorganize_updates_tag_directory_links(async_client, test_directo
 async def test_batch_reorganize_preserves_tags(async_client, test_directory, video_factory, tag_factory,
                                                test_tags_config):
     """Batch reorganization should preserve tags across multiple collections."""
-    from wrolpi.files.worker import file_worker
     import asyncio
 
     videos_dir = test_directory / 'videos'
@@ -1042,7 +1040,6 @@ async def test_reorganize_can_retry_after_partial_failure(async_client, test_dir
     - file_format should NOT have been updated (allowing retry)
     - needs_reorganization should still return True
     """
-    from wrolpi.files.worker import file_worker
     import shutil
 
     # Create channel collection
@@ -1675,7 +1672,7 @@ def test_reorganize_skips_archives_missing_required_metadata(
 
 @pytest.mark.asyncio
 async def test_domain_reorganization_moves_files_from_root_to_year_subdirectory(
-    async_client, test_directory, archive_factory
+        async_client, test_directory, archive_factory
 ):
     """Archives in collection root should be moved to year subdirectories.
 
@@ -1756,7 +1753,7 @@ async def test_domain_reorganization_moves_files_from_root_to_year_subdirectory(
 
 @pytest.mark.asyncio
 async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory(
-    async_client, test_directory, video_factory
+        async_client, test_directory, video_factory
 ):
     """Videos in collection root should be moved to year subdirectories.
 
@@ -1843,7 +1840,7 @@ async def test_channel_reorganization_moves_files_from_root_to_year_subdirectory
 
 @pytest.mark.asyncio
 async def test_channel_reorganization_preserves_root_level_files(
-    async_client, test_directory, video_factory
+        async_client, test_directory, video_factory
 ):
     """Root-level files (like channel info.json and images) should NOT be moved during reorganization.
 
@@ -2298,28 +2295,28 @@ async def test_conflict_preview_includes_quality_rank(async_client, test_directo
     # Filename with all fields: uploader_date_sourceid_title.ext
     # Should work with complex formats since filename parsing provides all metadata
     (
-        "Learning Self-Reliance_20170529_p_MzsCFkUPU_How to Build a Solar Generator.mp4",
-        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
-        True,  # Should work - filename has uploader, date, and source_id
+            "Learning Self-Reliance_20170529_p_MzsCFkUPU_How to Build a Solar Generator.mp4",
+            "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
+            True,  # Should work - filename has uploader, date, and source_id
     ),
     # Filename without source_id: uploader_date_title.ext pattern
     # Should NOT work with format requiring %(id)s
     (
-        "Commsprepper_20130113_110Ah Car Battery connected to 80W Solar Panel.mp4",
-        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
-        False,  # Should fail - filename doesn't have source_id and format requires it
+            "Commsprepper_20130113_110Ah Car Battery connected to 80W Solar Panel.mp4",
+            "%(upload_year)s/%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s",
+            False,  # Should fail - filename doesn't have source_id and format requires it
     ),
     # Filename without source_id but format doesn't require it
     (
-        "Commsprepper_20130113_110Ah Car Battery.mp4",
-        "%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s",
-        False,  # Should still fail - all-or-nothing: no source_id means no fallback
+            "Commsprepper_20130113_110Ah Car Battery.mp4",
+            "%(upload_year)s/%(uploader)s_%(upload_date)s_%(title)s.%(ext)s",
+            False,  # Should still fail - all-or-nothing: no source_id means no fallback
     ),
     # Simple title-only format (always works)
     (
-        "random_video_name.mp4",
-        "%(title)s.%(ext)s",
-        True,  # Should work - format only requires title
+            "random_video_name.mp4",
+            "%(title)s.%(ext)s",
+            True,  # Should work - format only requires title
     ),
 ])
 def test_video_metadata_fallback_from_filename(
@@ -2438,42 +2435,42 @@ def test_video_metadata_fallback_uses_channel_name_for_uploader(test_session, te
         # Complete filename with all fields - channel name takes priority over filename
         # This ensures reorganized files use the WROLPi channel name, not the YouTube uploader
         (
-            "TestUploader_20170529_p_MzsCFkUPU_My Test Video.mp4",
-            "FormatFallbackChannel",
-            "My Test Video",
-            None,  # No DB datetime
-            None,  # No DB source_id
-            "2017",
-            "FormatFallbackChannel",  # Channel name takes priority
-            "p_MzsCFkUPU",
-            ["TestUploader"],  # Should NOT contain filename uploader
+                "TestUploader_20170529_p_MzsCFkUPU_My Test Video.mp4",
+                "FormatFallbackChannel",
+                "My Test Video",
+                None,  # No DB datetime
+                None,  # No DB source_id
+                "2017",
+                "FormatFallbackChannel",  # Channel name takes priority
+                "p_MzsCFkUPU",
+                ["TestUploader"],  # Should NOT contain filename uploader
         ),
         # Incomplete filename (no source_id) - uses DB values, not filename
         (
-            "FilenameUploader_20200101_Just A Title.mp4",
-            "ChannelFromDB",
-            "Just A Title",
-            "2024-06-15",  # DB datetime
-            "db_source_id",  # DB source_id
-            "2024",
-            "ChannelFromDB",
-            "db_source_id",
-            ["FilenameUploader", "2020"],  # Should NOT contain these filename-parsed values
+                "FilenameUploader_20200101_Just A Title.mp4",
+                "ChannelFromDB",
+                "Just A Title",
+                "2024-06-15",  # DB datetime
+                "db_source_id",  # DB source_id
+                "2024",
+                "ChannelFromDB",
+                "db_source_id",
+                ["FilenameUploader", "2020"],  # Should NOT contain these filename-parsed values
         ),
     ],
 )
 def test_format_video_filename_fallback_behavior(
-    test_session,
-    test_directory,
-    filename,
-    channel_name,
-    title,
-    db_datetime,
-    db_source_id,
-    expected_year,
-    expected_uploader,
-    expected_source_id,
-    should_not_contain,
+        test_session,
+        test_directory,
+        filename,
+        channel_name,
+        title,
+        db_datetime,
+        db_source_id,
+        expected_year,
+        expected_uploader,
+        expected_source_id,
+        should_not_contain,
 ):
     """Test format_video_filename fallback behavior with various scenarios.
 

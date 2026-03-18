@@ -249,7 +249,8 @@ class AutoAwaitTestClient:
 
 
 @pytest.fixture
-async def async_client(test_directory, test_session, clear_background_tasks) -> AsyncGenerator[AutoAwaitTestClient, Any]:
+async def async_client(test_directory, test_session, clear_background_tasks) -> AsyncGenerator[
+    AutoAwaitTestClient, Any]:
     """Get an Async Sanic Test Client with all default routes attached.
 
     Depends on test_session to ensure the database mock is in place for session middleware.
@@ -533,6 +534,69 @@ def example_doc(test_directory) -> Generator[Path, Any, None]:
 def example_docx(test_directory) -> Generator[Path, Any, None]:
     destination = test_directory / 'example word.docx'
     shutil.copy(PROJECT_DIR / 'test/example word.docx', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_odt(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'test_book_odt.odt'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/test_book_odt.odt', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbz(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_sample.cbz'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_sample.cbz', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbz_metadata(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_metadata.cbz'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_metadata.cbz', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbt(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_cbt.cbt'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_cbt.cbt', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbr(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_cbr.cbr'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_cbr.cbr', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cb7(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_cb7.cb7'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_cb7.cb7', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbz_dir(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_dir_cbz.cbz'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_dir_cbz.cbz', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cbt_dir(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_dir_cbt.cbt'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_dir_cbt.cbt', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_cb7_dir(test_directory) -> Generator[Path, Any, None]:
+    destination = test_directory / 'bobby_make_believe_dir_cb7.cb7'
+    shutil.copy(PROJECT_DIR / 'test/sample_reading_media/bobby_make_believe_dir_cb7.cb7', destination)
     yield destination
 
 
@@ -1038,5 +1102,3 @@ def refresh_files(async_client):
         await await_file_worker()
 
     return _refresh
-
-

@@ -6,6 +6,7 @@ import {Media} from "../contexts/contexts";
 import {encodeMediaPath, isSupportedArchive} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
+import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
@@ -361,6 +362,9 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
                 setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
+            } else if (mimetype.includes('cbz') || mimetype.includes('cbr') || mimetype.includes('comicbook+zip') || mimetype.includes('comicbook-rar')
+                || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr') || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
+                setModalContent(<Modal.Content><CbzViewer path={path}/></Modal.Content>, null, downloadURL, path, taggable);
             } else if (isSupportedArchive(mimetype, lowerPath)) {
                 setModalContent(<ArchivePreviewContent previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else {

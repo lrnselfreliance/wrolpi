@@ -152,5 +152,6 @@ async def await_switches(timeout: int = 8):
         # All switches handled.
         break
     else:
-        logger.error(f'await_switches: TIMEOUT after {count} iterations, switches={list(api_app.shared_ctx.switches.keys())}, changed={api_app.shared_ctx.switches_changed.is_set()}')
+        logger.error(
+            f'await_switches: TIMEOUT after {count} iterations, switches={list(api_app.shared_ctx.switches.keys())}, changed={api_app.shared_ctx.switches_changed.is_set()}')
         raise RuntimeError('Timed out waiting for switches.  Did you remember to use the `await_switches` fixture?')

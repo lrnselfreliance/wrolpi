@@ -548,7 +548,7 @@ async def test_tags_directory_file_replaced(test_session, test_directory, tag_fa
 
 @pytest.mark.asyncio
 async def test_tags_directory_partial_file_deleted(test_session, test_directory, tag_factory, video_bytes,
-                                                    image_bytes_factory, await_switches):
+                                                   image_bytes_factory, await_switches):
     """When one file in a FileGroup is deleted, its hardlink should be removed."""
     from wrolpi import tags as tags_module
 
@@ -584,7 +584,7 @@ async def test_tags_directory_partial_file_deleted(test_session, test_directory,
 
 @pytest.mark.asyncio
 async def test_tags_directory_all_files_deleted(test_session, test_directory, tag_factory, video_bytes,
-                                                 image_bytes_factory, await_switches):
+                                                image_bytes_factory, await_switches):
     """When ALL files in a FileGroup are deleted, hardlinks should be preserved."""
     from wrolpi import tags as tags_module
 
@@ -726,8 +726,6 @@ async def test_recent_tags_api(async_client, test_session, make_files_structure,
     assert response.status == 200
     body = response.json
     assert 'alpha' in body['tag_names']
-
-
 
 
 @pytest.mark.asyncio

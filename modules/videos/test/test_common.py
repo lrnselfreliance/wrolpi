@@ -399,6 +399,39 @@ async def test_import_channel_cleans_up_preexisting_orphaned_collections(await_s
 
 
 @pytest.mark.asyncio
+async def test_once_download_excluded_from_channel_config(await_switches, test_session, channel_factory,
+                                                          test_channels_config):
+    """A once-download (no frequency) associated with a Channel's Collection should not be saved to the channels
+    config.  This prevents errors during import when a once-download has no frequency."""
+    channel = channel_factory(download_frequency=DownloadFrequency.weekly)
+
+    # Create a once-download associated with the channel's collection (simulates a video download that got
+    # associated with the channel via apply_yt_channel).
+    once_download = Download(url='https://www.youtube.com/watch?v=once_video', downloader='video',
+                             collection_id=channel.collection_id)
+    test_session.add(once_download)
+    test_session.commit()
+    # The once-download is in the Collection, but Channel.downloads filters it out.
+    assert len(channel.collection.downloads) == 2
+    assert len(channel.downloads) == 1
+
+    save_channels_config()
+    await await_switches()
+
+    # The once-download should not appear in the config.
+    config_text = test_channels_config.read_text()
+    assert 'once_video' not in config_text
+    # The recurring download should still be there.
+    assert channel.url in config_text
+
+    # Importing should succeed without the "Refusing to create Download" error.
+    test_session.delete(once_download)
+    test_session.commit()
+    import_channels_config()
+    assert len(channel.downloads) == 1
+
+
+@pytest.mark.asyncio
 async def test_import_channel_download_comments(await_switches, test_session, channel_factory,
                                                 test_channels_config):
     channel = channel_factory()

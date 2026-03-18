@@ -580,7 +580,6 @@ class ConfigFile:
         suffix = pathlib.Path(self.file_name).suffix
         return get_media_directory() / f'config/backup/{stem}-{backup_date}{suffix}'
 
-
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         """Preview what a backup import would do. Subclasses override this."""
         raise NotImplementedError(f'{self.__class__.__name__} does not support backup import')

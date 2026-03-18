@@ -158,7 +158,7 @@ async def test_delete_similar_names(async_client, test_session, make_files_struc
     ])
 
     await lib.delete('config/._wrolpi.yaml', 'config/._wrolpi.yaml.sb-98fa34a1-MG7phT',
-                      'config/._wrolpi.yaml.sb-98fa34a1-N4k8NB')
+                     'config/._wrolpi.yaml.sb-98fa34a1-N4k8NB')
 
 
 @pytest.mark.parametrize(
@@ -948,7 +948,7 @@ async def test_doc_indexer(async_client, test_session, example_doc, refresh_file
     await refresh_files()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
-    assert doc.title == 'example word.doc'
+    assert doc.title == 'example word doc'
     assert doc.a_text == 'example word doc'
     if IS_MACOS:
         assert doc.d_text == 'Example Word Document\nSecond page'
@@ -962,8 +962,9 @@ async def test_docx_indexer(async_client, test_session, example_docx, refresh_fi
     await refresh_files()
     assert test_session.query(FileGroup).count() == 1
     doc = test_session.query(FileGroup).one()
-    assert doc.title == 'example word.docx'
-    assert doc.a_text == 'example word docx'
+    # The docx file has a "Word Document" title in its core properties.
+    assert doc.title == 'Word Document'
+    assert doc.a_text == 'Word Document'
     assert doc.d_text == 'Example Word Document Second page'
 
 

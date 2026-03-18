@@ -123,7 +123,7 @@ class TestTagsBackupImport:
 
     @pytest.mark.asyncio
     async def test_import_merge(self, test_directory, test_tags_config, test_session, async_client):
-        from wrolpi.tags import get_tags_config, Tag
+        from wrolpi.tags import get_tags_config
         config = get_tags_config()
 
         # Write current config with one tag
@@ -148,7 +148,7 @@ class TestTagsBackupImport:
 
     @pytest.mark.asyncio
     async def test_import_overwrite(self, test_directory, test_tags_config, test_session, async_client):
-        from wrolpi.tags import get_tags_config, Tag
+        from wrolpi.tags import get_tags_config
         config = get_tags_config()
 
         # Write current config with two tags
@@ -641,7 +641,6 @@ class TestImportBackupPreservesCurrentConfig:
         assert preserved['version'] == 5
 
 
-
 class TestConfigStatusIncludesBackupInfo:
 
     def test_db_config_has_backup_info(self, test_directory, test_tags_config):
@@ -678,7 +677,6 @@ class TestNotImplementedForNonDBConfigs:
 class TestBackupAPIEndpoints:
 
     async def test_get_backups(self, async_client, test_directory, test_tags_config):
-        from wrolpi.tags import get_tags_config
         backup_dir = test_directory / 'config' / 'backup'
         backup_dir.mkdir(parents=True, exist_ok=True)
         (backup_dir / 'tags-20260301.yaml').write_text('tags: {}\nversion: 1')
@@ -881,7 +879,8 @@ class TestPreviewWithRealisticData:
         current = dict(
             downloads=[
                 dict(url='https://example.com', downloader='video', frequency=None, status='failed'),
-                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000, status='complete'),
+                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000,
+                     status='complete'),
             ],
             skip_urls=['https://skip1.com'],
             version=260,
@@ -892,7 +891,8 @@ class TestPreviewWithRealisticData:
         backup = dict(
             downloads=[
                 dict(url='https://example.com', downloader='video', frequency=None, status='failed'),
-                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000, status='complete'),
+                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000,
+                     status='complete'),
                 dict(url='https://youtube.com/watch?v=TEST', downloader='video', frequency=None, status='new'),
             ],
             skip_urls=['https://skip1.com'],
@@ -914,7 +914,8 @@ class TestPreviewWithRealisticData:
         current = dict(
             downloads=[
                 dict(url='https://example.com', downloader='video', frequency=None, status='failed'),
-                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000, status='complete'),
+                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000,
+                     status='complete'),
             ],
             skip_urls=[],
             version=260,
@@ -924,7 +925,8 @@ class TestPreviewWithRealisticData:
         backup = dict(
             downloads=[
                 dict(url='https://example.com', downloader='video', frequency=None, status='failed'),
-                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000, status='complete'),
+                dict(url='https://youtube.com/channel/ABC', downloader='video_channel', frequency=2592000,
+                     status='complete'),
                 dict(url='https://youtube.com/watch?v=TEST', downloader='video', frequency=None, status='new'),
             ],
             skip_urls=[],

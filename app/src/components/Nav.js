@@ -37,6 +37,7 @@ function updateFavicon(colorName) {
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
     {text: 'Archive', to: '/archive', key: 'archive'},
+    {text: 'Docs', to: '/docs', key: 'docs'},
     {text: 'Map', to: '/map', key: 'map'},
     {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Files', to: '/files', key: 'files'},

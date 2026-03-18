@@ -248,7 +248,8 @@ async def test_rss_downloader_normalizes_youtube_shorts_urls(test_session, test_
 
 
 @pytest.mark.asyncio
-async def test_rss_downloader_normalizes_skipped_youtube_shorts_urls(test_session, test_download_manager, await_switches):
+async def test_rss_downloader_normalizes_skipped_youtube_shorts_urls(test_session, test_download_manager,
+                                                                     await_switches):
     """RSS downloader should normalize YouTube Shorts URLs before checking the skip list.
 
     If a video was skipped with a normalized URL, the RSS feed returning a shorts URL should

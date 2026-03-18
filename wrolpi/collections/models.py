@@ -1,7 +1,8 @@
 import pathlib
 from typing import Optional, List
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, or_
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
+    or_
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -11,9 +12,9 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_re
 from wrolpi.downloader import Download, save_downloads_config
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
-from wrolpi.files.worker import file_worker
-from wrolpi.files.models import FileGroup
 from wrolpi.files.lib import delete_directory
+from wrolpi.files.models import FileGroup
+from wrolpi.files.worker import file_worker
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag
 from wrolpi.tags import save_tags_config
@@ -58,7 +59,7 @@ def validate_collection_directory(directory: pathlib.Path) -> pathlib.Path:
 
 class Collection(ModelHelper, Base):
     """
-    A Collection is a grouping of FileGroups (videos, archives, ebooks, etc).
+    A Collection is a grouping of FileGroups (videos, archives, docs, etc).
 
     Collections can be:
     - Directory-restricted: Only contains files within a specific directory tree
@@ -290,8 +291,8 @@ class Collection(ModelHelper, Base):
         tag_name = data.get('tag_name')
         file_format = data.get('file_format')
         kind = (data.get('kind') or 'channel').strip()
-        # Validate known kinds (forward-compatible: allow future values)
-        if kind not in {'channel', 'domain'}:
+        # Validate known kinds using the registry (allows extensible kinds).
+        if not collection_type_registry.is_registered(kind):
             logger.warning(f"Unknown collection kind '{kind}', defaulting to 'channel'")
             kind = 'channel'
 
@@ -430,8 +431,8 @@ class Collection(ModelHelper, Base):
             file_format = data.get('file_format')
             kind = (data.get('kind') or 'channel').strip()
 
-            # Validate known kinds
-            if kind not in {'channel', 'domain'}:
+            # Validate known kinds using the registry.
+            if not collection_type_registry.is_registered(kind):
                 logger.warning(f"Unknown collection kind '{kind}', defaulting to 'channel'")
                 kind = 'channel'
 

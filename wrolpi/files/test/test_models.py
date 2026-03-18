@@ -132,5 +132,3 @@ def test_file_group_update_wrolpi_json_noop_no_metadata_json(test_session, make_
     fg.update_wrolpi_json({'key': 'value'})
     assert not (get_media_directory() / 'video.info.json').exists()
     assert not (get_media_directory() / 'video.readability.json').exists()
-
-

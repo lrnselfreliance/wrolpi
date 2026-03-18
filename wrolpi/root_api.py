@@ -13,6 +13,7 @@ from vininfo import Vin
 from vininfo.details._base import VinDetails
 
 from modules.archive.api import archive_bp
+from modules.docs.api import docs_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
 from modules.otp.api import otp_bp
@@ -49,6 +50,7 @@ api_app.blueprint(api_bp)
 api_app.blueprint(archive_bp)
 api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
+api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
@@ -710,16 +712,21 @@ async def post_upgrade_start(_: Request):
 async def post_search_suggestions(request: Request, body: schema.SearchSuggestionsRequest):
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
+    from modules.docs.lib import search_authors_by_name, search_subjects_by_name
 
     session = request.ctx.session
-    channels, domains = await asyncio.gather(
+    channels, domains, authors, subjects = await asyncio.gather(
         search_channels_by_name(session, body.search_str, order_by_video_count=body.order_by_video_count),
         search_domains_by_name(session, body.search_str),
+        search_authors_by_name(session, body.search_str),
+        search_subjects_by_name(session, body.search_str),
     )
 
     ret = dict(
         channels=channels,
         domains=domains,
+        authors=authors,
+        subjects=subjects,
     )
     return json_response(ret)
 

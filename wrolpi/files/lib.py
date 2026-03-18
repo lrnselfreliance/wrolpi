@@ -274,7 +274,7 @@ async def delete(*paths: Union[str, pathlib.Path]):
 
 def _mimetype_suffix_map(path: Path, mimetype: str):
     """Special handling for mimetypes.  Python Magic may not return the correct mimetype."""
-    from wrolpi.files.ebooks import MOBI_MIMETYPE
+    from modules.docs.models import MOBI_MIMETYPE
     suffix = path.suffix.lower()
     if mimetype == 'application/octet-stream':
         if suffix.endswith('.mobi'):
@@ -315,6 +315,12 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
         return 'text/srt'
     if mimetype == 'application/zip' and suffix == '.docx':
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    if mimetype == 'application/zip' and suffix == '.cbz':
+        return 'application/x-cbz'
+    if mimetype == 'application/zip' and suffix == '.odt':
+        return 'application/vnd.oasis.opendocument.text'
+    if mimetype in ('application/x-rar', 'application/x-rar-compressed') and suffix == '.cbr':
+        return 'application/x-cbr'
     if mimetype == 'video/x-ms-asf' and suffix == '.wma':
         return 'audio/x-ms-wma'
     return mimetype
@@ -529,6 +535,14 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
             return file
         if mimetype.startswith('application/x-mobipocket-ebook') and not has_epub:
             # Only return a MOBI if no EPUB is present.
+            return file
+        if mimetype in ('application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.oasis.opendocument.text',
+                        'application/x-cbz', 'application/x-cbr',
+                        'application/vnd.comicbook+zip', 'application/vnd.comicbook-rar'):
+            return file
+        if file.suffix.lower() in ('.cbz', '.cbr', '.cbt', '.cb7'):
             return file
 
     # Secondary file types.
@@ -1440,19 +1454,19 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
         for update in updates:
             # Don't change indexed - reorganization only moves files, content unchanged
             curs.execute('''
-                UPDATE file_group
-                SET directory = %s,
-                    primary_path = %s,
-                    files = %s,
-                    data = %s
-                WHERE id = %s
-            ''', (
-                update['directory'],
-                update['primary_path'],
-                json.dumps(update['files'], default=_json_serial),
-                json.dumps(update['data'], default=_json_serial) if update.get('data') else None,
-                update['id'],
-            ))
+                         UPDATE file_group
+                         SET directory    = %s,
+                             primary_path = %s,
+                             files        = %s,
+                             data         = %s
+                         WHERE id = %s
+                         ''', (
+                             update['directory'],
+                             update['primary_path'],
+                             json.dumps(update['files'], default=_json_serial),
+                             json.dumps(update['data'], default=_json_serial) if update.get('data') else None,
+                             update['id'],
+                         ))
 
     # Expire SQLAlchemy's session cache so subsequent queries see the raw SQL updates.
     # This is necessary because get_db_curs uses the same connection as get_db_session
@@ -2085,12 +2099,16 @@ bulk_tag_worker = perpetual_signal(sleep=1)(bulk_tag_worker)
 
 
 def _detect_archive_type(path: pathlib.Path) -> str:
-    """Detect archive type from file suffix. Returns 'zip', 'tar', or raises UnsupportedArchive."""
+    """Detect archive type from file suffix. Returns 'zip', 'tar', 'rar', '7z', or raises UnsupportedArchive."""
     name = path.name.lower()
-    if name.endswith('.zip'):
+    if name.endswith(('.zip', '.cbz')):
         return 'zip'
-    if name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tar.xz')):
+    if name.endswith(('.tar', '.tar.gz', '.tgz', '.tar.bz2', '.tar.xz', '.cbt')):
         return 'tar'
+    if name.endswith(('.rar', '.cbr')):
+        return 'rar'
+    if name.endswith(('.7z', '.cb7')):
+        return '7z'
     raise UnsupportedArchive(f'Unsupported archive format: {path.name}')
 
 
@@ -2198,6 +2216,36 @@ def list_archive_contents(path: pathlib.Path) -> dict:
                     if not is_dir:
                         total_size += member.size
                         total_files += 1
+        elif archive_type == 'rar':
+            import rarfile
+            with rarfile.RarFile(path, 'r') as rf:
+                for info in rf.infolist():
+                    is_dir = info.is_dir()
+                    entry = {
+                        'path': info.filename,
+                        'name': info.filename.rstrip('/').split('/')[-1],
+                        'is_dir': is_dir,
+                        'size': info.file_size,
+                    }
+                    flat_entries.append(entry)
+                    if not is_dir:
+                        total_size += info.file_size
+                        total_files += 1
+        elif archive_type == '7z':
+            import py7zr
+            with py7zr.SevenZipFile(path, 'r') as sz:
+                for entry_info in sz.list():
+                    is_dir = entry_info.is_directory
+                    entry = {
+                        'path': entry_info.filename + ('/' if is_dir else ''),
+                        'name': entry_info.filename.rstrip('/').split('/')[-1],
+                        'is_dir': is_dir,
+                        'size': entry_info.uncompressed if not is_dir else 0,
+                    }
+                    flat_entries.append(entry)
+                    if not is_dir:
+                        total_size += entry_info.uncompressed
+                        total_files += 1
     except (zipfile.BadZipFile, tarfile.TarError, EOFError, OSError) as e:
         raise UnsupportedArchive(f'Cannot read archive: {e}')
 
@@ -2247,6 +2295,28 @@ def stream_archive_member(archive_path: pathlib.Path, member_path: str) -> Tuple
                 if f is None:
                     raise InvalidArchiveMember(f'Cannot extract member: {member_path}')
                 file_bytes = f.read()
+        elif archive_type == 'rar':
+            import rarfile
+            with rarfile.RarFile(archive_path, 'r') as rf:
+                try:
+                    info = rf.getinfo(member_path)
+                except KeyError:
+                    raise InvalidArchiveMember(f'Member not found in archive: {member_path}')
+                if info.is_dir():
+                    raise InvalidArchiveMember(f'Cannot download a directory: {member_path}')
+                file_bytes = rf.read(member_path)
+        elif archive_type == '7z':
+            import py7zr
+            import tempfile
+            with py7zr.SevenZipFile(archive_path, 'r') as sz:
+                if member_path not in sz.getnames():
+                    raise InvalidArchiveMember(f'Member not found in archive: {member_path}')
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    sz.extract(tmpdir, targets=[member_path])
+                    extracted_path = pathlib.Path(tmpdir) / member_path
+                    if not extracted_path.is_file():
+                        raise InvalidArchiveMember(f'Cannot extract member: {member_path}')
+                    file_bytes = extracted_path.read_bytes()
     except (zipfile.BadZipFile, tarfile.TarError, EOFError, OSError) as e:
         raise UnsupportedArchive(f'Cannot read archive: {e}')
 

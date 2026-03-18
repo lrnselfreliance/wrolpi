@@ -18,8 +18,8 @@ from http import HTTPStatus
 from itertools import filterfalse
 from typing import List, Dict, Generator, Iterable, Coroutine, Any
 from typing import Tuple, Optional
-from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import feedparser
 import pytz
@@ -31,7 +31,6 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
-
 from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
@@ -1752,7 +1751,8 @@ class DownloadManagerConfig(ConfigFile):
             shutil.copy2(backup_file, config_file)
         elif mode == 'merge':
             backup_data = self.read_config_file(backup_file)
-            current_data = self.read_config_file() if config_file.is_file() else dict(downloads=[], skip_urls=[], version=0)
+            current_data = self.read_config_file() if config_file.is_file() else dict(downloads=[], skip_urls=[],
+                                                                                      version=0)
 
             current_urls = {dl.get('url') for dl in current_data.get('downloads', []) if dl.get('url')}
             merged_downloads = list(current_data.get('downloads', []))

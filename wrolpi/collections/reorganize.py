@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session
-from wrolpi.files.lib import glob_shared_stem
 from .errors import UnknownCollection
 from .models import Collection
 

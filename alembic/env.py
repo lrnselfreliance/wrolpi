@@ -18,7 +18,7 @@ fileConfig(config.config_file_name)
 from wrolpi.common import Base
 # Import all models so they are registered with the Base metadata
 from wrolpi.files.models import FileGroup, Directory  # noqa: F401
-from wrolpi.files.ebooks import EBook  # noqa: F401
+from modules.docs.models import Doc  # noqa: F401
 from wrolpi.tags import Tag  # noqa: F401
 from wrolpi.flags import WROLPiFlag  # noqa: F401
 from wrolpi.downloader import Download  # noqa: F401

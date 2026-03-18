@@ -2,7 +2,7 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from datetime import datetime, time, timezone, timedelta
+from datetime import datetime, time, timezone
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
@@ -16,7 +16,7 @@ from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     get_download_manager_config, RSSDownloader, parse_aria2c_progress, _parse_size, \
-    set_download_progress, clear_download_progress, make_progress_callback, download_manager
+    set_download_progress, clear_download_progress, make_progress_callback
 from wrolpi.errors import InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
@@ -1196,7 +1196,6 @@ def test_is_within_download_window_uses_local_time(test_download_manager):
 
 def test_get_local_time_with_configured_timezone(test_download_manager):
     """When config.timezone is set, _get_local_time() converts to that timezone."""
-    from zoneinfo import ZoneInfo
 
     config = get_wrolpi_config()
     config.timezone = 'America/Denver'

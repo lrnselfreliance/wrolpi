@@ -136,6 +136,34 @@ class TestCollectionsAPI:
         assert test_channel_data['total_size'] > 0
 
 
+    @pytest.mark.asyncio
+    async def test_get_collections_includes_item_count_for_author(
+            self, async_client, test_session, test_directory
+    ):
+        """Test that GET /api/collections?kind=author returns correct item_count from CollectionItem rows."""
+        from modules.docs.lib import get_or_create_author_collection
+        from wrolpi.files.models import FileGroup
+
+        # Create an author collection with a file group added to it.
+        author_col = get_or_create_author_collection(test_session, 'John Smith')
+        path = test_directory / 'test_doc.pdf'
+        path.write_bytes(b'%PDF-1.4 test')
+        fg = FileGroup.from_paths(test_session, path)
+        test_session.flush()
+        author_col.add_file_group(fg, session=test_session)
+        test_session.commit()
+
+        # Make the request.
+        request, response = await async_client.get('/api/collections?kind=author')
+
+        assert response.status_code == HTTPStatus.OK
+        data = response.json
+
+        author_data = next(c for c in data['collections'] if c['name'] == 'John Smith')
+        assert author_data['item_count'] == 1, \
+            f'Author collection should report 1 item, got {author_data["item_count"]}'
+
+
 class TestCollectionTagInfoAPI:
     """Test the POST /api/collections/<id>/tag_info endpoint."""
 
@@ -415,7 +443,7 @@ class TestCollectionDeletion:
             self, async_client, test_session, test_directory, channel_factory, video_factory
     ):
         """Test that deleting a channel collection with videos orphans the videos."""
-        from modules.videos.models import Channel, Video
+        from modules.videos.models import Channel
 
         # Create a channel with videos
         channel = channel_factory(name='test', directory=test_directory / 'videos' / 'test')

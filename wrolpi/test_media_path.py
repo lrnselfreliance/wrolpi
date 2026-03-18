@@ -7,7 +7,6 @@ import pathlib
 import pytest
 
 from wrolpi.collections.models import Collection
-from wrolpi.common import get_media_directory
 from wrolpi.media_path import MediaPathType
 
 

@@ -64,7 +64,7 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     const pages = usePages(defaultLimit, totalPages);
     // text/html, video*, image*, etc.
     const filter = searchParams.get('filter');
-    // archive/video/ebook/etc.
+    // archive/video/doc/etc.
     const model_ = searchParams.get('model') || model;
 
     const anySearch = (!datesIsEmpty) || searchStr || (activeTags && activeTags.length > 0) || filter || model;
@@ -121,6 +121,8 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
         fileGroups: [],
         channels: [],
         domains: [],
+        authors: [],
+        subjects: [],
         zimsEstimates: [],
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
@@ -162,6 +164,8 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
                     ...prevState,
                     channels: generalData.channels,
                     domains: generalData.domains,
+                    authors: generalData.authors,
+                    subjects: generalData.subjects,
                 }
             });
         }
@@ -274,6 +278,30 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
                 })
             }
         }
+        if (newSuggestions.authors && newSuggestions.authors.length > 0) {
+            results.authors = {
+                name: 'Authors', results: newSuggestions.authors.map(i => {
+                    return {
+                        type: 'author',
+                        title: i.name,
+                        id: i.id,
+                        location: `/docs?author=${encodeURIComponent(i.name)}`
+                    }
+                })
+            }
+        }
+        if (newSuggestions.subjects && newSuggestions.subjects.length > 0) {
+            results.subjects = {
+                name: 'Subjects', results: newSuggestions.subjects.map(i => {
+                    return {
+                        type: 'subject',
+                        title: i.name,
+                        id: i.id,
+                        location: `/docs?subject=${encodeURIComponent(i.name)}`
+                    }
+                })
+            }
+        }
 
         // Match at most 5 Tags.
         const matchingTags = searchStr ? fuzzyMatchTagsByName(searchStr).slice(0, 5) : null;
@@ -304,6 +332,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             otherSum: otherSum,
             channels: newSuggestions.channels.length,
             domains: newSuggestions.domains.length,
+            authors: newSuggestions.authors?.length,
+            subjects: newSuggestions.subjects?.length,
             tags: matchingTags?.length,
             apps: matchingApps?.length,
         });

@@ -346,6 +346,8 @@ function ArchivePage() {
 
 export function ArchiveCard({file}) {
     const {s} = useContext(ThemeContext);
+    const {sort} = useSearchOrder();
+    const sortField = sort ? sort.replace(/^-/, '') : null;
     const {data, directory} = file;
 
     // Resolve data paths (filename-only) to full relative paths using directory
@@ -386,7 +388,16 @@ export function ArchiveCard({file}) {
                     <span {...s}>{domain}</span>
                 </CardLink>}
             <CardMeta {...s}>
-                {isoDatetimeToAgoPopup(dt, false)}
+                {sortField === 'published_modified_datetime'
+                    ? isoDatetimeToAgoPopup(file.published_modified_datetime, false)
+                    : sortField === 'download_datetime'
+                    ? isoDatetimeToAgoPopup(file.download_datetime, false)
+                    : sortField === 'size'
+                    ? humanFileSize(file.size)
+                    : sortField === 'viewed'
+                    ? isoDatetimeToAgoPopup(file.viewed, false)
+                    : isoDatetimeToAgoPopup(dt, false)
+                }
             </CardMeta>
             <CardDescription>
                 <Link to={`/archive/${data.id}`}>

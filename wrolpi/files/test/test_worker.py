@@ -473,7 +473,8 @@ async def test_file_worker_status_during_refresh(async_client, test_session, tes
 
 
 @pytest.mark.asyncio
-async def test_file_worker_status_resets_after_refresh(async_client, test_session, test_directory, make_files_structure):
+async def test_file_worker_status_resets_after_refresh(async_client, test_session, test_directory,
+                                                       make_files_structure):
     """FileWorker resets status to idle after refresh completes."""
     make_files_structure(['docs/file1.txt'])
 
@@ -509,7 +510,7 @@ async def test_file_worker_count_only_resets_status(async_client, test_session, 
 
 @pytest.mark.asyncio
 async def test_file_worker_refresh_inserts_new_files(async_client, test_session, test_directory, make_files_structure,
-                                                      video_file_factory):
+                                                     video_file_factory):
     """FileWorker inserts new FileGroups during refresh."""
     # Create files on disk but not in DB
     # Note: txt/json files without recognizable primary types (video, epub, etc.)
@@ -898,7 +899,8 @@ async def test_handle_refresh_runs_modelers(async_client, test_session, test_dir
 
 
 @pytest.mark.asyncio
-async def test_handle_refresh_status_includes_indexing(async_client, test_session, test_directory, make_files_structure):
+async def test_handle_refresh_status_includes_indexing(async_client, test_session, test_directory,
+                                                       make_files_structure):
     """FileWorker.handle_refresh should update status during indexing phase."""
     # Create files
     make_files_structure(['file1.txt', 'file2.txt'])
@@ -926,7 +928,8 @@ async def test_handle_refresh_status_includes_indexing(async_client, test_sessio
 
 
 @pytest.mark.asyncio
-async def test_refresh_complete_flag_set_on_full_refresh(async_client, test_session, test_directory, make_files_structure, flags_lock):
+async def test_refresh_complete_flag_set_on_full_refresh(async_client, test_session, test_directory,
+                                                         make_files_structure, flags_lock):
     """refresh_complete flag is set when refreshing the entire media directory."""
     from wrolpi import flags
 
@@ -946,7 +949,8 @@ async def test_refresh_complete_flag_set_on_full_refresh(async_client, test_sess
 
 
 @pytest.mark.asyncio
-async def test_refresh_complete_flag_not_set_on_partial_refresh(async_client, test_session, test_directory, make_files_structure, flags_lock):
+async def test_refresh_complete_flag_not_set_on_partial_refresh(async_client, test_session, test_directory,
+                                                                make_files_structure, flags_lock):
     """refresh_complete flag is NOT set when refreshing only a subdirectory."""
     from wrolpi import flags
 
@@ -1251,7 +1255,7 @@ async def test_file_worker_refresh_file_skips_count_phase(
 
 @pytest.mark.asyncio
 async def test_queue_refresh_returns_job_id(async_client, test_session, test_directory, make_files_structure,
-                                             await_background_tasks):
+                                            await_background_tasks):
     """queue_refresh returns a job_id that can be tracked to completion."""
     make_files_structure(['docs/file1.txt'])
 
@@ -1270,7 +1274,7 @@ async def test_queue_refresh_returns_job_id(async_client, test_session, test_dir
 
 @pytest.mark.asyncio
 async def test_wait_for_job(async_client, test_session, test_directory, make_files_structure,
-                             await_background_tasks):
+                            await_background_tasks):
     """wait_for_job waits for a job to complete."""
     make_files_structure(['docs/file1.txt'])
 
@@ -1291,7 +1295,7 @@ async def test_wait_for_job(async_client, test_session, test_directory, make_fil
 
 @pytest.mark.asyncio
 async def test_file_worker_counting_flag_is_set(async_client, test_session, test_directory, make_files_structure,
-                                                 flags_lock):
+                                                flags_lock):
     """file_worker_counting flag is set during counting phase."""
     from wrolpi import flags
 
@@ -1320,7 +1324,7 @@ async def test_file_worker_counting_flag_is_set(async_client, test_session, test
 
 @pytest.mark.asyncio
 async def test_file_worker_discovery_flag_is_set(async_client, test_session, test_directory, make_files_structure,
-                                                  flags_lock):
+                                                 flags_lock):
     """file_worker_discovery flag is set during discovery phases (comparing, upserting, deleting)."""
     from wrolpi import flags
 
@@ -1362,7 +1366,7 @@ async def test_upsert_files_progress_callback(test_session, test_directory, make
 
 @pytest.mark.asyncio
 async def test_upsert_file_groups_tracks_actual_db_progress(async_client, test_session, test_directory,
-                                                             make_files_structure):
+                                                            make_files_structure):
     """_upsert_file_groups tracks progress of actual DB operations, not just diff collection."""
     make_files_structure(['docs/file1.txt', 'docs/file2.txt', 'docs/file3.txt'])
 

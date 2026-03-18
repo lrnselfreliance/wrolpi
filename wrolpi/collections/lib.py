@@ -4,7 +4,7 @@ Collection Library Functions
 Provides generic operations for collections of any kind (domains, channels, etc.).
 These functions are used by both the unified collection API and legacy endpoints.
 """
-import asyncio
+import pathlib
 from typing import List, Optional, Dict
 
 from sqlalchemy import func
@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from wrolpi import flags
 from wrolpi.common import logger, get_relative_to_media_directory, TRACE_LEVEL, background_task
 from wrolpi.db import get_db_session
-import pathlib
 from wrolpi.errors import FileWorkerConflict
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
@@ -68,6 +67,7 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
     # Separate collections by kind for batch processing
     domain_ids = [c.id for c in collections if c.kind == 'domain']
     channel_ids = [c.id for c in collections if c.kind == 'channel']
+    generic_ids = [c.id for c in collections if c.kind not in ('domain', 'channel')]
 
     # Batch query: Get archive stats for all domain collections at once
     domain_stats_map = {}
@@ -102,6 +102,19 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
 
         channel_stats_map = {s.collection_id: s for s in channel_stats}
 
+    # Batch query: Get item counts for generic collections (author, subject, etc.)
+    generic_stats_map = {}
+    if generic_ids:
+        from .models import CollectionItem
+        generic_stats = session.query(
+            CollectionItem.collection_id,
+            func.count(CollectionItem.id).label('item_count'),
+        ).filter(
+            CollectionItem.collection_id.in_(generic_ids)
+        ).group_by(CollectionItem.collection_id).all()
+
+        generic_stats_map = {s.collection_id: s.item_count for s in generic_stats}
+
     # Convert to JSON and merge batch statistics
     result = []
     for collection in collections:
@@ -132,6 +145,10 @@ def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
                 data['video_count'] = 0
                 data['total_size'] = 0
                 data['channel_id'] = None
+
+        else:
+            # Generic collections (author, subject, etc.): use actual CollectionItem count.
+            data['item_count'] = generic_stats_map.get(collection.id, 0)
 
         result.append(data)
 
@@ -197,6 +214,14 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
         else:
             data['video_count'] = 0
             data['total_size'] = 0
+
+    else:
+        # Generic collections (author, subject, etc.): count actual CollectionItem rows.
+        from .models import CollectionItem
+        item_count = session.query(func.count(CollectionItem.id)).filter(
+            CollectionItem.collection_id == collection_id
+        ).scalar()
+        data['item_count'] = item_count or 0
 
     return data
 

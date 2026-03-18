@@ -19,7 +19,7 @@ import {
     Search,
     Transition
 } from 'semantic-ui-react';
-import {Link, NavLink, useNavigate, useSearchParams} from "react-router";
+import {Link, NavLink, useNavigate} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
@@ -701,15 +701,9 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links}) {
-    const [searchParams] = useSearchParams();
-
-    const getTo = (to) => {
-        return `${to}?${searchParams.toString()}`;
-    }
-
     return <Menu tabular>
         {links.map((link) => <NavLink
-            to={getTo(link.to)}
+            to={link.to}
             style={{padding: '1em'}}
             key={link.to}
             end={link.end === true ? true : null}
@@ -1084,11 +1078,12 @@ export function emptyToNull(obj) {
     return obj;
 }
 
-export function mimetypeColor(mimetype) {
+export function mimetypeColor(mimetype, path = '') {
     if (!mimetype) {
         return 'grey';
     }
     try {
+        const lowerPath = path.toLowerCase();
         if (mimetype === 'application/pdf') {
             return 'red'
         } else if (mimetype.startsWith('video/')) {
@@ -1098,6 +1093,11 @@ export function mimetypeColor(mimetype) {
         } else if (mimetype.startsWith('text/html')) {
             return 'green'
         } else if (mimetype.startsWith('application/epub')) {
+            return 'yellow'
+        } else if (mimetype.includes('cbz') || mimetype.includes('cbr')
+            || mimetype.includes('comicbook')
+            || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr')
+            || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
             return 'yellow'
         } else if (mimetype.startsWith('audio/')) {
             return 'violet'
@@ -1142,7 +1142,8 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image') || mimetype.startsWith('application/x-raw-disk-image') || mimetype.startsWith('application/x-cd-image')) {
             return 'dot circle';
-        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook') || mimetype.startsWith('application/vnd.amazon.mobi8-ebook')) {
+        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook') || mimetype.startsWith('application/vnd.amazon.mobi8-ebook')
+            || mimetype.startsWith('application/vnd.comicbook') || mimetype.startsWith('application/x-cbz') || mimetype.startsWith('application/x-cbr')) {
             return 'book';
         } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
             return 'closed captioning';
@@ -1527,6 +1528,10 @@ export const filterToMimetypes = (filter) => {
         return ['audio'];
     } else if (filter === 'ebook') {
         return ['application/epub+zip', 'application/x-mobipocket-ebook'];
+    } else if (filter === 'doc') {
+        return ['application/epub+zip', 'application/x-mobipocket-ebook', 'application/pdf',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.oasis.opendocument.text', 'application/x-cbz', 'application/x-cbr'];
     } else if (filter === 'image') {
         return ['image'];
     } else if (filter === 'zip') {

@@ -1,4 +1,3 @@
-
 import contextlib
 import pathlib
 from dataclasses import dataclass, field
@@ -517,7 +516,8 @@ class TagsConfig(ConfigFile):
     def preview_backup_import(self, backup_date: str, mode: str) -> dict:
         backup_file = self._get_backup_file(backup_date)
         backup_data = self.read_config_file(backup_file)
-        current_data = self.read_config_file() if self.get_file().is_file() else dict(tags={}, tag_files=[], tag_zims=[])
+        current_data = self.read_config_file() if self.get_file().is_file() else dict(tags={}, tag_files=[],
+                                                                                      tag_zims=[])
 
         backup_tags = backup_data.get('tags', {})
         current_tags = current_data.get('tags', {})
@@ -586,7 +586,8 @@ class TagsConfig(ConfigFile):
             shutil.copy2(backup_file, config_file)
         elif mode == 'merge':
             backup_data = self.read_config_file(backup_file)
-            current_data = self.read_config_file() if config_file.is_file() else dict(tags={}, tag_files=[], tag_zims=[], version=0)
+            current_data = self.read_config_file() if config_file.is_file() else dict(tags={}, tag_files=[],
+                                                                                      tag_zims=[], version=0)
 
             # Merge tags: add missing tags only
             merged_tags = dict(current_data.get('tags', {}))
@@ -791,10 +792,10 @@ def get_tags() -> List[dict]:
                      SELECT t.id,
                             t.name,
                             t.color,
-                            (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id) AS file_group_count,
-                            (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id)  AS zim_entry_count,
+                            (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id)                        AS file_group_count,
+                            (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id)                         AS zim_entry_count,
                             (SELECT COUNT(*) FROM collection WHERE tag_id = t.id AND kind = 'channel') AS channel_count,
-                            (SELECT COUNT(*) FROM collection WHERE tag_id = t.id AND kind = 'domain') AS domain_count
+                            (SELECT COUNT(*) FROM collection WHERE tag_id = t.id AND kind = 'domain')  AS domain_count
                      FROM tag t
                      GROUP BY t.id, t.name, t.color
                      ORDER BY t.name
@@ -806,15 +807,18 @@ def get_tags() -> List[dict]:
 def get_recent_tags(limit: int = 5) -> List[str]:
     with get_db_curs() as curs:
         curs.execute('''
-                     SELECT t.name FROM (
-                         SELECT tag_id, MAX(created_at) AS latest FROM (
-                             SELECT tag_id, created_at FROM tag_file
-                             UNION ALL
-                             SELECT tag_id, created_at FROM tag_zim
-                         ) AS combined
-                         GROUP BY tag_id ORDER BY latest DESC LIMIT %(limit)s
-                     ) AS recent
-                     JOIN tag t ON t.id = recent.tag_id ORDER BY recent.latest DESC
+                     SELECT t.name
+                     FROM (SELECT tag_id, MAX(created_at) AS latest
+                           FROM (SELECT tag_id, created_at
+                                 FROM tag_file
+                                 UNION ALL
+                                 SELECT tag_id, created_at
+                                 FROM tag_zim) AS combined
+                           GROUP BY tag_id
+                           ORDER BY latest DESC
+                           LIMIT %(limit)s) AS recent
+                              JOIN tag t ON t.id = recent.tag_id
+                     ORDER BY recent.latest DESC
                      ''', dict(limit=limit))
         return [row['name'] for row in curs.fetchall()]
 

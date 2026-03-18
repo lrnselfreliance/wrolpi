@@ -4,9 +4,12 @@ import {
     createChannel,
     fetchChannels,
     fetchDecoded,
+    fetchAuthors,
     fetchDomains,
+    fetchSubjects,
     filesSearch,
     getArchive,
+    getDocByFileGroup,
     getArchiveStatistics,
     getChannel,
     getConfigs,
@@ -28,6 +31,7 @@ import {
     searchArchives,
     searchChannels,
     searchDirectories,
+    searchDocs,
     searchVideos,
     searchZim,
     updateChannel,
@@ -294,6 +298,81 @@ export const useDomains = () => {
     return [domains, total];
 }
 
+export const useAuthors = () => {
+    const [authors, setAuthors] = useState(null);
+    const [total, setTotal] = useState(null);
+
+    const _fetchAuthors = async () => {
+        setAuthors(null);
+        setTotal(0);
+        try {
+            let [authors, total] = await fetchAuthors();
+            setAuthors(authors);
+            setTotal(total);
+        } catch (e) {
+            setAuthors(undefined);
+            setTotal(0);
+        }
+    }
+
+    useEffect(() => {
+        _fetchAuthors();
+    }, []);
+
+    return [authors, total];
+}
+
+export const useSubjects = () => {
+    const [subjects, setSubjects] = useState(null);
+    const [total, setTotal] = useState(null);
+
+    const _fetchSubjects = async () => {
+        setSubjects(null);
+        setTotal(0);
+        try {
+            let [subjects, total] = await fetchSubjects();
+            setSubjects(subjects);
+            setTotal(total);
+        } catch (e) {
+            setSubjects(undefined);
+            setTotal(0);
+        }
+    }
+
+    useEffect(() => {
+        _fetchSubjects();
+    }, []);
+
+    return [subjects, total];
+}
+
+export const useDoc = (fileGroupId) => {
+    const [docFile, setDocFile] = useState(null);
+    const [doc, setDoc] = useState(null);
+
+    const fetchDoc = async () => {
+        try {
+            const response = await getDocByFileGroup(fileGroupId);
+            if (response.ok) {
+                const data = await response.json();
+                setDocFile(data.file_group);
+                setDoc(data.doc);
+            } else {
+                setDocFile(undefined);
+            }
+        } catch (e) {
+            console.error(e);
+            setDocFile(undefined);
+        }
+    }
+
+    useEffect(() => {
+        fetchDoc();
+    }, [fileGroupId]);
+
+    return {docFile, doc, fetchDoc};
+}
+
 export const useDomain = (domainId) => {
     const emptyDomain = {
         domain: '',
@@ -452,6 +531,62 @@ export const useSearchArchives = (defaultLimit) => {
         searchStr,
         setSearchStr,
         fetchArchives: localSearchArchives,
+    }
+}
+
+export const useSearchDocs = (defaultLimit) => {
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
+    const searchStr = searchParams.get('q') || '';
+    const order = searchParams.get('order');
+    const activeTags = searchParams.getAll('tag');
+    const author = searchParams.get('author') || '';
+    const subject = searchParams.get('subject') || '';
+
+    const [docs, setDocs] = useState(null);
+    const [totalPages, setTotalPages] = useState(0);
+
+    const localSearchDocs = async () => {
+        setDocs(null);
+        setTotalPages(0);
+        try {
+            let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject);
+            setDocs(docs_);
+            setTotalPages(calculateTotalPages(total, limit));
+        } catch (e) {
+            console.error(e);
+            setDocs(undefined);
+        }
+    }
+
+    useEffect(() => {
+        localSearchDocs();
+    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject]);
+
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: 0, order: undefined});
+    }
+
+    const setOrderBy = (value) => {
+        setPage(1);
+        updateQuery({order: value});
+    }
+
+    return {
+        docs,
+        limit,
+        setLimit,
+        offset,
+        order,
+        setOrderBy,
+        totalPages,
+        activePage,
+        setPage,
+        searchStr,
+        setSearchStr,
+        author,
+        subject,
+        fetchDocs: localSearchDocs,
     }
 }
 

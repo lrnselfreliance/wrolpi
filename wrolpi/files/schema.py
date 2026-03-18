@@ -103,5 +103,3 @@ class BulkTagApplyRequest:
 @dataclass
 class ArchiveContentsRequest:
     path: str
-
-

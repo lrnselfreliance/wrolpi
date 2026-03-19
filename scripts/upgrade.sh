@@ -12,6 +12,32 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Upgrade Controller first so users can monitor the rest of the upgrade.
+upgrade_controller() {
+    echo "Upgrading WROLPi Controller..."
+
+    # Create Controller venv if it doesn't exist
+    if [ ! -d /opt/wrolpi/controller/venv ]; then
+        echo "Creating Controller virtual environment..."
+        python3 -m venv /opt/wrolpi/controller/venv
+    fi
+
+    # Clear bytecode cache before upgrading.
+    find /opt/wrolpi/controller/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
+    find /opt/wrolpi/controller/venv -name "*.pyc" -delete 2>/dev/null || :
+
+    # Install dependencies while Controller is still running to minimize downtime.
+    echo "Updating Controller dependencies..."
+    /opt/wrolpi/controller/venv/bin/pip install --upgrade pip
+    /opt/wrolpi/controller/venv/bin/pip install --upgrade -r /opt/wrolpi/controller/requirements.txt
+
+    # Dependencies are ready, now restart the Controller as quickly as possible.
+    systemctl daemon-reload
+    systemctl restart wrolpi-controller
+}
+
+upgrade_controller || echo "Controller upgrade failed, continuing..."
+
 # Install any App dependencies.
 cd /opt/wrolpi/app || exit 1
 npm install || npm install || npm install || npm install # try install multiple times  :(
@@ -57,35 +83,6 @@ find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
 # Upgrade the WROLPi database.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
-
-# Upgrade Controller
-upgrade_controller() {
-    echo "Upgrading WROLPi Controller..."
-
-    # Stop Controller during upgrade
-    systemctl stop wrolpi-controller || true
-
-    # Create Controller venv if it doesn't exist
-    if [ ! -d /opt/wrolpi/controller/venv ]; then
-        echo "Creating Controller virtual environment..."
-        python3 -m venv /opt/wrolpi/controller/venv
-    fi
-
-    # Clear bytecode cache before upgrading.
-    find /opt/wrolpi/controller/venv -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || :
-    find /opt/wrolpi/controller/venv -name "*.pyc" -delete 2>/dev/null || :
-
-    # Update dependencies
-    echo "Updating Controller dependencies..."
-    /opt/wrolpi/controller/venv/bin/pip install --upgrade pip
-    /opt/wrolpi/controller/venv/bin/pip install --upgrade -r /opt/wrolpi/controller/requirements.txt
-
-    # Start the Controller.
-    systemctl daemon-reload
-    systemctl start wrolpi-controller
-}
-
-upgrade_controller || echo "Controller upgrade failed, continuing..."
 
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."

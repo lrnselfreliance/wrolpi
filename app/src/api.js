@@ -271,8 +271,12 @@ export async function deleteVideos(videoIds) {
     }
 }
 
-export async function downloadVideoMetadata(videoUrl, destination) {
-    const downloadData = {urls: [videoUrl], downloader: Downloaders.Video, destination: destination};
+export async function downloadVideoMetadata(videoUrl) {
+    const downloadData = {
+        urls: [videoUrl],
+        downloader: Downloaders.Video,
+        settings: {download_metadata_only: true},
+    };
     return await postDownload(downloadData);
 }
 

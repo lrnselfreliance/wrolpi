@@ -7,7 +7,6 @@ import {
     APIButton,
     BackButton,
     encodeMediaPath,
-    getParentDirectory,
     humanFileSize,
     humanNumber,
     isoDatetimeToAgoPopup,
@@ -75,8 +74,7 @@ const NoComments = ({video}) => {
     const videoUrl = video.url;
 
     const handleRefresh = async () => {
-        const destination = getParentDirectory(video.primary_path);
-        await downloadVideoMetadata(videoUrl, destination);
+        await downloadVideoMetadata(videoUrl);
     };
 
     if (videoUrl) {
@@ -273,8 +271,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     }
 
     const handleRefresh = async () => {
-        const destination = getParentDirectory(videoFile.primary_path);
-        await downloadVideoMetadata(videoFile.url, destination);
+        await downloadVideoMetadata(videoFile.url);
     };
 
     let videoUrl = `${MEDIA_PATH}/${encodeMediaPath(video.video_path)}`;

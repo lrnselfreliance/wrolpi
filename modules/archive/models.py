@@ -38,6 +38,18 @@ class Archive(Base, ModelHelper):
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
     file_group: FileGroup = relationship('FileGroup')
 
+    def __json__(self) -> dict:
+        d = self.file_group.__json__()
+        d['archive'] = dict(
+            id=self.id,
+            collection_id=self.collection_id,
+            domain=self.domain,
+            singlefile_path=self.singlefile_path.name if self.singlefile_path else None,
+            readability_txt_path=self.readability_txt_path.name if self.readability_txt_path else None,
+            screenshot_path=self.screenshot_path.name if self.screenshot_path else None,
+        )
+        return d
+
     def __repr__(self):
         domain_name = self.domain if self.collection else None
         if domain_name:

@@ -418,7 +418,8 @@ class ChannelDownloader(Downloader, ABC):
         if not name:
             raise ValueError(f'Could not find name')
         channel_source_id = info.get('channel_id') or info.get('id')
-        channel = get_or_create_channel(session, channel_source_id, download.url, name, channel_tag_name)
+        channel_url = info.get('channel_url') or info.get('uploader_url') or download.url
+        channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name)
         channel.dict()  # get all attributes while we have the session.
 
         # Link this channel download to the channel's collection.

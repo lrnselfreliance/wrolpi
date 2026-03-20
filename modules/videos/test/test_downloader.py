@@ -266,6 +266,48 @@ async def test_get_or_create_channel(async_client, test_session, test_directory,
     assert channel.tag_name == one.name and channel.tag == one
 
 
+@pytest.mark.asyncio
+async def test_get_or_create_channel_conflict_recovery(async_client, test_session, test_directory):
+    """get_or_create_channel should find an existing channel even when source_id and url don't match,
+    rather than raising ChannelNameConflict."""
+    from wrolpi.collections import Collection
+
+    # Create a channel with a specific source_id and url.
+    collection = Collection(name='My Channel', kind='channel')
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='old_source_id',
+                      url='https://www.youtube.com/channel/UCold')
+    test_session.add(channel)
+    test_session.commit()
+
+    # Calling with different source_id and url but same name should return the existing channel.
+    result = get_or_create_channel(test_session, source_id='new_source_id',
+                                   url='https://www.youtube.com/@mychannel', name='My Channel')
+    assert result.id == channel.id
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_channel_youtube_channel_url(async_client, test_session, test_directory):
+    """get_or_create_channel should find an existing channel when the URL contains a YouTube /channel/ ID
+    that matches the channel's source_id."""
+    from wrolpi.collections import Collection
+
+    collection = Collection(name='WROLPi', kind='channel')
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='UC4t8bw1besFTyjW7ZBCOIrw',
+                      url='https://www.youtube.com/@wrolpi')
+    test_session.add(channel)
+    test_session.commit()
+
+    # A /channel/UCXXX URL should match via source_id extraction.
+    result = get_or_create_channel(test_session,
+                                   url='https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw',
+                                   name='WROLPi Channel')
+    assert result.id == channel.id
+
+
 def test_channel_downloader_hidden(video_download_manager):
     """
     ChannelDownloader should not be presented to the User.

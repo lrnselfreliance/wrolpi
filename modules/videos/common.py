@@ -8,6 +8,7 @@ from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional, Tuple, Union
+from urllib.parse import urlparse
 
 import PIL
 from PIL import Image
@@ -44,6 +45,18 @@ def get_no_channel_directory() -> pathlib.Path:
     if not directory.is_dir():
         directory.mkdir(parents=True)
     return directory
+
+
+def get_youtube_channel_id(url: str) -> Optional[str]:
+    """Extract YouTube channel ID (UC...) from /channel/ URLs."""
+    parsed = urlparse(url)
+    if parsed.netloc not in ('youtube.com', 'www.youtube.com', 'm.youtube.com'):
+        return None
+    if parsed.path.startswith('/channel/'):
+        parts = parsed.path.split('/')
+        if len(parts) >= 3 and parts[2]:
+            return parts[2]
+    return None
 
 
 def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, directory=None,

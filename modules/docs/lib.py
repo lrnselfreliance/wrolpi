@@ -364,7 +364,7 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
 
         if search_str:
-            query = query.filter(FileGroup.textsearch.match(search_str))
+            query = query.filter(FileGroup.textsearch.op('@@')(func.websearch_to_tsquery(search_str)))
 
         if author:
             query = query.filter(FileGroup.b_text.ilike(f'%{author}%'))

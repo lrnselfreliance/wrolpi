@@ -31,6 +31,17 @@ async def test_docs_search(async_client, test_session, test_directory, example_e
 
 
 @pytest.mark.asyncio
+async def test_docs_search_multi_word(async_client, test_session, test_directory, example_epub, refresh_files):
+    """Docs search handles multi-word queries without tsquery syntax errors."""
+    await refresh_files()
+
+    # Multi-word search should not raise a syntax error.
+    content = dict(search_str='primitive fire starting friction methods')
+    request, response = await async_client.post('/api/docs/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.asyncio
 async def test_get_doc(async_client, test_session, test_directory, example_epub, refresh_files):
     """Single doc endpoint returns the doc."""
     await refresh_files()

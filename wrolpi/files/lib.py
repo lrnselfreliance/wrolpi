@@ -1013,18 +1013,21 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
             extras = []
 
     with get_db_session() as session:
+        from modules.archive.models import Archive
         from modules.videos.models import Video
-        results = session.query(FileGroup, Video) \
+        results = session.query(FileGroup, Video, Archive) \
             .filter(FileGroup.id.in_(ordered_ids)) \
-            .outerjoin(Video, Video.file_group_id == FileGroup.id)
+            .outerjoin(Video, Video.file_group_id == FileGroup.id) \
+            .outerjoin(Archive, Archive.file_group_id == FileGroup.id)
         # Order FileGroups by their location in ordered_ids.  Use dict for O(1) lookups instead of O(n) list.index().
         id_to_order = {id_: idx for idx, id_ in enumerate(ordered_ids)}
-        file_groups: List[Tuple[FileGroup, Video]] = sorted(results, key=lambda i: id_to_order.get(i[0].id, 0))
+        file_groups = sorted(results, key=lambda i: id_to_order.get(i[0].id, 0))
         results = list()
-        for extra, (file_group, video) in zip_longest(extras, file_groups):
-            video: Video
+        for extra, (file_group, video, archive) in zip_longest(extras, file_groups):
             if video:
                 results.append(video.__json__())
+            elif archive:
+                results.append(archive.__json__())
             else:
                 results.append(file_group.__json__())
             # Preserve the ts_ranks, if any.

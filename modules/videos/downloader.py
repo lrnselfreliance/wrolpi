@@ -25,7 +25,7 @@ from wrolpi.common import logger, get_media_directory, escape_file_name, resolve
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult, \
-    clear_download_progress, _parse_size, make_progress_callback
+    clear_download_progress, _parse_size, make_progress_callback, get_download_cache_config
 from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
@@ -73,6 +73,21 @@ def parse_ytdlp_progress(line: str) -> dict | None:
         speed=speed,
         eta=eta,
     )
+
+
+def _log_ytdlp_versions():
+    """Log yt-dlp and yt-dlp-ejs versions for debugging download issues."""
+    try:
+        import yt_dlp.version
+        ytdlp_version = yt_dlp.version.__version__
+    except Exception:
+        ytdlp_version = 'unknown'
+    try:
+        from importlib.metadata import version
+        ejs_version = version('yt-dlp-ejs')
+    except Exception:
+        ejs_version = 'not installed'
+    logger.info(f'yt-dlp={ytdlp_version} yt-dlp-ejs={ejs_version}')
 
 
 VIDEO_RESOLUTION_MAP = {
@@ -312,21 +327,41 @@ def preview_filename(filename_format: str) -> str:
         raise RuntimeError(f'Invalid variable: {e}')
 
 
+VIDEO_DURATION_CACHE_MAX_SIZE = 1_000
+
+
+def _cache_video_duration(url: str, duration: int):
+    """Persist a video duration to the download cache config.  Evicts oldest entries when over the max size."""
+    cache_config = get_download_cache_config()
+    entries = [e for e in cache_config.video_durations if e[0] != url]
+    entries.append([url, duration])
+    if len(entries) > VIDEO_DURATION_CACHE_MAX_SIZE:
+        entries = entries[-VIDEO_DURATION_CACHE_MAX_SIZE:]
+    cache_config.video_durations = entries
+
+
 @cached_multiprocessing_result
 async def fetch_video_duration(url: str) -> int:
-    """Get video duration in seconds. Attempts to get the duration from a Video that has already been downloaded,
-    otherwise uses YouTube API for YouTube URLs, falling back to yt-dlp."""
+    """Get video duration in seconds. Checks persistent cache, then DB, then YouTube API, then yt-dlp."""
+    # Check persistent cache first (survives restarts).
+    cached_duration = dict(get_download_cache_config().video_durations).get(url)
+    if cached_duration is not None:
+        logger.debug(f'Using cached duration {cached_duration} for {url}')
+        return cached_duration
+
     with get_db_session() as session:
         # Join with Video to get duration; a URL may have other files (such as an Archive).
         video = Video.get_by_url(session, url)
         if video and (duration := video.file_group.length):
             logger.debug(f'Using already-known duration {duration} for {url} from FileGroup')
+            _cache_video_duration(url, duration)
             return duration
 
     # Try YouTube API first (faster than yt-dlp)
     duration = await get_youtube_duration(url)
     if duration is not None:
         logger.info(f'Fetched video duration of {duration} from {url} using YouTube API')
+        _cache_video_duration(url, duration)
         return duration
 
     # Fall back to yt-dlp for non-YouTube URLs or API failures
@@ -334,6 +369,7 @@ async def fetch_video_duration(url: str) -> int:
     info = extract_info(url, process=False)
     duration = info['duration']
     logger.info(f'Fetched video duration of {duration} from {url}')
+    _cache_video_duration(url, duration)
     return duration
 
 
@@ -353,6 +389,7 @@ class ChannelDownloader(Downloader, ABC):
 
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
+        _log_ytdlp_versions()
         try:
             info = extract_info(download.url, process=False)
         except Exception as e:
@@ -537,6 +574,7 @@ class VideoDownloader(Downloader, ABC):
         return file_groups
 
     async def do_download(self, download: Download) -> DownloadResult:
+        _log_ytdlp_versions()
         with get_db_session() as session:
             if download.attempts >= 10:
                 raise UnrecoverableDownloadError('Max download attempts reached')

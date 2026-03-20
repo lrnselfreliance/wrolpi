@@ -44,7 +44,7 @@ from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
-    downloads_manager_config_context
+    downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
 from wrolpi.switches import await_switches as await_switches_
@@ -276,6 +276,14 @@ def test_download_manager_config(async_client, test_directory) -> Generator[Path
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
+        yield config_path
+
+
+@pytest.fixture
+def test_download_cache_config(async_client, test_directory) -> Generator[Path, Any, None]:
+    with download_cache_config_context():
+        (test_directory / 'config').mkdir(exist_ok=True)
+        config_path = test_directory / 'config/download_cache.yaml'
         yield config_path
 
 

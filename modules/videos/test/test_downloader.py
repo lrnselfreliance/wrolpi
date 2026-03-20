@@ -963,3 +963,47 @@ def test_parse_ytdlp_progress_not_progress_line():
     assert parse_ytdlp_progress('[info] Downloading video 1 of 1') is None
     assert parse_ytdlp_progress('') is None
     assert parse_ytdlp_progress('[download] Destination: video.mp4') is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_video_duration_persistent_cache(test_download_cache_config):
+    """Video durations are persisted to the download cache config and reused on subsequent calls."""
+    from modules.videos.downloader import _cache_video_duration
+    from wrolpi.downloader import get_download_cache_config
+
+    url = 'https://www.youtube.com/watch?v=test123'
+
+    # Verify cache is initially empty.
+    assert get_download_cache_config().video_durations == []
+
+    # Persist a duration directly.
+    _cache_video_duration(url, 120)
+    assert get_download_cache_config().video_durations == [[url, 120]]
+
+    # Re-caching the same URL updates the entry (no duplicate).
+    _cache_video_duration(url, 200)
+    assert get_download_cache_config().video_durations == [[url, 200]]
+
+
+@pytest.mark.asyncio
+async def test_fetch_video_duration_cache_eviction(test_download_cache_config):
+    """Video duration cache evicts oldest entries when over the max size."""
+    from modules.videos.downloader import _cache_video_duration, VIDEO_DURATION_CACHE_MAX_SIZE
+    from wrolpi.downloader import get_download_cache_config
+
+    # Fill to max size.
+    for i in range(VIDEO_DURATION_CACHE_MAX_SIZE):
+        _cache_video_duration(f'https://example.com/video{i}', i)
+    assert len(get_download_cache_config().video_durations) == VIDEO_DURATION_CACHE_MAX_SIZE
+
+    # Adding one more should evict the oldest (video0), keeping it at max size.
+    _cache_video_duration('https://example.com/new_video', 999)
+    durations = get_download_cache_config().video_durations
+    assert len(durations) == VIDEO_DURATION_CACHE_MAX_SIZE
+    # Newest entry is at the end.
+    assert durations[-1] == ['https://example.com/new_video', 999]
+    # Oldest entry (video0) was evicted.
+    durations_dict = dict(durations)
+    assert 'https://example.com/video0' not in durations_dict
+    # Second oldest (video1) is still present.
+    assert durations_dict['https://example.com/video1'] == 1

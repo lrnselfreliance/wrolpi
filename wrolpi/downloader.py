@@ -1784,6 +1784,61 @@ DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
 TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None
 
 
+@dataclass
+class DownloadCacheConfigValidator:
+    version: int = None
+    video_durations: list = field(default_factory=list)
+
+
+class DownloadCacheConfig(ConfigFile):
+    file_name = 'download_cache.yaml'
+    default_config = dict(
+        video_durations=list(),
+        version=0,
+    )
+    validator = DownloadCacheConfigValidator
+
+    @property
+    def video_durations(self) -> List[list]:
+        return self._config['video_durations'] or list()
+
+    @video_durations.setter
+    def video_durations(self, value: List[list]):
+        self.update({'video_durations': value})
+
+
+DOWNLOAD_CACHE_CONFIG: DownloadCacheConfig = DownloadCacheConfig()
+TEST_DOWNLOAD_CACHE_CONFIG: DownloadCacheConfig = None
+
+
+@contextlib.contextmanager
+def download_cache_config_context() -> Generator[DownloadCacheConfig, Any, None]:
+    """Used to create a test config."""
+    global TEST_DOWNLOAD_CACHE_CONFIG
+    TEST_DOWNLOAD_CACHE_CONFIG = DownloadCacheConfig()
+    yield TEST_DOWNLOAD_CACHE_CONFIG
+    TEST_DOWNLOAD_CACHE_CONFIG = None
+
+
+def get_download_cache_config() -> DownloadCacheConfig:
+    global TEST_DOWNLOAD_CACHE_CONFIG
+    if isinstance(TEST_DOWNLOAD_CACHE_CONFIG, ConfigFile):
+        return TEST_DOWNLOAD_CACHE_CONFIG
+
+    global DOWNLOAD_CACHE_CONFIG
+    return DOWNLOAD_CACHE_CONFIG
+
+
+@register_switch_handler('save_download_cache_config')
+def save_download_cache_config():
+    """Save the download cache config to disk."""
+    get_download_cache_config().dump_config()
+    logger.info('save_download_cache_config completed')
+
+
+save_download_cache_config: ActivateSwitchMethod
+
+
 @contextlib.contextmanager
 def downloads_manager_config_context() -> Generator[DownloadManagerConfig, Any, None]:
     """Used to create a test config."""

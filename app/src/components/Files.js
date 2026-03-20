@@ -75,7 +75,7 @@ function EbookCard({file, sortField}) {
     const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
 
     // Link to doc detail page if this is a modeled doc.
-    const detailUrl = file.model === 'doc' ? `/docs/view/${file.id}` : null;
+    const detailUrl = file.model === 'doc' ? `/docs/${file.id}` : null;
 
     const color = mimetypeColor(file.mimetype, file.primary_path);
     const title = file.title || file.stem || file.name;

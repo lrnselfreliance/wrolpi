@@ -9,7 +9,7 @@ import {
     fetchSubjects,
     filesSearch,
     getArchive,
-    getDocByFileGroup,
+    getDoc,
     getArchiveStatistics,
     getChannel,
     getConfigs,
@@ -352,7 +352,7 @@ export const useDoc = (fileGroupId) => {
 
     const fetchDoc = async () => {
         try {
-            const response = await getDocByFileGroup(fileGroupId);
+            const response = await getDoc(fileGroupId);
             if (response.ok) {
                 const data = await response.json();
                 setDocFile(data.file_group);

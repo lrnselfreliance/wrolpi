@@ -38,7 +38,7 @@ async def test_get_doc(async_client, test_session, test_directory, example_epub,
     doc = test_session.query(Doc).first()
     assert doc
 
-    request, response = await async_client.get(f'/api/docs/{doc.id}')
+    request, response = await async_client.get(f'/api/docs/{doc.file_group_id}')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_group']
 
@@ -71,9 +71,9 @@ async def test_delete_doc(async_client, test_session, test_directory, example_ep
 
     doc = test_session.query(Doc).first()
     assert doc
-    doc_id = doc.id
+    file_group_id = doc.file_group_id
 
-    request, response = await async_client.delete(f'/api/docs/{doc_id}')
+    request, response = await async_client.delete(f'/api/docs/{file_group_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert test_session.query(Doc).filter_by(id=doc_id).one_or_none() is None
+    assert test_session.query(Doc).filter_by(file_group_id=file_group_id).one_or_none() is None

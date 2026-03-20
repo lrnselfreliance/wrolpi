@@ -338,15 +338,7 @@ def _doc_response(doc) -> dict:
     }
 
 
-def _get_doc(session, doc_id: int):
-    from .models import Doc
-    doc = session.query(Doc).filter_by(id=doc_id).one_or_none()
-    if not doc:
-        raise ValidationError(f'Doc {doc_id} not found')
-    return doc
-
-
-def _get_doc_by_file_group(session, file_group_id: int):
+def _get_doc(session, file_group_id: int):
     from .models import Doc
     doc = session.query(Doc).filter_by(file_group_id=file_group_id).one_or_none()
     if not doc:
@@ -354,11 +346,11 @@ def _get_doc_by_file_group(session, file_group_id: int):
     return doc
 
 
-def _delete_docs(*doc_ids):
+def _delete_docs(*file_group_ids):
     from .models import Doc
     with get_db_session(commit=True) as session:
-        for doc_id in doc_ids:
-            doc = session.query(Doc).filter_by(id=doc_id).one_or_none()
+        for file_group_id in file_group_ids:
+            doc = session.query(Doc).filter_by(file_group_id=file_group_id).one_or_none()
             if doc:
                 session.delete(doc)
 

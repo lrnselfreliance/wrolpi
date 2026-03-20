@@ -187,7 +187,7 @@ function DocPage() {
 
     const handleDelete = async () => {
         if (doc && doc.id) {
-            await deleteDocs([doc.id]);
+            await deleteDocs([docFile.id]);
             toast({
                 type: 'success',
                 title: 'Document Deleted',
@@ -512,7 +512,7 @@ export function DocsRoute() {
             text: 'Docs',
             to: '/docs',
             end: true,
-            isActive: () => path === '/docs' || /^\/docs\/view\/\d+$/.test(path)
+            isActive: () => path === '/docs' || /^\/docs\/\d+$/.test(path)
         },
         {text: 'Subjects', to: '/docs/subjects', isActive: () => path.startsWith('/docs/subjects')},
         {text: 'Authors', to: '/docs/authors', isActive: () => path.startsWith('/docs/authors')},
@@ -523,7 +523,7 @@ export function DocsRoute() {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' element={<DocsPage/>}/>
-            <Route path='view/:fileGroupId' element={<DocPage/>}/>
+            <Route path=':fileGroupId' element={<DocPage/>}/>
             <Route path='subjects' element={<SubjectsPage/>}/>
             <Route path='authors' element={<AuthorsPage/>}/>
             <Route path='statistics' element={<DocsStatisticsPage/>}/>

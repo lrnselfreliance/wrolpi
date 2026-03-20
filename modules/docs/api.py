@@ -9,7 +9,7 @@ from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
 from wrolpi.schema import JSONErrorResponse
 from . import schema
-from .lib import get_statistics, _doc_response, _get_doc, _get_doc_by_file_group, _delete_docs, _search_docs
+from .lib import get_statistics, _doc_response, _get_doc, _delete_docs, _search_docs
 
 NAME = 'docs'
 
@@ -25,35 +25,26 @@ async def statistics(_: Request):
     return json_response(ret, HTTPStatus.OK)
 
 
-@docs_bp.get('/<doc_id:int>')
-@openapi.description('Get a doc by doc ID')
+@docs_bp.get('/<file_group_id:int>')
+@openapi.description('Get a doc by FileGroup ID')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_doc(request: Request, doc_id: int):
+async def get_doc(request: Request, file_group_id: int):
     session = request.ctx.session
-    doc = _get_doc(session, doc_id)
+    doc = _get_doc(session, file_group_id)
     return json_response(_doc_response(doc))
 
 
-@docs_bp.get('/view/<file_group_id:int>')
-@openapi.description('Get a doc by file_group ID')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_doc_by_file_group(request: Request, file_group_id: int):
-    session = request.ctx.session
-    doc = _get_doc_by_file_group(session, file_group_id)
-    return json_response(_doc_response(doc))
-
-
-@docs_bp.delete('/<doc_ids:int>', name='doc_delete_one')
-@docs_bp.delete('/<doc_ids:[0-9,]+>', name='doc_delete_many')
-@openapi.description('Delete Docs')
+@docs_bp.delete('/<file_group_ids:int>', name='doc_delete_one')
+@docs_bp.delete('/<file_group_ids:[0-9,]+>', name='doc_delete_many')
+@openapi.description('Delete Docs by FileGroup IDs')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def delete_docs(_: Request, doc_ids: str):
+async def delete_docs(_: Request, file_group_ids: str):
     try:
-        doc_ids = [int(i) for i in str(doc_ids).split(',')]
+        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
     except ValueError:
-        raise ValidationError('Could not parse doc ids')
-    _delete_docs(*doc_ids)
+        raise ValidationError('Could not parse file group ids')
+    _delete_docs(*file_group_ids)
     return response.empty()
 
 

@@ -2103,12 +2103,8 @@ export async function getDocStatistics() {
     return await apiGet(`${DOCS_API}/statistics`);
 }
 
-export async function getDoc(docId) {
-    return await apiGet(`${DOCS_API}/${docId}`);
-}
-
-export async function getDocByFileGroup(fileGroupId) {
-    return await apiGet(`${DOCS_API}/view/${fileGroupId}`);
+export async function getDoc(fileGroupId) {
+    return await apiGet(`${DOCS_API}/${fileGroupId}`);
 }
 
 export async function deleteDocs(docIds) {

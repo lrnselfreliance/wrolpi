@@ -245,6 +245,28 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
     return results
 
 
+def search_all_zims(session: Session, search_str: str, tag_names: List[str] = None, offset: int = 0,
+                    limit: int = 10) -> List[Dict]:
+    """Search all Zim files that have auto_search enabled.
+
+    Returns a list of per-zim result dicts, each containing metadata and search results.
+    Each search entry includes `zim_id` so callers can fetch the full entry afterward."""
+    zims = Zims.get_all(session)
+    all_results = []
+    for zim in zims:
+        if not zim.auto_search:
+            continue
+        try:
+            result = headline_zim(session, search_str, zim.id, tag_names=tag_names, offset=offset, limit=limit)
+            if result.get('search'):
+                for entry in result['search']:
+                    entry['zim_id'] = zim.id
+                all_results.append(result)
+        except Exception as e:
+            logger.error(f'Failed to search Zim {zim}', exc_info=e)
+    return all_results
+
+
 @cachetools.func.mru_cache(maxsize=1_000)
 def get_estimates(search_str: str) -> List[int]:
     zims = Zims.get_all()

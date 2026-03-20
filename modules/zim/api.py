@@ -57,6 +57,19 @@ async def post_set_zim_auto_search(request: Request, zim_id: int, body: schema.Z
     return response.empty()
 
 
+@zim_bp.post('/search')
+@openapi.definition(
+    summary='Search all Zim files that have auto_search enabled',
+    body=schema.ZimSearchRequest,
+)
+@validate(schema.ZimSearchRequest)
+async def search_all_zims(request: Request, body: schema.ZimSearchRequest):
+    session = request.ctx.session
+    results = lib.search_all_zims(session, body.search_str, tag_names=body.tag_names, offset=body.offset,
+                                  limit=body.limit)
+    return json_response({'zims': results})
+
+
 @zim_bp.post('/search/<zim_id:[0-9]+>')
 @openapi.definition(
     summary='Search all entries of a Zim',

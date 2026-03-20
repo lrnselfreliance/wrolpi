@@ -420,13 +420,13 @@ export const useDomain = (domainId) => {
     return {domain, form, fetchDomain: form.fetcher};
 }
 
-export const useArchive = (archiveId) => {
+export const useArchive = (fileGroupId) => {
     const [archiveFileGroup, setArchiveFileGroup] = useState(null);
     const [history, setHistory] = useState(null);
 
     const fetchArchive = async () => {
         try {
-            const {file_group, history} = await getArchive(archiveId);
+            const {file_group, history} = await getArchive(fileGroupId);
             setArchiveFileGroup(file_group);
             setHistory(history);
         } catch (e) {
@@ -437,7 +437,7 @@ export const useArchive = (archiveId) => {
 
     useEffect(() => {
         fetchArchive();
-    }, [archiveId]);
+    }, [fileGroupId]);
 
     return {archiveFile: archiveFileGroup, history, fetchArchive};
 }
@@ -651,20 +651,20 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     }
 }
 
-export const useVideo = (videoId) => {
+export const useVideo = (fileGroupId) => {
     const [videoFile, setVideoFile] = useState(null);
     const [prevFile, setPrevFile] = useState(null);
     const [nextFile, setNextFile] = useState(null);
 
     const fetchVideo = async () => {
-        if (videoId && videoFile && Number(videoFile.video.id) !== Number(videoId)) {
+        if (fileGroupId && videoFile && Number(videoFile.id) !== Number(fileGroupId)) {
             // Video is changing.  Clear the old video before fetching.
             setVideoFile(null);
             setPrevFile(null);
             setNextFile(null);
         }
         try {
-            const [v, p, n] = await getVideo(videoId);
+            const [v, p, n] = await getVideo(fileGroupId);
             setVideoFile(v);
             setPrevFile(p);
             setNextFile(n);
@@ -684,19 +684,19 @@ export const useVideo = (videoId) => {
 
     useEffect(() => {
         fetchVideo();
-    }, [videoId]);
+    }, [fileGroupId]);
 
     return {videoFile, prevFile, nextFile, fetchVideo};
 }
 
-export const useVideoExtras = (videoId) => {
+export const useVideoExtras = (fileGroupId) => {
     // Fetches extra data to display on a Video's page.
     const [comments, setComments] = useState(null);
     const [captions, setCaptions] = useState(null);
 
     const fetchComments = async () => {
         try {
-            const result = await getVideoComments(videoId);
+            const result = await getVideoComments(fileGroupId);
             setComments(result.comments);
         } catch (e) {
             console.error(e);
@@ -705,7 +705,7 @@ export const useVideoExtras = (videoId) => {
 
     const fetchCaptions = async () => {
         try {
-            const result = await getVideoCaptions(videoId);
+            const result = await getVideoCaptions(fileGroupId);
             setCaptions(result.captions);
         } catch (e) {
             console.error(e);
@@ -713,14 +713,14 @@ export const useVideoExtras = (videoId) => {
     }
 
     useEffect(() => {
-        if (videoId) {
+        if (fileGroupId) {
             fetchComments();
             fetchCaptions();
         } else {
             setComments(null);
             setCaptions(null);
         }
-    }, [videoId]);
+    }, [fileGroupId]);
 
     return {comments, captions}
 }

@@ -213,13 +213,13 @@ async def handle_user_delete_duplicates(similar_videos: List[Video], video_url: 
         ranked_videos = sorted(ranked_videos, key=lambda i: (i[0], i[1].file_group.size), reverse=True)
         for rank, video in ranked_videos:
             fg = video.file_group
-            id_, title, path, source_id, size = video.id, fg.title, video.video_path, video.source_id, fg.size
+            fg_id, title, path, source_id, size = fg.id, fg.title, video.video_path, video.source_id, fg.size
             size = f'{size // 1_048_576} MB'
             path = get_relative_to_media_directory(path)
             if video_url:
-                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {id_} {video_url + str(id_)}')
+                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {fg_id} {video_url + str(fg_id)}')
             else:
-                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {id_}')
+                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {fg_id}')
 
         # Detect re-uploaded videos.
         # If video with exact title is uploaded day(s) later, then suggest deleting the oldest video.
@@ -325,7 +325,7 @@ if __name__ == '__main__':
                         help='The ID of the channel to search.  If empty, all channels will be searched.')
     parser.add_argument('-r', '--rank', type=float, default=MINIMUM_RANK,
                         help=f'The minimum similarity between the titles. Default: {MINIMUM_RANK}')
-    parser.add_argument('-u', '--video-url', default='http://127.0.0.1/videos/video/',
+    parser.add_argument('-u', '--video-url', default='http://127.0.0.1/videos/',
                         help='The URL where the videos can be viewed.')
     parser.add_argument('-d', '--directory',
                         help='Only search videos in this directory.')

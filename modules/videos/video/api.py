@@ -19,30 +19,30 @@ video_bp = Blueprint('Video', '/api/videos')
 logger = logger.getChild(__name__)
 
 
-@video_bp.get('/video/<video_id:int>')
+@video_bp.get('/<file_group_id:int>')
 @openapi.description('Get Video information')
 @openapi.response(HTTPStatus.OK, schema.VideoResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get(_: Request, video_id: int):
-    video, previous_video, next_video = lib.get_video_for_app(video_id)
+def video_get(_: Request, file_group_id: int):
+    video, previous_video, next_video = lib.get_video_for_app(file_group_id)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 
-@video_bp.get('/video/<video_id:int>/comments')
+@video_bp.get('/<file_group_id:int>/comments')
 @openapi.description('Get Video comments')
 @openapi.response(HTTPStatus.OK, schema.VideoCommentsResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get_comments(_: Request, video_id: int):
-    video = lib.get_video(video_id)
+def video_get_comments(_: Request, file_group_id: int):
+    video = lib.get_video(file_group_id)
     return json_response({'comments': video.get_comments()})
 
 
-@video_bp.get('/video/<video_id:int>/captions')
+@video_bp.get('/<file_group_id:int>/captions')
 @openapi.description('Get Video captions')
 @openapi.response(HTTPStatus.OK, schema.VideoCaptionsResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get_captions(_: Request, video_id: int):
-    video = lib.get_video(video_id)
+def video_get_captions(_: Request, file_group_id: int):
+    video = lib.get_video(file_group_id)
     return json_response({'captions': video.file_group.d_text})
 
 
@@ -72,21 +72,21 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
     return json_response(ret)
 
 
-@video_bp.delete('/video/<video_ids:[0-9,]+>', name='Video Delete Many')
-@video_bp.delete('/video/<video_ids:int>', name='Video Delete One')
+@video_bp.delete('/<file_group_ids:[0-9,]+>', name='Video Delete Many')
+@video_bp.delete('/<file_group_ids:int>', name='Video Delete One')
 @openapi.description('Delete videos.')
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def video_delete(request: Request, video_ids: str):
+async def video_delete(request: Request, file_group_ids: str):
     try:
-        video_ids = [int(i) for i in str(video_ids).split(',')]
+        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
     except Exception:
-        raise ValidationError('Unable to parse video ids')
+        raise ValidationError('Unable to parse file group ids')
 
     session = request.ctx.session
-    lib.delete_videos(session, *video_ids)
+    lib.delete_videos(session, *file_group_ids)
 
     save_channels_config.activate_switch()
-    Events.send_deleted(f'Deleted {len(video_ids)} videos')
+    Events.send_deleted(f'Deleted {len(file_group_ids)} videos')
     return response.empty()

@@ -411,7 +411,7 @@ class Archive(Base, ModelHelper):
     @property
     def location(self):
         """The location where this Archive can be viewed in the UI."""
-        return f'/archive/{self.id}'
+        return f'/archives/{self.file_group_id}'
 
     @property
     def download_directory(self) -> pathlib.Path:

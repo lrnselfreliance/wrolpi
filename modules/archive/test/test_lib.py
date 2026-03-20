@@ -13,8 +13,8 @@ from modules.archive import lib
 from modules.archive.lib import ArchiveDownloaderConfigValidator
 from modules.archive.lib import format_archive_filename
 from modules.archive.lib import get_archive_downloader_config
-from modules.archive.lib import get_or_create_domain_collection, get_new_archive_files, delete_archives, \
-    model_archive_result, get_domains
+from modules.archive.lib import get_or_create_domain_collection, get_new_archive_files, \
+    delete_archives_by_file_group_ids, model_archive_result, get_domains
 from modules.archive.models import Archive
 from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.collections import Collection
@@ -241,7 +241,7 @@ async def test_delete_archive(async_client, test_session, archive_factory):
     archive3_paths = list(archive3.my_paths())
 
     # Delete the oldest.
-    delete_archives(archive1.id, archive3.id)
+    delete_archives_by_file_group_ids(archive1.file_group_id, archive3.file_group_id)
     assert test_session.query(Archive).count() == 1
     assert test_session.query(FileGroup).count() == 1
     # Files were deleted.
@@ -251,7 +251,7 @@ async def test_delete_archive(async_client, test_session, archive_factory):
     assert archive2_paths and all(i.is_file() for i in archive2_paths)
 
     # Delete the last archive.  The domain collection should also be deleted.
-    delete_archives(archive2.id)
+    delete_archives_by_file_group_ids(archive2.file_group_id)
     assert test_session.query(Archive).count() == 0
     domain = test_session.query(Collection).filter_by(kind='domain').one_or_none()
     assert domain is None

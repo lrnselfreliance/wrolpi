@@ -104,8 +104,8 @@ function archiveFileLink(path, directory = false) {
 
 function ArchivePage() {
     const navigate = useNavigate();
-    const {archiveId} = useParams();
-    const {archiveFile, history, fetchArchive} = useArchive(archiveId);
+    const {fileGroupId} = useParams();
+    const {archiveFile, history, fetchArchive} = useArchive(fileGroupId);
     const {theme} = useContext(ThemeContext);
 
     let title = archiveFile ? archiveFile.title ? archiveFile.title : archiveFile.name : null;
@@ -144,7 +144,7 @@ function ArchivePage() {
         null;
 
     const localDeleteArchive = async () => {
-        await deleteArchives([data.id]);
+        await deleteArchives([archiveFile.id]);
         toast({
             type: 'success',
             title: 'Archive Deleted',
@@ -168,7 +168,7 @@ function ArchivePage() {
     }
 
     const localGenerateScreenshot = async () => {
-        const success = await generateArchiveScreenshot(data.id);
+        const success = await generateArchiveScreenshot(archiveFile.id);
         if (success) {
             // Refresh the archive data after a short delay to show the new screenshot
             setTimeout(() => fetchArchive(), 2000);
@@ -218,7 +218,7 @@ function ArchivePage() {
     const domain = data.domain ? data.domain : null;
     let domainHeader = <p>Unknown</p>;
     if (domain) {
-        const domainUrl = `/archive?domain=${domain}`;
+        const domainUrl = `/archives?domain=${domain}`;
         domainHeader = <Header as='h4'>
             <a href={domainUrl}>{domain}</a>
         </Header>;
@@ -364,7 +364,7 @@ export function ArchiveCard({file}) {
     }
 
     const domain = data ? data.domain : null;
-    const domainUrl = `/archive?domain=${domain}`;
+    const domainUrl = `/archives?domain=${domain}`;
 
     const title = file.title || data.url;
     const header = <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>{title}</ExternalCardLink>;
@@ -400,7 +400,7 @@ export function ArchiveCard({file}) {
                 }
             </CardMeta>
             <CardDescription>
-                <Link to={`/archive/${data.id}`}>
+                <Link to={`/archives/${file.id}`}>
                     <Button icon='file alternate' content='Details'
                             labelPosition='left'/>
                 </Link>
@@ -428,9 +428,9 @@ const DOMAIN_COLUMNS = [
 ];
 
 const DOMAIN_ROUTES = {
-    list: '/archive/domains',
-    edit: '/archive/domain/:id/edit',
-    search: '/archive',
+    list: '/archives/domains',
+    edit: '/archives/domain/:id/edit',
+    search: '/archives',
     searchParam: 'domain'
 };
 
@@ -606,7 +606,7 @@ export function DomainEditPage() {
         try {
             let response = await deleteDomain(parseInt(domainId));
             if (response.status === 204) {
-                navigate('/archive/domains');
+                navigate('/archives/domains');
             }
         } catch (e) {
             console.error('Failed to delete domain', e);
@@ -663,7 +663,7 @@ export function DomainEditPage() {
 
     return <>
         <BackButton/>
-        <Link to={`/archive?domain=${domain?.domain}`}>
+        <Link to={`/archives?domain=${domain?.domain}`}>
             <Button>Archives</Button>
         </Link>
 
@@ -1185,7 +1185,7 @@ function ArchivesPage() {
     // Domain header with edit link when filtering by domain
     let header;
     if (domainObj && domainObj.domain) {
-        const editLink = `/archive/domain/${domainObj.id}/edit`;
+        const editLink = `/archives/domain/${domainObj.id}/edit`;
         header = <>
             <Header as='h1'>
                 {domainObj.domain}
@@ -1241,7 +1241,7 @@ export function ArchiveRowCells({file}) {
     let {sort} = useSearchOrder();
     sort = sort ? sort.replace(/^-+/, '') : null;
 
-    const archiveUrl = `/archive/${data.id}`;
+    const archiveUrl = `/archives/${file.id}`;
     const posterPath = findPosterPath(file);
     const posterUrl = posterPath ? `/media/${encodeMediaPath(posterPath)}` : null;
 
@@ -1340,17 +1340,17 @@ export function ArchiveRoute() {
     const links = [
         {
             text: 'Archives',
-            to: '/archive',
+            to: '/archives',
             end: true,
-            isActive: () => path === '/archive' || /^\/archive\/\d+$/.test(path)
+            isActive: () => path === '/archives' || /^\/archives\/\d+$/.test(path)
         },
         {
             text: 'Domains',
-            to: '/archive/domains',
-            isActive: () => path.startsWith('/archive/domain')
+            to: '/archives/domains',
+            isActive: () => path.startsWith('/archives/domain')
         },
-        {text: 'Settings', to: '/archive/settings'},
-        {text: 'Statistics', to: '/archive/statistics'},
+        {text: 'Settings', to: '/archives/settings'},
+        {text: 'Statistics', to: '/archives/statistics'},
     ];
     return <PageContainer>
         <TabLinks links={links}/>
@@ -1360,7 +1360,7 @@ export function ArchiveRoute() {
             <Route path='domain/:domainId/edit' element={<DomainEditPage/>}/>
             <Route path='settings' element={<ArchiveSettingsPage/>}/>
             <Route path='statistics' element={<ArchiveStatistics/>}/>
-            <Route path=':archiveId' element={<ArchivePage/>}/>
+            <Route path=':fileGroupId' element={<ArchivePage/>}/>
         </Routes>
     </PageContainer>
 }

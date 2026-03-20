@@ -90,7 +90,7 @@ class ArchiveDownloader(Downloader, ABC):
 
             logger.info(f'Successfully downloaded Archive {download.url} {archive}')
 
-            return DownloadResult(success=True, location=f'/archive/{archive.id}')
+            return DownloadResult(success=True, location=archive.location)
 
     async def do_singlefile(self, download: Download) -> bytes:
         """Create a Singlefile from the archive's URL."""

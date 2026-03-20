@@ -36,7 +36,7 @@ function updateFavicon(colorName) {
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
-    {text: 'Archive', to: '/archive', key: 'archive'},
+    {text: 'Archive', to: '/archives', key: 'archive'},
     {text: 'Docs', to: '/docs', key: 'docs'},
     {text: 'Map', to: '/map', key: 'map'},
     {text: 'Zim', to: '/zim', key: 'zim'},
@@ -208,7 +208,7 @@ export function NavBar() {
                 if (collectionKind === 'channel') {
                     processingLink = `/videos/channel/${collectionId}/edit`;
                 } else if (collectionKind === 'domain') {
-                    processingLink = `/archive/domain/${collectionId}/edit`;
+                    processingLink = `/archives/domain/${collectionId}/edit`;
                 } else {
                     processingLink = '/files';
                 }
@@ -217,7 +217,7 @@ export function NavBar() {
                 if (collectionKind === 'channel') {
                     processingLink = '/videos/settings';
                 } else if (collectionKind === 'domain') {
-                    processingLink = '/archive/settings';
+                    processingLink = '/archives/settings';
                 } else {
                     processingLink = '/files';
                 }

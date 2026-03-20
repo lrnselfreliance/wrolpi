@@ -773,7 +773,6 @@ def _detect_conflicts_with_details(
                     'title': source_path.stem,
                     'model_type': collection.kind,
                     'size': 0,
-                    'video_id': None,
                     'archive_id': None,
                     'poster_path': None,
                     'published_datetime': None,
@@ -789,7 +788,6 @@ def _detect_conflicts_with_details(
                 'title': file_group.title or source_path.stem,
                 'model_type': file_group.model or collection.kind,
                 'size': file_group.size or 0,
-                'video_id': None,
                 'archive_id': None,
                 'poster_path': None,
                 'published_datetime': None,
@@ -802,7 +800,6 @@ def _detect_conflicts_with_details(
                 from modules.videos.models import Video
                 video = session.query(Video).filter_by(file_group_id=file_group.id).one_or_none()
                 if video:
-                    file_info['video_id'] = video.id
                     file_info['source_id'] = video.source_id
                     # Date is stored on file_group
                     if file_group.published_datetime:
@@ -1264,8 +1261,8 @@ async def get_conflict_details_with_ffprobe(
     videos_processed = 0
     for conflict in preview.conflicts:
         for file_info in conflict['conflicting_files']:
-            if file_info.get('video_id'):
-                video = session.query(Video).get(file_info['video_id'])
+            if file_info.get('file_group_id') and file_info.get('model_type') == 'channel':
+                video = session.query(Video).filter_by(file_group_id=file_info['file_group_id']).one_or_none()
                 if video and not video.ffprobe_json:
                     try:
                         await video.get_ffprobe_json()

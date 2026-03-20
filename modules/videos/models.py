@@ -366,6 +366,16 @@ class Video(ModelHelper, Base):
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
+    @staticmethod
+    def find_by_file_group_id(session: Session, file_group_id: int) -> 'Video':
+        """Find a Video by its FileGroup ID, raises an exception if it cannot be found.
+
+        @raise UnknownVideo: if the Video can not be found"""
+        video = session.query(Video).filter(Video.file_group_id == file_group_id).one_or_none()
+        if not video:
+            raise UnknownVideo(f'Cannot find Video with file_group_id {file_group_id}')
+        return video
+
     def add_tag(self, session: Session, tag_id_or_name: int | str) -> TagFile:
         return self.file_group.add_tag(session, tag_id_or_name)
 
@@ -526,12 +536,9 @@ class Video(ModelHelper, Base):
     @property
     def location(self) -> str:
         """The href of the video in the App."""
-        if not self.id:
-            raise RuntimeError('Video id not set.  Flush to DB.')
-
-        if self.channel_id:
-            return f'/videos/channel/{self.channel_id}/video/{self.id}'
-        return f'/videos/video/{self.id}'
+        if not self.file_group_id:
+            raise RuntimeError('Video file_group_id not set.')
+        return f'/videos/{self.file_group_id}'
 
     def get_comments(self) -> list | None:
         return (self.get_info_json() or dict()).get('comments')

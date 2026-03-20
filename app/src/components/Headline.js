@@ -82,13 +82,10 @@ export const Headlines = ({results}) => {
         const {model, data, video} = result;
 
         if (model === 'video' && !_.isEmpty(video)) {
-            const {channel} = video;
-            const video_url = channel
-                ? `/videos/channel/${channel.id}/video/${video.id}`
-                : `/videos/video/${video.id}`;
+            const video_url = `/videos/${result.id}`;
             headlines = [...headlines, <FileHeadline key={result['key']} file={result} to={video_url}/>];
         } else if (model === 'archive' && !_.isEmpty(data)) {
-            headlines = [...headlines, <FileHeadline key={result['key']} file={result} to={`/archive/${data.id}`}/>];
+            headlines = [...headlines, <FileHeadline key={result['key']} file={result} to={`/archives/${result.id}`}/>];
         } else {
             headlines = [...headlines, <FileHeadline key={result['key']} file={result}/>];
         }

@@ -1005,9 +1005,7 @@ class VideoDownloader(Downloader, ABC):
             # Find the existing video, replace its info json.
             video = Video.get_by_url(url, session)
 
-            location = f'/videos/video/{video.id}'
-            if video.channel_id:
-                location = f'/videos/channel/{video.channel_id}/video/{video.id}'
+            location = video.location
 
         # Download video info json directly using yt-dlp.
         try:

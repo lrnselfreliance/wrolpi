@@ -17,7 +17,6 @@ import {humanFileSize, isoDatetimeToString} from '../Common';
  *   - title: string - File title
  *   - model_type: 'video'|'archive' - Type of content
  *   - size: number - File size in bytes
- *   - video_id: number|null - Video ID if model_type is 'video'
  *   - archive_id: number|null - Archive ID if model_type is 'archive'
  *   - poster_path: string|null - Path to thumbnail/poster image
  *   - published_datetime: string|null - ISO datetime string
@@ -35,8 +34,8 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
         setLocalError(null);
 
         try {
-            if (file.model_type === 'video' && file.video_id) {
-                await deleteVideos([file.video_id]);
+            if (file.model_type === 'video' && file.file_group_id) {
+                await deleteVideos([file.file_group_id]);
             } else if (file.model_type === 'archive' && file.archive_id) {
                 await deleteArchives([file.archive_id]);
             }

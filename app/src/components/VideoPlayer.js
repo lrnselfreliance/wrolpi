@@ -175,16 +175,7 @@ const Comments = ({comments, video}) => {
 // Generate a video page URL for a file object.
 function getVideoLink(file) {
     if (!file || !file.video) return null;
-    const {video} = file;
-    const channel = video.channel ? video.channel : null;
-
-    if (file.slug) {
-        return `/videos/video/${file.slug}`;
-    } else if (channel) {
-        return `/videos/channel/${channel.id}/video/${video.id}`;
-    } else {
-        return `/videos/video/${video.id}`;
-    }
+    return `/videos/${file.id}`;
 }
 
 function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
@@ -463,7 +454,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         color='red'
                         confirmContent='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
                         confirmButton='Delete'
-                        onClick={async () => await handleDeleteVideo(video.id)}
+                        onClick={async () => await handleDeleteVideo(videoFile.id)}
                         obeyWROLMode={true}
                     >Delete</APIButton>
                     <APIButton

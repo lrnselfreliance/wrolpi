@@ -2,7 +2,7 @@ import React, {useContext} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider} from "react-router";
-import {VideosRoute, VideoWrapper} from "./components/Videos";
+import {VideosTabLayout, VideosPage, VideosSettingsPage, VideosStatistics, VideoWrapper} from "./components/Videos";
 import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
@@ -12,6 +12,7 @@ import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
+import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./components/Channels";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
@@ -84,13 +85,22 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route index element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='search/*' element={<ErrorBoundary><DashboardPage/></ErrorBoundary>}/>
     <Route path='donate' element={<DonatePage/>}/>
-    <Route path='videos/video/:videoId' exact element={<ErrorBoundary><VideoWrapper/></ErrorBoundary>}/>
-    <Route path='videos/channel/:channelId/video/:videoId' exact element={<ErrorBoundary><VideoWrapper/></ErrorBoundary>}/>
-    <Route path="videos/*" element={<ErrorBoundary><VideosRoute/></ErrorBoundary>}/>
+    <Route path='videos'>
+        <Route element={<ErrorBoundary><VideosTabLayout/></ErrorBoundary>}>
+            <Route index element={<ErrorBoundary><VideosPage/></ErrorBoundary>}/>
+            <Route path='channel' element={<ErrorBoundary><ChannelsPage/></ErrorBoundary>}/>
+            <Route path='channel/new' element={<ErrorBoundary><ChannelNewPage/></ErrorBoundary>}/>
+            <Route path='channel/:channelId/edit' element={<ErrorBoundary><ChannelEditPage/></ErrorBoundary>}/>
+            <Route path='channel/:channelId/video' element={<ErrorBoundary><VideosPage/></ErrorBoundary>}/>
+            <Route path='settings' element={<ErrorBoundary><VideosSettingsPage/></ErrorBoundary>}/>
+            <Route path='statistics' element={<ErrorBoundary><VideosStatistics/></ErrorBoundary>}/>
+        </Route>
+        <Route path=':fileGroupId' element={<ErrorBoundary><VideoWrapper/></ErrorBoundary>}/>
+    </Route>
     <Route path="admin/*" element={<ErrorBoundary><AdminRoute/></ErrorBoundary>}/>
     <Route path="more/*" element={<ErrorBoundary><MoreRoute/></ErrorBoundary>}/>
     <Route path="inventory/*" element={<ErrorBoundary><InventoryRoute/></ErrorBoundary>}/>
-    <Route path='archive/*' element={<ErrorBoundary><ArchiveRoute/></ErrorBoundary>}/>
+    <Route path='archives/*' element={<ErrorBoundary><ArchiveRoute/></ErrorBoundary>}/>
     <Route path='docs/*' element={<ErrorBoundary><DocsRoute/></ErrorBoundary>}/>
     <Route path='map/*' element={<ErrorBoundary><MapRoute/></ErrorBoundary>}/>
     <Route path='zim/*' element={<ErrorBoundary><ZimRoute/></ErrorBoundary>}/>

@@ -372,12 +372,12 @@ async def test_videos_downloader_config_api(async_client, test_directory, test_v
 def test_video_location(test_session, video_factory, channel_factory, async_client):
     # Video location without a channel, it opens the preview.
     video1 = video_factory(title='vid1')
-    assert video1.location == '/videos/video/1'
+    assert video1.location == f'/videos/{video1.file_group_id}'
 
     # Video location with a channel.
     channel = channel_factory(name='ChannelName')
     video2 = video_factory(title='vid2', channel_id=channel.id)
-    assert video2.location == '/videos/channel/1/video/2'
+    assert video2.location == f'/videos/{video2.file_group_id}'
 
 
 def test_format_video_filename_without_upload_date(test_session, video_factory, test_videos_downloader_config, caplog):

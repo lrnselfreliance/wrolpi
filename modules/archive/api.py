@@ -31,28 +31,28 @@ async def statistics(_: Request):
     return json_response(ret, HTTPStatus.OK)
 
 
-@archive_bp.get('/<archive_id:int>')
-@openapi.description('Get an archive')
+@archive_bp.get('/<file_group_id:int>')
+@openapi.description('Get an archive by its FileGroup ID')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-async def get_archive(request: Request, archive_id: int):
+async def get_archive(request: Request, file_group_id: int):
     session = request.ctx.session
-    archive = lib.get_archive(session, archive_id)
+    archive = lib.get_archive_by_file_group_id(session, file_group_id)
     archive_file_group = archive.file_group.__json__()
     history = [i.file_group.__json__() for i in archive.history]
     return json_response({'file_group': archive_file_group, 'history': history})
 
 
-@archive_bp.delete('/<archive_ids:int>', name='archive_delete_one')
-@archive_bp.delete('/<archive_ids:[0-9,]+>', name='archive_delete_many')
-@openapi.description('Delete Archives')
+@archive_bp.delete('/<file_group_ids:int>', name='archive_delete_one')
+@archive_bp.delete('/<file_group_ids:[0-9,]+>', name='archive_delete_many')
+@openapi.description('Delete Archives by FileGroup IDs')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def delete_archive(_: Request, archive_ids: str):
+async def delete_archive(_: Request, file_group_ids: str):
     try:
-        archive_ids = [int(i) for i in str(archive_ids).split(',')]
+        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
     except ValueError:
-        raise ValidationError('Could not parse archive ids')
-    lib.delete_archives(*archive_ids)
+        raise ValidationError('Could not parse file group ids')
+    lib.delete_archives_by_file_group_ids(*file_group_ids)
     return response.empty()
 
 
@@ -253,25 +253,26 @@ async def post_upload_singlefile(request: Request):
     return json_response(dict(), status=HTTPStatus.OK)
 
 
-@archive_bp.post('/<archive_id:int>/generate_screenshot')
+@archive_bp.post('/<file_group_id:int>/generate_screenshot')
 @openapi.description('Generate a screenshot for an Archive that does not have one')
 @openapi.response(HTTPStatus.OK, description='Screenshot generation queued')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-async def post_generate_screenshot(request: Request, archive_id: int):
+async def post_generate_screenshot(request: Request, file_group_id: int):
     """Queue a screenshot generation request for an Archive."""
     session = request.ctx.session
     # Verify archive exists
     try:
-        archive = lib.get_archive(session, archive_id)
+        archive = lib.get_archive_by_file_group_id(session, file_group_id)
     except Exception:
-        return json_response({'error': f'Archive {archive_id} not found'}, status=HTTPStatus.NOT_FOUND)
+        return json_response({'error': f'Archive with FileGroup {file_group_id} not found'}, status=HTTPStatus.NOT_FOUND)
 
     if not archive.singlefile_path:
         return json_response({'error': 'Archive has no singlefile'}, status=HTTPStatus.BAD_REQUEST)
 
-    # Queue the screenshot generation request
+    # Queue the screenshot generation request using internal archive ID
+    archive_id = archive.id
     logger.info(f'Queueing screenshot generation for Archive {archive_id}')
     api_app.shared_ctx.archive_screenshots.put(archive_id)
     generate_screenshot_switch_handler.activate_switch(context=dict(archive_id=archive_id))

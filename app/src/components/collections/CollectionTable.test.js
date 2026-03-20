@@ -54,9 +54,9 @@ const DOMAIN_COLUMNS = [
 ];
 
 const DOMAIN_ROUTES = {
-    list: '/archive/domains',
-    edit: '/archive/domain/:id/edit',
-    search: '/archive',
+    list: '/archives/domains',
+    edit: '/archives/domain/:id/edit',
+    search: '/archives',
     searchParam: 'domain'
 };
 

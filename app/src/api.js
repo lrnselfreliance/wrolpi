@@ -225,30 +225,30 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     }
 }
 
-export async function getVideo(video_id) {
-    const response = await apiGet(`${VIDEOS_API}/video/${video_id}`);
+export async function getVideo(fileGroupId) {
+    const response = await apiGet(`${VIDEOS_API}/${fileGroupId}`);
     let data = await response.json();
     return [data['file_group'], data['prev'], data['next']];
 }
 
-export async function getVideoComments(videoId) {
-    const response = await apiGet(`${VIDEOS_API}/video/${videoId}/comments`);
+export async function getVideoComments(fileGroupId) {
+    const response = await apiGet(`${VIDEOS_API}/${fileGroupId}/comments`);
     let data = await response.json();
     return {
         comments: data.comments,
     }
 }
 
-export async function getVideoCaptions(videoId) {
-    const response = await apiGet(`${VIDEOS_API}/video/${videoId}/captions`);
+export async function getVideoCaptions(fileGroupId) {
+    const response = await apiGet(`${VIDEOS_API}/${fileGroupId}/captions`);
     let data = await response.json();
     return {
         captions: data.captions,
     }
 }
 
-export async function deleteVideos(videoIds) {
-    if (!videoIds || videoIds.length === 0) {
+export async function deleteVideos(fileGroupIds) {
+    if (!fileGroupIds || fileGroupIds.length === 0) {
         toast({
             type: 'error',
             title: 'Empty request',
@@ -256,9 +256,9 @@ export async function deleteVideos(videoIds) {
             time: 5000,
         });
     }
-    console.info(`Deleting Videos: ${videoIds}`);
-    const i = videoIds.join(',');
-    const response = await apiDelete(`${VIDEOS_API}/video/${i}`);
+    console.info(`Deleting Videos: ${fileGroupIds}`);
+    const i = fileGroupIds.join(',');
+    const response = await apiDelete(`${VIDEOS_API}/${i}`);
     if (response.status !== 204) {
         const message = await getErrorMessage(response, 'Failed to delete videos.');
         toast({
@@ -746,7 +746,7 @@ export async function deleteArchives(archiveIds) {
     }
     console.log(`Deleting Archives: ${archiveIds}`);
     let i = archiveIds.join(',');
-    const response = await apiDelete(`${API_URI}/archive/${i}`);
+    const response = await apiDelete(`${ARCHIVES_API}/${i}`);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Failed to delete archives');
         toast({
@@ -1110,8 +1110,8 @@ export async function fetchCollectionConflicts(collectionId) {
     }
 }
 
-export async function getArchive(archiveId) {
-    const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
+export async function getArchive(fileGroupId) {
+    const response = await apiGet(`${ARCHIVES_API}/${fileGroupId}`);
     if (response.ok) {
         const data = await response.json();
         return {
@@ -1126,8 +1126,8 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function generateArchiveScreenshot(archiveId) {
-    const response = await apiPost(`${ARCHIVES_API}/${archiveId}/generate_screenshot`);
+export async function generateArchiveScreenshot(fileGroupId) {
+    const response = await apiPost(`${ARCHIVES_API}/${fileGroupId}/generate_screenshot`);
     if (response.ok) {
         toast({
             type: 'success',

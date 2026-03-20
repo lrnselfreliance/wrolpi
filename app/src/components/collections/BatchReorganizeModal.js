@@ -336,7 +336,7 @@ export function BatchReorganizeModal({
                                     as={Link}
                                     to={kind === 'channel'
                                         ? `/videos/channel/${status.failed_collection.channel_id || status.failed_collection.id}/edit`
-                                        : `/archive/domain/${status.failed_collection.id}/edit`
+                                        : `/archives/domain/${status.failed_collection.id}/edit`
                                     }
                                     size='small'
                                 >

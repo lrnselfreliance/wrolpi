@@ -273,7 +273,7 @@ async def test_delete_video(async_client, test_session, video_factory, test_down
     files = video.file_group.my_paths()
     test_session.commit()
 
-    request, response = await async_client.delete(f'/api/videos/video/{video.id}')
+    request, response = await async_client.delete(f'/api/videos/{video.file_group_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(Video).count() == 0, 'Video was not deleted.'

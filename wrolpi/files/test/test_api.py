@@ -684,7 +684,7 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'
     assert isinstance(file_group.get_model_record(), Video)
-    assert file_group.location == '/videos/video/2'
+    assert file_group.location == f'/videos/{file_group.id}'
     # Video was modeled, but has no Channel.
     video: Video = test_session.query(Video).one()
     assert video.video_path

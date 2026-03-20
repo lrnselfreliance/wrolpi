@@ -18,7 +18,7 @@ export const SHORTCUTS = [
     // Navigation (g+ sequences)
     {keys: 'g h', description: 'Go to Home', category: 'Navigation', path: '/'},
     {keys: 'g v', description: 'Go to Videos', category: 'Navigation', path: '/videos'},
-    {keys: 'g a', description: 'Go to Archives', category: 'Navigation', path: '/archive'},
+    {keys: 'g a', description: 'Go to Archives', category: 'Navigation', path: '/archives'},
     {keys: 'g m', description: 'Go to Map', category: 'Navigation', path: '/map'},
     {keys: 'g z', description: 'Go to Zim', category: 'Navigation', path: '/zim'},
     {keys: 'g f', description: 'Go to Files', category: 'Navigation', path: '/files'},
@@ -164,7 +164,7 @@ export function KeyboardShortcutsProvider({children}) {
     const NAV_KEYS = {
         'h': '/',
         'v': '/videos',
-        'a': '/archive',
+        'a': '/archives',
         'm': '/map',
         'z': '/zim',
         'f': '/files',

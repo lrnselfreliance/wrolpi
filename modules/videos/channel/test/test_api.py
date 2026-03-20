@@ -42,14 +42,14 @@ async def test_get_video(async_client, test_session, simple_channel, video_facto
     test_session.commit()
 
     # Test that a 404 is returned when no video exists
-    _, response = await async_client.get('/api/videos/video/10')
+    _, response = await async_client.get('/api/videos/10')
     assert response.status_code == HTTPStatus.NOT_FOUND, response.json
     assert response.json == {'code': 'UNKNOWN_VIDEO',
-                             'error': 'Cannot find Video with id 10',
+                             'error': 'Cannot find Video with file_group_id 10',
                              'message': 'The video could not be found.'}
 
     # Get the video info we inserted
-    _, response = await async_client.get('/api/videos/video/1')
+    _, response = await async_client.get(f'/api/videos/{video1.file_group_id}')
     assert response.status_code == HTTPStatus.OK, response.json
     assert_dict_contains(response.json['file_group'], {'title': 'vid1'})
 
@@ -97,7 +97,7 @@ async def test_channel_no_download_frequency(async_client, test_session, test_di
 @pytest.mark.asyncio
 async def test_video_file_name(test_session, simple_video, async_client):
     """If a Video has no title, the front-end can use the file name as the title."""
-    _, resp = await async_client.get(f'/api/videos/video/{simple_video.id}')
+    _, resp = await async_client.get(f'/api/videos/{simple_video.file_group_id}')
     assert resp.status_code == HTTPStatus.OK
     assert resp.json['file_group']['video']['video_path'] == 'simple_video.mp4'
     assert resp.json['file_group']['video'].get('stem') == 'simple_video'

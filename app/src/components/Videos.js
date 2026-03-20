@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
-import {Link, Route, Routes, useParams} from "react-router";
+import {Link, Outlet, useParams} from "react-router";
 import {useHotkeys} from "react-hotkeys-hook";
 import {
     APIButton,
@@ -46,7 +46,6 @@ import {
     StatisticValue,
     TableCell
 } from "semantic-ui-react";
-import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
 import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -72,17 +71,17 @@ import {VideoFormatSelectorForm, VideoResolutionSelectorForm} from "./Download";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
 
 export function VideoWrapper() {
-    const {videoId} = useParams();
-    const {videoFile, prevFile, nextFile, fetchVideo} = useVideo(videoId);
+    const {fileGroupId} = useParams();
+    const {videoFile, prevFile, nextFile, fetchVideo} = useVideo(fileGroupId);
 
-    // Scroll to the top when videoId changes.
-    useEffect(scrollToTop, [videoId]);
+    // Scroll to the top when fileGroupId changes.
+    useEffect(scrollToTop, [fileGroupId]);
 
     return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile} fetchVideo={fetchVideo}
                       autoplay={true}/>
 }
 
-function VideosPage() {
+export function VideosPage() {
 
     const {channelId} = useParams();
     const {searchParams} = React.useContext(QueryContext);
@@ -156,8 +155,8 @@ function VideosPage() {
     }
 
     const onDelete = async () => {
-        const videoIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['video']['id']);
-        await deleteVideos(videoIds);
+        const fileGroupIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['id']);
+        await deleteVideos(fileGroupIds);
         await fetchVideos();
         setSelectedVideos([]);
     }
@@ -308,7 +307,7 @@ function VideoFileNameForm({form}) {
     />
 }
 
-function VideosSettingsPage() {
+export function VideosSettingsPage() {
     useTitle('Videos Settings');
 
     const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -767,7 +766,7 @@ function CookiesSettingsSection() {
     </Segment>;
 }
 
-function VideosStatistics() {
+export function VideosStatistics() {
     useTitle('Video Statistics');
 
     const {statistics} = useVideoStatistics();
@@ -828,7 +827,7 @@ function VideosStatistics() {
     </>
 }
 
-export function VideosRoute(props) {
+export function VideosTabLayout() {
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
         {text: 'Channels', to: '/videos/channel', key: 'channel'},
@@ -838,16 +837,7 @@ export function VideosRoute(props) {
 
     return <PageContainer>
         <TabLinks links={links}/>
-        <Routes>
-            <Route path='/' exact element={<VideosPage/>}/>
-            <Route path='channel' exact element={<ChannelsPage/>}/>
-            <Route path='settings' exact element={<VideosSettingsPage/>}/>
-            <Route path='statistics' exact element={<VideosStatistics/>}/>
-            <Route path='channel/new' exact element={<ChannelNewPage/>}/>
-            <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
-            <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
-            <Route path='/video/:videoSlug' exact element={<VideosPage/>}/>
-        </Routes>
+        <Outlet/>
     </PageContainer>
 }
 
@@ -858,21 +848,13 @@ export function VideoCard({file}) {
     const sortField = sort ? sort.replace(/^-/, '') : null;
 
     // Default to video FilePreview for lone video files.
-    let video_url;
+    let video_url = `/videos/${file.id}`;
 
     // A video may not have a channel.
     const channel = video.channel ? video.channel : null;
     let channel_url = null;
     if (channel) {
-        // Link to Video in the Channel if possible.
         channel_url = `/videos/channel/${channel.id}/video`;
-        video_url = `/videos/channel/${channel.id}/video/${video.id}`;
-    } else if (file.files.length > 1) {
-        // No Channel, but the video has multiple files (subtitles, etc.).  Use the full VideoPage.
-        video_url = `/videos/video/${video.id}`;
-    }
-    if (file.slug) {
-        video_url = `/videos/video/${file.slug}`;
     }
 
     let poster = <CardPoster to={video_url} file={file}/>;
@@ -929,7 +911,7 @@ export function VideoRowCells({file}) {
     let {sort} = useSearchOrder();
     sort = sort ? sort.replace(/^-+/, '') : null;
 
-    let video_url = `/videos/video/${video.id}`;
+    let video_url = `/videos/${file.id}`;
     const poster_path = findPosterPath(file);
     const poster_url = poster_path ? `/media/${encodeMediaPath(poster_path)}` : null;
 

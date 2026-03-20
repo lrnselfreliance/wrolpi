@@ -2136,7 +2136,6 @@ async def test_reorganize_preview_returns_conflict_details(async_client, test_di
     # Verify file details are included
     for file_info in conflict['conflicting_files']:
         assert 'file_group_id' in file_info
-        assert 'video_id' in file_info
         assert 'current_path' in file_info
         assert 'title' in file_info
         assert 'model_type' in file_info
@@ -2277,13 +2276,13 @@ async def test_conflict_preview_includes_quality_rank(async_client, test_directo
         f"Files should be sorted by quality_rank descending. Got: {ranks}"
 
     # The video with more metadata (video2) should rank higher
-    video2_info = next(f for f in files if f['video_id'] == video2.id)
-    video1_info = next(f for f in files if f['video_id'] == video1.id)
+    video2_info = next(f for f in files if f['file_group_id'] == video2.file_group_id)
+    video1_info = next(f for f in files if f['file_group_id'] == video1.file_group_id)
     assert video2_info['quality_rank'] > video1_info['quality_rank'], \
         f"Video with more metadata should rank higher. v2={video2_info['quality_rank']}, v1={video1_info['quality_rank']}"
 
     # The highest ranked video should be first
-    assert files[0]['video_id'] == video2.id, "Highest ranked video should be first"
+    assert files[0]['file_group_id'] == video2.file_group_id, "Highest ranked video should be first"
 
 
 # ============================================================================

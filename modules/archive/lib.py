@@ -1110,14 +1110,22 @@ def get_archive(session: Session, archive_id: int) -> Archive:
     return archive
 
 
-def delete_archives(*archive_ids: List[int]):
-    """Delete an Archive and all of its files."""
-    with get_db_session(commit=True) as session:
-        archives: List[Archive] = list(session.query(Archive).filter(Archive.id.in_(archive_ids)))
-        if not archives:
-            raise UnknownArchive(f'Unknown Archives with IDs: {", ".join(map(str, archive_ids))}')
+def get_archive_by_file_group_id(session: Session, file_group_id: int) -> Archive:
+    """Get an Archive by its FileGroup ID."""
+    archive = session.query(Archive).filter_by(file_group_id=file_group_id).one_or_none()
+    if not archive:
+        raise UnknownArchive(f'Unknown Archive with FileGroup ID: {file_group_id}')
+    archive.file_group.set_viewed()
+    return archive
 
-        # Delete any files associated with this URL.
+
+def delete_archives_by_file_group_ids(*file_group_ids: List[int]):
+    """Delete Archives by their FileGroup IDs and all of their files."""
+    with get_db_session(commit=True) as session:
+        archives: List[Archive] = list(session.query(Archive).filter(Archive.file_group_id.in_(file_group_ids)))
+        if not archives:
+            raise UnknownArchive(f'Unknown Archives with FileGroup IDs: {", ".join(map(str, file_group_ids))}')
+
         for archive in archives:
             archive.delete()
 

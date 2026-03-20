@@ -21,8 +21,8 @@ const SUGGESTED_APPS = [
     {location: '/admin/settings', title: 'Shutdown', description: 'Shutdown your WROLPi'},
     {location: '/admin/status', title: 'Status', description: 'View the status of this WROLPi server'},
     {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
-    {location: '/archive', title: 'Archives', description: 'View your Archives'},
-    {location: '/archive/domains', title: 'Domains', description: 'View the domains of your Archives'},
+    {location: '/archives', title: 'Archives', description: 'View your Archives'},
+    {location: '/archives/domains', title: 'Domains', description: 'View the domains of your Archives'},
     {location: '/files', title: 'Files', description: 'View your files'},
     {location: '/help', title: 'Help', description: 'Help documents for WROLPi'},
     {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
@@ -273,7 +273,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
                         title: i.domain,
                         id: i.id,
                         domain: i.domain,
-                        location: `/archive?domain=${i.domain}`
+                        location: `/archives?domain=${i.domain}`
                     }
                 })
             }

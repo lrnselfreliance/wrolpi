@@ -349,7 +349,8 @@ async def test_download_result(test_session, test_directory, video_download_mana
 
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com'
-    assert download.location == '/videos/channel/1/video/1'
+    video = test_session.query(Video).one()
+    assert download.location == f'/videos/{video.file_group_id}'
 
     # Video has its files.
     video = test_session.query(Video).one()

@@ -125,7 +125,7 @@ async def test_delete_video_api(async_client, test_session, channel_factory, vid
     assert vid1_video_path.is_file() and vid1_caption_path.is_file()
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await async_client.delete(f'/api/videos/video/{vid1.id}')
+    request, response = await async_client.delete(f'/api/videos/{vid1.file_group_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
@@ -135,7 +135,7 @@ async def test_delete_video_api(async_client, test_session, channel_factory, vid
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await async_client.delete(f'/api/videos/video/{vid2.id}')
+    request, response = await async_client.delete(f'/api/videos/{vid2.file_group_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_download_manager.is_skipped(vid1.file_group.url, vid2.file_group.url)
@@ -144,7 +144,7 @@ async def test_delete_video_api(async_client, test_session, channel_factory, vid
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 
     # 3 does not exist.
-    request, response = await async_client.delete(f'/api/videos/video/3')
+    request, response = await async_client.delete(f'/api/videos/3')
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
@@ -169,7 +169,7 @@ async def test_wrol_mode(async_client, simple_channel, simple_video, wrol_mode_f
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't delete a video
-    _, resp = await async_client.delete(f'/api/videos/video/{simple_video.id}')
+    _, resp = await async_client.delete(f'/api/videos/{simple_video.file_group_id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
@@ -195,15 +195,15 @@ async def test_api_video_extras(async_client, simple_channel, video_factory):
     info_json = {'duration': 5, 'epoch': 12345, 'comments': [{'some': 'comments'}]}
     video = video_factory(simple_channel.id, with_info_json=info_json, with_caption_file=True)
 
-    request, response = await async_client.get(f'/api/videos/video/{video.id}/captions')
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/captions')
     assert response.status_code == HTTPStatus.OK
     assert response.json.get('captions')
 
-    request, response = await async_client.get(f'/api/videos/video/{video.id}/comments')
+    request, response = await async_client.get(f'/api/videos/{video.file_group_id}/comments')
     assert response.status_code == HTTPStatus.OK
     assert response.json.get('comments')
 
-    request, response = await async_client.get('/api/videos/video/123/captions')
+    request, response = await async_client.get('/api/videos/123/captions')
     assert response.status_code == HTTPStatus.NOT_FOUND
-    request, response = await async_client.get('/api/videos/video/123/comments')
+    request, response = await async_client.get('/api/videos/123/comments')
     assert response.status_code == HTTPStatus.NOT_FOUND

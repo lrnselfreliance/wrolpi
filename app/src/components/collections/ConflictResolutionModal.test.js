@@ -26,7 +26,6 @@ describe('ConflictResolutionModal', () => {
                     title: 'My Video',
                     model_type: 'video',
                     size: 1024000,
-                    video_id: 101,
                     archive_id: null,
                     poster_path: 'videos/old/My Video.jpg',
                     published_datetime: '2024-01-15T10:00:00Z',
@@ -38,7 +37,6 @@ describe('ConflictResolutionModal', () => {
                     title: 'My Video',
                     model_type: 'video',
                     size: 2048000,
-                    video_id: 102,
                     archive_id: null,
                     poster_path: null,
                     published_datetime: '2024-01-15T10:00:00Z',
@@ -109,7 +107,7 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(deleteButtons[0]);
 
         await waitFor(() => {
-            expect(api.deleteVideos).toHaveBeenCalledWith([101]);
+            expect(api.deleteVideos).toHaveBeenCalledWith([1]);
         });
 
         // File should be removed from UI (conflict resolved since only 1 file remains)
@@ -136,7 +134,6 @@ describe('ConflictResolutionModal', () => {
                         title: 'Example Page',
                         model_type: 'archive',
                         size: 50000,
-                        video_id: null,
                         archive_id: 201,
                         poster_path: null,
                         published_datetime: null,
@@ -202,15 +199,15 @@ describe('ConflictResolutionModal', () => {
             {
                 destination_path: 'videos/path1.mp4',
                 conflicting_files: [
-                    {file_group_id: 1, current_path: 'a.mp4', title: 'Video 1', model_type: 'video', video_id: 1},
-                    {file_group_id: 2, current_path: 'b.mp4', title: 'Video 1', model_type: 'video', video_id: 2},
+                    {file_group_id: 1, current_path: 'a.mp4', title: 'Video 1', model_type: 'video'},
+                    {file_group_id: 2, current_path: 'b.mp4', title: 'Video 1', model_type: 'video'},
                 ],
             },
             {
                 destination_path: 'videos/path2.mp4',
                 conflicting_files: [
-                    {file_group_id: 3, current_path: 'c.mp4', title: 'Video 2', model_type: 'video', video_id: 3},
-                    {file_group_id: 4, current_path: 'd.mp4', title: 'Video 2', model_type: 'video', video_id: 4},
+                    {file_group_id: 3, current_path: 'c.mp4', title: 'Video 2', model_type: 'video'},
+                    {file_group_id: 4, current_path: 'd.mp4', title: 'Video 2', model_type: 'video'},
                 ],
             },
         ];
@@ -267,7 +264,6 @@ describe('ConflictResolutionModal', () => {
                         title: 'My Video',
                         model_type: 'video',
                         size: 1024000,
-                        video_id: 101,
                         quality_rank: 12,
                     },
                     {
@@ -276,7 +272,6 @@ describe('ConflictResolutionModal', () => {
                         title: 'My Video',
                         model_type: 'video',
                         size: 2048000,
-                        video_id: 102,
                         quality_rank: 5,
                     },
                 ],
@@ -302,7 +297,6 @@ describe('ConflictResolutionModal', () => {
                         current_path: 'videos/old/My Video.mp4',
                         title: 'My Video',
                         model_type: 'video',
-                        video_id: 101,
                         quality_rank: 15,
                     },
                     {
@@ -310,7 +304,6 @@ describe('ConflictResolutionModal', () => {
                         current_path: 'videos/new/My Video.mp4',
                         title: 'My Video',
                         model_type: 'video',
-                        video_id: 102,
                         quality_rank: 8,
                     },
                 ],

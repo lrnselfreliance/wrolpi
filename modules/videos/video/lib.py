@@ -23,12 +23,12 @@ from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 logger.getChild(__name__)
 
 
-def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
+def get_video_for_app(file_group_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
     """
-    Get a Video, with it's prev/next videos.  Mark the Video as viewed.
+    Get a Video by its FileGroup ID, with its prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session(commit=True) as session:
-        video = Video.find_by_id(session, video_id)
+        video = Video.find_by_file_group_id(session, file_group_id)
         video.file_group.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
@@ -39,12 +39,12 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     return video, previous_video, next_video
 
 
-def get_video(video_id: int) -> Video:
+def get_video(file_group_id: int) -> Video:
     """
-    Get a Video, with it's prev/next videos.  Mark the Video as viewed.
+    Get a Video by its FileGroup ID.
     """
     with get_db_session() as session:
-        video = Video.find_by_id(session, video_id)
+        video = Video.find_by_file_group_id(session, file_group_id)
         return video
 
 
@@ -161,8 +161,8 @@ def search_videos(
     return results, total
 
 
-def delete_videos(session: Session, *video_ids: int):
-    videos = list(session.query(Video).filter(Video.id.in_(video_ids)))
+def delete_videos(session: Session, *file_group_ids: int):
+    videos = list(session.query(Video).filter(Video.file_group_id.in_(file_group_ids)))
     if not videos:
         raise UnknownVideo('Could not find videos to delete')
 

@@ -322,7 +322,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
         assert archive.singlefile_path is not None, 'Archive should have a singlefile'
 
         # Request screenshot generation
-        request, response = await async_client.post(f'/api/archive/{archive.id}/generate_screenshot')
+        request, response = await async_client.post(f'/api/archive/{archive.file_group_id}/generate_screenshot')
         assert response.status_code == HTTPStatus.OK
         assert response.json['message'] == 'Screenshot generation queued'
 
@@ -346,7 +346,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     # while the file existed. This scenario is now auto-fixed by Archive.validate() which calls
     # rebuild_data(), so the simulation is no longer necessary.
 
-    request, response = await async_client.post(f'/api/archive/{archive.id}/generate_screenshot')
+    request, response = await async_client.post(f'/api/archive/{archive.file_group_id}/generate_screenshot')
     assert response.status_code == HTTPStatus.OK
     assert response.json['message'] == 'Screenshot generation queued'
 
@@ -368,7 +368,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     if archive_no_singlefile.singlefile_path and archive_no_singlefile.singlefile_path.is_file():
         archive_no_singlefile.singlefile_path.unlink()
 
-    request, response = await async_client.post(f'/api/archive/{archive_no_singlefile.id}/generate_screenshot')
+    request, response = await async_client.post(f'/api/archive/{archive_no_singlefile.file_group_id}/generate_screenshot')
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'no singlefile' in response.json['error'].lower()
 
@@ -377,7 +377,7 @@ async def test_archive_generate_screenshot(test_session, async_client, archive_f
     archive_wrol = archive_factory('example.com', 'https://example.com/wrol-test', screenshot=False)
     test_session.commit()
 
-    request, response = await async_client.post(f'/api/archive/{archive_wrol.id}/generate_screenshot')
+    request, response = await async_client.post(f'/api/archive/{archive_wrol.file_group_id}/generate_screenshot')
     assert response.status_code == HTTPStatus.FORBIDDEN
     await wrol_mode_fixture(False)
 

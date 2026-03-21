@@ -42,9 +42,9 @@ describe('Domains List Page', () => {
                         {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'}
                     ],
                     routes: {
-                        list: '/archive/domains',
-                        edit: '/archive/domain/:id/edit',
-                        search: '/archive'
+                        list: '/archives/domains',
+                        edit: '/archives/domain/:id/edit',
+                        search: '/archives'
                     },
                     messages: {
                         no_directory: 'Set a directory to enable tagging',
@@ -55,7 +55,7 @@ describe('Domains List Page', () => {
         }).as('getDomains');
 
         // Visit the domains page
-        cy.visit('/archive/domains');
+        cy.visit('/archives/domains');
         cy.wait('@getDomains');
     });
 
@@ -120,7 +120,7 @@ describe('Domains List Page', () => {
         cy.get('table tbody tr').first().within(() => {
             cy.get('a').contains('Edit').click();
         });
-        cy.url().should('include', '/archive/domain/1/edit');
+        cy.url().should('include', '/archives/domain/1/edit');
     });
 
     it('filters domains with search', () => {
@@ -144,7 +144,7 @@ describe('Domains List Page', () => {
             }
         }).as('getEmptyDomains');
 
-        cy.visit('/archive/domains');
+        cy.visit('/archives/domains');
         cy.wait('@getEmptyDomains');
 
         cy.contains('No domains yet').should('exist');

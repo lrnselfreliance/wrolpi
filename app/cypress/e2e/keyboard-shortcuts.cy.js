@@ -200,7 +200,7 @@ describe('Keyboard Shortcuts', () => {
                 }
             }).as('getDomains');
 
-            cy.visit('/archive/domains');
+            cy.visit('/archives/domains');
             cy.wait('@getDomains');
 
             // Should have a filter input on page
@@ -221,7 +221,7 @@ describe('Keyboard Shortcuts', () => {
                 }
             }).as('getDomains');
 
-            cy.visit('/archive/domains');
+            cy.visit('/archives/domains');
             cy.wait('@getDomains');
 
             // Focus on filter input

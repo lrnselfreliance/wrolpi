@@ -67,7 +67,7 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.visit('/archive/domain/1/edit');
+            cy.visit('/archives/domain/1/edit');
             cy.wait('@getDomain');
             // Wait for initial directory search API call (component makes call on mount)
             cy.wait('@searchDirectories');
@@ -166,7 +166,7 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.visit('/archive/domain/2/edit');
+            cy.visit('/archives/domain/2/edit');
             cy.wait('@getDomain');
             // Wait for initial directory search API call (component makes call on mount)
             cy.wait('@searchDirectories');
@@ -230,7 +230,7 @@ describe('DirectorySearch Integration Tests', () => {
                 }
             }).as('getDomain');
 
-            cy.visit('/archive/domain/3/edit');
+            cy.visit('/archives/domain/3/edit');
             cy.wait('@getDomain');
             // Wait for initial directory search API call (component makes call on mount)
             cy.wait('@searchDirectories');

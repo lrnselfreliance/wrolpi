@@ -56,9 +56,9 @@ describe('Domain Editing Workflow', () => {
                         {key: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description'},
                     ],
                     routes: {
-                        list: '/archive/domains',
-                        edit: '/archive/domain/:id/edit',
-                        search: '/archive',
+                        list: '/archives/domains',
+                        edit: '/archives/domain/:id/edit',
+                        search: '/archives',
                     },
                 }
             }
@@ -84,7 +84,7 @@ describe('Domain Editing Workflow', () => {
         }).as('getDomain');
 
         // Start at domains list
-        cy.visit('/archive/domains');
+        cy.visit('/archives/domains');
         cy.wait('@getDomains');
 
         // Click edit on first domain
@@ -93,7 +93,7 @@ describe('Domain Editing Workflow', () => {
         });
 
         // Should navigate to edit page
-        cy.url().should('include', '/archive/domain/1/edit');
+        cy.url().should('include', '/archives/domain/1/edit');
         cy.wait('@getDomain');
 
         // Page should load with domain name
@@ -142,7 +142,7 @@ describe('Domain Editing Workflow', () => {
 
         // Should show success toast and stay on edit page (page refreshes data after save)
         cy.contains('Domain Updated').should('be.visible');
-        cy.url().should('include', '/archive/domain/1/edit');
+        cy.url().should('include', '/archives/domain/1/edit');
     });
 
     it('shows validation errors for invalid data', () => {
@@ -163,7 +163,7 @@ describe('Domain Editing Workflow', () => {
             }
         }).as('getDomain');
 
-        cy.visit('/archive/domain/1/edit');
+        cy.visit('/archives/domain/1/edit');
         cy.wait('@getDomain');
 
         // Try to save with invalid directory
@@ -212,7 +212,7 @@ describe('Domain Editing Workflow', () => {
             body: {success: true, domain: {}}
         }).as('updateDomain');
 
-        cy.visit('/archive/domain/1/edit');
+        cy.visit('/archives/domain/1/edit');
         cy.wait('@getDomain');
 
         // Make some changes
@@ -241,7 +241,7 @@ describe('Domain Editing Workflow', () => {
             }
         }).as('getDomain');
 
-        cy.visit('/archive/domain/1/edit');
+        cy.visit('/archives/domain/1/edit');
 
         cy.wait('@getDomain');
 
@@ -261,7 +261,7 @@ describe('Domain Editing Workflow', () => {
             }
         }).as('domainNotFound');
 
-        cy.visit('/archive/domain/999/edit');
+        cy.visit('/archives/domain/999/edit');
         cy.wait('@domainNotFound');
 
         // Should show error message

@@ -36,7 +36,8 @@ async def statistics(_: Request):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(request: Request, file_group_id: int):
     session = request.ctx.session
-    archive = lib.get_archive_by_file_group_id(session, file_group_id)
+    skip_viewed = request.args.get('skip_viewed', '').lower() == 'true'
+    archive = lib.get_archive_by_file_group_id(session, file_group_id, skip_viewed=skip_viewed)
     archive_file_group = archive.file_group.__json__()
     history = [i.file_group.__json__() for i in archive.history]
     return json_response({'file_group': archive_file_group, 'history': history})

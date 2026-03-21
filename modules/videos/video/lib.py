@@ -23,13 +23,14 @@ from ..lib import get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
 logger.getChild(__name__)
 
 
-def get_video_for_app(file_group_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
+def get_video_for_app(file_group_id: int, skip_viewed: bool = False) -> Tuple[dict, Optional[dict], Optional[dict]]:
     """
     Get a Video by its FileGroup ID, with its prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session(commit=True) as session:
         video = Video.find_by_file_group_id(session, file_group_id)
-        video.file_group.set_viewed()
+        if not skip_viewed:
+            video.file_group.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
         video = video.__json__()

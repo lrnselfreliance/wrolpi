@@ -23,8 +23,9 @@ logger = logger.getChild(__name__)
 @openapi.description('Get Video information')
 @openapi.response(HTTPStatus.OK, schema.VideoResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-def video_get(_: Request, file_group_id: int):
-    video, previous_video, next_video = lib.get_video_for_app(file_group_id)
+def video_get(request: Request, file_group_id: int):
+    skip_viewed = request.args.get('skip_viewed', '').lower() == 'true'
+    video, previous_video, next_video = lib.get_video_for_app(file_group_id, skip_viewed=skip_viewed)
     return json_response({'file_group': video, 'prev': previous_video, 'next': next_video})
 
 

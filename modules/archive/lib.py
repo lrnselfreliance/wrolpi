@@ -1103,19 +1103,21 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     return metadata
 
 
-def get_archive(session: Session, archive_id: int) -> Archive:
+def get_archive(session: Session, archive_id: int, skip_viewed: bool = False) -> Archive:
     """Get an Archive."""
     archive = Archive.find_by_id(session, archive_id)
-    archive.file_group.set_viewed()
+    if not skip_viewed:
+        archive.file_group.set_viewed()
     return archive
 
 
-def get_archive_by_file_group_id(session: Session, file_group_id: int) -> Archive:
+def get_archive_by_file_group_id(session: Session, file_group_id: int, skip_viewed: bool = False) -> Archive:
     """Get an Archive by its FileGroup ID."""
     archive = session.query(Archive).filter_by(file_group_id=file_group_id).one_or_none()
     if not archive:
         raise UnknownArchive(f'Unknown Archive with FileGroup ID: {file_group_id}')
-    archive.file_group.set_viewed()
+    if not skip_viewed:
+        archive.file_group.set_viewed()
     return archive
 
 

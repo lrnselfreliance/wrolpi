@@ -126,7 +126,7 @@ describe('Domains List Page', () => {
     it('filters domains with search', () => {
         cy.get('input[placeholder="Domain filter..."]').type('example');
         // Chain assertions so they retry together with the extended timeout
-        cy.get('table tbody tr', {timeout: 10000})
+        cy.get('table:visible tbody tr', {timeout: 10000})
             .should('have.length', 1)
             .and('contain', 'example.com');
     });

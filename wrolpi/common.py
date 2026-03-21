@@ -450,7 +450,8 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
-DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml', 'inventories.yaml'}
+DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml', 'inventories.yaml',
+                        'collections.yaml'}
 
 
 class ConfigFile:
@@ -846,6 +847,14 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if archive_downloader_config := get_archive_downloader_config():
         all_configs[archive_downloader_config.file_name] = archive_downloader_config
 
+    from wrolpi.downloader import get_download_cache_config
+    if download_cache_config := get_download_cache_config():
+        all_configs[download_cache_config.file_name] = download_cache_config
+
+    from wrolpi.collections.config import collections_config as _collections_config
+    if _collections_config:
+        all_configs[_collections_config.file_name] = _collections_config
+
     return all_configs
 
 
@@ -917,6 +926,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import inventories config: {e}')
         results['inventories'] = False
+
+    # Collections (uses tags for tag_name)
+    try:
+        from wrolpi.collections.config import collections_config as _collections_config
+        _collections_config.import_config()
+        results['collections'] = True
+        logger.debug('collections config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import collections config: {e}')
+        results['collections'] = False
 
     return results
 

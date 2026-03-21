@@ -268,6 +268,10 @@ async def start_single_tasks(app: Sanic):
                 from modules.archive.lib import get_archive_downloader_config
                 get_archive_downloader_config().import_config()
                 logger.debug('archive downloader config imported')
+            with log_and_suppress(Exception, message='Failed to import download cache config'):
+                from wrolpi.downloader import get_download_cache_config
+                get_download_cache_config().import_config()
+                logger.debug('download cache config imported')
 
     from modules.zim.lib import flag_outdated_zim_files
     try:

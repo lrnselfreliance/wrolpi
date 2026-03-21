@@ -1190,3 +1190,33 @@ def test_get_paths_in_parent_directory(test_directory, make_files_structure):
         test_directory / 'foo/bar',
         test_directory / 'foo/bar/baz.txt',
     }
+
+
+def test_get_all_configs_includes_all_config_subclasses():
+    """Every ConfigFile subclass must be included in get_all_configs so it is imported on startup.
+
+    If a ConfigFile subclass is not in get_all_configs, it will never have successful_import set to True and will fail
+    to save with: RuntimeError: Refusing to save config because it was never successfully imported!
+    """
+    from wrolpi.common import ConfigFile, get_all_configs
+
+    # Ensure all ConfigFile subclasses are imported.
+    import modules.archive.lib  # noqa
+    import modules.inventory.common  # noqa
+    import modules.videos.lib  # noqa
+    import wrolpi.collections.config  # noqa
+    import wrolpi.downloader  # noqa
+    import wrolpi.tags  # noqa
+
+    # Temporarily disable PYTEST guard so get_channels_config() returns its global instance.
+    with mock.patch('modules.videos.lib.PYTEST', False):
+        all_configs = get_all_configs()
+    returned_types = {type(config) for config in all_configs.values()}
+
+    all_subclasses = set(ConfigFile.__subclasses__())
+
+    missing = all_subclasses - returned_types
+    assert not missing, (
+        f'ConfigFile subclasses not in get_all_configs(): {[c.__name__ for c in missing]}. '
+        f'Add their getter to get_all_configs() so they are imported on startup.'
+    )

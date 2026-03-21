@@ -177,7 +177,7 @@ describe('Domain Editing Workflow', () => {
             }
         }).as('invalidUpdate');
 
-        cy.contains('label', 'Directory').parent().find('input').clear().type('/invalid/absolute/path');
+        cy.contains('label', 'Directory').parent().find('input').should('not.be.disabled').clear().type('/invalid/absolute/path');
         cy.contains('button', 'Save').click();
 
         cy.wait('@invalidUpdate');

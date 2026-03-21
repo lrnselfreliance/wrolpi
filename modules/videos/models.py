@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
-from wrolpi.captions import read_captions
+from wrolpi.captions import read_captions, read_captions_with_timestamps
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, get_relative_to_media_directory, \
     background_task
 from wrolpi.db import get_db_curs, get_db_session
@@ -335,6 +335,20 @@ class Video(ModelHelper, Base):
             caption_text = read_captions(srt[0])
 
         return caption_text
+
+    def get_caption_chunks(self) -> Optional[List[dict]]:
+        """Search the FileGroup's files for a caption file.  Return captions with timestamps."""
+        caption_paths = self.caption_paths
+        caption_chunks = None
+        if english_vtt := [i for i in caption_paths if i.name.endswith('.en.vtt')]:
+            caption_chunks = read_captions_with_timestamps(english_vtt[0])
+        elif vtt := [i for i in caption_paths if i.name.endswith('.vtt')]:
+            caption_chunks = read_captions_with_timestamps(vtt[0])
+        elif english_srt := [i for i in caption_paths if i.name.endswith('.en.srt')]:
+            caption_chunks = read_captions_with_timestamps(english_srt[0])
+        elif srt := [i for i in caption_paths if i.name.endswith('.srt')]:
+            caption_chunks = read_captions_with_timestamps(srt[0])
+        return caption_chunks
 
     @staticmethod
     def get_by_path(session: Session, path) -> Optional['Video']:

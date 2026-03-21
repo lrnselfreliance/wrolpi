@@ -44,7 +44,7 @@ def video_get_comments(_: Request, file_group_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 def video_get_captions(_: Request, file_group_id: int):
     video = lib.get_video(file_group_id)
-    return json_response({'captions': video.file_group.d_text})
+    return json_response({'captions': video.get_caption_chunks()})
 
 
 @video_bp.post('/search')

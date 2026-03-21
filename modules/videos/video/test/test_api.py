@@ -197,7 +197,11 @@ async def test_api_video_extras(async_client, simple_channel, video_factory):
 
     request, response = await async_client.get(f'/api/videos/{video.file_group_id}/captions')
     assert response.status_code == HTTPStatus.OK
-    assert response.json.get('captions')
+    captions = response.json.get('captions')
+    assert isinstance(captions, list)
+    assert len(captions) > 0
+    assert 'start_seconds' in captions[0]
+    assert 'text' in captions[0]
 
     request, response = await async_client.get(f'/api/videos/{video.file_group_id}/comments')
     assert response.status_code == HTTPStatus.OK

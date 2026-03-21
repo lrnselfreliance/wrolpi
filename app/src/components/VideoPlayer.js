@@ -1,4 +1,4 @@
-import React, {useContext} from 'react';
+import React, {useContext, useState} from 'react';
 import {useHotkeys} from 'react-hotkeys-hook';
 import {deleteVideos, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router";
@@ -19,12 +19,12 @@ import {
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
-import {useChannel, useVideoExtras} from "../hooks/customHooks";
+import {useChannel, useVideoCaptions, useVideoExtras} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, darkTheme, Header, Icon, Segment, Tab} from "./Theme";
+import {Button, darkTheme, Header, Icon, Loader, Segment, Tab} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
-import {Comment, CommentGroup, Label} from "semantic-ui-react";
+import {Comment, CommentGroup, Input, Label} from "semantic-ui-react";
 
 const MEDIA_PATH = '/media';
 
@@ -198,7 +198,8 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     // Get the Video's channel, fallback to the URL's channel id.
     const {channelId} = useParams();
     const {channel} = useChannel(video && video.channel_id ? video.channel_id : channelId);
-    const {comments, captions} = useVideoExtras(videoFile?.video?.id);
+    const {comments} = useVideoExtras(videoFile?.id);
+    const {captions, captionsLoading, fetchCaptions} = useVideoCaptions(videoFile?.id);
 
     const mediaTitle = videoFile ? (videoFile.title || videoFile.stem || videoFile.name) : null;
     const mediaArtworkUrl = video && video.poster_path ? `${MEDIA_PATH}/${encodeMediaPath(video.poster_path)}` : null;
@@ -290,9 +291,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     };
 
     const captionsPane = {
-        menuItem: 'Captions', render: () => <Tab.Pane>
-            <pre>{captions || 'No captions available.'}</pre>
-        </Tab.Pane>
+        menuItem: 'Captions', render: () => <CaptionsPane
+            captions={captions}
+            captionsLoading={captionsLoading}
+            fetchCaptions={fetchCaptions}
+            setVideoTime={setVideoTime}
+        />
     };
 
     const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));
@@ -477,6 +481,71 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             {prevNextVideosSegment}
         </Container>
     </>
+}
+
+function formatCaptionTimestamp(totalSeconds) {
+    totalSeconds = Math.floor(totalSeconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    const pad2 = (n) => String(n).padStart(2, '0');
+    if (hours > 0) {
+        return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
+    }
+    return `${minutes}:${pad2(seconds)}`;
+}
+
+function CaptionsPane({captions, captionsLoading, fetchCaptions, setVideoTime}) {
+    const [filter, setFilter] = useState('');
+
+    // Trigger fetch on first render of this pane.
+    React.useEffect(() => {
+        fetchCaptions();
+    }, []);
+
+    if (captionsLoading) {
+        return <Tab.Pane><Loader active/></Tab.Pane>;
+    }
+
+    if (!captions || captions.length === 0) {
+        return <Tab.Pane>No captions available.</Tab.Pane>;
+    }
+
+    let filtered = captions;
+    if (filter.trim()) {
+        const words = filter.toLowerCase().split(/\s+/).filter(Boolean);
+        filtered = captions.filter(chunk => {
+            const text = chunk.text.toLowerCase();
+            return words.every(word => text.includes(word));
+        });
+    }
+
+    return <Tab.Pane>
+        <Input
+            fluid
+            icon='filter'
+            placeholder='Filter captions...'
+            value={filter}
+            onChange={(e, {value}) => setFilter(value)}
+            style={{marginBottom: '1em'}}
+        />
+        <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+            {filtered.map((chunk, idx) => (
+                <div key={idx} style={{display: 'flex', gap: '1em', marginBottom: '0.4em'}}>
+                    <a href='#'
+                       onClick={(e) => {
+                           e.preventDefault();
+                           setVideoTime(chunk.start_seconds);
+                       }}
+                       style={{whiteSpace: 'nowrap', fontFamily: 'monospace'}}
+                    >
+                        {formatCaptionTimestamp(chunk.start_seconds)}
+                    </a>
+                    <span>{chunk.text}</span>
+                </div>
+            ))}
+        </div>
+    </Tab.Pane>;
 }
 
 export default VideoPage;

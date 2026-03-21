@@ -692,7 +692,6 @@ export const useVideo = (fileGroupId) => {
 export const useVideoExtras = (fileGroupId) => {
     // Fetches extra data to display on a Video's page.
     const [comments, setComments] = useState(null);
-    const [captions, setCaptions] = useState(null);
 
     const fetchComments = async () => {
         try {
@@ -703,26 +702,43 @@ export const useVideoExtras = (fileGroupId) => {
         }
     }
 
+    useEffect(() => {
+        if (fileGroupId) {
+            fetchComments();
+        } else {
+            setComments(null);
+        }
+    }, [fileGroupId]);
+
+    return {comments}
+}
+
+export const useVideoCaptions = (fileGroupId) => {
+    const [captions, setCaptions] = useState(null);
+    const [captionsLoading, setCaptionsLoading] = useState(false);
+    const captionsFetched = useRef(false);
+
     const fetchCaptions = async () => {
+        if (captionsFetched.current || !fileGroupId) return;
+        setCaptionsLoading(true);
         try {
             const result = await getVideoCaptions(fileGroupId);
             setCaptions(result.captions);
         } catch (e) {
             console.error(e);
+        } finally {
+            setCaptionsLoading(false);
+            captionsFetched.current = true;
         }
     }
 
     useEffect(() => {
-        if (fileGroupId) {
-            fetchComments();
-            fetchCaptions();
-        } else {
-            setComments(null);
-            setCaptions(null);
-        }
+        setCaptions(null);
+        setCaptionsLoading(false);
+        captionsFetched.current = false;
     }, [fileGroupId]);
 
-    return {comments, captions}
+    return {captions, captionsLoading, fetchCaptions}
 }
 
 export const useChannel = (channel_id) => {

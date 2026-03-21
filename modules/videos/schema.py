@@ -164,7 +164,7 @@ class VideoCommentsResponse:
 
 @dataclass
 class VideoCaptionsResponse:
-    captions: str
+    captions: list
 
 
 @dataclass

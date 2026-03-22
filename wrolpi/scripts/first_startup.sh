@@ -3,22 +3,31 @@
 
 set -x
 
-# Generate certificate for HTTPS — only if primary drive is mounted.
-# If not mounted, onboarding + repair will generate certs after drive setup.
-if mountpoint -q /media/wrolpi; then
-  /opt/wrolpi/scripts/generate_certificates.sh
-else
-  echo "Primary drive not mounted, skipping certificate generation (onboarding will handle this)"
-fi
-
 # Copy landing page for HTTP certificate download.
 cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
-# Ensure Caddy config is in place (safeguard in case build didn't complete this).
-if [ ! -f /etc/caddy/Caddyfile ]; then
-    echo "Caddyfile missing, copying from /opt/wrolpi..."
-    mkdir -p /etc/caddy
+mkdir -p /etc/caddy /etc/ssl/wrolpi
+
+if [ -f /media/wrolpi/config/ssl/ca.crt ]; then
+    # Persistent CA exists (drive mounted with previous install).
+    # Generate a fresh leaf cert from the existing CA and use the full Caddyfile.
+    echo "Persistent CA found, generating leaf cert and using full Caddyfile"
+    /opt/wrolpi/scripts/generate_certificates.sh
     cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+else
+    # No persistent CA (fresh install, no drive, or empty drive).
+    # Generate a throwaway self-signed cert directly into /etc/ssl/wrolpi/
+    # so Caddy can listen on :443. Never writes to /media/wrolpi/.
+    echo "No persistent CA, generating temporary cert for onboarding"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout /etc/ssl/wrolpi/cert.key \
+        -out /etc/ssl/wrolpi/cert.crt \
+        -days 1 -subj "/CN=wrolpi-onboarding"
+    chmod 640 /etc/ssl/wrolpi/cert.key /etc/ssl/wrolpi/cert.crt
+    if id caddy >/dev/null 2>&1; then
+        chown root:caddy /etc/ssl/wrolpi/cert.key /etc/ssl/wrolpi/cert.crt
+    fi
+    cp /opt/wrolpi/etc/raspberrypios/Caddyfile.onboarding /etc/caddy/Caddyfile
 fi
 
 # Enable and start Caddy now that certificates exist.

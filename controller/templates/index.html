@@ -840,6 +840,16 @@
     Main UI is unavailable. Using Controller fallback. Will redirect when ready...
 </div>
 
+{% if not docker_mode %}
+<div id="script-running-banner" class="script-running-banner">
+    <h2 id="script-running-name">Script Running</h2>
+    <span class="loading"></span>
+    <div class="actions">
+        <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
+    </div>
+</div>
+{% endif %}
+
 <div id="upgrade-banner" class="upgrade-banner">
     <h2>Upgrade in Progress</h2>
     <span id="upgrade-spinner" class="loading"></span>
@@ -986,13 +996,6 @@
     {% if not docker_mode %}
     <section id="scripts">
         <h2>Maintenance Scripts</h2>
-        <div id="script-running-banner" class="script-running-banner">
-            <h2 id="script-running-name">Script Running</h2>
-            <span class="loading"></span>
-            <div class="actions">
-                <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
-            </div>
-        </div>
         <div id="scripts-content">
             <p style="color: #888; text-align: center;"><span class="loading"></span> Loading...</p>
         </div>

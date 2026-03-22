@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Link, Route, Routes, useNavigate} from "react-router";
+import {Link, Route, Routes, useLocation, useNavigate} from "react-router";
 import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
@@ -411,15 +411,17 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
 
 
 export function SearchView({suggestions, suggestionsSums, loading}) {
+    const location = useLocation();
+    const search = location.search;
 
     const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
     const othersTabName = <span>Other <Label>{normalizeEstimate(suggestionsSums?.otherSum)}</Label></span>;
 
     const links = [
-        {text: filesTabName, to: '/search', key: 'filesSearch_', end: true},
-        {text: zimsTabName, to: '/search/zim', key: 'zimsSearch'},
-        {text: othersTabName, to: '/search/other', key: 'othersSearch'},
+        {text: filesTabName, to: `/search${search}`, key: 'filesSearch_', end: true},
+        {text: zimsTabName, to: `/search/zim${search}`, key: 'zimsSearch'},
+        {text: othersTabName, to: `/search/other${search}`, key: 'othersSearch'},
     ];
 
     return <React.Fragment>

@@ -451,6 +451,36 @@ async def test_import_channel_download_comments(await_switches, test_session, ch
 
 
 @pytest.mark.asyncio
+async def test_save_channels_config_does_not_wipe_config(await_switches, test_session, channel_factory,
+                                                          test_channels_config):
+    """Saving channels config when DB is empty must not overwrite an existing config file that has channels.
+
+    Regression test: a fresh DB (e.g. after repair) triggering save_channels_config would write channels: []
+    to the config file, permanently wiping the channel definitions.
+    """
+    # Create a channel and save it to the config file.
+    channel = channel_factory()
+    test_session.commit()
+    save_channels_config()
+    await await_switches()
+    assert test_channels_config.is_file()
+    config_text = test_channels_config.read_text()
+    assert 'channels: []' not in config_text, 'Config should have a channel'
+
+    # Simulate a fresh DB by deleting all channels.
+    test_session.query(Channel).delete()
+    test_session.query(Collection).filter_by(kind='channel').delete()
+    test_session.commit()
+    assert test_session.query(Channel).count() == 0
+
+    # Saving with an empty DB should NOT wipe the config file.
+    save_channels_config()
+    await await_switches()
+    config_text = test_channels_config.read_text()
+    assert 'channels: []' not in config_text, 'Config was wiped by saving with empty DB!'
+
+
+@pytest.mark.asyncio
 async def test_ffprobe_json(async_client, video_file, corrupted_video_file):
     content = await common.ffprobe_json(video_file)
     assert not content['chapters']

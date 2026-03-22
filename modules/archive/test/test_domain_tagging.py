@@ -1,6 +1,7 @@
 """Tests for domain collection tagging functionality."""
 
 import pytest
+import yaml
 
 from wrolpi.collections import Collection
 
@@ -316,3 +317,43 @@ async def test_untag_domain_without_directory_saves_config(test_session, test_di
     domain_entry = next((c for c in data.get('collections', []) if c['name'] == 'example.com'), None)
     assert domain_entry is not None, "Domain collection not found in config"
     assert domain_entry.get('tag_name') is None, "Tag should be removed from config"
+
+
+@pytest.mark.asyncio
+async def test_dump_domains_config_does_not_wipe_config(test_session, test_directory, async_client):
+    """Dumping domains config when DB is empty must not overwrite an existing config file that has domains.
+
+    Regression test: a fresh DB triggering dump_config would write collections: []
+    to the config file, permanently wiping the domain definitions.
+    """
+    from modules.archive.lib import DomainsConfig
+    from wrolpi.common import get_media_directory
+
+    # Create domain collection and dump config.
+    domain_dir = get_media_directory() / 'archives' / 'example.com'
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='example.com', kind='domain', directory=domain_dir)
+    test_session.add(collection)
+    test_session.commit()
+
+    config_file = test_directory / 'config' / 'domains.yaml'
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    domains_config = DomainsConfig()
+    domains_config.dump_config(config_file, overwrite=True)
+
+    data = yaml.safe_load(config_file.read_text())
+    assert len(data['collections']) == 1, 'Config should have a domain'
+
+    # Simulate a fresh DB by deleting all domain collections.
+    test_session.query(Collection).filter_by(kind='domain').delete()
+    test_session.commit()
+
+    # Re-initialize the config from the file so in-memory has the collections.
+    domains_config.initialize()
+    file_data = yaml.safe_load(config_file.read_text())
+    assert len(file_data['collections']) == 1, 'File should still have domains before dump'
+
+    # Dumping with an empty DB should NOT wipe the config file.
+    domains_config.dump_config(config_file)
+    data = yaml.safe_load(config_file.read_text())
+    assert len(data['collections']) == 1, 'Config was wiped by dumping with empty DB!'

@@ -3,7 +3,7 @@ import {Button, Header, Icon, Loader, Modal, Popup, Table} from "../Theme";
 import React, {useContext, useEffect, useState} from "react";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {TableRowPlaceholder} from "../Placeholder";
-import {getConfig, getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
+import {getConfigText, getConfigBackups, postConfigBackupImport, postConfigBackupPreview} from "../../api";
 import {ThemeContext} from "../../contexts/contexts";
 
 function WarningIcon({ok}) {
@@ -300,7 +300,7 @@ function ConfigContentModal({open, onClose, fileName}) {
         let cancelled = false;
         setLoading(true);
         setContent(null);
-        getConfig(fileName).then(result => {
+        getConfigText(fileName).then(result => {
             if (cancelled) return;
             setContent(result);
             setLoading(false);
@@ -318,7 +318,7 @@ function ConfigContentModal({open, onClose, fileName}) {
             {loading
                 ? <Loader active inline='centered'/>
                 : content
-                    ? <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{JSON.stringify(content, null, 2)}</pre>
+                    ? <pre style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>{content}</pre>
                     : <p>Failed to load config contents.</p>
             }
         </Modal.Content>

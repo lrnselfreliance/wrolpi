@@ -799,6 +799,10 @@ def save_channels_config():
         logger.warning('Refusing to save channels config because test did not initialize a test config!')
         return
 
+    if not config.get('channels') and channels_config.channels:
+        logger.warning('Refusing to save empty channels config because channels exist in the config file!')
+        return
+
     channels_config.update(config)
     logger.info('save_channels_config completed')
 

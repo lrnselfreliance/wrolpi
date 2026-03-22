@@ -17,7 +17,9 @@ config_bp = Blueprint('config', '/api/config')
 def get_config(request: Request):
     if file_name := request.args.get('file_name'):
         config = get_config_by_file_name(file_name)
-        return json_response(dict(config=config))
+        config_file = config.get_file()
+        config_text = config_file.read_text() if config_file.is_file() else None
+        return json_response(dict(config=config, config_text=config_text))
     else:
         configs = get_all_configs()
         configs = {k: v.config_status() for k, v in configs.items()}

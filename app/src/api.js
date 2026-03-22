@@ -425,6 +425,11 @@ export async function getConfig(fileName) {
     return (await response.json())['config'];
 }
 
+export async function getConfigText(fileName) {
+    const response = await apiGet(`${API_URI}/config?file_name=${fileName}`);
+    return (await response.json())['config_text'];
+}
+
 export async function getConfigBackups(fileName) {
     const response = await apiGet(`${API_URI}/config/backups?file_name=${fileName}`);
     if (response.ok) {

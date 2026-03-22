@@ -175,7 +175,11 @@ class DomainsConfig(ConfigFile):
             # Use to_config to export each collection
             collections_data = [collection.to_config() for collection in collections]
 
-            self._config['collections'] = collections_data
+        if not collections_data and self._config.get('collections'):
+            logger.warning('Refusing to save empty domains config because domains exist in the config file!')
+            return
+
+        self._config['collections'] = collections_data
 
         logger.info(f'Dumping {len(collections_data)} domain collections to config')
         self.save(file, send_events, overwrite)

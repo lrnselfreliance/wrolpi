@@ -336,6 +336,63 @@ async def test_calculate_next_download_overdue_spreading(test_session, test_down
 
 
 @pytest.mark.asyncio
+async def test_overdue_recurring_download_not_requeued_after_completion(test_session, test_download_manager, fake_now,
+                                                                       test_downloader, await_switches):
+    """When multiple same-frequency downloads are overdue and the most overdue one completes,
+    it should NOT be immediately renewed.  Reproduces a bug where next_download was set to now()
+    because calculate_next_download was called before complete(), leaving the download with stale
+    pending status and last_successful_download.  This caused an infinite loop on production where
+    doomandbloom.net/feed reached 3,379 attempts."""
+    test_downloader.set_test_success()
+
+    # Create 3 daily recurring downloads.
+    d1 = test_download_manager.recurring_download(test_session, 'https://example.com/overdue1',
+                                                  DownloadFrequency.daily, test_downloader.name)
+    d2 = test_download_manager.recurring_download(test_session, 'https://example.com/overdue2',
+                                                  DownloadFrequency.daily, test_downloader.name)
+    d3 = test_download_manager.recurring_download(test_session, 'https://example.com/overdue3',
+                                                  DownloadFrequency.daily, test_downloader.name)
+
+    # Set them as if they were last downloaded at different times and are all overdue.
+    d1.last_successful_download = datetime(2020, 1, 1, tzinfo=pytz.UTC)
+    d1.next_download = datetime(2020, 1, 2, tzinfo=pytz.UTC)
+    d1.status = 'complete'
+    d2.last_successful_download = datetime(2020, 1, 2, tzinfo=pytz.UTC)
+    d2.next_download = datetime(2020, 1, 3, tzinfo=pytz.UTC)
+    d2.status = 'complete'
+    d3.last_successful_download = datetime(2020, 1, 3, tzinfo=pytz.UTC)
+    d3.next_download = datetime(2020, 1, 4, tzinfo=pytz.UTC)
+    d3.status = 'complete'
+    test_session.commit()
+
+    # It's now Jan 10 — all three are overdue.
+    fake_now(datetime(2020, 1, 10, tzinfo=pytz.UTC))
+
+    # Renew overdue downloads and let one run.
+    test_download_manager.renew_recurring_downloads()
+    await test_download_manager.wait_for_all_downloads()
+    test_session.expire_all()
+
+    # At least one download should have completed.
+    completed = [d for d in [d1, d2, d3] if d.is_complete]
+    assert len(completed) >= 1, \
+        f'Expected at least one completed download, got statuses: {[d.status for d in [d1, d2, d3]]}'
+
+    # Advance 30 seconds — simulating the real download cycle interval.  In production, real time
+    # advances between when calculate_next_download sets next_download=now() and when
+    # renew_recurring_downloads checks if next_download < now().
+    fake_now(datetime(2020, 1, 10, 0, 0, 30, tzinfo=pytz.UTC))
+
+    # The completed download should NOT be renewed — its next_download should be in the future.
+    test_download_manager.renew_recurring_downloads()
+    test_session.expire_all()
+
+    for d in completed:
+        assert not d.is_new, \
+            f'{d.url} was renewed 30 seconds after completing — infinite re-download loop!'
+
+
+@pytest.mark.asyncio
 async def test_calculate_next_download_single_overdue(test_session, test_download_manager, fake_now):
     """A single overdue download should use normal scheduling (not spread logic)."""
     d1 = Download(url='https://example.com/overdue', frequency=DownloadFrequency.weekly)
@@ -438,8 +495,8 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     # Download is deferred, last successful download remains the same.
     assert download.is_deferred, download.status_code
     assert download.last_successful_download == now_
-    # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
-    expected = datetime(2020, 1, 1, 3, 0, 0, 997200, tzinfo=pytz.UTC)
+    # Download should be retried using exponential backoff: now + min(3^attempts * hour, frequency).
+    expected = datetime(2020, 1, 1, 3, 0, 1, tzinfo=pytz.UTC)
     assert download.next_download == expected
 
     # Try the download again, it finally succeeds.

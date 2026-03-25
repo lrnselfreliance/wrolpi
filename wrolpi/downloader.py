@@ -1455,6 +1455,23 @@ async def signal_download_download(download_id: int, download_url: str):
                 download.location = result.location or download.location or None
                 # Clear any old errors if the download succeeded.
                 download.error = result.error if result.error else None
+
+                # Set status BEFORE calculating next_download.  calculate_next_download uses
+                # the download's status and last_successful_download to determine scheduling.
+                # If status is still "pending" (stale), the overdue spread logic can return
+                # now() for the most overdue download, causing an infinite re-download loop.
+                if result.error and 'outside download window' in result.error:
+                    # Download was paused due to window closing; reset to new so it resumes later.
+                    download.renew()
+                    download.error = result.error
+                elif try_again is False and not download.frequency:
+                    # Only once-downloads can fail.
+                    download.fail()
+                elif result.success:
+                    download.complete()
+                else:
+                    download.defer()
+
                 if isinstance(result.retry_seconds, int):
                     download.next_download = now() + timedelta(seconds=result.retry_seconds)
                 else:
@@ -1467,18 +1484,6 @@ async def signal_download_download(download_id: int, download_url: str):
                     child_settings['parent_download_url'] = download.url
                     download_manager.create_downloads(session, urls, downloader_name=download.sub_downloader,
                                                       settings=child_settings)
-
-                if result.error and 'outside download window' in result.error:
-                    # Download was paused due to window closing; reset to new so it resumes later.
-                    download.renew()
-                    download.error = result.error
-                elif try_again is False and not download.frequency:
-                    # Only once-downloads can fail.
-                    download.fail()
-                elif result.success:
-                    download.complete()
-                else:
-                    download.defer()
 
             # Remove this domain from the running list.
             download_manager._delete_processing_domain(download_domain)

@@ -124,18 +124,29 @@ function getAudioPreviewModal(previewFile) {
     </React.Fragment>
 }
 
-function getSTLPreviewModal(previewFile) {
+function STLPreviewModal({previewFile}) {
+    const [dimensions, setDimensions] = React.useState(null);
     const url = getMediaPathURL(previewFile);
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
     return <React.Fragment>
         <Modal.Header>{name}</Modal.Header>
         <Modal.Content>
+            {dimensions && <div style={{marginBottom: '1em', textAlign: 'center'}}>
+                <b>Width:</b> {dimensions.width.toFixed(2)}
+                {' | '}
+                <b>Height:</b> {dimensions.height.toFixed(2)}
+                {' | '}
+                <b>Length:</b> {dimensions.length.toFixed(2)}
+                {' | '}
+                <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
+            </div>}
             <InlineErrorBoundary>
                 <StlViewer orbitControls shadows
                            url={url}
                            style={{height: '80vw', width: '80vw'}}
                            modelProps={{color: '#7353a8'}}
+                           onFinishLoading={(dims) => setDimensions(dims)}
                 />
             </InlineErrorBoundary>
         </Modal.Content>
@@ -357,11 +368,11 @@ export function FilePreviewProvider({children}) {
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImagePreviewModal(previewFile), url, null, path, taggable);
             } else if (mimetype.startsWith('model/stl')) {
-                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
+                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
-                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
+                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else if (mimetype.includes('cbz') || mimetype.includes('cbr') || mimetype.includes('comicbook+zip') || mimetype.includes('comicbook-rar')
                 || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr') || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
                 setModalContent(<Modal.Content><CbzViewer path={path}/></Modal.Content>, null, downloadURL, path, taggable);

@@ -250,6 +250,17 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         }
     }, {enableOnFormTags: false}, [prevFile, navigate]);
 
+    // f: Toggle fullscreen
+    useHotkeys('f', () => {
+        if (videoRef.current) {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                videoRef.current.requestFullscreen();
+            }
+        }
+    }, {enableOnFormTags: false});
+
     if (videoFile === null) {
         return <VideoPlaceholder/>;
     }

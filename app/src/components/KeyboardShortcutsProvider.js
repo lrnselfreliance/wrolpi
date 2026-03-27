@@ -34,6 +34,7 @@ export const SHORTCUTS = [
     {keys: 'l', description: 'Jump forward 30 seconds', category: 'Video Player'},
     {keys: 'n', description: 'Navigate to newer video', category: 'Video Player'},
     {keys: 'p', description: 'Navigate to older video', category: 'Video Player'},
+    {keys: 'f', description: 'Toggle fullscreen', category: 'Video Player'},
 ];
 
 function SearchModal({open, onClose}) {

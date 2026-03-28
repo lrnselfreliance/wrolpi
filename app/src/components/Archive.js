@@ -23,6 +23,7 @@ import {
     APIButton,
     BackButton,
     CardLink,
+    DirectoryLink,
     encodeMediaPath,
     ErrorMessage,
     ExternalCardLink,
@@ -88,19 +89,6 @@ import {CollectionTable} from "./collections/CollectionTable";
 import {CollectionEditForm} from "./collections/CollectionEditForm";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {DestinationForm} from "./Download";
-
-function archiveFileLink(path, directory = false) {
-    if (path) {
-        const href = directory ?
-            `/media/${encodeMediaPath(path)}/`
-            : `/media/${encodeMediaPath(path)}`;
-        return <a href={href} target='_blank' rel='noopener noreferrer'>
-            <pre>{path}</pre>
-        </a>
-    } else {
-        return <p>Unknown</p>
-    }
-}
 
 function ArchivePage() {
     const navigate = useNavigate();
@@ -258,37 +246,63 @@ function ArchivePage() {
         </Tab.Pane>
     };
 
+    // Helper to find file size from the files array by resolved path
+    const findFileSize = (resolvedPath) => {
+        if (!resolvedPath || !archiveFile.files) return null;
+        const file = archiveFile.files.find(i => String(i.path) === String(resolvedPath));
+        return file && file.size
+            ? <span style={{marginLeft: '1em', color: 'grey'}}>({humanFileSize(file.size)})</span>
+            : null;
+    };
+
     // Helper to resolve and preview a data path
     const localPreviewPath = (dataPath, mimetype) => {
         const resolvedPath = resolveDataPath(dataPath, directory);
         if (resolvedPath) {
-            return <PreviewPath path={resolvedPath} mimetype={mimetype} taggable={false}>{resolvedPath}</PreviewPath>
+            return <><PreviewPath path={resolvedPath} mimetype={mimetype}
+                                  taggable={false}>{resolvedPath}</PreviewPath>{findFileSize(resolvedPath)}</>
         } else {
             return 'Unknown'
         }
     }
 
+    const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
+    const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
     const filesPane = {
         menuItem: 'Files', render: () => <Tab.Pane>
-            <Header as={'h3'}>Singlefile File</Header>
-            {localPreviewPath(data.singlefile_path, 'text/html')}
-
-            <Header as={'h3'}>Readability File</Header>
-            {localPreviewPath(data.readability_path, 'text/html')}
-
-            <Header as={'h3'}>Readability Text File</Header>
-            {localPreviewPath(data.readability_txt_path, 'text/plain')}
-
-            <Header as={'h3'}>Readability JSON File</Header>
-            {localPreviewPath(data.readability_json_path, 'application/json')}
-
-            <Header as={'h3'}>Screenshot File</Header>
-            {screenshotPath ?
-                archiveFileLink(screenshotPath)
-                : 'Unknown'}
-
-            <Header as={'h3'}>Directory</Header>
-            {archiveFileLink(archiveFile.directory, true)}
+            <table style={tableStyle}>
+                <tbody>
+                <tr>
+                    <td style={labelStyle}><strong>Singlefile File</strong></td>
+                    <td>{localPreviewPath(data.singlefile_path, 'text/html')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability File</strong></td>
+                    <td>{localPreviewPath(data.readability_path, 'text/html')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability Text File</strong></td>
+                    <td>{localPreviewPath(data.readability_txt_path, 'text/plain')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Readability JSON File</strong></td>
+                    <td>{localPreviewPath(data.readability_json_path, 'application/json')}</td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Screenshot File</strong></td>
+                    <td>
+                        {screenshotPath
+                            ? <><PreviewPath path={screenshotPath} mimetype='image/*'
+                                             taggable={false}>{screenshotPath}</PreviewPath>{findFileSize(screenshotPath)}</>
+                            : 'Unknown'}
+                    </td>
+                </tr>
+                <tr>
+                    <td style={labelStyle}><strong>Directory</strong></td>
+                    <td><DirectoryLink path={archiveFile.directory}/></td>
+                </tr>
+                </tbody>
+            </table>
         </Tab.Pane>
     };
 

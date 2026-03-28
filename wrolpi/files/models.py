@@ -272,7 +272,8 @@ class FileGroup(ModelHelper, Base):
         new_files = list(self.files) if self.files else list()
         for path in paths:
             # Store just the filename, not the full path
-            new_files.append(dict(path=path.name, mimetype=get_mimetype(path)))
+            size = path.stat().st_size if path.exists() else None
+            new_files.append(dict(path=path.name, mimetype=get_mimetype(path), size=size))
         self.files = unique_by_predicate(new_files, lambda i: i['path'])
         # Update modification_datetime to include the new files' mtimes
         if paths:

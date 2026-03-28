@@ -6,6 +6,7 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {
     APIButton,
     BackButton,
+    DirectoryLink,
     encodeMediaPath,
     ErrorMessage,
     humanFileSize,
@@ -288,21 +289,33 @@ function DocPage() {
     };
 
     // Files pane.
+    const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
+    const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
     const filesPane = {
         menuItem: 'Files', render: () => <Tab.Pane>
-            {docFile.files && docFile.files.map((file, idx) =>
-                <div key={idx} style={{marginBottom: '0.5em'}}>
-                    <PreviewPath path={file.path} mimetype={file.mimetype} taggable={false}>
-                        {file.path}
-                    </PreviewPath>
-                    {file.size && <span style={{marginLeft: '1em', color: 'grey'}}>
-                        ({humanFileSize(file.size)})
-                    </span>}
-                </div>
-            )}
-
-            <Header as='h3'>Directory</Header>
-            <p>{directory || 'Unknown'}</p>
+            <table style={tableStyle}>
+                <tbody>
+                {docFile.files && docFile.files.map((file, idx) =>
+                    <tr key={idx}>
+                        <td style={labelStyle}>
+                            <strong>{file.path.split('.').pop().toUpperCase()}</strong>
+                        </td>
+                        <td>
+                            <PreviewPath path={file.path} mimetype={file.mimetype} taggable={false}>
+                                {file.path}
+                            </PreviewPath>
+                            {file.size && <span style={{marginLeft: '1em', color: 'grey'}}>
+                                ({humanFileSize(file.size)})
+                            </span>}
+                        </td>
+                    </tr>
+                )}
+                <tr>
+                    <td style={labelStyle}><strong>Directory</strong></td>
+                    <td><DirectoryLink path={directory}/></td>
+                </tr>
+                </tbody>
+            </table>
         </Tab.Pane>
     };
 

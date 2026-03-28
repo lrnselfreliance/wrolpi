@@ -246,6 +246,15 @@ export function PreviewPath({path, mimetype, taggable = true, ...props}) {
     return <PreviewLink file={{path, mimetype, taggable}} {...props}/>
 }
 
+export function DirectoryLink({path}) {
+    if (!path) return <span>Unknown</span>;
+    const href = `/media/${encodeMediaPath(path)}/`;
+    return <a href={href} target='_blank' rel='noopener noreferrer'
+              style={{color: 'inherit', textDecoration: 'none'}}>
+        {path}
+    </a>
+}
+
 export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }

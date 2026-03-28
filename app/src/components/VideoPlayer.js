@@ -6,6 +6,7 @@ import _ from "lodash";
 import {
     APIButton,
     BackButton,
+    DirectoryLink,
     encodeMediaPath,
     humanFileSize,
     humanNumber,
@@ -29,19 +30,6 @@ import {Comment, CommentGroup, Input, Label} from "semantic-ui-react";
 const MEDIA_PATH = '/media';
 
 
-function videoFileLink(path, directory = false) {
-    if (path) {
-        const href = directory ?
-            // Add / to end of directory.
-            `${MEDIA_PATH}/${encodeMediaPath(path)}/` :
-            `${MEDIA_PATH}/${encodeMediaPath(path)}`;
-        return <a href={href} target='_blank' rel='noopener noreferrer'>
-            <pre>{path}</pre>
-        </a>
-    } else {
-        return 'Unknown'
-    }
-}
 
 export function CaptionTrack({src, ...props}) {
     if (src.endsWith('.de.vtt')) {
@@ -311,44 +299,84 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     };
 
     const getFile = (suffix) => videoFile.files.find(i => i.path.toLowerCase().endsWith(suffix));
+    const fileSize = (file) => file && file.size
+        ? <span style={{marginLeft: '1em', color: 'grey'}}>({humanFileSize(file.size)})</span>
+        : null;
 
     const {poster_file, info_json_file} = video;
+    const videoPathFile = videoFile.files.find(i => i.path === video['video_path']);
     const ffprobeJsonFile = getFile('.ffprobe.json');
+    const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
+    const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
     const filesPane = {
         menuItem: 'Files', render: () => <Tab.Pane>
-            <h3>Video File</h3>
-            {videoFileLink(video['video_path'])}
+            <table style={tableStyle}>
+                <tbody>
+                <tr>
+                    <td style={labelStyle}><strong>Video File</strong></td>
+                    <td>
+                        {video['video_path']
+                            ? <><PreviewPath path={video['video_path']} mimetype='video/*' taggable={false}>
+                                {video['video_path']}
+                            </PreviewPath>{fileSize(videoPathFile)}</>
+                            : 'Unknown'}
+                    </td>
+                </tr>
 
-            <h4>Caption Files</h4>
-            {caption_files ?
-                caption_files.map(i => <p key={i['path']}><PreviewPath {...i} taggable={false}>
-                    {i['path']}
-                </PreviewPath></p>) : 'No caption files'
-            }
+                <tr>
+                    <td style={labelStyle}><strong>Caption Files</strong></td>
+                    <td>
+                        {caption_files
+                            ? caption_files.map(i => <div key={i['path']} style={{marginBottom: '0.3em'}}>
+                                <PreviewPath {...i} taggable={false}>{i['path']}</PreviewPath>
+                                {fileSize(i)}
+                            </div>)
+                            : 'No caption files'}
+                    </td>
+                </tr>
 
-            <h4>Poster File</h4>
-            {poster_file ?
-                <PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']} taggable={false}>
-                    {poster_file['path']}
-                </PreviewPath> : 'No poster file'
-            }
+                <tr>
+                    <td style={labelStyle}><strong>Poster File</strong></td>
+                    <td>
+                        {poster_file
+                            ? <><PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']}
+                                             taggable={false}>
+                                {poster_file['path']}
+                            </PreviewPath>{fileSize(poster_file)}</>
+                            : 'No poster file'}
+                    </td>
+                </tr>
 
-            <h4>Info JSON File</h4>
-            {info_json_file ?
-                <PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']} taggable={false}>
-                    {info_json_file['path']}
-                </PreviewPath> : 'No yt-dlp info json file'
-            }
+                <tr>
+                    <td style={labelStyle}><strong>Info JSON File</strong></td>
+                    <td>
+                        {info_json_file
+                            ? <><PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']}
+                                             taggable={false}>
+                                {info_json_file['path']}
+                            </PreviewPath>{fileSize(info_json_file)}</>
+                            : 'No yt-dlp info json file'}
+                    </td>
+                </tr>
 
-            <h4>ffprobe JSON File</h4>
-            {ffprobeJsonFile ?
-                <PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']} taggable={false}>
-                    {ffprobeJsonFile['path']}
-                </PreviewPath> : 'No ffprobe json file'
-            }
+                <tr>
+                    <td style={labelStyle}><strong>ffprobe JSON File</strong></td>
+                    <td>
+                        {ffprobeJsonFile
+                            ? <><PreviewPath path={ffprobeJsonFile['path']} mimetype={ffprobeJsonFile['mimetype']}
+                                             taggable={false}>
+                                {ffprobeJsonFile['path']}
+                            </PreviewPath>{fileSize(ffprobeJsonFile)}</>
+                            : 'No ffprobe json file'}
+                    </td>
+                </tr>
 
-            <h4>Directory</h4>
-            {videoFileLink(videoFile['directory'], true)}
+                <tr>
+                    <td style={labelStyle}><strong>Directory</strong></td>
+                    <td><DirectoryLink path={videoFile['directory']}/></td>
+                </tr>
+                </tbody>
+            </table>
         </Tab.Pane>
     }
 

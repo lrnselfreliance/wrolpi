@@ -175,6 +175,32 @@ def enable_hotspot() -> dict:
             timeout=10,
         )
 
+        # Wait for device to become ready after radio on.
+        # On real hardware, the device transitions from 'unavailable' to 'disconnected'
+        # which can take a few seconds.
+        import time
+        device_ready = False
+        for _ in range(20):  # 20 * 0.5s = 10s max
+            check = subprocess.run(
+                ["nmcli", "-t", "-f", "DEVICE,STATE", "device", "status"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if check.returncode == 0:
+                for line in check.stdout.strip().splitlines():
+                    parts = line.split(":")
+                    if len(parts) >= 2 and parts[0] == device and parts[1] != "unavailable":
+                        device_ready = True
+                        break
+            if device_ready:
+                break
+            time.sleep(0.5)
+
+        if not device_ready:
+            logger.warning("WiFi device %s did not become ready after turning radio on", device)
+            return {"success": False, "error": f"WiFi device {device} not ready after turning radio on"}
+
         # Create hotspot using NetworkManager
         logger.info("Enabling hotspot on %s with SSID %s", device, ssid)
         result = subprocess.run(

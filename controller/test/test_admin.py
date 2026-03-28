@@ -357,7 +357,6 @@ class TestEnableHotspot:
     def test_uses_config_values(self):
         """Should use get_config_value for device, ssid, and password."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            # Mock get_config_value to return custom values
             def mock_get_config(key, default=None):
                 config_map = {
                     'hotspot.device': 'wlan1',
@@ -367,20 +366,59 @@ class TestEnableHotspot:
                 return config_map.get(key, default)
 
             with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
-                mock_run = mock.Mock()
-                mock_run.returncode = 0
-                with mock.patch("subprocess.run", return_value=mock_run) as mock_subprocess:
-                    enable_hotspot()
+                radio_on = mock.Mock(returncode=0, stdout="", stderr="")
+                device_ready = mock.Mock(returncode=0, stdout="wlan1:disconnected\n", stderr="")
+                hotspot_ok = mock.Mock(returncode=0, stdout="", stderr="")
 
-                    # Verify the hotspot was created with config values
-                    calls = mock_subprocess.call_args_list
+                with mock.patch("subprocess.run", side_effect=[radio_on, device_ready, hotspot_ok]) as mock_subprocess:
+                    with mock.patch("time.sleep"):
+                        enable_hotspot()
+
                     # Find the hotspot creation call (nmcli device wifi hotspot)
-                    hotspot_call = [c for c in calls if len(c[0][0]) > 2 and 'hotspot' in c[0][0]]
-                    if hotspot_call:
-                        cmd_args = hotspot_call[0][0][0]
-                        assert "wlan1" in cmd_args
-                        assert "TestSSID" in cmd_args
-                        assert "testpassword123" in cmd_args
+                    calls = mock_subprocess.call_args_list
+                    hotspot_call = [c for c in calls if 'hotspot' in c[0][0]]
+                    assert hotspot_call, "Hotspot creation call not found"
+                    cmd_args = hotspot_call[0][0][0]
+                    assert "wlan1" in cmd_args
+                    assert "TestSSID" in cmd_args
+                    assert "testpassword123" in cmd_args
+
+
+    def test_waits_for_device_ready_after_radio_on(self):
+        """Should poll device status after turning radio on, waiting for device
+        to transition from 'unavailable' before creating hotspot.
+        Real RPi behavior: radio on takes ~2s for device to become 'disconnected'."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            # Simulate: radio on succeeds, device initially unavailable, then disconnected, then hotspot succeeds
+            radio_on_result = mock.Mock(returncode=0, stdout="", stderr="")
+            device_unavailable = mock.Mock(returncode=0, stdout="wlan0:unavailable\n", stderr="")
+            device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+            hotspot_result = mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch("subprocess.run", side_effect=[
+                radio_on_result,     # nmcli radio wifi on
+                device_unavailable,  # nmcli -t device status (not ready)
+                device_ready,        # nmcli -t device status (ready)
+                hotspot_result,      # nmcli device wifi hotspot
+            ]):
+                with mock.patch("time.sleep"):  # Don't actually sleep in tests
+                    result = enable_hotspot()
+                    assert result["success"] is True
+
+    def test_fails_if_device_never_becomes_ready(self):
+        """Should fail with a clear error if device stays unavailable after radio on."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            radio_on_result = mock.Mock(returncode=0, stdout="", stderr="")
+            device_unavailable = mock.Mock(returncode=0, stdout="wlan0:unavailable\n", stderr="")
+
+            # Device never becomes ready (all polls return unavailable)
+            with mock.patch("subprocess.run", side_effect=[
+                radio_on_result,
+            ] + [device_unavailable] * 20):
+                with mock.patch("time.sleep"):
+                    result = enable_hotspot()
+                    assert result["success"] is False
+                    assert "not ready" in result.get("error", "").lower() or "unavailable" in result.get("error", "").lower()
 
 
 class TestDisableHotspot:

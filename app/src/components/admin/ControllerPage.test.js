@@ -34,12 +34,16 @@ jest.mock('../../api/controller', () => ({
     getMounts: jest.fn().mockResolvedValue([]),
     getSmartStatus: jest.fn().mockResolvedValue({}),
     restartServices: jest.fn().mockResolvedValue({success: true}),
+    getSambaStatus: jest.fn().mockResolvedValue({enabled: false, available: true, shares: []}),
+    addSambaShare: jest.fn().mockResolvedValue({success: true}),
+    removeSambaShare: jest.fn().mockResolvedValue({success: true}),
 }));
 
 
-// Mock useDockerized hook
+// Mock hooks
 jest.mock('../../hooks/customHooks', () => ({
     useDockerized: jest.fn().mockReturnValue(false),
+    useMediaDirectory: jest.fn().mockReturnValue('/media/wrolpi'),
     useBluetooth: jest.fn().mockReturnValue({on: false, setBluetooth: jest.fn()}),
     useHotspot: jest.fn().mockReturnValue({on: true, setHotspot: jest.fn()}),
     useThrottle: jest.fn().mockReturnValue({on: false, setThrottle: jest.fn()}),
@@ -65,6 +69,9 @@ jest.mock('../Common', () => {
         ),
         APIButton: ({children, onClick, disabled}) => (
             <button onClick={onClick} disabled={disabled}>{children}</button>
+        ),
+        DirectorySearch: ({onSelect, value}) => (
+            <input data-testid="directory-search" value={value || ''} onChange={e => onSelect && onSelect(e.target.value)}/>
         ),
     };
 });

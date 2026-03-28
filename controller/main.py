@@ -77,6 +77,10 @@ async def lifespan(app: FastAPI):
         # Apply timezone from wrolpi.yaml to the system.
         from controller.lib.admin import apply_timezone_from_config
         apply_timezone_from_config()
+
+        # Apply Samba config if enabled.
+        from controller.lib.samba import apply_samba_from_config
+        apply_samba_from_config()
     else:
         # Drive may be mounted but controller.yaml may not exist yet (e.g., the system
         # was set up before the Controller was introduced). Create the marker file.
@@ -94,6 +98,9 @@ async def lifespan(app: FastAPI):
 
             from controller.lib.admin import apply_timezone_from_config
             apply_timezone_from_config()
+
+            from controller.lib.samba import apply_samba_from_config
+            apply_samba_from_config()
         else:
             logger.info("Primary drive not mounted - using default configuration")
 

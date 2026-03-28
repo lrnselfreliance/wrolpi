@@ -109,6 +109,23 @@ DEFAULT_CONFIG = {
             "use_https": False,
             "description": "Web proxy",
         },
+        # Samba file sharing services
+        {
+            "name": "smbd",
+            "systemd_name": "smbd",
+            "port": 445,
+            "viewable": False,
+            "use_https": False,
+            "description": "Samba file sharing",
+        },
+        {
+            "name": "nmbd",
+            "systemd_name": "nmbd",
+            "port": 137,
+            "viewable": False,
+            "use_https": False,
+            "description": "Samba NetBIOS name service",
+        },
         # Upgrade service - only shown when running
         {
             "name": "wrolpi-upgrade",
@@ -129,5 +146,10 @@ DEFAULT_CONFIG = {
 
     "throttle": {
         "default_governor": "ondemand",
+    },
+
+    "samba": {
+        "shares": [],
+        # Each share: {"name": str, "path": str, "read_only": bool, "comment": str}
     },
 }

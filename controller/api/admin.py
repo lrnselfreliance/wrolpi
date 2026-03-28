@@ -10,6 +10,10 @@ from controller.api.schemas import (
     HotspotActionResponse,
     HotspotStatusResponse,
     RestartServicesResponse,
+    SambaShareAddRequest,
+    SambaShareRemoveResponse,
+    SambaShareResponse,
+    SambaStatusResponse,
     ServiceRestartResult,
     SystemActionResponse,
     ThrottleActionResponse,
@@ -35,6 +39,11 @@ from controller.lib.admin import (
     shutdown_system,
 )
 from controller.lib.config import is_docker_mode
+from controller.lib.samba import (
+    add_share,
+    get_samba_status_dict,
+    remove_share,
+)
 
 router = APIRouter(tags=["admin"])
 
@@ -89,6 +98,32 @@ async def bluetooth_disable() -> BluetoothActionResponse:
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return BluetoothActionResponse(**result)
+
+
+# --- Samba ---
+
+@router.get("/api/samba/status", response_model=SambaStatusResponse)
+async def samba_status() -> SambaStatusResponse:
+    """Get Samba sharing status."""
+    return SambaStatusResponse(**get_samba_status_dict())
+
+
+@router.post("/api/samba/shares", response_model=SambaShareResponse)
+async def samba_add_share(request: SambaShareAddRequest) -> SambaShareResponse:
+    """Add a Samba share."""
+    result = add_share(request.name, request.path, request.read_only, request.comment or "")
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
+    return SambaShareResponse(**result)
+
+
+@router.delete("/api/samba/shares/{share_name}", response_model=SambaShareRemoveResponse)
+async def samba_remove_share(share_name: str) -> SambaShareRemoveResponse:
+    """Remove a Samba share."""
+    result = remove_share(share_name)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error", "Failed"))
+    return SambaShareRemoveResponse(**result)
 
 
 # --- Throttle ---

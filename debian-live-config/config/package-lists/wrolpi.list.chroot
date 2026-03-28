@@ -88,6 +88,7 @@ python3-pip
 python3-venv
 renderd
 rsync
+samba
 smartmontools
 software-properties-common
 sudo

@@ -1,20 +1,23 @@
 import React from 'react';
 import {Checkbox, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
 import {Button, Confirm, Header, Loader, Modal, Segment, Table} from "../Theme";
-import {APIButton, BluetoothToggle, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle,} from "../Common";
-import {useDockerized} from "../../hooks/customHooks";
+import {APIButton, BluetoothToggle, DirectorySearch, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle,} from "../Common";
+import {useDockerized, useMediaDirectory} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
 import {
     addFstabEntry,
+    addSambaShare,
     disableService,
     enableService,
     getDisks,
     getFstabEntries,
+    getSambaStatus,
     getServiceLogs,
     getServices,
     getSmartStatus,
     mountDisk,
     removeFstabEntry,
+    removeSambaShare,
     restartService,
     restartServices,
     startService,
@@ -1053,6 +1056,215 @@ function DiskSection() {
 }
 
 
+function SambaSection() {
+    const [status, setStatus] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+    const [actionLoading, setActionLoading] = React.useState(false);
+    const [addOpen, setAddOpen] = React.useState(false);
+    const [shareAll, setShareAll] = React.useState(true);
+    const [newName, setNewName] = React.useState('');
+    const [newPath, setNewPath] = React.useState('');
+    const [newReadOnly, setNewReadOnly] = React.useState(true);
+    const [newComment, setNewComment] = React.useState('');
+    const [removeConfirmName, setRemoveConfirmName] = React.useState(null);
+    const dockerized = useDockerized();
+    const mediaDirectory = useMediaDirectory();
+
+    const fetchStatus = async () => {
+        try {
+            const result = await getSambaStatus();
+            setStatus(result);
+        } catch (e) {
+            console.error('Failed to fetch Samba status:', e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchStatus();
+        const interval = setInterval(fetchStatus, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleAddShare = async () => {
+        if (!newName.trim()) return;
+        setActionLoading(true);
+        const absolutePath = shareAll
+            ? mediaDirectory
+            : `${mediaDirectory}/${newPath.trim()}`;
+        try {
+            await addSambaShare(newName.trim(), absolutePath, newReadOnly, newComment.trim());
+            toast({type: 'success', title: 'Share Added', description: `Added share "${newName}"`, time: 3000});
+            setAddOpen(false);
+            setShareAll(true);
+            setNewName('');
+            setNewPath('');
+            setNewReadOnly(true);
+            setNewComment('');
+            await fetchStatus();
+        } catch (e) {
+            toast({type: 'error', title: 'Add Share Failed', description: e.message, time: 5000});
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleRemoveShare = async (name) => {
+        setActionLoading(true);
+        try {
+            await removeSambaShare(name);
+            toast({type: 'success', title: 'Share Removed', description: `Removed share "${name}"`, time: 3000});
+            await fetchStatus();
+        } catch (e) {
+            toast({type: 'error', title: 'Remove Share Failed', description: e.message, time: 5000});
+        } finally {
+            setActionLoading(false);
+            setRemoveConfirmName(null);
+        }
+    };
+
+    if (loading) {
+        return <Segment><Loader active inline='centered'/></Segment>;
+    }
+
+    if (!status || !status.available) {
+        if (dockerized) return null;
+        return (
+            <Segment>
+                <Header as='h3'>
+                    <Icon name='folder open'/>
+                    Network Shares (Samba)
+                </Header>
+                <Message info>Samba is not available on this system.</Message>
+            </Segment>
+        );
+    }
+
+    const shares = status.shares || [];
+
+    return (
+        <Segment>
+            <Header as='h3'>
+                <Icon name='folder open'/>
+                Network Shares (Samba)
+            </Header>
+
+            <p>Configure directories to share over the local network. Start the smbd service to activate sharing.</p>
+
+            {shares.length > 0 && (
+                <Table celled style={{marginTop: '1em'}}>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>Name</Table.HeaderCell>
+                            <Table.HeaderCell>Path</Table.HeaderCell>
+                            <Table.HeaderCell>Read Only</Table.HeaderCell>
+                            <Table.HeaderCell>Comment</Table.HeaderCell>
+                            <Table.HeaderCell>Actions</Table.HeaderCell>
+                        </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                        {shares.map(share => (
+                            <Table.Row key={share.name}>
+                                <Table.Cell>{share.name}</Table.Cell>
+                                <Table.Cell><code>{share.path}</code></Table.Cell>
+                                <Table.Cell>{share.read_only ? 'Yes' : 'No'}</Table.Cell>
+                                <Table.Cell>{share.comment}</Table.Cell>
+                                <Table.Cell>
+                                    <Button
+                                        size='tiny'
+                                        color='red'
+                                        icon='trash'
+                                        disabled={actionLoading}
+                                        onClick={() => setRemoveConfirmName(share.name)}
+                                    />
+                                </Table.Cell>
+                            </Table.Row>
+                        ))}
+                    </Table.Body>
+                </Table>
+            )}
+
+            <Confirm
+                open={removeConfirmName !== null}
+                header='Remove Share'
+                content={`Remove the share "${removeConfirmName}"?`}
+                confirmButton='Remove'
+                onCancel={() => setRemoveConfirmName(null)}
+                onConfirm={() => handleRemoveShare(removeConfirmName)}
+            />
+
+            <div style={{marginTop: '1em'}}>
+                <Button
+                    icon='plus'
+                    content='Add Share'
+                    onClick={() => setAddOpen(true)}
+                    disabled={actionLoading}
+                />
+            </div>
+
+            <Modal open={addOpen} onClose={() => { setAddOpen(false); setShareAll(true); }} size='small'>
+                <Modal.Header>Add Samba Share</Modal.Header>
+                <Modal.Content>
+                    <Form>
+                        <Form.Field>
+                            <label>Share Name</label>
+                            <Input
+                                placeholder='e.g. Documents'
+                                value={newName}
+                                onChange={(e, {value}) => setNewName(value)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <Checkbox
+                                label='Share all files'
+                                checked={shareAll}
+                                onChange={(e, {checked}) => setShareAll(checked)}
+                            />
+                        </Form.Field>
+                        {!shareAll && (
+                            <Form.Field>
+                                <label>Path</label>
+                                <DirectorySearch
+                                    onSelect={setNewPath}
+                                    value={newPath}
+                                />
+                            </Form.Field>
+                        )}
+                        <Form.Field>
+                            <Checkbox
+                                label='Read Only'
+                                checked={newReadOnly}
+                                onChange={(e, {checked}) => setNewReadOnly(checked)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <label>Comment (optional)</label>
+                            <Input
+                                placeholder='Description of this share'
+                                value={newComment}
+                                onChange={(e, {value}) => setNewComment(value)}
+                            />
+                        </Form.Field>
+                    </Form>
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+                    <Button
+                        color='green'
+                        icon='plus'
+                        content='Add Share'
+                        disabled={!newName.trim() || actionLoading}
+                        loading={actionLoading}
+                        onClick={handleAddShare}
+                    />
+                </Modal.Actions>
+            </Modal>
+        </Segment>
+    );
+}
+
+
 function AdminControlsSection() {
     const dockerized = useDockerized();
 
@@ -1089,6 +1301,7 @@ export function ControllerPage() {
         <Container fluid>
             <AdminControlsSection/>
             <ServicesSection/>
+            <SambaSection/>
             <DiskSection/>
             <ControllerLink/>
         </Container>

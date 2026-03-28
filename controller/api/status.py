@@ -12,7 +12,7 @@ wrol_mode) remain in the main WROLPi API at /api/status.
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from controller.lib.admin import get_hotspot_status, get_throttle_status, HotspotStatus
+from controller.lib.admin import get_bluetooth_status, get_hotspot_status, get_throttle_status, BluetoothStatus, HotspotStatus
 from controller.lib.config import is_docker_mode, is_rpi, is_rpi4, is_rpi5
 from controller.lib.status import (
     get_cpu_status,
@@ -31,7 +31,7 @@ def get_cached_status(request: Request) -> dict:
     return getattr(request.app.state, "cached_status", {})
 
 
-def get_system_info() -> dict:
+async def get_system_info() -> dict:
     """
     Get static system info that doesn't need frequent updates.
     These are collected on each request as they rarely change.
@@ -39,6 +39,7 @@ def get_system_info() -> dict:
     from controller.lib.config import get_config
 
     hotspot_status = get_hotspot_status()
+    bluetooth_status = await get_bluetooth_status()
     throttle_status = get_throttle_status()
 
     # Get hotspot SSID from config if hotspot is connected
@@ -51,6 +52,7 @@ def get_system_info() -> dict:
         "is_rpi": is_rpi(),
         "is_rpi4": is_rpi4(),
         "is_rpi5": is_rpi5(),
+        "bluetooth_status": bluetooth_status.name,
         "hotspot_status": hotspot_status.name,
         "hotspot_ssid": hotspot_ssid,
         "throttle_status": throttle_status.name,
@@ -78,7 +80,7 @@ async def get_all_stats(request: Request):
         cached = await collect_all_status()
 
     # Add system info to response
-    response = {**cached, **get_system_info()}
+    response = {**cached, **await get_system_info()}
     return JSONResponse(content=response)
 
 

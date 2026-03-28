@@ -6,6 +6,7 @@ Migrated from wrolpi/admin.py - provides system control functions.
 
 import asyncio
 import enum
+import json
 import logging
 import subprocess
 from pathlib import Path
@@ -27,6 +28,14 @@ class HotspotStatus(enum.Enum):
     connected = enum.auto()  # Radio is on, Hotspot is on.
     unknown = enum.auto()  # Unknown status. Hotspot may not be supported.
     in_use = enum.auto()  # Wi-Fi device is in use for a network connection.
+
+
+class BluetoothStatus(enum.Enum):
+    """Bluetooth radio status."""
+    on = enum.auto()  # Bluetooth radio is on (rfkill unblocked).
+    off = enum.auto()  # Bluetooth radio is off (rfkill blocked).
+    unavailable = enum.auto()  # No Bluetooth hardware or rfkill not installed.
+    unknown = enum.auto()  # Docker mode or cannot determine.
 
 
 class GovernorStatus(enum.Enum):
@@ -230,6 +239,158 @@ def disable_hotspot() -> dict:
         return {"success": False, "error": "nmcli not found"}
     except subprocess.SubprocessError as e:
         logger.warning("Failed to disable hotspot: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+# --- Bluetooth ---
+
+
+async def get_bluetooth_status() -> BluetoothStatus:
+    """
+    Get current Bluetooth radio status using rfkill.
+
+    Parses JSON output from `rfkill -J` to determine if Bluetooth is blocked.
+
+    Returns:
+        BluetoothStatus enum value
+    """
+    if is_docker_mode():
+        return BluetoothStatus.unknown
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "rfkill", "-J",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+
+        if proc.returncode != 0:
+            return BluetoothStatus.unknown
+
+        data = json.loads(stdout.decode())
+        bt_devices = [d for d in data.get("rfkilldevices", []) if d.get("type") == "bluetooth"]
+
+        if not bt_devices:
+            return BluetoothStatus.unavailable
+
+        # If any Bluetooth device is soft or hard blocked, report as off.
+        for device in bt_devices:
+            if device.get("soft") == "blocked" or device.get("hard") == "blocked":
+                return BluetoothStatus.off
+
+        return BluetoothStatus.on
+
+    except (json.JSONDecodeError, KeyError):
+        return BluetoothStatus.unknown
+    except asyncio.TimeoutError:
+        return BluetoothStatus.unknown
+    except FileNotFoundError:
+        return BluetoothStatus.unavailable
+    except OSError:
+        return BluetoothStatus.unknown
+
+
+async def get_bluetooth_status_dict() -> dict:
+    """
+    Get Bluetooth status as a dict for API responses.
+
+    Returns dict matching BluetoothStatusResponse schema:
+        enabled: bool - Whether Bluetooth radio is currently on
+        available: bool - Whether Bluetooth functionality is available
+        reason: Optional[str] - Reason if unavailable
+    """
+    status = await get_bluetooth_status()
+
+    enabled = status == BluetoothStatus.on
+    available = status not in (BluetoothStatus.unknown, BluetoothStatus.unavailable)
+
+    reason = None
+    if status == BluetoothStatus.unknown:
+        reason = "Bluetooth not supported or rfkill unavailable"
+    elif status == BluetoothStatus.unavailable:
+        reason = "No Bluetooth hardware detected"
+
+    return {
+        "enabled": enabled,
+        "available": available,
+        "reason": reason,
+    }
+
+
+async def enable_bluetooth() -> dict:
+    """
+    Enable Bluetooth radio using rfkill.
+
+    Returns:
+        dict with success status
+    """
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    logger.info("Enabling Bluetooth radio")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "rfkill", "unblock", "bluetooth",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+
+        if proc.returncode == 0:
+            logger.info("Bluetooth radio enabled successfully")
+            return {"success": True}
+        else:
+            error_msg = stderr.decode().strip()
+            logger.warning("Failed to enable Bluetooth: %s", error_msg)
+            return {"success": False, "error": error_msg or "Unknown error"}
+
+    except asyncio.TimeoutError:
+        logger.warning("Timeout enabling Bluetooth")
+        return {"success": False, "error": "Timeout enabling Bluetooth"}
+    except FileNotFoundError:
+        logger.warning("rfkill not found, cannot enable Bluetooth")
+        return {"success": False, "error": "rfkill not found"}
+    except OSError as e:
+        logger.warning("Failed to enable Bluetooth: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+async def disable_bluetooth() -> dict:
+    """
+    Disable Bluetooth radio using rfkill.
+
+    Returns:
+        dict with success status
+    """
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    logger.info("Disabling Bluetooth radio")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "rfkill", "block", "bluetooth",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+
+        if proc.returncode == 0:
+            logger.info("Bluetooth radio disabled successfully")
+            return {"success": True}
+        else:
+            error_msg = stderr.decode().strip()
+            logger.warning("Failed to disable Bluetooth: %s", error_msg)
+            return {"success": False, "error": error_msg or "Unknown error"}
+
+    except asyncio.TimeoutError:
+        logger.warning("Timeout disabling Bluetooth")
+        return {"success": False, "error": "Timeout disabling Bluetooth"}
+    except FileNotFoundError:
+        logger.warning("rfkill not found, cannot disable Bluetooth")
+        return {"success": False, "error": "rfkill not found"}
+    except OSError as e:
+        logger.warning("Failed to disable Bluetooth: %s", e)
         return {"success": False, "error": str(e)}
 
 

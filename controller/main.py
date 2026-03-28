@@ -78,7 +78,24 @@ async def lifespan(app: FastAPI):
         from controller.lib.admin import apply_timezone_from_config
         apply_timezone_from_config()
     else:
-        logger.info("Primary drive not mounted - using default configuration")
+        # Drive may be mounted but controller.yaml may not exist yet (e.g., the system
+        # was set up before the Controller was introduced). Create the marker file.
+        from controller.lib.config import get_media_directory, save_config
+        media_dir = get_media_directory()
+        if media_dir.is_mount():
+            logger.info("Primary drive is mounted at %s but controller.yaml is missing, creating it", media_dir)
+            config_dir = media_dir / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                save_config()
+                reload_config_from_drive()
+            except RuntimeError as e:
+                logger.warning("Failed to create controller.yaml: %s", e)
+
+            from controller.lib.admin import apply_timezone_from_config
+            apply_timezone_from_config()
+        else:
+            logger.info("Primary drive not mounted - using default configuration")
 
     # Initialize cached status
     app.state.cached_status = {}

@@ -1,7 +1,7 @@
 import React from 'react';
 import {Checkbox, Container, Dropdown, Form, Icon, Input} from "semantic-ui-react";
 import {Button, Confirm, Header, Loader, Modal, Segment, Table} from "../Theme";
-import {APIButton, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle,} from "../Common";
+import {APIButton, BluetoothToggle, HandPointMessage, HotspotToggle, InfoMessage, ThrottleToggle, Toggle,} from "../Common";
 import {useDockerized} from "../../hooks/customHooks";
 import {Media} from "../../contexts/contexts";
 import {
@@ -1064,6 +1064,7 @@ function AdminControlsSection() {
             </Header>
 
             <HotspotToggle/>
+            <BluetoothToggle/>
             <ThrottleToggle/>
 
             {!dockerized && (

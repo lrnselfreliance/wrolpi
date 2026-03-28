@@ -40,6 +40,7 @@ jest.mock('../../api/controller', () => ({
 // Mock useDockerized hook
 jest.mock('../../hooks/customHooks', () => ({
     useDockerized: jest.fn().mockReturnValue(false),
+    useBluetooth: jest.fn().mockReturnValue({on: false, setBluetooth: jest.fn()}),
     useHotspot: jest.fn().mockReturnValue({on: true, setHotspot: jest.fn()}),
     useThrottle: jest.fn().mockReturnValue({on: false, setThrottle: jest.fn()}),
 }));
@@ -49,6 +50,7 @@ jest.mock('../Common', () => {
     const actual = jest.requireActual('../Common');
     return {
         ...actual,
+        BluetoothToggle: () => <div data-testid="bluetooth-toggle">BluetoothToggle</div>,
         HotspotToggle: () => <div data-testid="hotspot-toggle">HotspotToggle</div>,
         ThrottleToggle: () => <div data-testid="throttle-toggle">ThrottleToggle</div>,
         Toggle: ({label, checked, onChange}) => (

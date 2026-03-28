@@ -95,6 +95,18 @@ export async function disableThrottle() {
     return controllerFetch('/throttle/disable', {method: 'POST'});
 }
 
+export async function getBluetoothStatus() {
+    return controllerFetch('/bluetooth/status');
+}
+
+export async function enableBluetooth() {
+    return controllerFetch('/bluetooth/enable', {method: 'POST'});
+}
+
+export async function disableBluetooth() {
+    return controllerFetch('/bluetooth/disable', {method: 'POST'});
+}
+
 export async function shutdownSystem() {
     return controllerFetch('/shutdown', {method: 'POST'});
 }

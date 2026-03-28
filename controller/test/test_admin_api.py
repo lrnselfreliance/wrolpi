@@ -45,6 +45,48 @@ class TestHotspotDisableEndpoint:
         assert "Docker" in response.json()["detail"]
 
 
+class TestBluetoothStatusEndpoint:
+    """Tests for /api/bluetooth/status endpoint."""
+
+    def test_bluetooth_status_returns_200(self, test_client):
+        """Bluetooth status endpoint should return 200 OK."""
+        response = test_client.get("/api/bluetooth/status")
+        assert response.status_code == 200
+
+    def test_bluetooth_status_returns_expected_fields(self, test_client):
+        """Bluetooth status should return enabled and available fields."""
+        response = test_client.get("/api/bluetooth/status")
+        data = response.json()
+        assert "enabled" in data
+        assert "available" in data
+
+    def test_bluetooth_status_shows_unavailable_in_docker(self, test_client_docker_mode):
+        """Bluetooth should be unavailable in Docker mode."""
+        response = test_client_docker_mode.get("/api/bluetooth/status")
+        data = response.json()
+        assert data["available"] is False
+
+
+class TestBluetoothEnableEndpoint:
+    """Tests for /api/bluetooth/enable endpoint."""
+
+    def test_bluetooth_enable_fails_in_docker(self, test_client_docker_mode):
+        """Bluetooth enable should fail in Docker mode."""
+        response = test_client_docker_mode.post("/api/bluetooth/enable")
+        assert response.status_code == 500
+        assert "Docker" in response.json()["detail"]
+
+
+class TestBluetoothDisableEndpoint:
+    """Tests for /api/bluetooth/disable endpoint."""
+
+    def test_bluetooth_disable_fails_in_docker(self, test_client_docker_mode):
+        """Bluetooth disable should fail in Docker mode."""
+        response = test_client_docker_mode.post("/api/bluetooth/disable")
+        assert response.status_code == 500
+        assert "Docker" in response.json()["detail"]
+
+
 class TestThrottleStatusEndpoint:
     """Tests for /api/throttle/status endpoint."""
 
@@ -159,6 +201,14 @@ class TestOpenAPIIncludesAdminEndpoints:
         assert "/api/hotspot/status" in data["paths"]
         assert "/api/hotspot/enable" in data["paths"]
         assert "/api/hotspot/disable" in data["paths"]
+
+    def test_openapi_has_bluetooth_paths(self, test_client):
+        """OpenAPI schema should include bluetooth paths."""
+        response = test_client.get("/openapi.json")
+        data = response.json()
+        assert "/api/bluetooth/status" in data["paths"]
+        assert "/api/bluetooth/enable" in data["paths"]
+        assert "/api/bluetooth/disable" in data["paths"]
 
     def test_openapi_has_throttle_paths(self, test_client):
         """OpenAPI schema should include throttle paths."""

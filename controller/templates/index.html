@@ -773,7 +773,7 @@
 <body>
 {% if docker_mode %}
 <div class="warning-banner">
-    Running in Docker mode. Disk mounting, hotspot, and shutdown are not available.
+    Running in Docker mode. Disk mounting, hotspot, Bluetooth, and shutdown are not available.
 </div>
 {% endif %}
 
@@ -904,6 +904,12 @@
 
     <section id="actions">
         <h2>System Actions</h2>
+        {% if not docker_mode %}
+        <div class="action-buttons" style="margin-bottom: 1rem;">
+            <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
+            <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
+        </div>
+        {% endif %}
         <div class="action-buttons">
             <button class="btn btn-warning" onclick="restartServices()">Restart All Services</button>
             {% if not docker_mode %}
@@ -1233,6 +1239,94 @@
         } catch (e) {
             alert(`Failed to shutdown: ${e.message}`);
         }
+    }
+
+    // --- Hotspot ---
+    let hotspotEnabled = null;
+
+    async function updateHotspotButton() {
+        const btn = document.getElementById('hotspot-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/hotspot/status');
+            hotspotEnabled = data.enabled;
+            if (!data.available) {
+                btn.textContent = 'Hotspot Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.enabled) {
+                btn.textContent = 'Disable Hotspot';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Enable Hotspot';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'Hotspot Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleHotspot() {
+        const btn = document.getElementById('hotspot-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (hotspotEnabled) {
+                await apiCall('api/hotspot/disable', 'POST');
+            } else {
+                await apiCall('api/hotspot/enable', 'POST');
+            }
+        } catch (e) {
+            alert(`Hotspot error: ${e.message}`);
+        }
+        await updateHotspotButton();
+    }
+
+    // --- Bluetooth ---
+    let bluetoothEnabled = null;
+
+    async function updateBluetoothButton() {
+        const btn = document.getElementById('bluetooth-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/bluetooth/status');
+            bluetoothEnabled = data.enabled;
+            if (!data.available) {
+                btn.textContent = 'Bluetooth Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.enabled) {
+                btn.textContent = 'Disable Bluetooth';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Enable Bluetooth';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'Bluetooth Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleBluetooth() {
+        const btn = document.getElementById('bluetooth-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (bluetoothEnabled) {
+                await apiCall('api/bluetooth/disable', 'POST');
+            } else {
+                await apiCall('api/bluetooth/enable', 'POST');
+            }
+        } catch (e) {
+            alert(`Bluetooth error: ${e.message}`);
+        }
+        await updateBluetoothButton();
     }
 
     async function waitForController(maxWaitMs = 60000) {
@@ -2471,6 +2565,10 @@
         // Update every 10 seconds
         const updateInterval = 10000;
 
+        // Fetch hardware button status immediately
+        updateHotspotButton();
+        updateBluetoothButton();
+
         // Initial update after a short delay (to not overlap with initial load)
         setTimeout(() => {
             updateSystemStatus();
@@ -2485,6 +2583,8 @@
             updateServicesTable();
             loadDisks();
             loadSmart();
+            updateHotspotButton();
+            updateBluetoothButton();
         }, updateInterval);
     }
 </script>

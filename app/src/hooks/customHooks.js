@@ -38,6 +38,8 @@ import {
     updateDomain,
 } from "../api";
 import {
+    enableBluetooth,
+    disableBluetooth,
     enableHotspot,
     disableHotspot,
     enableThrottle,
@@ -1118,6 +1120,43 @@ export const useThrottle = () => {
     }
 
     return {on, setOn, setThrottle: localSetThrottle};
+}
+
+export const useBluetooth = () => {
+    const [on, setOn] = useState(null);
+    const {status} = useContext(StatusContext);
+
+    useEffect(() => {
+        const bluetoothStatus = status?.bluetooth_status;
+        if (bluetoothStatus === 'on') {
+            setOn(true);
+        } else if (bluetoothStatus === 'off') {
+            setOn(false);
+        } else {
+            setOn(null);
+        }
+    }, [status?.bluetooth_status]);
+
+    const localSetBluetooth = async (enable) => {
+        setOn(null);
+        try {
+            if (enable) {
+                await enableBluetooth();
+            } else {
+                await disableBluetooth();
+            }
+        } catch (e) {
+            console.error('Bluetooth error:', e);
+            toast({
+                type: 'error',
+                title: 'Bluetooth Error',
+                description: e.message || 'Could not modify Bluetooth. See server logs.',
+                time: 5000,
+            });
+        }
+    }
+
+    return {on, setBluetooth: localSetBluetooth};
 }
 
 export const useSearchDirectories = (value) => {

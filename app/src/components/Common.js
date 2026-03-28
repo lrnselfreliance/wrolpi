@@ -21,7 +21,7 @@ import {
 } from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
+import {useBluetooth, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
@@ -978,6 +978,20 @@ export function ThrottleToggle() {
             onChange={checked => setThrottle(checked)}
         />
         {disabled && <InfoPopup content='CPU Power-save is not supported on this server'/>}
+    </div>;
+}
+
+export function BluetoothToggle() {
+    let {on, setBluetooth} = useBluetooth();
+    const disabled = on === null;
+    return <div style={{margin: '0.5em'}}>
+        <Toggle
+            label='Bluetooth'
+            disabled={disabled}
+            checked={on === true}
+            onChange={checked => setBluetooth(checked)}
+        />
+        {disabled && <InfoPopup content='Bluetooth is not supported on this server'/>}
     </div>;
 }
 

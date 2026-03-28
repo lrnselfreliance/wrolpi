@@ -5,6 +5,8 @@ Admin API endpoints for WROLPi Controller.
 from fastapi import APIRouter, HTTPException
 
 from controller.api.schemas import (
+    BluetoothActionResponse,
+    BluetoothStatusResponse,
     HotspotActionResponse,
     HotspotStatusResponse,
     RestartServicesResponse,
@@ -17,10 +19,13 @@ from controller.api.schemas import (
     TimezoneStatusResponse,
 )
 from controller.lib.admin import (
+    disable_bluetooth,
     disable_hotspot,
     disable_throttle,
+    enable_bluetooth,
     enable_hotspot,
     enable_throttle,
+    get_bluetooth_status_dict,
     get_hotspot_status_dict,
     get_throttle_status_dict,
     get_timezone_status_dict,
@@ -58,6 +63,32 @@ async def hotspot_disable() -> HotspotActionResponse:
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return HotspotActionResponse(**result)
+
+
+# --- Bluetooth ---
+
+@router.get("/api/bluetooth/status", response_model=BluetoothStatusResponse)
+async def bluetooth_status() -> BluetoothStatusResponse:
+    """Get Bluetooth radio status."""
+    return BluetoothStatusResponse(**await get_bluetooth_status_dict())
+
+
+@router.post("/api/bluetooth/enable", response_model=BluetoothActionResponse)
+async def bluetooth_enable() -> BluetoothActionResponse:
+    """Enable Bluetooth radio."""
+    result = await enable_bluetooth()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return BluetoothActionResponse(**result)
+
+
+@router.post("/api/bluetooth/disable", response_model=BluetoothActionResponse)
+async def bluetooth_disable() -> BluetoothActionResponse:
+    """Disable Bluetooth radio."""
+    result = await disable_bluetooth()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return BluetoothActionResponse(**result)
 
 
 # --- Throttle ---

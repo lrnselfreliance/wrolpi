@@ -8,10 +8,13 @@ import pytest
 
 from controller.lib.admin import (
     apply_timezone_from_config,
+    disable_bluetooth,
     disable_hotspot,
     disable_throttle,
+    enable_bluetooth,
     enable_hotspot,
     enable_throttle,
+    get_bluetooth_status,
     get_hotspot_status,
     get_throttle_status,
     get_timezone_status_dict,
@@ -19,9 +22,175 @@ from controller.lib.admin import (
     restart_all_services,
     set_timezone,
     shutdown_system,
+    BluetoothStatus,
     HotspotStatus,
     GovernorStatus,
 )
+
+
+class TestGetBluetoothStatus:
+    """Tests for get_bluetooth_status function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_bluetooth_status_enum(self):
+        """Should return a BluetoothStatus enum value."""
+        result = await get_bluetooth_status()
+        assert isinstance(result, BluetoothStatus)
+
+    @pytest.mark.asyncio
+    async def test_returns_unknown_in_docker_mode(self):
+        """Should return unknown when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = await get_bluetooth_status()
+            assert result == BluetoothStatus.unknown
+
+    @pytest.mark.asyncio
+    async def test_returns_unavailable_when_rfkill_not_found(self):
+        """Should return unavailable when rfkill is not installed."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.unavailable
+
+    @pytest.mark.asyncio
+    async def test_returns_on_when_unblocked(self):
+        """Should return on when Bluetooth is unblocked."""
+        rfkill_json = '{"rfkilldevices": [{"id": 0, "type": "bluetooth", "device": "hci0", "soft": "unblocked", "hard": "unblocked"}]}'
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (rfkill_json.encode(), b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.on
+
+    @pytest.mark.asyncio
+    async def test_returns_off_when_soft_blocked(self):
+        """Should return off when Bluetooth is soft blocked."""
+        rfkill_json = '{"rfkilldevices": [{"id": 0, "type": "bluetooth", "device": "hci0", "soft": "blocked", "hard": "unblocked"}]}'
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (rfkill_json.encode(), b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.off
+
+    @pytest.mark.asyncio
+    async def test_returns_off_when_hard_blocked(self):
+        """Should return off when Bluetooth is hard blocked."""
+        rfkill_json = '{"rfkilldevices": [{"id": 0, "type": "bluetooth", "device": "hci0", "soft": "unblocked", "hard": "blocked"}]}'
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (rfkill_json.encode(), b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.off
+
+    @pytest.mark.asyncio
+    async def test_returns_unavailable_when_no_bluetooth_device(self):
+        """Should return unavailable when no Bluetooth devices exist."""
+        rfkill_json = '{"rfkilldevices": [{"id": 0, "type": "wlan", "device": "phy0", "soft": "unblocked", "hard": "unblocked"}]}'
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (rfkill_json.encode(), b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.unavailable
+
+    @pytest.mark.asyncio
+    async def test_handles_timeout(self):
+        """Should return unknown on timeout."""
+        import asyncio
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            mock_proc = mock.AsyncMock()
+            mock_proc.communicate.side_effect = asyncio.TimeoutError()
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                # wait_for wraps communicate, but we mock at the proc level.
+                # The timeout is handled by asyncio.wait_for in the function.
+                result = await get_bluetooth_status()
+                assert result == BluetoothStatus.unknown
+
+
+class TestEnableBluetooth:
+    """Tests for enable_bluetooth function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_error_in_docker_mode(self):
+        """Should return error when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = await enable_bluetooth()
+            assert result["success"] is False
+            assert "Docker" in result.get("error", "")
+
+    @pytest.mark.asyncio
+    async def test_calls_rfkill_unblock(self):
+        """Should call rfkill unblock bluetooth."""
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+                result = await enable_bluetooth()
+                assert result["success"] is True
+                mock_exec.assert_called_once_with(
+                    "rfkill", "unblock", "bluetooth",
+                    stdout=mock.ANY,
+                    stderr=mock.ANY,
+                )
+
+    @pytest.mark.asyncio
+    async def test_handles_rfkill_not_found(self):
+        """Should handle rfkill not being available."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
+                result = await enable_bluetooth()
+                assert result["success"] is False
+                assert "rfkill" in result.get("error", "").lower()
+
+
+class TestDisableBluetooth:
+    """Tests for disable_bluetooth function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_error_in_docker_mode(self):
+        """Should return error when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = await disable_bluetooth()
+            assert result["success"] is False
+            assert "Docker" in result.get("error", "")
+
+    @pytest.mark.asyncio
+    async def test_calls_rfkill_block(self):
+        """Should call rfkill block bluetooth."""
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+                result = await disable_bluetooth()
+                assert result["success"] is True
+                mock_exec.assert_called_once_with(
+                    "rfkill", "block", "bluetooth",
+                    stdout=mock.ANY,
+                    stderr=mock.ANY,
+                )
+
+    @pytest.mark.asyncio
+    async def test_handles_rfkill_not_found(self):
+        """Should handle rfkill not being available."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
+                result = await disable_bluetooth()
+                assert result["success"] is False
 
 
 class TestGetHotspotStatus:

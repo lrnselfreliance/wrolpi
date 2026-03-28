@@ -167,6 +167,25 @@ class HotspotActionResponse(BaseModel):
 
 
 # ============================================================================
+# Admin - Bluetooth
+# ============================================================================
+
+class BluetoothStatusResponse(BaseModel):
+    """Response model for /api/bluetooth/status endpoint."""
+
+    enabled: bool = Field(description="Whether Bluetooth radio is currently on")
+    available: bool = Field(description="Whether Bluetooth functionality is available")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+
+
+class BluetoothActionResponse(BaseModel):
+    """Response model for Bluetooth enable/disable actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
 # Admin - Throttle
 # ============================================================================
 

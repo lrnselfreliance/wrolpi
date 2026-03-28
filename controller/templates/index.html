@@ -2306,6 +2306,20 @@
             } else {
                 upgradeHttpsBase = `https://${window.location.hostname}`;
             }
+            // Two-phase upgrade detection:
+            // Phase 1: Wait for services to go DOWN (confirms upgrade actually started).
+            // Phase 2: Wait for services to come back UP (upgrade complete).
+            // State is persisted in sessionStorage so it survives page refreshes.
+            let upgradeServicesWentDown = sessionStorage.getItem('upgradeServicesWentDown') === 'true';
+
+            const markServicesDown = () => {
+                if (!upgradeServicesWentDown) {
+                    upgradeServicesWentDown = true;
+                    sessionStorage.setItem('upgradeServicesWentDown', 'true');
+                    document.getElementById('upgrade-message').textContent = 'Upgrading... Services restarting.';
+                }
+            };
+
             const checkUpgradeComplete = async () => {
                 try {
                     // WARNING: This must be a relative URL (no leading slash) so it resolves to
@@ -2318,8 +2332,14 @@
                     });
                     if (resp.ok) {
                         const data = await resp.json();
-                        if (data.api && data.app) {
-                            // Upgrade complete!
+                        if (!upgradeServicesWentDown) {
+                            // Phase 1: waiting for services to go down
+                            if (!data.api || !data.app) {
+                                markServicesDown();
+                            }
+                        } else if (data.api && data.app) {
+                            // Phase 2: services are back up — upgrade complete!
+                            sessionStorage.removeItem('upgradeServicesWentDown');
                             document.getElementById('upgrade-spinner').style.display = 'none';
                             document.getElementById('upgrade-success').style.display = 'inline';
                             document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
@@ -2330,9 +2350,13 @@
                                 window.location.href = `${upgradeHttpsBase}/`;
                             }, 2000);
                         }
+                    } else {
+                        // Non-ok response means services are going down
+                        markServicesDown();
                     }
                 } catch (e) {
-                    // Still upgrading, continue polling
+                    // Fetch failed (connection refused) — services are down
+                    markServicesDown();
                 }
             };
 

@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
-import {Grid, Icon as SIcon, Label, Loader, StatisticLabel, StatisticValue} from "semantic-ui-react";
+import {Grid, Icon as SIcon, Loader, StatisticLabel, StatisticValue} from "semantic-ui-react";
 import {deleteDocs, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {
@@ -158,6 +158,8 @@ function DocPage() {
     const title = docFile ? (docFile.title || docFile.name) : null;
     useTitle(title);
 
+    const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+
     if (docFile === null) {
         return <Segment><Loader active/></Segment>;
     }
@@ -174,16 +176,40 @@ function DocPage() {
     const coverPath = data && data.cover_path ? data.cover_path : null;
     const coverUrl = coverPath ? `/media/${encodeMediaPath(coverPath)}` : null;
 
-    // Primary file URLs.
-    const primaryPath = docFile.primary_path;
-    const downloadUrl = primaryPath ? `/download/${encodeMediaPath(primaryPath)}` : null;
-    const isEpub = docFile.mimetype && docFile.mimetype.startsWith('application/epub');
-    const mt = docFile.mimetype || '';
-    const primaryExt = (primaryPath || '').toLowerCase().split('.').pop();
-    const isCbz = mt.includes('cbz') || mt.includes('cbr') || mt.includes('comicbook+zip') || mt.includes('comicbook-rar')
-        || ['cbz', 'cbr', 'cbt', 'cb7'].includes(primaryExt);
+    // Filter files to those that can be viewed inline (EPUB, PDF, comic books).
+    const CBZ_EXTENSIONS = ['cbz', 'cbr', 'cbt', 'cb7'];
+    const isViewableMimetype = (mt) => {
+        if (!mt) return false;
+        if (mt.startsWith('application/epub')) return true;
+        if (mt === 'application/pdf') return true;
+        if (mt.includes('cbz') || mt.includes('cbr') || mt.includes('comicbook+zip') || mt.includes('comicbook-rar')) return true;
+        return false;
+    };
+    const viewableFiles = (docFile.files || [])
+        .filter(f => isViewableMimetype(f.mimetype) || CBZ_EXTENSIONS.includes((f.path || '').toLowerCase().split('.').pop()))
+        .sort((a, b) => {
+            if (String(a.path) === String(docFile.primary_path)) return -1;
+            if (String(b.path) === String(docFile.primary_path)) return 1;
+            return 0;
+        });
+
+    const selectedFile = viewableFiles[selectedFileIndex] || viewableFiles[0];
+
+    // Derive viewer state from the selected file (or fall back to primary).
+    const activePath = selectedFile ? selectedFile.path : docFile.primary_path;
+    const activeMimetype = selectedFile ? (selectedFile.mimetype || '') : (docFile.mimetype || '');
+    const activeExt = (String(activePath) || '').toLowerCase().split('.').pop();
+
+    const downloadUrl = activePath ? `/download/${encodeMediaPath(activePath)}` : null;
+    const isEpub = activeMimetype.startsWith('application/epub');
+    const isPdf = activeMimetype === 'application/pdf';
+    const isCbz = activeMimetype.includes('cbz') || activeMimetype.includes('cbr')
+        || activeMimetype.includes('comicbook+zip') || activeMimetype.includes('comicbook-rar')
+        || CBZ_EXTENSIONS.includes(activeExt);
     const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
-    const openUrl = viewerUrl || (primaryPath ? `/media/${encodeMediaPath(primaryPath)}` : null);
+    const openUrl = viewerUrl || (activePath ? `/media/${encodeMediaPath(activePath)}` : null);
+    const canEmbed = isEpub || isPdf;
+    const embedUrl = isEpub ? viewerUrl : (isPdf && activePath ? `/media/${encodeMediaPath(activePath)}` : null);
 
     const handleDelete = async () => {
         if (doc && doc.id) {
@@ -213,8 +239,8 @@ function DocPage() {
         : null;
 
     // Format badge based on mimetype.
-    const formatLabel = () => {
-        const mt = docFile.mimetype || '';
+    const formatLabel = (overrideMt) => {
+        const mt = overrideMt || activeMimetype;
         if (mt.startsWith('application/epub')) return 'EPUB';
         if (mt === 'application/x-mobipocket-ebook') return 'MOBI';
         if (mt === 'application/pdf') return 'PDF';
@@ -283,15 +309,10 @@ function DocPage() {
     const tabPanes = [aboutPane, filesPane];
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
-    // Inline reader: epub viewer iframe or PDF iframe.
-    const isPdf = docFile.mimetype === 'application/pdf';
-    const canEmbed = isEpub || isPdf;
-    const embedUrl = isEpub ? viewerUrl : (isPdf && primaryPath ? `/media/${encodeMediaPath(primaryPath)}` : null);
-
     return <>
         <BackButton/>
 
-        {isCbz && primaryPath && <CbzViewer path={primaryPath}/>}
+        {isCbz && activePath && <CbzViewer path={activePath}/>}
 
         {canEmbed && embedUrl && !isCbz && <div style={{marginBottom: '1em'}}>
             <iframe
@@ -310,31 +331,65 @@ function DocPage() {
 
             <Grid columns={2} stackable>
                 <Grid.Row>
+                    <Grid.Column>
+                        <Header as='h4'>Format: {formatLabel()}{doc && doc.page_count && ` (${doc.page_count} pages)`}</Header>
+                    </Grid.Column>
                     {publishedDatetimeString && <Grid.Column>
                         <Header as='h4'>Published: {publishedDatetimeString}</Header>
                     </Grid.Column>}
-                    <Grid.Column>
-                        <Label>{formatLabel()}</Label>
-                        {doc && doc.page_count && <Label>{doc.page_count} pages</Label>}
-                    </Grid.Column>
                 </Grid.Row>
             </Grid>
 
-            <div style={{marginTop: '1em'}}>
-                {openUrl && <Button as='a' href={openUrl} target='_blank' rel='noreferrer' color='violet'>
-                    <SIcon name='expand arrows alternate'/> Open
-                </Button>}
-                {downloadUrl && <Button as='a' href={downloadUrl}>
-                    <SIcon name='download'/> Download
-                </Button>}
-                <APIButton
-                    color='red'
-                    confirmContent='Are you sure you want to delete this document? All files will be deleted.'
-                    confirmButton='Delete'
-                    onClick={handleDelete}
-                    obeyWROLMode={true}
-                >Delete</APIButton>
-            </div>
+            {(() => {
+                const formatButtons = viewableFiles.length > 1 ? <Button.Group>
+                    {viewableFiles.map((file, idx) => {
+                        const mt = file.mimetype || '';
+                        let btnColor;
+                        if (mt.startsWith('application/epub')) btnColor = 'yellow';
+                        else if (mt === 'application/pdf') btnColor = 'red';
+                        return <Button
+                            key={file.path}
+                            active={idx === selectedFileIndex}
+                            onClick={() => setSelectedFileIndex(idx)}
+                            color={idx === selectedFileIndex ? btnColor : undefined}
+                            basic={idx !== selectedFileIndex}
+                        >
+                            {formatLabel(file.mimetype)}
+                        </Button>;
+                    })}
+                </Button.Group> : null;
+
+                const actionButtons = <>
+                    {openUrl && <Button as='a' href={openUrl} target='_blank' rel='noreferrer' color='violet'>
+                        <SIcon name='expand arrows alternate'/> Open
+                    </Button>}
+                    {downloadUrl && <Button as='a' href={downloadUrl}>
+                        <SIcon name='download'/> Download
+                    </Button>}
+                    <APIButton
+                        color='red'
+                        confirmContent='Are you sure you want to delete this document? All files will be deleted.'
+                        confirmButton='Delete'
+                        onClick={handleDelete}
+                        obeyWROLMode={true}
+                    >Delete</APIButton>
+                </>;
+
+                return <>
+                    <Media at='mobile'>
+                        {formatButtons && <div style={{marginTop: '1em'}}>{formatButtons}</div>}
+                        <div style={{marginTop: '1em'}}>{actionButtons}</div>
+                    </Media>
+                    <Media greaterThanOrEqual='tablet'>
+                        <div style={{marginTop: '1em'}}>
+                            {formatButtons && <span style={{marginRight: '1em', display: 'inline-block'}}>
+                                {formatButtons}
+                            </span>}
+                            {actionButtons}
+                        </div>
+                    </Media>
+                </>;
+            })()}
         </Segment>
 
         <Segment>

@@ -22,11 +22,11 @@ DEFAULT_CPU_FREQUENCY = get_config_value('throttle.default_governor', 'ondemand'
 
 
 class HotspotStatus(enum.Enum):
-    """Hotspot status enum matching wrolpi/admin.py"""
+    """Hotspot status enum."""
     disconnected = enum.auto()  # Radio is on, but Hotspot is not connected.
-    unavailable = enum.auto()  # Radio is off.
+    off = enum.auto()  # Radio is software-disabled. Can be turned on.
     connected = enum.auto()  # Radio is on, Hotspot is on.
-    unknown = enum.auto()  # Unknown status. Hotspot may not be supported.
+    unknown = enum.auto()  # Unknown status. No nmcli, Docker, or no WiFi hardware.
     in_use = enum.auto()  # Wi-Fi device is in use for a network connection.
 
 
@@ -105,7 +105,7 @@ def get_hotspot_status() -> HotspotStatus:
             elif line.startswith(f'{device}: disconnected'):
                 return HotspotStatus.disconnected
             elif line.startswith(f'{device}: unavailable'):
-                return HotspotStatus.unavailable
+                return HotspotStatus.off
 
         return HotspotStatus.unknown
 
@@ -133,13 +133,13 @@ def get_hotspot_status_dict() -> dict:
 
     # Map enum status to enabled/available flags
     enabled = status == HotspotStatus.connected
-    available = status not in (HotspotStatus.unknown, HotspotStatus.unavailable)
+    # Hotspot is available even when radio is off because enable_hotspot()
+    # turns the radio on first.
+    available = status != HotspotStatus.unknown
 
     reason = None
     if status == HotspotStatus.unknown:
         reason = "Hotspot not supported or nmcli unavailable"
-    elif status == HotspotStatus.unavailable:
-        reason = "WiFi radio is off"
     elif status == HotspotStatus.in_use:
         reason = "WiFi device is connected to a network"
 
@@ -259,7 +259,7 @@ async def get_bluetooth_status() -> BluetoothStatus:
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "rfkill", "-J",
+            "/usr/sbin/rfkill", "-J",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -331,7 +331,7 @@ async def enable_bluetooth() -> dict:
     logger.info("Enabling Bluetooth radio")
     try:
         proc = await asyncio.create_subprocess_exec(
-            "rfkill", "unblock", "bluetooth",
+            "/usr/sbin/rfkill", "unblock", "bluetooth",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -369,7 +369,7 @@ async def disable_bluetooth() -> dict:
     logger.info("Disabling Bluetooth radio")
     try:
         proc = await asyncio.create_subprocess_exec(
-            "rfkill", "block", "bluetooth",
+            "/usr/sbin/rfkill", "block", "bluetooth",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

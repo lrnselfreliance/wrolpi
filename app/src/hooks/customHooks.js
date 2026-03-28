@@ -986,7 +986,7 @@ export const useHotspot = () => {
             } else if (hotspot_status === 'in_use') {
                 setInUse(true);
                 setOn(false);
-            } else if (hotspot_status === 'disconnected' || hotspot_status === 'unavailable') {
+            } else if (hotspot_status === 'disconnected' || hotspot_status === 'off') {
                 setOn(false);
                 setInUse(false);
             } else {

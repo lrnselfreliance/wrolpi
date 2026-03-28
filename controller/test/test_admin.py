@@ -16,6 +16,7 @@ from controller.lib.admin import (
     enable_throttle,
     get_bluetooth_status,
     get_hotspot_status,
+    get_hotspot_status_dict,
     get_throttle_status,
     get_timezone_status_dict,
     reboot_system,
@@ -141,7 +142,7 @@ class TestEnableBluetooth:
                 result = await enable_bluetooth()
                 assert result["success"] is True
                 mock_exec.assert_called_once_with(
-                    "rfkill", "unblock", "bluetooth",
+                    "/usr/sbin/rfkill", "unblock", "bluetooth",
                     stdout=mock.ANY,
                     stderr=mock.ANY,
                 )
@@ -179,7 +180,7 @@ class TestDisableBluetooth:
                 result = await disable_bluetooth()
                 assert result["success"] is True
                 mock_exec.assert_called_once_with(
-                    "rfkill", "block", "bluetooth",
+                    "/usr/sbin/rfkill", "block", "bluetooth",
                     stdout=mock.ANY,
                     stderr=mock.ANY,
                 )
@@ -223,6 +224,116 @@ class TestGetHotspotStatus:
                 with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("nmcli", 5)):
                     result = get_hotspot_status()
                     assert result == HotspotStatus.unknown
+
+
+class TestGetHotspotStatusWithRealOutput:
+    """Tests for get_hotspot_status using real nmcli output from RPi (10.0.0.9)."""
+
+    # Real nmcli output when WiFi radio is off (wlan0 software-disabled).
+    NMCLI_RADIO_OFF = (
+        "eth0: connected to Wired connection 1\n"
+        "\t\"eth0\"\n"
+        "\tethernet (macb), 2C:CF:67:08:87:88, hw, mtu 1500\n"
+        "\n"
+        "lo: connected (externally) to lo\n"
+        "\t\"lo\"\n"
+        "\tloopback (unknown), 00:00:00:00:00:00, sw, mtu 65536\n"
+        "\n"
+        "wlan0: unavailable\n"
+        "\t\"Broadcom Wi-Fi\"\n"
+        "\twifi (brcmfmac), 2C:CF:67:08:87:89, sw disabled, hw, mtu 1500\n"
+    )
+
+    # Real nmcli output when WiFi radio is on but no hotspot (wlan0 disconnected).
+    NMCLI_RADIO_ON_NO_HOTSPOT = (
+        "eth0: connected to Wired connection 1\n"
+        "\t\"eth0\"\n"
+        "\tethernet (macb), 2C:CF:67:08:87:88, hw, mtu 1500\n"
+        "\n"
+        "lo: connected (externally) to lo\n"
+        "\t\"lo\"\n"
+        "\tloopback (unknown), 00:00:00:00:00:00, sw, mtu 65536\n"
+        "\n"
+        "wlan0: disconnected\n"
+        "\t\"Broadcom Wi-Fi\"\n"
+        "\twifi (brcmfmac), 2C:CF:67:08:87:89, hw, mtu 1500\n"
+    )
+
+    # Real nmcli output when hotspot is active (wlan0 connected to Hotspot).
+    NMCLI_HOTSPOT_ACTIVE = (
+        "wlan0: connected to Hotspot\n"
+        "\t\"Broadcom Wi-Fi\"\n"
+        "\twifi (brcmfmac), 2C:CF:67:08:87:89, hw, mtu 1500\n"
+        "\n"
+        "eth0: connected to Wired connection 1\n"
+        "\t\"eth0\"\n"
+        "\tethernet (macb), 2C:CF:67:08:87:88, hw, mtu 1500\n"
+        "\n"
+        "lo: connected (externally) to lo\n"
+        "\t\"lo\"\n"
+        "\tloopback (unknown), 00:00:00:00:00:00, sw, mtu 65536\n"
+    )
+
+    def test_radio_off_returns_off(self):
+        """nmcli 'wlan0: unavailable' (radio sw disabled) should return HotspotStatus.off."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = self.NMCLI_RADIO_OFF
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_current_ssid", return_value=None):
+                with mock.patch("subprocess.run", return_value=mock_result):
+                    result = get_hotspot_status()
+                    assert result == HotspotStatus.off
+
+    def test_radio_on_no_hotspot_returns_disconnected(self):
+        """nmcli 'wlan0: disconnected' (radio on, no hotspot) should return disconnected."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = self.NMCLI_RADIO_ON_NO_HOTSPOT
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_current_ssid", return_value=None):
+                with mock.patch("subprocess.run", return_value=mock_result):
+                    result = get_hotspot_status()
+                    assert result == HotspotStatus.disconnected
+
+    def test_hotspot_active_returns_connected(self):
+        """nmcli 'wlan0: connected to Hotspot' should return HotspotStatus.connected."""
+        mock_result = mock.Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = self.NMCLI_HOTSPOT_ACTIVE
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_current_ssid", return_value=None):
+                with mock.patch("subprocess.run", return_value=mock_result):
+                    result = get_hotspot_status()
+                    assert result == HotspotStatus.connected
+
+
+class TestGetHotspotStatusDict:
+    """Tests for get_hotspot_status_dict function."""
+
+    def test_available_when_radio_off(self):
+        """Hotspot should be available when WiFi radio is off,
+        because enable_hotspot() turns the radio on first."""
+        with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.off):
+            result = get_hotspot_status_dict()
+            assert result["available"] is True
+            assert result["enabled"] is False
+
+    def test_unavailable_when_unknown(self):
+        """Hotspot should be unavailable when status is unknown (Docker, no nmcli)."""
+        with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.unknown):
+            result = get_hotspot_status_dict()
+            assert result["available"] is False
+
+    def test_enabled_when_connected(self):
+        """Hotspot should be enabled and available when connected."""
+        with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.connected):
+            result = get_hotspot_status_dict()
+            assert result["available"] is True
+            assert result["enabled"] is True
 
 
 class TestEnableHotspot:

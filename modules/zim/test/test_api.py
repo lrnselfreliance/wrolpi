@@ -200,6 +200,22 @@ async def test_get_zim_entry(test_session, async_client, test_zim):
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
+def test_parse_name():
+    """Zim file names that match the kiwix naming scheme are parsed.  Non-matching names raise ValueError."""
+    import pathlib
+    from datetime import datetime
+
+    name, date = lib.parse_name(pathlib.Path('wikipedia_en_all_maxi_2023-01.zim'))
+    assert name == 'wikipedia_en_all_maxi'
+    assert date == datetime(2023, 1, 1)
+
+    with pytest.raises(ValueError):
+        lib.parse_name(pathlib.Path('edibleplantdb.zim'))
+
+    with pytest.raises(ValueError):
+        lib.parse_name(pathlib.Path('nodate.zim'))
+
+
 @pytest.mark.asyncio
 async def test_find_outdated_zim_files(test_session, test_directory, test_zim_bytes, async_client):
     """Outdated Zim files are found and reported.  They can automatically be deleted."""

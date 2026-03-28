@@ -540,7 +540,10 @@ ZIM_NAME_PARSER = re.compile(r'(.+?)_(\d{4}-\d{2}).zim')
 
 
 def parse_name(path: pathlib.Path) -> Tuple[str, datetime]:
-    name, date = ZIM_NAME_PARSER.match(path.name).groups()
+    match = ZIM_NAME_PARSER.match(path.name)
+    if not match:
+        raise ValueError(f'Zim file name does not match expected pattern: {path.name}')
+    name, date = match.groups()
     date = datetime.strptime(date, '%Y-%m')
     return name, date
 
@@ -558,8 +561,8 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
     for file in files:
         try:
             name, date = parse_name(file)
-        except Exception as e:
-            logger.warning(f'Found Zim {file} but its name does not match.', exc_info=e)
+        except Exception:
+            logger.warning(f'Found Zim {file} but its name does not match.')
             continue
 
         zims.append((name, date, file))

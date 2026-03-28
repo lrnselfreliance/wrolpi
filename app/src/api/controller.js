@@ -107,6 +107,23 @@ export async function disableBluetooth() {
     return controllerFetch('/bluetooth/disable', {method: 'POST'});
 }
 
+// --- Samba Endpoints ---
+
+export async function getSambaStatus() {
+    return controllerFetch('/samba/status');
+}
+
+export async function addSambaShare(name, path, readOnly = true, comment = '') {
+    return controllerFetch('/samba/shares', {
+        method: 'POST',
+        body: JSON.stringify({name, path, read_only: readOnly, comment}),
+    });
+}
+
+export async function removeSambaShare(shareName) {
+    return controllerFetch(`/samba/shares/${encodeURIComponent(shareName)}`, {method: 'DELETE'});
+}
+
 export async function shutdownSystem() {
     return controllerFetch('/shutdown', {method: 'POST'});
 }

@@ -186,6 +186,52 @@ class BluetoothActionResponse(BaseModel):
 
 
 # ============================================================================
+# Admin - Samba
+# ============================================================================
+
+class SambaShareInfo(BaseModel):
+    """Information about a single Samba share."""
+
+    name: str = Field(description="Share name")
+    path: str = Field(description="Filesystem path being shared")
+    read_only: bool = Field(description="Whether share is read-only")
+    comment: Optional[str] = Field(default="", description="Share description")
+
+
+class SambaStatusResponse(BaseModel):
+    """Response model for /api/samba/status endpoint."""
+
+    enabled: bool = Field(description="Whether Samba is currently running")
+    available: bool = Field(description="Whether Samba functionality is available")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+    shares: list[SambaShareInfo] = Field(default_factory=list, description="Configured shares")
+
+
+class SambaShareAddRequest(BaseModel):
+    """Request model for adding a Samba share."""
+
+    name: str = Field(description="Share name (alphanumeric, hyphens, underscores)")
+    path: str = Field(description="Filesystem path to share")
+    read_only: bool = Field(default=True, description="Whether share is read-only")
+    comment: Optional[str] = Field(default="", description="Share description")
+
+
+class SambaShareResponse(BaseModel):
+    """Response model for share add/update actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    share: Optional[SambaShareInfo] = Field(default=None, description="The share")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class SambaShareRemoveResponse(BaseModel):
+    """Response model for removing a Samba share."""
+
+    success: bool = Field(description="Whether the share was removed")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
 # Admin - Throttle
 # ============================================================================
 

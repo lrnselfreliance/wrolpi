@@ -114,5 +114,12 @@ if ! command -v caddy &>/dev/null; then
   apt-get install -y caddy
 fi
 
+# Install Samba if not already installed.
+if ! command -v smbd &>/dev/null; then
+  echo "Installing Samba..."
+  apt-get update
+  apt-get install -y samba
+fi
+
 # Install any configs, restart services.
 /opt/wrolpi/repair.sh

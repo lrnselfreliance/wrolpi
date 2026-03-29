@@ -2,6 +2,10 @@
 Samba share management for WROLPi Controller.
 
 Manages smb.conf generation, smbd/nmbd service control, and share CRUD.
+Works in both native (systemd) and Docker modes.
+
+The controller manages samba's lifecycle: samba is started when shares
+are added and stopped when the last share is removed.
 """
 
 import enum
@@ -21,8 +25,6 @@ from controller.lib.config import (
 
 logger = logging.getLogger(__name__)
 
-SMB_CONF_PATH = Path("/etc/samba/smb.conf")
-
 # Share name must be alphanumeric with hyphens, underscores, or spaces.
 SHARE_NAME_RE = re.compile(r'^[\w\s-]+$')
 
@@ -34,10 +36,26 @@ class SambaStatus(enum.Enum):
     unknown = enum.auto()
 
 
+def _get_smb_conf_path() -> Path:
+    """Get the smb.conf path for the current mode."""
+    if is_docker_mode():
+        return get_media_directory() / "config" / "smb.conf"
+    return Path("/etc/samba/smb.conf")
+
+
 def get_samba_status() -> SambaStatus:
     """Get Samba service status."""
     if is_docker_mode():
-        return SambaStatus.unavailable
+        from controller.lib.docker_services import can_manage_containers, get_container_status
+        if not can_manage_containers():
+            return SambaStatus.unavailable
+        status = get_container_status("samba")
+        container_status = status.get("status")
+        if container_status == "running":
+            return SambaStatus.running
+        elif container_status in ("stopped", "not_found"):
+            return SambaStatus.stopped
+        return SambaStatus.unknown
 
     try:
         result = subprocess.run(
@@ -117,18 +135,57 @@ def _generate_smb_conf() -> str:
     return "\n".join(lines)
 
 
-def _write_smb_conf() -> dict:
-    """Write smb.conf and reload Samba config."""
-    try:
-        content = _generate_smb_conf()
-        SMB_CONF_PATH.write_text(content)
+def _start_samba():
+    """Start samba services."""
+    if is_docker_mode():
+        from controller.lib.docker_services import can_manage_containers, start_container
+        if can_manage_containers():
+            start_container("samba")
+    else:
+        for service in ("smbd", "nmbd"):
+            try:
+                subprocess.run(["systemctl", "start", service],
+                               capture_output=True, text=True, timeout=10)
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
 
-        # Reload config without full restart if Samba is running.
+
+def _stop_samba():
+    """Stop samba services."""
+    if is_docker_mode():
+        from controller.lib.docker_services import can_manage_containers, stop_container
+        if can_manage_containers():
+            stop_container("samba")
+    else:
+        for service in ("smbd", "nmbd"):
+            try:
+                subprocess.run(["systemctl", "stop", service],
+                               capture_output=True, text=True, timeout=10)
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+
+
+def _reload_samba():
+    """Reload Samba config. Native uses smbcontrol, Docker restarts the container."""
+    if is_docker_mode():
+        from controller.lib.docker_services import can_manage_containers, restart_container
+        if can_manage_containers():
+            restart_container("samba")
+    else:
         if get_samba_status() == SambaStatus.running:
             subprocess.run(
                 ["smbcontrol", "all", "reload-config"],
                 capture_output=True, text=True, timeout=10,
             )
+
+
+def _write_smb_conf() -> dict:
+    """Write smb.conf and reload Samba config if running."""
+    try:
+        content = _generate_smb_conf()
+        conf_path = _get_smb_conf_path()
+        conf_path.parent.mkdir(parents=True, exist_ok=True)
+        conf_path.write_text(content)
         return {"success": True}
     except PermissionError:
         return {"success": False, "error": "Permission denied writing smb.conf"}
@@ -152,9 +209,6 @@ def _validate_share_path(path: str) -> str | None:
 
 def add_share(name: str, path: str, read_only: bool = True, comment: str = "") -> dict:
     """Add a Samba share."""
-    if is_docker_mode():
-        return {"success": False, "error": "Not available in Docker mode"}
-
     if not SHARE_NAME_RE.match(name):
         return {"success": False, "error": "Share name must be alphanumeric (hyphens/underscores/spaces allowed)"}
 
@@ -175,17 +229,19 @@ def add_share(name: str, path: str, read_only: bool = True, comment: str = "") -
     update_config("samba.shares", shares)
     save_config()
 
-    # Write smb.conf so it's ready when user starts smbd.
     _write_smb_conf()
+
+    # Start samba if it isn't running.
+    if get_samba_status() != SambaStatus.running:
+        _start_samba()
+    else:
+        _reload_samba()
 
     return {"success": True, "share": new_share}
 
 
 def remove_share(name: str) -> dict:
     """Remove a Samba share by name."""
-    if is_docker_mode():
-        return {"success": False, "error": "Not available in Docker mode"}
-
     shares = get_config_value("samba.shares", [])
     new_shares = [s for s in shares if s["name"].lower() != name.lower()]
 
@@ -196,22 +252,33 @@ def remove_share(name: str) -> dict:
     save_config()
     _write_smb_conf()
 
+    if not new_shares:
+        # Last share removed, stop samba.
+        _stop_samba()
+    else:
+        _reload_samba()
+
     return {"success": True}
 
 
 def apply_samba_from_config():
     """Apply Samba config on startup. Called from lifespan.
 
-    Writes smb.conf whenever shares are configured so the config is ready
-    when the user starts smbd from the services table.
+    Writes smb.conf and manages samba lifecycle based on configured shares.
     """
-    if is_docker_mode():
+    shares = get_config_value("samba.shares", [])
+
+    # Always write a valid smb.conf so samba doesn't crash if started manually.
+    result = _write_smb_conf()
+    if not result["success"]:
+        logger.warning("Failed to write Samba config: %s", result.get("error"))
         return
 
-    shares = get_config_value("samba.shares", [])
     if shares:
-        result = _write_smb_conf()
-        if result["success"]:
-            logger.info("Applied Samba config with %d shares", len(shares))
-        else:
-            logger.warning("Failed to apply Samba config: %s", result.get("error"))
+        logger.info("Applied Samba config with %d shares, starting samba", len(shares))
+        if get_samba_status() != SambaStatus.running:
+            _start_samba()
+    else:
+        logger.info("No Samba shares configured, stopping samba")
+        if get_samba_status() == SambaStatus.running:
+            _stop_samba()

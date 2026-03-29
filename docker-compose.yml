@@ -29,8 +29,8 @@ services:
       # Host system info (read-only)
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      # Config directory
-      - ${MEDIA_DIRECTORY:-./test}/config:/media/wrolpi/config
+      # Media directory (needed for Samba share path validation)
+      - ${MEDIA_DIRECTORY:-./test}:/media/wrolpi
     environment:
       - DOCKERIZED=true
       - MEDIA_DIRECTORY=/media/wrolpi
@@ -158,6 +158,19 @@ services:
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
       interval: 1m
+
+  samba: # Samba file sharing - started/stopped by the controller based on configured shares.
+    build:
+      context: .
+      dockerfile: docker/samba/Dockerfile
+    restart: "no"
+    depends_on:
+      controller:
+        condition: service_healthy
+    ports:
+      - "445:445"
+    volumes:
+      - ${MEDIA_DIRECTORY:-./test}:/media/wrolpi
 
   help: # The WROLPi Help documentation.
     build:

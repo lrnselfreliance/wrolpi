@@ -17,11 +17,6 @@ class TestSambaStatusEndpoint:
         assert "available" in data
         assert "shares" in data
 
-    def test_shows_unavailable_in_docker(self, test_client_docker_mode):
-        response = test_client_docker_mode.get("/api/samba/status")
-        data = response.json()
-        assert data["available"] is False
-
 
 class TestSambaShareAddEndpoint:
     """Tests for POST /api/samba/shares endpoint."""
@@ -33,13 +28,6 @@ class TestSambaShareAddEndpoint:
         })
         assert response.status_code == 400
 
-    def test_fails_in_docker(self, test_client_docker_mode):
-        response = test_client_docker_mode.post("/api/samba/shares", json={
-            "name": "test",
-            "path": "/media/wrolpi",
-        })
-        assert response.status_code == 400
-
 
 class TestSambaShareRemoveEndpoint:
     """Tests for DELETE /api/samba/shares/{name} endpoint."""
@@ -47,9 +35,3 @@ class TestSambaShareRemoveEndpoint:
     def test_returns_404_for_missing_share(self, test_client):
         response = test_client.delete("/api/samba/shares/nonexistent")
         assert response.status_code == 404
-
-    def test_fails_in_docker(self, test_client_docker_mode):
-        response = test_client_docker_mode.delete("/api/samba/shares/test")
-        assert response.status_code == 404
-
-

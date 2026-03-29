@@ -27,7 +27,7 @@ except ImportError:
 CONTAINER_PREFIX = os.environ.get("COMPOSE_PROJECT_NAME", "wrolpi")
 
 # Containers that should not have a "View" button (non-HTTP services)
-NON_VIEWABLE_CONTAINERS = {"db", "postgres", "postgresql", "redis", "memcached"}
+NON_VIEWABLE_CONTAINERS = {"db", "postgres", "postgresql", "redis", "memcached", "samba"}
 
 # Containers that should use HTTPS
 HTTPS_CONTAINERS = {"web"}

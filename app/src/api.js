@@ -1485,21 +1485,85 @@ export async function setThrottle(on) {
     }
 }
 
-export async function getMapImportStatus() {
+export async function getMapFiles() {
     const response = await apiGet(`${API_URI}/map/files`);
     if (response.ok) {
         return await response.json();
     } else {
-        const message = await getErrorMessage(response, 'Could not get import status');
+        const message = await getErrorMessage(response, 'Could not get map files');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     }
 }
 
-export async function importMapFiles(paths) {
-    let body = {'files': paths};
-    const response = await apiPost(`${API_URI}/map/import`, body);
+export async function deleteMapFile(filename) {
+    const response = await apiDelete(`${API_URI}/map/files/${encodeURIComponent(filename)}`);
     if (!response.ok) {
-        const message = await getErrorMessage(response, 'Could not start import!  See server logs.');
+        const message = await getErrorMessage(response, 'Could not delete map file');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function fetchMapSubscriptions() {
+    const response = await apiGet(`${API_URI}/map/subscribe`);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Could not get map subscriptions');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function mapSubscribe(name, region) {
+    const body = {name, region};
+    const response = await apiPost(`${API_URI}/map/subscribe`, body);
+    if (response.ok) {
+        return true;
+    } else {
+        const message = await getErrorMessage(response, 'Could not subscribe to map region');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+        return false;
+    }
+}
+
+export async function mapUnsubscribe(region) {
+    const response = await apiDelete(`${API_URI}/map/subscribe/${encodeURIComponent(region)}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not unsubscribe from map region');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function getMapPins() {
+    const response = await apiGet(`${API_URI}/map/pins`);
+    if (response.ok) {
+        return await response.json();
+    }
+}
+
+export async function addMapPin(lat, lon, label, color) {
+    const body = {lat, lon, label, color};
+    const response = await apiPost(`${API_URI}/map/pins`, body);
+    if (response.ok) {
+        return await response.json();
+    } else {
+        const message = await getErrorMessage(response, 'Could not add map pin');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function deleteMapPin(pinId) {
+    const response = await apiDelete(`${API_URI}/map/pins/${pinId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not delete map pin');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function updateMapPin(pinId, label, color) {
+    const body = {label, color};
+    const response = await apiPut(`${API_URI}/map/pins/${pinId}`, body);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not update map pin');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
     }
 }

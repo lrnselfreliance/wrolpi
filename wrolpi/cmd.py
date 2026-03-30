@@ -157,7 +157,7 @@ TESTING_RUN_COMMAND_RESULT = None
 
 async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
                       timeout: int = 600, log_command: bool = True,
-                      stdout_callback: callable = None) -> CommandResult:
+                      stdout_callback: callable = None, env: dict = None) -> CommandResult:
     """Run a shell command, return the results (stdout/stderr/return code).
 
     When stdout_callback is provided, stdout is piped and each line is passed to the callback
@@ -165,6 +165,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
 
     :param log_command: Enable debug logging.
     :param stdout_callback: Called with each decoded stdout line (str). May be None.
+    :param env: Environment variables for the subprocess. If None, inherits the current environment.
     """
     if not isinstance(cmd, (list, tuple)):
         raise RuntimeError('Command must be a list or tuple')
@@ -203,20 +204,43 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
                 stdout=stdout_arg,
                 stderr=stderr_fh,
                 cwd=cwd,
+                env=env,
             )
             pid = proc.pid
 
             if streaming:
                 async def _read_stdout():
+                    buf = ''
                     while True:
-                        line = await proc.stdout.readline()
-                        if not line:
+                        chunk = await proc.stdout.read(4096)
+                        if not chunk:
+                            # Flush remaining buffer.
+                            if buf.strip():
+                                try:
+                                    stdout_callback(buf.strip())
+                                except Exception as e:
+                                    logger.warning(f'run_command: stdout_callback error: {e}')
                             break
-                        stdout_buf.extend(line)
-                        try:
-                            stdout_callback(line.decode(errors='replace').rstrip('\n'))
-                        except Exception as e:
-                            logger.warning(f'run_command: stdout_callback error: {e}')
+                        stdout_buf.extend(chunk)
+                        buf += chunk.decode(errors='replace')
+                        # Split on both \n and \r to handle progress bars.
+                        while '\n' in buf or '\r' in buf:
+                            # Find the earliest delimiter.
+                            ni = buf.find('\n')
+                            ri = buf.find('\r')
+                            if ni == -1:
+                                idx, skip = ri, 1
+                            elif ri == -1:
+                                idx, skip = ni, 1
+                            else:
+                                idx, skip = min(ni, ri), 1
+                            line = buf[:idx]
+                            buf = buf[idx + skip:]
+                            if line.strip():
+                                try:
+                                    stdout_callback(line.strip())
+                                except Exception as e:
+                                    logger.warning(f'run_command: stdout_callback error: {e}')
 
                 reader_task = asyncio.create_task(_read_stdout())
 

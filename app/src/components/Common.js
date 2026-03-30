@@ -2054,10 +2054,10 @@ export function IframeViewer({title, src, fallback, style, timeout = 5000}) {
 
     const iframeMedia = <>
         <Media at='mobile'>
-            <iframe title={title} src={src} style={mobileStyle}/>
+            <iframe title={title} src={src} style={mobileStyle} allow="geolocation"/>
         </Media>
         <Media greaterThan='mobile'>
-            <iframe title={title} src={src} style={tabletStyle}/>
+            <iframe title={title} src={src} style={tabletStyle} allow="geolocation"/>
         </Media>
     </>;
 

@@ -683,8 +683,6 @@ async def restart_all_services() -> dict:
         "wrolpi-app",
         "wrolpi-kiwix",
         "wrolpi-help",
-        "renderd",
-        "apache2",
         # Controller restarts itself last (scheduled after response)
     ]
 

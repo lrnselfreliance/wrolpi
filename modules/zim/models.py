@@ -401,7 +401,8 @@ class ZimSubscription(Base):
     def change_download(self, session: Session, url: str, frequency: int):
         # A Zim file is found using the KiwixCatalogDownloader, then handled by the KiwixZimDownloader.
         old_url = self.download.url if self.download else url
-        download = download_manager.get_or_create_download(session, old_url, reset_attempts=True)
+        download = download_manager.get_or_create_download(session, old_url, reset_attempts=True,
+                                                               override_skip=True)
         download.url = url
         download.frequency = frequency
         download.downloader = 'kiwix_catalog'

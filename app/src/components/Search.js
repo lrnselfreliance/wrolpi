@@ -325,6 +325,31 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             results.apps = {name: 'Apps', results: matchingApps.slice(0, 5)};
         }
 
+        // Detect coordinates (e.g., "40.76, -111.89" or "40.76 -111.89").
+        const coordMatch = searchStr && searchStr.trim().match(
+            /^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/
+        );
+        if (coordMatch) {
+            const lat = parseFloat(coordMatch[1]);
+            const lon = parseFloat(coordMatch[2]);
+            if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                // Derive zoom from decimal precision: 0dp=3, 1dp=7, 2dp=10, 3dp=13, 4dp=16, 5+=18
+                const maxDecimals = Math.max(
+                    (coordMatch[1].split('.')[1] || '').length,
+                    (coordMatch[2].split('.')[1] || '').length,
+                );
+                const zoom = Math.min([3, 7, 10, 13, 16, 18][maxDecimals] || 18, 18);
+                results.map = {
+                    name: 'Map', results: [{
+                        type: 'map',
+                        title: `${lat}, ${lon}`,
+                        description: 'View on map',
+                        location: `/map?lat=${lat}&lon=${lon}&z=${zoom}`,
+                    }]
+                };
+            }
+        }
+
         setSuggestionsResults(results);
         setSuggestionsSums({
             fileGroups: newSuggestions.fileGroups,

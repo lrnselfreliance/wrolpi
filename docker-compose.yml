@@ -105,26 +105,11 @@ services:
       # Force React to use Caddy port to connect to it's websocket.
       - WDS_SOCKET_PORT=0
 
-  map: # https://github.com/Overv/openstreetmap-tile-server
-    image: overv/openstreetmap-tile-server:v1.6.0
-    volumes:
-      - 'openstreetmap-data:/var/lib/postgresql/12/main'
-      - 'openstreetmap-rendered-tiles:/var/lib/mod_tile'
-      - './modules/map/leaflet.html:/var/www/html/index.html'
-      - './modules/map/leaflet.js:/var/www/html/leaflet.js'
-      - './modules/map/leaflet.css:/var/www/html/leaflet.css'
-    command: 'run'
-    shm_size: 1g  # Increase shared size to render large map tiles
-    healthcheck:
-      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
-      interval: 1m
-
   web: # Caddy reverse proxy - handles HTTPS for all services.
     depends_on:
       - app
       - zim
       - help
-      - map
     build:
       context: .
       dockerfile: docker/web/Dockerfile
@@ -139,6 +124,8 @@ services:
       - './icon.ico:/etc/caddy/favicon.ico'
       - './icon.png:/etc/caddy/icon.png'
       - './test:/opt/media'
+      - './modules/map/static:/opt/wrolpi/modules/map/static:ro'
+      - './blobs:/opt/wrolpi-blobs:ro'
     environment:
       - MEDIA_DIRECTORY=/opt/media
       # Set EXTRA_SANS to include the host's LAN IP in the TLS certificate.
@@ -181,9 +168,3 @@ services:
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8086' ]
       interval: 1m
-
-volumes:
-  openstreetmap-data:
-    external: true
-  openstreetmap-rendered-tiles:
-    external: true

@@ -6,98 +6,159 @@ from modules.map import lib
 from wrolpi.common import get_wrolpi_config
 
 
-def test_get_map_paths(test_directory, make_files_structure):
-    pbf, dump = make_files_structure([
-        'map/pbf/map.osm.pbf',
-        'map/pbf/map.dump',
+def test_get_pmtiles_files_empty(test_directory):
+    """No files returns an empty list."""
+    assert lib.get_pmtiles_files() == []
+
+
+def test_get_pmtiles_files(test_directory, make_files_structure):
+    """PMTiles files are found, other files are ignored."""
+    make_files_structure([
+        'map/usa.pmtiles',
+        'map/oregon.pmtiles',
+        'map/old-data.osm.pbf',
+        'map/readme.txt',
     ])
 
-    with mock.patch('modules.map.lib.subprocess.check_output') as mock_check_output:
-        mock_check_output.return_value = b'OpenStreetMap Protocolbuffer Binary Format'
-        assert lib.get_map_paths() == [pbf, ]
+    files = lib.get_pmtiles_files()
+    names = [f['name'] for f in files]
+    assert 'oregon.pmtiles' in names
+    assert 'usa.pmtiles' in names
+    assert 'old-data.osm.pbf' not in names
+    assert 'readme.txt' not in names
 
-    with mock.patch('modules.map.lib.subprocess.check_output') as mock_check_output:
-        mock_check_output.return_value = b'PostgreSQL custom database dump'
-        assert lib.get_map_paths() == [dump, ]
+    # Each file has expected keys.
+    for f in files:
+        assert 'name' in f
+        assert 'path' in f
+        assert 'size' in f
+        assert 'mtime' in f
+
+
+def test_delete_pmtiles_file(test_directory, make_files_structure):
+    """A PMTiles file can be deleted."""
+    pmtiles_file, = make_files_structure(['map/oregon.pmtiles'])
+    assert pmtiles_file.is_file()
+
+    assert lib.delete_pmtiles_file('oregon.pmtiles') is True
+    assert not pmtiles_file.is_file()
+
+
+def test_delete_nonexistent_file(test_directory):
+    """Deleting a nonexistent file returns False."""
+    assert lib.delete_pmtiles_file('nonexistent.pmtiles') is False
+
+
+def test_delete_path_traversal(test_directory, make_files_structure):
+    """Path traversal is rejected."""
+    make_files_structure(['map/safe.pmtiles'])
+
+    with pytest.raises(ValueError):
+        lib.delete_pmtiles_file('../../etc/passwd')
+
+
+def test_get_map_catalog(test_directory):
+    """Catalog returns predefined regions."""
+    catalog = lib.get_map_catalog()
+    assert len(catalog) > 0
+    names = [r['name'] for r in catalog]
+    assert 'Alaska' in names  # Verify a known region exists
+    for region in catalog:
+        assert 'name' in region
+        assert 'region' in region
+        assert 'size_estimate' in region
 
 
 @pytest.mark.asyncio
-async def test_run_import_command(test_directory, mock_run_command, run_command_bad_result):
-    """
-    Import map files.  Files to import are checked for validity before importing.  Any errors returned by
-    asyncio.create_subprocess_shell are caught and reported.
-    """
-    foo_pbf = test_directory / 'foo.osm.pbf'
-    bar_pbf = test_directory / 'bar.osm.pbf'
+async def test_subscribe(async_client, test_session, test_directory):
+    """A subscription adds a region to the download settings."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    subs = lib.get_map_subscriptions(test_session)
+    regions = [s['region'] for s in subs]
+    assert 'us-alaska' in regions
+
+
+@pytest.mark.asyncio
+async def test_subscribe_multiple(async_client, test_session, test_directory):
+    """Multiple subscriptions share one Download."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    await lib.subscribe(test_session, 'United States (West)', 'us-west')
+    subs = lib.get_map_subscriptions(test_session)
+    regions = [s['region'] for s in subs]
+    assert 'us-alaska' in regions
+    assert 'us-west' in regions
+
+
+@pytest.mark.asyncio
+async def test_subscribe_duplicate(async_client, test_session, test_directory):
+    """Subscribing to the same region twice doesn't duplicate."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    subs = lib.get_map_subscriptions(test_session)
+    assert len([s for s in subs if s['region'] == 'us-alaska']) == 1
+
+
+@pytest.mark.asyncio
+async def test_subscribe_invalid(async_client, test_session, test_directory):
+    """Invalid region name raises ValueError."""
     with pytest.raises(ValueError):
-        await lib.run_import_command(foo_pbf)
-
-    foo_pbf.touch()
-    with pytest.raises(ValueError):
-        await lib.run_import_command(foo_pbf)
-
-    dump_file = test_directory / 'dumpy.dump'
-    dump_file.touch()
-
-    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
-        # Run the import, it succeeds.
-        mock_is_pbf_file.return_value = True
-        await lib.run_import_command(foo_pbf)
-
-    # Can import more than one pbf.
-    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
-        mock_is_pbf_file.return_value = True
-        await lib.run_import_command(foo_pbf, bar_pbf)
-
-    with mock.patch('modules.map.lib.is_pbf_file') as mock_is_pbf_file:
-        # Run the import, it fails.
-        mock_run_command(run_command_bad_result)
-        mock_is_pbf_file.return_value = True
-        with pytest.raises(ValueError):
-            await lib.run_import_command(foo_pbf)
-
-    with pytest.raises(ValueError) as e:
-        await lib.run_import_command()
-    assert 'Must import a file' in str(e)
-
-    # Can't import more than one dump.
-    with pytest.raises(ValueError) as e:
-        await lib.run_import_command(dump_file, dump_file)
-    assert 'more than one' in str(e)
+        await lib.subscribe(test_session, 'Atlantis', 'atlantis')
 
 
-@pytest.mark.parametrize('size,expected', [
-    (0, 0),
-    (-1, 0),
-    (17737381, 101),
-    (63434267, 361),
-    (87745484, 500),
-    (116318111, 662),
-    (136372996, 777),
-    (1936075318, 29032),
-    (2676094489, 46705),
-    (3392375001, 67202),
-    (11346305075, 519006),
-])
-def test_seconds_to_import_rpi4(size, expected):
-    assert lib.seconds_to_import(size) == expected
+@pytest.mark.asyncio
+async def test_unsubscribe(async_client, test_session, test_directory):
+    """Unsubscribing removes a region."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    await lib.subscribe(test_session, 'United States (West)', 'us-west')
+
+    await lib.unsubscribe(test_session, 'us-alaska')
+    subs = lib.get_map_subscriptions(test_session)
+    regions = [s['region'] for s in subs]
+    assert 'us-alaska' not in regions
+    assert 'us-west' in regions
 
 
-@pytest.mark.parametrize('size,expected', [
-    (0, 0),
-    (-1, 0),
-    (17737381, 130),
-    (63434267, 466),
-    (87745484, 645),
-    (116318111, 855),
-    (136372996, 1002),
-    (1936075318, 10873),
-    (2676094489, 18313),
-    (3392375001, 27253),
-    (11346305075, 241574),
-])
-def test_seconds_to_import_rpi5(size, expected):
-    assert lib.seconds_to_import(size, True) == expected
+@pytest.mark.asyncio
+async def test_unsubscribe_last_deletes_download(async_client, test_session, test_directory):
+    """Unsubscribing the last region deletes the Download."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    await lib.unsubscribe(test_session, 'us-alaska')
+    assert lib.get_map_subscriptions(test_session) == []
+    assert lib._get_map_download(test_session) is None
+
+
+@pytest.mark.asyncio
+async def test_subscribe_renews_download(async_client, test_session, test_directory):
+    """Subscribing renews the download so it runs immediately."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    download = lib._get_map_download(test_session)
+    assert download.status == 'new'
+
+    # Simulate the download completing.
+    download.status = 'complete'
+    test_session.commit()
+
+    # Subscribe to another region — download should be renewed.
+    await lib.subscribe(test_session, 'United States (West)', 'us-west')
+    download = lib._get_map_download(test_session)
+    assert download.status == 'new'
+
+
+@pytest.mark.asyncio
+async def test_subscribe_saves_config(async_client, test_session, test_directory):
+    """Subscribing triggers a download config save."""
+    with mock.patch('modules.map.lib.save_downloads_config') as mock_save:
+        await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+        mock_save.activate_switch.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_saves_config(async_client, test_session, test_directory):
+    """Unsubscribing triggers a download config save."""
+    await lib.subscribe(test_session, 'Alaska', 'us-alaska')
+    with mock.patch('modules.map.lib.save_downloads_config') as mock_save:
+        await lib.unsubscribe(test_session, 'us-alaska')
+        mock_save.activate_switch.assert_called_once()
 
 
 def test_get_custom_map_directory(async_client, test_directory, test_wrolpi_config):

@@ -25,7 +25,7 @@ useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 sed -i 's/port =.*/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 
 # Install Node console commands.
-npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1.2.0
+npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
 # Install Deno runtime.
 DENO_VERSION="v2.2.4"
@@ -68,6 +68,7 @@ apt-get install -y caddy
 # Configure Caddy.
 mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 

@@ -1,51 +1,100 @@
 from http import HTTPStatus
-from pathlib import Path
 
 from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import lib, schema
-from wrolpi import flags
+from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
-from wrolpi.common import wrol_mode_check, get_media_directory, background_task
-from wrolpi.errors import ValidationError
-from wrolpi.vars import DOCKERIZED
+from wrolpi.common import wrol_mode_check
+from wrolpi.events import Events
 
 map_bp = Blueprint('Map', '/api/map')
 
 
-@map_bp.post('/import')
-@openapi.definition(
-    summary='Import PBF/dump map files',
-    body=schema.ImportPost,
-)
-@validate(schema.ImportPost)
-@wrol_mode_check
-async def import_pbfs(_: Request, body: schema.ImportPost):
-    if flags.map_importing.is_set():
-        return response.json({'error': 'Map import already running'}, HTTPStatus.CONFLICT)
-
-    paths = [i for i in body.files if i]
-    if not paths:
-        raise ValidationError('No PBF or dump files were provided')
-
-    background_task(lib.import_files(paths))
-    return response.empty()
-
-
 @map_bp.get('/files')
-@openapi.description('Find any map files, get their import status')
-def get_files_status(request: Request):
-    paths = lib.get_import_status(request.ctx.session)
-    paths = sorted(paths, key=lambda i: str(i.path))
-    pending = request.app.shared_ctx.map_importing.get('pending')
-    if pending:
-        pending = [Path(i).relative_to(get_media_directory()) for i in pending]
-    body = dict(
-        files=paths,
-        pending=pending,
-        import_running=flags.map_importing.is_set(),
-        dockerized=DOCKERIZED,
-    )
-    return json_response(body, HTTPStatus.OK)
+@openapi.description('List available PMTiles map files')
+def get_files(_: Request):
+    files = lib.get_pmtiles_files()
+    return json_response(dict(files=files), HTTPStatus.OK)
+
+
+@map_bp.delete('/files/<filename:str>')
+@openapi.description('Delete a PMTiles map file')
+@wrol_mode_check
+async def delete_file(_: Request, filename: str):
+    try:
+        deleted = lib.delete_pmtiles_file(filename)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    if deleted:
+        return response.empty()
+    return response.json({'error': 'File not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/subscribe')
+@openapi.description('Get map catalog and current subscriptions')
+def get_subscriptions(request: Request):
+    catalog = lib.get_map_catalog()
+    subscriptions = lib.get_map_subscriptions(request.ctx.session)
+    return json_response(dict(catalog=catalog, subscriptions=subscriptions), HTTPStatus.OK)
+
+
+@map_bp.post('/subscribe')
+@openapi.description('Subscribe to a map region for automatic downloads')
+@validate(schema.MapSubscribeRequest)
+@wrol_mode_check
+async def post_subscribe(request: Request, body: schema.MapSubscribeRequest):
+    try:
+        await lib.subscribe(request.ctx.session, body.name, body.region)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    Events.send_created(f'Map subscription created for {body.name}')
+    return response.empty(HTTPStatus.CREATED)
+
+
+@map_bp.delete('/subscribe/<region:str>')
+@openapi.description('Unsubscribe from a map region')
+@wrol_mode_check
+async def delete_subscription(request: Request, region: str):
+    try:
+        await lib.unsubscribe(request.ctx.session, region)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.NOT_FOUND)
+
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@map_bp.get('/pins')
+@openapi.description('Get all map pins')
+def get_pins(_: Request):
+    pins = get_map_pins_config().pins
+    return json_response(dict(pins=pins), HTTPStatus.OK)
+
+
+@map_bp.post('/pins')
+@openapi.description('Add a map pin')
+@validate(schema.MapPinRequest)
+async def add_pin(_: Request, body: schema.MapPinRequest):
+    pin = get_map_pins_config().add_pin(body.lat, body.lon, body.label, body.color)
+    return json_response(dict(pin=pin), HTTPStatus.CREATED)
+
+
+@map_bp.delete('/pins/<pin_id:int>')
+@openapi.description('Delete a map pin by ID')
+async def delete_pin(_: Request, pin_id: int):
+    if get_map_pins_config().delete_pin(pin_id):
+        return response.empty(HTTPStatus.NO_CONTENT)
+    return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.put('/pins/<pin_id:int>')
+@openapi.description('Update a map pin by ID')
+@validate(schema.MapPinUpdateRequest)
+async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
+    if get_map_pins_config().update_pin(pin_id, body.label, body.color):
+        return response.empty(HTTPStatus.NO_CONTENT)
+    return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)

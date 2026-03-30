@@ -14,7 +14,7 @@ node -v
 npm -v
 
 # Install serve, and archiving tools.
-single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1.2.0
+single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
 # Build React app in background job.
 cd /opt/wrolpi/app || exit 5
@@ -26,18 +26,6 @@ python3 -m venv /opt/wrolpi/venv
 
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
-
-# Get map dependencies.
-[ -d /opt/openstreetmap-carto ] && chown -R wrolpi:wrolpi /opt/openstreetmap-carto
-git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
-git config --global --add safe.directory /opt/openstreetmap-carto
-(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
-chown -R _renderd:_renderd /opt/openstreetmap-carto
-
-# Get map initialization dump.
-if [[ ! -f /opt/wrolpi-blobs/map-db-gis.dump || ! -s /opt/wrolpi-blobs/map-db-gis.dump ]]; then
-  wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/map-db-gis.dump -O /opt/wrolpi-blobs/map-db-gis.dump
-fi
 
 # Install Caddy from official apt repo if not already installed.
 if ! command -v caddy &>/dev/null; then

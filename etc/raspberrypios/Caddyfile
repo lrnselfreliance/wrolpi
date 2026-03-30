@@ -60,6 +60,18 @@
 	}
 
 
+	# WROLPi blobs (planet overview map, fonts, etc.)
+	handle_path /blobs/* {
+		root * /opt/wrolpi-blobs
+		file_server
+	}
+
+	# Map static assets (fonts, sprites) for embedded MapLibre viewer.
+	handle_path /map-assets/* {
+		root * /opt/wrolpi/modules/map/static
+		file_server
+	}
+
 	# Custom MIME types not in Caddy's defaults.
 	@yaml path *.yaml *.yml
 	header @yaml Content-Type "text/yaml"
@@ -116,10 +128,33 @@
 	reverse_proxy 0.0.0.0:9086
 }
 
-# Map HTTPS proxy (Apache2 HTTP-only on 9084).
+# Map viewer - serves MapLibre static assets and PMTiles data via Caddy.
 :8084 {
 	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
 	header ?Access-Control-Allow-Origin "*"
-	header ?Access-Control-Allow-Methods "GET, OPTIONS"
-	reverse_proxy 0.0.0.0:9084
+	header ?Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+	header ?Access-Control-Expose-Headers "Content-Range, Content-Length"
+
+	# PMTiles file list from WROLPi API.
+	handle /api/map/* {
+		reverse_proxy 0.0.0.0:8081
+	}
+
+	# WROLPi blobs (planet overview map).
+	handle_path /blobs/* {
+		root * /opt/wrolpi-blobs
+		file_server
+	}
+
+	# PMTiles data files from media directory (Range Requests supported by default).
+	handle_path /data/* {
+		root * /media/wrolpi/map
+		file_server
+	}
+
+	# MapLibre static assets (HTML, JS, CSS, fonts, sprites).
+	handle {
+		root * /opt/wrolpi/modules/map/static
+		file_server
+	}
 }

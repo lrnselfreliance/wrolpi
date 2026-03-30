@@ -561,7 +561,7 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
 
     # The user can start a download even if the URL is in the skip list.
     test_download_manager.create_download(test_session, 'https://example.com/skipme', test_downloader.name,
-                                          reset_attempts=True)
+                                          reset_attempts=True, override_skip=True)
     assert_download_urls({'https://example.com/skipme'})
     assert get_download_manager_config().skip_urls == []
 

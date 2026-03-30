@@ -108,8 +108,6 @@ class Flag:
 db_up = Flag('db_up')
 # Outdated Zims need to be removed.
 outdated_zims = Flag('outdated_zims', store_db=True)
-# Map Importing
-map_importing = Flag('map_importing')
 # Used to disable or enable downloading when Internet is down.
 have_internet = Flag('have_internet')
 
@@ -147,7 +145,6 @@ def get_flags() -> dict:
         file_worker_modeling=file_worker_modeling.is_set(),
         global_refresh_active=global_refresh_active.is_set(),
         have_internet=have_internet.is_set(),
-        map_importing=map_importing.is_set(),
         outdated_zims=outdated_zims.is_set(),
         refresh_complete=refresh_complete.is_set(),
     )

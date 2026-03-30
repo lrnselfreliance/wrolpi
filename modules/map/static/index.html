@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>WROLPi Map</title>
+    <link rel="stylesheet" href="/libs/maplibre-gl.css"/>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+        #map { width: 100%; height: 100%; }
+
+        /* Layer control panel */
+        #layer-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+            min-width: 220px;
+            font-size: 14px;
+        }
+
+        #layer-toggle {
+            padding: 10px 14px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            user-select: none;
+        }
+        #layer-toggle:hover { background: #f5f5f5; }
+        #layer-toggle .arrow { transition: transform 0.2s; }
+        #layer-toggle .arrow.collapsed { transform: rotate(-90deg); }
+
+        #layer-content { padding: 8px 0; }
+        #layer-content.hidden { display: none; }
+
+        .layer-group { padding: 4px 14px; }
+        .layer-group-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 0;
+            cursor: pointer;
+            font-weight: 500;
+            user-select: none;
+        }
+        .layer-group-header:hover { color: #1a73e8; }
+        .layer-group-header input { cursor: pointer; width: 16px; height: 16px; }
+
+        /* File selector */
+        #file-panel {
+            position: absolute;
+            top: 10px;
+            right: 50px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            padding: 10px 14px;
+            font-size: 14px;
+            max-width: 300px;
+        }
+        #file-panel h3 { margin-bottom: 8px; font-size: 14px; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 0;
+        }
+        .file-item input { cursor: pointer; width: 16px; height: 16px; }
+        .file-item label { cursor: pointer; word-break: break-all; }
+
+        #no-files-msg {
+            color: #888;
+            font-style: italic;
+            padding: 4px 0;
+        }
+
+        /* Status bar */
+        #status {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            z-index: 1000;
+            display: none;
+        }
+
+        /* Context menu */
+        #context-menu {
+            position: absolute;
+            z-index: 1001;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            padding: 4px 0;
+            font-size: 13px;
+            min-width: 180;
+            display: none;
+        }
+        #context-menu .coords {
+            padding: 6px 12px;
+            color: #666;
+            font-size: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        #context-menu .action {
+            padding: 8px 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+        #context-menu .action:hover { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="layer-panel">
+    <div id="layer-toggle">
+        <span>Layers</span>
+        <span class="arrow">&#9660;</span>
+    </div>
+    <div id="layer-content"></div>
+</div>
+
+<div id="file-panel">
+    <h3>Map Files</h3>
+    <div id="file-list">
+        <div id="no-files-msg">Scanning...</div>
+    </div>
+</div>
+
+<div id="status"></div>
+
+<div id="context-menu">
+    <div class="coords" id="context-coords"></div>
+    <div class="action" id="context-copy">Copy GPS coordinates</div>
+    <div class="action" id="context-export">Export as PNG</div>
+</div>
+
+<script src="/libs/pmtiles.js"></script>
+<script src="/libs/maplibre-gl.js"></script>
+<script src="/libs/protomaps-themes-base.js"></script>
+<script src="/libs/maplibre-contour-pmtiles.js"></script>
+<script>
+(function() {
+    // --- Constants ---
+    var MAP_OVERVIEW_URL = "/blobs/map-overview.pmtiles";
+    var TERRAIN_PREFIX = "terrain-";
+
+    function isPlanetFile(name) {
+        if (name.indexOf("planet-") === 0) return true;
+        return /^\d{8}\.pmtiles$/.test(name);
+    }
+    var terrainFileName = null;
+    var STORAGE_KEY_LAYERS = "wrolpi-map-layers";
+    var STORAGE_KEY_SCALE = "wrolpi-map-scale";
+    var DEFAULT_HIDDEN = {"Hillshade": true, "Contours": true};
+
+    // --- PMTiles protocol ---
+    var protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+
+    // --- Layer group definitions ---
+    var LAYER_GROUPS = {
+        "Hillshade": ["hillshade"],
+        "Contours": ["contour-lines", "contour-labels"],
+        "Water": ["water"],
+        "Land Cover": [
+            "landcover", "landuse_park", "landuse_urban_green", "landuse_beach",
+            "landuse_aerodrome", "landuse_hospital", "landuse_industrial",
+            "landuse_pedestrian", "landuse_pier", "landuse_school", "landuse_zoo"
+        ],
+        "Buildings": ["buildings"],
+        "Roads - Highway": ["roads_highway"],
+        "Roads - Major": ["roads_major", "roads_link"],
+        "Roads - Minor": ["roads_minor", "roads_other"],
+        "Roads - Tunnels": ["roads_tunnels"],
+        "Roads - Bridges": ["roads_bridges"],
+        "Rail & Runways": ["roads_rail", "roads_runway", "roads_taxiway", "landuse_runway"],
+        "Boundaries": ["boundaries"],
+        "Labels": ["roads_labels", "places_", "address_label", "pois", "water_label", "water_waterway_label"],
+    };
+
+    // --- State ---
+    var map;
+    var scaleControl;
+    var demSource = null;
+    var activeSources = {};
+    var hasPlanetOverview = false;
+    var hasTerrain = false;
+    var contextMenuData = null;
+
+    // Load saved state from localStorage.
+    function getSavedVisibility() {
+        try {
+            var saved = localStorage.getItem(STORAGE_KEY_LAYERS);
+            if (saved) return JSON.parse(saved);
+        } catch(e) {}
+        var v = {};
+        for (var g in LAYER_GROUPS) v[g] = !DEFAULT_HIDDEN[g];
+        return v;
+    }
+    function getSavedScale() {
+        try { return localStorage.getItem(STORAGE_KEY_SCALE) || "metric"; } catch(e) { return "metric"; }
+    }
+
+    var groupVisibility = getSavedVisibility();
+    var currentScale = getSavedScale();
+
+    function getMapFlavor() {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    // --- Build style ---
+    function buildStyle() {
+        var flavor = getMapFlavor();
+        var skipSecondary = {"background": true, "earth": true};
+        var sources = {};
+        var allLayers = [];
+        var si = 0;
+
+        // Planet overview as the primary base layer.
+        if (hasPlanetOverview) {
+            sources["map-overview"] = {
+                type: "vector",
+                url: "pmtiles://" + MAP_OVERVIEW_URL,
+            };
+            var baseLayers = protomaps_themes_base.default("map-overview", flavor);
+            allLayers = allLayers.concat(baseLayers);
+            si = 1;
+        }
+
+        // User files as additional sources.
+        var sourceNames = Object.keys(activeSources);
+        for (var fi = 0; fi < sourceNames.length; fi++) {
+            var filename = sourceNames[fi];
+            sources[filename] = {
+                type: "vector",
+                url: "pmtiles:///data/" + filename,
+            };
+            var fileLayers = protomaps_themes_base.default(filename, flavor);
+            if (si === 0 && fi === 0) {
+                allLayers = allLayers.concat(fileLayers);
+            } else {
+                for (var li = 0; li < fileLayers.length; li++) {
+                    if (skipSecondary[fileLayers[li].id]) continue;
+                    var layer = Object.assign({}, fileLayers[li]);
+                    layer.id = filename + ":" + layer.id;
+                    allLayers.push(layer);
+                }
+            }
+        }
+
+        // Terrain (hillshade + contours).
+        if (hasTerrain && demSource) {
+            var savedVis = getSavedVisibility();
+            var hillshadeVis = savedVis["Hillshade"] ? "visible" : "none";
+            var contourVis = savedVis["Contours"] ? "visible" : "none";
+            var isImperial = currentScale === "imperial";
+            var elevUnit = isImperial ? "ft" : "m";
+
+            sources["terrain-dem"] = {
+                type: "raster-dem",
+                url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                encoding: "terrarium",
+                tileSize: 512,
+            };
+
+            var hillshadeSearch = allLayers.findIndex(function(l) { return l.id === "buildings"; });
+            var hillshadeIdx = hillshadeSearch === -1 ? allLayers.length : hillshadeSearch;
+            allLayers.splice(hillshadeIdx, 0, {
+                id: "hillshade",
+                type: "hillshade",
+                source: "terrain-dem",
+                layout: {visibility: hillshadeVis},
+                paint: {
+                    "hillshade-shadow-color": "#000000",
+                    "hillshade-illumination-anchor": "viewport",
+                    "hillshade-exaggeration": 0.3,
+                },
+            });
+
+            var contourUrl = demSource.contourProtocolUrl({
+                overzoom: 1,
+                contourLayer: "contours",
+                elevationKey: "ele",
+                levelKey: "level",
+                multiplier: isImperial ? 3.28084 : 1,
+                thresholds: isImperial ? {
+                    4: [1000, 5000], 5: [500, 2500], 6: [200, 1000], 7: [200, 1000], 8: [100, 500],
+                } : {
+                    4: [500, 2500], 5: [200, 1000], 6: [100, 500], 7: [100, 500], 8: [50, 200],
+                },
+            });
+            sources["contours"] = { type: "vector", tiles: [contourUrl], maxzoom: 8 };
+
+            var textColor = flavor === "dark" ? "rgba(210,180,140,0.9)" : "rgba(150,100,50,0.8)";
+            var haloColor = flavor === "dark" ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)";
+
+            allLayers.push(
+                {
+                    id: "contour-lines", type: "line", source: "contours", "source-layer": "contours",
+                    filter: ["!=", ["get", "level"], 1],
+                    layout: {visibility: contourVis},
+                    paint: {"line-color": "rgba(150,100,50,0.3)", "line-width": 0.5},
+                },
+                {
+                    id: "contour-lines-major", type: "line", source: "contours", "source-layer": "contours",
+                    filter: ["==", ["get", "level"], 1],
+                    layout: {visibility: contourVis},
+                    paint: {"line-color": "rgba(150,100,50,0.5)", "line-width": 1},
+                },
+                {
+                    id: "contour-labels", type: "symbol", source: "contours", "source-layer": "contours",
+                    filter: ["==", ["get", "level"], 1],
+                    layout: {
+                        visibility: contourVis,
+                        "symbol-placement": "line",
+                        "text-field": ["concat", ["get", "ele"], elevUnit],
+                        "text-size": 10,
+                    },
+                    paint: {"text-color": textColor, "text-halo-color": haloColor, "text-halo-width": 1},
+                }
+            );
+        }
+
+        return {
+            version: 8,
+            glyphs: "/fonts/{fontstack}/{range}.pbf",
+            sprite: window.location.origin + "/sprites/" + flavor,
+            sources: sources,
+            layers: allLayers,
+        };
+    }
+
+    // --- Parse URL hash for coordinates ---
+    function parseHash() {
+        var hash = window.location.hash.replace("#", "");
+        if (!hash) return null;
+        var parts = hash.split(",");
+        if (parts.length >= 2) {
+            var lat = parseFloat(parts[0]);
+            var lon = parseFloat(parts[1]);
+            var zoom = parts.length >= 3 ? parseFloat(parts[2]) : 10;
+            if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                return {lat: lat, lon: lon, zoom: zoom};
+            }
+        }
+        return null;
+    }
+
+    function initMap() {
+        var initial = parseHash();
+        var center = initial ? [initial.lon, initial.lat] : [0, 0];
+        var zoom = initial ? initial.zoom : 2;
+
+        map = new maplibregl.Map({
+            container: "map",
+            style: buildStyle(),
+            center: center,
+            zoom: zoom,
+            attributionControl: true,
+            preserveDrawingBuffer: true,
+        });
+
+        map.addControl(new maplibregl.NavigationControl(), "top-right");
+        map.addControl(new maplibregl.FullscreenControl(), "top-right");
+        scaleControl = new maplibregl.ScaleControl({maxWidth: 200, unit: currentScale});
+        map.addControl(scaleControl, "bottom-left");
+
+        var geolocate = new maplibregl.GeolocateControl({
+            positionOptions: {enableHighAccuracy: true},
+            trackUserLocation: true,
+            showUserHeading: true,
+            showAccuracyCircle: true,
+        });
+        map.addControl(geolocate, "top-right");
+
+        // Update URL hash on pan/zoom.
+        map.on("moveend", function() {
+            var c = map.getCenter();
+            var z = map.getZoom();
+            window.location.hash = c.lat.toFixed(4) + "," + c.lng.toFixed(4) + "," + z.toFixed(1);
+        });
+
+        // Right-click context menu.
+        map.on("contextmenu", function(e) {
+            contextMenuData = {lat: e.lngLat.lat, lon: e.lngLat.lng};
+            var menu = document.getElementById("context-menu");
+            var z = map.getZoom();
+            var d = z < 4 ? 1 : z < 8 ? 2 : z < 12 ? 3 : 4;
+            document.getElementById("context-coords").textContent =
+                contextMenuData.lat.toFixed(d) + ", " + contextMenuData.lon.toFixed(d);
+            menu.style.left = e.point.x + "px";
+            menu.style.top = e.point.y + "px";
+            menu.style.display = "block";
+        });
+        map.on("click", function() { document.getElementById("context-menu").style.display = "none"; });
+        map.on("movestart", function() { document.getElementById("context-menu").style.display = "none"; });
+
+        // Long-press context menu (mobile).
+        var longPressTimer = null;
+        var touchStartPos = null;
+        var canvas = map.getCanvas();
+        canvas.addEventListener("touchstart", function(e) {
+            if (e.touches.length !== 1) return;
+            touchStartPos = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+            longPressTimer = setTimeout(function() {
+                var rect = canvas.getBoundingClientRect();
+                var px = touchStartPos.x - rect.left;
+                var py = touchStartPos.y - rect.top;
+                var lngLat = map.unproject([px, py]);
+                contextMenuData = {lat: lngLat.lat, lon: lngLat.lng};
+                var menu = document.getElementById("context-menu");
+                var z = map.getZoom();
+                var d = z < 4 ? 1 : z < 8 ? 2 : z < 12 ? 3 : 4;
+                document.getElementById("context-coords").textContent =
+                    contextMenuData.lat.toFixed(d) + ", " + contextMenuData.lon.toFixed(d);
+                menu.style.left = px + "px";
+                menu.style.top = py + "px";
+                menu.style.display = "block";
+            }, 500);
+        }, {passive: true});
+        canvas.addEventListener("touchmove", function(e) {
+            if (longPressTimer && touchStartPos) {
+                var dx = e.touches[0].clientX - touchStartPos.x;
+                var dy = e.touches[0].clientY - touchStartPos.y;
+                if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            }
+        });
+        canvas.addEventListener("touchend", function() {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        });
+
+        map.on("load", function() {
+            buildLayerControls();
+        });
+    }
+
+    // --- Context menu copy ---
+    document.getElementById("context-copy").addEventListener("click", function() {
+        if (!contextMenuData || !map) return;
+        var z = map.getZoom();
+        var d = z < 4 ? 1 : z < 8 ? 2 : z < 12 ? 3 : 4;
+        var text = contextMenuData.lat.toFixed(d) + ", " + contextMenuData.lon.toFixed(d);
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).catch(function() {
+                window.prompt("Copy coordinates:", text);
+            });
+        } else {
+            window.prompt("Copy coordinates:", text);
+        }
+        document.getElementById("context-menu").style.display = "none";
+    });
+
+    // --- Context menu export ---
+    document.getElementById("context-export").addEventListener("click", function() {
+        if (!map) return;
+        document.getElementById("context-menu").style.display = "none";
+        // Force a fresh render, then capture.
+        map.once("render", function() {
+            var c = map.getCenter();
+            var z = map.getZoom();
+            var filename = "wrolpi-map_" + c.lat.toFixed(4) + "_" + c.lng.toFixed(4) + "_z" + z.toFixed(0) + ".png";
+            map.getCanvas().toBlob(function(blob) {
+                if (!blob) return;
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        });
+        map.triggerRepaint();
+    });
+
+    // --- Layer control ---
+    function matchesGroup(layerId, prefixes) {
+        var baseId = layerId.indexOf(":") >= 0 ? layerId.split(":").slice(1).join(":") : layerId;
+        return prefixes.some(function(prefix) {
+            return baseId.indexOf(prefix) >= 0;
+        });
+    }
+
+    function setGroupVisibility(groupName, visible) {
+        groupVisibility[groupName] = visible;
+        try { localStorage.setItem(STORAGE_KEY_LAYERS, JSON.stringify(groupVisibility)); } catch(e) {}
+        if (!map || !map.getStyle()) return;
+        var prefixes = LAYER_GROUPS[groupName];
+        var allLayers = map.getStyle().layers || [];
+        for (var i = 0; i < allLayers.length; i++) {
+            if (matchesGroup(allLayers[i].id, prefixes)) {
+                map.setLayoutProperty(allLayers[i].id, "visibility", visible ? "visible" : "none");
+            }
+        }
+    }
+
+    function buildLayerControls() {
+        var container = document.getElementById("layer-content");
+        container.innerHTML = "";
+
+        for (var groupName in LAYER_GROUPS) {
+            var div = document.createElement("div");
+            div.className = "layer-group";
+
+            var header = document.createElement("label");
+            header.className = "layer-group-header";
+
+            var checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = groupVisibility[groupName] !== false;
+            checkbox.addEventListener("change", (function(name) {
+                return function(e) { setGroupVisibility(name, e.target.checked); };
+            })(groupName));
+
+            var label = document.createTextNode(groupName);
+            header.appendChild(checkbox);
+            header.appendChild(label);
+            div.appendChild(header);
+            container.appendChild(div);
+        }
+
+        // Scale unit toggle.
+        var scaleDiv = document.createElement("div");
+        scaleDiv.className = "layer-group";
+        scaleDiv.style.borderTop = "1px solid #eee";
+        scaleDiv.style.marginTop = "4px";
+        scaleDiv.style.paddingTop = "4px";
+
+        var scaleLabel = document.createElement("label");
+        scaleLabel.className = "layer-group-header";
+
+        var scaleCheckbox = document.createElement("input");
+        scaleCheckbox.type = "checkbox";
+        scaleCheckbox.checked = currentScale === "imperial";
+        scaleCheckbox.addEventListener("change", function(e) {
+            currentScale = e.target.checked ? "imperial" : "metric";
+            scaleText.textContent = e.target.checked ? "Imperial" : "Metric";
+            try { localStorage.setItem(STORAGE_KEY_SCALE, currentScale); } catch(e2) {}
+            if (map && scaleControl) {
+                map.removeControl(scaleControl);
+                scaleControl = new maplibregl.ScaleControl({maxWidth: 200, unit: currentScale});
+                map.addControl(scaleControl, "bottom-left");
+            }
+            // Rebuild style for contour unit change.
+            if (hasTerrain) reloadMap();
+        });
+
+        var scaleText = document.createTextNode(currentScale === "imperial" ? "Imperial" : "Metric");
+        scaleLabel.appendChild(scaleCheckbox);
+        scaleLabel.appendChild(scaleText);
+        scaleDiv.appendChild(scaleLabel);
+        container.appendChild(scaleDiv);
+    }
+
+    // Toggle layer panel
+    document.getElementById("layer-toggle").addEventListener("click", function() {
+        var content = document.getElementById("layer-content");
+        var arrow = this.querySelector(".arrow");
+        content.classList.toggle("hidden");
+        arrow.classList.toggle("collapsed");
+    });
+
+    // --- File management ---
+    function showStatus(msg) {
+        var el = document.getElementById("status");
+        el.textContent = msg;
+        el.style.display = "block";
+        setTimeout(function() { el.style.display = "none"; }, 3000);
+    }
+
+    function reloadMap() {
+        if (!map) { initMap(); return; }
+
+        var center = map.getCenter();
+        var zoom = map.getZoom();
+        var bearing = map.getBearing();
+        var pitch = map.getPitch();
+
+        map.setStyle(buildStyle());
+
+        map.once("style.load", function() {
+            map.setCenter(center);
+            map.setZoom(zoom);
+            map.setBearing(bearing);
+            map.setPitch(pitch);
+            // Re-apply visibility for groups that were toggled off.
+            for (var groupName in groupVisibility) {
+                if (!groupVisibility[groupName]) {
+                    setGroupVisibility(groupName, false);
+                }
+            }
+            buildLayerControls();
+        });
+    }
+
+    function toggleFile(filename, enabled) {
+        if (enabled) { activeSources[filename] = true; }
+        else { delete activeSources[filename]; }
+        reloadMap();
+        showStatus(enabled ? "Added " + filename : "Removed " + filename);
+    }
+
+    function renderFileList(files) {
+        var container = document.getElementById("file-list");
+        container.innerHTML = "";
+
+        if (files.length === 0) {
+            container.innerHTML = '<div id="no-files-msg">No .pmtiles files found in map/ directory</div>';
+            return;
+        }
+
+        files.forEach(function(file) {
+            var div = document.createElement("div");
+            div.className = "file-item";
+
+            var checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.id = "file-" + file;
+            checkbox.checked = !!activeSources[file];
+            checkbox.addEventListener("change", function(e) {
+                toggleFile(file, e.target.checked);
+            });
+
+            var label = document.createElement("label");
+            label.htmlFor = "file-" + file;
+            label.textContent = file;
+
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+        });
+    }
+
+    function scanFiles() {
+        // Fetch user's map files first to determine what base layer is needed.
+        fetch("/api/map/files")
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var allFiles = (data.files || []).sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+                // Separate files into planet, terrain, and regional extracts.
+                var planetFile = null;
+                var regionFiles = [];
+                for (var i = 0; i < allFiles.length; i++) {
+                    var f = allFiles[i];
+                    if (f.name.startsWith(TERRAIN_PREFIX) && f.name.endsWith('.pmtiles')) {
+                        terrainFileName = f.name;
+                        hasTerrain = true;
+                    } else if (isPlanetFile(f.name)) {
+                        if (!planetFile || f.size > planetFile.size) {
+                            planetFile = f;
+                        }
+                    } else {
+                        regionFiles.push(f);
+                    }
+                }
+
+                var pmtilesFiles;
+                if (planetFile) {
+                    // Planet covers everything — sole vector source, no overview needed.
+                    pmtilesFiles = [planetFile.name];
+                    hasPlanetOverview = false;
+                    return pmtilesFiles;
+                }
+
+                // Use regional extracts.
+                pmtilesFiles = regionFiles.map(function(f) { return f.name; });
+
+                // Check for planet overview blob as low-zoom base layer.
+                return fetch(MAP_OVERVIEW_URL, {method: "HEAD"})
+                    .then(function(r) { hasPlanetOverview = r.ok; })
+                    .catch(function() { hasPlanetOverview = false; })
+                    .then(function() { return pmtilesFiles; });
+            })
+            .then(function(pmtilesFiles) {
+
+                // Initialize contour source if terrain available.
+                if (hasTerrain && !demSource) {
+                    demSource = new mlcontour.DemSource({
+                        url: "pmtiles://" + window.location.origin + "/data/" + terrainFileName,
+                        encoding: "terrarium",
+                        maxzoom: 8,
+                        worker: true,
+                    });
+                    demSource.setupMaplibre(maplibregl);
+                }
+
+                renderFileList(pmtilesFiles);
+
+                if (pmtilesFiles.length > 0 && Object.keys(activeSources).length === 0) {
+                    activeSources[pmtilesFiles[0]] = true;
+                    renderFileList(pmtilesFiles);
+                    reloadMap();
+                } else if (hasPlanetOverview || hasTerrain) {
+                    reloadMap();
+                } else if (Object.keys(activeSources).length === 0) {
+                    initMap();
+                }
+            })
+            .catch(function(err) {
+                console.error("Failed to scan files:", err);
+                document.getElementById("file-list").innerHTML =
+                    '<div id="no-files-msg">Error scanning for map files</div>';
+                initMap();
+            });
+    }
+
+    // --- Listen for system theme changes ---
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function() {
+        if (map) reloadMap();
+    });
+
+    // --- Start ---
+    scanFiles();
+})();
+</script>
+</body>
+</html>

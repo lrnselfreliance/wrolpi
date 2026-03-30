@@ -787,6 +787,10 @@
             <span class="loading"></span>
         </div>
         <p id="onboarding-no-drives" style="display: none;">No unmounted drives detected. Plug in a USB drive and refresh.</p>
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2);">
+            <p style="margin-bottom: 0.5rem; font-size: 0.9em; opacity: 0.8;">No external drive? You can still set up WROLPi using internal storage.</p>
+            <button class="btn btn-secondary" onclick="repairWithoutDrive()">Run repair without external drive</button>
+        </div>
     </div>
 
     <!-- Step 2: Confirm -->
@@ -1872,6 +1876,12 @@
 
                 currentScriptOutput = status.script_name;
 
+                // Hide onboarding while a script is running
+                const onboardingEl = document.getElementById('onboarding-banner');
+                if (onboardingEl) {
+                    onboardingEl.style.display = 'none';
+                }
+
                 // Disable run buttons while script is running
                 document.querySelectorAll('.script-row .btn').forEach(btn => {
                     btn.disabled = true;
@@ -1880,6 +1890,12 @@
                 // Hide banner
                 banner.classList.remove('show');
                 currentScriptOutput = null;
+
+                // Re-check if onboarding is still needed (e.g. after repair finishes)
+                const onboardingEl = document.getElementById('onboarding-banner');
+                if (onboardingEl) {
+                    loadOnboardingCandidates();
+                }
 
                 // Re-enable run buttons
                 document.querySelectorAll('.script-row').forEach(row => {
@@ -2105,6 +2121,9 @@
             const candidates = await resp.json();
             container.innerHTML = '';
 
+            // Re-show the onboarding banner (may have been hidden while a script was running)
+            document.getElementById('onboarding-banner').style.display = '';
+
             if (candidates.length === 0) {
                 noDrives.style.display = 'block';
                 return;
@@ -2227,6 +2246,35 @@
         onboardingFstype = null;
         showOnboardingStep('select');
         loadOnboardingCandidates();
+    }
+
+    async function repairWithoutDrive() {
+        showOnboardingStep('progress');
+        document.querySelector('#onboarding-progress h2').textContent = 'Running Repair...';
+        document.querySelector('#onboarding-progress p').textContent = 'Starting repair without external drive. Please wait...';
+
+        try {
+            const resp = await fetch('api/scripts/repair/start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                signal: AbortSignal.timeout(60000)
+            });
+
+            if (!resp.ok) {
+                const data = await resp.json().catch(() => ({}));
+                throw new Error(data.detail || 'Failed to start repair');
+            }
+
+            showOnboardingStep('complete');
+            document.getElementById('onboarding-complete-msg').textContent =
+                'Repair started without external drive. The main UI will be available shortly.';
+            setTimeout(() => {
+                window.location.href = '?fallback=true';
+            }, 10000);
+        } catch (e) {
+            document.getElementById('onboarding-error-msg').textContent = e.message;
+            showOnboardingStep('error');
+        }
     }
 
     function resetOnboarding() {

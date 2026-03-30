@@ -114,10 +114,15 @@ def make_progress_callback(download_id: int, parse_fn: callable) -> callable:
         now_ = time.monotonic()
         if now_ - last_update[0] < 1.0:
             return
-        progress = parse_fn(line)
-        if progress:
-            last_update[0] = now_
-            set_download_progress(download_id, progress)
+        # Some tools (e.g., pmtiles) use \r for progress updates within a single line.
+        # Parse the last non-empty segment.
+        segments = [s.strip() for s in line.split('\r') if s.strip()]
+        for segment in reversed(segments):
+            progress = parse_fn(segment)
+            if progress:
+                last_update[0] = now_
+                set_download_progress(download_id, progress)
+                return
 
     return on_stdout
 
@@ -390,7 +395,7 @@ class Downloader:
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
                              timeout: int = None, debug: bool = True,
-                             stdout_callback: callable = None) -> CommandResult:
+                             stdout_callback: callable = None, env: dict = None) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
@@ -399,9 +404,14 @@ class Downloader:
         if cwd and not cwd.is_dir():
             raise RuntimeError('cwd directory does not exist')
 
-        timeout = get_wrolpi_config().download_timeout or timeout or self.timeout
+        config_timeout = get_wrolpi_config().download_timeout
+        # 0 means no timeout. Prefer config timeout, then argument, then class default.
+        if config_timeout:
+            timeout = config_timeout
+        elif timeout is None:
+            timeout = self.timeout
         coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug,
-                           stdout_callback=stdout_callback)
+                           stdout_callback=stdout_callback, env=env)
         result = await self.cancel_wrapper(coro, download)
 
         if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
@@ -475,8 +485,9 @@ class Downloader:
 
         return None
 
-    async def download_file(self, download: Download, url: str, destination: pathlib.Path, check_for_meta4: bool = True) \
-            -> pathlib.Path:
+    async def download_file(self, download: Download, url: str, destination: pathlib.Path,
+                            check_for_meta4: bool = True, concurrent: int = 3,
+                            meta4_xml: bytes = None) -> pathlib.Path:
         from wrolpi.files.lib import glob_shared_stem
 
         if not ARIA2C_PATH:
@@ -484,8 +495,9 @@ class Downloader:
 
         # Log download time.
         with timer('download_file', level='info'):
-            meta4_contents = None
-            if check_for_meta4:
+            # Use caller-provided meta4 (pre-verified), or auto-discover from CDN.
+            meta4_contents = meta4_xml
+            if not meta4_contents and check_for_meta4:
                 meta4_contents = await self.get_meta4_contents(url)
 
             info = await get_download_info(url)
@@ -496,10 +508,11 @@ class Downloader:
             with tempfile.NamedTemporaryFile(suffix='.meta4') as meta4_path:
                 cmd = (
                     ARIA2C_PATH,
-                    '-l', '-',
+                    '-l', '-',  # Log to stdout for progress parsing.
+                    '--log-level=notice',  # Only notice-level logs (skip debug spam).
                     '-c',  # Continue downloading a partially downloaded file.
-                    '-j3',  # concurrent downloads
-                    '-s3',  # split jobs
+                    f'-j{concurrent}',  # concurrent connections
+                    f'-s{concurrent}',  # split into segments
                     '-d', destination,
                     url
                 )
@@ -520,13 +533,20 @@ class Downloader:
                     result = await self.process_runner(download, cmd, destination, stdout_callback=on_stdout)
                 finally:
                     clear_download_progress(download.id)
-                error = result.stderr.decode()
+                stderr = result.stderr.decode() if getattr(result, 'stderr', None) else ''
+                stdout = result.stdout.decode() if getattr(result, 'stdout', None) else ''
 
                 if result.return_code != 0:
-                    raise DownloadError(f'{error}\n\nFileDownloader failed with return code {result.return_code}')
+                    output = stderr.strip() or stdout.strip() or '(no output captured)'
+                    logger.error(f'FileDownloader failed (rc={result.return_code}):'
+                                 f'\nstderr: {stderr[-1000:]}'
+                                 f'\nstdout: {stdout[-1000:]}')
+                    raise DownloadError(
+                        f'{output}\n\nFileDownloader failed with return code {result.return_code}'
+                    )
 
                 if not output_path.is_file():
-                    raise DownloadError(f'{error}\n\nOutput file not found: {output_path}')
+                    raise DownloadError(f'{stderr}\n\nOutput file not found: {output_path}')
 
             # Delete any trailing meta4 files.
             matching_files = glob_shared_stem(output_path)
@@ -702,16 +722,19 @@ class DownloadManager:
             return downloader
         raise InvalidDownload(f'Cannot find downloader with name {name}')
 
-    def get_or_create_download(self, session: Session, url: str, reset_attempts: bool = False) -> Download:
+    def get_or_create_download(self, session: Session, url: str, reset_attempts: bool = False,
+                               override_skip: bool = False) -> Download:
         """Get a Download by its URL, if it cannot be found create one."""
         if not url:
             raise ValueError('Download must have a URL')
 
         if download := Download.get_by_url(session, url):
+            if reset_attempts:
+                download.attempts = 0
             return download
 
         if self.is_skipped(url):
-            if reset_attempts is True:
+            if override_skip is True:
                 self.remove_from_skip_list(url)
             else:
                 raise InvalidDownload(
@@ -722,7 +745,8 @@ class DownloadManager:
 
     def create_downloads(self, session: Session, urls: List[str], downloader_name: str,
                          reset_attempts: bool = False, sub_downloader_name: str = None,
-                         destination: str | pathlib.Path = None, tag_names: List[str] = None, settings: dict = None) \
+                         destination: str | pathlib.Path = None, tag_names: List[str] = None, settings: dict = None,
+                         override_skip: bool = False) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not urls or not all(urls):
@@ -749,14 +773,14 @@ class DownloadManager:
                 destination = get_absolute_media_path(destination)
 
         for url in urls:
-            if url in get_download_manager_config().skip_urls and reset_attempts:
+            if url in get_download_manager_config().skip_urls and override_skip:
                 # User manually entered this download, remove it from the skip list.
                 self.remove_from_skip_list(url)
             elif url in get_download_manager_config().skip_urls:
                 self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                 continue
 
-            download = self.get_or_create_download(session, url, reset_attempts=reset_attempts)
+            download = self.get_or_create_download(session, url, override_skip=override_skip)
             # Download may have failed, try again.
             download.renew(reset_attempts=reset_attempts)
             download.destination = destination or None
@@ -788,17 +812,20 @@ class DownloadManager:
 
     def create_download(self, session: Session, url: str, downloader_name: str, reset_attempts: bool = False,
                         sub_downloader_name: str = None, destination: str | pathlib.Path = None,
-                        tag_names: List[str] = None, settings: Dict = None) -> Download:
+                        tag_names: List[str] = None, settings: Dict = None,
+                        override_skip: bool = False) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
         downloads = self.create_downloads(session, [url], downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
-                                          destination=destination, tag_names=tag_names, settings=settings)
+                                          destination=destination, tag_names=tag_names, settings=settings,
+                                          override_skip=override_skip)
         return downloads[0]
 
     def recurring_download(self, session: Session, url: str, frequency: int, downloader_name: str,
                            sub_downloader_name: str = None, reset_attempts: bool = False,
                            destination: str | pathlib.Path = None, tag_names: List[str] = None,
-                           settings: Dict = None, collection_id: int = None) -> Download:
+                           settings: Dict = None, collection_id: int = None,
+                           override_skip: bool = False) -> Download:
         """Schedule a recurring download."""
         if not frequency or not isinstance(frequency, int):
             raise ValueError('Recurring download must have a frequency!')
@@ -809,7 +836,8 @@ class DownloadManager:
 
         download, = self.create_downloads(session, [url, ], downloader_name=downloader_name,
                                           reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
-                                          destination=destination, tag_names=tag_names, settings=settings)
+                                          destination=destination, tag_names=tag_names, settings=settings,
+                                          override_skip=override_skip)
         download.frequency = frequency
         if collection_id:
             download.collection_id = collection_id
@@ -1483,7 +1511,7 @@ async def signal_download_download(download_id: int, download_url: str):
                     child_settings = dict(result.settings) if result.settings else {}
                     child_settings['parent_download_url'] = download.url
                     download_manager.create_downloads(session, urls, downloader_name=download.sub_downloader,
-                                                      settings=child_settings)
+                                                      settings=child_settings, reset_attempts=True)
 
             # Remove this domain from the running list.
             download_manager._delete_processing_domain(download_domain)

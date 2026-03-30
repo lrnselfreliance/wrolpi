@@ -104,7 +104,6 @@ class FlagsStatusResponse:
     file_worker_modeling: bool
     global_refresh_active: bool
     have_internet: bool
-    map_importing: bool
     outdated_zims: bool
     refresh_complete: bool
 

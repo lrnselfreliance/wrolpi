@@ -243,7 +243,8 @@ function RecurringDownloadRow({download, fetchDownloads, onDelete}) {
         </Modal.Actions>
     </Modal>;
 
-    const editButton = <Button icon='edit' onClick={handleEditOpen}/>;
+    const hideEdit = downloader === Downloaders.MapCatalog || downloader === Downloaders.MapExtract;
+    const editButton = hideEdit ? null : <Button icon='edit' onClick={handleEditOpen}/>;
 
     const restartButton = <APIButton
         color='green'

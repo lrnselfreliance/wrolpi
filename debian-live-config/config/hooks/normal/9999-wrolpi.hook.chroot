@@ -30,7 +30,7 @@ node --version
 npm install
 
 # Install Node console commands.
-npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6 carto@1.2.0
+npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
 # Install Deno runtime.
 DENO_VERSION="v2.2.4"
@@ -65,6 +65,7 @@ apt-get install -y caddy
 # Configure Caddy.
 mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
@@ -74,18 +75,13 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
-# Create postgres cluster for map.
-pg_createcluster 15 map --port=5433 -e utf8
-
-git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
-git config --global --add safe.directory /opt/openstreetmap-carto
-sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
-(cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
-
-# Change default postgresql port to 5432.
-sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
-
 mkdir /media/wrolpi
+
+# Verify blob files were copied in by includes.chroot (downloaded by build.sh).
+[[ -f /opt/wrolpi-blobs/map-fonts.tar.gz && -s /opt/wrolpi-blobs/map-fonts.tar.gz ]] || \
+  (echo "ERROR: map-fonts.tar.gz missing from /opt/wrolpi-blobs!" && exit 1)
+[[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
+  (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
 
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh
@@ -93,8 +89,6 @@ mkdir /media/wrolpi
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.timer /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
-
 # Copy MOTD scripts, delete original.
 cp /opt/wrolpi/etc/raspberrypios/motd/20-wrolpi.motd /etc/update-motd.d/20-wrolpi
 cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi-first.motd /etc/update-motd.d/30-wrolpi
@@ -116,10 +110,11 @@ systemctl enable wrolpi-cert-renew.timer
 systemctl enable wrolpi-cert-renew.timer
 
 # Protect blob files from accidental modification or deletion.
-# These files are critical for initializing WROLPi.
-chown -R root:root /opt/wrolpi-blobs
-chmod 444 /opt/wrolpi-blobs/*
-chattr +i /opt/wrolpi-blobs/*
+if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then
+  chown -R root:root /opt/wrolpi-blobs
+  chmod 444 /opt/wrolpi-blobs/*
+  chattr +i /opt/wrolpi-blobs/*
+fi
 
 set +x
 

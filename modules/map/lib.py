@@ -1,19 +1,13 @@
-import subprocess
-from datetime import timedelta
+import json
+import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.orm import Session
 
-from modules.map.models import MapFile
-from wrolpi import flags
-from wrolpi.api_utils import api_app
-from wrolpi.cmd import SUDO_BIN, run_command
-from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
-from wrolpi.dates import timedelta_to_timestamp, seconds_to_timestamp, now
-from wrolpi.db import get_db_session
-from wrolpi.events import Events
-from wrolpi.vars import PROJECT_DIR, IS_RPI5
+from modules.map.catalog import MAP_REGIONS, MAP_REGIONS_BY_NAME, MAP_REGIONS_BY_REGION, MANIFEST_URL
+from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config, aiohttp_get, verify_gpg_signature
+from wrolpi.downloader import DownloadFrequency, Download, save_downloads_config, download_manager
 
 logger = logger.getChild(__name__)
 
@@ -25,229 +19,151 @@ def get_map_directory() -> Path:
     return map_directory
 
 
-def is_pbf_file(pbf: Path) -> bool:
-    """Uses file command to check type of file.  Returns True if a file is an OpenStreetMap PBF file."""
-    cmd = ('/usr/bin/file', pbf)
-    try:
-        output = subprocess.check_output(cmd)
-    except FileNotFoundError:
-        return False
-
-    return 'OpenStreetMap Protocolbuffer Binary Format' in output.decode()
-
-
-def is_dump_file(path: Path) -> bool:
-    """Uses file command to check the type of file.  Returns True if a file is a Postgresql dump file."""
-    cmd = ('/usr/bin/file', path)
-    try:
-        output = subprocess.check_output(cmd)
-    except FileNotFoundError:
-        return False
-
-    return 'PostgreSQL custom database dump' in output.decode()
-
-
-def get_map_paths() -> List[Path]:
-    """Find all pbf/dump files in the map directory."""
+def get_pmtiles_files() -> List[dict]:
+    """Find all .pmtiles files in the map directory and return their metadata."""
     map_directory = get_map_directory()
     paths = walk(map_directory)
 
-    def is_valid(path: Path) -> bool:
-        if path.is_file():
-            if str(path).endswith('.osm.pbf') and is_pbf_file(path):
-                return True
-            elif path.suffix == '.dump' and is_dump_file(path):
-                return True
-        return False
+    files = []
+    for path in sorted(paths):
+        if path.is_file() and path.suffix == '.pmtiles':
+            stat = path.stat()
+            files.append(dict(
+                name=path.name,
+                path=str(path.relative_to(get_media_directory())),
+                size=stat.st_size,
+                mtime=stat.st_mtime,
+            ))
 
-    return list(filter(is_valid, paths))
-
-
-def get_or_create_map_file(pbf_path: Path, session: Session) -> MapFile:
-    """Finds the MapFile row in the DB, or creates one."""
-    map_file: MapFile = session.query(MapFile).filter_by(path=str(pbf_path)).one_or_none()
-    if map_file:
-        return map_file
-
-    map_file = MapFile(path=pbf_path, size=pbf_path.stat().st_size)
-    session.add(map_file)
-    return map_file
+    return files
 
 
-import_logger = logger.getChild('import')
+def delete_pmtiles_file(filename: str) -> bool:
+    """Delete a PMTiles file from the map directory.  Returns True if the file was deleted."""
+    map_directory = get_map_directory()
+    # Prevent path traversal.
+    path = (map_directory / filename).resolve()
+    if not path.is_relative_to(map_directory.resolve()):
+        raise ValueError(f'Invalid filename: {filename}')
+
+    if path.is_file() and path.suffix == '.pmtiles':
+        path.unlink()
+        logger.warning(f'Deleted PMTiles file: {path}')
+        return True
+
+    return False
 
 
-async def import_files(paths: List[str]):
-    if flags.map_importing.is_set():
-        import_logger.error('Map import already running...')
+def get_map_catalog() -> List[dict]:
+    """Return the list of available map regions."""
+    return MAP_REGIONS.copy()
+
+
+def _get_map_download(session: Session) -> Download | None:
+    """Find the single recurring map download, if it exists."""
+    return session.query(Download).filter_by(url=MANIFEST_URL, downloader='map_catalog').one_or_none()
+
+
+def _get_or_create_map_download(session: Session) -> Download:
+    """Get or create the single recurring map download."""
+    download = _get_map_download(session)
+    if download:
+        return download
+
+    download = download_manager.get_or_create_download(session, MANIFEST_URL, reset_attempts=True,
+                                                       override_skip=True)
+    download.downloader = 'map_catalog'
+    download.sub_downloader = 'map_extract'
+    download.frequency = DownloadFrequency.days180
+    download.settings = {'regions': []}
+    download.location = '/map/manage'
+    download.attempts = 0
+    session.flush([download])
+    return download
+
+
+def get_map_subscriptions(session: Session) -> List[dict]:
+    """Return the list of subscribed regions."""
+    regions = []
+    download = _get_map_download(session)
+    if download and download.settings:
+        regions.extend(download.settings.get('regions', []))
+    return regions
+
+
+async def subscribe(session: Session, name: str, region: str):
+    """Subscribe to a map region."""
+    if name not in MAP_REGIONS_BY_NAME:
+        raise ValueError(f'{name!r} is not a valid map region name')
+
+    region_info = MAP_REGIONS_BY_NAME[name]
+    if region != region_info['region']:
+        raise ValueError(f'Region {region!r} does not match name {name!r}')
+
+    download = _get_or_create_map_download(session)
+    regions = list(download.settings.get('regions', []))
+
+    # Don't add duplicates.
+    if any(r['region'] == region for r in regions):
         return
 
-    with flags.map_importing:
-        paths = [get_media_directory() / i for i in paths]
-        import_logger.warning(f'Importing: {", ".join(map(str, paths))}')
+    entry = {'region': region}
+    if region_info.get('terrain'):
+        entry['terrain'] = True
 
-        dumps = [i for i in paths if i.suffix == '.dump']
-        pbfs = [i for i in paths if i.suffix == '.pbf']
-
-        start = now()
-        any_success = False
-        try:
-            if pbfs:
-                with get_db_session(commit=True) as session:
-                    # Any previously imported PBFs are no longer imported.
-                    for pbf_file in session.query(MapFile):
-                        pbf_file.imported = False
-
-                success = False
-                try:
-                    api_app.shared_ctx.map_importing.update(dict(
-                        pending=list(pbfs),
-                    ))
-                    await run_import_command(*pbfs)
-                    success = True
-                    any_success = True
-                except Exception as e:
-                    import_logger.warning('Failed to run import', exc_info=e)
-                finally:
-                    api_app.shared_ctx.map_importing.update(dict(
-                        pending=None,
-                    ))
-
-                if success:
-                    with get_db_session(commit=True) as session:
-                        # Any previously imported PBFs are no longer imported.
-                        for pbf_path in pbfs:
-                            pbf_file = get_or_create_map_file(pbf_path, session)
-                            pbf_file.imported = True
-
-            for path in dumps:
-                # Import each dump individually.
-                if not path.is_file():
-                    import_logger.fatal(f'Map file does not exist! {path}')
-                    continue
-
-                with get_db_session() as session:
-                    map_file = session.query(MapFile).filter_by(path=path).one_or_none()
-                    if map_file and map_file.imported:
-                        # Don't import a map file twice.
-                        import_logger.debug(f'{path} is already imported')
-                        continue
-
-                success = False
-                try:
-                    api_app.shared_ctx.map_importing.update(dict(
-                        pending=str(path),
-                    ))
-                    await run_import_command(path)
-                    success = True
-                    any_success = True
-                except Exception as e:
-                    import_logger.warning('Failed to run import', exc_info=e)
-                finally:
-                    api_app.shared_ctx.map_importing.update(dict(
-                        pending=None,
-                    ))
-
-                if success:
-                    with get_db_session(commit=True) as session:
-                        map_file = get_or_create_map_file(path, session)
-                        map_file.imported = True
-        finally:
-            elapsed = (now() - start).total_seconds()
-            if any_success:
-                Events.send_map_import_complete(f'Map import completed; took {seconds_to_timestamp(elapsed)}')
-            else:
-                Events.send_map_import_failed(
-                    f'Map import failed; took {seconds_to_timestamp(elapsed)} See server logs.')
-
-
-async def run_import_command(*paths: Path):
-    """Run the map import script on the provided paths.
-
-    Can only import a single *.dump file, or a list of *.osm.pbf files.  They cannot be mixed.
-    """
-    paths = [i.absolute() for i in paths]
-    dumps = [i for i in paths if i.suffix == '.dump']
-    pbfs = [i for i in paths if i.suffix == '.pbf']
-
-    # Only import a single dump, or a list of pbfs.  No other combinations acceptable.
-    if not paths:
-        raise ValueError('Must import a file')
-    if not dumps and not pbfs:
-        raise ValueError('Cannot import unknown file!')
-    if dumps and pbfs:
-        raise ValueError('Cannot import mixed dumps and pbfs.')
-    if len(dumps) > 1:
-        raise ValueError('Cannot import more than one dump')
-    if dumps and not is_dump_file(dumps[0]):
-        import_logger.warning(f'Could not import non-dump file: {dumps}')
-        raise ValueError('Invalid dump file')
-    if pbfs:
-        for path in pbfs:
-            if not is_pbf_file(path):
-                import_logger.warning(f'Could not import non-pbf file: {path}')
-                raise ValueError('Invalid PBF file')
-
-    paths = [str(i) for i in paths]
-    # Run with sudo so renderd can be restarted.
-    cmd = (SUDO_BIN, f'{PROJECT_DIR}/scripts/import_map.sh', *paths)
-    result = await run_command(
-        cmd,
-        timeout=0,  # No timeout, map importing could take days.
-    )
-
-    success = 'Successful' if result.return_code == 0 else 'Unsuccessful'
-    import_logger.info(
-        f'{success} import of {repr(paths)} took {timedelta_to_timestamp(timedelta(seconds=result.elapsed))}')
-    if result.return_code != 0:
-        # Log all lines.  Truncate long lines.
-        for line in result.stdout.decode().splitlines():
-            import_logger.debug(line[:500])
-        for line in result.stderr.decode().splitlines():
-            import_logger.error(line[:500])
-        raise ValueError(f'Importing map file failed with return code {result.return_code}')
-
-
-def get_import_status(session: Session) -> List[MapFile]:
-    paths = get_map_paths()
-    map_paths = []
-    for path in paths:
-        map_file = get_or_create_map_file(path, session)
-        map_paths.append(map_file)
-
+    regions.append(entry)
+    download.settings = {**download.settings, 'regions': regions}
+    download.renew(reset_attempts=True)
     session.commit()
-    return map_paths
+    save_downloads_config.activate_switch()
 
 
-# Calculated using many tests on a well-cooled RPi4 (4GB).
-RPI4_PBF_BYTES_PER_SECOND = 175473
-RPI4_COEFFICIENTS = [3.25099914e-15, 8.88717664e-06, -3.59754030e+02]
-# Calculated using many tests on a well-cooled RPi5 (8GB).
-RPI5_PBF_BYTES_PER_SECOND = 136003
-RPI5_COEFFICIENTS = [1.66813827e-15, 2.35907825e-06, 5.37276181e+01]
+async def unsubscribe(session: Session, region: str):
+    """Remove a region from the subscriptions."""
+    download = _get_map_download(session)
+    if not download:
+        raise ValueError(f'No map subscriptions exist')
+
+    regions = [r for r in download.settings.get('regions', []) if r['region'] != region]
+    if regions:
+        download.settings = {**download.settings, 'regions': regions}
+    else:
+        # No more subscriptions — delete the download.
+        session.delete(download)
+    session.commit()
+    save_downloads_config.activate_switch()
 
 
-def seconds_to_import_rpi4(size_in_bytes: int) -> int:
-    if size_in_bytes > 1_000_000_000:
-        # Use exponential curve for large files.
-        a, b, c = RPI4_COEFFICIENTS
-        return int(a * size_in_bytes ** 2 + b * size_in_bytes + c)
-    # Use simpler equation for small files.
-    return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)
+async def fetch_manifest(url: str = None) -> dict:
+    """Fetch the map manifest JSON from the CDN and verify its GPG signature."""
+    url = url or MANIFEST_URL
+    sig_url = f'{url}.sig'
 
+    # Fetch manifest.
+    async with aiohttp_get(url, timeout=30) as response:
+        if response.status != 200:
+            raise RuntimeError(f'Failed to fetch manifest: HTTP {response.status}')
+        manifest_bytes = await response.content.read()
 
-def seconds_to_import_rpi5(size_in_bytes: int) -> int:
-    if size_in_bytes > 1_000_000_000:
-        # Use exponential curve for large files.
-        a, b, c = RPI5_COEFFICIENTS
-        return int(a * size_in_bytes ** 2 + b * size_in_bytes + c)
-    return max(int(size_in_bytes // RPI5_PBF_BYTES_PER_SECOND), 0)
+    # Fetch detached signature.
+    try:
+        async with aiohttp_get(sig_url, timeout=30) as response:
+            if response.status != 200:
+                raise RuntimeError(f'Failed to fetch manifest signature: HTTP {response.status}')
+            signature_bytes = await response.content.read()
+    except Exception as e:
+        logger.warning(f'Could not fetch manifest signature from {sig_url}: {e}')
+        raise RuntimeError(f'Manifest signature not available: {e}')
 
+    # Write to temp files and verify signature against on-disk files.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manifest_path = Path(tmpdir) / 'manifest.json'
+        sig_path = Path(tmpdir) / 'manifest.json.sig'
+        manifest_path.write_bytes(manifest_bytes)
+        sig_path.write_bytes(signature_bytes)
 
-def seconds_to_import(size_in_bytes: int, is_rpi_5: bool = IS_RPI5) -> int:
-    """Attempt to predict how long it will take an RPi4 to import a given PBF file."""
-    if is_rpi_5:
-        return seconds_to_import_rpi5(size_in_bytes)
+        if not await verify_gpg_signature(manifest_path, sig_path):
+            raise RuntimeError('Manifest GPG signature verification failed — file may be tampered with')
 
-    # Default to RPi4, because it's the most conservative estimate.
-    return seconds_to_import_rpi4(size_in_bytes)
+    logger.info('Manifest GPG signature verified successfully')
+    return json.loads(manifest_bytes)

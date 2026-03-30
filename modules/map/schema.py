@@ -1,7 +1,21 @@
 from dataclasses import dataclass
-from typing import List
 
 
 @dataclass
-class ImportPost:
-    files: List[str]
+class MapSubscribeRequest:
+    name: str
+    region: str
+
+
+@dataclass
+class MapPinRequest:
+    lat: float
+    lon: float
+    label: str
+    color: str = "red"
+
+
+@dataclass
+class MapPinUpdateRequest:
+    label: str = None
+    color: str = None

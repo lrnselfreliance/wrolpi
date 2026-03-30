@@ -57,7 +57,7 @@ class TestManagedServicesConfig:
     def test_managed_services_count(self):
         """Should have expected number of managed services."""
         services = DEFAULT_CONFIG["managed_services"]
-        assert len(services) == 14
+        assert len(services) == 12
 
     @pytest.mark.parametrize("name,expected", [
         ("wrolpi-api",
@@ -81,7 +81,6 @@ class TestManagedServicesConfig:
     @pytest.mark.parametrize("name,use_https", [
         ("wrolpi-help", True),
         ("wrolpi-kiwix", True),
-        ("apache2", True),
         ("wrolpi-api", False),
         ("wrolpi-app", False),
         ("postgresql", False),

@@ -290,39 +290,26 @@ fi
 echo
 # Map
 
-if netstat -ant | grep LISTEN | grep -E '[:\.]5433\b' >/dev/null; then
-  echo "OK: Port 5433 is occupied"
+if curl -k -s https://0.0.0.0:8084 --max-time 5 2>/dev/null | grep -i "WROLPi Map" >/dev/null; then
+  echo "OK: Map viewer responded"
 else
-  echo "FAILED: Port 5433 is not occupied"
+  echo "FAILED: Map viewer did not respond on port 8084"
 fi
 
-if sudo -iu postgres psql --port=5433 -l 2>/dev/null | grep gis >/dev/null; then
-  echo "OK: Found map database"
+check_directory /opt/wrolpi/modules/map/static "Map static assets exist" "Map static assets missing at /opt/wrolpi/modules/map/static"
 
-  if sudo -iu postgres psql --port=5433 gis -c '\d' | grep water_polygons >/dev/null; then
-    echo "OK: Map database is initialized"
-  else
-    echo "FAILED: Map database is not initialized"
-  fi
+if ls /media/wrolpi/map/*.pmtiles >/dev/null 2>&1; then
+  echo "OK: PMTiles map files found"
+  ls -lh /media/wrolpi/map/*.pmtiles 2>/dev/null | awk '{print "  " $NF " (" $5 ")"}'
 else
-  echo "FAILED: Unable to find map database"
+  echo "Note: No PMTiles map files found in /media/wrolpi/map/"
 fi
 
-if systemctl list-unit-files "*renderd*" >/dev/null; then
-  echo "OK: renderd systemd exists"
+if [ -f /opt/wrolpi/.protomaps_installed ]; then
+  echo "OK: Protomaps migration completed"
 else
-  echo "FAILED: renderd systemd does not exist"
+  echo "Note: Protomaps migration has not been run (old map stack may still be active)"
 fi
-
-if curl -k -s https://0.0.0.0:8084 --max-time 5 2>/dev/null | grep -i openstreetmap >/dev/null; then
-  echo "OK: Map app responded"
-else
-  echo "FAILED: Map app did not respond"
-fi
-
-check_file /opt/wrolpi-blobs/map-db-gis.dump "Map initialization blob exists" "Map initialization blob does not exist"
-
-check_file /var/www/html/leaflet.js "Leaflet.js exists" "Leaflet.js does not exist"
 
 echo
 # Kiwix

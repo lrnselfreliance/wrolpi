@@ -5,6 +5,8 @@ import multiprocessing
 import os
 import pathlib
 import re
+import shutil
+import subprocess
 import tempfile
 import time
 from datetime import date, datetime
@@ -1220,3 +1222,82 @@ def test_get_all_configs_includes_all_config_subclasses():
         f'ConfigFile subclasses not in get_all_configs(): {[c.__name__ for c in missing]}. '
         f'Add their getter to get_all_configs() so they are imported on startup.'
     )
+
+
+@pytest.fixture
+def gpg_test_key(tmp_path):
+    """Generate a GPG test keypair with a short GNUPGHOME path. Yields (env, pubkey_path, tmp_path)."""
+    # GPG agent sockets have a ~108 char path limit; use a short temp dir.
+    short_tmp = pathlib.Path(tempfile.mkdtemp(prefix='gpg'))
+    gnupghome = short_tmp / 'gh'
+    gnupghome.mkdir(mode=0o700)
+    env = {**os.environ, 'GNUPGHOME': str(gnupghome)}
+
+    # Configure and launch gpg-agent to allow loopback pinentry.
+    (gnupghome / 'gpg-agent.conf').write_text('allow-loopback-pinentry\n')
+    subprocess.run(['gpgconf', '--homedir', str(gnupghome), '--launch', 'gpg-agent'], env=env, check=True)
+
+    subprocess.run(
+        ['gpg', '--batch', '--quiet', '--passphrase', '', '--pinentry-mode', 'loopback',
+         '--quick-gen-key', 'test@test.com', 'default', 'default'],
+        env=env, check=True,
+    )
+
+    result = subprocess.run(
+        ['gpg', '--batch', '--armor', '--export', 'test@test.com'],
+        env=env, capture_output=True, check=True,
+    )
+    test_pubkey = short_tmp / 'test.gpg'
+    test_pubkey.write_bytes(result.stdout)
+
+    yield env, test_pubkey, short_tmp
+
+    # Kill the agent and clean up.
+    subprocess.run(['gpgconf', '--homedir', str(gnupghome), '--kill', 'gpg-agent'], env=env)
+    shutil.rmtree(short_tmp, ignore_errors=True)
+
+
+def _gpg_sign_file(data_path, sig_path, env):
+    """Helper: create a detached GPG signature for a file."""
+    subprocess.run(
+        ['gpg', '--batch', '--quiet', '--passphrase', '', '--pinentry-mode', 'loopback',
+         '--detach-sign', '--armor', '-o', str(sig_path), str(data_path)],
+        env=env, check=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_verify_gpg_signature_valid(tmp_path, gpg_test_key):
+    """A file signed with the shipped GPG key should verify successfully."""
+    from wrolpi.common import verify_gpg_signature
+
+    env, test_pubkey, _ = gpg_test_key
+
+    data_file = tmp_path / 'data.txt'
+    data_file.write_text('hello world')
+
+    sig_file = tmp_path / 'data.txt.sig'
+    _gpg_sign_file(data_file, sig_file, env)
+
+    with mock.patch('wrolpi.common.GPG_PUBLIC_KEY', test_pubkey):
+        assert await verify_gpg_signature(data_file, sig_file) is True
+
+
+@pytest.mark.asyncio
+async def test_verify_gpg_signature_tampered(tmp_path, gpg_test_key):
+    """A file whose contents don't match the signature should fail verification."""
+    from wrolpi.common import verify_gpg_signature
+
+    env, test_pubkey, _ = gpg_test_key
+
+    data_file = tmp_path / 'data.txt'
+    data_file.write_text('hello world')
+
+    sig_file = tmp_path / 'data.txt.sig'
+    _gpg_sign_file(data_file, sig_file, env)
+
+    # Tamper with the file after signing.
+    data_file.write_text('tampered content')
+
+    with mock.patch('wrolpi.common.GPG_PUBLIC_KEY', test_pubkey):
+        assert await verify_gpg_signature(data_file, sig_file) is False

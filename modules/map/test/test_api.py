@@ -1,135 +1,130 @@
 import json
 from http import HTTPStatus
-from itertools import zip_longest
 
-import mock
 import pytest
 
 
-async def assert_map_file_status(async_client, expected, status_code=HTTPStatus.OK):
+@pytest.mark.asyncio
+async def test_get_files_empty(async_client, test_directory):
+    """An empty map directory returns no files."""
     request, response = await async_client.get('/api/map/files')
-    assert response.status_code == status_code
-    for pbf, expected_ in zip_longest(response.json['files'], expected):
-        imported = 'to be imported' if expected_['imported'] else 'to NOT be imported'
-        if not pbf['imported'] == expected_['imported']:
-            raise AssertionError(f'Expected {pbf["path"]} {imported}')
-        assert pbf['path'].endswith(expected_['path'])
-    assert response.json['pending'] is None
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['files'] == []
 
 
 @pytest.mark.asyncio
-@mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
-@mock.patch('modules.map.lib.is_dump_file', lambda i: True)
-async def test_status_and_import(async_client, test_session, make_files_structure, mock_run_command):
-    """PBF files can be imported, and the status of the import can be monitored."""
-    pbf1, pbf2, dump1 = make_files_structure([
-        'map/pbf/some-country.osm.pbf',
-        'map/pbf/other-country.osm.pbf',
-        'map/dump/dumpy.dump',
+async def test_get_files(async_client, test_directory, make_files_structure):
+    """PMTiles files in the map directory are listed."""
+    make_files_structure([
+        'map/usa.pmtiles',
+        'map/oregon.pmtiles',
+        'map/not-a-map.txt',
     ])
 
-    # The PBF files can be found, but have not yet been imported.
-    expected = [
-        {'imported': False, 'path': 'map/dump/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
-        {'imported': False, 'path': 'map/pbf/some-country.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
-
-    body = {'files': [str(pbf1), str(pbf2)]}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    # Can import multiple pbf files.
-    expected = [
-        {'imported': False, 'path': 'map/dump/dumpy.dump'},
-        {'imported': True, 'path': 'map/pbf/other-country.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
-
-    body = {'files': [str(pbf1), ], }
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    # Importing one pbf resets the import statuses.
-    expected = [
-        {'imported': False, 'path': 'map/dump/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
-
-    body = {'files': [str(dump1), ]}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    # Importing a dump also resets statuses.
-    expected = [
-        {'imported': True, 'path': 'map/dump/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
+    request, response = await async_client.get('/api/map/files')
+    assert response.status_code == HTTPStatus.OK
+    files = response.json['files']
+    names = [f['name'] for f in files]
+    assert 'oregon.pmtiles' in names
+    assert 'usa.pmtiles' in names
+    assert 'not-a-map.txt' not in names
 
 
 @pytest.mark.asyncio
-@mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
-@mock.patch('modules.map.lib.is_dump_file', lambda i: True)
-async def test_multiple_import(async_client, test_session, test_directory, make_files_structure, mock_run_command):
-    """Multiple PBFs can be imported.  Importing a second time overwrites the previous imports."""
-    pbf1, pbf2, pbf3, dump = make_files_structure([
-        'map/pbf/country1.osm.pbf',
-        'map/pbf/country2.osm.pbf',
-        'map/pbf/country3.osm.pbf',
-        'map/dumpy.dump',
-    ])
+async def test_delete_file(async_client, test_directory, make_files_structure):
+    """A PMTiles file can be deleted."""
+    pmtiles_file, = make_files_structure(['map/oregon.pmtiles'])
 
-    body = {'files': [str(pbf2), str(pbf1)]}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
+    # File exists.
+    request, response = await async_client.get('/api/map/files')
+    assert len(response.json['files']) == 1
+
+    # Delete the file.
+    request, response = await async_client.delete('/api/map/files/oregon.pmtiles')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    # Two PBFs can be merged and imported.
-    expected = [
-        {'imported': False, 'path': 'map/dumpy.dump'},
-        {'imported': True, 'path': 'map/pbf/country1.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/country2.osm.pbf'},
-        {'imported': False, 'path': 'map/pbf/country3.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
-
-    body = {'files': [str(pbf3), ]}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    # New imports overwrite old imports.
-    expected = [
-        {'imported': False, 'path': 'map/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/country1.osm.pbf'},
-        {'imported': False, 'path': 'map/pbf/country2.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/country3.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
-
-    # Can't mix PBF and dump.
-    body = {'files': [str(dump), ]}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    # Dump does not overwrite.
-    expected = [
-        {'imported': True, 'path': 'map/dumpy.dump'},
-        {'imported': False, 'path': 'map/pbf/country1.osm.pbf'},
-        {'imported': False, 'path': 'map/pbf/country2.osm.pbf'},
-        {'imported': True, 'path': 'map/pbf/country3.osm.pbf'},
-    ]
-    await assert_map_file_status(async_client, expected)
+    # File is gone.
+    request, response = await async_client.get('/api/map/files')
+    assert len(response.json['files']) == 0
 
 
 @pytest.mark.asyncio
-async def test_empty_import(async_client, test_session, test_directory):
-    """Some files must be requested."""
-    body = {'files': []}
-    request, response = await async_client.post('/api/map/import', content=json.dumps(body))
+async def test_delete_nonexistent_file(async_client, test_directory):
+    """Deleting a nonexistent file returns 404."""
+    request, response = await async_client.delete('/api/map/files/nonexistent.pmtiles')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_delete_path_traversal(async_client, test_directory, make_files_structure):
+    """Path traversal attempts are rejected."""
+    request, response = await async_client.delete('/api/map/files/..%2F..%2Fetc%2Fpasswd')
+    # Path traversal is blocked — either 400 (caught by validation) or 404 (file not found).
+    assert response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND)
+
+
+@pytest.mark.asyncio
+async def test_get_subscriptions_empty(async_client, test_session, test_directory):
+    """Catalog and empty subscriptions can be fetched."""
+    request, response = await async_client.get('/api/map/subscribe')
+    assert response.status_code == HTTPStatus.OK
+    assert 'catalog' in response.json
+    assert 'subscriptions' in response.json
+    assert len(response.json['catalog']) > 0
+    assert len(response.json['subscriptions']) == 0
+
+
+@pytest.mark.asyncio
+async def test_subscribe_and_unsubscribe(async_client, test_session, test_directory):
+    """A map region can be subscribed to and unsubscribed from."""
+    body = json.dumps({'name': 'Alaska', 'region': 'us-alaska'})
+    request, response = await async_client.post('/api/map/subscribe', content=body)
+    assert response.status_code == HTTPStatus.CREATED
+
+    # Subscription appears in the list.
+    request, response = await async_client.get('/api/map/subscribe')
+    assert response.status_code == HTTPStatus.OK
+    regions = [s['region'] for s in response.json['subscriptions']]
+    assert 'us-alaska' in regions
+
+    # Unsubscribe.
+    request, response = await async_client.delete('/api/map/subscribe/us-alaska')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Subscription is gone.
+    request, response = await async_client.get('/api/map/subscribe')
+    assert len(response.json['subscriptions']) == 0
+
+
+@pytest.mark.asyncio
+async def test_subscribe_multiple_regions(async_client, test_session, test_directory):
+    """Multiple regions share a single Download record."""
+    body = json.dumps({'name': 'Alaska', 'region': 'us-alaska'})
+    request, response = await async_client.post('/api/map/subscribe', content=body)
+    assert response.status_code == HTTPStatus.CREATED
+
+    body = json.dumps({'name': 'United States (West)', 'region': 'us-west'})
+    request, response = await async_client.post('/api/map/subscribe', content=body)
+    assert response.status_code == HTTPStatus.CREATED
+
+    request, response = await async_client.get('/api/map/subscribe')
+    regions = [s['region'] for s in response.json['subscriptions']]
+    assert 'us-alaska' in regions
+    assert 'us-west' in regions
+
+    # Unsubscribe one — the other remains.
+    request, response = await async_client.delete('/api/map/subscribe/us-alaska')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    request, response = await async_client.get('/api/map/subscribe')
+    regions = [s['region'] for s in response.json['subscriptions']]
+    assert 'us-alaska' not in regions
+    assert 'us-west' in regions
+
+
+@pytest.mark.asyncio
+async def test_subscribe_invalid_region(async_client, test_session, test_directory):
+    """Subscribing to an invalid region returns an error."""
+    body = json.dumps({'name': 'Atlantis', 'region': 'atlantis'})
+    request, response = await async_client.post('/api/map/subscribe', content=body)
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert 'validate' in response.json['message']

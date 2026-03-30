@@ -134,7 +134,6 @@ class TestGetServiceStatus:
     @pytest.mark.parametrize("service_name,expected_https", [
         ("wrolpi-help", True),
         ("wrolpi-kiwix", True),
-        ("apache2", True),
         ("wrolpi-api", False),
     ])
     def test_returns_use_https_field(self, service_name, expected_https):

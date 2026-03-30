@@ -37,40 +37,7 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-if [ ! -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump" ]; then
-  echo "config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump does not exist!"
-  exit 1
-fi
-
-# Validate dump file format - must be PostgreSQL custom format (PGDMP magic)
-DUMP_FILE="${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/map-db-gis.dump"
-DUMP_HEADER=$(head -c 5 "${DUMP_FILE}" 2>/dev/null | od -An -tx1 | tr -d ' \n')
-
-if [[ "${DUMP_HEADER:0:6}" == "504744" ]]; then
-  echo "map-db-gis.dump: Valid PostgreSQL custom format"
-elif [[ "${DUMP_HEADER:0:6}" == "1f8b08" ]]; then
-  # Check if gzipped content is custom format
-  INNER_HEADER=$(gunzip -c "${DUMP_FILE}" 2>/dev/null | head -c 5 | od -An -tx1 | tr -d ' \n')
-  if [[ "${INNER_HEADER:0:6}" == "504744" ]]; then
-    echo "map-db-gis.dump: Valid gzipped PostgreSQL custom format"
-  else
-    echo "ERROR: map-db-gis.dump is gzipped but does NOT contain PostgreSQL custom format!"
-    echo "Inner header: ${INNER_HEADER} (expected to start with 504744 for 'PGDMP')"
-    echo "The dump was likely created incorrectly. Use:"
-    echo "  docker run --rm -v /path/to/file.osm.pbf:/data/region.osm.pbf lrnselfreliance/osm-map-dumper > map-db-gis.dump"
-    exit 1
-  fi
-else
-  echo "ERROR: map-db-gis.dump has invalid format!"
-  echo "Header: ${DUMP_HEADER} (expected to start with 504744 for 'PGDMP' or 1f8b08 for gzip)"
-  echo "Create the dump using:"
-  echo "  docker run --rm -v /path/to/file.osm.pbf:/data/region.osm.pbf lrnselfreliance/osm-map-dumper > map-db-gis.dump"
-  exit 1
-fi
-
 # Clear out old builds.
-# Remove immutable attribute from protected files before cleanup
-chattr -i "${BUILD_DIR}"/chroot/opt/wrolpi-blobs/* 2>/dev/null || :
 [ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
 mkdir "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)
@@ -104,7 +71,37 @@ lb config \
 rsync -a "${SCRIPT_DIR}/config" "${BUILD_DIR}/"
 
 # Write branch config for hook script.
+mkdir -p "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs"
 echo "${BRANCH}" > "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-branch"
+
+# Cache directory for downloaded blobs (persists across builds).
+BLOB_CACHE="${SCRIPT_DIR}/files"
+mkdir -p "${BLOB_CACHE}"
+
+# Download map fonts (skip if cached).
+if [ ! -f "${BLOB_CACHE}/map-fonts.tar.gz" ]; then
+  echo "Downloading map fonts..."
+  mkdir -p /tmp/map-fonts-dl
+  curl -fsSL https://github.com/protomaps/basemaps-assets/archive/refs/heads/main.tar.gz \
+    | tar -xz --strip-components=1 -C /tmp/map-fonts-dl basemaps-assets-main/fonts
+  tar -czf "${BLOB_CACHE}/map-fonts.tar.gz" -C /tmp/map-fonts-dl fonts
+  rm -rf /tmp/map-fonts-dl
+fi
+[[ -f "${BLOB_CACHE}/map-fonts.tar.gz" && -s "${BLOB_CACHE}/map-fonts.tar.gz" ]] || \
+  (echo "ERROR: Failed to download map fonts!" && exit 1)
+
+# Download map overview (skip if cached).
+if [ ! -f "${BLOB_CACHE}/map-overview.pmtiles" ]; then
+  echo "Downloading map overview..."
+  curl -fsSL https://wrolpi.nyc3.cdn.digitaloceanspaces.com/maps/map-overview.pmtiles \
+    -o "${BLOB_CACHE}/map-overview.pmtiles"
+fi
+[[ -f "${BLOB_CACHE}/map-overview.pmtiles" && -s "${BLOB_CACHE}/map-overview.pmtiles" ]] || \
+  (echo "ERROR: Failed to download map overview!" && exit 1)
+
+# Copy cached blobs into the live image.
+cp "${BLOB_CACHE}/map-fonts.tar.gz" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
+cp "${BLOB_CACHE}/map-overview.pmtiles" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
 
 time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
 

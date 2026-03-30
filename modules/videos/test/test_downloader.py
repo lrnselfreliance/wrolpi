@@ -14,8 +14,8 @@ from modules.videos.downloader import VideoDownloader, \
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
-from wrolpi.downloader import Download, DownloadResult
-from wrolpi.errors import InvalidDownload
+from wrolpi.downloader import Download, DownloadResult, get_download_manager_config
+from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
 from wrolpi.vars import PROJECT_DIR
 
 example_video_json = {
@@ -306,6 +306,84 @@ async def test_get_or_create_channel_youtube_channel_url(async_client, test_sess
                                    url='https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw',
                                    name='WROLPi Channel')
     assert result.id == channel.id
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_channel_with_destination(async_client, test_session, test_directory):
+    """A new Channel should be created at the destination directory when provided."""
+    destination = test_directory / 'custom/my_channel'
+
+    channel = get_or_create_channel(test_session, source_id='abc', name='My Channel',
+                                    url='https://example.com', destination=destination)
+    assert channel.name == 'My Channel'
+    assert channel.directory == destination
+    assert destination.is_dir()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_channel_destination_conflict(async_client, test_session, test_directory):
+    """Creating a channel at a destination that conflicts with an existing channel should raise
+    UnrecoverableDownloadError."""
+    from wrolpi.collections import Collection
+
+    # Create an existing channel at the destination directory.
+    existing_dir = test_directory / 'videos/existing'
+    existing_dir.mkdir(parents=True)
+    collection = Collection(name='Existing Channel', kind='channel', directory=existing_dir)
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='existing')
+    test_session.add(channel)
+    test_session.commit()
+
+    # Attempting to create a new channel at the same directory should fail.
+    with pytest.raises(UnrecoverableDownloadError):
+        get_or_create_channel(test_session, source_id='new_id', name='New Channel',
+                              url='https://example.com', destination=existing_dir)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_channel_destination_nested_conflict(async_client, test_session, test_directory):
+    """Creating a channel at a destination nested inside an existing channel's directory should raise
+    UnrecoverableDownloadError."""
+    from wrolpi.collections import Collection
+
+    parent_dir = test_directory / 'videos/parent_channel'
+    parent_dir.mkdir(parents=True)
+    collection = Collection(name='Parent Channel', kind='channel', directory=parent_dir)
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='parent')
+    test_session.add(channel)
+    test_session.commit()
+
+    # Nested directory should conflict.
+    nested_dir = parent_dir / 'nested'
+    with pytest.raises(UnrecoverableDownloadError):
+        get_or_create_channel(test_session, source_id='nested_id', name='Nested Channel',
+                              url='https://example.net', destination=nested_dir)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_channel_existing_ignores_destination(async_client, test_session, test_directory):
+    """When a channel already exists (matched by source_id), the destination parameter should be ignored."""
+    from wrolpi.collections import Collection
+
+    existing_dir = test_directory / 'videos/existing'
+    existing_dir.mkdir(parents=True)
+    collection = Collection(name='Existing', kind='channel', directory=existing_dir)
+    test_session.add(collection)
+    test_session.flush([collection])
+    channel = Channel(collection_id=collection.id, source_id='match_me', url='https://example.com')
+    test_session.add(channel)
+    test_session.commit()
+
+    # Even with a different destination, the existing channel is returned.
+    other_dir = test_directory / 'videos/other'
+    result = get_or_create_channel(test_session, source_id='match_me', name='Existing',
+                                   destination=other_dir)
+    assert result.id == channel.id
+    assert result.directory == existing_dir
 
 
 def test_channel_downloader_hidden(video_download_manager):
@@ -1050,3 +1128,40 @@ async def test_fetch_video_duration_cache_eviction(test_download_cache_config):
     assert 'https://example.com/video0' not in durations_dict
     # Second oldest (video1) is still present.
     assert durations_dict['https://example.com/video1'] == 1
+
+
+@pytest.mark.asyncio
+async def test_channel_download_preserves_skip_list(test_session, test_directory, simple_channel,
+                                                    video_download_manager, video_file,
+                                                    mock_video_extract_info, mock_video_prepare_filename,
+                                                    await_switches, mock_video_process_runner,
+                                                    test_download_manager_config):
+    """A skipped video URL should remain in the skip list when its channel downloads again.
+
+    Regression: child video downloads created by ChannelDownloader used reset_attempts=True which
+    caused create_downloads to remove the URL from the skip list."""
+    skipped_url = 'https://youtube.com/watch?v=video_1_url'
+    url = 'https://www.youtube.com/c/ExampleChannel/videos'
+
+    # Skip video_1_url — simulating user skipping a video.
+    get_download_manager_config().skip_urls = [skipped_url]
+    assert get_download_manager_config().skip_urls == [skipped_url]
+
+    mock_video_prepare_filename.return_value = video_file
+    mock_video_extract_info.return_value = example_channel_json
+    with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
+        mock_get_channel.return_value = simple_channel
+        simple_channel.get_or_create_download(test_session, url, 60)
+        # Download channel catalog.
+        await video_download_manager.wait_for_all_downloads()
+        # Download the child videos.
+        await video_download_manager.wait_for_all_downloads()
+
+    # The skipped URL must still be in the skip list.
+    assert skipped_url in get_download_manager_config().skip_urls, \
+        'Channel download removed a URL from the skip list!'
+
+    # Only video_2 should have been downloaded, not the skipped video_1.
+    once_downloads = video_download_manager.get_once_downloads(test_session)
+    video_downloads = [i for i in once_downloads if 'watch' in i.url]
+    assert {i.url for i in video_downloads} == {'https://youtube.com/watch?v=video_2_url'}

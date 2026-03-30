@@ -1,2 +1,4 @@
 *.dump.gz
 *.dump
+*.pmtiles
+*.tar.gz

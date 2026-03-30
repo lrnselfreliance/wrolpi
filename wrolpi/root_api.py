@@ -306,7 +306,7 @@ async def post_download(request: Request, body: schema.DownloadRequest):
     kwargs = dict(downloader_name=body.downloader,
                   sub_downloader_name=body.sub_downloader, reset_attempts=True,
                   destination=body.destination, tag_names=body.tag_names,
-                  settings=body.settings)
+                  settings=body.settings, override_skip=True)
     if body.frequency:
         download_manager.recurring_download(session, body.urls[0], body.frequency, collection_id=body.collection_id,
                                             **kwargs)

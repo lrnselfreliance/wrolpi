@@ -127,6 +127,8 @@ export const Downloaders = {
     File: 'file',
     KiwixCatalog: 'kiwix_catalog',
     KiwixZim: 'kiwix_zim',
+    MapCatalog: 'map_catalog',
+    MapExtract: 'map_extract',
     RSS: 'rss',
     ScrapeHtml: 'scrape_html',
     Video: 'video',

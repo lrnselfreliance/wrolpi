@@ -26,7 +26,7 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult, \
     clear_download_progress, _parse_size, make_progress_callback, get_download_cache_config
-from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError
+from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError, ValidationError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.files.worker import file_worker
@@ -34,7 +34,8 @@ from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, update_view_counts_and_censored, \
     ffmpeg_video_complete
-from .errors import UnknownChannel
+from .errors import UnknownChannel, ChannelDirectoryConflict, ChannelNameConflict, ChannelURLConflict, \
+    ChannelSourceIdConflict
 from .cookies import cookies_unlocked, cookies_for_download
 from .lib import get_videos_downloader_config, get_effective_video_settings, CHANNEL_INHERITABLE_SETTINGS, YDL, \
     ydl_logger, format_videos_destination, get_yt_dlp_http_headers, get_yt_dlp_sleep_opts
@@ -419,7 +420,8 @@ class ChannelDownloader(Downloader, ABC):
             raise ValueError(f'Could not find name')
         channel_source_id = info.get('channel_id') or info.get('id')
         channel_url = info.get('channel_url') or info.get('uploader_url') or download.url
-        channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name)
+        channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name,
+                                        destination=download.destination)
         channel.dict()  # get all attributes while we have the session.
 
         # Link this channel download to the channel's collection.
@@ -872,8 +874,8 @@ class VideoDownloader(Downloader, ABC):
             # Try to find the channel via info_json from yt-dlp.
             try:
                 channel = get_or_create_channel(session, source_id=channel_source_id, url=channel_url,
-                                                name=channel_name,
-                                                tag_name=channel_tag_name)
+                                                name=channel_name, tag_name=channel_tag_name,
+                                                destination=download.destination)
                 if channel:
                     found_channel = 'yt_dlp'
                     logger.debug(f'Found a channel with source_id {channel=}')
@@ -1096,11 +1098,12 @@ video_downloader = VideoDownloader()
 
 
 def get_or_create_channel(session: Session, source_id: str = None, url: str = None, name: str = None,
-                          tag_name: str = None) -> Channel:
+                          tag_name: str = None, destination: pathlib.Path = None) -> Channel:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
-    Creates a new Channel if one cannot be found.
+    Creates a new Channel if one cannot be found.  If a destination is provided, the Channel will be created in that
+    directory instead of the default videos destination.
     """
     try:
         channel = get_channel(session, source_id=source_id, url=url, name=name, return_dict=False)
@@ -1113,18 +1116,25 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
     if not name:
         raise UnknownChannel(f'Cannot create channel without a name')
 
-    # Channel does not exist.  Create one in the video directory.
-    channel_directory = format_videos_destination(name, tag_name, url)
+    # Channel does not exist.  Create one using the destination if provided, otherwise the default video directory.
+    if destination:
+        channel_directory = get_absolute_media_path(destination)
+    else:
+        channel_directory = format_videos_destination(name, tag_name, url)
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
     data = ChannelPostRequest(
         source_id=source_id,
         name=name,
         url=url,
-        directory=str(channel_directory.relative_to(get_media_directory())),
+        directory=str(channel_directory),
         tag_name=tag_name,
     )
-    channel = create_channel(session, data=data, return_dict=False)
+    try:
+        channel = create_channel(session, data=data, return_dict=False)
+    except (ValidationError, ChannelDirectoryConflict, ChannelNameConflict, ChannelURLConflict, ChannelSourceIdConflict) as e:
+        raise UnrecoverableDownloadError(
+            f'Cannot create channel {name!r}: conflicts with an existing channel') from e
     # Create the directory now that the channel is approved.
     channel_directory.mkdir(exist_ok=True)
     # Get all properties while we have the session.

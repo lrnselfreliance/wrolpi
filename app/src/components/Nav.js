@@ -224,8 +224,6 @@ export function NavBar() {
             } else {
                 processingLink = '/files';
             }
-        } else if (status.flags.map_importing) {
-            processingLink = '/map/manage';
         }
     }
     const processingIcon = processingLink &&

@@ -33,11 +33,11 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.archive_downloader_config = manager.dict()
     app.shared_ctx.download_cache_config = manager.dict()
     app.shared_ctx.collections_config = manager.dict()
+    app.shared_ctx.map_pins_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.refresh = manager.dict()
     app.shared_ctx.uploaded_files = manager.dict()
     app.shared_ctx.status = manager.dict()
-    app.shared_ctx.map_importing = manager.dict()
     app.shared_ctx.cache = manager.dict()
     # Secure cookies shared storage
     app.shared_ctx.secure_cookies = manager.dict()
@@ -123,7 +123,6 @@ def reset_shared_contexts(app: Sanic):
         commits_behind=0,
         git_branch=None,
     ))
-    app.shared_ctx.map_importing.clear()
     app.shared_ctx.cache.clear()
     # Secure cookies
     app.shared_ctx.secure_cookies.clear()
@@ -271,3 +270,9 @@ def initialize_configs_contexts(app: Sanic):
         _collections_config.initialize(app.shared_ctx.collections_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory collections config: {e}')
+
+    try:
+        from modules.map.pins import MAP_PINS_CONFIG
+        MAP_PINS_CONFIG.initialize(app.shared_ctx.map_pins_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory map pins config: {e}')

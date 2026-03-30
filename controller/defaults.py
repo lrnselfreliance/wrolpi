@@ -75,23 +75,6 @@ DEFAULT_CONFIG = {
             "use_https": True,
             "description": "Kiwix/Zim server",
         },
-        # Map services
-        {
-            "name": "renderd",
-            "systemd_name": "renderd",
-            "port": None,
-            "viewable": False,
-            "use_https": False,
-            "description": "Map tile rendering daemon",
-        },
-        {
-            "name": "apache2",
-            "systemd_name": "apache2",
-            "port": 8084,
-            "viewable": True,
-            "use_https": True,
-            "description": "Map tile web server",
-        },
         # System services
         {
             "name": "postgresql",

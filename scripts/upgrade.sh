@@ -87,19 +87,27 @@ find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."
 
-# Get map db blob, if it is missing.
-MAP_DB_BLOB=/opt/wrolpi-blobs/map-db-gis.dump
-if [[ ! -f ${MAP_DB_BLOB} || ! -s ${MAP_DB_BLOB} ]]; then
-  echo "Downloading new map blob (1.2 GB)..."
-  wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/map-db-gis.dump -O ${MAP_DB_BLOB}
-fi
-if [[ -f /opt/wrolpi-blobs/gis-map.dump.gz && -s ${MAP_DB_BLOB} ]]; then
-  # Remove old blob now that we have the new one.
-  rm /opt/wrolpi-blobs/gis-map.dump.gz
-fi
+# Migrate from old Leaflet/renderd/Apache2 map stack to MapLibre GL JS + PMTiles.
+/opt/wrolpi/scripts/install_protomaps.sh || echo "Protomaps migration failed."
 
-# Migrate map DB if necessary.  Do this before repair because it will reset map if map db is empty.
-/opt/wrolpi/wrolpi/scripts/migrate_map_db.sh || echo "Map DB migration failed."
+# Download map fonts blob if missing.
+MAP_FONTS_BLOB=/opt/wrolpi-blobs/map-fonts.tar.gz
+if [[ ! -f ${MAP_FONTS_BLOB} || ! -s ${MAP_FONTS_BLOB} ]]; then
+  echo "Downloading map fonts..."
+  mkdir -p /tmp/map-fonts-dl
+  curl -fsSL https://github.com/protomaps/basemaps-assets/archive/refs/heads/main.tar.gz \
+    | tar -xz --strip-components=1 -C /tmp/map-fonts-dl basemaps-assets-main/fonts
+  tar -czf "${MAP_FONTS_BLOB}" -C /tmp/map-fonts-dl fonts
+  rm -rf /tmp/map-fonts-dl
+fi || echo "Map fonts download failed, continuing..."
+
+# Download map overview blob if missing (42 MB, provides global zoom 0-6).
+MAP_OVERVIEW_BLOB=/opt/wrolpi-blobs/map-overview.pmtiles
+if [[ ! -f ${MAP_OVERVIEW_BLOB} || ! -s ${MAP_OVERVIEW_BLOB} ]]; then
+  echo "Downloading map overview..."
+  curl -fsSL https://wrolpi.nyc3.cdn.digitaloceanspaces.com/maps/map-overview.pmtiles \
+    -o "${MAP_OVERVIEW_BLOB}"
+fi || echo "Map overview download failed, continuing..."
 
 # Migrate from nginx to Caddy if necessary.
 if ! command -v caddy &>/dev/null; then

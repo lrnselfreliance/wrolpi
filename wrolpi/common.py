@@ -855,6 +855,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if _collections_config:
         all_configs[_collections_config.file_name] = _collections_config
 
+    from modules.map.pins import get_map_pins_config
+    if map_pins_config := get_map_pins_config():
+        all_configs[map_pins_config.file_name] = map_pins_config
+
     return all_configs
 
 
@@ -936,6 +940,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import collections config: {e}')
         results['collections'] = False
+
+    # Map pins (YAML-only, no DB)
+    try:
+        from modules.map.pins import get_map_pins_config
+        get_map_pins_config().import_config()
+        results['map_pins'] = True
+        logger.debug('map pins config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import map pins config: {e}')
+        results['map_pins'] = False
 
     return results
 
@@ -2662,3 +2676,33 @@ def create_empty_config_files() -> list[str]:
                 created.append(get_inventories_config().get_file().name)
 
     return created
+
+
+GPG_PUBLIC_KEY = Path(__file__).parent / 'roland@learningselfreliance.com.gpg'
+
+
+async def verify_gpg_signature(data_path: Path, signature_path: Path) -> bool:
+    """Verify a detached GPG signature against the shipped WROLPi public key.
+
+    Accepts file paths so that large files are never loaded into memory.
+    Uses a temporary GNUPGHOME to avoid polluting the system keyring.
+    Returns True if the signature is valid, False otherwise."""
+    from wrolpi.cmd import run_command
+
+    with tempfile.TemporaryDirectory() as gnupghome:
+        env = {**os.environ, 'GNUPGHOME': gnupghome}
+
+        # Import the trusted public key.
+        result = await run_command(
+            ('gpg', '--batch', '--quiet', '--import', str(GPG_PUBLIC_KEY)),
+            timeout=10, env=env, log_command=False,
+        )
+        if result.return_code != 0:
+            logger.error(f'Failed to import GPG key: {result.stderr.decode()}')
+            return False
+
+        result = await run_command(
+            ('gpg', '--batch', '--verify', str(signature_path), str(data_path)),
+            timeout=10, env=env, log_command=False,
+        )
+        return result.return_code == 0

@@ -23,8 +23,6 @@ systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
 systemctl stop caddy || :
-systemctl stop renderd || :
-systemctl stop apache2 || :
 
 # Clear Python bytecode cache from virtual environments to fix potential corruption.
 echo "Clearing Python bytecode cache..."
@@ -38,7 +36,6 @@ find /opt/wrolpi-help/venv -name "*.pyc" -delete 2>/dev/null || :
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 [ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
-127.0.0.1:5433:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
 chmod 0600 /home/wrolpi/.pgpass
@@ -51,11 +48,19 @@ chown -R wrolpi:wrolpi /opt/wrolpi
 # Copy configs to system.
 mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
 # Generate certificate for HTTPS.
 /opt/wrolpi/scripts/generate_certificates.sh
+
+# Install map fonts from blob (needed for MapLibre map labels).
+MAP_FONTS_BLOB=/opt/wrolpi-blobs/map-fonts.tar.gz
+if [ -f "${MAP_FONTS_BLOB}" ]; then
+  mkdir -p /opt/wrolpi/modules/map/static/fonts
+  tar -xzf "${MAP_FONTS_BLOB}" -C /opt/wrolpi/modules/map/static/
+fi
 
 # Start Caddy quickly so user can access Controller from React UI
 systemctl start caddy || :
@@ -119,20 +124,6 @@ fi
 # Start Controller so user can monitor repair in UI.
 systemctl start wrolpi-controller
 
-# Copy config files necessary for map.
-cp -r /opt/wrolpi/etc/raspberrypios/postgresql@15-map.service.d /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
-cp /opt/wrolpi/etc/raspberrypios/renderd.service /lib/systemd/system/renderd.service
-# Configure Apache2 to listen on 8084.
-cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
-# Copy Leaflet files to Apache's directory so they can be used offline.
-cp /opt/wrolpi/etc/raspberrypios/index.html \
-  /opt/wrolpi/modules/map/leaflet.js \
-  /opt/wrolpi/modules/map/leaflet.css /var/www/html/
-chmod 644 /var/www/html/*
-a2enmod headers
-
-systemctl enable renderd
 /usr/bin/systemctl daemon-reload
 
 # WROLPi needs a few privileged commands.
@@ -146,40 +137,6 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 # wrolpi user is superuser so they can import maps.
 sudo -iu postgres psql -c "alter user wrolpi with superuser"
 
-# Configure renderd.
-if [ ! -d /opt/openstreetmap-carto ]; then
-  echo "/opt/openstreetmap-carto does not exist!  Has install completed?" && exit 1
-fi
-
-cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
-# Enable mod_tile.
-cp /opt/wrolpi/etc/raspberrypios/mod_tile.conf /etc/apache2/conf-available/mod_tile.conf
-
-carto -v
-
-# Initialize the map if it has not been initialized.
-systemctl enable postgresql@15-map.service || :
-systemctl start postgresql@15-map.service || :
-sudo -iu postgres psql -c '\l' --port=5433 | grep -q gis || yes | /opt/wrolpi/scripts/initialize_map_db.sh
-# Update openstreetmap-carto to use the new database.
-grep -q 'port: 5433' /opt/openstreetmap-carto/project.mml || (
-  # Append port line after dbname configuration line.
-  sed -i '/dbname: "gis"/a \    port: 5433' /opt/openstreetmap-carto/project.mml
-  (cd /opt/openstreetmap-carto/ && carto project.mml >mapnik.xml)
-)
-chown -R _renderd:_renderd /opt/openstreetmap-carto
-# Disable JIT as recommended by mod_tile
-sed -i 's/#jit =.*/jit = off/' /etc/postgresql/15/map/postgresql.conf
-
-cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
-# Configure Apache2 to listen on 8084.
-cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
-if [[ ${rpi} == true ]]; then
-  cp /opt/wrolpi/etc/raspberrypios/000-default.conf /etc/apache2/sites-available/000-default.conf
-else
-  cp /opt/wrolpi/etc/debian12/000-default.conf /etc/apache2/sites-available/000-default.conf
-fi
-
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 # Create config directory if external drive is mounted, and is empty.
@@ -192,6 +149,8 @@ fi
 
 # Change owner of the media directory, ignore any errors because the drive may be fat/exfat/etc.
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."
+# Ensure the config directory is owned by wrolpi so the API can write config files.
+[ -d /media/wrolpi/config ] && chown -R wrolpi:wrolpi /media/wrolpi/config 2>/dev/null || :
 
 # Remove immutable flag from blob files before chown (may not exist or may not be set).
 chattr -i /opt/wrolpi-blobs/* 2>/dev/null || :
@@ -200,7 +159,7 @@ chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 # Protect blob files from accidental modification or deletion.
 # These files are critical for initializing WROLPi.
-if [ -d /opt/wrolpi-blobs ]; then
+if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then
   chown -R root:root /opt/wrolpi-blobs
   chmod 444 /opt/wrolpi-blobs/*
   chattr +i /opt/wrolpi-blobs/*
@@ -223,7 +182,6 @@ if [[ ${rpi} == true ]]; then
   cp /opt/wrolpi/etc/raspberrypios/*.desktop /etc/skel/Desktop/
 fi
 
-systemctl restart renderd
 systemctl restart wrolpi-help
 systemctl start wrolpi.target
 

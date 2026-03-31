@@ -1144,6 +1144,10 @@ export function isSupportedArchive(mimetype, lowerPath) {
     if (mimetype.startsWith('application/x-tar')) return true;
     // Suffix-based detection for tar variants whose mimetype may be the compression type.
     if (lowerPath.endsWith('.tar') || lowerPath.endsWith('.tar.gz') || lowerPath.endsWith('.tgz') || lowerPath.endsWith('.tar.bz2') || lowerPath.endsWith('.tar.xz')) return true;
+    // 7z and RAR archives.
+    if (mimetype.startsWith('application/x-7z-compressed')) return true;
+    if (mimetype.startsWith('application/x-rar') || mimetype.startsWith('application/vnd.rar')) return true;
+    if (lowerPath.endsWith('.7z') || lowerPath.endsWith('.rar')) return true;
     return false;
 }
 

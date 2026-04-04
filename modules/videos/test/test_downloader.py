@@ -322,8 +322,8 @@ async def test_get_or_create_channel_with_destination(async_client, test_session
 
 @pytest.mark.asyncio
 async def test_get_or_create_channel_destination_conflict(async_client, test_session, test_directory):
-    """Creating a channel at a destination that conflicts with an existing channel should raise
-    UnrecoverableDownloadError."""
+    """When destination matches an existing channel's directory, that channel should be returned
+    instead of trying to create a new one (which would raise ChannelDirectoryConflict)."""
     from wrolpi.collections import Collection
 
     # Create an existing channel at the destination directory.
@@ -336,16 +336,15 @@ async def test_get_or_create_channel_destination_conflict(async_client, test_ses
     test_session.add(channel)
     test_session.commit()
 
-    # Attempting to create a new channel at the same directory should fail.
-    with pytest.raises(UnrecoverableDownloadError):
-        get_or_create_channel(test_session, source_id='new_id', name='New Channel',
-                              url='https://example.com', destination=existing_dir)
+    # Destination matches an existing channel, so it should be returned even though source_id/name/url don't match.
+    result = get_or_create_channel(test_session, source_id='new_id', name='New Channel',
+                                   url='https://example.com', destination=existing_dir)
+    assert result.id == channel.id
 
 
 @pytest.mark.asyncio
 async def test_get_or_create_channel_destination_nested_conflict(async_client, test_session, test_directory):
-    """Creating a channel at a destination nested inside an existing channel's directory should raise
-    UnrecoverableDownloadError."""
+    """When destination is nested inside an existing channel's directory, the parent channel should be returned."""
     from wrolpi.collections import Collection
 
     parent_dir = test_directory / 'videos/parent_channel'
@@ -357,11 +356,11 @@ async def test_get_or_create_channel_destination_nested_conflict(async_client, t
     test_session.add(channel)
     test_session.commit()
 
-    # Nested directory should conflict.
+    # Nested directory should find the parent channel.
     nested_dir = parent_dir / 'nested'
-    with pytest.raises(UnrecoverableDownloadError):
-        get_or_create_channel(test_session, source_id='nested_id', name='Nested Channel',
-                              url='https://example.net', destination=nested_dir)
+    result = get_or_create_channel(test_session, source_id='nested_id', name='Nested Channel',
+                                   url='https://example.net', destination=nested_dir)
+    assert result.id == channel.id
 
 
 @pytest.mark.asyncio
@@ -384,6 +383,48 @@ async def test_get_or_create_channel_existing_ignores_destination(async_client, 
                                    destination=other_dir)
     assert result.id == channel.id
     assert result.directory == existing_dir
+
+
+@pytest.mark.asyncio
+async def test_get_channel_prefers_destination_over_ytdlp(async_client, test_session, test_directory, channel_factory):
+    """When yt-dlp metadata identifies ChannelA but the download destination is ChannelB's directory,
+    _get_channel should return ChannelB (the destination's channel)."""
+    channel_a = channel_factory(source_id='channel_a_id', name='ChannelA',
+                                url='https://example.com/channel_a')
+    channel_b = channel_factory(source_id='channel_b_id', name='ChannelB',
+                                url='https://example.com/channel_b')
+
+    # Download has yt-dlp metadata matching ChannelA, but destination is ChannelB's directory.
+    download = Download(
+        url='https://example.com/video1',
+        destination=channel_b.directory,
+        info_json={'channel': 'ChannelA', 'channel_id': 'channel_a_id',
+                   'channel_url': 'https://example.com/channel_a'},
+    )
+
+    channel = await VideoDownloader._get_channel(test_session, download)
+
+    assert channel.id == channel_b.id, 'Should prefer the destination channel over yt-dlp metadata'
+
+
+@pytest.mark.asyncio
+async def test_get_channel_uses_ytdlp_when_destination_matches(async_client, test_session, test_directory,
+                                                                channel_factory):
+    """When yt-dlp metadata identifies ChannelA and the download destination is also ChannelA's directory,
+    _get_channel should return ChannelA (no conflict)."""
+    channel_a = channel_factory(source_id='channel_a_id', name='ChannelA',
+                                url='https://example.com/channel_a')
+
+    download = Download(
+        url='https://example.com/video1',
+        destination=channel_a.directory,
+        info_json={'channel': 'ChannelA', 'channel_id': 'channel_a_id',
+                   'channel_url': 'https://example.com/channel_a'},
+    )
+
+    channel = await VideoDownloader._get_channel(test_session, download)
+
+    assert channel.id == channel_a.id
 
 
 def test_channel_downloader_hidden(video_download_manager):

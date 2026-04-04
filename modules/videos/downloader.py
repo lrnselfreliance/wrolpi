@@ -611,15 +611,17 @@ class VideoDownloader(Downloader, ABC):
             if not download.info_json:
                 raise ValueError(f'Cannot download video with no info_json.')
 
-            channel, channel_directory, channel_id, destination, settings = await self._get_channel(session, download)
+            channel = await self._get_channel(session, download)
+            channel_id = channel.id if channel else None
+            destination = download.destination
 
             if destination:
                 # Download to the directory specified in the settings.
                 out_dir = destination
                 logger.debug(f'Downloading {url} to destination {destination} from settings')
             elif channel:
-                out_dir = channel_directory
-                logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
+                out_dir = channel.directory
+                logger.debug(f'Downloading {url} to channel directory: {channel.directory}')
             else:
                 # Download to the default directory if this video has no channel.
                 out_dir = get_no_channel_directory()
@@ -633,7 +635,6 @@ class VideoDownloader(Downloader, ABC):
             if tag_names and logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f'Downloading {url} with {tag_names=}')
 
-        config = get_videos_downloader_config()
         effective = get_effective_video_settings(settings)
 
         logs = None  # noqa
@@ -859,71 +860,59 @@ class VideoDownloader(Downloader, ABC):
         return result
 
     @staticmethod
-    async def _get_channel(session: Session, download: Download) \
-            -> Tuple[Optional[Channel], Optional[pathlib.Path], Optional[int], Optional[pathlib.Path], dict]:
-        settings = download.settings or dict()
-        channel_tag_name = i[0] if (i := settings.get('channel_tag_name')) else None
+    async def _get_channel(session: Session, download: Download) -> Optional[Channel]:
+        """Find the Channel for a video download.
 
-        found_channel = None
-        # Look for Channel using channel data first, fallback to uploader data.
+        Priority order:
+        1. Destination directory — if it belongs to a channel, that channel wins (files must live in their channel's dir)
+        2. yt-dlp info_json metadata (channel/uploader fields)
+        3. Download settings (collection_id or channel_url from ChannelDownloader)
+        """
+        settings = download.settings or dict()
+        destination = download.destination
+
+        # Destination channel always takes priority — files must live in their channel's directory.
+        if destination:
+            try:
+                channel = get_channel(session, directory=destination, return_dict=False)
+                logger.debug(f'Found {channel} using destination directory')
+                return channel
+            except UnknownChannel:
+                pass
+
+        # Try yt-dlp info_json metadata.
         channel_name = download.info_json.get('channel') or download.info_json.get('uploader')
         channel_source_id = download.info_json.get('channel_id') or download.info_json.get('uploader_id')
         channel_url = download.info_json.get('channel_url') or download.info_json.get('uploader_url')
-        channel = None
         if channel_name or channel_source_id or channel_url:
-            # Try to find the channel via info_json from yt-dlp.
+            tag_name = i[0] if (i := settings.get('channel_tag_name')) else None
             try:
                 channel = get_or_create_channel(session, source_id=channel_source_id, url=channel_url,
-                                                name=channel_name, tag_name=channel_tag_name,
-                                                destination=download.destination)
-                if channel:
-                    found_channel = 'yt_dlp'
-                    logger.debug(f'Found a channel with source_id {channel=}')
+                                                name=channel_name, tag_name=tag_name, destination=destination)
+                logger.debug(f'Found {channel} using yt-dlp info_json')
+                return channel
             except UnknownChannel:
-                # Can't find a channel, use the no channel directory.
                 pass
-        destination = download.destination
-        if not channel and destination:
-            # Destination may find Channel if not already found.
-            try:
-                channel = get_channel(session, directory=destination, return_dict=False)
-                found_channel = 'download_settings_directory'
-                logger.debug(f'Found a channel that shares the destination directory {channel=}')
-            except UnknownChannel:
-                # Destination must not be a channel.
-                pass
-        # Look up Channel via Collection or channel_url from settings
+
+        # Try collection_id or channel_url from ChannelDownloader settings.
         collection_id = download.collection_id
-        channel_url = settings.get('channel_url')
-        if not channel and (collection_id or channel_url):
-            # Could not find Channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
-            logger.info(f'Using download.settings to find channel')
+        settings_channel_url = settings.get('channel_url')
+        if collection_id:
+            channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
+            if channel:
+                logger.debug(f'Found {channel} using collection_id')
+                return channel
+        if settings_channel_url:
             try:
-                # Find Channel by collection_id or URL
-                if collection_id:
-                    channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
-                if not channel and channel_url:
-                    channel = get_channel(session, url=channel_url, return_dict=False)
-                logger.debug(f'Found channel with collection_id or channel url {channel=}')
+                channel = get_channel(session, url=settings_channel_url, return_dict=False)
+                logger.debug(f'Found {channel} using settings channel_url')
+                return channel
             except UnknownChannel:
-                # We do not need a Channel if we have a destination directory.
                 if not destination:
                     raise
-            if channel:
-                found_channel = 'download_settings'
 
-        channel_id = channel.id if channel else None
-        channel_directory = channel.directory if channel else None
-        if found_channel == 'yt_dlp':
-            logger.debug(f'Found {channel} using yt_dlp')
-        elif found_channel == 'download_settings':
-            logger.info(f'Found {channel} using Download.settings')
-        elif found_channel == 'download_settings_directory':
-            logger.info(f'Found {channel} using Download.settings directory')
-        else:
-            logger.warning('Could not find channel')
-
-        return channel, channel_directory, channel_id, destination, settings
+        logger.warning('Could not find channel')
+        return None
 
     @staticmethod
     def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str) \
@@ -1112,6 +1101,17 @@ def get_or_create_channel(session: Session, source_id: str = None, url: str = No
         return channel
     except UnknownChannel:
         pass
+
+    # If destination matches an existing channel, use it rather than creating a new one.
+    # This handles the case where yt-dlp returns bad metadata (e.g. channel name 'watch')
+    # but the destination directory already belongs to a known channel.
+    if destination:
+        try:
+            channel = get_channel(session, directory=destination, return_dict=False)
+            channel.dict()
+            return channel
+        except UnknownChannel:
+            pass
 
     if not name:
         raise UnknownChannel(f'Cannot create channel without a name')

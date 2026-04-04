@@ -317,6 +317,7 @@ export async function getSettings() {
             ignore_outdated_zims: content.ignore_outdated_zims,
             ignored_directories: content.ignored_directories,
             log_level: content.log_level,
+            map_default_location: content.map_default_location,
             map_destination: content.map_destination,
             nav_color: content.nav_color,
             media_directory: content.media_directory,
@@ -1565,6 +1566,17 @@ export async function updateMapPin(pinId, label, color) {
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Could not update map pin');
         toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    }
+}
+
+export async function setMapDefaultLocation(lat, lon, zoom) {
+    try {
+        await updateConfig('wrolpi.yaml', {map_default_location: {lat, lon, zoom}});
+        toast({type: 'success', title: 'Default Location', description: 'Default map location saved', time: 3000});
+        return true;
+    } catch (e) {
+        toast({type: 'error', title: 'Map Error', description: 'Could not set default location', time: 5000});
+        return false;
     }
 }
 

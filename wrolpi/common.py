@@ -801,6 +801,7 @@ class WROLPiConfigValidator:
     hotspot_ssid: str = None
     ignore_outdated_zims: bool = None
     log_level: str = None
+    map_default_location: dict = None
     map_destination: str = None
     nav_color: str = None
     require_cookies_unlocked: bool = None
@@ -979,6 +980,7 @@ class WROLPiConfig(ConfigFile):
         ignore_outdated_zims=False,
         ignored_directories=['config', 'tags'],
         log_level='info',
+        map_default_location=None,
         map_destination='map',
         nav_color='violet',
         require_cookies_unlocked=True,
@@ -1196,6 +1198,14 @@ class WROLPiConfig(ConfigFile):
     @archive_destination.setter
     def archive_destination(self, value: str):
         self.update({'archive_destination': value})
+
+    @property
+    def map_default_location(self) -> dict:
+        return self._config.get('map_default_location')
+
+    @map_default_location.setter
+    def map_default_location(self, value: dict):
+        self.update({'map_default_location': value})
 
     @property
     def map_destination(self) -> str:

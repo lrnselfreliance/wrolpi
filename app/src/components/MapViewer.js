@@ -5,11 +5,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
-import {addMapPin, deleteMapPin, getMapFiles, getMapPins} from "../api";
+import {addMapPin, deleteMapPin, getMapFiles, getMapPins, setMapDefaultLocation} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
 import {Checkbox, Icon, Segment} from "semantic-ui-react";
 import {Header} from "./Theme";
-import {ThemeContext} from "../contexts/contexts";
+import {SettingsContext, ThemeContext} from "../contexts/contexts";
 
 // Terrain DEM file prefix for hillshade and contours.
 const TERRAIN_PREFIX = "terrain-";
@@ -354,11 +354,20 @@ export default function MapViewer() {
     });
     const [searchParams, setSearchParams] = useSearchParams();
     const {theme} = useContext(ThemeContext);
+    const {settings, fetchSettings} = useContext(SettingsContext);
 
-    // Parse initial coordinates from URL.
-    const initialLat = parseFloat(searchParams.get("lat")) || 0;
-    const initialLon = parseFloat(searchParams.get("lon")) || 0;
-    const initialZoom = parseFloat(searchParams.get("z")) || 2;
+    // Use URL params if provided, otherwise fall back to saved default location, then 0,0,z2.
+    const hasUrlParams = searchParams.has("lat") || searchParams.has("lon") || searchParams.has("z");
+    const defaultLoc = settings?.map_default_location;
+    const initialLat = hasUrlParams
+        ? (parseFloat(searchParams.get("lat")) || 0)
+        : (parseFloat(defaultLoc?.lat) || 0);
+    const initialLon = hasUrlParams
+        ? (parseFloat(searchParams.get("lon")) || 0)
+        : (parseFloat(defaultLoc?.lon) || 0);
+    const initialZoom = hasUrlParams
+        ? (parseFloat(searchParams.get("z")) || 2)
+        : (parseFloat(defaultLoc?.zoom) || 2);
 
     useEffect(() => {
         if (!mapContainer.current) return;
@@ -705,6 +714,16 @@ export default function MapViewer() {
         setContextMenu(null);
     }, [contextMenu]);
 
+    const handleSetDefaultLocation = useCallback(async () => {
+        const map = mapRef.current;
+        if (!map) return;
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        await setMapDefaultLocation(center.lat, center.lng, zoom);
+        await fetchSettings();
+        setContextMenu(null);
+    }, [fetchSettings]);
+
     const handleSubmitPin = useCallback(async (label, color) => {
         if (!addingPin) return;
         const {lat, lon} = addingPin;
@@ -769,6 +788,14 @@ export default function MapViewer() {
                 onClick={handleAddPin}
             >
                 Add Pin Here
+            </div>
+            <div
+                style={{padding: "8px 12px", cursor: "pointer", userSelect: "none"}}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
+                onClick={handleSetDefaultLocation}
+            >
+                Set as Default View
             </div>
         </div>}
         {addingPin && <AddPinDialog

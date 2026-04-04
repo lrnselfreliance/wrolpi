@@ -128,3 +128,26 @@ async def test_subscribe_invalid_region(async_client, test_session, test_directo
     body = json.dumps({'name': 'Atlantis', 'region': 'atlantis'})
     request, response = await async_client.post('/api/map/subscribe', content=body)
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_map_default_location_empty(async_client, test_directory):
+    """Default location is null when not set."""
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['map_default_location'] is None
+
+
+@pytest.mark.asyncio
+async def test_set_and_get_map_default_location(async_client, test_directory):
+    """Setting a default map location persists and is returned in settings."""
+    body = json.dumps({'config': {'map_default_location': {'lat': 40.7, 'lon': -111.9, 'zoom': 10.5}}})
+    request, response = await async_client.post('/api/config?file_name=wrolpi.yaml', content=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    loc = response.json['map_default_location']
+    assert loc['lat'] == 40.7
+    assert loc['lon'] == -111.9
+    assert loc['zoom'] == 10.5

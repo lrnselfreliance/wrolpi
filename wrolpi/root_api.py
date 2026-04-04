@@ -171,6 +171,7 @@ def get_settings(_: Request):
         'ignore_outdated_zims': wrolpi_config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
         'log_level': api_app.shared_ctx.log_level.value,
+        'map_default_location': wrolpi_config.map_default_location,
         'map_destination': wrolpi_config.map_destination,
         'nav_color': wrolpi_config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.

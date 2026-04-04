@@ -35,7 +35,7 @@ import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/custom
 import {FileCards, FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 import {useCalculators} from "./components/Calculators";
-import {evaluate} from "mathjs";
+import {classifyAndEvaluate} from "./components/calculators/mathConfig";
 
 function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
@@ -100,15 +100,33 @@ function FlagsMessages() {
 function EvaluateForm() {
 
     const helpContents = <span>
-        <p>Enter an equation above.</p>
+        <p>Enter an equation or a value with units.</p>
 
-        <h5>Examples:</h5>
+        <h5>Math:</h5>
         <pre>2 + 3</pre>
         <pre>sqrt(15)</pre>
+        <pre>8 * pi</pre>
+
+        <h5>Unit Conversions:</h5>
         <pre>15 km to miles</pre>
         <pre>65 degF to degC</pre>
+        <pre>1 gallon to liters</pre>
+        <pre>5 psi to atm</pre>
+
+        <h5>Auto-Convert (enter value + unit):</h5>
+        <pre>5 miles</pre>
+        <pre>100 degF</pre>
+        <pre>1 gallon</pre>
+        <pre>500 Wh</pre>
+
+        <h5>Radiation:</h5>
+        <pre>0.5 Sv</pre>
+        <pre>1 Gy to raddose</pre>
+        <pre>100 remdose to Sv</pre>
+
+        <h5>Data:</h5>
         <pre>7 * 750 Mb</pre>
-        <pre>8 * pi</pre>
+        <pre>2 Tb to Gb</pre>
     </span>
 
     const inputRef = React.useRef();
@@ -123,7 +141,14 @@ function EvaluateForm() {
         }
         setEvaluatedValue(''); // Clear input temporarily so the user can tell something happened.
         try {
-            setEvaluatedValue(evaluate(inputValue).toString());
+            const {primary, conversions} = classifyAndEvaluate(inputValue);
+            setEvaluatedValue(<div>
+                <strong>{primary}</strong>
+                {conversions.length > 0 && <div style={{marginTop: '0.5em'}}>
+                    <em>Also:</em>
+                    {conversions.map((c, i) => <div key={i}>{c}</div>)}
+                </div>}
+            </div>);
         } catch (error) {
             console.error(error);
             setEvaluatedValue(`Unable to evaluate: ${error.message}`);

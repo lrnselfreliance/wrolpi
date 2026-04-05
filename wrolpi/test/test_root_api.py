@@ -302,13 +302,17 @@ async def test_clear_downloads(test_session, async_client, test_wrolpi_config, t
         {'url': 'https://example.com/3', 'status': 'new'},
         {'url': 'https://example.com/4', 'status': 'new'},
     ]
-    check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
+    recurring_downloads_after_retry = [
+        {'url': 'https://example.com/6', 'status': 'new'},
+        {'url': 'https://example.com/7', 'status': 'complete'},
+    ]
+    check_downloads(response, once_downloads, recurring_downloads_after_retry, status_code=HTTPStatus.OK)
 
     # "Delete All" button deletes all once-downloads.
     request, response = await async_client.post('/api/download/delete_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = await async_client.get('/api/download')
-    check_downloads(response, [], recurring_downloads, status_code=HTTPStatus.OK)
+    check_downloads(response, [], recurring_downloads_after_retry, status_code=HTTPStatus.OK)
 
     # Failed once-downloads will not be downloaded again.
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
@@ -336,9 +340,9 @@ async def test_retry_downloads(test_session, async_client, test_wrolpi_config, a
         dict(url='https://example.com/2', status='new', attempts=0),  # pending is retried.
         dict(url='https://example.com/3', status='new', attempts=0),  # deferred is retried.
         dict(url='https://example.com/4', status='new', attempts=1),  # new does not need to be retried.
-        dict(url='https://example.com/5', status='failed', attempts=1),  # failed has been given up on.
-        dict(url='https://example.com/6', status='failed', frequency=60, attempts=1, ),  # recurring is always retried.
-        dict(url='https://example.com/7', status='complete', frequency=60, attempts=1),  # recurring is always retried.
+        dict(url='https://example.com/5', status='new', attempts=0),  # failed is retried.
+        dict(url='https://example.com/6', status='new', frequency=60, attempts=0),  # recurring failed is retried.
+        dict(url='https://example.com/7', status='complete', frequency=60, attempts=1),  # complete recurring is unchanged.
     ])
 
 

@@ -29,6 +29,13 @@
 	header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
 	header Access-Control-Allow-Headers "Content-Type, Accept"
 
+	handle /ca.crt {
+		root * /media/wrolpi/config/ssl
+		header Content-Type "application/x-x509-ca-cert"
+		header Content-Disposition "attachment; filename=\"wrolpi-ca.crt\""
+		file_server
+	}
+
 	handle /favicon.ico {
 		root * /opt/wrolpi
 		rewrite * /icon.ico

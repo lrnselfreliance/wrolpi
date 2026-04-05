@@ -495,7 +495,7 @@ class Video(ModelHelper, Base):
         def delete_video(video_: Video):
             """Delete a Video with any of its tags."""
             for tag_name_ in video_.file_group.tag_names:
-                video_.file_group.untag(tag_name_, session)
+                video_.file_group.untag(session, tag_name_)
             video_.delete()
 
         changes = False

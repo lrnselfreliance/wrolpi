@@ -134,6 +134,53 @@ async def test_delete_duplicate_video(async_client, test_session, channel_factor
 
 
 @pytest.mark.asyncio
+async def test_delete_duplicate_video_tagged_duplicate(async_client, test_session, channel_factory, video_factory,
+                                                       tag_factory):
+    """Deleting a duplicate Video should work even when the duplicate being deleted has tags."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
+    entry = channel.info_json['entries'][0]
+
+    tag = await tag_factory()
+    vid1 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title',
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+    )
+    vid2 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title ',
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+        tag_names=[tag.name, ],  # The duplicate being deleted has a tag.
+    )
+    vid1.file_group.url = vid2.file_group.url = 'https://example.com/video'
+
+    assert test_session.query(Video).count() == 2
+
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    assert test_session.query(Video).count() == 1, 'Duplicate video was not deleted.'
+    video = test_session.query(Video).one()
+    assert video.video_path == video_path
+    assert video.video_path.is_file()
+    # The tag from the deleted duplicate should be consolidated onto the kept video.
+    assert video.file_group.tag_names == [tag.name, ]
+
+
+@pytest.mark.asyncio
 async def test_delete_renamed_video(async_client, test_session, channel_factory, video_factory, tag_factory):
     """If duplicate Video's exist, delete all the videos that do not have the new title."""
     channel = channel_factory(name='Channel Name')

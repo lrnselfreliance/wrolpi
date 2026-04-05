@@ -990,9 +990,9 @@ class DownloadManager:
         """
         with get_db_curs(commit=True) as curs:
             if reset_attempts:
-                stmt = "UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred'"
+                stmt = "UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred' OR status='failed'"
             else:
-                stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred'"
+                stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred' OR status='failed'"
             curs.execute(stmt)
 
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:

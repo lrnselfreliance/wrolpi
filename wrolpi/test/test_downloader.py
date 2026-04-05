@@ -890,6 +890,40 @@ async def test_batch_delete_downloads(test_session, test_download_manager, test_
 
 
 @pytest.mark.asyncio
+async def test_retry_downloads_includes_failed(test_session, test_download_manager, test_downloader):
+    """Test that retry_downloads retries failed, pending, and deferred downloads."""
+    d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)
+    d2 = test_download_manager.create_download(test_session, 'https://example.com/2', test_downloader.name)
+    d3 = test_download_manager.create_download(test_session, 'https://example.com/3', test_downloader.name)
+    d4 = test_download_manager.create_download(test_session, 'https://example.com/4', test_downloader.name)
+
+    # Set different statuses
+    d1.fail()
+    d1.attempts = 5
+    d2.defer()
+    d2.attempts = 3
+    d3.status = 'pending'
+    d3.attempts = 1
+    d4.complete()  # completed download should not be retried
+    test_session.commit()
+
+    test_download_manager.retry_downloads(reset_attempts=True)
+
+    test_session.refresh(d1)
+    test_session.refresh(d2)
+    test_session.refresh(d3)
+    test_session.refresh(d4)
+
+    assert d1.status == 'new'
+    assert d1.attempts == 0
+    assert d2.status == 'new'
+    assert d2.attempts == 0
+    assert d3.status == 'new'
+    assert d3.attempts == 0
+    assert d4.status == 'complete'  # unchanged
+
+
+@pytest.mark.asyncio
 async def test_batch_retry_downloads(test_session, test_download_manager, test_downloader):
     """Test retrying specific downloads by their IDs."""
     d1 = test_download_manager.create_download(test_session, 'https://example.com/1', test_downloader.name)

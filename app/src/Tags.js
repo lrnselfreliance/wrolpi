@@ -584,6 +584,12 @@ export function AddTagsButton({
                     placeholder='Filter tags...'
                     value={filterText}
                     onChange={(e) => setFilterText(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && filteredUnusedTags.length === 1) {
+                            e.preventDefault();
+                            addTag(filteredUnusedTags[0]);
+                        }
+                    }}
                     icon='search'
                     fluid
                     style={{marginBottom: '0.5em'}}

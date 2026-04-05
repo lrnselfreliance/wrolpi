@@ -71,7 +71,9 @@ def get_block_devices() -> list[BlockDevice]:
         devices = []
 
         def process_device(dev: dict, parent_model: str = None):
-            if dev.get("type") == "part" and dev.get("fstype") in SUPPORTED_FILESYSTEMS:
+            is_partition = dev.get("type") == "part"
+            is_whole_disk = dev.get("type") == "disk" and not dev.get("children")
+            if (is_partition or is_whole_disk) and dev.get("fstype") in SUPPORTED_FILESYSTEMS:
                 devices.append(BlockDevice(
                     name=dev["name"],
                     path=dev.get("path", f"/dev/{dev['name']}"),
@@ -80,7 +82,7 @@ def get_block_devices() -> list[BlockDevice]:
                     mountpoint=dev.get("mountpoint"),
                     label=dev.get("label"),
                     uuid=dev.get("uuid"),
-                    model=parent_model,
+                    model=dev.get("model") or parent_model,
                 ))
             # Process children (partitions)
             for child in dev.get("children", []):

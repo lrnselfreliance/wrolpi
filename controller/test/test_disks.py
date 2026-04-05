@@ -118,6 +118,65 @@ class TestGetBlockDevices:
                 assert len(result) == 1
                 assert result[0].name == "sda1"
 
+    def test_returns_whole_disk_without_partitions(self):
+        """Should return a disk device that has a supported filesystem but no partitions."""
+        lsblk_output = json.dumps({
+            "blockdevices": [
+                {
+                    "name": "sda",
+                    "path": "/dev/sda",
+                    "size": "1.8T",
+                    "type": "disk",
+                    "fstype": "ext4",
+                    "mountpoint": "/media/pi/crucialx9",
+                    "label": "crucialx9",
+                    "uuid": "abcd-1234",
+                    "model": "CT2000X9SSD9",
+                }
+            ]
+        })
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.return_value = mock.Mock(returncode=0, stdout=lsblk_output)
+                result = get_block_devices()
+                assert len(result) == 1
+                assert result[0].name == "sda"
+                assert result[0].fstype == "ext4"
+                assert result[0].model == "CT2000X9SSD9"
+
+    def test_does_not_return_parent_disk_when_it_has_partitions(self):
+        """Should not include a parent disk that has children partitions."""
+        lsblk_output = json.dumps({
+            "blockdevices": [
+                {
+                    "name": "sda",
+                    "path": "/dev/sda",
+                    "size": "500G",
+                    "type": "disk",
+                    "fstype": "ext4",
+                    "model": "Samsung SSD",
+                    "children": [
+                        {
+                            "name": "sda1",
+                            "path": "/dev/sda1",
+                            "size": "500G",
+                            "type": "part",
+                            "fstype": "ext4",
+                            "mountpoint": "/media/data",
+                            "label": "DATA",
+                            "uuid": "1234-5678",
+                        }
+                    ]
+                }
+            ]
+        })
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run") as mock_run:
+                mock_run.return_value = mock.Mock(returncode=0, stdout=lsblk_output)
+                result = get_block_devices()
+                assert len(result) == 1
+                assert result[0].name == "sda1"  # Only the partition, not the parent disk
+
     def test_handles_lsblk_failure(self):
         """Should return empty list on lsblk failure."""
         with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):

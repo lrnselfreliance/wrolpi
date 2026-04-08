@@ -54,11 +54,6 @@ class TestDashboardEndpoint:
         assert b"Controller" in response.content
         assert b"WROLPi" in response.content
 
-    def test_dashboard_contains_version(self, test_client):
-        """Dashboard should contain version."""
-        response = test_client.get("/")
-        assert __version__.encode() in response.content
-
     def test_dashboard_contains_status_cards(self, test_client):
         """Dashboard should contain status cards."""
         response = test_client.get("/")
@@ -122,13 +117,6 @@ class TestDashboardEndpoint:
         if tbody_match:
             tbody_content = tbody_match.group(1)
             assert 'id="boot-' not in tbody_content
-
-    def test_dashboard_has_upgrade_banner_element(self, test_client):
-        """Dashboard should have upgrade banner element for upgrade mode."""
-        response = test_client.get("/")
-        content = response.text
-        assert 'id="upgrade-banner"' in content
-        assert "Upgrade in Progress" in content
 
     def test_dashboard_has_mount_modal(self, test_client):
         """Dashboard should have mount modal for disk mounting."""

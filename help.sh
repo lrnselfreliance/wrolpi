@@ -142,7 +142,7 @@ if [ -f /etc/systemd/system/wrolpi-controller.service ]; then
   fi
 fi
 
-if curl -s http://0.0.0.0:8087/api/health --max-time 5 >/dev/null 2>&1; then
+if curl -s http://0.0.0.0:80/api/health --max-time 5 >/dev/null 2>&1; then
   echo "OK: WROLPi Controller health check passed"
 else
   echo "FAILED: WROLPi Controller health check failed"
@@ -263,7 +263,6 @@ check_file /etc/ssl/wrolpi/cert.crt "TLS certificate exists" "TLS certificate do
 check_file /etc/ssl/wrolpi/cert.key "TLS key exists" "TLS key does not exist at /etc/ssl/wrolpi/cert.key"
 check_file ${MEDIA_DIRECTORY}/config/ssl/ca.crt "Root CA certificate exists" "Root CA certificate does not exist at ${MEDIA_DIRECTORY}/config/ssl/ca.crt"
 check_file ${MEDIA_DIRECTORY}/config/ssl/ca.key "Root CA key exists" "Root CA key does not exist at ${MEDIA_DIRECTORY}/config/ssl/ca.key"
-check_file /var/www/landing.html "Landing page exists" "Landing page does not exist at /var/www/landing.html"
 
 if [ -f ${MEDIA_DIRECTORY}/config/ssl/ca.crt ] && [ -f /etc/ssl/wrolpi/cert.crt ]; then
   if openssl verify -CAfile ${MEDIA_DIRECTORY}/config/ssl/ca.crt /etc/ssl/wrolpi/cert.crt >/dev/null 2>&1; then

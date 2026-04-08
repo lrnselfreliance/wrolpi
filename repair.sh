@@ -50,7 +50,6 @@ mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
 mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
-cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
 # Generate certificate for HTTPS.
 /opt/wrolpi/scripts/generate_certificates.sh

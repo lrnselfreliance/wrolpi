@@ -7,7 +7,7 @@
 <p>The web proxy could not find WROLPi! Are your services running?</p>
 
 <p>Start by viewing status of your services at the
-    <a id="controller_link" href="http://127.0.0.1:8087">Controller</a>
+    <a id="controller_link" href="http://127.0.0.1:80">Controller</a>
 </p>
 
 <pre><b>sudo systemctl status wrolpi-app</b></pre>
@@ -87,7 +87,7 @@
         replaceHref('api_link', `http://${hostname}:8081`);
         replaceHref('map_link', `http://${hostname}:8084`);
         replaceHref('kiwix_link', `http://${hostname}:8085`);
-        replaceHref('controller_link', `http://${hostname}:8087`);
+        replaceHref('controller_link', `http://${hostname}:80`);
     } else {
         console.error('Refusing to replace services links because window.location.hostname is empty');
     }

@@ -14,8 +14,8 @@ class TestDefaultConfig:
         assert isinstance(DEFAULT_CONFIG, dict)
 
     def test_default_port(self):
-        """Default port should be 8087."""
-        assert DEFAULT_CONFIG["port"] == 8087
+        """Default port should be 80."""
+        assert DEFAULT_CONFIG["port"] == 80
 
     def test_default_media_directory(self):
         """Default media directory should be /media/wrolpi."""
@@ -66,7 +66,7 @@ class TestManagedServicesConfig:
          {"systemd_name": "wrolpi-api-dev", "port": 8081, "viewable": True, "show_only_when_running": True}),
         ("wrolpi-app", {"port": 3000, "viewable": False}),
         ("wrolpi-app-dev", {"port": 3000, "viewable": False, "show_only_when_running": True}),
-        ("caddy", {"port": 80}),
+        ("caddy", {"port": 443}),
         ("postgresql", {"port": 5432, "viewable": False}),
         ("wrolpi-upgrade", {"port": None, "viewable": False, "show_only_when_running": True}),
     ])

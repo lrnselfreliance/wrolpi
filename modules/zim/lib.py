@@ -30,7 +30,7 @@ from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
 
-CONTROLLER_SERVICE = 'http://controller:8087'
+CONTROLLER_SERVICE = 'http://controller'
 
 __all__ = [
     'flag_outdated_zim_files',

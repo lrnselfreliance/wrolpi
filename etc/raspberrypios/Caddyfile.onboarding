@@ -6,11 +6,7 @@
 	auto_https disable_redirects
 }
 
-:80 {
-	redir * http://{host}:8087/ 302
-}
-
 :443 {
 	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
-	redir * http://{host}:8087/ 302
+	redir * http://{host}/ 302
 }

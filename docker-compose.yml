@@ -20,7 +20,7 @@ services:
       dockerfile: docker/controller/Dockerfile
     restart: unless-stopped
     ports:
-      - "8087:8087"
+      - "8080:80"
     volumes:
       # Controller code (for development hot-reload)
       - ./controller:/app/controller
@@ -35,9 +35,9 @@ services:
       - DOCKERIZED=true
       - MEDIA_DIRECTORY=/media/wrolpi
     # Override CMD to enable auto-reload for development
-    command: ["uvicorn", "controller.main:app", "--host", "0.0.0.0", "--port", "8087", "--reload", "--reload-dir", "/app/controller"]
+    command: ["python", "-m", "controller.serve"]
     healthcheck:
-      test: [ 'CMD-SHELL', 'curl -f http://127.0.0.1:8087/api/health || exit 1' ]
+      test: [ 'CMD-SHELL', 'curl -f http://127.0.0.1:80/api/health || exit 1' ]
       interval: 30s
       timeout: 5s
       start_period: 10s
@@ -114,7 +114,6 @@ services:
       context: .
       dockerfile: docker/web/Dockerfile
     ports:
-      - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
       - ${WEB_HOST-0.0.0.0}:${WEB_HTTPS_PORT-8443}:443
       - '8084:8084'
       - '8085:8085'
@@ -132,7 +131,7 @@ services:
       # Example: EXTRA_SANS=IP:10.0.0.5
       - EXTRA_SANS=${EXTRA_SANS:-}
     healthcheck:
-      test: [ 'CMD-SHELL', 'wget --spider http://127.0.0.1:80 || exit 1' ]
+      test: [ 'CMD-SHELL', 'wget --spider --no-check-certificate https://127.0.0.1:443 || exit 1' ]
       interval: 1m
 
   zim: # kiwix-serve

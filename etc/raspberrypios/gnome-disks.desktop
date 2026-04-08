@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Disk Management
+Comment=Manage disks and partitions
+Exec=gnome-disks
+Icon=org.gnome.DiskUtility
+Categories=System;

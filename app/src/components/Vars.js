@@ -9,11 +9,13 @@ export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REAC
 
 // Other services on a WROLPi.
 const port = window.location.port ? `${window.location.port.replace(/^/, '')}` : '';
-export const FILES_MEDIA_URI = `https://${window.location.hostname}:${port}/media/`;
+export const FILES_MEDIA_URI = `https://${window.location.hostname}${port ? ':' + port : ''}/media/`;
 export const MAP_VIEWER_URI = `https://${window.location.hostname}:8084`;
 export const ZIM_VIEWER_URI = `https://${window.location.hostname}:8085`;
 export const HELP_VIEWER_URI = `https://${window.location.hostname}:8086`;
-export const CONTROLLER_URI = `http://${window.location.hostname}:8087`; // no https
+// Docker: 8080; native: 80 (default, no port needed).
+const controllerPort = window.location.port === '8443' ? ':8080' : '';
+export const CONTROLLER_URI = `http://${window.location.hostname}${controllerPort}`;
 export const API_ARCHIVE_UPLOAD_URI = `http://${window.location.hostname}:8081/api/archive/upload`;
 
 export let defaultFileOrder = '-published_datetime'; // Most recently published files first.

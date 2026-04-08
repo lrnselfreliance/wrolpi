@@ -3,9 +3,6 @@
 
 set -x
 
-# Copy landing page for HTTP certificate download.
-cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
-
 mkdir -p /etc/caddy /etc/ssl/wrolpi
 
 if [ -f /media/wrolpi/config/ssl/ca.crt ]; then

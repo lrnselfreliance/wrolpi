@@ -39,11 +39,11 @@ const links = [
     {text: 'Archive', to: '/archives', key: 'archive'},
     {text: 'Docs', to: '/docs', key: 'docs'},
     {text: 'Map', to: '/map', key: 'map'},
-    {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Files', to: '/files', key: 'files'},
     {
         text: 'More', key: 'more',
         links: [
+            {text: 'Zim', to: '/zim', key: 'zim'},
             {text: 'Inventory', to: '/inventory', key: 'inventory'},
             {to: '/more/otp', text: 'One Time Pad', end: true},
             {to: '/more/vin', text: 'VIN Decoder', end: true},
@@ -265,7 +265,7 @@ export function NavBar() {
     </React.Fragment>;
 
     return <>
-        <Media at='mobile'>
+        <Media between={['mobile', 'wideTablet']}>
             <Menu {...i} attached='top' color={navColor} id='global_navbar'>
                 {homeLink}
                 <Menu.Menu position='right'>
@@ -279,7 +279,7 @@ export function NavBar() {
                 </Menu.Menu>
             </Menu>
         </Media>
-        <Media greaterThanOrEqual='tablet'>
+        <Media greaterThanOrEqual='wideTablet'>
             <Menu {...i} attached='top' color={navColor} id='global_navbar'>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}

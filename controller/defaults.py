@@ -6,8 +6,9 @@ Controller starts with these defaults and loads overrides from
 """
 
 DEFAULT_CONFIG = {
-    "port": 8087,
+    "port": 80,
     "media_directory": "/media/wrolpi",
+    "hide_cert_banner": False,
 
     "drives": {
         "supported_filesystems": ["ext4", "btrfs", "vfat", "exfat"],
@@ -20,8 +21,8 @@ DEFAULT_CONFIG = {
         {
             "name": "wrolpi-controller",
             "systemd_name": "wrolpi-controller",
-            "port": 8087,
-            "viewable": True,
+            "port": 80,
+            "viewable": False,
             "use_https": False,
             "description": "Controller API (FastAPI)",
         },
@@ -87,10 +88,10 @@ DEFAULT_CONFIG = {
         {
             "name": "caddy",
             "systemd_name": "caddy",
-            "port": 80,
+            "port": 443,
             "viewable": True,
-            "use_https": False,
-            "description": "Web proxy",
+            "use_https": True,
+            "description": "Web proxy (HTTPS)",
         },
         # Samba file sharing services
         {

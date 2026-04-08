@@ -5,23 +5,6 @@
 	auto_https disable_redirects
 }
 
-:80 {
-	handle / {
-		root * /var/www
-		rewrite * /landing.html
-		file_server
-	}
-	handle /ca.crt {
-		root * /media/wrolpi/config/ssl
-		header Content-Type "application/x-x509-ca-cert"
-		header Content-Disposition "attachment; filename=\"wrolpi-ca.crt\""
-		file_server
-	}
-	handle {
-		redir https://{host}{uri} permanent
-	}
-}
-
 :443 {
 	tls /etc/ssl/wrolpi/cert.crt /etc/ssl/wrolpi/cert.key
 
@@ -55,7 +38,7 @@
 
 	# Controller - system management API and UI.
 	handle_path /controller/* {
-		reverse_proxy 0.0.0.0:8087
+		reverse_proxy 0.0.0.0:80
 	}
 	handle /controller {
 		redir * /controller/ 301
@@ -115,7 +98,7 @@
 	}
 
 	handle_errors 502 503 504 {
-		redir * "http://{host}:8087/?fallback=true" 302
+		redir * "http://{host}/?fallback=true" 302
 	}
 }
 

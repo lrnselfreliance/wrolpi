@@ -70,7 +70,6 @@ mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
 mkdir -p /var/www
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
-cp /opt/wrolpi/etc/raspberrypios/landing.html /var/www/landing.html
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi

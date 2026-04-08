@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)s %(levelname
 logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from controller import __version__
@@ -33,9 +33,13 @@ from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
 from controller.lib.config import (
+    get_config_value,
+    get_media_directory,
     is_docker_mode,
     is_primary_drive_mounted,
     reload_config_from_drive,
+    save_config,
+    update_config,
 )
 from controller.lib.docker_services import (
     can_manage_containers,
@@ -217,6 +221,7 @@ async def dashboard(request: Request):
         "version": __version__,
         "docker_mode": is_docker_mode(),
         "drive_mounted": is_primary_drive_mounted(),
+        "hide_cert_banner": get_config_value("hide_cert_banner", False),
         "host": get_host(request),
 
         # Real status data
@@ -259,3 +264,26 @@ async def health_check() -> HealthResponse:
         docker_mode=is_docker_mode(),
         drive_mounted=is_primary_drive_mounted(),
     )
+
+
+@app.get("/ca.crt")
+async def download_ca_certificate():
+    """Serve the WROLPi Root CA certificate for browser trust setup."""
+    ca_path = get_media_directory() / "config" / "ssl" / "ca.crt"
+    if not ca_path.is_file():
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"error": "CA certificate not found"})
+    return FileResponse(
+        path=ca_path,
+        media_type="application/x-x509-ca-cert",
+        filename="wrolpi-ca.crt",
+        headers={"Content-Disposition": 'attachment; filename="wrolpi-ca.crt"'},
+    )
+
+
+@app.post("/api/hide-cert-banner")
+async def hide_cert_banner():
+    """Permanently hide the HTTPS certificate setup banner."""
+    update_config("hide_cert_banner", True)
+    save_config()
+    return {"ok": True}

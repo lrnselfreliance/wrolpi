@@ -441,7 +441,7 @@ export function DashboardPage() {
                 </Grid.Row>
             </Grid>
         </Media>
-        <Media at='tablet'>
+        <Media between={['tablet', 'computer']}>
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column textAlign='right' width={2}>

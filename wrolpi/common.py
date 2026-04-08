@@ -399,7 +399,12 @@ def find_file(directory: pathlib.Path, name: str, depth=1) -> Optional[pathlib.P
     if depth == 0:
         return
 
-    for path in sorted(directory.iterdir()):
+    try:
+        entries = sorted(directory.iterdir())
+    except PermissionError:
+        return
+
+    for path in entries:
         if path.is_file() and path.name == name:
             return path
         if path.is_dir() and (result := find_file(path, name, depth - 1)):
@@ -1785,7 +1790,7 @@ async def aiohttp_head(url: str, timeout: int = None, headers: dict = None) -> A
             yield response
 
 
-CONTROLLER_URL = 'http://127.0.0.1:8087'
+CONTROLLER_URL = 'http://127.0.0.1'
 
 
 async def set_system_timezone(timezone: str):

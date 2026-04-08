@@ -6,7 +6,7 @@ Before=wrolpi-api.service wrolpi-app.service postgresql.service
 
 [Service]
 Type=simple
-ExecStart=/opt/wrolpi/controller/venv/bin/uvicorn controller.main:app --host 0.0.0.0 --port 8087
+ExecStart=/opt/wrolpi/controller/venv/bin/python -m controller.serve
 WorkingDirectory=/opt/wrolpi
 User=root
 Group=root

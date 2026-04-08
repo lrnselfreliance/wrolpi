@@ -57,7 +57,7 @@ export const QueryContext = React.createContext({
 
 export const AppMedia = createMedia({
     breakpoints: {
-        mobile: 0, tablet: 700, computer: 1024,
+        mobile: 0, tablet: 700, wideTablet: 880, computer: 1024,
     }
 });
 export const mediaStyles = AppMedia.createMediaStyle();

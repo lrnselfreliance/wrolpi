@@ -23,8 +23,8 @@ ENV DOCKERIZED=true
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8087/api/health || exit 1
+    CMD curl -f http://localhost:80/api/health || exit 1
 
-EXPOSE 8087
+EXPOSE 80
 
-CMD ["uvicorn", "controller.main:app", "--host", "0.0.0.0", "--port", "8087"]
+CMD ["python", "-m", "controller.serve"]

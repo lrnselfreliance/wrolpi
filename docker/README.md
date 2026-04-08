@@ -20,17 +20,17 @@ Browse to https://localhost:8443
 
 ## Services
 
-| Service        | Port(s)                              | Description                 |
-|----------------|--------------------------------------|-----------------------------|
-| **web**        | 8080 (HTTP), 8443 (HTTPS), 8084-8086 | Caddy reverse proxy         |
-| **api**        | 8081                                 | Sanic API server            |
-| **app**        | (via web)                            | React frontend              |
-| **controller** | 8087                                 | System management (FastAPI) |
-| **db**         | 5432                                 | PostgreSQL 12               |
-| **archive**    | 8083                                 | SingleFile/Readability      |
-| **zim**        | (via web:8085)                       | Kiwix                       |
-| **help**       | (via web:8086)                       | MkDocs documentation        |
-| **map**        | (via web:8084)                       | OpenStreetMap tile server   |
+| Service        | Port(s)                  | Description                 |
+|----------------|--------------------------|-----------------------------|
+| **web**        | 8443 (HTTPS), 8084-8086  | Caddy reverse proxy         |
+| **api**        | 8081                     | Sanic API server            |
+| **app**        | (via web)                | React frontend              |
+| **controller** | 8080                     | System management (FastAPI) |
+| **db**         | 5432                     | PostgreSQL 12               |
+| **archive**    | 8083                     | SingleFile/Readability      |
+| **zim**        | (via web:8085)           | Kiwix                       |
+| **help**       | (via web:8086)           | MkDocs documentation        |
+| **map**        | (via web:8084)           | OpenStreetMap tile server   |
 
 ## TLS Certificates
 
@@ -43,12 +43,13 @@ to pick up hostname and IP changes.
 1. On first start, the `web` container generates a root CA at `/opt/media/config/ssl/`.
 2. A leaf cert signed by the root CA is created at `/etc/ssl/caddy/` inside the container.
 3. Caddy serves HTTPS on ports 443, 8084, 8085, and 8086 using the leaf cert.
-4. Port 80 serves an HTTP landing page where users can download the root CA.
+4. The Controller serves on port 80 with a certificate trust banner when needed.
 
 ### Trusting the certificate
 
-1. Browse to `http://<host-ip>:8080` to see the landing page with download link and
-   platform-specific trust instructions.
+1. Browse to `http://<host-ip>` to see the Controller. If the HTTPS certificate is not
+   yet trusted, a banner will appear with the download link and platform-specific
+   trust instructions.
 2. Download and install the root CA on your device.
 3. All HTTPS ports will work without browser warnings.
 
@@ -94,7 +95,7 @@ docker compose up -d --build web
 ```
 
 All devices will need to re-download and re-trust the new CA from
-`http://<host-ip>:8080/ca.crt`.
+`http://<host-ip>/ca.crt`.
 
 ## Volumes
 
@@ -116,7 +117,6 @@ docker volume create --name=openstreetmap-rendered-tiles
 | `MEDIA_DIRECTORY` | `/opt/media`   | Media directory inside containers            |
 | `EXTRA_SANS`      | (empty)        | Additional SANs for the TLS leaf certificate |
 | `WEB_HOST`        | `0.0.0.0`      | Host bind address for the web service        |
-| `WEB_PORT`        | `8080`         | HTTP port                                    |
 | `WEB_HTTPS_PORT`  | `8443`         | HTTPS port                                   |
 | `REACT_APP_API`   | `0.0.0.0:8081` | API bind address                             |
 | `UID`             | `1000`         | User ID for api/app containers               |

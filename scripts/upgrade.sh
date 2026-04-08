@@ -129,5 +129,15 @@ if ! command -v smbd &>/dev/null; then
   apt-get install -y samba
 fi
 
+# Install gnome-disk-utility if not already installed (provides desktop disk management GUI).
+if ! command -v gnome-disks &>/dev/null; then
+  echo "Installing gnome-disk-utility..."
+  apt-get update
+  apt-get install -y gnome-disk-utility
+fi
+
+# Clean up stale landing page (Controller now serves port 80 directly).
+rm -f /var/www/landing.html
+
 # Install any configs, restart services.
 /opt/wrolpi/repair.sh

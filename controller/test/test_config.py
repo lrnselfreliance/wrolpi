@@ -38,16 +38,16 @@ class TestGetConfig:
         assert "throttle" in config
 
     def test_get_config_default_port(self, reset_runtime_config):
-        """Default port should be 8087."""
+        """Default port should be 80."""
         config = get_config()
-        assert config["port"] == 8087
+        assert config["port"] == 80
 
 
 class TestGetConfigValue:
     """Tests for get_config_value function."""
 
     @pytest.mark.parametrize("key,expected", [
-        ("port", 8087),
+        ("port", 80),
         ("media_directory", "/media/wrolpi"),
         ("drives.auto_mount", True),
         ("hotspot.ssid", "WROLPi"),
@@ -145,7 +145,7 @@ class TestReloadConfigFromDrive:
         result = reload_config_from_drive()
         assert result is False
         # Should still have defaults
-        assert get_config_value("port") == 8087
+        assert get_config_value("port") == 80
 
     def test_reload_handles_empty_file(
             self, reset_runtime_config, mock_config_path
@@ -158,7 +158,7 @@ class TestReloadConfigFromDrive:
         # File exists and was processed, so returns True
         assert result is True
         # Config should still have all defaults
-        assert get_config_value("port") == 8087
+        assert get_config_value("port") == 80
 
 
 class TestSaveConfig:
@@ -210,7 +210,7 @@ class TestSaveConfig:
         assert mock_config_path.exists()
 
         # Reset to default value
-        update_config("port", 8087)  # Default port
+        update_config("port", 80)  # Default port
         save_config()
 
         # File should still exist (serves as marker that drive is set up)

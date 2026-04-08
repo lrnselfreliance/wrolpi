@@ -174,59 +174,6 @@
             border-top-color: #000;
         }
 
-        .upgrade-banner {
-            background: linear-gradient(135deg, #f39c12, #e67e22);
-            color: #000;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            text-align: center;
-            display: none;
-        }
-
-        .upgrade-banner.show {
-            display: block;
-        }
-
-        .upgrade-banner h2 {
-            margin: 0 0 0.5rem 0;
-            font-size: 1.5rem;
-        }
-
-        .upgrade-banner .loading {
-            width: 2rem;
-            height: 2rem;
-            border-color: #333;
-            border-top-color: #000;
-            margin: 0.5rem auto;
-        }
-
-        .upgrade-banner .elapsed {
-            font-size: 1.25rem;
-            font-weight: bold;
-            margin: 0.5rem 0;
-        }
-
-        .upgrade-banner .warning {
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-            opacity: 0.8;
-        }
-
-        .upgrade-banner .success {
-            color: #27ae60;
-            font-size: 2rem;
-        }
-
-        .upgrade-banner.complete {
-            background: linear-gradient(135deg, #27ae60, #2ecc71);
-            color: #fff;
-        }
-
-        .upgrade-banner.complete .warning {
-            display: none;
-        }
-
         /* Status Grid */
         .status-grid {
             display: grid;
@@ -777,6 +724,101 @@
 </div>
 {% endif %}
 
+<header>
+    <div>
+        <h1>Controller - {{ host }} WROLPi</h1>
+    </div>
+</header>
+
+<!-- Certificate trust banner — shown by JS when HTTPS cert is not trusted -->
+<div id="cert-banner" class="card" style="display: none; background: #16213e; border: 1px solid #1a3a5c; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: #4cc9f0;">HTTPS Certificate Setup</h2>
+    <p style="line-height: 1.6; color: #ccc; margin-bottom: 1rem;">
+        Install the WROLPi Root CA certificate so your browser trusts all WROLPi HTTPS services.
+    </p>
+    <a class="btn btn-info" href="/ca.crt" download="wrolpi-ca.crt" style="margin-bottom: 1rem; display: inline-block;">Download WROLPi Root CA</a>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">iOS / iPadOS</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <ol style="padding-left: 1.25rem;">
+                <li>Tap the download button above, then tap <strong>Allow</strong>.</li>
+                <li>Open <strong>Settings</strong> &rarr; <strong>General</strong> &rarr; <strong>VPN &amp; Device Management</strong>.</li>
+                <li>Tap <strong>WROLPi Root CA</strong> &rarr; <strong>Install</strong> &rarr; enter your passcode.</li>
+                <li>Go to <strong>Settings</strong> &rarr; <strong>General</strong> &rarr; <strong>About</strong> &rarr; <strong>Certificate Trust Settings</strong>.</li>
+                <li>Enable full trust for <strong>WROLPi Root CA</strong>.</li>
+            </ol>
+        </div>
+    </details>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">Android</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <ol style="padding-left: 1.25rem;">
+                <li>Tap the download button above.</li>
+                <li>Open <strong>Settings</strong> &rarr; <strong>Security &amp; privacy</strong> &rarr; <strong>More security settings</strong> &rarr; <strong>Encryption &amp; credentials</strong> &rarr; <strong>Install a certificate</strong> &rarr; <strong>CA certificate</strong>.</li>
+                <li>Select the downloaded <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">wrolpi-ca.crt</code> file and confirm.</li>
+            </ol>
+            <p style="margin-top:0.5rem;font-size:0.9em;color:#999;">Menu paths vary by manufacturer. Search for <em>"certificate"</em> in Settings if needed.</p>
+        </div>
+    </details>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">macOS</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <ol style="padding-left: 1.25rem;">
+                <li>Double-click the downloaded <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">wrolpi-ca.crt</code> to open Keychain Access.</li>
+                <li>Add it to the <strong>System</strong> or <strong>login</strong> keychain.</li>
+                <li>Find <strong>WROLPi Root CA</strong>, double-click it.</li>
+                <li>Expand <strong>Trust</strong>, set to <strong>Always Trust</strong>.</li>
+                <li>Close and enter your password.</li>
+            </ol>
+        </div>
+    </details>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">Windows</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <ol style="padding-left: 1.25rem;">
+                <li>Double-click the downloaded <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">wrolpi-ca.crt</code>.</li>
+                <li>Click <strong>Install Certificate</strong> &rarr; <strong>Local Machine</strong> &rarr; <strong>Next</strong>.</li>
+                <li>Select <strong>Place all certificates in the following store</strong> &rarr; <strong>Browse</strong> &rarr; <strong>Trusted Root Certification Authorities</strong>.</li>
+                <li>Click <strong>Finish</strong>.</li>
+            </ol>
+        </div>
+    </details>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">Linux (Debian / Ubuntu)</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <ol style="padding-left: 1.25rem;">
+                <li>Copy the certificate: <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">sudo cp wrolpi-ca.crt /usr/local/share/ca-certificates/</code></li>
+                <li>Update the trust store: <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">sudo update-ca-certificates</code></li>
+                <li>Restart your browser.</li>
+            </ol>
+        </div>
+    </details>
+
+    <details style="margin-bottom: 0.75rem;">
+        <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">Firefox (all platforms)</summary>
+        <div style="padding: 0.75rem 0 0.25rem 0.5rem; color: #bbb; line-height: 1.7;">
+            <p style="margin-bottom:0.5rem;">Since Firefox 120, Firefox <strong>automatically trusts</strong> root certificates from the OS store on <strong>Windows, macOS, and Android</strong>.</p>
+            <p style="margin-bottom:0.5rem;">On <strong>Linux</strong> (or if auto-trust is disabled), import manually:</p>
+            <ol style="padding-left: 1.25rem;">
+                <li>Open Firefox &rarr; <strong>Settings</strong> &rarr; <strong>Privacy &amp; Security</strong>.</li>
+                <li>Scroll to <strong>Certificates</strong> &rarr; <strong>View Certificates</strong>.</li>
+                <li>In <strong>Authorities</strong> tab, click <strong>Import</strong>.</li>
+                <li>Select <code style="background: #0f3460; padding: 0.15rem 0.4rem; border-radius: 4px;">wrolpi-ca.crt</code>, check <strong>Trust this CA to identify websites</strong>.</li>
+            </ol>
+        </div>
+    </details>
+
+    <div style="text-align: center; margin-top: 1rem;">
+        <a class="btn btn-success" id="cert-continue-btn" href="#">Continue to WROLPi (HTTPS)</a>
+        <button class="btn btn-secondary" onclick="fetch('api/hide-cert-banner',{method:'POST'}).then(function(){document.getElementById('cert-banner').style.display='none';})" style="margin-left: 0.5rem;">Never ask again</button>
+    </div>
+</div>
+
 {% if not drive_mounted and not docker_mode %}
 <div id="onboarding-banner" class="onboarding-banner">
     <!-- Step 1: Select drive -->
@@ -839,6 +881,12 @@
 </div>
 {% endif %}
 
+{% set app_ready = services | selectattr('name', 'in', ['caddy', 'web']) | selectattr('status', 'equalto', 'running') | list | length > 0 %}
+<div style="margin-bottom: 1rem;">
+    <a id="proceed-btn" class="btn btn-success" style="{% if not app_ready %}display: none;{% endif %} font-size: 1.1rem; padding: 0.6rem 1.5rem;" href="#">Proceed to WROLPi</a>
+    <a id="view-files-btn" class="btn btn-info" style="{% if not app_ready %}display: none;{% endif %} font-size: 1.1rem; padding: 0.6rem 1.5rem; margin-left: 0.5rem;" href="#">View Files</a>
+</div>
+
 <div id="fallback-banner" class="fallback-banner">
     <span class="loading"></span>
     Main UI is unavailable. Using Controller fallback. Will redirect when ready...
@@ -853,21 +901,6 @@
     </div>
 </div>
 {% endif %}
-
-<div id="upgrade-banner" class="upgrade-banner">
-    <h2>Upgrade in Progress</h2>
-    <span id="upgrade-spinner" class="loading"></span>
-    <span id="upgrade-success" class="success" style="display: none;">✓</span>
-    <p id="upgrade-message">Please wait while WROLPi upgrades...</p>
-    <p class="elapsed">Elapsed: <span id="upgrade-elapsed">0:00</span></p>
-</div>
-
-<header>
-    <div>
-        <h1>Controller - {{ host }} WROLPi</h1>
-        <span class="version">v{{ version }}</span>
-    </div>
-</header>
 
 <main>
     <section id="status">
@@ -955,7 +988,8 @@
                     </button>
                     <button class="btn btn-info" onclick="showLogs('{{ service.name }}', true)">Logs</button>
                     {% if service.viewable and service.status == 'running' and service.port %}
-                    <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}:{{ service.port }}{{ service.view_path|default('') }}"
+                    {% set is_default_port = (service.use_https and service.port == 443) or (not service.use_https and service.port == 80) %}
+                    <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}{% if not is_default_port %}:{{ service.port }}{% endif %}{{ service.view_path|default('') }}"
                        target="_blank" class="btn btn-violet">View</a>
                     {% endif %}
                 </td>
@@ -1128,6 +1162,42 @@
 
 <script>
     /* ===== INLINE JAVASCRIPT - No external files ===== */
+
+    // Certificate trust detection.
+    (function() {
+        var host = window.location.hostname;
+        var port = window.location.port;
+        // Docker: 8080 → 8443; native: 80/empty → 443 (default).
+        var httpsPort = (port === '8080') ? ':8443' : '';
+        var httpsBase = 'https://' + host + httpsPort;
+
+        // Set the "Continue to WROLPi" link.
+        var continueBtn = document.getElementById('cert-continue-btn');
+        if (continueBtn) continueBtn.href = httpsBase;
+
+        // Set the "Proceed to WROLPi" and "View Files" links.
+        var proceedBtn = document.getElementById('proceed-btn');
+        if (proceedBtn) proceedBtn.href = httpsBase;
+        var viewFilesBtn = document.getElementById('view-files-btn');
+        if (viewFilesBtn) viewFilesBtn.href = httpsBase + '/media/';
+
+        // Skip cert check if user has permanently hidden the banner.
+        {% if hide_cert_banner %}return;{% endif %}
+
+        // Probe the HTTPS endpoint; show the cert banner if it fails.
+        var controller = new AbortController();
+        var timeout = setTimeout(function() { controller.abort(); }, 3000);
+        fetch(httpsBase + '/api/echo', { signal: controller.signal })
+            .then(function(r) {
+                // Cert is trusted — keep banner hidden.
+            })
+            .catch(function() {
+                // Cert not trusted or HTTPS unreachable — show the banner.
+                var banner = document.getElementById('cert-banner');
+                if (banner) banner.style.display = 'block';
+            })
+            .finally(function() { clearTimeout(timeout); });
+    })();
 
     async function apiCall(url, method = 'GET', body = null) {
         try {
@@ -2326,25 +2396,9 @@
     }
 
     // ===== UPGRADE MODE =====
+    // When ?upgrade=true, poll for completion and redirect to main UI when ready.
     try {
         if (isUpgradeMode) {
-            // Show upgrade banner
-            document.getElementById('upgrade-banner').classList.add('show');
-
-            // Track elapsed time
-            const startTime = Date.now();
-            const elapsedEl = document.getElementById('upgrade-elapsed');
-
-            const updateElapsed = () => {
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                const minutes = Math.floor(elapsed / 60);
-                const seconds = elapsed % 60;
-                elapsedEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            };
-            updateElapsed();
-            setInterval(updateElapsed, 1000);
-
-            // Poll controller's readiness endpoint (same-origin, avoids CORS/cert issues).
             const upgradeIsDocker = {{ 'true' if docker_mode else 'false' }};
             let upgradeHttpsBase;
             if (window.location.protocol === 'https:') {
@@ -2354,25 +2408,14 @@
             } else {
                 upgradeHttpsBase = `https://${window.location.hostname}`;
             }
+
             // Two-phase upgrade detection:
             // Phase 1: Wait for services to go DOWN (confirms upgrade actually started).
             // Phase 2: Wait for services to come back UP (upgrade complete).
-            // State is persisted in sessionStorage so it survives page refreshes.
             let upgradeServicesWentDown = sessionStorage.getItem('upgradeServicesWentDown') === 'true';
-
-            const markServicesDown = () => {
-                if (!upgradeServicesWentDown) {
-                    upgradeServicesWentDown = true;
-                    sessionStorage.setItem('upgradeServicesWentDown', 'true');
-                    document.getElementById('upgrade-message').textContent = 'Upgrading... Services restarting.';
-                }
-            };
 
             const checkUpgradeComplete = async () => {
                 try {
-                    // WARNING: This must be a relative URL (no leading slash) so it resolves to
-                    // /controller/api/ready behind Caddy, or /api/ready when accessed directly.
-                    // An absolute '/api/ready' would be routed to Sanic by Caddy, not the Controller.
                     const resp = await fetch('api/ready', {
                         method: 'GET',
                         headers: {'Accept': 'application/json'},
@@ -2381,36 +2424,27 @@
                     if (resp.ok) {
                         const data = await resp.json();
                         if (!upgradeServicesWentDown) {
-                            // Phase 1: waiting for services to go down
                             if (!data.api || !data.app) {
-                                markServicesDown();
+                                upgradeServicesWentDown = true;
+                                sessionStorage.setItem('upgradeServicesWentDown', 'true');
                             }
                         } else if (data.api && data.app) {
-                            // Phase 2: services are back up — upgrade complete!
                             sessionStorage.removeItem('upgradeServicesWentDown');
-                            document.getElementById('upgrade-spinner').style.display = 'none';
-                            document.getElementById('upgrade-success').style.display = 'inline';
-                            document.getElementById('upgrade-message').textContent = 'Upgrade complete! Redirecting...';
-                            document.getElementById('upgrade-banner').classList.add('complete');
-
-                            // Redirect to main app after 2 seconds
                             setTimeout(() => {
                                 window.location.href = `${upgradeHttpsBase}/`;
                             }, 2000);
                         }
                     } else {
-                        // Non-ok response means services are going down
-                        markServicesDown();
+                        upgradeServicesWentDown = true;
+                        sessionStorage.setItem('upgradeServicesWentDown', 'true');
                     }
                 } catch (e) {
-                    // Fetch failed (connection refused) — services are down
-                    markServicesDown();
+                    upgradeServicesWentDown = true;
+                    sessionStorage.setItem('upgradeServicesWentDown', 'true');
                 }
             };
 
-            // Check every 3 seconds (same as old maintenance page)
             setInterval(checkUpgradeComplete, 3000);
-            // Also check immediately
             checkUpgradeComplete();
         }
     } catch (e) {
@@ -2595,7 +2629,9 @@
                     const protocol = service.use_https ? 'https' : 'http';
                     const host = window.location.hostname;
                     const viewPath = service.view_path || '';
-                    html += `<a href="${protocol}://${host}:${service.port}${viewPath}" target="_blank" class="btn btn-violet">View</a>`;
+                    const isDefaultPort = (protocol === 'https' && service.port === 443) || (protocol === 'http' && service.port === 80);
+                    const portSuffix = isDefaultPort ? '' : ':' + service.port;
+                    html += `<a href="${protocol}://${host}${portSuffix}${viewPath}" target="_blank" class="btn btn-violet">View</a>`;
                 }
 
                 html += '</td>';
@@ -2628,6 +2664,33 @@
             }
 
             tbody.innerHTML = html;
+
+            // Show "Proceed to WROLPi" when the main UI is reachable.
+            var proceedBtn = document.getElementById('proceed-btn');
+            if (proceedBtn) {
+                // Check if caddy/web is running (native or Docker).
+                var appReady = services.some(function(s) {
+                    return (s.name === 'caddy' || s.name === 'web') && s.status === 'running';
+                });
+                if (appReady) {
+                    var host = window.location.hostname;
+                    var port = window.location.port;
+                    // Docker: 8080 → 8443; native: 80/empty → 443 (default).
+                    var httpsPort = (port === '8080') ? ':8443' : '';
+                    var httpsBase = 'https://' + host + httpsPort;
+                    proceedBtn.href = httpsBase;
+                    proceedBtn.style.display = 'inline-block';
+                    var viewFilesBtn = document.getElementById('view-files-btn');
+                    if (viewFilesBtn) {
+                        viewFilesBtn.href = httpsBase + '/media/';
+                        viewFilesBtn.style.display = 'inline-block';
+                    }
+                } else {
+                    proceedBtn.style.display = 'none';
+                    var viewFilesBtn2 = document.getElementById('view-files-btn');
+                    if (viewFilesBtn2) viewFilesBtn2.style.display = 'none';
+                }
+            }
         } catch (e) {
             console.error('Failed to update services:', e);
         }

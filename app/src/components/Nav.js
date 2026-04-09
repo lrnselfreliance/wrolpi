@@ -9,6 +9,7 @@ import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
 import {Icon, Popup} from "./Theme";
 import {HELP_VIEWER_URI, NAME, semanticUIColorMap} from "./Vars";
+import {useOverflowNav} from "../hooks/useOverflowNav";
 import _ from "lodash";
 
 function updateFavicon(colorName) {
@@ -34,29 +35,22 @@ function updateFavicon(colorName) {
     if (themeColorMeta) themeColorMeta.content = hexColor;
 }
 
-const links = [
+const help = {to: HELP_VIEWER_URI, text: 'Help', key: 'help', target: '_blank'};
+const admin = {to: '/admin', text: 'Admin', key: 'admin'};
+const rightLinks = [help, admin];
+const allLinks = [
     {text: 'Videos', to: '/videos', key: 'videos'},
     {text: 'Archive', to: '/archives', key: 'archive'},
     {text: 'Docs', to: '/docs', key: 'docs'},
     {text: 'Map', to: '/map', key: 'map'},
     {text: 'Files', to: '/files', key: 'files'},
-    {
-        text: 'More', key: 'more',
-        links: [
-            {text: 'Zim', to: '/zim', key: 'zim'},
-            {text: 'Inventory', to: '/inventory', key: 'inventory'},
-            {to: '/more/otp', text: 'One Time Pad', end: true},
-            {to: '/more/vin', text: 'VIN Decoder', end: true},
-            {to: '/more/calculators', text: 'Calculators', end: true},
-            {to: '/more/statistics', text: 'Statistics', end: true},
-        ]
-    },
+    {text: 'Zim', to: '/zim', key: 'zim'},
+    {text: 'Inventory', to: '/inventory', key: 'inventory'},
+    {to: '/more/otp', text: 'One Time Pad', key: 'otp', end: true},
+    {to: '/more/vin', text: 'VIN Decoder', key: 'vin', end: true},
+    {to: '/more/calculators', text: 'Calculators', key: 'calculators', end: true},
+    {to: '/more/statistics', text: 'Statistics', key: 'statistics', end: true},
 ];
-const help = {to: HELP_VIEWER_URI, text: 'Help', key: 'help', target: '_blank'};
-const admin = {to: '/admin', text: 'Admin', key: 'admin'};
-const rightLinks = [help, admin];
-
-const collapsedLinks = links.concat([help, admin]);
 
 function DropdownLinks({link}) {
     return <Dropdown item text={link.text} direction='left'>
@@ -265,7 +259,7 @@ export function NavBar() {
     </React.Fragment>;
 
     return <>
-        <Media between={['mobile', 'wideTablet']}>
+        <Media between={['mobile', 'tablet']}>
             <Menu {...i} attached='top' color={navColor} id='global_navbar'>
                 {homeLink}
                 <Menu.Menu position='right'>
@@ -273,23 +267,56 @@ export function NavBar() {
                     <SearchIconButton/>
                     <Dropdown item icon="bars">
                         <Dropdown.Menu>
-                            {collapsedLinks.map(i => <MenuLink link={i} key={i.key}/>)}
+                            {allLinks.map(i => <MenuLink link={i} key={i.key}/>)}
+                            {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
                         </Dropdown.Menu>
                     </Dropdown>
                 </Menu.Menu>
             </Menu>
         </Media>
-        <Media greaterThanOrEqual='wideTablet'>
-            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
-                {homeLink}
-                {links.map(i => <MenuLink link={i} key={i.key}/>)}
+        <Media greaterThanOrEqual='tablet'>
+            <DesktopNav i={i} navColor={navColor} homeLink={homeLink} icons={icons}/>
+        </Media>
+    </>
+}
 
-                <Menu.Menu position='right'>
+function DesktopNav({i, navColor, homeLink, icons}) {
+    const containerRef = React.useRef(null);
+    const homeRef = React.useRef(null);
+    const rightMenuRef = React.useRef(null);
+    const moreRef = React.useRef(null);
+    const {visibleLinks, overflowLinks, itemRefCallback, isReady} = useOverflowNav({
+        links: allLinks,
+        containerRef,
+        homeRef,
+        rightMenuRef,
+        moreRef,
+    });
+
+    return (
+        <div ref={containerRef}>
+            <Menu {...i} attached='top' color={navColor} id='global_navbar'>
+                <span ref={homeRef} style={{display: 'contents'}}>{homeLink}</span>
+                {(isReady ? visibleLinks : allLinks).map((link, idx) => (
+                    <span
+                        key={link.key}
+                        ref={itemRefCallback(idx)}
+                        style={isReady ? {display: 'contents'} : {visibility: 'hidden'}}
+                    >
+                        <MenuLink link={link}/>
+                    </span>
+                ))}
+                {!isReady && <span ref={moreRef} style={{visibility: 'hidden'}}>
+                    <Dropdown item text='More'><Dropdown.Menu/></Dropdown>
+                </span>}
+                {isReady && overflowLinks.length > 0 &&
+                    <DropdownLinks link={{text: 'More', key: 'more', links: overflowLinks}}/>}
+                <div ref={rightMenuRef} className='right menu'>
                     {icons}
                     <SearchIconButton/>
                     {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
-                </Menu.Menu>
+                </div>
             </Menu>
-        </Media>
-    </>
+        </div>
+    );
 }

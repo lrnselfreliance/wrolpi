@@ -150,7 +150,7 @@ def get_drive_status() -> list[dict]:
             usage = psutil.disk_usage(partition.mountpoint)
             drives.append({
                 "mount": partition.mountpoint,
-                "percent": int(usage.percent),
+                "percent": round(usage.percent),
                 "size": int(usage.total),
                 "used": int(usage.used),
             })

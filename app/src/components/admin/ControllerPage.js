@@ -154,7 +154,9 @@ function useServiceRow(service, onAction) {
         const protocol = service.use_https ? 'https' : 'http';
         const host = window.location.hostname;
         const path = service.view_path || '';
-        viewUrl = `${protocol}://${host}:${service.port}${path}`;
+        const isDefaultPort = (protocol === 'https' && service.port === 443) || (protocol === 'http' && service.port === 80);
+        const portSuffix = isDefaultPort ? '' : `:${service.port}`;
+        viewUrl = `${protocol}://${host}${portSuffix}${path}`;
     }
 
     return {
@@ -1289,13 +1291,6 @@ function AdminControlsSection() {
     );
 }
 
-function ControllerLink() {
-    return <HandPointMessage>
-        You can view the Controller at <a href={CONTROLLER_URI}>{CONTROLLER_URI}</a>
-    </HandPointMessage>
-}
-
-
 export function ControllerPage() {
     return (
         <Container fluid>
@@ -1303,7 +1298,6 @@ export function ControllerPage() {
             <ServicesSection/>
             <SambaSection/>
             <DiskSection/>
-            <ControllerLink/>
         </Container>
     );
 }

@@ -22,7 +22,7 @@ DEFAULT_CONFIG = {
             "name": "wrolpi-controller",
             "systemd_name": "wrolpi-controller",
             "port": 80,
-            "viewable": False,
+            "viewable": True,
             "use_https": False,
             "description": "Controller API (FastAPI)",
         },

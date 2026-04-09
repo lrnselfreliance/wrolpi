@@ -100,12 +100,14 @@ VIDEO_RESOLUTION_MAP = {
         'bestvideo[height=360]+bestaudio/bestvideo[width=360]+bestaudio/best[height=360]',
     ],
     '480p': [
+        'hls-96', # 480p (sort of) Vertical
         '135+bestaudio', '231+bestaudio', '135+139', 'mp4-480p', 'res:480',
         'hls-312+bestaudio',  # 480p avc1 + best audio
         '788+bestaudio', '780+bestaudio', '397+bestaudio',  # Vertical
         'bestvideo[height=480]+bestaudio/bestvideo[width=480]+bestaudio/best[height=480]',
     ],
     '720p': [
+        'hls-258+bestaudio', # 720p (sort of) Vertical
         '136+bestaudio', '22', '311+bestaudio', 'res:720',
         '298+bestaudio', '232+bestaudio',  # 720@60 avc1 + best audio
         'hls-517+bestaudio', 'hls-637+bestaudio',  # 720p avc1 + best audio
@@ -114,6 +116,7 @@ VIDEO_RESOLUTION_MAP = {
         'bestvideo[height=720]+bestaudio/bestvideo[width=720]+bestaudio/best[height=720]',
     ],
     '1080p': [
+        'hls-509+bestaudio', # 1080p Vertical
         '137+bestaudio', '614+bestaudio', 'res:1080',
         '299+bestaudio', '312+bestaudio', '270+bestaudio',  # 1080@60 avc1 + best audio
         'hls-899+bestaudio', 'hls-1271+bestaudio',  # 1080p avc1 + best audio

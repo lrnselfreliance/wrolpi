@@ -2399,6 +2399,13 @@
     // When ?upgrade=true, poll for completion and redirect to main UI when ready.
     try {
         if (isUpgradeMode) {
+            // Show the script-running banner with upgrade-specific text
+            const upgradeBanner = document.getElementById('script-running-banner');
+            if (upgradeBanner) {
+                upgradeBanner.classList.add('show');
+                document.getElementById('script-running-name').textContent = 'WROLPi Upgrade Running';
+            }
+
             const upgradeIsDocker = {{ 'true' if docker_mode else 'false' }};
             let upgradeHttpsBase;
             if (window.location.protocol === 'https:') {

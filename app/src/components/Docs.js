@@ -20,6 +20,7 @@ import {
     useTitle
 } from "./Common";
 import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
+import {BulkTagModal} from "./BulkTagModal";
 import {FilesView} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
@@ -45,6 +46,7 @@ function DocsPage() {
     } = useSearchDocs();
 
     const [selectedDocs, setSelectedDocs] = useState([]);
+    const [bulkTagOpen, setBulkTagOpen] = useState(false);
 
     const onSelect = (path, checked) => {
         if (checked && path) {
@@ -71,7 +73,14 @@ function DocsPage() {
         setSelectedDocs([]);
     }
 
+    const onBulkTagComplete = async () => {
+        await fetchDocs();
+        setSelectedDocs([]);
+    }
+
     const selectElm = <div style={{marginTop: '0.5em'}}>
+        <Button color='violet' disabled={_.isEmpty(selectedDocs)}
+                onClick={() => setBulkTagOpen(true)}>Tag</Button>
         <APIButton
             color='red'
             disabled={_.isEmpty(selectedDocs)}
@@ -83,6 +92,12 @@ function DocsPage() {
         <Button color='grey' onClick={invertSelection} disabled={_.isEmpty(docs)}>Invert</Button>
         <Button color='yellow' onClick={clearSelection}
                 disabled={_.isEmpty(docs) || _.isEmpty(selectedDocs)}>Clear</Button>
+        <BulkTagModal
+            open={bulkTagOpen}
+            onClose={() => setBulkTagOpen(false)}
+            paths={selectedDocs}
+            onComplete={onBulkTagComplete}
+        />
     </div>;
 
     let docOrders = [
@@ -94,7 +109,7 @@ function DocsPage() {
         docOrders = [{value: 'rank', text: 'Rank'}, ...docOrders];
     }
 
-    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         {
             files: docs,
             activePage: activePage,
@@ -122,11 +137,10 @@ function DocsPage() {
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={2}>{selectButton}</Grid.Column>
                     <Grid.Column width={2}>{viewButton}</Grid.Column>
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={6}><SortButton sorts={docOrders}/></Grid.Column>
+                    <Grid.Column width={8}><SortButton sorts={docOrders}/></Grid.Column>
                 </Grid.Row>
                 <Grid.Row width={16}>
                     <Grid.Column>{searchInput}</Grid.Column>
@@ -136,12 +150,11 @@ function DocsPage() {
         <Media greaterThanOrEqual='tablet'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={1}>{selectButton}</Grid.Column>
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
                     <Grid.Column width={3}><SortButton sorts={docOrders}/></Grid.Column>
-                    <Grid.Column width={8}>{searchInput}</Grid.Column>
+                    <Grid.Column width={9}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

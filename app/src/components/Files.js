@@ -353,31 +353,19 @@ export function FilesView(
 ) {
     const {view} = useSearchView();
 
-    let selectButton;
-    const [selectOn, setSelectOn] = React.useState(false);
-    const toggleSelectOn = () => setSelectOn(!selectOn);
-    const selectButtonDisabled = view !== 'list';
-    if (selectOn) {
-        selectButton = <Button active disabled={selectButtonDisabled} icon='checkmark box'
-                               onClick={toggleSelectOn}/>;
-    } else {
-        selectButton = <Button icon='checkmark box' disabled={selectButtonDisabled}
-                               onClick={toggleSelectOn}/>;
-    }
-
     const paginator = <center style={{marginTop: '2em'}}>
         <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
     </center>;
 
     let body;
     if (view === 'list') {
-        const footer = selectOn && selectElem ?
+        const footer = selectElem ?
             <>
                 <TableHeaderCell colSpan='3'>{selectElem}</TableHeaderCell>
             </> : null;
         body = <FileTable
             files={files}
-            selectOn={selectOn}
+            selectOn={true}
             onSelect={onSelect}
             footer={footer}
             selectedKeys={selectedKeys || []}
@@ -395,7 +383,6 @@ export function FilesView(
     return {
         body,
         paginator,
-        selectButton,
         viewButton,
         limitDropdown,
         tagQuerySelector,
@@ -509,14 +496,13 @@ export function FileSearchFilterButton({size = 'medium'}) {
 
 export function FilesSearchView({
                                     showView = true,
-                                    showSelect = false,
                                     emptySearch = false,
                                     model,
                                 }) {
 
     const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
 
-    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         {
             files: searchFiles,
             activePage: pages.activePage,
@@ -534,8 +520,6 @@ export function FilesSearchView({
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>
-                    {showSelect &&
-                        <Grid.Column width={2}>{selectButton}</Grid.Column>}
                     {showView &&
                         <Grid.Column width={2}>{viewButton}</Grid.Column>}
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
@@ -546,8 +530,6 @@ export function FilesSearchView({
         <Media greaterThanOrEqual='tablet'>
             <Grid>
                 <Grid.Row>
-                    {showSelect &&
-                        <Grid.Column width={1}>{selectButton}</Grid.Column>}
                     {showView &&
                         <Grid.Column width={1}>{viewButton}</Grid.Column>}
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>

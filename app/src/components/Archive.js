@@ -82,6 +82,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, Statistic, Tab} from "./Theme";
+import {BulkTagModal} from "./BulkTagModal";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
@@ -1080,6 +1081,7 @@ function ArchiveSettingsPage() {
 
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
+    const [bulkTagOpen, setBulkTagOpen] = useState(false);
     const searchInputRef = React.useRef();
 
     useHotkeys('f', (e) => {
@@ -1148,7 +1150,17 @@ function ArchivesPage() {
         setSelectedArchives([]);
     }
 
+    const onBulkTagComplete = async () => {
+        await fetchArchives();
+        setSelectedArchives([]);
+    }
+
     const selectElm = <div style={{marginTop: '0.5em'}}>
+        <Button
+            color='violet'
+            disabled={_.isEmpty(selectedArchives)}
+            onClick={() => setBulkTagOpen(true)}
+        >Tag</Button>
         <APIButton
             color='red'
             disabled={_.isEmpty(selectedArchives)}
@@ -1170,9 +1182,15 @@ function ArchivesPage() {
         >
             Clear
         </Button>
+        <BulkTagModal
+            open={bulkTagOpen}
+            onClose={() => setBulkTagOpen(false)}
+            paths={selectedArchives}
+            onComplete={onBulkTagComplete}
+        />
     </div>;
 
-    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         {
             files: archives,
             activePage: activePage,
@@ -1222,11 +1240,10 @@ function ArchivesPage() {
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={2}>{selectButton}</Grid.Column>
                     <Grid.Column width={2}>{viewButton}</Grid.Column>
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={6}><SortButton sorts={archiveOrders}/></Grid.Column>
+                    <Grid.Column width={8}><SortButton sorts={archiveOrders}/></Grid.Column>
                 </Grid.Row>
                 <Grid.Row width={16}>
                     <Grid.Column>{searchInput}</Grid.Column>
@@ -1236,12 +1253,11 @@ function ArchivesPage() {
         <Media greaterThanOrEqual='tablet'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={1}>{selectButton}</Grid.Column>
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
                     <Grid.Column width={3}><SortButton sorts={archiveOrders}/></Grid.Column>
-                    <Grid.Column width={8}>{searchInput}</Grid.Column>
+                    <Grid.Column width={9}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

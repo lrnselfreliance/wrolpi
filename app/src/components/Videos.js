@@ -51,6 +51,7 @@ import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
+import {BulkTagModal} from "./BulkTagModal";
 import {
     deleteVideos,
     deleteCookies,
@@ -86,6 +87,7 @@ export function VideosPage() {
     const {channelId} = useParams();
     const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
+    const [bulkTagOpen, setBulkTagOpen] = useState(false);
     const searchInputRef = React.useRef();
 
     useHotkeys('f', (e) => {
@@ -171,7 +173,17 @@ export function VideosPage() {
         setSelectedVideos([]);
     }
 
+    const onBulkTagComplete = async () => {
+        await fetchVideos();
+        setSelectedVideos([]);
+    }
+
     const selectElm = <div style={{marginTop: '0.5em'}}>
+        <Button
+            color='violet'
+            disabled={_.isEmpty(selectedVideos)}
+            onClick={() => setBulkTagOpen(true)}
+        >Tag</Button>
         <APIButton
             color='red'
             disabled={_.isEmpty(selectedVideos)}
@@ -193,9 +205,15 @@ export function VideosPage() {
         >
             Clear
         </Button>
+        <BulkTagModal
+            open={bulkTagOpen}
+            onClose={() => setBulkTagOpen(false)}
+            paths={selectedVideos}
+            onComplete={onBulkTagComplete}
+        />
     </div>;
 
-    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         {
             files: videos,
             activePage: activePage,
@@ -224,11 +242,10 @@ export function VideosPage() {
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={2}>{selectButton}</Grid.Column>
                     <Grid.Column width={2}>{viewButton}</Grid.Column>
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={6}><SortButton sorts={videoOrders}/></Grid.Column>
+                    <Grid.Column width={8}><SortButton sorts={videoOrders}/></Grid.Column>
                 </Grid.Row>
                 <Grid.Row>
                     <Grid.Column width={16}>{searchInput}</Grid.Column>
@@ -238,12 +255,11 @@ export function VideosPage() {
         <Media greaterThanOrEqual='tablet'>
             <Grid>
                 <Grid.Row>
-                    <Grid.Column width={1}>{selectButton}</Grid.Column>
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
                     <Grid.Column width={4}><SortButton sorts={videoOrders}/></Grid.Column>
-                    <Grid.Column width={7}>{searchInput}</Grid.Column>
+                    <Grid.Column width={8}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

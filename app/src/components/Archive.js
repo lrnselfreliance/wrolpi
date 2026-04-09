@@ -1132,7 +1132,7 @@ function ArchivesPage() {
 
     const onDelete = async () => {
         const archiveIds = archives.filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
-            .map(i => i['data']['id']);
+            .map(i => i['id']);
         await deleteArchives(archiveIds);
         await fetchArchives();
         setSelectedArchives([]);

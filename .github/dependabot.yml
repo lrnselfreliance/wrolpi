@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Python - root (requirements.txt)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "master"
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  # Python - controller
+  - package-ecosystem: "pip"
+    directory: "/controller"
+    schedule:
+      interval: "monthly"
+    target-branch: "master"
+    open-pull-requests-limit: 5
+    groups:
+      controller-dependencies:
+        patterns:
+          - "*"
+
+  # npm - app
+  - package-ecosystem: "npm"
+    directory: "/app"
+    schedule:
+      interval: "monthly"
+    target-branch: "master"
+    open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"

@@ -301,12 +301,12 @@ function DesktopNav({i, navColor, homeLink, icons}) {
                     <span
                         key={link.key}
                         ref={itemRefCallback(idx)}
-                        style={isReady ? {display: 'contents'} : {visibility: 'hidden'}}
+                        style={isReady ? {display: 'contents'} : {visibility: 'hidden', flexShrink: 0}}
                     >
                         <MenuLink link={link}/>
                     </span>
                 ))}
-                {!isReady && <span ref={moreRef} style={{visibility: 'hidden'}}>
+                {!isReady && <span ref={moreRef} style={{visibility: 'hidden', flexShrink: 0}}>
                     <Dropdown item text='More'><Dropdown.Menu/></Dropdown>
                 </span>}
                 {isReady && overflowLinks.length > 0 &&

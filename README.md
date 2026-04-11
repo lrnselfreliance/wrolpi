@@ -16,11 +16,6 @@ WROLPi is a self-contained collection of software to help you survive the world 
 WROLPi is intended to be run on a Raspberry Pi with an optional external drive attached. It serves up it's own Wi-Fi
 network so that any user with a laptop/tablet/phone can connect and use the library created by the maintainer.
 
-# WARNING WROLPi is under active development!
-
-- WROLPi is in Beta!
-- Expect things to change!
-
 # Table of Contents
 
 * [Features](#features)
@@ -57,7 +52,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 | Web Archives   | yes      | yes        | yes          | [Singlefile](https://github.com/gildas-lormeau/SingleFile) |
 | Wikipedia      | yes      | yes        | yes          | [Kiwix](https://www.kiwix.org)                             |
 | eBooks         | yes      | yes        | planned      | EPUB/PDF                                                   |
-| Map            | yes      | planned    | planned      | [OpenStreetMap](https://www.openstreetmap.org)             |
+| Map            | yes      | planned    | yes          | [Protomaps](https://protomaps.com/)                        |
 | Podcasts/Audio | yes      | planned    | planned      |                                                            |
 
 # Demo

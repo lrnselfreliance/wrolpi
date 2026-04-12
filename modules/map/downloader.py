@@ -66,6 +66,7 @@ class MapCatalogDownloader(Downloader):
 
         version = manifest.get('version', '')
         manifest_regions = manifest.get('regions', {})
+        search_indexes = manifest.get('search_indexes', {})
 
         if not manifest_regions:
             return DownloadResult(success=False, error='Manifest does not contain regions')
@@ -101,6 +102,7 @@ class MapCatalogDownloader(Downloader):
                 child.settings = {
                     'region': region,
                     'version': version,
+                    'search_index_url': search_indexes.get(region, ''),
                 }
                 child.renew(reset_attempts=True)
                 created += 1
@@ -200,6 +202,31 @@ class MapExtractDownloader(Downloader):
 
         size = output_path.stat().st_size
         logger.warning(f'Successfully downloaded {region} ({size} bytes) to {output_path}')
+
+        # Try to download pre-built search index from CDN; fall back to local build.
+        search_index_url = settings.get('search_index_url', '')
+        search_db_path = output_path.with_suffix('.search.db')
+        if search_index_url:
+            try:
+                logger.info(f'Downloading pre-built search index for {region}')
+                from wrolpi.common import aiohttp_get
+                async with aiohttp_get(search_index_url, timeout=60) as resp:
+                    if resp.status == 200:
+                        search_db_path.write_bytes(await resp.content.read())
+                        logger.warning(f'Downloaded search index for {region} ({search_db_path.stat().st_size} bytes)')
+                    else:
+                        raise RuntimeError(f'HTTP {resp.status}')
+            except Exception as e:
+                logger.warning(f'Could not download search index for {region}: {e} — building locally')
+                search_db_path.unlink(missing_ok=True)
+                search_index_url = ''  # Fall through to local build.
+
+        if not search_index_url:
+            try:
+                from modules.map.search import rebuild_search_index
+                rebuild_search_index(output_path.name)
+            except Exception as e:
+                logger.error(f'Failed to start search index build for {region}: {e}')
 
         return DownloadResult(success=True, location='/map')
 

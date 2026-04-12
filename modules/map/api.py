@@ -4,7 +4,7 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import lib, schema
+from modules.map import lib, schema, search
 from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
@@ -98,3 +98,40 @@ async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
     if get_map_pins_config().update_pin(pin_id, body.label, body.color):
         return response.empty(HTTPStatus.NO_CONTENT)
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/search')
+@openapi.description('Search for places in map search indexes')
+async def search_places(request: Request):
+    q = request.args.get('q', '')
+    if not q or len(q.strip()) < 1:
+        return json_response({'error': 'Query parameter "q" is required'}, HTTPStatus.BAD_REQUEST)
+
+    limit = int(request.args.get('limit', 10))
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+
+    if lat is not None:
+        lat = float(lat)
+    if lon is not None:
+        lon = float(lon)
+
+    results = search.search_places(q.strip(), limit=limit, lat=lat, lon=lon)
+    return json_response(dict(results=results), HTTPStatus.OK)
+
+
+@map_bp.get('/search/status')
+@openapi.description('Get status of map search indexes')
+async def get_search_status(_: Request):
+    status = search.get_search_status()
+    return json_response(status, HTTPStatus.OK)
+
+
+@map_bp.post('/search/rebuild')
+@openapi.description('Rebuild all map search indexes')
+@wrol_mode_check
+async def rebuild_search_indexes(_: Request):
+    proc = search.rebuild_all_search_indexes()
+    if proc:
+        return json_response({'message': 'Search index rebuild started'}, HTTPStatus.ACCEPTED)
+    return json_response({'error': 'No map directory found'}, HTTPStatus.NOT_FOUND)

@@ -39,7 +39,9 @@ def get_pmtiles_files() -> List[dict]:
 
 
 def delete_pmtiles_file(filename: str) -> bool:
-    """Delete a PMTiles file from the map directory.  Returns True if the file was deleted."""
+    """Delete a PMTiles file from the map directory.  Returns True if the file was deleted.
+
+    Also deletes the companion .search.db file if it exists."""
     map_directory = get_map_directory()
     # Prevent path traversal.
     path = (map_directory / filename).resolve()
@@ -49,6 +51,11 @@ def delete_pmtiles_file(filename: str) -> bool:
     if path.is_file() and path.suffix == '.pmtiles':
         path.unlink()
         logger.warning(f'Deleted PMTiles file: {path}')
+        # Also delete companion search index.
+        search_db = path.with_suffix('.search.db')
+        if search_db.is_file():
+            search_db.unlink()
+            logger.warning(f'Deleted search index: {search_db}')
         return True
 
     return False

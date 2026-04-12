@@ -124,6 +124,43 @@
             user-select: none;
         }
         #context-menu .action:hover { background: #f0f0f0; }
+
+        /* Search */
+        #search-container {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: 320px;
+            max-width: calc(100% - 100px);
+        }
+        #search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        #search-results {
+            display: none;
+            background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .search-result {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .search-result:hover { background: #f0f0f0; }
+        .search-result-name { font-weight: 500; }
+        .search-result-kind { font-size: 11px; color: #888; }
     </style>
 </head>
 <body>
@@ -145,6 +182,11 @@
 </div>
 
 <div id="status"></div>
+
+<div id="search-container">
+    <input type="text" id="search-input" placeholder="Search places...">
+    <div id="search-results"></div>
+</div>
 
 <div id="context-menu">
     <div class="coords" id="context-coords"></div>
@@ -730,6 +772,102 @@
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function() {
         if (map) reloadMap();
     });
+
+    // --- Search ---
+    var searchInput = document.getElementById("search-input");
+    var searchResults = document.getElementById("search-results");
+    var searchTimeout = null;
+    var searchMarker = null;
+    var coordRegex = /^\s*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)\s*$/;
+
+    searchInput.addEventListener("input", function() {
+        clearTimeout(searchTimeout);
+        var query = this.value.trim();
+        if (query.length < 2) {
+            searchResults.style.display = "none";
+            return;
+        }
+
+        // Check for coordinate input.
+        var coordMatch = query.match(coordRegex);
+        if (coordMatch) {
+            var cLat = parseFloat(coordMatch[1]);
+            var cLon = parseFloat(coordMatch[2]);
+            if (cLat >= -90 && cLat <= 90 && cLon >= -180 && cLon <= 180) {
+                searchResults.innerHTML = "";
+                var div = document.createElement("div");
+                div.className = "search-result";
+                div.innerHTML = '<div class="search-result-name">' + cLat + ", " + cLon + '</div><div class="search-result-kind">coordinates</div>';
+                div.onclick = function() { goToResult(cLat, cLon, cLat + ", " + cLon); };
+                searchResults.appendChild(div);
+                searchResults.style.display = "block";
+                return;
+            }
+        }
+
+        searchTimeout = setTimeout(function() {
+            var url = "/api/map/search?q=" + encodeURIComponent(query) + "&limit=8";
+            if (map) {
+                var center = map.getCenter();
+                url += "&lat=" + center.lat + "&lon=" + center.lng;
+            }
+            fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+                searchResults.innerHTML = "";
+                var results = data.results || [];
+                if (results.length > 0) {
+                    results.forEach(function(r) {
+                        var div = document.createElement("div");
+                        div.className = "search-result";
+                        var parts = [];
+                        if (r.region) parts.push(r.region);
+                        var detail = r.kind_detail || r.kind || "";
+                        if (detail && !r.region) parts.push(detail.replace(/_/g, " "));
+                        if (r.population) {
+                            var pop = r.population >= 1000000 ? (r.population / 1000000).toFixed(1) + "M"
+                                : r.population >= 1000 ? Math.round(r.population / 1000) + "K"
+                                : "" + r.population;
+                            parts.push("pop. " + pop);
+                        }
+                        var subtitle = parts.join(" \u00b7 ");
+                        div.innerHTML = '<div class="search-result-name">' + r.name + '</div>' +
+                            (subtitle ? '<div class="search-result-kind">' + subtitle + '</div>' : '');
+                        div.onclick = function() { goToResult(r.lat, r.lon, r.name); };
+                        searchResults.appendChild(div);
+                    });
+                    searchResults.style.display = "block";
+                } else {
+                    searchResults.style.display = "none";
+                }
+            }).catch(function() { searchResults.style.display = "none"; });
+        }, 300);
+    });
+
+    searchInput.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") {
+            searchResults.style.display = "none";
+            searchInput.blur();
+        }
+    });
+
+    document.addEventListener("click", function(e) {
+        if (!document.getElementById("search-container").contains(e.target)) {
+            searchResults.style.display = "none";
+        }
+    });
+
+    function goToResult(lat, lon, name) {
+        if (!map) return;
+        if (searchMarker) { searchMarker.remove(); searchMarker = null; }
+        var zoom = Math.max(map.getZoom(), 12);
+        map.flyTo({center: [lon, lat], zoom: zoom});
+        searchMarker = new maplibregl.Marker({color: "#6435c9"})
+            .setLngLat([lon, lat])
+            .setPopup(new maplibregl.Popup({offset: 25}).setText(name))
+            .addTo(map);
+        searchMarker.togglePopup();
+        searchResults.style.display = "none";
+        searchInput.value = name;
+    }
 
     // --- Start ---
     scanFiles();

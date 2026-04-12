@@ -1580,6 +1580,26 @@ export async function setMapDefaultLocation(lat, lon, zoom) {
     }
 }
 
+export async function searchMap(query, limit = 10, lat = null, lon = null) {
+    let url = `${API_URI}/map/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+    if (lat !== null && lon !== null) {
+        url += `&lat=${lat}&lon=${lon}`;
+    }
+    const response = await apiGet(url);
+    if (!response.ok) {
+        return {results: []};
+    }
+    return await response.json();
+}
+
+export async function getMapSearchStatus() {
+    const response = await apiGet(`${API_URI}/map/search/status`);
+    if (!response.ok) {
+        return {indexed: [], missing: []};
+    }
+    return await response.json();
+}
+
 export async function clearCompletedDownloads() {
     const response = await apiPost(`${API_URI}/download/clear_completed`);
     if (!response.ok) {

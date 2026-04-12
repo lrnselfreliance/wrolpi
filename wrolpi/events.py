@@ -73,6 +73,18 @@ class Events:
         send_event('map_import_failed', message, subject='map')
 
     @staticmethod
+    def send_map_search_complete(message: str = None):
+        send_event('map_search_complete', message, subject='map')
+
+    @staticmethod
+    def send_map_search_failed(message: str = None):
+        send_event('map_search_failed', message, subject='map')
+
+    @staticmethod
+    def send_tippecanoe_missing(message: str = None):
+        send_event('tippecanoe_missing', message, subject='map')
+
+    @staticmethod
     def send_shutdown(message: str = None):
         send_event('shutdown', message, subject='shutdown')
 

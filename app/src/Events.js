@@ -54,6 +54,14 @@ function handleEvents(events) {
             eventToast('Map import failed', message, 'error');
         }
 
+        if (event === 'map_search_complete') {
+            eventToast('Map Search Index', message, 'success');
+        }
+
+        if (event === 'map_search_failed') {
+            eventToast('Map Search Index Failed', message, 'error');
+        }
+
         if (event === 'user_notify_message') {
             console.log(message, url);
             eventToast(

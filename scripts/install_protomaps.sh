@@ -38,6 +38,33 @@ install_pmtiles() {
 
 install_pmtiles || echo "pmtiles CLI installation failed, continuing..."
 
+# --- Install/upgrade tippecanoe (for map search index building) ---
+
+install_tippecanoe() {
+    TIPPECANOE_VERSION="2.79.0"
+
+    # Check if already installed at correct version.
+    if command -v tippecanoe-decode &>/dev/null; then
+        CURRENT=$(tippecanoe --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+        if [ "$CURRENT" = "$TIPPECANOE_VERSION" ]; then
+            echo "tippecanoe ${TIPPECANOE_VERSION} already installed"
+            return 0
+        fi
+    fi
+
+    echo "Building tippecanoe ${TIPPECANOE_VERSION}..."
+    apt-get install -y build-essential libsqlite3-dev zlib1g-dev
+
+    TIPPECANOE_BUILD_DIR=$(mktemp -d)
+    curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
+      | tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1
+    cd "${TIPPECANOE_BUILD_DIR}" && make -j$(nproc) && make install
+    rm -rf "${TIPPECANOE_BUILD_DIR}"
+    tippecanoe --version
+}
+
+install_tippecanoe || echo "tippecanoe installation failed, continuing..."
+
 # --- Migrate from old map stack (runs once) ---
 
 MARKER_FILE="/opt/wrolpi/.protomaps_installed"

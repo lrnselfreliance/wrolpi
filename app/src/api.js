@@ -1580,6 +1580,44 @@ export async function setMapDefaultLocation(lat, lon, zoom) {
     }
 }
 
+export async function searchMap(query, limit = 12, offset = 0, lat = null, lon = null) {
+    let url = `${API_URI}/map/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`;
+    if (lat !== null && lon !== null) {
+        url += `&lat=${lat}&lon=${lon}`;
+    }
+    const response = await apiGet(url);
+    if (!response.ok) {
+        return {results: [], total: 0};
+    }
+    return await response.json();
+}
+
+export async function getMapSearchStatus() {
+    const response = await apiGet(`${API_URI}/map/search/status`);
+    if (!response.ok) {
+        return {indexed: [], missing: []};
+    }
+    return await response.json();
+}
+
+export async function searchEstimateMap(search_str) {
+    if (!search_str) return {mapPlaces: 0};
+    const response = await apiGet(`${API_URI}/map/search/estimate?q=${encodeURIComponent(search_str)}`);
+    if (!response.ok) return {mapPlaces: 0};
+    const data = await response.json();
+    return {mapPlaces: data.map_places || 0};
+}
+
+export async function rebuildMapSearchIndex(filename) {
+    const response = await apiPost(`${API_URI}/map/search/rebuild/${encodeURIComponent(filename)}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Could not rebuild search index');
+        toast({type: 'error', title: 'Map Error', description: message, time: 5000});
+    } else {
+        toast({type: 'success', title: 'Search Index', description: 'Search index build started', time: 3000});
+    }
+}
+
 export async function clearCompletedDownloads() {
     const response = await apiPost(`${API_URI}/download/clear_completed`);
     if (!response.ok) {

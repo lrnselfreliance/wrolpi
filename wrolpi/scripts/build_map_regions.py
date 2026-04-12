@@ -22,14 +22,22 @@ import argparse
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import time
+
+import requests
 
 # Add project root to path so we can import catalog.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from modules.map.catalog import MAP_REGIONS
+from wrolpi.scripts.build_map_search import build_search_index
+
+SPARQL_URL = 'https://query.wikidata.org/sparql'
+SPARQL_BATCH_SIZE = 2000
+SPARQL_DELAY = 2  # seconds between batches
 
 DEFAULT_CDN_BASE = 'https://wrolpi.nyc3.cdn.digitaloceanspaces.com/maps'
 
@@ -102,6 +110,124 @@ def extract_region(planet_path: str, output_path: str, bbox: str, threads: int =
     return result.returncode == 0
 
 
+def _parse_sparql_bindings(bindings):
+    """Parse SPARQL bindings into a dict of qid -> region label."""
+    # Substrings that indicate a county-level region (use parent instead).
+    county_indicators = ('county', 'parish', 'borough', 'municipality',
+                         'district', 'canton', 'comarca', 'département',
+                         'united counties')
+
+    results = {}
+    for b in bindings:
+        entity_uri = b.get('entity', {}).get('value', '')
+        qid = entity_uri.rsplit('/', 1)[-1] if entity_uri else ''
+        parent_label = b.get('parentLabel', {}).get('value', '')
+        region_label = b.get('regionLabel', {}).get('value', '')
+
+        # Default to the direct P131 region (usually state or province).
+        # If it looks like a county, use the parent (state) instead.
+        if region_label and any(ind in region_label.lower() for ind in county_indicators):
+            best_label = parent_label or region_label
+        else:
+            best_label = region_label or parent_label
+
+        if qid and best_label and qid not in results:
+            results[qid] = best_label
+
+    return results
+
+
+def _query_sparql_batch(qid_list, min_batch_size=100):
+    """Query Wikidata SPARQL for a batch of entity IDs. Retries with smaller chunks on failure."""
+    values = ' '.join(f'wd:{qid}' for qid in qid_list)
+    sparql = f"""
+    SELECT ?entity ?regionLabel ?parentLabel WHERE {{
+      VALUES ?entity {{ {values} }}
+      ?entity wdt:P131 ?region .
+      OPTIONAL {{ ?region wdt:P131 ?parent . }}
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en" . }}
+    }}
+    """
+
+    try:
+        resp = requests.post(
+            SPARQL_URL,
+            data={'query': sparql, 'format': 'json'},
+            headers={'User-Agent': 'WROLPi/1.0 (https://wrolpi.org)'},
+            timeout=90,
+        )
+        resp.raise_for_status()
+        bindings = resp.json().get('results', {}).get('bindings', [])
+        return bindings
+    except Exception as e:
+        if len(qid_list) <= min_batch_size:
+            print(f'    WARNING: batch of {len(qid_list)} failed, skipping: {e}', flush=True)
+            return []
+
+        # Split in half and retry.
+        mid = len(qid_list) // 2
+        print(f'    Batch of {len(qid_list)} failed, retrying as 2x{mid}...', flush=True)
+        time.sleep(SPARQL_DELAY)
+        left = _query_sparql_batch(qid_list[:mid], min_batch_size)
+        time.sleep(SPARQL_DELAY)
+        right = _query_sparql_batch(qid_list[mid:], min_batch_size)
+        return left + right
+
+
+def enrich_search_db_with_regions(search_db_path):
+    """Query Wikidata SPARQL to look up the administrative region for each place and update the search.db.
+
+    Batches queries in chunks of SPARQL_BATCH_SIZE to stay within Wikidata's 60s timeout.
+    Safe to re-run — only queries places that don't already have a region.
+    """
+    conn = sqlite3.connect(str(search_db_path))
+    conn.row_factory = sqlite3.Row
+
+    # Only collect wikidata IDs that still need enrichment (region is NULL or empty).
+    rows = conn.execute(
+        "SELECT id, wikidata FROM places WHERE wikidata != '' AND wikidata IS NOT NULL"
+        " AND (region IS NULL OR region = '')"
+    ).fetchall()
+    qids = {row['wikidata']: row['id'] for row in rows if row['wikidata']}
+
+    if not qids:
+        print(f'  No wikidata IDs to enrich in {search_db_path}')
+        conn.close()
+        return
+
+    print(f'  Enriching {len(qids)} places with Wikidata regions...', flush=True)
+
+    # Batch SPARQL queries.
+    qid_list = list(qids.keys())
+    region_map = {}  # qid -> region label
+
+    for i in range(0, len(qid_list), SPARQL_BATCH_SIZE):
+        batch = qid_list[i:i + SPARQL_BATCH_SIZE]
+        batch_num = i // SPARQL_BATCH_SIZE + 1
+        total_batches = (len(qid_list) + SPARQL_BATCH_SIZE - 1) // SPARQL_BATCH_SIZE
+        print(f'    SPARQL batch {batch_num}/{total_batches} ({len(batch)} IDs)...', flush=True)
+
+        bindings = _query_sparql_batch(batch)
+        parsed = _parse_sparql_bindings(bindings)
+        region_map.update(parsed)
+
+        print(f'    Got {len(bindings)} results', flush=True)
+
+        if i + SPARQL_BATCH_SIZE < len(qid_list):
+            time.sleep(SPARQL_DELAY)
+
+    # Update the search.db with region labels.
+    updated = 0
+    for qid, region_label in region_map.items():
+        if qid in qids:
+            conn.execute('UPDATE places SET region = ? WHERE wikidata = ?', (region_label, qid))
+            updated += 1
+
+    conn.commit()
+    conn.close()
+    print(f'  Enriched {updated}/{len(qids)} places with region names', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Extract map regions and generate CDN manifest.')
     parser.add_argument('planet', help='Path to the planet PMTiles file')
@@ -142,6 +268,7 @@ def main():
 
     # Extract each bbox region.
     manifest_regions = {}
+    search_index_urls = {}
     results = []
     failed = []
 
@@ -175,6 +302,15 @@ def main():
         results.append((r['name'], region, size))
         manifest_regions[region] = cdn_url
 
+        # Build search index for this region, then enrich with Wikidata region names.
+        search_db_path = build_search_index(output_path)
+        if search_db_path:
+            enrich_search_db_with_regions(search_db_path)
+            search_db_name = os.path.basename(str(search_db_path))
+            search_cdn_url = f'{cdn_base}/{search_db_name}'
+            write_meta4(str(search_db_path), search_cdn_url)
+            search_index_urls[region] = search_cdn_url
+
     # Add terrain to manifest if the file exists in output_dir.
     if terrain_region:
         terrain_name = f'{terrain_region["region"]}.pmtiles'
@@ -197,6 +333,9 @@ def main():
     # Add terrain URL if present.
     if terrain_region and terrain_region['region'] in manifest_regions:
         manifest['terrain_url'] = manifest_regions[terrain_region['region']]
+    # Add search index URLs.
+    if search_index_urls:
+        manifest['search_indexes'] = search_index_urls
 
     manifest_path = os.path.join(output_dir, 'manifest.json')
     with open(manifest_path, 'w') as f:

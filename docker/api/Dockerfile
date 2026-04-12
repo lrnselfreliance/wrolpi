@@ -3,7 +3,14 @@ ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
-RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip
+RUN apt-get update && apt-get install -y ffmpeg catdoc sysstat aria2 iputils-ping unrar-free unzip \
+    build-essential libsqlite3-dev zlib1g-dev git
+
+# Install tippecanoe (for map search index building via tippecanoe-decode).
+RUN git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
+    && cd /tmp/tippecanoe && make -j$(nproc) && make install \
+    && rm -rf /tmp/tippecanoe \
+    && tippecanoe-decode --help 2>&1 | head -1
 RUN ffmpeg -version
 
 # Install Deno runtime for yt-dlp

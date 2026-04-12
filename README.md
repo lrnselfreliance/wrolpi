@@ -52,7 +52,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 | Web Archives   | yes      | yes        | yes          | [Singlefile](https://github.com/gildas-lormeau/SingleFile) |
 | Wikipedia      | yes      | yes        | yes          | [Kiwix](https://www.kiwix.org)                             |
 | eBooks         | yes      | yes        | planned      | EPUB/PDF                                                   |
-| Map            | yes      | planned    | yes          | [Protomaps](https://protomaps.com/)                        |
+| Map            | yes      | yes        | yes          | [Protomaps](https://protomaps.com/)                        |
 | Podcasts/Audio | yes      | planned    | planned      |                                                            |
 
 # Demo

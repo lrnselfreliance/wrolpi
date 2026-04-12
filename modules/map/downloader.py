@@ -7,7 +7,8 @@ from wrolpi.common import logger, verify_gpg_signature
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult, download_manager
 
-__all__ = ['MapCatalogDownloader', 'MapExtractDownloader', 'map_catalog_downloader', 'map_extract_downloader']
+__all__ = ['MapCatalogDownloader', 'MapExtractDownloader', 'MapSearchIndexDownloader',
+           'map_catalog_downloader', 'map_extract_downloader', 'map_search_index_downloader']
 
 logger = logger.getChild(__name__)
 
@@ -66,6 +67,7 @@ class MapCatalogDownloader(Downloader):
 
         version = manifest.get('version', '')
         manifest_regions = manifest.get('regions', {})
+        search_indexes = manifest.get('search_indexes', {})
 
         if not manifest_regions:
             return DownloadResult(success=False, error='Manifest does not contain regions')
@@ -74,7 +76,13 @@ class MapCatalogDownloader(Downloader):
         if not regions:
             return DownloadResult(success=True)
 
+        map_directory = lib.get_map_directory()
+
         created = 0
+        # Defer search-index downloads so they are all inserted AFTER every pmtiles
+        # download. Downloads process in insertion order; this prevents a search-index
+        # download from running before its companion pmtiles file exists on disk.
+        pending_search_downloads = []
         with get_db_session(commit=True) as session:
             for r in regions:
                 region = r.get('region', '')
@@ -82,6 +90,12 @@ class MapCatalogDownloader(Downloader):
                 if not region_url:
                     logger.warning(f'Subscribed region {region!r} not found in manifest — skipping')
                     continue
+
+                # Compute the expected PMTiles filename.
+                if version:
+                    pmtiles_name = f'{region}-{version}.pmtiles'
+                else:
+                    pmtiles_name = f'{region}.pmtiles'
 
                 # Delete stale download for this region if the URL changed (new version).
                 old = session.query(Download).filter(
@@ -101,14 +115,34 @@ class MapCatalogDownloader(Downloader):
                 child.settings = {
                     'region': region,
                     'version': version,
+                    'search_index_url': search_indexes.get(region, ''),
                 }
                 child.renew(reset_attempts=True)
                 created += 1
+
+                # Queue search index download if the CDN provides one and the
+                # .search.db file does not already exist on disk.
+                search_url = search_indexes.get(region)
+                search_db_path = (map_directory / pmtiles_name).with_suffix('.search.db')
+                if search_url and not search_db_path.is_file():
+                    pending_search_downloads.append((region, search_url, pmtiles_name))
+
+            # Insert all search-index downloads after every pmtiles download, so they
+            # process in insertion order behind their companion pmtiles.
+            for region, search_url, pmtiles_name in pending_search_downloads:
+                search_child = download_manager.get_or_create_download(
+                    session, search_url, reset_attempts=True, override_skip=True)
+                search_child.downloader = 'map_search_index'
+                search_child.location = '/map/manage'
+                search_child.settings = {'region': region, 'pmtiles_name': pmtiles_name}
+                search_child.renew(reset_attempts=True)
+                logger.info(f'Created search index download for {region}')
 
         if not created:
             return DownloadResult(success=False, error='No matching region URLs found in manifest')
 
         logger.info(f'Created {created} map region downloads')
+
         return DownloadResult(success=True, location='/map/manage')
 
 
@@ -201,7 +235,86 @@ class MapExtractDownloader(Downloader):
         size = output_path.stat().st_size
         logger.warning(f'Successfully downloaded {region} ({size} bytes) to {output_path}')
 
+        # Build search index locally if tippecanoe is available and no CDN
+        # search index download already exists for this region.
+        has_search_download = False
+        with get_db_session() as session:
+            has_search_download = session.query(Download).filter(
+                Download.downloader == 'map_search_index',
+                Download.settings['region'].astext == region,
+            ).count() > 0
+        if not has_search_download:
+            try:
+                from modules.map.search import rebuild_search_index
+                rebuild_search_index(output_path.name)
+            except Exception as e:
+                logger.error(f'Failed to start search index build for {region}: {e}')
+
         return DownloadResult(success=True, location='/map')
 
 
 map_extract_downloader = MapExtractDownloader()
+
+
+class MapSearchIndexDownloader(Downloader):
+    """Downloads a pre-built .search.db file from the CDN via aria2c with meta4 verification.
+
+    Created by MapCatalogDownloader alongside map_extract downloads for each
+    subscribed region.  Will wait (fail + retry) until the PMTiles file exists.
+    """
+
+    name = 'map_search_index'
+    listable = False
+
+    async def do_download(self, download: Download) -> DownloadResult:
+        settings = download.settings or {}
+        region = settings.get('region', '')
+        pmtiles_name = settings.get('pmtiles_name', '')
+
+        if not region or not pmtiles_name:
+            return DownloadResult(success=False, error='Missing region or pmtiles_name in settings')
+
+        map_directory = lib.get_map_directory()
+        pmtiles_path = map_directory / pmtiles_name
+
+        if not pmtiles_path.is_file():
+            return DownloadResult(success=False, error=f'PMTiles file not found: {pmtiles_name}')
+
+        # Name the search.db to match the local PMTiles filename.
+        search_db_path = pmtiles_path.with_suffix('.search.db')
+
+        if search_db_path.is_file():
+            logger.info(f'Search index already exists for {region}, skipping')
+            return DownloadResult(success=True, location='/map')
+
+        # Fetch and verify meta4 (GPG-signed hash).
+        meta4_contents = await self.get_meta4_contents(download.url)
+        if meta4_contents:
+            if not await verify_meta4_signature(meta4_contents):
+                return DownloadResult(success=False,
+                                     error=f'meta4 signature verification failed for {region} search index')
+            logger.info(f'Search index meta4 verified for {region}')
+
+        # Download via aria2c with meta4 hash verification.
+        logger.warning(f'Downloading search index for {region} from {download.url}')
+        downloaded_path = None
+        try:
+            downloaded_path = await self.download_file(
+                download, download.url, map_directory,
+                check_for_meta4=False, concurrent=1, meta4_xml=meta4_contents,
+            )
+            # Rename to match the local PMTiles filename.
+            downloaded_path.rename(search_db_path)
+        except Exception as e:
+            logger.error(f'Search index download failed for {region}: {e}')
+            if downloaded_path:
+                downloaded_path.unlink(missing_ok=True)
+            search_db_path.unlink(missing_ok=True)
+            return DownloadResult(success=False, error=f'Download failed: {str(e)[:500]}')
+
+        size = search_db_path.stat().st_size
+        logger.warning(f'Downloaded search index for {region} ({size} bytes)')
+        return DownloadResult(success=True, location='/map')
+
+
+map_search_index_downloader = MapSearchIndexDownloader()

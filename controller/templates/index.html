@@ -881,6 +881,16 @@
 </div>
 {% endif %}
 
+{% if not docker_mode %}
+<div id="script-running-banner" class="script-running-banner">
+    <h2 id="script-running-name">Script Running</h2>
+    <span class="loading"></span>
+    <div class="actions">
+        <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
+    </div>
+</div>
+{% endif %}
+
 {% set app_ready = services | selectattr('name', 'in', ['caddy', 'web']) | selectattr('status', 'equalto', 'running') | list | length > 0 %}
 <div style="margin-bottom: 1rem;">
     <a id="proceed-btn" class="btn btn-success" style="{% if not app_ready %}display: none;{% endif %} font-size: 1.1rem; padding: 0.6rem 1.5rem;" href="#">Proceed to WROLPi</a>
@@ -891,16 +901,6 @@
     <span class="loading"></span>
     Main UI is unavailable. Using Controller fallback. Will redirect when ready...
 </div>
-
-{% if not docker_mode %}
-<div id="script-running-banner" class="script-running-banner">
-    <h2 id="script-running-name">Script Running</h2>
-    <span class="loading"></span>
-    <div class="actions">
-        <button class="btn btn-info" onclick="showScriptOutput()">View Output</button>
-    </div>
-</div>
-{% endif %}
 
 <main>
     <section id="status">

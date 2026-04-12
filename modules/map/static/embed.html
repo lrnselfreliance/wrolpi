@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/libs/maplibre-gl.css"/>
+    <style>* { margin: 0; padding: 0; } html, body, #map { width: 100%; height: 100%; }</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="/libs/pmtiles.js"></script>
+<script src="/libs/maplibre-gl.js"></script>
+<script src="/libs/protomaps-themes-base.js"></script>
+<script>
+(function() {
+    var protocol = new pmtiles.Protocol();
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+
+    var hash = window.location.hash.replace("#", "");
+    var parts = hash ? hash.split(",") : [];
+    var lat = parseFloat(parts[0]) || 0;
+    var lon = parseFloat(parts[1]) || 0;
+    var zoom = parseFloat(parts[2]) || 4;
+
+    var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var flavor = dark ? "dark" : "light";
+
+    fetch("/api/map/files").then(function(r) { return r.json(); }).then(function(data) {
+        var sources = {};
+        var allLayers = [];
+
+        // Add user's PMTiles files (skip terrain). Includes map-overview if present.
+        var files = (data.files || []).filter(function(f) {
+            return f.name.indexOf("terrain") !== 0;
+        });
+        files.forEach(function(f, i) {
+            sources[f.name] = {type: "vector", url: "pmtiles:///data/" + f.name};
+            var layers = protomaps_themes_base.default(f.name, flavor);
+            if (i > 0) {
+                layers.forEach(function(l) { l.id = f.name + ":" + l.id; });
+            }
+            allLayers = allLayers.concat(layers);
+        });
+
+        new maplibregl.Map({
+            container: "map",
+            style: {
+                version: 8,
+                glyphs: "/fonts/{fontstack}/{range}.pbf",
+                sprite: window.location.origin + "/sprites/" + flavor,
+                sources: sources,
+                layers: allLayers,
+            },
+            center: [lon, lat],
+            zoom: zoom,
+            attributionControl: false,
+            interactive: false,
+        });
+    }).catch(function(e) {
+        console.error("Embed map error:", e);
+        document.getElementById("map").textContent = "Map unavailable";
+    });
+})();
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ import {
 import {Route, Routes, useNavigate} from "react-router";
 import {
     deleteMapFile, deleteMapPin, fetchMapSubscriptions, getMapFiles, getMapPins,
-    mapSubscribe, mapUnsubscribe, updateMapPin
+    mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, updateMapPin
 } from "../api";
 import {
     Button,
@@ -25,7 +25,7 @@ import {
 import {SortableTable} from "./SortableTable";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Header} from "./Theme";
-import {Media} from "../contexts/contexts";
+import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
 import {Modal} from "./Theme";
 import MapViewer from "./MapViewer";
@@ -265,6 +265,8 @@ function ManageMap() {
     const [catalog, setCatalog] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
     const [allRegionsOpen, setAllRegionsOpen] = useState(false);
+    const {status} = React.useContext(StatusContext);
+    const searchBuilding = status?.flags?.map_search_building;
 
     const fetchFiles = async () => {
         try {
@@ -306,13 +308,31 @@ function ManageMap() {
     const fileHeaders = [
         {key: 'name', text: 'File', sortBy: i => i.name.toLowerCase()},
         {key: 'size', text: 'Size', sortBy: i => i.size || 0},
+        {key: 'search', text: 'Search', sortBy: null},
         {key: 'actions', text: '', sortBy: null},
     ];
+
+    const handleBuildSearch = async (filename) => {
+        await rebuildMapSearchIndex(filename);
+        await fetchFiles();
+    };
 
     const fileRowFunc = (file) => {
         return <TableRow key={file.name}>
             <TableCell>{file.name}</TableCell>
             <TableCell>{humanFileSize(file.size)}</TableCell>
+            <TableCell collapsing>
+                {file.name.startsWith('terrain')
+                    ? null
+                    : file.has_search_index
+                        ? <Button size='tiny' icon='check' content='Built' disabled color='green'/>
+                        : <APIButton size='tiny' icon='search'
+                                     content={searchBuilding ? 'Building...' : 'Build'}
+                                     disabled={searchBuilding}
+                                     loading={searchBuilding}
+                                     onClick={() => handleBuildSearch(file.name)}/>
+                }
+            </TableCell>
             <TableCell collapsing>
                 <APIButton
                     color='red'
@@ -328,7 +348,7 @@ function ManageMap() {
     };
 
     const emptyRow = <TableRow>
-        <TableCell colSpan={3}>No PMTiles map files were found in <b>map/</b></TableCell>
+        <TableCell colSpan={4}>No PMTiles map files were found in <b>map/</b></TableCell>
     </TableRow>;
 
     // --- Catalog table ---

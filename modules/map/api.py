@@ -4,7 +4,7 @@ from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map import lib, schema
+from modules.map import lib, schema, search
 from modules.map.pins import get_map_pins_config
 from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check
@@ -98,3 +98,63 @@ async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
     if get_map_pins_config().update_pin(pin_id, body.label, body.color):
         return response.empty(HTTPStatus.NO_CONTENT)
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.get('/search')
+@openapi.description('Search for places in map search indexes')
+async def search_places(request: Request):
+    q = request.args.get('q', '')
+    if not q or len(q.strip()) < 1:
+        return json_response({'error': 'Query parameter "q" is required'}, HTTPStatus.BAD_REQUEST)
+
+    try:
+        limit = int(request.args.get('limit', 12))
+        offset = int(request.args.get('offset', 0))
+        lat = float(request.args.get('lat')) if request.args.get('lat') is not None else None
+        lon = float(request.args.get('lon')) if request.args.get('lon') is not None else None
+    except (ValueError, TypeError):
+        return json_response({'error': 'Invalid query parameters'}, HTTPStatus.BAD_REQUEST)
+
+    data = search.search_places(q.strip(), limit=limit, offset=offset, lat=lat, lon=lon)
+    return json_response(data, HTTPStatus.OK)
+
+
+@map_bp.get('/search/estimate')
+@openapi.description('Get estimated count of map search results')
+async def get_search_estimate(request: Request):
+    q = request.args.get('q', '')
+    if not q or len(q.strip()) < 1:
+        return json_response({'map_places': 0}, HTTPStatus.OK)
+    count = search.search_places_count(q.strip())
+    return json_response({'map_places': count}, HTTPStatus.OK)
+
+
+@map_bp.get('/search/status')
+@openapi.description('Get status of map search indexes')
+async def get_search_status(_: Request):
+    status = search.get_search_status()
+    return json_response(status, HTTPStatus.OK)
+
+
+@map_bp.post('/search/rebuild')
+@openapi.description('Rebuild all map search indexes')
+@wrol_mode_check
+async def rebuild_search_indexes(_: Request):
+    started = search.rebuild_all_search_indexes()
+    if started:
+        return json_response({'message': 'Search index rebuild started'}, HTTPStatus.ACCEPTED)
+    return json_response({'error': 'No PMTiles files found'}, HTTPStatus.NOT_FOUND)
+
+
+@map_bp.post('/search/rebuild/<filename:str>')
+@openapi.description('Rebuild search index for a single PMTiles file')
+@wrol_mode_check
+async def rebuild_single_search_index(_: Request, filename: str):
+    try:
+        started = search.rebuild_search_index(filename)
+    except ValueError as e:
+        return response.json({'error': str(e)}, HTTPStatus.BAD_REQUEST)
+
+    if started:
+        return json_response({'message': f'Search index rebuild started for {filename}'}, HTTPStatus.ACCEPTED)
+    return json_response({'error': 'File not found'}, HTTPStatus.NOT_FOUND)

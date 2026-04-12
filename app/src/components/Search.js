@@ -4,7 +4,8 @@ import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
-import {searchEstimateFiles, searchEstimateOthers, searchEstimateZims, searchSuggestions} from "../api";
+import {MapSearchView} from "./MapSearchView";
+import {searchEstimateFiles, searchEstimateMap, searchEstimateOthers, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
@@ -133,6 +134,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
     // Zims are slow, so they are separate.
     const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
     const {data: otherData, sendRequest: sendOtherRequest, loading: otherLoading} = useLatestRequest(500);
+    const {data: mapData, sendRequest: sendMapRequest, loading: mapLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
         if (searchStr || (tagNames && tagNames.length > 0)) {
@@ -141,6 +143,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             if (searchStr && searchStr.length > 0) {
                 // We can't search Channels/Domains without some string to filter by.
                 sendGeneralReqeust(async () => await searchSuggestions(searchStr));
+                sendMapRequest(async () => await searchEstimateMap(searchStr));
             }
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
@@ -194,6 +197,14 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
             });
         }
     }, [setSuggestions, otherData]);
+
+    React.useEffect(() => {
+        if (!_.isEmpty(mapData)) {
+            setSuggestions((prevState) => {
+                return {...prevState, mapPlaces: mapData.mapPlaces}
+            });
+        }
+    }, [setSuggestions, mapData]);
 
     return {suggestions, loading: generalLoading || zimLoading || filesLoading}
 }
@@ -329,6 +340,18 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
         const coordMatch = searchStr && searchStr.trim().match(
             /^(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)$/
         );
+        // Map places suggestion in dropdown.
+        if (newSuggestions.mapPlaces > 0) {
+            results['map places'] = {
+                name: 'Map Places', results: [{
+                    type: 'search',
+                    title: `Map: ${newSuggestions.mapPlaces} places`,
+                    description: 'Search map locations',
+                    location: `/search/map?q=${encodeURIComponent(searchStr)}`,
+                }]
+            };
+        }
+
         if (coordMatch) {
             const lat = parseFloat(coordMatch[1]);
             const lon = parseFloat(coordMatch[2]);
@@ -355,6 +378,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
             fileGroups: newSuggestions.fileGroups,
             zims: zimSum,
             otherSum: otherSum,
+            mapPlaces: newSuggestions.mapPlaces || 0,
             channels: newSuggestions.channels.length,
             domains: newSuggestions.domains.length,
             authors: newSuggestions.authors?.length,
@@ -441,11 +465,13 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
 
     const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
+    const mapTabName = <span>Map <Label>{normalizeEstimate(suggestionsSums?.mapPlaces)}</Label></span>;
     const othersTabName = <span>Other <Label>{normalizeEstimate(suggestionsSums?.otherSum)}</Label></span>;
 
     const links = [
         {text: filesTabName, to: `/search${search}`, key: 'filesSearch_', end: true},
         {text: zimsTabName, to: `/search/zim${search}`, key: 'zimsSearch'},
+        {text: mapTabName, to: `/search/map${search}`, key: 'mapSearch'},
         {text: othersTabName, to: `/search/other${search}`, key: 'othersSearch'},
     ];
 
@@ -454,6 +480,7 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
         <Routes>
             <Route path='/*' element={<FilesSearchView/>}/>
             <Route path='/zim' exact element={<ZimSearchView suggestions={suggestions} loading={loading}/>}/>
+            <Route path='/map' exact element={<MapSearchView/>}/>
             <Route path='/other' exact element={<OtherSearchView loading={loading}/>}/>
         </Routes>
     </React.Fragment>

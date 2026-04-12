@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
 import mlcontour from "@acalcutt/maplibre-contour-pmtiles";
-import {addMapPin, deleteMapPin, getMapFiles, getMapPins, setMapDefaultLocation} from "../api";
+import {addMapPin, deleteMapPin, getMapFiles, getMapPins, searchMap, setMapDefaultLocation} from "../api";
 import {MAP_VIEWER_URI} from "./Vars";
 import {Checkbox, Icon, Segment} from "semantic-ui-react";
 import {Header} from "./Theme";
@@ -221,6 +221,21 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         return v;
     });
     const [collapsed, setCollapsed] = useState(true);
+    const [isMobile, setIsMobile] = useState(
+        () => typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches
+    );
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const mq = window.matchMedia("(max-width: 768px)");
+        const handler = (e) => setIsMobile(e.matches);
+        mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
+        return () => {
+            mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler);
+        };
+    }, []);
+
+    const iconOnly = isMobile && collapsed;
 
     const toggleGroup = useCallback((groupName, checked) => {
         if (!map) return;
@@ -251,21 +266,35 @@ function LayerControl({map, scaleUnit, onScaleUnitChange, visibilityRef}) {
         boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
         maxHeight: "calc(100vh - 120px)",
         overflowY: "auto",
-        minWidth: 200,
+        minWidth: iconOnly ? 0 : 200,
         fontSize: 13,
     };
 
+    const headerStyle = iconOnly
+        ? {
+            padding: 0, cursor: "pointer", userSelect: "none",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 40, height: 40,
+        }
+        : {
+            padding: "8px 12px", cursor: "pointer", fontWeight: 600,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            borderBottom: collapsed ? "none" : "1px solid #eee", userSelect: "none",
+        };
+
     return <div style={panelStyle}>
         <div
-            style={{
-                padding: "8px 12px", cursor: "pointer", fontWeight: 600,
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                borderBottom: collapsed ? "none" : "1px solid #eee", userSelect: "none",
-            }}
+            style={headerStyle}
             onClick={() => setCollapsed(c => !c)}
+            title="Layers"
+            aria-label="Layers"
         >
-            <span>Layers</span>
-            <Icon name={collapsed ? "chevron right" : "chevron down"} size="small"/>
+            {iconOnly
+                ? <Icon name="map outline" size="large" style={{margin: 0}}/>
+                : <>
+                    <span>Layers</span>
+                    <Icon name={collapsed ? "chevron right" : "chevron down"} size="small"/>
+                </>}
         </div>
         {!collapsed && <div style={{padding: "4px 12px 8px"}}>
             {Object.keys(LAYER_GROUPS).map(name =>
@@ -333,6 +362,150 @@ function AddPinDialog({lat, lon, onSubmit, onCancel}) {
                 Add
             </button>
         </div>
+    </div>;
+}
+
+// Coordinate regex: "45.5, -122.6" or "45.5 -122.6"
+const COORD_REGEX = /^\s*(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)\s*$/;
+
+function MapSearch({map}) {
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState([]);
+    const [showResults, setShowResults] = useState(false);
+    const [searchMarker, setSearchMarker] = useState(null);
+    const debounceRef = useRef(null);
+    const containerRef = useRef(null);
+
+    // Close results when clicking outside.
+    useEffect(() => {
+        const handler = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setShowResults(false);
+            }
+        };
+        document.addEventListener("click", handler);
+        return () => document.removeEventListener("click", handler);
+    }, []);
+
+    const doSearch = useCallback((q) => {
+        if (!q || q.length < 2) {
+            setResults([]);
+            setShowResults(false);
+            return;
+        }
+
+        // Check for coordinate input first.
+        const coordMatch = q.match(COORD_REGEX);
+        if (coordMatch) {
+            const lat = parseFloat(coordMatch[1]);
+            const lon = parseFloat(coordMatch[2]);
+            if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+                setResults([{name: `${lat}, ${lon}`, kind: "coordinates", lat, lon, min_zoom: 0, source: "input"}]);
+                setShowResults(true);
+                return;
+            }
+        }
+
+        // Get current map center for proximity bias.
+        let lat = null, lon = null;
+        if (map) {
+            const center = map.getCenter();
+            lat = center.lat;
+            lon = center.lng;
+        }
+
+        searchMap(q, 8, 0, lat, lon).then(data => {
+            setResults(data.results || []);
+            setShowResults((data.results || []).length > 0);
+        });
+    }, [map]);
+
+    const handleInput = useCallback((e) => {
+        const q = e.target.value;
+        setQuery(q);
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => doSearch(q), 300);
+    }, [doSearch]);
+
+    const handleSelect = useCallback((result) => {
+        if (!map) return;
+
+        // Remove old search marker.
+        if (searchMarker) {
+            searchMarker.remove();
+        }
+
+        const zoom = result.kind === "coordinates" ? 14 : Math.max(map.getZoom(), 12);
+        map.flyTo({center: [result.lon, result.lat], zoom});
+
+        const marker = new maplibregl.Marker({color: "#6435c9"})
+            .setLngLat([result.lon, result.lat])
+            .setPopup(new maplibregl.Popup({offset: 25}).setText(result.name))
+            .addTo(map);
+        marker.togglePopup();
+        setSearchMarker(marker);
+
+        setShowResults(false);
+        setQuery(result.name);
+    }, [map, searchMarker]);
+
+    const handleKeyDown = useCallback((e) => {
+        if (e.key === "Escape") {
+            setShowResults(false);
+            e.target.blur();
+        }
+    }, []);
+
+    const formatPopulation = (pop) => {
+        if (!pop) return "";
+        if (pop >= 1_000_000) return `${(pop / 1_000_000).toFixed(1)}M`;
+        if (pop >= 1_000) return `${(pop / 1_000).toFixed(0)}K`;
+        return `${pop}`;
+    };
+
+    const resultSubtext = (r) => {
+        if (r.kind === "coordinates") return "";
+        const parts = [];
+        if (r.region) parts.push(r.region);
+        const detail = r.kind_detail || r.kind || "";
+        if (detail && !r.region) parts.push(detail.replace(/_/g, " "));
+        const pop = formatPopulation(r.population);
+        if (pop) parts.push(`pop. ${pop}`);
+        return parts.join(" \u00b7 ");
+    };
+
+    return <div ref={containerRef} style={{
+        position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+        zIndex: 5, width: 320, maxWidth: "calc(100% - 100px)",
+    }}>
+        <input
+            type="text"
+            placeholder="Search places..."
+            value={query}
+            onChange={handleInput}
+            onFocus={() => results.length > 0 && setShowResults(true)}
+            onKeyDown={handleKeyDown}
+            style={{
+                width: "100%", padding: "8px 12px", border: "1px solid #ccc", borderRadius: 4,
+                fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.2)", background: "white",
+            }}
+        />
+        {showResults && results.length > 0 && <div style={{
+            background: "white", border: "1px solid #ccc", borderTop: "none",
+            borderRadius: "0 0 4px 4px", maxHeight: 300, overflowY: "auto",
+            boxShadow: "0 4px 8px rgba(0,0,0,0.2)",
+        }}>
+            {results.map((r, i) => <div
+                key={i}
+                onClick={() => handleSelect(r)}
+                onMouseEnter={e => e.target.style.background = "#f0f0f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}
+                style={{padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee"}}
+            >
+                <div style={{fontWeight: 500}}>{r.name}</div>
+                {resultSubtext(r) && <div style={{fontSize: 11, color: "#888"}}>{resultSubtext(r)}</div>}
+            </div>)}
+        </div>}
     </div>;
 }
 
@@ -742,6 +915,7 @@ export default function MapViewer() {
     }
 
     return <div ref={mapContainer} style={{position: "relative", width: "100%", height: "85vh"}}>
+        {mapReady && <MapSearch map={mapRef.current}/>}
         {mapReady && <LayerControl map={mapRef.current} scaleUnit={scaleUnit} onScaleUnitChange={handleScaleUnitChange} visibilityRef={layerVisibilityRef}/>}
         {contextMenu && <div
             style={{

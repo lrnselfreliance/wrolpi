@@ -1052,6 +1052,19 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
                 results[-1]['c_headline'] = extra['c_headline']
                 results[-1]['d_headline'] = extra['d_headline']
 
+        # When searching by text, attach a `section_hint` to any doc-modeled result so
+        # the UI can deep-link into the matching EPUB chapter or PDF page.
+        search_str = params.get('search_str') if isinstance(params, dict) else None
+        if search_str:
+            from modules.docs.lib import _fetch_section_hints
+            doc_ids = [r['id'] for r in results if r.get('model') == 'doc']
+            if doc_ids:
+                hints = _fetch_section_hints(session, doc_ids, search_str)
+                for r in results:
+                    hint = hints.get(r['id'])
+                    if hint:
+                        r['section_hint'] = hint
+
     return results, total
 
 

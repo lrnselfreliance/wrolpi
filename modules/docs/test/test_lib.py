@@ -2,7 +2,9 @@ import pytest
 
 from modules.docs.lib import is_valid_author, split_authors, get_or_create_author_collection, \
     get_or_create_subject_collection, normalize_author, normalize_subject, split_subjects, is_valid_subject, \
-    search_authors_by_name, search_subjects_by_name
+    search_authors_by_name, search_subjects_by_name, _search_docs
+from modules.docs.models import Doc, DocSection
+from wrolpi.files.models import FileGroup
 
 
 def test_is_valid_author():
@@ -248,3 +250,83 @@ async def test_search_subjects_by_name(test_session):
     # No match.
     results = await search_subjects_by_name(test_session, 'nothing')
     assert len(results) == 0
+
+
+def _make_doc_with_sections(test_session, test_directory, filename, mimetype, sections):
+    """Build a FileGroup + Doc + DocSection rows for search tests.
+
+    `sections` is a list of (ordinal, label, content) tuples. The section contents
+    are also concatenated into the FileGroup's d_text so the top-level tsvector
+    search can match the doc in the first place.
+    """
+    path = test_directory / filename
+    path.write_bytes(b'')  # Placeholder; _search_docs doesn't read the file.
+    fg = FileGroup.from_paths(test_session, path)
+    fg.mimetype = mimetype
+    fg.model = 'doc'
+    fg.title = filename
+    fg.a_text = filename
+    fg.d_text = ' '.join(c for _, _, c in sections)
+    test_session.flush()
+    doc = Doc(file_group_id=fg.id, size=1)
+    test_session.add(doc)
+    test_session.flush()
+    kind = 'pdf_page' if mimetype == 'application/pdf' else 'epub_spine'
+    for ordinal, label, content in sections:
+        test_session.add(DocSection(doc_id=doc.id, kind=kind, ordinal=ordinal,
+                                    label=label, content=content))
+    test_session.commit()
+    return fg, doc
+
+
+@pytest.mark.asyncio
+async def test_search_docs_attaches_section_hint_epub(test_session, test_directory):
+    """_search_docs returns a section_hint pointing at the matching spine item."""
+    fg, _ = _make_doc_with_sections(test_session, test_directory,
+                                    'alpha.epub', 'application/epub+zip', [
+                                        (0, 'Introduction', 'preface about gardening'),
+                                        (1, 'Chapter 1', 'a tale of mullen and his dog'),
+                                        (2, 'Chapter 2', 'unrelated content about pottery'),
+                                    ])
+
+    results, total = _search_docs(search_str='mullen', mimetype='application/epub')
+    assert total == 1
+    assert results[0]['id'] == fg.id
+    hint = results[0]['section_hint']
+    assert hint['kind'] == 'epub_spine'
+    assert hint['ordinal'] == 1
+    assert hint['label'] == 'Chapter 1'
+    assert 'mullen' in hint['snippet'].lower()
+    # The snippet uses our sentinel markers rather than raw HTML.
+    assert '[[WROLPI_HL]]' in hint['snippet']
+
+
+@pytest.mark.asyncio
+async def test_search_docs_attaches_section_hint_pdf(test_session, test_directory):
+    """_search_docs returns a section_hint pointing at the matching PDF page."""
+    fg, _ = _make_doc_with_sections(test_session, test_directory,
+                                    'beta.pdf', 'application/pdf', [
+                                        (1, 'Page 1', 'cover page text'),
+                                        (2, 'Page 2', 'nothing to see here'),
+                                        (3, 'Page 3', 'here is where mullen shows up'),
+                                    ])
+
+    results, total = _search_docs(search_str='mullen', mimetype='application/pdf')
+    assert total == 1
+    assert results[0]['id'] == fg.id
+    hint = results[0]['section_hint']
+    assert hint['kind'] == 'pdf_page'
+    assert hint['ordinal'] == 3
+    assert hint['label'] == 'Page 3'
+
+
+@pytest.mark.asyncio
+async def test_search_docs_no_hint_when_no_query(test_session, test_directory):
+    """Without a search query, results have no section_hint."""
+    fg, _ = _make_doc_with_sections(test_session, test_directory,
+                                    'gamma.pdf', 'application/pdf', [
+                                        (1, 'Page 1', 'whatever'),
+                                    ])
+    results, _ = _search_docs(mimetype='application/pdf')
+    assert results and results[0]['id'] == fg.id
+    assert 'section_hint' not in results[0]

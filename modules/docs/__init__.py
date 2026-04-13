@@ -14,7 +14,7 @@ from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
 from .extractors import extract_metadata
 from .lib import get_or_create_subject_collection, get_or_create_author_collection, is_valid_author, split_authors, \
     normalize_author, normalize_subject, split_subjects, is_valid_subject, discover_calibre_cover
-from .models import Doc, DOC_MIMETYPES, COMIC_BOOK_SUFFIXES, EPUB_MIMETYPE, MOBI_MIMETYPE
+from .models import Doc, DocSection, DOC_MIMETYPES, COMIC_BOOK_SUFFIXES, EPUB_MIMETYPE, MOBI_MIMETYPE
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +118,33 @@ def _model_doc(file_group: FileGroup, session: Session) -> Doc:
     # Auto-create collections.
     _auto_create_collections(session, file_group, metadata)
 
+    # Ensure the Doc has an id before inserting DocSection rows that reference it.
     doc.flush()
+
+    # Replace any existing sections with the freshly-extracted ones.
+    _replace_doc_sections(session, doc, metadata.sections)
+
     return doc
+
+
+def _replace_doc_sections(session: Session, doc: Doc, sections):
+    """Delete any DocSection rows for this Doc and insert the new ones.
+
+    Using a bulk delete + bulk insert keeps this O(N) without SQLAlchemy tracking
+    each old row. Callers must have flushed `doc` so it has an id.
+    """
+    session.query(DocSection).filter(DocSection.doc_id == doc.id).delete(synchronize_session=False)
+    if not sections:
+        return
+    session.bulk_save_objects([
+        DocSection(
+            doc_id=doc.id,
+            kind=s.kind,
+            ordinal=s.ordinal,
+            label=s.label,
+            content=s.content,
+        ) for s in sections
+    ])
 
 
 def _handle_doc_cover(doc: Doc, file_group: FileGroup, metadata):

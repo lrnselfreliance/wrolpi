@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from 'react';
-import {Link, Route, Routes, useLocation, useNavigate, useParams} from "react-router";
+import {Link, Route, Routes, useLocation, useNavigate, useParams, useSearchParams} from "react-router";
 import {Grid, Icon as SIcon, Loader, StatisticLabel, StatisticValue} from "semantic-ui-react";
 import {deleteDocs, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
 import {Media, ThemeContext} from "../contexts/contexts";
@@ -168,6 +168,11 @@ function DocPage() {
     const navigate = useNavigate();
     const {docFile, doc, fetchDoc} = useDoc(parseInt(fileGroupId));
     const {theme} = useContext(ThemeContext);
+    const [searchParams] = useSearchParams();
+    // Deep-link params: `loc` = EPUB spine index, `page` = PDF page, `q` = search term.
+    const locParam = searchParams.get('loc');
+    const pageParam = searchParams.get('page');
+    const qParam = searchParams.get('q');
 
     const title = docFile ? (docFile.title || docFile.name) : null;
     useTitle(title);
@@ -220,10 +225,22 @@ function DocPage() {
     const isCbz = activeMimetype.includes('cbz') || activeMimetype.includes('cbr')
         || activeMimetype.includes('comicbook+zip') || activeMimetype.includes('comicbook-rar')
         || CBZ_EXTENSIONS.includes(activeExt);
-    const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
+    // Build EPUB viewer URL, propagating any deep-link params through to epub.html.
+    let viewerUrl = null;
+    if (isEpub) {
+        const epubParams = new URLSearchParams();
+        epubParams.set('url', downloadUrl);
+        if (locParam) epubParams.set('loc', locParam);
+        if (qParam) epubParams.set('q', qParam);
+        viewerUrl = `/epub/epub.html?${epubParams.toString()}`;
+    }
     const openUrl = viewerUrl || (activePath ? `/media/${encodeMediaPath(activePath)}` : null);
     const canEmbed = isEpub || isPdf;
-    const embedUrl = isEpub ? viewerUrl : (isPdf && activePath ? `/media/${encodeMediaPath(activePath)}` : null);
+    // PDFs use the browser's built-in viewer, which honors `#page=N` fragments.
+    const pdfSrc = isPdf && activePath
+        ? `/media/${encodeMediaPath(activePath)}${pageParam ? `#page=${encodeURIComponent(pageParam)}` : ''}`
+        : null;
+    const embedUrl = isEpub ? viewerUrl : pdfSrc;
 
     const handleDelete = async () => {
         if (doc && doc.id) {

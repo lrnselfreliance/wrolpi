@@ -1,10 +1,10 @@
 import pathlib
 from typing import Optional
 
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, Computed, or_
+from sqlalchemy.orm import relationship, Session, deferred
 
-from wrolpi.common import ModelHelper, Base
+from wrolpi.common import ModelHelper, Base, tsvector
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
 
@@ -57,6 +57,9 @@ class Doc(ModelHelper, Base):
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False, unique=True)
     file_group: FileGroup = relationship('FileGroup')
+    sections = relationship('DocSection', back_populates='doc',
+                            cascade='all, delete-orphan',
+                            passive_deletes=True)
 
     def __repr__(self):
         path = str(self.file_group.primary_path) if self.file_group else 'None'
@@ -120,3 +123,37 @@ class Doc(ModelHelper, Base):
             ))
             for fg in file_groups:
                 session.delete(fg)
+
+
+# Section kinds.
+SECTION_KIND_EPUB_SPINE = 'epub_spine'
+SECTION_KIND_PDF_PAGE = 'pdf_page'
+
+
+class DocSection(ModelHelper, Base):
+    """A searchable sub-range of a Doc.
+
+    For EPUB files, one row per spine item with `ordinal` as the 0-based spine index.
+    For PDF files, one row per page with `ordinal` as the 1-based page number.
+    Each row maintains its own tsvector for per-section full-text search, which lets us
+    deep-link from a search result into a specific chapter or page.
+    """
+    __tablename__ = 'doc_section'
+    __table_args__ = (
+        Index('doc_section_doc_id_idx', 'doc_id', 'ordinal'),
+        Index('doc_section_tsv_idx', 'tsv', postgresql_using='gin'),
+    )
+
+    id = Column(BigInteger, primary_key=True)
+    doc_id = Column(Integer, ForeignKey('doc.id', ondelete='CASCADE'), nullable=False)
+    kind = Column(String, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    label = Column(String)
+    content = Column(Text)
+    tsv = deferred(Column(tsvector, Computed(
+        "to_tsvector('english'::regconfig, COALESCE(content, ''))")))
+
+    doc = relationship('Doc', back_populates='sections')
+
+    def __repr__(self):
+        return f'<DocSection id={self.id} doc_id={self.doc_id} kind={self.kind} ordinal={self.ordinal}>'

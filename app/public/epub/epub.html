@@ -175,6 +175,9 @@ either expressed or implied, of the FreeBSD Project. -->
     let params = URLSearchParams && new URLSearchParams(document.location.search.substring(1));
     let url = params && params.get("url") && decodeURIComponent(params.get("url"));
     let currentSectionIndex = (params && params.get("loc")) ? params.get("loc") : undefined;
+    // Optional search term passed in from a search-result deep link. If present we'll
+    // search the spine item at `loc` and jump to + highlight the first match.
+    let searchQuery = (params && params.get("q")) ? params.get("q") : null;
 
     let book = ePub(url);
     let rendition = book.renderTo("viewer", {
@@ -184,6 +187,44 @@ either expressed or implied, of the FreeBSD Project. -->
     });
 
     rendition.display(currentSectionIndex);
+
+    // If a search query was provided, try to locate it within the target spine item
+    // and scroll to / highlight the first match. Any failure is non-fatal — the `loc`
+    // jump above still lands the user at the right chapter.
+    if (searchQuery) {
+        book.ready.then(function () {
+            try {
+                let spine = book.spine;
+                let item;
+                if (currentSectionIndex !== undefined) {
+                    let n = parseInt(currentSectionIndex, 10);
+                    if (!isNaN(n)) {
+                        item = spine.get(n);
+                    }
+                }
+                if (!item && spine.spineItems && spine.spineItems.length) {
+                    item = spine.spineItems[0];
+                }
+                if (!item) return;
+                Promise.resolve(item.load(book.load.bind(book))).then(function () {
+                    let results = item.find(searchQuery) || [];
+                    if (results.length > 0) {
+                        let hit = results[0];
+                        rendition.display(hit.cfi);
+                        try {
+                            rendition.annotations.highlight(hit.cfi);
+                        } catch (e) {
+                            console.warn("highlight failed", e);
+                        }
+                    }
+                }).finally(function () {
+                    try { item.unload(); } catch (e) { /* ignore */ }
+                });
+            } catch (e) {
+                console.warn("epub deep-link search failed", e);
+            }
+        });
+    }
 
     book.ready.then(() => {
 

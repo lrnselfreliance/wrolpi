@@ -4,6 +4,7 @@ import logging
 import os
 import pathlib
 import zipfile
+from typing import List
 
 import pytz
 
@@ -12,6 +13,10 @@ from wrolpi.common import truncate_generator_bytes, truncate_object_bytes, get_h
 from wrolpi.files.indexers import Indexer
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import FILE_MAX_PDF_SIZE, FILE_MAX_TEXT_SIZE
+
+# Cap on a single section's stored text to prevent a pathological one-chapter-is-the-whole-book
+# EPUB from producing a huge row.
+SECTION_MAX_TEXT_SIZE = 200_000
 
 try:
     import ebooklib
@@ -34,6 +39,19 @@ logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass
+class DocSection:
+    """A searchable sub-range of a document (EPUB spine item or PDF page).
+
+    `ordinal` is 0-based for EPUB spine items and 1-based for PDF pages, to match the
+    conventions of the respective viewers.
+    """
+    kind: str  # 'epub_spine' or 'pdf_page'
+    ordinal: int
+    label: str
+    content: str
+
+
+@dataclasses.dataclass
 class DocMetadata:
     title: str = None
     author: str = None
@@ -45,6 +63,7 @@ class DocMetadata:
     description: str = None
     cover_bytes: bytes = None
     text: str = None
+    sections: List[DocSection] = dataclasses.field(default_factory=list)
 
 
 def extract_metadata(file_group: FileGroup) -> DocMetadata:
@@ -79,6 +98,46 @@ def _extract_text_from_html(html: str) -> str:
     return soup.get_text()
 
 
+def _build_epub_toc_label_map(toc) -> dict:
+    """Walk an ebooklib TOC (nested list of Links and (Section, children) tuples)
+    and return a mapping of href (fragment-stripped) -> label.
+
+    The first label wins for any given href; children are walked so deeply-nested
+    entries still contribute. Anything without both an href and a title is skipped.
+    """
+    href_to_label: dict = {}
+
+    def walk(entries):
+        for entry in entries or ():
+            if isinstance(entry, (list, tuple)):
+                walk(entry)
+            else:
+                href = getattr(entry, 'href', None)
+                title = getattr(entry, 'title', None)
+                if href and title:
+                    href_to_label.setdefault(href.split('#')[0], title)
+
+    walk(toc)
+    return href_to_label
+
+
+def _resolve_spine_labels(hrefs, href_to_label: dict) -> list:
+    """Assign each spine item a label, carrying the most recently-matched TOC label
+    forward so mid-chapter spine items inherit their chapter's label.
+
+    `hrefs` is a list of (file_name, get_name) tuples in spine order. Items before
+    the first TOC match (e.g. cover, title page) get a generic `Section N` fallback.
+    """
+    labels: list = []
+    current_label = None
+    for ordinal, (file_name, get_name) in enumerate(hrefs):
+        new_label = href_to_label.get(file_name) or href_to_label.get(get_name)
+        if new_label:
+            current_label = new_label
+        labels.append(current_label or f'Section {ordinal + 1}')
+    return labels
+
+
 def extract_epub(path: pathlib.Path) -> DocMetadata:
     """Extract metadata from an EPUB file using ebooklib."""
     if ebooklib is None or epub is None:
@@ -107,10 +166,32 @@ def extract_epub(path: pathlib.Path) -> DocMetadata:
         if 'subject' in value:
             metadata.subject = metadata.subject or value['subject'][0][0]
 
-    # Extract text.
+    # Build a map of spine-item href -> chapter label from the TOC, if available.
+    href_to_label = {}
+    try:
+        href_to_label = _build_epub_toc_label_map(book.toc)
+    except Exception as e:
+        logger.warning(f'Failed to walk EPUB TOC for {path}', exc_info=e)
+
+    # Extract text per spine item, keeping a per-section record for deep-linking.
+    # Many EPUBs (especially Calibre-converted ones) split chapters across many spine
+    # items but only have a single TOC entry at the chapter start. Carry the most
+    # recently-matched TOC label forward so mid-chapter sections still get a useful
+    # label (e.g. "Mullein" rather than "Section 302").
     text_parts = []
-    for doc in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-        text_parts.append(_extract_text_from_html(doc.content))
+    spine_items = list(book.get_items_of_type(ebooklib.ITEM_DOCUMENT))
+    hrefs = [(d.file_name, d.get_name()) for d in spine_items]
+    labels = _resolve_spine_labels(hrefs, href_to_label)
+    for ordinal, (doc, label) in enumerate(zip(spine_items, labels)):
+        section_text = _extract_text_from_html(doc.content)
+        text_parts.append(section_text)
+        capped = truncate_object_bytes(section_text, SECTION_MAX_TEXT_SIZE)
+        metadata.sections.append(DocSection(
+            kind='epub_spine',
+            ordinal=ordinal,
+            label=label,
+            content=capped,
+        ))
     metadata.text = ''.join(text_parts)
 
     # Extract cover.
@@ -174,6 +255,14 @@ def extract_pdf(path: pathlib.Path) -> DocMetadata:
                     text = text.replace('\x00', '\uFFFD').strip()
                     if text:
                         words.append(text)
+                        # Record a per-page section (1-based, matching the PDF viewer's
+                        # `#page=N` fragment convention).
+                        metadata.sections.append(DocSection(
+                            kind='pdf_page',
+                            ordinal=page.number + 1,
+                            label=f'Page {page.number + 1}',
+                            content=truncate_object_bytes(text, SECTION_MAX_TEXT_SIZE),
+                        ))
                 metadata.text = '\n'.join(
                     truncate_generator_bytes(iter(words), FILE_MAX_TEXT_SIZE))
             except Exception as e:

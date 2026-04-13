@@ -249,8 +249,9 @@ async def test_files_search_attaches_doc_section_hint(async_client, test_session
         f'doc result has no section_hint on global search path: {result}'
     hint = result['section_hint']
     assert hint['kind'] == 'epub_spine'
-    # The test EPUB's "Chapter one" body is in spine item 1.
-    assert hint['ordinal'] == 1
+    # The test EPUB's spine order is [titlepage, start, chapter1]; the chapter1
+    # document holds the "Chapter one" body, so its spine ordinal is 2.
+    assert hint['ordinal'] == 2
     assert hint['label']
     # Snippet uses our sentinel markers, not raw HTML.
     assert '[[WROLPI_HL]]' in hint['snippet']

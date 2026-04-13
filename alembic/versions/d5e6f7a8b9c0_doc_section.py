@@ -49,3 +49,13 @@ def upgrade():
 
 def downgrade():
     op.execute('DROP TABLE IF EXISTS doc_section')
+    # If we drop the table while some file groups still have indexed=FALSE (the
+    # upgrade sets that to trigger re-extraction), the next refresh would try to
+    # write DocSection rows to a table that no longer exists. Restore indexed=TRUE
+    # for those rows so a downgrade leaves the system in a consistent state.
+    op.execute('''
+        UPDATE file_group
+        SET indexed = TRUE
+        WHERE mimetype LIKE 'application/epub%'
+           OR mimetype = 'application/pdf'
+    ''')

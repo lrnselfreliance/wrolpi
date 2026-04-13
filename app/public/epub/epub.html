@@ -164,9 +164,73 @@ either expressed or implied, of the FreeBSD Project. -->
         display: block;
     }
 
+    #toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px auto;
+        padding: 0 12px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #444;
+    }
+
+    #toolbar #toc {
+        margin: 0;
+    }
+
+    #toolbar form {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        margin: 0;
+    }
+
+    #toolbar input[type="search"] {
+        padding: 4px 6px;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        min-width: 180px;
+    }
+
+    #toolbar button {
+        padding: 3px 10px;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        background: #f6f6f6;
+        border-radius: 3px;
+        cursor: pointer;
+        line-height: 1.4;
+    }
+
+    #toolbar button:disabled {
+        opacity: 0.45;
+        cursor: default;
+    }
+
+    #search-status {
+        color: #666;
+        min-width: 96px;
+    }
+
+    #search-status.error {
+        color: #b00;
+    }
+
 </style>
 
-<select id="toc"></select>
+<div id="toolbar">
+    <select id="toc"></select>
+    <form id="search-form" onsubmit="return false;">
+        <input id="search-input" type="search" placeholder="Search in book…" aria-label="Search in book"/>
+        <button id="search-submit" type="submit">Search</button>
+        <button id="search-prev" type="button" title="Previous match" disabled>‹</button>
+        <button id="search-next" type="button" title="Next match" disabled>›</button>
+        <button id="search-clear" type="button" title="Clear search" disabled>×</button>
+    </form>
+    <span id="search-status"></span>
+</div>
 <div id="viewer"></div>
 <a id="prev" href="#prev" class="arrow">‹</a>
 <a id="next" href="#next" class="arrow">›</a>
@@ -188,41 +252,192 @@ either expressed or implied, of the FreeBSD Project. -->
 
     rendition.display(currentSectionIndex);
 
-    // If a search query was provided, try to locate it within the target spine item
-    // and scroll to / highlight the first match. Any failure is non-fatal — the `loc`
-    // jump above still lands the user at the right chapter.
-    if (searchQuery) {
-        book.ready.then(function () {
+    // --- In-book search ---------------------------------------------------
+    // State is module-level so the toolbar buttons can drive it. `hits` is the
+    // most recent search's results in spine order; `currentHitIndex` tracks
+    // which one is "selected" for prev/next navigation.
+    let hits = [];
+    let currentHitIndex = -1;
+    let searchInProgress = false;
+    const SEARCH_CONCURRENCY = 8;
+
+    const $input = document.getElementById("search-input");
+    const $submit = document.getElementById("search-submit");
+    const $prev = document.getElementById("search-prev");
+    const $next = document.getElementById("search-next");
+    const $clear = document.getElementById("search-clear");
+    const $status = document.getElementById("search-status");
+    const $form = document.getElementById("search-form");
+
+    function setStatus(text, isError) {
+        $status.textContent = text || "";
+        $status.classList.toggle("error", !!isError);
+    }
+
+    function updateButtons() {
+        const hasHits = hits.length > 0;
+        $prev.disabled = !hasHits || searchInProgress;
+        $next.disabled = !hasHits || searchInProgress;
+        $clear.disabled = (!hasHits && !$input.value) || searchInProgress;
+        $submit.disabled = searchInProgress;
+    }
+
+    function clearHighlights() {
+        for (const hit of hits) {
             try {
-                let spine = book.spine;
-                let item;
-                if (currentSectionIndex !== undefined) {
-                    let n = parseInt(currentSectionIndex, 10);
-                    if (!isNaN(n)) {
-                        item = spine.get(n);
-                    }
+                rendition.annotations.remove(hit.cfi, "highlight");
+            } catch (e) { /* already gone — ignore */ }
+        }
+    }
+
+    function clearSearch() {
+        clearHighlights();
+        hits = [];
+        currentHitIndex = -1;
+        setStatus("");
+        updateButtons();
+    }
+
+    function gotoHit(i) {
+        if (!hits.length) return;
+        // Wrap around both directions for easy cycling.
+        if (i < 0) i = hits.length - 1;
+        if (i >= hits.length) i = 0;
+        currentHitIndex = i;
+        try {
+            rendition.display(hits[i].cfi);
+        } catch (e) {
+            console.warn("failed to display hit", e);
+        }
+        setStatus(`${i + 1} of ${hits.length}`);
+    }
+
+    // Run a search across every spine item, collecting CFIs and excerpts.
+    // Uses small-chunk concurrency so a 600-item book doesn't serialize one
+    // load at a time and doesn't stampede memory by loading all at once.
+    // `preferredSpineIndex` biases the initial hit selection. When a search is
+    // kicked off from a `?loc=…&q=…` deep-link, callers pass the loc so the
+    // viewer lands on the match in that chapter rather than jumping to the
+    // first match in the whole book.
+    async function runBookSearch(query, preferredSpineIndex) {
+        query = (query || "").trim();
+        if (!query) {
+            clearSearch();
+            return;
+        }
+        // Always clear prior state before starting a new search.
+        clearHighlights();
+        hits = [];
+        currentHitIndex = -1;
+        searchInProgress = true;
+        updateButtons();
+        setStatus("Searching…");
+
+        const spineItems = (book.spine && book.spine.spineItems) || [];
+        const total = spineItems.length;
+        let processed = 0;
+        const newHits = [];
+
+        async function searchOne(item) {
+            try {
+                await Promise.resolve(item.load(book.load.bind(book)));
+                const results = item.find(query) || [];
+                for (const r of results) {
+                    newHits.push({
+                        spineIndex: item.index,
+                        cfi: r.cfi,
+                        excerpt: r.excerpt,
+                    });
                 }
-                if (!item && spine.spineItems && spine.spineItems.length) {
-                    item = spine.spineItems[0];
-                }
-                if (!item) return;
-                Promise.resolve(item.load(book.load.bind(book))).then(function () {
-                    let results = item.find(searchQuery) || [];
-                    if (results.length > 0) {
-                        let hit = results[0];
-                        rendition.display(hit.cfi);
-                        try {
-                            rendition.annotations.highlight(hit.cfi);
-                        } catch (e) {
-                            console.warn("highlight failed", e);
-                        }
-                    }
-                }).finally(function () {
-                    try { item.unload(); } catch (e) { /* ignore */ }
-                });
             } catch (e) {
-                console.warn("epub deep-link search failed", e);
+                console.warn("search failed for item", item && item.href, e);
+            } finally {
+                try { item.unload(); } catch (e) { /* ignore */ }
+                processed += 1;
+                // Live progress — users with big books want to know something's happening.
+                if (processed % SEARCH_CONCURRENCY === 0 || processed === total) {
+                    setStatus(`Searching… ${processed} / ${total}`);
+                }
             }
+        }
+
+        // Simple fixed-concurrency pool.
+        let cursor = 0;
+        async function worker() {
+            while (cursor < spineItems.length) {
+                const i = cursor++;
+                await searchOne(spineItems[i]);
+            }
+        }
+        const workers = [];
+        for (let i = 0; i < Math.min(SEARCH_CONCURRENCY, spineItems.length); i++) {
+            workers.push(worker());
+        }
+        await Promise.all(workers);
+
+        // Sort hits by spine order then position within the section. `spineIndex`
+        // handles the first; CFI string comparison is a reasonable tiebreaker.
+        newHits.sort((a, b) => {
+            if (a.spineIndex !== b.spineIndex) return a.spineIndex - b.spineIndex;
+            return a.cfi < b.cfi ? -1 : a.cfi > b.cfi ? 1 : 0;
+        });
+
+        // Highlight each match. The annotation only renders visibly when its
+        // section is rendered, but calling this up-front means navigating to
+        // any hit arrives with the term already marked.
+        for (const hit of newHits) {
+            try {
+                rendition.annotations.highlight(hit.cfi);
+            } catch (e) { /* dup or invalid CFI — ignore */ }
+        }
+
+        hits = newHits;
+        searchInProgress = false;
+
+        if (hits.length === 0) {
+            setStatus("No matches");
+        } else {
+            // If the caller pinned a preferred spine item (e.g. a deep-link with
+            // `?loc=`), prefer the first hit inside that exact section. Fall back
+            // to the first hit globally only when there's no match in the pin.
+            let startIdx = 0;
+            const pin = (preferredSpineIndex === undefined || preferredSpineIndex === null)
+                ? null
+                : parseInt(preferredSpineIndex, 10);
+            if (pin !== null && !isNaN(pin)) {
+                const pinned = hits.findIndex(h => h.spineIndex === pin);
+                if (pinned !== -1) startIdx = pinned;
+            }
+            gotoHit(startIdx);
+        }
+        updateButtons();
+    }
+
+    // Wire up the toolbar.
+    $form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        runBookSearch($input.value);
+    });
+    $next.addEventListener("click", function () { gotoHit(currentHitIndex + 1); });
+    $prev.addEventListener("click", function () { gotoHit(currentHitIndex - 1); });
+    $clear.addEventListener("click", function () {
+        $input.value = "";
+        clearSearch();
+    });
+    $input.addEventListener("input", function () {
+        // Enable/disable the clear button as the user types, even with no hits yet.
+        updateButtons();
+    });
+    updateButtons();
+
+    // Deep-link `q=` — pre-fill the box and run the full search once the book
+    // is ready. Pass `loc` (when present) as the preferred spine index so the
+    // viewer lands on the match inside that chapter rather than the first match
+    // in the book. Manual searches triggered from the toolbar don't pass a pin.
+    if (searchQuery) {
+        $input.value = searchQuery;
+        book.ready.then(function () {
+            runBookSearch(searchQuery, currentSectionIndex);
         });
     }
 

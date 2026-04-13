@@ -28,6 +28,68 @@ async def test_extract_epub_sections(test_session, test_directory, example_epub)
     assert all(s.label for s in metadata.sections)
 
 
+@pytest.mark.asyncio
+async def test_extract_epub_ordinals_match_reading_spine_order(test_session, test_directory, tmp_path):
+    """Section ordinals must index the EPUB *reading spine*, not the full manifest.
+
+    The JS viewer (epub.html) resolves a deep-linked section via `spine.get(n)`,
+    which is only defined for items in the spine. Two ways `get_items_of_type
+    (ITEM_DOCUMENT)` diverges from the spine:
+
+    1. An EPUB 3 book lists a `nav.xhtml` (properties=nav) in the manifest but
+       excludes it from the spine — doc count > spine count.
+    2. The spine declares items in a different order than the manifest, so
+       enumerating ITEM_DOCUMENT gives scrambled ordinals even when counts match.
+
+    This test constructs a minimal EPUB exhibiting both conditions and asserts the
+    extracted sections are in spine order (by matching spine-only content).
+    """
+    from ebooklib import epub as epub_lib
+
+    book = epub_lib.EpubBook()
+    book.set_identifier('spine-test')
+    book.set_title('Spine Test')
+    book.set_language('en')
+
+    # Three chapters whose spine order is INTENTIONALLY different from the
+    # manifest add order, so ITEM_DOCUMENT (manifest) and spine indices diverge.
+    c_first = epub_lib.EpubHtml(title='Opens first', file_name='c_first.xhtml', lang='en')
+    c_first.content = '<html><head></head><body><p>OPEN_MARKER</p></body></html>'
+    c_middle = epub_lib.EpubHtml(title='Opens middle', file_name='c_middle.xhtml', lang='en')
+    c_middle.content = '<html><head></head><body><p>MIDDLE_MARKER</p></body></html>'
+    c_last = epub_lib.EpubHtml(title='Opens last', file_name='c_last.xhtml', lang='en')
+    c_last.content = '<html><head></head><body><p>LAST_MARKER</p></body></html>'
+
+    # Manifest insertion order: last, first, middle — deliberately scrambled.
+    book.add_item(c_last)
+    book.add_item(c_first)
+    book.add_item(c_middle)
+
+    # EPUB 3 nav (in manifest but NOT in the reading spine). This makes
+    # ITEM_DOCUMENT iteration include a doc the viewer's spine.get() won't.
+    book.toc = (c_first, c_middle, c_last)
+    book.add_item(epub_lib.EpubNcx())
+    book.add_item(epub_lib.EpubNav())
+
+    # Spine order: first, middle, last (different from manifest order). Nav excluded.
+    book.spine = [c_first, c_middle, c_last]
+
+    epub_path = tmp_path / 'spine_order.epub'
+    epub_lib.write_epub(str(epub_path), book)
+
+    from modules.docs.extractors import extract_epub
+    metadata = extract_epub(epub_path)
+
+    # Sections must be in spine order: first, middle, last — and must NOT include nav.
+    contents = [s.content for s in metadata.sections]
+    assert len(contents) == 3, f'Expected 3 spine sections, got {len(contents)}: {contents!r}'
+    assert 'OPEN_MARKER' in contents[0], f'ordinal 0 should be the first spine item; got {contents[0]!r}'
+    assert 'MIDDLE_MARKER' in contents[1], f'ordinal 1 should be the middle spine item; got {contents[1]!r}'
+    assert 'LAST_MARKER' in contents[2], f'ordinal 2 should be the last spine item; got {contents[2]!r}'
+    # And none of them should be the nav file.
+    assert not any('epub:type' in c for c in contents), 'nav.xhtml must not be a section'
+
+
 def test_resolve_spine_labels_carries_forward_across_split_chapters():
     """When a chapter spans multiple spine items (common in Calibre conversions),
     sections after the TOC-anchored one inherit the chapter label instead of

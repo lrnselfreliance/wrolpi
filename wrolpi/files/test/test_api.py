@@ -229,6 +229,34 @@ async def test_files_search(test_session, async_client, make_files_structure, as
 
 
 @pytest.mark.asyncio
+async def test_files_search_attaches_doc_section_hint(async_client, test_session, test_directory,
+                                                     example_epub, refresh_files):
+    """The global /api/files/search endpoint attaches `section_hint` to doc-modeled
+    results so the UI can deep-link into the matching chapter. Regression test for a
+    bug where only the docs-specific endpoint (/api/docs/search) attached hints."""
+    await refresh_files()
+
+    body = dict(search_str='chapter')
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK
+
+    epub_results = [r for r in response.json['file_groups']
+                    if r.get('model') == 'doc'
+                    and (r.get('mimetype') or '').startswith('application/epub')]
+    assert len(epub_results) == 1, f'Expected 1 EPUB result, got: {response.json}'
+    result = epub_results[0]
+    assert 'section_hint' in result, \
+        f'doc result has no section_hint on global search path: {result}'
+    hint = result['section_hint']
+    assert hint['kind'] == 'epub_spine'
+    # The test EPUB's "Chapter one" body is in spine item 1.
+    assert hint['ordinal'] == 1
+    assert hint['label']
+    # Snippet uses our sentinel markers, not raw HTML.
+    assert '[[WROLPI_HL]]' in hint['snippet']
+
+
+@pytest.mark.asyncio
 async def test_files_search_any_tag(async_client, test_session, make_files_structure, tag_factory, refresh_files):
     one, two = await tag_factory(), await tag_factory()
     files = [

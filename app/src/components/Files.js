@@ -43,7 +43,7 @@ import {
     useWROLMode
 } from "../hooks/customHooks";
 import {useFileWorkerStatus} from "../contexts/FileWorkerStatusContext";
-import {Link, Route, Routes} from "react-router";
+import {Link, Route, Routes, useSearchParams} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -67,15 +67,35 @@ import {Headlines} from "./Headline";
 import {useSearch} from "./Search";
 import {FILES_MEDIA_URI} from "./Vars";
 
+// Split a ts_headline snippet on our sentinel markers and wrap each match in <b>.
+// We use sentinels instead of ts_headline's default <b> tags so the snippet can be
+// safely rendered as React children without dangerouslySetInnerHTML.
+function renderHighlightedSnippet(snippet, s) {
+    const parts = snippet.split(/\[\[WROLPI_HL\]\]|\[\[\/WROLPI_HL\]\]/);
+    // Even indices are plain text, odd indices are highlighted matches.
+    return parts.map((part, i) => i % 2 === 1 ? <b key={i} {...s}>{part}</b> : <span key={i} {...s}>{part}</span>);
+}
+
 function EbookCard({file, sortField}) {
     const {s, t} = useContext(ThemeContext);
+    const [searchParams] = useSearchParams();
+    const query = searchParams.get('q') || '';
 
     const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const isEpub = file['mimetype'] && file['mimetype'].startsWith('application/epub');
     const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
 
-    // Link to doc detail page if this is a modeled doc.
-    const detailUrl = file.model === 'doc' ? `/docs/${file.id}` : null;
+    // Link to doc detail page if this is a modeled doc, augmenting with
+    // the section hint from search so the viewer opens at the right chapter/page.
+    const hint = file.section_hint;
+    let detailUrl = file.model === 'doc' ? `/docs/${file.id}` : null;
+    if (detailUrl && hint) {
+        const params = new URLSearchParams();
+        if (hint.kind === 'epub_spine') params.set('loc', String(hint.ordinal));
+        if (hint.kind === 'pdf_page') params.set('page', String(hint.ordinal));
+        if (query) params.set('q', query);
+        detailUrl = `${detailUrl}?${params.toString()}`;
+    }
 
     const color = mimetypeColor(file.mimetype, file.primary_path);
     const title = file.title || file.stem || file.name;
@@ -98,6 +118,12 @@ function EbookCard({file, sortField}) {
                     ? <p {...s}>{file.published_datetime ? isoDatetimeToAgoPopup(file.published_datetime, false) : null}</p>
                     : file.size && <p {...s}>{humanFileSize(file.size)}</p>
                 }
+                {hint && <p {...s} style={{fontSize: '0.85em', marginTop: '0.3em'}}>
+                    <b {...s}>{hint.label}</b>
+                    {hint.snippet && <span style={{...s, marginLeft: '0.4em', opacity: 0.8}}>
+                        {renderHighlightedSnippet(hint.snippet, s)}
+                    </span>}
+                </p>}
             </CardMeta>
         </CardContent>
     </Card>

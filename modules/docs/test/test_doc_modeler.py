@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from modules.docs import doc_modeler
-from modules.docs.models import Doc
+from modules.docs.models import Doc, DocSection
 from wrolpi.dates import now
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -50,6 +50,53 @@ async def test_doc_modeler_pdf(async_client, test_session, test_directory, examp
     assert doc.file_group.model == 'doc'
     assert doc.file_group.indexed is True
     assert doc.size  # Has a size.
+
+
+@pytest.mark.asyncio
+async def test_doc_modeler_persists_epub_sections(async_client, test_session, test_directory,
+                                                  example_epub, refresh_files):
+    """After modeling, per-spine-item DocSection rows exist for an EPUB."""
+    await refresh_files()
+
+    doc: Doc = test_session.query(Doc).one()
+    sections = test_session.query(DocSection).filter_by(doc_id=doc.id) \
+        .order_by(DocSection.ordinal).all()
+    assert sections, 'EPUB modeler should produce DocSection rows'
+    assert all(s.kind == 'epub_spine' for s in sections)
+    assert [s.ordinal for s in sections] == list(range(len(sections)))
+
+
+@pytest.mark.asyncio
+async def test_doc_modeler_persists_pdf_sections(async_client, test_session, test_directory,
+                                                 example_pdf, refresh_files):
+    """After modeling, per-page DocSection rows exist for a PDF."""
+    await refresh_files()
+
+    doc: Doc = test_session.query(Doc).one()
+    sections = test_session.query(DocSection).filter_by(doc_id=doc.id) \
+        .order_by(DocSection.ordinal).all()
+    assert sections, 'PDF modeler should produce DocSection rows'
+    assert all(s.kind == 'pdf_page' for s in sections)
+    # 1-based ordinals, test PDF has 3 pages.
+    assert [s.ordinal for s in sections] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_doc_modeler_replaces_sections(async_client, test_session, test_directory,
+                                             example_epub, refresh_files):
+    """Re-modeling a Doc replaces its DocSection rows (no duplicates)."""
+    from modules.docs import _model_doc
+
+    await refresh_files()
+    doc: Doc = test_session.query(Doc).one()
+    initial_count = test_session.query(DocSection).filter_by(doc_id=doc.id).count()
+    assert initial_count > 0
+
+    # Re-run modeling on the same file_group and confirm we don't accumulate rows.
+    _model_doc(doc.file_group, test_session)
+    test_session.commit()
+    final_count = test_session.query(DocSection).filter_by(doc_id=doc.id).count()
+    assert final_count == initial_count
 
 
 @pytest.mark.asyncio

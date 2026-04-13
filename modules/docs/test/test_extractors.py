@@ -16,6 +16,77 @@ async def test_extract_epub(test_session, test_directory, example_epub):
 
 
 @pytest.mark.asyncio
+async def test_extract_epub_sections(test_session, test_directory, example_epub):
+    """extract_epub produces one DocSection per spine item with ascending ordinals."""
+    metadata = extract_epub(example_epub)
+    assert metadata.sections, 'EPUB should produce at least one section'
+    assert all(s.kind == 'epub_spine' for s in metadata.sections)
+    # Ordinals should be 0..N-1 and strictly ascending.
+    ordinals = [s.ordinal for s in metadata.sections]
+    assert ordinals == list(range(len(metadata.sections)))
+    # Every section has a label.
+    assert all(s.label for s in metadata.sections)
+
+
+def test_resolve_spine_labels_carries_forward_across_split_chapters():
+    """When a chapter spans multiple spine items (common in Calibre conversions),
+    sections after the TOC-anchored one inherit the chapter label instead of
+    falling back to a generic 'Section N'.
+
+    This models real-world books like 'Mountain States Medicinal Plants' where each
+    plant's chapter is split across ~5 spine items but the TOC only anchors the first.
+    """
+    from modules.docs.extractors import _resolve_spine_labels
+
+    href_to_label = {
+        'text/mullein_0.xhtml': 'Mullein',
+        'text/yarrow_0.xhtml': 'Yarrow',
+    }
+    # (file_name, get_name) tuples in spine order.
+    hrefs = [
+        ('front.xhtml', 'front.xhtml'),
+        ('text/mullein_0.xhtml', 'text/mullein_0.xhtml'),
+        ('text/mullein_1.xhtml', 'text/mullein_1.xhtml'),
+        ('text/mullein_2.xhtml', 'text/mullein_2.xhtml'),
+        ('text/yarrow_0.xhtml', 'text/yarrow_0.xhtml'),
+        ('text/yarrow_1.xhtml', 'text/yarrow_1.xhtml'),
+    ]
+    labels = _resolve_spine_labels(hrefs, href_to_label)
+
+    # Front matter has no TOC anchor yet — falls back.
+    assert labels[0] == 'Section 1'
+    # mullein_0 is the TOC-anchored entry for 'Mullein'; the next two inherit it.
+    assert labels[1:4] == ['Mullein', 'Mullein', 'Mullein']
+    # yarrow_0 flips the carry-forward to the next chapter.
+    assert labels[4:6] == ['Yarrow', 'Yarrow']
+
+
+def test_build_epub_toc_label_map_strips_fragments_and_walks_nested():
+    """_build_epub_toc_label_map handles fragments and nested (Section, [children])
+    tuples, taking the first label that wins for a given href."""
+    from modules.docs.extractors import _build_epub_toc_label_map
+
+    class FakeLink:
+        def __init__(self, href, title):
+            self.href = href
+            self.title = title
+
+    toc = (
+        FakeLink('chap1.xhtml', 'Chapter One'),
+        # A nested (Section, [children]) tuple — children should be walked.
+        (FakeLink('chap2.xhtml', 'Part Two'), [
+            FakeLink('chap2.xhtml#sub-a', 'Sub A'),
+            FakeLink('chap3.xhtml', 'Chapter Three'),
+        ]),
+        FakeLink('chap1.xhtml', 'Chapter One Duplicate'),  # first wins
+    )
+    result = _build_epub_toc_label_map(toc)
+    assert result['chap1.xhtml'] == 'Chapter One'
+    assert result['chap2.xhtml'] == 'Part Two'  # fragment stripped; first wins
+    assert result['chap3.xhtml'] == 'Chapter Three'
+
+
+@pytest.mark.asyncio
 async def test_extract_pdf(test_session, test_directory, example_pdf):
     """Metadata can be extracted from a PDF file."""
     metadata = extract_pdf(example_pdf)
@@ -34,6 +105,17 @@ async def test_extract_pdf_metadata(test_session, test_directory, example_pdf):
     assert metadata.published_date is not None
     assert metadata.cover_bytes
     assert metadata.text
+
+
+@pytest.mark.asyncio
+async def test_extract_pdf_sections(test_session, test_directory, example_pdf):
+    """extract_pdf produces one DocSection per page with 1-based ordinals."""
+    metadata = extract_pdf(example_pdf)
+    assert metadata.sections, 'PDF should produce at least one section'
+    assert all(s.kind == 'pdf_page' for s in metadata.sections)
+    # Pages are 1-indexed; the test PDF has 3 pages.
+    assert [s.ordinal for s in metadata.sections] == [1, 2, 3]
+    assert all(s.label == f'Page {s.ordinal}' for s in metadata.sections)
 
 
 @pytest.mark.asyncio

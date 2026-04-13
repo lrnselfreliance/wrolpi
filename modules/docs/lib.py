@@ -4,7 +4,7 @@ import pathlib
 import re
 from typing import List, Optional
 
-from sqlalchemy import asc, desc, func, nullslast
+from sqlalchemy import asc, desc, func, nullslast, text
 from sqlalchemy.orm import Session
 
 from wrolpi.collections.models import Collection
@@ -404,6 +404,50 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
             query = query.order_by(desc(FileGroup.id))
 
         file_groups = query.offset(offset).limit(limit).all()
+        fg_ids = [fg.id for fg in file_groups]
         results = [fg.__json__() for fg in file_groups]
 
+        if search_str and fg_ids:
+            hints = _fetch_section_hints(session, fg_ids, search_str)
+            for r in results:
+                hint = hints.get(r['id'])
+                if hint:
+                    r['section_hint'] = hint
+
     return results, total
+
+
+def _fetch_section_hints(session, file_group_ids, search_str):
+    """For each matching Doc, return the best-ranking DocSection for `search_str`.
+
+    Returns a mapping of file_group_id -> {kind, ordinal, label, snippet}.
+    """
+    from .models import Doc, DocSection
+
+    if not file_group_ids:
+        return {}
+
+    sql = text('''
+        SELECT DISTINCT ON (d.file_group_id)
+            d.file_group_id AS fg_id,
+            ds.kind AS kind,
+            ds.ordinal AS ordinal,
+            ds.label AS label,
+            ts_headline('english', ds.content, q,
+                        'MaxWords=20,MinWords=5,ShortWord=3,StartSel=[[WROLPI_HL]],StopSel=[[/WROLPI_HL]]') AS snippet
+        FROM doc_section ds
+        JOIN doc d ON d.id = ds.doc_id,
+             websearch_to_tsquery('english', :q) q
+        WHERE d.file_group_id = ANY(:ids) AND ds.tsv @@ q
+        ORDER BY d.file_group_id, ts_rank(ds.tsv, q) DESC, ds.ordinal ASC
+    ''')
+    rows = session.execute(sql, {'q': search_str, 'ids': list(file_group_ids)}).fetchall()
+    hints = {}
+    for row in rows:
+        hints[row['fg_id']] = {
+            'kind': row['kind'],
+            'ordinal': row['ordinal'],
+            'label': row['label'],
+            'snippet': row['snippet'],
+        }
+    return hints

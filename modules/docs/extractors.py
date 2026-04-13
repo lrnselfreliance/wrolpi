@@ -121,6 +121,34 @@ def _build_epub_toc_label_map(toc) -> dict:
     return href_to_label
 
 
+def _iter_epub_spine_documents(book) -> list:
+    """Return the EpubHtml items that make up the book's reading spine, in order.
+
+    Using `book.get_items_of_type(ITEM_DOCUMENT)` is wrong for deep-linking because
+    it enumerates the full manifest — which can include EPUB 3 `nav.xhtml` files
+    (excluded from the spine) and can return items in manifest order that differs
+    from spine order. The viewer (`epub.html`) resolves deep-links via
+    `spine.get(n)`, which indexes the reading spine only — so section ordinals
+    must match that.
+
+    Falls back to the manifest-order iteration only if the book has no spine info
+    (malformed EPUB), to preserve indexing behavior on edge cases.
+    """
+    spine_docs = []
+    spine = getattr(book, 'spine', None)
+    if spine:
+        for entry in spine:
+            # book.spine entries are (idref, linear) tuples or bare idref strings.
+            idref = entry[0] if isinstance(entry, (tuple, list)) else entry
+            item = book.get_item_with_id(idref)
+            if item is not None and item.get_type() == ebooklib.ITEM_DOCUMENT:
+                spine_docs.append(item)
+    if not spine_docs:
+        # Malformed / spine-less EPUB — fall back to manifest order.
+        spine_docs = list(book.get_items_of_type(ebooklib.ITEM_DOCUMENT))
+    return spine_docs
+
+
 def _resolve_spine_labels(hrefs, href_to_label: dict) -> list:
     """Assign each spine item a label, carrying the most recently-matched TOC label
     forward so mid-chapter spine items inherit their chapter's label.
@@ -179,7 +207,7 @@ def extract_epub(path: pathlib.Path) -> DocMetadata:
     # recently-matched TOC label forward so mid-chapter sections still get a useful
     # label (e.g. "Mullein" rather than "Section 302").
     text_parts = []
-    spine_items = list(book.get_items_of_type(ebooklib.ITEM_DOCUMENT))
+    spine_items = _iter_epub_spine_documents(book)
     hrefs = [(d.file_name, d.get_name()) for d in spine_items]
     labels = _resolve_spine_labels(hrefs, href_to_label)
     for ordinal, (doc, label) in enumerate(zip(spine_items, labels)):

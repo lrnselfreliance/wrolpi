@@ -1057,9 +1057,11 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
         search_str = params.get('search_str') if isinstance(params, dict) else None
         if search_str:
             from modules.docs.lib import _fetch_section_hints
-            doc_ids = [r['id'] for r in results if r.get('model') == 'doc']
-            if doc_ids:
-                hints = _fetch_section_hints(session, doc_ids, search_str)
+            # `r['id']` is the FileGroup primary key; _fetch_section_hints filters
+            # on `file_group_id`, so this list is file-group ids (not doc.id).
+            fg_ids = [r['id'] for r in results if r.get('model') == 'doc']
+            if fg_ids:
+                hints = _fetch_section_hints(session, fg_ids, search_str)
                 for r in results:
                     hint = hints.get(r['id'])
                     if hint:

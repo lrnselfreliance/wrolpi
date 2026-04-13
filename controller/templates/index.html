@@ -2404,6 +2404,7 @@
             if (upgradeBanner) {
                 upgradeBanner.classList.add('show');
                 document.getElementById('script-running-name').textContent = 'WROLPi Upgrade Running';
+                currentScriptOutput = 'upgrade';
             }
 
             const upgradeIsDocker = {{ 'true' if docker_mode else 'false' }};

@@ -1,6 +1,7 @@
 import asyncio
 from typing import Callable, List, Tuple
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
@@ -24,7 +25,7 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
         with get_db_session(commit=True) as session:
             file_groups = session.query(FileGroup, Video).filter(
                 FileGroup.indexed != True,
-                FileGroup.mimetype.like('video/%'),
+                or_(FileGroup.mimetype.like('video/%'), FileGroup.mimetype.like('audio/%')),
             ).outerjoin(Video, Video.file_group_id == FileGroup.id) \
                 .limit(VIDEO_PROCESSING_LIMIT)
             file_groups: List[Tuple[FileGroup, Video]] = list(file_groups)
@@ -79,10 +80,14 @@ async def video_modeler(progress_callback: Callable[[int], None] = None):
 def video_cleanup():
     logger.info('Claiming Videos for their Channels')
     with get_db_curs(commit=True) as curs:
-        # Delete all Videos if the FileModel no longer contains a video.
+        # Delete all Videos if the FileModel no longer contains a video or audio file.
         curs.execute('''
                      WITH deleted AS
-                              (UPDATE file_group SET model = null WHERE model = 'video' AND mimetype NOT LIKE 'video/%' RETURNING id)
+                              (UPDATE file_group SET model = null
+                               WHERE model = 'video'
+                                 AND mimetype NOT LIKE 'video/%%'
+                                 AND mimetype NOT LIKE 'audio/%%'
+                               RETURNING id)
                      DELETE
                      FROM video
                      WHERE file_group_id = ANY (select id from deleted)

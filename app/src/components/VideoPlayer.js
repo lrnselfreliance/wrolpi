@@ -1,4 +1,4 @@
-import React, {useContext, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {useHotkeys} from 'react-hotkeys-hook';
 import {deleteVideos, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router";
@@ -25,7 +25,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Loader, Segment, Tab} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
-import {Comment, CommentGroup, Input, Label} from "semantic-ui-react";
+import {Comment, CommentGroup, Input, Label, Transition} from "semantic-ui-react";
 
 const MEDIA_PATH = '/media';
 
@@ -249,6 +249,26 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         }
     }, {enableOnFormTags: false});
 
+    const isAudioFile = videoFile?.mimetype?.startsWith('audio/');
+    const [showAudioOverlay, setShowAudioOverlay] = useState(!!isAudioFile);
+    const [audioPosterHover, setAudioPosterHover] = useState(false);
+    const [audioPlaying, setAudioPlaying] = useState(false);
+    useEffect(() => {
+        if (!isAudioFile) return;
+        setShowAudioOverlay(true);
+        const timer = setTimeout(() => setShowAudioOverlay(false), 3000);
+        return () => clearTimeout(timer);
+    }, [isAudioFile]);
+    useEffect(() => {
+        const el = videoRef.current;
+        if (!isAudioFile || !el) return;
+        const onPlay = () => setAudioPlaying(true);
+        const onPause = () => setAudioPlaying(false);
+        el.addEventListener('play', onPlay);
+        el.addEventListener('pause', onPause);
+        return () => { el.removeEventListener('play', onPlay); el.removeEventListener('pause', onPause); };
+    }, [isAudioFile]);
+
     if (videoFile === null) {
         return <VideoPlaceholder/>;
     }
@@ -313,10 +333,10 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <table style={tableStyle}>
                 <tbody>
                 <tr>
-                    <td style={labelStyle}><strong>Video File</strong></td>
+                    <td style={labelStyle}><strong>{isAudio ? 'Audio File' : 'Video File'}</strong></td>
                     <td>
                         {video['video_path']
-                            ? <><PreviewPath path={video['video_path']} mimetype='video/*' taggable={false}>
+                            ? <><PreviewPath path={video['video_path']} mimetype={isAudio ? 'audio/*' : 'video/*'} taggable={false}>
                                 {video['video_path']}
                             </PreviewPath>{fileSize(videoPathFile)}</>
                             : 'Unknown'}
@@ -434,6 +454,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     }
 
     let videoSource = <source src={videoUrl}/>;
+    const isAudio = videoFile.mimetype && videoFile.mimetype.startsWith('audio/');
 
     let prevNextVideosSegment = <Segment><p>No related videos found.</p></Segment>;
     if (prevFile || nextFile) {
@@ -463,7 +484,42 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <BackButton/>
         </Container>
 
-        <video controls
+        {isAudio ? <>
+            {posterUrl && <div
+                className='audio-poster-container'
+                onClick={() => {
+                    if (videoRef.current) {
+                        videoRef.current.paused ? videoRef.current.play() : videoRef.current.pause();
+                    }
+                }}
+                onMouseEnter={() => setAudioPosterHover(true)}
+                onMouseLeave={() => setAudioPosterHover(false)}
+            >
+                <img
+                    src={posterUrl}
+                    alt={mediaTitle || 'Audio thumbnail'}
+                    style={{maxWidth: '100%', maxHeight: '400px', cursor: 'pointer'}}
+                />
+                <Transition visible={showAudioOverlay} animation='fade' duration={500}>
+                    <div className='audio-poster-overlay'>
+                        <Icon name='volume up' size='massive'/>
+                    </div>
+                </Transition>
+                <Transition visible={audioPosterHover && !showAudioOverlay} animation='fade' duration={200}>
+                    <div className='audio-poster-overlay'>
+                        <Icon name={audioPlaying ? 'pause circle outline' : 'play circle outline'} size='massive'/>
+                    </div>
+                </Transition>
+            </div>}
+            <audio controls
+                   autoPlay={props.autoplay !== undefined ? props.autoplay : true}
+                   id="player"
+                   style={{width: '100%', marginTop: posterUrl ? '0.5em' : 0}}
+                   ref={videoRef}
+            >
+                {videoSource}
+            </audio>
+        </> : <video controls
                className='video-player'
                autoPlay={props.autoplay !== undefined ? props.autoplay : true}
                poster={posterUrl}
@@ -475,7 +531,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             {videoSource}
             {/* Only WebVTT captions can be displayed. */}
             {captionUrls.map(i => <CaptionTrack key={i} src={i}/>)}
-        </video>
+        </video>}
 
         <Container style={{marginTop: '1em'}}>
             <Segment>

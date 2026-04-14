@@ -326,6 +326,10 @@ class FileGroup(ModelHelper, Base):
         """Return all my Files that are videos."""
         return self.my_files('video/')
 
+    def my_audio_files(self):
+        """Return all my Files that are audio."""
+        return self.my_files('audio/')
+
     def my_json_files(self):
         """Return all my Files that are JSON."""
         return self.my_files('application/json')

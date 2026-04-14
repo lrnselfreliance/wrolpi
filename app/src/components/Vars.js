@@ -120,9 +120,22 @@ export const defaultVideoResolutionOptions = ['1080p', '720p', '480p', 'maximum'
 export const downloadFormatOptions = [
     {key: 'mp4', text: '.mp4', value: 'mp4'},
     {key: 'mkv', text: '.mkv', value: 'mkv'},
+    {key: 'ogg', text: '.ogg', value: 'ogg'},
+    {key: 'webm', text: '.webm', value: 'webm'},
 ]
 
 export const defaultVideoFormatOption = 'mp4';
+
+export const downloadAudioFormatOptions = [
+    {key: 'mp3', text: '.mp3', value: 'mp3'},
+    {key: 'opus', text: '.opus', value: 'opus'},
+    {key: 'm4a', text: '.m4a', value: 'm4a'},
+    {key: 'flac', text: '.flac', value: 'flac'},
+    {key: 'vorbis', text: '.ogg', value: 'vorbis'},
+    {key: 'wav', text: '.wav', value: 'wav'},
+];
+
+export const defaultAudioFormatOption = 'mp3';
 
 export const Downloaders = {
     Archive: 'archive',

@@ -28,8 +28,10 @@ import {
 import {
     channelFrequencyOptions,
     days30Option,
+    defaultAudioFormatOption,
     defaultVideoFormatOption,
     defaultVideoResolutionOptions,
+    downloadAudioFormatOptions,
     Downloaders,
     downloadFormatOptions,
     downloadOrderOptions,
@@ -320,6 +322,39 @@ export function VideoFormatSelectorForm({form, name = 'video_format', path = 'se
     </>
 }
 
+export function AudioOnlyToggle({form, onChange}) {
+    return <ToggleForm
+        form={form}
+        label='Audio only'
+        name='audio_only'
+        path='settings.audio_only'
+        helpContent='Download only the audio track from videos.'
+        onChange={onChange}
+    />
+}
+
+export function AudioFormatSelectorForm({form, name = 'audio_format', path = 'settings.audio_format'}) {
+    const [inputProps, inputAttrs] = form.getSelectionProps({
+        name,
+        path,
+        defaultValue: defaultAudioFormatOption,
+    });
+
+    return <>
+        <InfoHeader
+            headerSize='h5'
+            headerContent='Audio Format'
+            popupContent='Audio will be downloaded and converted to this format.'
+            for_='audio_format_input'
+        />
+        <FormDropdown selection
+                      id='audio_format_input'
+                      options={downloadAudioFormatOptions}
+                      {...inputProps}
+        />
+    </>
+}
+
 function VideoDurationLimit({form, name, path, label, helpContent, placeholder, helpPosition}) {
     return <NumberInputForm
         form={form}
@@ -496,6 +531,8 @@ export function VideosDownloadForm({
         settings: {
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,
+            audio_only: false,
+            audio_format: defaultAudioFormatOption,
             writesubtitles: false,
             writeautomaticsub: false,
             writethumbnail: false,
@@ -618,17 +655,29 @@ export function VideosDownloadForm({
                     />
                 </Grid.Column>
             </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={11}>
-                    <VideoResolutionSelectorForm
-                        form={form}
-                        onChange={() => setUserChangedResolutions(true)}
-                    />
-                </Grid.Column>
-                <Grid.Column width={4}>
-                    <VideoFormatSelectorForm form={form}/>
+            <Grid.Row>
+                <Grid.Column>
+                    <AudioOnlyToggle form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            {form.formData?.settings?.audio_only
+                ? <Grid.Row columns={1}>
+                    <Grid.Column width={5}>
+                        <AudioFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+                : <Grid.Row columns={2}>
+                    <Grid.Column width={11}>
+                        <VideoResolutionSelectorForm
+                            form={form}
+                            onChange={() => setUserChangedResolutions(true)}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={4}>
+                        <VideoFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+            }
             <Grid.Row columns={1}>
                 <Grid.Column>
                     <ChannelTagNameForm form={form}/>
@@ -768,6 +817,8 @@ export function ChannelDownloadForm({
             video_count_limit: null,
             video_format: defaultVideoFormat,
             video_resolutions: configResolutions,
+            audio_only: false,
+            audio_format: defaultAudioFormatOption,
             writesubtitles: false,
             writeautomaticsub: false,
             writethumbnail: false,
@@ -886,17 +937,29 @@ export function ChannelDownloadForm({
                     <VideoDownloadCountLimit form={form}/>
                 </Grid.Column>
             </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={11}>
-                    <VideoResolutionSelectorForm
-                        form={form}
-                        onChange={() => setUserChangedResolutions(true)}
-                    />
-                </Grid.Column>
-                <Grid.Column width={4}>
-                    <VideoFormatSelectorForm form={form}/>
+            <Grid.Row>
+                <Grid.Column>
+                    <AudioOnlyToggle form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            {form.formData?.settings?.audio_only
+                ? <Grid.Row columns={1}>
+                    <Grid.Column width={5}>
+                        <AudioFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+                : <Grid.Row columns={2}>
+                    <Grid.Column width={11}>
+                        <VideoResolutionSelectorForm
+                            form={form}
+                            onChange={() => setUserChangedResolutions(true)}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={4}>
+                        <VideoFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+            }
             <Grid.Row columns={2}>
                 <Grid.Column tablet={8} computer={4}>
                     <VideoMinimumDurationForm form={form}/>
@@ -1110,6 +1173,8 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             title_include: null,
             video_resolutions: configResolutions,
             video_format: defaultVideoFormat,
+            audio_only: false,
+            audio_format: defaultAudioFormatOption,
             writesubtitles: false,
             writeautomaticsub: false,
             writethumbnail: false,
@@ -1196,17 +1261,29 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
                     <TitleExclusionInput form={form}/>
                 </Grid.Column>
             </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column mobile={16} computer={11}>
-                    <VideoResolutionSelectorForm
-                        form={form}
-                        onChange={() => setUserChangedResolutions(true)}
-                    />
-                </Grid.Column>
-                <Grid.Column mobile={8} computer={3}>
-                    <VideoFormatSelectorForm form={form}/>
+            <Grid.Row>
+                <Grid.Column>
+                    <AudioOnlyToggle form={form}/>
                 </Grid.Column>
             </Grid.Row>
+            {form.formData?.settings?.audio_only
+                ? <Grid.Row columns={1}>
+                    <Grid.Column width={5}>
+                        <AudioFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+                : <Grid.Row columns={2}>
+                    <Grid.Column mobile={16} computer={11}>
+                        <VideoResolutionSelectorForm
+                            form={form}
+                            onChange={() => setUserChangedResolutions(true)}
+                        />
+                    </Grid.Column>
+                    <Grid.Column mobile={8} computer={3}>
+                        <VideoFormatSelectorForm form={form}/>
+                    </Grid.Column>
+                </Grid.Row>
+            }
             <Grid.Row columns={2}>
                 <Grid.Column tablet={8} computer={4}>
                     <VideoMinimumDurationForm form={form}/>

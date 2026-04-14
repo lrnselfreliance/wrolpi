@@ -301,6 +301,10 @@ class Video(ModelHelper, Base):
         for file_group in self.file_group.my_video_files():
             return file_group['path']
 
+        # Or the first audio file (for audio-only downloads).
+        for file_group in self.file_group.my_audio_files():
+            return file_group['path']
+
     @property
     def poster_file(self) -> Optional[dict]:
         for file_group in self.file_group.my_poster_files():

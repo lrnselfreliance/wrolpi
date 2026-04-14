@@ -144,7 +144,8 @@ def validate_video(session: Session, video: Video, channel_generate_poster: bool
         video.file_group.published_datetime = json_published_datetime or published_date
         video.source_id = video.source_id or source_id
 
-    if channel_generate_poster:
+    is_audio = video.file_group.mimetype and video.file_group.mimetype.startswith('audio/')
+    if channel_generate_poster and not is_audio:
         # Try to convert/generate, but keep the old poster if those fail.
         new_poster_path, duration = convert_or_generate_poster(video) or video.poster_path
         if new_poster_path:
@@ -565,6 +566,8 @@ class VideoDownloaderConfigValidator:
     download_missing_video_comments: bool = False
     user_agent: str = ''
     sleep_requests: float = 0.75
+    audio_only: bool = False
+    audio_format: str = 'mp3'
 
     def __post_init__(self):
         allowed_fields = {i.name for i in dataclasses.fields(VideoDownloaderConfigYtDlpOptionsValidator)}
@@ -594,6 +597,8 @@ class VideoDownloaderConfig(ConfigFile):
         download_missing_video_comments=False,
         user_agent='',
         sleep_requests=0.75,
+        audio_only=False,
+        audio_format='mp3',
     )
     validator = VideoDownloaderConfigValidator
 
@@ -690,6 +695,22 @@ class VideoDownloaderConfig(ConfigFile):
     def sleep_requests(self, value: float):
         self.update({**self._config, 'sleep_requests': value})
 
+    @property
+    def audio_only(self) -> bool:
+        return self._config.get('audio_only', False)
+
+    @audio_only.setter
+    def audio_only(self, value: bool):
+        self.update({**self._config, 'audio_only': value})
+
+    @property
+    def audio_format(self) -> str:
+        return self._config.get('audio_format', 'mp3')
+
+    @audio_format.setter
+    def audio_format(self, value: str):
+        self.update({**self._config, 'audio_format': value})
+
     def import_config(self, file: pathlib.Path = None, send_events=False):
         super().import_config(file, send_events)
         self.successful_import = True
@@ -718,7 +739,7 @@ def set_test_downloader_config(enabled: bool):
 INHERITABLE_VIDEO_SETTINGS = {
     'video_resolutions', 'video_format', 'writesubtitles', 'writeautomaticsub',
     'writethumbnail', 'writeinfojson', 'yt_dlp_extra_args', 'sleep_requests',
-    'user_agent', 'continue_dl', 'nooverwrites',
+    'user_agent', 'continue_dl', 'nooverwrites', 'audio_only', 'audio_format',
 }
 
 # Subset of inheritable settings allowed at channel/RSS level.
@@ -740,6 +761,8 @@ def _extract_global_inheritable(config: VideoDownloaderConfig) -> dict:
         'user_agent': config.user_agent,
         'continue_dl': config.continue_dl,
         'nooverwrites': config.nooverwrites,
+        'audio_only': config.audio_only,
+        'audio_format': config.audio_format,
     }
 
 

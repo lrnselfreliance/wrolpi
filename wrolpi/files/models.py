@@ -451,11 +451,11 @@ class FileGroup(ModelHelper, Base):
         else:
             self.replace_info_json(contents)
 
-    def delete(self, add_to_skip_list: bool = True):
+    def delete(self, add_to_skip_list: bool = True, force: bool = False):
         """Delete this FileGroup record, and all of its files.
 
-        @raise FileGroupIsTagged: If any tags are related to me."""
-        if self.tag_files:
+        @raise FileGroupIsTagged: If any tags are related to me and force is False."""
+        if self.tag_files and not force:
             raise FileGroupIsTagged(f'Cannot delete {self} because it has tags')
 
         for path in self.my_paths():

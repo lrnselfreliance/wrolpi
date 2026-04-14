@@ -130,13 +130,16 @@ async def test_delete_tagged(await_switches, test_session, make_files_structure,
     await await_switches()
     test_session.commit()
 
-    # Neither file can be deleted.
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo/bar.txt')
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo/bar.mp4')
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo')
+    # Neither file can be deleted without force; tagged file groups are returned.
+    result = await lib.delete('foo/bar.txt')
+    assert result and len(result) == 1
+    result = await lib.delete('foo/bar.mp4')
+    assert result and len(result) == 1
+    result = await lib.delete('foo')
+    assert result and len(result) == 1
+
+    # Force delete succeeds.
+    await lib.delete('foo', force=True)
 
 
 @pytest.mark.asyncio

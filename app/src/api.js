@@ -1386,10 +1386,18 @@ export async function getFile(path, skipTracking = false) {
     }
 }
 
-export async function deleteFile(paths) {
-    let body = {paths: paths};
+export async function deleteFile(paths, force = false) {
+    let body = {paths: paths, force: force};
     const response = await apiPost(`${API_URI}/files/delete`, body);
     if (!response.ok) {
+        try {
+            const json = await response.clone().json();
+            if (json.code === 'FILE_GROUP_IS_TAGGED' && json.file_groups) {
+                return {tagged: true, file_groups: json.file_groups};
+            }
+        } catch (e) {
+            // Not JSON, fall through to generic error.
+        }
         const message = await getErrorMessage(response, 'Failed to delete file.  See server logs.');
         toast({
             type: 'error',

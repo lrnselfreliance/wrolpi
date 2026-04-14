@@ -216,11 +216,12 @@ def list_directories_contents(session: Session, directories_: List[str]) -> Dict
 
 
 @wrol_mode_check
-async def delete(*paths: Union[str, pathlib.Path]):
+async def delete(*paths: Union[str, pathlib.Path], force: bool = False):
     """
     Delete a file or directory in the media directory.
 
-    This will refuse to delete any files (or files in the directories) that have been tagged."""
+    If any files are tagged and force is False, returns a list of tagged FileGroups without deleting.
+    If force is True, deletes even tagged files."""
     media_directory = get_media_directory()
     paths = [media_directory / i for i in paths]
     if any(i == media_directory for i in paths):
@@ -235,33 +236,40 @@ async def delete(*paths: Union[str, pathlib.Path]):
                     continue
                 if p1 != p2 and p1 in p2.parents:
                     raise InvalidFile(f'Cannot deleted nested paths')
-    with get_db_session() as session:
-        # Search for any files that have been tagged.
-        for path in paths:
-            query = session.query(FileGroup, TagFile) \
-                .join(TagFile, TagFile.file_group_id == FileGroup.id)
-            if path.is_file():
-                # Could be deleting a file in a FileGroup that has been tagged.
-                stem, _ = split_path_stem_and_suffix(path)
-                query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
-            else:
-                # Search for any FileGroups that have been tagged under this directory.
-                # Use indexed directory column for efficient lookup
-                path_str = str(path)
-                query = query.filter(or_(
-                    FileGroup.directory == path_str,
-                    FileGroup.directory.like(f'{path_str}/%')
-                ))
-            for (file_group, tag_file) in query:
-                if any(i for i in paths if i in file_group.my_paths()):
-                    # File that will be deleted is in a Tagged FileGroup.
-                    raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
+    if not force:
+        tagged_file_groups = []
+        seen_ids = set()
+        with get_db_session() as session:
+            # Search for any files that have been tagged.
+            for path in paths:
+                query = session.query(FileGroup, TagFile) \
+                    .join(TagFile, TagFile.file_group_id == FileGroup.id)
+                if path.is_file():
+                    # Could be deleting a file in a FileGroup that has been tagged.
+                    stem, _ = split_path_stem_and_suffix(path)
+                    query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
+                else:
+                    # Search for any FileGroups that have been tagged under this directory.
+                    # Use indexed directory column for efficient lookup
+                    path_str = str(path)
+                    query = query.filter(or_(
+                        FileGroup.directory == path_str,
+                        FileGroup.directory.like(f'{path_str}/%')
+                    ))
+                for (file_group, tag_file) in query:
+                    if path.is_dir() or any(i for i in paths if i in file_group.my_paths()):
+                        if file_group.id not in seen_ids:
+                            seen_ids.add(file_group.id)
+                            tagged_file_groups.append(file_group)
+            if tagged_file_groups:
+                # Serialize while session is still active.
+                return [i.__json__() for i in tagged_file_groups]
     for path in paths:
         ignored_directories = get_wrolpi_config().ignored_directories
         if ignored_directories and str(path) in ignored_directories:
             remove_ignored_directory(path)
         if path.is_dir():
-            delete_directory(path, recursive=True)
+            delete_directory(path, recursive=True, force=force)
         elif path.exists():
             path.unlink()
 
@@ -1490,26 +1498,27 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
         session.expire_all()
 
 
-def delete_directory(directory: pathlib.Path, recursive: bool = False):
+def delete_directory(directory: pathlib.Path, recursive: bool = False, force: bool = False):
     """Remove a directory, remove it's Directory record.
 
-    Will refuse to delete a directory if it contains Tagged Files.
+    Will refuse to delete a directory if it contains Tagged Files, unless force is True.
 
     This function is idempotent - safe to call even if the directory was already deleted."""
     if directory.exists():
         if recursive:
-            with get_db_session() as session:
-                # Use indexed directory column for efficient lookup
-                directory_str = str(directory)
-                tagged = session.query(FileGroup) \
-                    .filter(or_(
-                    FileGroup.directory == directory_str,
-                    FileGroup.directory.like(f'{directory_str}/%')
-                )) \
-                    .join(TagFile, TagFile.file_group_id == FileGroup.id) \
-                    .limit(1).one_or_none()
-                if tagged:
-                    raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
+            if not force:
+                with get_db_session() as session:
+                    # Use indexed directory column for efficient lookup
+                    directory_str = str(directory)
+                    tagged = session.query(FileGroup) \
+                        .filter(or_(
+                        FileGroup.directory == directory_str,
+                        FileGroup.directory.like(f'{directory_str}/%')
+                    )) \
+                        .join(TagFile, TagFile.file_group_id == FileGroup.id) \
+                        .limit(1).one_or_none()
+                    if tagged:
+                        raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
             shutil.rmtree(directory)
         else:
             directory.rmdir()

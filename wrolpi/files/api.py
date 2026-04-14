@@ -66,7 +66,12 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
     paths = [i for i in body.paths if i]
     if not paths:
         raise InvalidFile('paths cannot be empty')
-    await lib.delete(*paths)
+    tagged_file_groups = await lib.delete(*paths, force=body.force)
+    if tagged_file_groups:
+        return json_response(
+            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged_file_groups},
+            HTTPStatus.CONFLICT,
+        )
     return response.empty()
 
 

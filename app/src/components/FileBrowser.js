@@ -212,6 +212,8 @@ export function FileBrowser() {
     const [isDirectoryIgnored, setIsDirectoryIgnored] = React.useState(false);
     // Tracks folder that was opened while selected - its children will be auto-selected when they load
     const pendingAutoSelectRef = React.useRef(null);
+    // Tagged file groups that would be deleted - shown in confirmation modal
+    const [taggedFileGroups, setTaggedFileGroups] = React.useState(null);
 
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {inverted} = React.useContext(ThemeContext);
@@ -294,8 +296,7 @@ export function FileBrowser() {
         await fetchSettings();
     }
 
-    const onDelete = async () => {
-        await deleteFile(selectedPaths);
+    const handleDeleteComplete = async () => {
         // Remove deleted directories from openFolders to prevent fetching non-existent directories
         const deletedDirs = selectedPaths.filter(p => p.endsWith('/'));
         if (deletedDirs.length > 0 && openFolders && openFolders.length > 0) {
@@ -305,6 +306,24 @@ export function FileBrowser() {
             setOpenFolders(newOpenFolders.length > 0 ? newOpenFolders : null);
         }
         await reset();
+    };
+
+    const onDelete = async () => {
+        const result = await deleteFile(selectedPaths);
+        if (result && result.tagged) {
+            // Show modal with tagged file groups for user to confirm.
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
+        await handleDeleteComplete();
+    };
+
+    const onForceDelete = async () => {
+        setTaggedFileGroups(null);
+        const result = await deleteFile(selectedPaths, true);
+        if (result && result.tagged) return; // unexpected tagged response
+        if (result && !result.ok) return;    // error already toasted
+        await handleDeleteComplete();
     };
 
     const handleMakeDirectory = async () => {
@@ -412,6 +431,38 @@ export function FileBrowser() {
             paths={selectedPaths}
             onComplete={reset}
         />
+        <Modal
+            open={taggedFileGroups !== null}
+            onClose={() => setTaggedFileGroups(null)}
+            closeIcon
+        >
+            <Modal.Header><Icon name='warning sign'/> Tagged Files Will Be Deleted</Modal.Header>
+            <Modal.Content>
+                <p>The following tagged files will be deleted:</p>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHeaderCell>File</TableHeaderCell>
+                            <TableHeaderCell>Tags</TableHeaderCell>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {taggedFileGroups && taggedFileGroups.map((fg, idx) => (
+                            <TableRow key={idx}>
+                                <TableCell>{fg.primary_path || fg.name}</TableCell>
+                                <TableCell>{(fg.tags || []).join(', ')}</TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setTaggedFileGroups(null)}>Cancel</Button>
+                <Button color='red' onClick={onForceDelete}>
+                    <Icon name='trash'/> Delete
+                </Button>
+            </Modal.Actions>
+        </Modal>
     </div>;
 
     const onFolderClick = async (folder) => {

@@ -18,6 +18,7 @@ class FileRequest:
 @dataclass
 class DeleteRequest:
     paths: List[str] = field(default_factory=list)
+    force: bool = False
 
 
 @dataclass

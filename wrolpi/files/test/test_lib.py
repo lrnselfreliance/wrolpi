@@ -118,8 +118,8 @@ async def test_delete_file_link(async_client, test_session, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_delete_tagged(await_switches, test_session, make_files_structure, tag_factory, video_bytes,
-                             refresh_files):
+async def test_delete_tagged(await_switches, test_session, test_directory, make_files_structure, tag_factory,
+                             video_bytes, refresh_files):
     """Cannot delete a file that has been tagged."""
     tag = await tag_factory()
     make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})
@@ -130,13 +130,17 @@ async def test_delete_tagged(await_switches, test_session, make_files_structure,
     await await_switches()
     test_session.commit()
 
-    # Neither file can be deleted.
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo/bar.txt')
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo/bar.mp4')
-    with pytest.raises(FileGroupIsTagged):
-        await lib.delete('foo')
+    # Neither file can be deleted without force; tagged file groups are returned.
+    result = await lib.delete('foo/bar.txt')
+    assert result and len(result) == 1
+    result = await lib.delete('foo/bar.mp4')
+    assert result and len(result) == 1
+    result = await lib.delete('foo')
+    assert result and len(result) == 1
+
+    # Force delete succeeds and actually removes the files.
+    await lib.delete('foo', force=True)
+    assert not (test_directory / 'foo').exists()
 
 
 @pytest.mark.asyncio

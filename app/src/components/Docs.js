@@ -21,7 +21,7 @@ import {
 } from "./Common";
 import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
-import {FilesView} from "./Files";
+import {DocSearchFilterButton, FilesView} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
@@ -140,7 +140,8 @@ function DocsPage() {
                     <Grid.Column width={2}>{viewButton}</Grid.Column>
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={8}><SortButton sorts={docOrders}/></Grid.Column>
+                    <Grid.Column width={2}><DocSearchFilterButton/></Grid.Column>
+                    <Grid.Column width={6}><SortButton sorts={docOrders}/></Grid.Column>
                 </Grid.Row>
                 <Grid.Row width={16}>
                     <Grid.Column>{searchInput}</Grid.Column>
@@ -153,8 +154,9 @@ function DocsPage() {
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={1}><DocSearchFilterButton/></Grid.Column>
                     <Grid.Column width={3}><SortButton sorts={docOrders}/></Grid.Column>
-                    <Grid.Column width={9}>{searchInput}</Grid.Column>
+                    <Grid.Column width={8}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

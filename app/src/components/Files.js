@@ -520,6 +520,17 @@ export function FileSearchFilterButton({size = 'medium'}) {
     return <SearchFilter filters={filterOptions} size={size}/>
 }
 
+export function DocSearchFilterButton({size = 'medium'}) {
+    const filterOptions = [
+        {key: 'pdf', text: 'PDF', value: 'pdf'},
+        {key: 'epub', text: 'EPUB', value: 'epub'},
+        {key: 'comic', text: 'Comic', value: 'comic'},
+        {key: 'mobi', text: 'MOBI', value: 'mobi'},
+    ];
+
+    return <SearchFilter filters={filterOptions} size={size}/>
+}
+
 export function FilesSearchView({
                                     showView = true,
                                     emptySearch = false,

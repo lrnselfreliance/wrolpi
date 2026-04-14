@@ -2239,7 +2239,7 @@ export async function deleteDocs(docIds) {
     return await apiDelete(`${DOCS_API}/${ids}`);
 }
 
-export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject) {
+export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype) {
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
     let body = {offset, limit};
@@ -2257,6 +2257,9 @@ export async function searchDocs(offset, limit, searchStr, order, tagNames, auth
     }
     if (subject) {
         body['subject'] = subject;
+    }
+    if (mimetype) {
+        body['mimetype'] = mimetype;
     }
 
     console.debug('searching docs', body);

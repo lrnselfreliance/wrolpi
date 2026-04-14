@@ -536,6 +536,14 @@ export const useSearchArchives = (defaultLimit) => {
     }
 }
 
+const docFilterToMimetype = (filter) => {
+    if (filter === 'pdf') return 'application/pdf';
+    if (filter === 'epub') return 'application/epub';
+    if (filter === 'comic') return 'application/x-cb';
+    if (filter === 'mobi') return 'application/x-mobipocket-ebook';
+    return null;
+}
+
 export const useSearchDocs = (defaultLimit) => {
     const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
     const {searchParams, updateQuery} = React.useContext(QueryContext);
@@ -544,6 +552,7 @@ export const useSearchDocs = (defaultLimit) => {
     const activeTags = searchParams.getAll('tag');
     const author = searchParams.get('author') || '';
     const subject = searchParams.get('subject') || '';
+    const filter = searchParams.get('filter') || '';
 
     const [docs, setDocs] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -552,7 +561,8 @@ export const useSearchDocs = (defaultLimit) => {
         setDocs(null);
         setTotalPages(0);
         try {
-            let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject);
+            const mimetype = docFilterToMimetype(filter);
+            let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject, mimetype);
             setDocs(docs_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -563,7 +573,7 @@ export const useSearchDocs = (defaultLimit) => {
 
     useEffect(() => {
         localSearchDocs();
-    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject]);
+    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject, filter]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});

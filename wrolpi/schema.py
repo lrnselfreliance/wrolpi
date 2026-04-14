@@ -252,6 +252,8 @@ class DownloadSettings:
     user_agent: Optional[str] = None
     continue_dl: Optional[bool] = None
     nooverwrites: Optional[bool] = None
+    audio_only: Optional[bool] = None
+    audio_format: Optional[str] = None
 
     def __post_init__(self):
         if self.excluded_urls and self.excluded_urls.endswith(','):
@@ -269,8 +271,11 @@ class DownloadSettings:
         if self.download_order not in (None, 'newest', 'oldest', 'views'):
             raise ValidationError(f'Download order must be one of newest, oldest, views, or null.')
 
-        if self.video_format not in (None, 'mp4', 'mkv'):
-            raise ValidationError(f'Download order must be one of mp4, mkv, or null.')
+        if self.video_format not in (None, 'mp4', 'mkv', 'ogg', 'webm'):
+            raise ValidationError(f'Video format must be one of mp4, mkv, ogg, webm, or null.')
+
+        if self.audio_format not in (None, 'mp3', 'opus', 'm4a', 'flac', 'vorbis', 'wav'):
+            raise ValidationError(f'Audio format must be one of mp3, opus, m4a, flac, vorbis, wav, or null.')
 
         valid_resolutions = ('360p', '480p', '720p', '1080p', '1440p', '2160p', 'maximum')
         if not all(i in valid_resolutions for i in self.video_resolutions):

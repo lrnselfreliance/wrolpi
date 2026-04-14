@@ -95,8 +95,8 @@ def search_videos(
         headline: bool = False,
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
-    # Only search videos.
-    wheres = ["fg.mimetype LIKE 'video/%%'"]
+    # Search videos and audio-only files.
+    wheres = ["(fg.mimetype LIKE 'video/%%' OR fg.mimetype LIKE 'audio/%%')"]
     joins = list()
     join_video = False
 

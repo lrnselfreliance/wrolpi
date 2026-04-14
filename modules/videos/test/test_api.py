@@ -265,6 +265,40 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
 
 
 @pytest.mark.asyncio
+async def test_search_audio_only(test_session, audio_factory, assert_video_search):
+    """Audio-only files should be searchable alongside videos."""
+    audio1 = audio_factory(title='podcast episode one', upload_date='2025-01-01', with_info_json=True)
+    audio2 = audio_factory(title='podcast episode two', upload_date='2025-01-02', with_info_json=True)
+    test_session.commit()
+
+    assert audio1.file_group.mimetype == 'audio/mpeg'
+    assert audio1.file_group.model == 'video'
+
+    # Both audio files are returned.
+    await assert_video_search(assert_total=2, order_by='published_datetime')
+
+    # Search by title.
+    await assert_video_search(search_str='podcast', assert_total=2)
+    await assert_video_search(search_str='episode one', assert_total=1, assert_ids=[audio1.id])
+
+
+@pytest.mark.asyncio
+async def test_search_mixed_video_and_audio(test_session, video_factory, audio_factory, assert_video_search):
+    """Audio and video files should both appear in search results."""
+    video = video_factory(title='tutorial video', upload_date='2025-01-01', with_video_file=True)
+    audio = audio_factory(title='tutorial audio', upload_date='2025-01-02', with_info_json=True)
+    test_session.commit()
+
+    # Both appear when searching.
+    await assert_video_search(assert_total=2, order_by='published_datetime')
+    await assert_video_search(search_str='tutorial', assert_total=2)
+
+    # Each can be found individually.
+    await assert_video_search(search_str='video', assert_total=1, assert_ids=[video.id])
+    await assert_video_search(search_str='audio', assert_total=1, assert_ids=[audio.id])
+
+
+@pytest.mark.asyncio
 async def test_delete_video(async_client, test_session, video_factory, test_download_manager):
     """When a Video record is deleted, the FileGroup should be deleted.  The URL is added to the
     global skip list so the video is not downloaded again."""

@@ -537,6 +537,8 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], Iterable[pathlib.Path]]) 
             return file
         if mimetype.startswith('video/'):
             return file
+        if mimetype.startswith('audio/'):
+            return file
         if mimetype.startswith('application/epub'):
             return file
         if mimetype.startswith('application/pdf') and not has_epub:

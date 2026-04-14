@@ -91,6 +91,17 @@ def _log_ytdlp_versions():
     logger.info(f'yt-dlp={ytdlp_version} yt-dlp-ejs={ejs_version}')
 
 
+# yt-dlp codec names that differ from their output file extension.
+AUDIO_CODEC_EXTENSION_MAP = {
+    'vorbis': 'ogg',
+}
+
+
+def audio_output_extension(audio_format: str) -> str:
+    """Map a yt-dlp audio codec name to the file extension it actually produces."""
+    return AUDIO_CODEC_EXTENSION_MAP.get(audio_format, audio_format)
+
+
 VIDEO_RESOLUTION_MAP = {
     '360p': [
         '134+bestaudio', '230+bestaudio', 'mp4-360p', 'res:360',
@@ -639,6 +650,8 @@ class VideoDownloader(Downloader, ABC):
                 logger.debug(f'Downloading {url} with {tag_names=}')
 
         effective = get_effective_video_settings(settings)
+        audio_only = effective.get('audio_only', False)
+        audio_format = effective.get('audio_format', 'mp3')
 
         logs = None  # noqa
         try:
@@ -647,29 +660,34 @@ class VideoDownloader(Downloader, ABC):
             video_resolutions_str = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
 
             video_format = effective['video_format']
-            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions_str, video_format)
+            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions_str, video_format,
+                                                      audio_only=audio_only, audio_format=audio_format)
 
             if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
                 return await self.download_info_json(download, video_path)
 
+            # Common yt-dlp flags shared by both video and audio-only downloads.
             cmd = (
                 str(YT_DLP_BIN),
-                '-f', video_resolutions_str,
-                '--match-filter', '!is_live',  # Do not attempt to download Live videos.
+                '--match-filter', '!is_live',
                 '--sub-format', DEFAULT_CAPTION_FORMAT,
                 '--convert-subs', DEFAULT_CAPTION_FORMAT,
                 '--convert-thumbnails', DEFAULT_POSTER_FORMAT,
-                '--merge-output-format', video_format,
                 '--no-cache-dir',
                 '--newline',
                 '--compat-options', 'no-live-chat',
-                # Get top 20 comments, 10 replies per parent.
                 '--write-comments',
                 '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
-                # Use experimental feature to merge files.
-                '--ppa', 'Merger+ffmpeg_o1:-strict -2',
             )
+            if audio_only:
+                cmd = (*cmd, '-f', 'bestaudio', '-x', '--audio-format', audio_format)
+            else:
+                cmd = (*cmd,
+                       '-f', video_resolutions_str,
+                       '--merge-output-format', video_format,
+                       '--ppa', 'Merger+ffmpeg_o1:-strict -2',
+                       )
             if effective['continue_dl']:
                 cmd = (*cmd, '--continue')
             if effective['writesubtitles']:
@@ -717,19 +735,20 @@ class VideoDownloader(Downloader, ABC):
                     location=location,
                 )
 
-            preferred_path = video_path.with_suffix(f'.{video_format}')
+            output_format = audio_output_extension(audio_format) if audio_only else video_format
+            preferred_path = video_path.with_suffix(f'.{output_format}')
             if not video_path.is_file() and preferred_path.is_file():
-                # Prepared filename does not exist, but video with preferred video extension does, it was probably
-                # remuxed by yt-dlp.
+                # Prepared filename does not exist, but file with preferred extension does, it was probably
+                # remuxed/converted by yt-dlp.
                 video_path = preferred_path
-                logger.info(f'Using preferred video file which exists: {preferred_path}')
+                logger.info(f'Using preferred file which exists: {preferred_path}')
 
             if not video_path.is_file():
                 # yt-dlp may have appended the real extension to a bogus one (e.g. .NA.mp4 from a playlist entry).
-                appended_path = video_path.parent / f'{video_path.name}.{video_format}'
+                appended_path = video_path.parent / f'{video_path.name}.{output_format}'
                 if appended_path.is_file():
                     video_path = appended_path
-                    logger.info(f'Using video file with appended extension: {appended_path}')
+                    logger.info(f'Using file with appended extension: {appended_path}')
 
             if video_path.suffix == '.part':
                 return DownloadResult(
@@ -754,7 +773,7 @@ class VideoDownloader(Downloader, ABC):
                     retry_seconds=retry_seconds,
                 )
 
-            if not ffmpeg_video_complete(video_path):
+            if not audio_only and not ffmpeg_video_complete(video_path):
                 return DownloadResult(
                     success=False,
                     error='Video was incomplete',
@@ -806,8 +825,8 @@ class VideoDownloader(Downloader, ABC):
 
                 await video.get_ffprobe_json()
 
-                # Check that video has both audio and video streams.
-                if not video.get_streams_by_codec_type('video'):
+                # Check that the download has the expected streams.
+                if not audio_only and not video.get_streams_by_codec_type('video'):
                     return DownloadResult(
                         success=False,
                         error='Video was downloaded but did not contain video stream',
@@ -816,7 +835,7 @@ class VideoDownloader(Downloader, ABC):
                 if not video.get_streams_by_codec_type('audio'):
                     return DownloadResult(
                         success=False,
-                        error='Video was downloaded but did not contain audio stream',
+                        error='Download did not contain audio stream',
                         location=location,
                     )
                 logger.info(f'Successfully downloaded video {url} {video}')
@@ -918,34 +937,48 @@ class VideoDownloader(Downloader, ABC):
         return None
 
     @staticmethod
-    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str) \
+    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str,
+                         audio_only: bool = False, audio_format: str = 'mp3') \
             -> Tuple[pathlib.Path, dict]:
-        """Get the full path of a video file from its URL using yt-dlp."""
+        """Get the full path of a video/audio file from its URL using yt-dlp."""
         if not out_dir.is_dir():
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
-        # YoutubeDL expects specific options, add onto the default options
+        # YoutubeDL expects specific options, add onto the default options.
+        # Deep copy to avoid mutating the shared singleton config dict.
         config = get_videos_downloader_config()
-        options = config.yt_dlp_options
+        options = copy.deepcopy(config.yt_dlp_options)
+
+        if audio_only:
+            options['format'] = 'bestaudio'
+            options['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': audio_format,
+            }]
+            # merge_output_format is not used for audio-only.
+            options.pop('merge_output_format', None)
+        else:
+            options['merge_output_format'] = video_format
+            options['format'] = video_resolutions
+
         # Convert WROLPi-specific variables to yt-dlp syntax
         converted_format = convert_wrolpi_filename_format(config.file_name_format)
         # yt-dlp expects the absolute path.
         options['outtmpl'] = f'{out_dir}/{converted_format}'
-        options['merge_output_format'] = video_format
-        # options['remuxvideo'] = video_format
-        options['format'] = video_resolutions
         options['cachdir'] = YTDLP_CACHE_DIR
+
+        output_ext = audio_output_extension(audio_format) if audio_only else video_format
 
         # Create a new YoutubeDL for the output directory.
         ydl = YoutubeDL(copy.deepcopy(options))
         ydl.params['logger'] = ydl_logger
         ydl.add_default_info_extractors()
 
-        # Get the path where the video will be saved.
+        # Get the path where the file will be saved.
         try:
             entry = extract_info(url, ydl=ydl, process=True)
             # If the entry is a playlist (e.g. Twitter/X post with multiple videos),
-            # use the first video entry for filename preparation.
+            # use the first entry for filename preparation.
             if entry.get('entries'):
                 entries = list(entry['entries']) if not isinstance(entry['entries'], list) else entry['entries']
                 if entries:
@@ -967,11 +1000,11 @@ class VideoDownloader(Downloader, ABC):
             parent = full_path.parent
             filename, _ = split_path_stem_and_suffix(full_path.name)
 
-            # Trim long filename, add video suffix, add back into parent directory.
+            # Trim long filename, add output suffix, add back into parent directory.
             filename = escape_file_name(filename)
-            final_filename = parent / f'{filename}.{video_format}'
+            final_filename = parent / f'{filename}.{output_ext}'
             final_filename = trim_file_name(final_filename)
-            logger.debug(f'Video file name was too long.  Trimmed to: {final_filename.name}')
+            logger.debug(f'File name was too long.  Trimmed to: {final_filename.name}')
 
             # Get entry info json.
             options['outtmpl'] = str(final_filename)

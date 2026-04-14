@@ -193,6 +193,55 @@ def video_factory(test_session, test_directory):
 
 
 @pytest.fixture
+def audio_factory(test_session, test_directory):
+    """Creates audio-only Video records for testing."""
+
+    def factory(channel_id: int = None, title: str = None, upload_date=None,
+                with_info_json: dict = None, with_poster_ext: str = None,
+                source_id: str = None, tag_names: List[str] = None) -> Video:
+        title = title or str(uuid4())
+        tag_names = tag_names or list()
+
+        if channel_id:
+            channel = Channel.find_by_id(test_session, channel_id)
+            path = (channel.directory or test_directory) / f'{title}.mp3'
+            path.parent.mkdir(exist_ok=True, parents=True)
+        else:
+            (test_directory / 'videos/NO CHANNEL').mkdir(exist_ok=True, parents=True)
+            path = test_directory / f'videos/NO CHANNEL/{title}.mp3'
+
+        assert str(path).startswith(str(test_directory)), 'Audio must be in the test directory'
+
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny.mp3', path)
+
+        info_json_path = None
+        if with_info_json:
+            with_info_json = {'duration': 5, 'epoch': 12345678} if with_info_json is True else with_info_json
+            info_json_path = path.with_suffix('.info.json')
+            info_json_path.write_text(json.dumps(with_info_json))
+
+        poster_path = None
+        if with_poster_ext:
+            poster_path = path.with_suffix(f'.{with_poster_ext.lstrip(".")}')
+            Image.new('RGB', (25, 25)).save(poster_path)
+
+        paths = list(filter(None, (path, info_json_path, poster_path)))
+
+        video = Video.from_paths(test_session, *paths)
+        video.channel_id = channel_id
+        video.source_id = source_id or title
+        video.file_group.published_datetime = upload_date
+        video.validate(test_session)
+
+        for tag_name in tag_names:
+            video.add_tag(test_session, tag_name)
+
+        return video
+
+    return factory
+
+
+@pytest.fixture
 def video_download_manager(test_download_manager) -> DownloadManager:
     """Get a DownloadManager ready to download Videos and Channels."""
     channel_downloader = ChannelDownloader()

@@ -7,7 +7,7 @@ set -e
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies.
-apt-get install -y $(cat /opt/wrolpi/pi-gen/stage2/04-wrolpi/01-packages)
+apt-get install -y $(cat /opt/wrolpi/pi-gen/stage2/04-wrolpi/01-packages-nr)
 
 # App dependencies were installed.
 node -v

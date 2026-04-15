@@ -127,6 +127,182 @@ function getAudioPreviewModal(previewFile) {
     </React.Fragment>
 }
 
+function ThreeMFPreviewModal({previewFile}) {
+    const containerRef = React.useRef(null);
+    const [dimensions, setDimensions] = React.useState(null);
+    const [error, setError] = React.useState(null);
+    const url = getMediaPathURL(previewFile);
+    const path = previewFile.primary_path ?? previewFile.path;
+    const name = path.replace(/^.*[\\\/]/, '');
+
+    React.useEffect(() => {
+        // Imperative three.js viewer — mirrors react-stl-viewer behavior for .3mf files.
+        let cancelled = false;
+        const container = containerRef.current;
+        if (!container) return;
+
+        let renderer, scene, camera, controls, animationId, resizeObserver, loadedGroup;
+        let THREE;
+
+        (async () => {
+            try {
+                THREE = await import('three');
+                const {OrbitControls} = await import('three/examples/jsm/controls/OrbitControls.js');
+                const {ThreeMFLoader} = await import('three/examples/jsm/loaders/3MFLoader.js');
+                if (cancelled) return;
+
+                scene = new THREE.Scene();
+                // Transparent background so the modal/theme color shows through,
+                // matching react-stl-viewer's behavior.
+
+                const width = container.clientWidth || 1;
+                const height = container.clientHeight || 1;
+
+                camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 10000);
+                camera.position.set(0, 0, 100);
+
+                renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
+                renderer.setClearColor(0x000000, 0);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(width, height);
+                container.appendChild(renderer.domElement);
+
+                scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(1, 1, 1);
+                scene.add(dirLight);
+                const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+                dirLight2.position.set(-1, -1, -1);
+                scene.add(dirLight2);
+
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+
+                const loader = new ThreeMFLoader();
+                loader.load(
+                    url,
+                    (group) => {
+                        if (cancelled) return;
+                        loadedGroup = group;
+
+                        // Match react-stl-viewer's violet so 3MFs without authored
+                        // materials are visible against either theme's background.
+                        // 3MF geometry often lacks vertex normals — compute them so
+                        // MeshPhongMaterial can shade faces instead of rendering flat black.
+                        group.traverse((obj) => {
+                            if (obj.isMesh) {
+                                if (obj.geometry && !obj.geometry.attributes.normal) {
+                                    obj.geometry.computeVertexNormals();
+                                }
+                                obj.material = new THREE.MeshPhongMaterial({
+                                    color: 0x7353a8,
+                                    flatShading: false,
+                                });
+                            }
+                        });
+
+                        scene.add(group);
+
+                        // Frame the model: center it, then pull camera back along Z by bounding radius.
+                        const box = new THREE.Box3().setFromObject(group);
+                        const size = new THREE.Vector3();
+                        const center = new THREE.Vector3();
+                        box.getSize(size);
+                        box.getCenter(center);
+                        group.position.sub(center);
+
+                        const boundingRadius = Math.max(size.x, size.y, size.z) / 2 || 1;
+                        const fitDistance = boundingRadius / Math.tan((Math.PI * camera.fov) / 360);
+                        camera.position.set(0, 0, fitDistance * 2.2);
+                        camera.near = Math.max(0.1, fitDistance / 1000);
+                        camera.far = fitDistance * 100;
+                        camera.updateProjectionMatrix();
+                        controls.target.set(0, 0, 0);
+                        controls.update();
+
+                        setDimensions({
+                            width: size.x,
+                            height: size.y,
+                            length: size.z,
+                            boundingRadius: size.length() / 2,
+                        });
+                    },
+                    undefined,
+                    (err) => {
+                        console.error('Failed to load 3MF', err);
+                        if (!cancelled) setError('Failed to load 3MF file.');
+                    },
+                );
+
+                const animate = () => {
+                    animationId = requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                };
+                animate();
+
+                resizeObserver = new ResizeObserver(() => {
+                    const w = container.clientWidth || 1;
+                    const h = container.clientHeight || 1;
+                    camera.aspect = w / h;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(w, h);
+                });
+                resizeObserver.observe(container);
+            } catch (err) {
+                console.error('3MF viewer init failed', err);
+                if (!cancelled) setError('Failed to initialize 3MF viewer.');
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            if (animationId) cancelAnimationFrame(animationId);
+            if (resizeObserver) resizeObserver.disconnect();
+            if (controls) controls.dispose();
+            if (loadedGroup && THREE) {
+                loadedGroup.traverse((obj) => {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) {
+                        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+                        materials.forEach((m) => {
+                            if (m.map) m.map.dispose();
+                            m.dispose();
+                        });
+                    }
+                });
+            }
+            if (renderer) {
+                renderer.dispose();
+                if (renderer.domElement && renderer.domElement.parentNode) {
+                    renderer.domElement.parentNode.removeChild(renderer.domElement);
+                }
+            }
+        };
+    }, [url]);
+
+    return <React.Fragment>
+        <Modal.Header>{name}</Modal.Header>
+        <Modal.Content>
+            {dimensions && <div style={{marginBottom: '1em', textAlign: 'center'}}>
+                <b>Width:</b> {dimensions.width.toFixed(2)}
+                {' | '}
+                <b>Height:</b> {dimensions.height.toFixed(2)}
+                {' | '}
+                <b>Length:</b> {dimensions.length.toFixed(2)}
+                {' | '}
+                <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
+            </div>}
+            {error && <div style={{color: 'red', textAlign: 'center'}}>{error}</div>}
+            <InlineErrorBoundary>
+                <div className='preview-fit'>
+                    <div ref={containerRef} style={{height: '100%', width: '100%'}}/>
+                </div>
+            </InlineErrorBoundary>
+        </Modal.Content>
+    </React.Fragment>
+}
+
 function STLPreviewModal({previewFile}) {
     const [dimensions, setDimensions] = React.useState(null);
     const url = getMediaPathURL(previewFile);
@@ -369,10 +545,15 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getImagePreviewModal(previewFile), url, null, path, taggable);
             } else if (mimetype.startsWith('model/stl')) {
                 setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+            } else if (mimetype.startsWith('model/3mf')) {
+                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
                 setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+            } else if ((mimetype.startsWith('application/octet-stream') || mimetype === 'application/zip')
+                && lowerPath.endsWith('.3mf')) {
+                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
             } else if (mimetype.includes('cbz') || mimetype.includes('cbr') || mimetype.includes('comicbook+zip') || mimetype.includes('comicbook-rar')
                 || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr') || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
                 setModalContent(<Modal.Content><CbzViewer path={path}/></Modal.Content>, null, downloadURL, path, taggable);

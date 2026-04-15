@@ -642,6 +642,44 @@ def test_get_mimetype(example_epub, example_mobi, example_pdf, image_file, video
     assert lib.get_mimetype(video_file) == 'video/mp4'
 
 
+def test_get_mimetype_stl(test_directory):
+    """.stl files should resolve to model/stl regardless of magic's initial guess."""
+    stl_path = test_directory / 'example.stl'
+    # Minimal ASCII STL body; python-magic reports this as text/plain.
+    stl_path.write_text(
+        'solid cube\n'
+        'facet normal 0 0 1\n'
+        '  outer loop\n'
+        '    vertex 0 0 0\n'
+        '    vertex 1 0 0\n'
+        '    vertex 0 1 0\n'
+        '  endloop\n'
+        'endfacet\n'
+        'endsolid cube\n'
+    )
+    lib.get_mimetype.cache_clear()
+    assert lib.get_mimetype(stl_path) == 'model/stl'
+
+
+def test_get_mimetype_3mf(test_directory):
+    """.3mf files are zipped XML; ensure they resolve to model/3mf."""
+    import zipfile
+    threemf_path = test_directory / 'example.3mf'
+    with zipfile.ZipFile(threemf_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr('[Content_Types].xml',
+                    '<?xml version="1.0" encoding="UTF-8"?>'
+                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                    '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+                    '</Types>')
+        zf.writestr('3D/3dmodel.model',
+                    '<?xml version="1.0" encoding="UTF-8"?>'
+                    '<model unit="millimeter" xml:lang="en-US"'
+                    ' xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
+                    '<resources/><build/></model>')
+    lib.get_mimetype.cache_clear()
+    assert lib.get_mimetype(threemf_path) == 'model/3mf'
+
+
 def test_group_files_by_stem(make_files_structure, test_directory):
     make_files_structure([
         'foo.mp4',

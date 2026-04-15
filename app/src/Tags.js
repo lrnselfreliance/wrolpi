@@ -405,6 +405,7 @@ export function AddTagsButton({
                                   limit = null,
                                   disabled = false,
                                   filterByOverlap = false,
+                                  color = 'violet',
                               }) {
     // A button which displays a modal in which the user can add or remove tags.
 
@@ -556,7 +557,7 @@ export function AddTagsButton({
     return <>
         <Button
             icon={active ? 'tags' : 'tag'}
-            color={active ? 'violet' : undefined}
+            color={color}
             onClick={handleOpen}
             type="button"
             disabled={disabled}

@@ -1,8 +1,7 @@
 import React from "react";
 import _ from "lodash";
-import {Grid, Header as SHeader, Image,} from "semantic-ui-react";
+import {Header as SHeader, Icon, Image,} from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
-import {Media} from "../contexts/contexts";
 import {encodeMediaPath, isSupportedArchive} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
@@ -51,10 +50,10 @@ function getEpubViewerURL(previewFile) {
 function getIframePreviewModal(previewFile, url) {
     url = url || getMediaPathURL(previewFile);
     return <Modal.Content>
-        <div className='full-height'>
+        <div className='preview-fit'>
             <iframe title='textModal' src={url}
                     style={{
-                        height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
+                        height: '100%', width: '100%', border: 'none',
                         // Use white to avoid iframe displaying with dark-theme.
                         backgroundColor: '#ffffff',
                     }}/>
@@ -72,9 +71,11 @@ function getImagePreviewModal(previewFile) {
             {name}
         </Modal.Header>
         <Modal.Content>
-            <a href={url}>
-                <Image src={url}/>
-            </a>
+            <div className='preview-fit'>
+                <a href={url}>
+                    <Image src={url} style={{maxHeight: '100%', maxWidth: '100%', objectFit: 'contain'}}/>
+                </a>
+            </div>
         </Modal.Content>
     </React.Fragment>
 }
@@ -89,14 +90,16 @@ function getVideoPreviewModal(previewFile) {
         </Modal.Header>
         <Modal.Content>
             <SHeader as='h5'>{path['path']}</SHeader>
-            <video controls
-                   autoPlay={true}
-                   id="player"
-                   playsInline={true}
-                   style={{maxWidth: '100%'}}
-            >
-                <source src={url}/>
-            </video>
+            <div className='preview-fit'>
+                <video controls
+                       autoPlay={true}
+                       id="player"
+                       playsInline={true}
+                       style={{maxHeight: '100%', maxWidth: '100%'}}
+                >
+                    <source src={url}/>
+                </video>
+            </div>
         </Modal.Content>
     </React.Fragment>
 }
@@ -142,12 +145,14 @@ function STLPreviewModal({previewFile}) {
                 <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
             </div>}
             <InlineErrorBoundary>
-                <StlViewer orbitControls shadows
-                           url={url}
-                           style={{height: '65vh', width: '100%'}}
-                           modelProps={{color: '#7353a8'}}
-                           onFinishLoading={(dims) => setDimensions(dims)}
-                />
+                <div className='preview-fit'>
+                    <StlViewer orbitControls shadows
+                               url={url}
+                               style={{height: '100%', width: '100%'}}
+                               modelProps={{color: '#7353a8'}}
+                               onFinishLoading={(dims) => setDimensions(dims)}
+                    />
+                </div>
             </InlineErrorBoundary>
         </Modal.Content>
     </React.Fragment>
@@ -275,17 +280,22 @@ export function FilePreviewProvider({children}) {
     }
 
     function setModalContent(content, url, downloadURL, path, taggable = true) {
-        const openButton = url ? <Button color='blue' as='a' href={url}>Open</Button> : null;
-        const closeButton = <Button onClick={handleClose}>Close</Button>;
+        // All action buttons share `size='small'` and `icon` for consistent height across viewports.
+        // Close is handled by the Modal's `closeIcon` (X in the top-right corner) — no dedicated button.
+        const openButton = url
+            ? <Button color='blue' as='a' href={url} size='small' icon labelPosition='left'>
+                <Icon name='external'/>Open
+            </Button>
+            : null;
         const tagsDisplay = taggable ?
             <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
                           onRemove={localRemoveTag}/>
             : null;
-        const downloadButton = downloadURL ?
-            <Button color='yellow' as='a' href={downloadURL} floated='left' icon='download'/>
+        const downloadButton = downloadURL
+            ? <Button color='yellow' as='a' href={downloadURL} size='small' icon='download'/>
             : null;
         const directoryURL = path ? `/files?folders=${encodeURIComponent(pathDirectory(path))}` : null;
-        const directoryButton = path ? <Button as='a' href={directoryURL} icon='folder'/> : null;
+        const directoryButton = path ? <Button as='a' href={directoryURL} size='small' icon='folder'/> : null;
         const pathContent = path ? <Modal.Content>
                 <pre>{path}</pre>
             </Modal.Content>
@@ -294,6 +304,9 @@ export function FilePreviewProvider({children}) {
         console.log('Preview Download URL', downloadURL);
         console.log('Preview Open URL', url);
 
+        // Single flex toolbar — same button order at every viewport size.
+        // `flex-wrap: wrap` lets the tags selector drop to a second line on narrow screens
+        // while the button groups stay together and in order: [file actions] [tags] [open/close].
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
                                open={true}
@@ -301,30 +314,17 @@ export function FilePreviewProvider({children}) {
         >
             {pathContent}
             <Modal.Actions>
-                <Media at='mobile'>
-                    <Grid>
-                        <Grid.Row>
-                            <Grid.Column width={6} textAlign='left'>{downloadButton}{directoryButton}</Grid.Column>
-                            <Grid.Column width={5}>{openButton}</Grid.Column>
-                            <Grid.Column width={5}>{closeButton}</Grid.Column>
-                        </Grid.Row>
-                        <Grid.Row>
-                            <Grid.Column width={2} style={{paddingTop: '0.5em'}}><ShareButton/></Grid.Column>
-                            <Grid.Column width={14}>{tagsDisplay}</Grid.Column>
-                        </Grid.Row>
-                    </Grid>
-                </Media>
-                <Media greaterThanOrEqual='tablet'>
-                    <Grid>
-                        <Grid.Row>
-                            <Grid.Column width={2} textAlign='left'>{downloadButton}{directoryButton}</Grid.Column>
-                            <Grid.Column width={1} style={{paddingTop: '0.5em'}}><ShareButton/></Grid.Column>
-                            <Grid.Column width={9}>{tagsDisplay}</Grid.Column>
-                            <Grid.Column width={2}>{openButton}</Grid.Column>
-                            <Grid.Column width={2}>{closeButton}</Grid.Column>
-                        </Grid.Row>
-                    </Grid>
-                </Media>
+                <div className='preview-toolbar'>
+                    <div className='preview-toolbar-group'>
+                        {downloadButton}
+                        {directoryButton}
+                        <ShareButton/>
+                    </div>
+                    <div className='preview-toolbar-tags'>{tagsDisplay}</div>
+                    <div className='preview-toolbar-group'>
+                        {openButton}
+                    </div>
+                </div>
             </Modal.Actions>
             {content}
         </Modal>);

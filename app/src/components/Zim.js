@@ -191,9 +191,9 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
                open={open}
                onClose={() => setOpen(false)}>
             <Modal.Content>
-                <div className='full-height'>
+                <div className='preview-fit'>
                     <ZimViewer src={url} style={{
-                        height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
+                        height: '100%', width: '100%', border: 'none',
                         // Use white to avoid iframe displaying with dark-theme.
                         backgroundColor: '#ffffff',
                     }}/>

@@ -109,7 +109,7 @@ export function CbzViewer({path}) {
                 src={pages[currentPage]}
                 alt={`Page ${currentPage + 1}`}
                 style={{
-                    maxHeight: fullscreen ? '100vh' : '75vh',
+                    maxHeight: fullscreen ? '100dvh' : 'calc(100dvh - 300px)',
                     maxWidth: '100%',
                     objectFit: 'contain',
                 }}

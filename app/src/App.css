@@ -122,10 +122,42 @@ input:checked + .slider:before {
     color: rgba(0, 0, 0, 0.85) !important;
 }
 
-div.full-height {
+/* File preview Modal.Actions toolbar.
+   Single layout that works at every viewport — buttons keep their order at any width.
+   On narrow screens, the tags selector wraps to its own line while the button groups stay together. */
+.preview-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5em;
+}
+
+.preview-toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25em;
+    flex: 0 0 auto;
+}
+
+.preview-toolbar-tags {
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+/* Caps preview content to fit inside the file-preview Modal.
+   300px reserves room for pathContent <pre>, Modal.Header, Modal.Actions row,
+   inner content (e.g. STL dimensions banner), and modal padding.
+   Use 100dvh so mobile browser chrome (URL bar) is accounted for. */
+.preview-fit {
+    width: 100%;
+    height: calc(100dvh - 300px);
+    max-height: calc(100dvh - 300px);
+    min-height: 240px;
     overflow: hidden;
-    padding-top: 100%;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 td.file-path {

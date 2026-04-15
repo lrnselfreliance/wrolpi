@@ -306,8 +306,6 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/html'
         if suffix.endswith('.stl'):
             return 'model/stl'
-        if suffix.endswith('.3mf'):
-            return 'model/3mf'
         if suffix.endswith('.scad'):
             return 'application/x-openscad'
         if suffix.endswith('.js'):

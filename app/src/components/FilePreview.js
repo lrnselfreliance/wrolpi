@@ -144,7 +144,7 @@ function STLPreviewModal({previewFile}) {
             <InlineErrorBoundary>
                 <StlViewer orbitControls shadows
                            url={url}
-                           style={{height: '80vw', width: '80vw'}}
+                           style={{height: '65vh', width: '100%'}}
                            modelProps={{color: '#7353a8'}}
                            onFinishLoading={(dims) => setDimensions(dims)}
                 />

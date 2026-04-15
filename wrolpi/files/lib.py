@@ -289,6 +289,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return MOBI_MIMETYPE
         if suffix.endswith('.stl'):
             return 'model/stl'
+        if suffix.endswith('.3mf'):
+            return 'model/3mf'
         if suffix.endswith('.mp4'):
             return 'video/mp4'
     if suffix.endswith('.hgt'):
@@ -304,6 +306,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/html'
         if suffix.endswith('.stl'):
             return 'model/stl'
+        if suffix.endswith('.3mf'):
+            return 'model/3mf'
         if suffix.endswith('.scad'):
             return 'application/x-openscad'
         if suffix.endswith('.js'):
@@ -325,6 +329,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     if mimetype == 'application/zip' and suffix == '.cbz':
         return 'application/x-cbz'
+    if mimetype == 'application/zip' and suffix == '.3mf':
+        return 'model/3mf'
     if mimetype == 'application/zip' and suffix == '.odt':
         return 'application/vnd.oasis.opendocument.text'
     if mimetype in ('application/x-rar', 'application/x-rar-compressed') and suffix == '.cbr':

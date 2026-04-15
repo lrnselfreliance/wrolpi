@@ -1124,6 +1124,9 @@ export function mimetypeColor(mimetype, path = '') {
             return 'yellow'
         } else if (mimetype.startsWith('audio/')) {
             return 'violet'
+        } else if (mimetype.startsWith('model/') || mimetype.startsWith('application/x-openscad') || mimetype.startsWith('application/sla')
+            || lowerPath.endsWith('.stl') || lowerPath.endsWith('.3mf') || lowerPath.endsWith('.obj') || lowerPath.endsWith('.scad')) {
+            return 'teal'
         } else if (isZipMimetype(mimetype)) {
             return 'purple'
         }
@@ -1165,6 +1168,9 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'film';
         } else if (mimetype.startsWith('message/rfc822')) {
             return 'mail';
+        } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/')
+            || lowerPath.endsWith('.stl') || lowerPath.endsWith('.3mf') || lowerPath.endsWith('.obj') || lowerPath.endsWith('.scad')) {
+            return 'cube';
         } else if (isZipMimetype(mimetype)) {
             return 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image') || mimetype.startsWith('application/x-raw-disk-image') || mimetype.startsWith('application/x-cd-image')) {
@@ -1174,8 +1180,6 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'book';
         } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
             return 'closed captioning';
-        } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/stl')) {
-            return 'cube';
         } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi') || mimetype.startsWith('application/vnd.microsoft.portable-executable')) {
             return 'windows';
         } else if (mimetype.startsWith('audio/')) {
@@ -1268,7 +1272,7 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     // `file` may be a file_group or a file.
     const lowerPath = primary_path ? primary_path.toLocaleString() : path.toLowerCase();
     props['name'] = mimetypeIconName(mimetype, lowerPath);
-    props['color'] = mimetypeColor(mimetype);
+    props['color'] = mimetypeColor(mimetype, lowerPath);
     return <Icon disabled={disabled} size={size} {...props}/>
 }
 
@@ -1564,7 +1568,7 @@ export const filterToMimetypes = (filter) => {
     } else if (filter === 'zip') {
         return zipMimetypes;
     } else if (filter === 'model') {
-        return ['application/x-openscad', 'model/stl', 'application/sla', 'model/obj'];
+        return ['application/x-openscad', 'model/stl', 'application/sla', 'model/obj', 'model/3mf'];
     } else if (filter === 'software') {
         return softwareMimetypes;
     }

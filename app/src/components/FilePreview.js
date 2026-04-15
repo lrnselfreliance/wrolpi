@@ -292,6 +292,7 @@ function ThreeMFPreviewModal({previewFile}) {
                 <b>Length:</b> {dimensions.length.toFixed(2)}
                 {' | '}
                 <b>Bounding Radius:</b> {dimensions.boundingRadius.toFixed(2)}
+                {' (model units)'}
             </div>}
             {error && <div style={{color: 'red', textAlign: 'center'}}>{error}</div>}
             <InlineErrorBoundary>

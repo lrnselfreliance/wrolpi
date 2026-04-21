@@ -21,7 +21,7 @@ pytest-xdist==3.5.0
 pytest==8.3.3
 py7zr>=1.1.0
 python-docx==1.1.2
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 python-magic~=0.4.27
 pytz==2024.2
 rarfile>=4.2

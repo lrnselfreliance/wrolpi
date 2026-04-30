@@ -139,7 +139,7 @@ const calculateTotalPages = (total, limit) => {
     if (!total || !limit || total < limit) {
         return 1;
     }
-    return Math.round(total / limit) + 1;
+    return Math.ceil(total / limit);
 }
 
 export const useRecurringTimeout = (callback, delay) => {

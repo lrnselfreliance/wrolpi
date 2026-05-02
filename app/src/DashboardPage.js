@@ -20,7 +20,7 @@ import {
     Segment,
     Statistic
 } from "./components/Theme";
-import {Link, useNavigate} from "react-router";
+import {Link, useNavigate, useSearchParams} from "react-router";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
 import {GridColumn, GridRow, Icon, Input, Message} from "semantic-ui-react";
@@ -32,6 +32,7 @@ import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {OutdatedZimsMessage} from "./components/Zim";
 import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
+import {ExtensionInstallSuggestion} from "./components/admin/ExtensionInstallSuggestion";
 import {FileCards, FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 import {useCalculators} from "./components/Calculators";
@@ -204,11 +205,33 @@ export function Getters() {
     const [selectedGetter, setSelectedGetter] = useState(null);
     const gettersDisabled = status?.flags?.refresh_complete !== true;
 
+    // Deep-link support: the WROLPi browser extension (and anyone else) can open
+    // /?downloader=<archive|video|...>&download_url=<u1>&download_url=<u2>
+    // to auto-open the download modal pre-filled with a downloader and URLs.
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialDownloader = searchParams.get('downloader');
+    const initialUrls = searchParams.getAll('download_url');
+
+    React.useEffect(() => {
+        if (initialDownloader && selectedGetter !== 'downloads') {
+            setSelectedGetter('downloads');
+        }
+        // Run once on mount per change to query params.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialDownloader]);
+
     const handleSetGetter = (e, value) => {
         if (e) {
             e.preventDefault();
         }
         setSelectedGetter(value);
+        // Closing the modal? Clear deep-link params so a refresh doesn't re-open.
+        if (value === null && (initialDownloader || initialUrls.length)) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('downloader');
+            next.delete('download_url');
+            setSearchParams(next, {replace: true});
+        }
     }
 
     const getter = <Segment>
@@ -240,7 +263,11 @@ export function Getters() {
         >
             <Modal.Header>Download from the Internet</Modal.Header>
             <Modal.Content>
-                <DownloadMenu disabled={gettersDisabled}/>
+                <DownloadMenu
+                    disabled={gettersDisabled}
+                    initialDownloader={initialDownloader}
+                    initialUrls={initialUrls}
+                />
             </Modal.Content>
         </Modal>;
     } else if (selectedGetter === 'upload') {
@@ -476,6 +503,7 @@ export function DashboardPage() {
             </Grid>
         </Media>
         {!searchStr && <FlagsMessages/>}
+        {!searchStr && <ExtensionInstallSuggestion/>}
         {body}
     </PageContainer>
 }

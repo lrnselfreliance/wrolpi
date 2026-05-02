@@ -5,6 +5,7 @@ from http import HTTPStatus
 from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
+from sqlalchemy.exc import IntegrityError
 
 from wrolpi.api_utils import json_response, api_app
 from wrolpi.cmd import get_installed_browsers
@@ -136,6 +137,8 @@ async def singlefile_upload_switch_handler(url=None):
     """Used by `post_upload_singlefile` to upload a single file"""
     # Local imports to avoid circular import: downloader -> archive -> api -> downloader
     from wrolpi.downloader import Download
+    from wrolpi.files.models import FileGroup
+    from wrolpi.tags import Tag
     from . import ArchiveDownloader
 
     q: multiprocessing.Queue = api_app.shared_ctx.archive_singlefiles
@@ -144,11 +147,18 @@ async def singlefile_upload_switch_handler(url=None):
     if trace_enabled:
         logger.trace(f'singlefile_upload_switch_handler called for {url}')
     try:
-        singlefile = q.get_nowait()
+        payload = q.get_nowait()
     except queue.Empty:
         if trace_enabled:
             logger.trace(f'singlefile_upload_switch_handler called on empty queue')
         return
+
+    # Payload is (singlefile_bytes, tag_names) tuple. Older callers may have put raw bytes;
+    # tolerate that shape so an in-flight queue across an upgrade does not crash.
+    if isinstance(payload, tuple):
+        singlefile, tag_names = payload
+    else:
+        singlefile, tag_names = payload, []
 
     try:
         q_size = q.qsize()
@@ -173,6 +183,32 @@ async def singlefile_upload_switch_handler(url=None):
         logger.error(f'singlefile_upload_switch_handler failed', exc_info=e)
         Events.send_upload_archive_failed(f'Failed to convert singlefile to archive: {e}')
         raise
+
+    if tag_names:
+        # Apply tags to the new FileGroup. Auto-create unknown tag names so any
+        # API caller (the browser extension does not, but third-party callers
+        # might) can introduce a new tag at upload time.
+        #
+        # Each tag insert sits inside a SAVEPOINT so a concurrent caller
+        # racing on the same novel name (Tag.name has unique=True) doesn't
+        # abort the whole transaction — the loser of the race rolls back its
+        # own savepoint, set_tags() re-resolves the name, and finds the row
+        # the winner just committed.
+        file_group_id = archive.file_group.id
+        with get_db_session(commit=True) as session:
+            for name in tag_names:
+                if Tag.get_by_name(session, name):
+                    continue
+                try:
+                    with session.begin_nested():
+                        session.add(Tag(name=name))
+                        session.flush()
+                except IntegrityError:
+                    # Another writer created the tag first. Tag.name's unique
+                    # constraint did its job; set_tags() below will find it.
+                    pass
+            fg = session.query(FileGroup).filter_by(id=file_group_id).one()
+            fg.set_tags(session, list(tag_names))
 
     name = archive.file_group.title or archive.file_group.url
     logger.info(f'Created Archive from upload ({q_size}): {archive}')
@@ -242,13 +278,16 @@ generate_screenshot_switch_handler: ActivateSwitchMethod
 async def post_upload_singlefile(request: Request):
     url = request.form['url'][0]
     singlefile = request.files['singlefile_contents'][0].body
-    logger.info(f'Got Archive upload of {len(singlefile)} bytes for URL: {url}')
+    # Optional repeated form field; matches the convention used by /api/files/upload.
+    tag_names = [str(i) for i in (request.form.getlist('tagNames') or [])]
+    logger.info(f'Got Archive upload of {len(singlefile)} bytes for URL: {url} '
+                f'with {len(tag_names)} tag(s)')
 
     # Extract the URL to ensure that the singlefile is valid.
     lib.get_url_from_singlefile(singlefile)
 
     # Send processing to background task so the extension can continue.
-    api_app.shared_ctx.archive_singlefiles.put(singlefile)
+    api_app.shared_ctx.archive_singlefiles.put((singlefile, tag_names))
     singlefile_upload_switch_handler.activate_switch(context=dict(url=url))
     # Return empty json response because SingleFile extension expects a JSON response.
     return json_response(dict(), status=HTTPStatus.OK)

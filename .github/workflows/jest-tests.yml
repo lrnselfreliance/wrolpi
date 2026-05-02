@@ -31,6 +31,19 @@ jobs:
       - name: Run Jest tests
         run: CI=true npm test -- --watchAll=false --coverage --coverageReporters=text --coverageReporters=lcov
 
+      # Webpack build catches errors that Jest+Babel don't, e.g. named imports
+      # that resolve to `undefined` because the source module doesn't actually
+      # export that name (Babel turns these into runtime undefined; webpack
+      # rejects them at build time). GitHub Actions sets CI=true in every
+      # step's environment by default, which makes react-scripts treat any
+      # lint warning as a fatal error — so we override it here. The webpack
+      # build still fails on real errors (the goal of this step); only
+      # pre-existing lint warnings stop being blocking.
+      - name: Build app (catches missing imports etc.)
+        env:
+          CI: ''
+        run: npm run build
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:

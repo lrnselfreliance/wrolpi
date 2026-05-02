@@ -1937,12 +1937,16 @@ async def test_channel_reorganization_preserves_root_level_files(
         config._config['yt_dlp_options'] = yt_dlp_options
 
 
-def test_preview_computes_actual_moves(test_session, test_directory, archive_factory):
+async def test_preview_computes_actual_moves(async_client, test_session, test_directory, archive_factory):
     """Preview should compute actual files needing move by building move mappings.
 
     This test verifies that:
     - Preview correctly identifies files in wrong location
     - After reorganization, preview shows 0 files needing move
+
+    Uses the `async_client` fixture so the Sanic app's shared_ctx (including
+    file_worker_jobs) is initialized before file_worker.process_queue() runs.
+    Without it, file_worker._jobs raises AttributeError on the missing key.
     """
     # Create domain collection with a year-based format (different from default)
     domain_dir = test_directory / 'archive' / 'exactcount.com'
@@ -1989,8 +1993,7 @@ def test_preview_computes_actual_moves(test_session, test_directory, archive_fac
             assert job_id, "Should return job_id"
 
         file_worker.transfer_queue()
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(file_worker.process_queue())
+        await file_worker.process_queue()
 
         # After reorganization, should show 0 files needing move
         with get_db_session() as session:

@@ -13,7 +13,8 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_DB: wrolpi
           POSTGRES_PASSWORD: "wrolpi"
-    resource_class: medium
+    # `large` (4 vCPU, 8 GB) so pytest-xdist's `-nauto` has room to scale.
+    resource_class: large
     steps:
       - checkout
       - run: sudo apt-get update
@@ -30,8 +31,11 @@ jobs:
           key: deps-3.11-{{ checksum "requirements.txt" }}-5
           paths:
             - "venv"
+      # `-nauto` parallelizes across all available cores via pytest-xdist.
+      # `-svv` was dumping the full test stdout to CircleCI logs on every run,
+      # which inflated wall time and produced multi-MB log artifacts; dropped.
       - run:
-          command: './venv/bin/pytest -svv --junitxml=test-results.xml'
+          command: './venv/bin/pytest -nauto --junitxml=test-results.xml'
       - store_test_results:
           path: test-results.xml
   api-alembic-migrations:
@@ -71,7 +75,7 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_DB: wrolpi
           POSTGRES_PASSWORD: "wrolpi"
-    resource_class: medium
+    resource_class: large
     steps:
       - checkout
       - run: sudo apt-get update
@@ -89,7 +93,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv'
+          command: './venv/bin/pytest -nauto'
   sanic-api-start:
     docker:
       - image: cimg/python:3.11

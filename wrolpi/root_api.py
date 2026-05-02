@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pathlib
 import re
 from http import HTTPStatus
@@ -767,3 +768,57 @@ async def post_search_other_estimates(_: Request, body: schema.SearchOtherEstima
     others = await search_other_estimates(body.tag_names)
     ret = dict(others=others)
     return json_response(ret)
+
+
+# Browser extension distribution.
+# Files are committed to wrolpi/static/extensions/ and served as binary
+# downloads. The whitelist prevents path traversal and limits exposure to
+# only the two filenames the install page knows about.
+EXTENSION_DIR = pathlib.Path(__file__).parent / 'static' / 'extensions'
+
+EXTENSION_FILES = {
+    'wrolpi-chrome.zip': 'application/zip',
+    # Firefox click-to-install requires this exact Content-Type.
+    'wrolpi-firefox.xpi': 'application/x-xpinstall',
+}
+
+
+@api_bp.get('/extensions')
+@openapi.description('Metadata for the WROLPi browser extension binaries.')
+async def get_extensions_metadata(_: Request):
+    versions = {}
+    versions_path = EXTENSION_DIR / 'versions.json'
+    if versions_path.is_file():
+        try:
+            versions = json.loads(versions_path.read_text())
+        except json.JSONDecodeError:
+            logger.warning(f'Could not parse {versions_path}')
+    files = {}
+    for name in EXTENSION_FILES:
+        path = EXTENSION_DIR / name
+        files[name] = {
+            'available': path.is_file(),
+            'size_bytes': path.stat().st_size if path.is_file() else None,
+        }
+    return json_response(dict(files=files, versions=versions))
+
+
+@api_bp.get('/extensions/<filename:str>')
+@openapi.description('Download a WROLPi browser extension binary.')
+async def get_extension_file(_: Request, filename: str):
+    if filename not in EXTENSION_FILES:
+        return response.json({'error': f'Unknown extension file: {filename}'}, status=HTTPStatus.NOT_FOUND)
+    path = EXTENSION_DIR / filename
+    if not path.is_file():
+        return response.json({'error': f'Extension file not installed: {filename}'},
+                             status=HTTPStatus.NOT_FOUND)
+    mime_type = EXTENSION_FILES[filename]
+    headers = {}
+    # Firefox click-to-install requires application/x-xpinstall AND that we do
+    # NOT send Content-Disposition: attachment — the latter forces the browser
+    # into "save file" mode, bypassing the add-on install handler. The Chrome
+    # zip still wants attachment so the browser writes a file instead of
+    # navigating away from the page.
+    if mime_type != 'application/x-xpinstall':
+        headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return await response.file(str(path), mime_type=mime_type, headers=headers)

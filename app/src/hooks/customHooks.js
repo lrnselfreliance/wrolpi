@@ -1850,3 +1850,54 @@ export const useSearchChannels = (defaultTagNames) => {
         loading,
     }
 }
+
+
+/**
+ * Detect whether the WROLPi browser extension is installed AND has this
+ * destination configured. The extension's background worker dynamically
+ * registers a content script on each configured destination origin; that
+ * script appends `<meta name="wrolpi-extension" content="<version>">` to the
+ * head. We read for that marker.
+ *
+ * Three-state result so callers can avoid flashing UI during the race
+ * between React's first render and the content script's document_idle:
+ *   null      — checking; render nothing
+ *   false     — confirmed absent (after recheck); show "install me" UI
+ *   <string>  — installed; the version string the extension reported
+ *
+ * Observes <head> for a late-arriving marker (e.g., the user installs the
+ * extension while the page is open, or grants the destination permission
+ * after page load) so the banner clears without requiring a manual reload.
+ */
+export function useExtensionInstalled() {
+    const detect = () => {
+        const meta = document.querySelector('meta[name="wrolpi-extension"]');
+        if (!meta) return null;
+        return meta.getAttribute('content') || true;
+    };
+    const [state, setState] = useState(detect);
+
+    useEffect(() => {
+        // Observe <head> for the marker meta tag appearing at any time.
+        // Once we see it we clean up — there's no need to keep watching.
+        const observer = new MutationObserver(() => {
+            const result = detect();
+            if (result) setState(result);
+        });
+        if (document.head) {
+            observer.observe(document.head, {childList: true, subtree: true});
+        }
+        return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        if (state !== null) return;
+        // Recheck once after the document_idle window closes; only then
+        // commit to "false". Avoids flashing the banner on every dashboard
+        // load while we're just waiting for the content script to run.
+        const t = setTimeout(() => setState(detect() ?? false), 500);
+        return () => clearTimeout(t);
+    }, [state]);
+
+    return state;
+}

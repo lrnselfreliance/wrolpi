@@ -1639,8 +1639,12 @@ export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuc
     />
 }
 
-export function DownloadMenu({onOpen, disabled}) {
-    const [downloader, setDownloader] = useState();
+export function DownloadMenu({onOpen, disabled, initialDownloader, initialUrls}) {
+    // initialDownloader and initialUrls support the deep-link flow used by the
+    // WROLPi browser extension's "Configure Download" button: visiting
+    // `/?downloader=archive&download_url=...` pre-selects a form and pre-fills
+    // its URLs textarea via DashboardPage.Getters.
+    const [downloader, setDownloader] = useState(initialDownloader || undefined);
 
     const localOnOpen = (name) => {
         setDownloader(name);
@@ -1698,13 +1702,21 @@ export function DownloadMenu({onOpen, disabled}) {
         body = null;
     }
 
+    // Synthesize a partial `download` prop that seeds the form's URL field(s).
+    // Multi-URL forms read `urls` (newline-separated string); the single-URL
+    // ChannelDownloadForm reads `url`. Setting both is harmless — each form's
+    // emptyFormData defines which field actually exists.
+    const seed = (initialUrls && initialUrls.length)
+        ? {urls: initialUrls.join('\n'), url: initialUrls[0]}
+        : undefined;
+
     const downloaders = {
-        archive: <ArchiveDownloadForm onCancel={clearSelected}/>,
-        video: <VideosDownloadForm singleDownload={false} onCancel={clearSelected}/>,
-        video_channel: <ChannelDownloadForm onCancel={clearSelected}/>,
-        rss: <RSSDownloadForm onCancel={clearSelected}/>,
-        file: <FilesDownloadForm onCancel={clearSelected}/>,
-        scrape: <ScrapeFilesDownloadForm onCancel={clearSelected}/>
+        archive: <ArchiveDownloadForm onCancel={clearSelected} download={seed}/>,
+        video: <VideosDownloadForm singleDownload={false} onCancel={clearSelected} download={seed}/>,
+        video_channel: <ChannelDownloadForm onCancel={clearSelected} download={seed}/>,
+        rss: <RSSDownloadForm onCancel={clearSelected} download={seed}/>,
+        file: <FilesDownloadForm onCancel={clearSelected} download={seed}/>,
+        scrape: <ScrapeFilesDownloadForm onCancel={clearSelected} download={seed}/>
     };
 
     if (downloader in downloaders) {

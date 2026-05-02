@@ -208,6 +208,72 @@ async def test_archive_upload(test_session, async_client, singlefile_contents_fa
 
 
 @pytest.mark.asyncio
+async def test_archive_upload_with_tags(test_session, async_client, singlefile_contents_factory, make_multipart_form,
+                                        await_switches, tag_factory, archive_factory):
+    """Uploading with tagNames applies existing tags and auto-creates new ones.
+
+    This test mocks `singlefile_to_archive` so it can run on every platform
+    (the full archive pipeline depends on a readability/screenshot service
+    that is not available on macOS). The mocked Archive stands in for what
+    the real pipeline would have produced; the assertion verifies that the
+    switch handler applies tags to whichever FileGroup the pipeline returns.
+    """
+    existing = await tag_factory('preexisting')
+    archive = archive_factory('example.com', 'https://example.com/tagged', 'tagged')
+    test_session.commit()
+
+    async def fake_singlefile_to_archive(singlefile, destination=None):
+        return archive
+
+    singlefile_contents = singlefile_contents_factory(title='tagged', url='https://example.com/tagged')
+    forms = [
+        dict(name='url', value='https://example.com/tagged'),
+        dict(name='singlefile_contents', value=singlefile_contents, filename='singlefile_contents'),
+        dict(name='tagNames', value=existing.name),
+        dict(name='tagNames', value='brand-new-tag'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+
+    with patch('modules.archive.lib.singlefile_to_archive', side_effect=fake_singlefile_to_archive):
+        request, response = await async_client.post('/api/archive/upload', content=body, headers=headers)
+        assert response.status_code == HTTPStatus.OK
+        await await_switches()
+
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+    assert sorted(archive.file_group.tag_names) == ['brand-new-tag', 'preexisting']
+
+
+@pytest.mark.asyncio
+async def test_archive_upload_without_tags_unchanged(test_session, async_client, singlefile_contents_factory,
+                                                    make_multipart_form, await_switches, archive_factory):
+    """Uploads from clients that don't send tagNames (e.g. upstream SingleFile) still work."""
+    archive = archive_factory('example.com', 'https://example.com/no-tags', 'no-tags')
+    test_session.commit()
+
+    async def fake_singlefile_to_archive(singlefile, destination=None):
+        return archive
+
+    singlefile_contents = singlefile_contents_factory(title='no-tags', url='https://example.com/no-tags')
+    forms = [
+        dict(name='url', value='https://example.com/no-tags'),
+        dict(name='singlefile_contents', value=singlefile_contents, filename='singlefile_contents'),
+    ]
+    body = make_multipart_form(forms)
+    headers = {'Content-Type': 'multipart/form-data; boundary=-----------------------------sanic'}
+
+    with patch('modules.archive.lib.singlefile_to_archive', side_effect=fake_singlefile_to_archive):
+        request, response = await async_client.post('/api/archive/upload', content=body, headers=headers)
+        assert response.status_code == HTTPStatus.OK
+        await await_switches()
+
+    test_session.expire_all()
+    archive = test_session.query(Archive).filter_by(id=archive.id).one()
+    assert archive.file_group.tag_names == []
+
+
+@pytest.mark.asyncio
 async def test_archive_upload_file_tracking(test_session, async_client, archive_directory, archive_factory,
                                             await_switches, make_multipart_form, image_bytes_factory):
     """Test that uploading an info.json and image file via /api/files/upload properly tracks them in Archive and FileGroup."""

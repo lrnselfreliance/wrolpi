@@ -5,6 +5,7 @@ import {DownloadsPage} from "./Downloads";
 import {SettingsPage} from "./Settings";
 import {StatusPage} from "./Status";
 import {ControllerPage} from "./ControllerPage";
+import {ExtensionPage} from "./ExtensionPage";
 
 export default function AdminRoute() {
 
@@ -13,6 +14,7 @@ export default function AdminRoute() {
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
         {text: 'Status', to: '/admin/status', key: 'status'},
         {text: 'Control', to: '/admin/controller', key: 'controller'},
+        {text: 'Extension', to: '/admin/extension', key: 'extension'},
     ];
 
     return <PageContainer>
@@ -22,6 +24,7 @@ export default function AdminRoute() {
             <Route path='settings' exact element={<SettingsPage/>}/>
             <Route path='status' exact element={<StatusPage/>}/>
             <Route path='controller' exact element={<ControllerPage/>}/>
+            <Route path='extension' exact element={<ExtensionPage/>}/>
         </Routes>
     </PageContainer>
 }

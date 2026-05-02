@@ -424,7 +424,7 @@ export function UrlsTextarea({name = 'urls', required, form}) {
         let urls = (inputProps.value || '').split('\n');
         urls = [...urls, droppedUrl];
         urls = urls.filter(i => !!i).join('\n');
-        inputAttrs.setValue(`${urls}\n`);
+        inputAttrs.localSetValue(`${urls}\n`);
     };
 
     const handleKeyDown = (event) => {

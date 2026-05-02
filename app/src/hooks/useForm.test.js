@@ -1,5 +1,5 @@
 import React from 'react';
-import {act, renderHook, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, renderHook, screen, waitFor} from '@testing-library/react';
 import {
     commaSeparatedValidator,
     InputForm,
@@ -999,6 +999,41 @@ describe('Form Components', () => {
 
             expect(form.getInputProps).toHaveBeenCalledWith(
                 expect.objectContaining({name: 'urls'})
+            );
+        });
+
+        it('appends dropped URL via localSetValue on drop', () => {
+            // Regression: handleDrop previously called inputAttrs.setValue, which does
+            // not exist on the attrs returned by getInputProps. The correct helper is
+            // localSetValue.
+            const localSetValue = jest.fn();
+            const form = {
+                disabled: false,
+                formData: {urls: 'https://existing.example/'},
+                getInputProps: jest.fn(() => [
+                    {
+                        type: 'text',
+                        disabled: false,
+                        value: 'https://existing.example/',
+                        name: 'urls',
+                        onChange: jest.fn(),
+                        error: null,
+                        'data-path': 'urls',
+                    },
+                    {valid: true, path: 'urls', localSetValue},
+                ]),
+                onSubmit: jest.fn(),
+            };
+
+            renderWithProviders(<UrlsTextarea form={form}/>);
+
+            const textarea = screen.getByPlaceholderText('Enter one URL per line');
+            fireEvent.drop(textarea, {
+                dataTransfer: {getData: () => 'https://dropped.example/'},
+            });
+
+            expect(localSetValue).toHaveBeenCalledWith(
+                'https://existing.example/\nhttps://dropped.example/\n'
             );
         });
     });

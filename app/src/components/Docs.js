@@ -21,6 +21,7 @@ import {
 } from "./Common";
 import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
+import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {DocSearchFilterButton, FilesView} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
@@ -47,6 +48,7 @@ function DocsPage() {
 
     const [selectedDocs, setSelectedDocs] = useState([]);
     const [bulkTagOpen, setBulkTagOpen] = useState(false);
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
     const onSelect = (path, checked) => {
         if (checked && path) {
@@ -56,9 +58,13 @@ function DocsPage() {
         }
     }
 
-    const onDelete = async () => {
+    const onDelete = async (force = false) => {
         const docIds = docs.filter(i => selectedDocs.indexOf(i['primary_path']) >= 0).map(i => i['id']);
-        await deleteDocs(docIds);
+        const result = await deleteDocs(docIds, force);
+        if (result && result.tagged) {
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
         await fetchDocs();
         setSelectedDocs([]);
     }
@@ -86,7 +92,7 @@ function DocsPage() {
             disabled={_.isEmpty(selectedDocs)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these documents? This cannot be undone.'
-            onClick={onDelete}
+            onClick={() => onDelete(false)}
             obeyWROLMode={true}
         >Delete</APIButton>
         <Button color='grey' onClick={invertSelection} disabled={_.isEmpty(docs)}>Invert</Button>
@@ -162,6 +168,15 @@ function DocsPage() {
         </Media>
         {body}
         {paginator}
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await onDelete(true);
+            }}
+        />
     </>;
 }
 
@@ -171,6 +186,7 @@ function DocPage() {
     const {docFile, doc, fetchDoc} = useDoc(parseInt(fileGroupId));
     const {theme} = useContext(ThemeContext);
     const [searchParams] = useSearchParams();
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
     // Deep-link params: `loc` = EPUB spine index, `page` = PDF page, `q` = search term.
     const locParam = searchParams.get('loc');
     const pageParam = searchParams.get('page');
@@ -244,9 +260,13 @@ function DocPage() {
         : null;
     const embedUrl = isEpub ? viewerUrl : pdfSrc;
 
-    const handleDelete = async () => {
+    const handleDelete = async (force = false) => {
         if (doc && doc.id) {
-            await deleteDocs([docFile.id]);
+            const result = await deleteDocs([docFile.id], force);
+            if (result && result.tagged) {
+                setTaggedFileGroups(result.file_groups);
+                return;
+            }
             toast({
                 type: 'success',
                 title: 'Document Deleted',
@@ -415,7 +435,7 @@ function DocPage() {
                         color='red'
                         confirmContent='Are you sure you want to delete this document? All files will be deleted.'
                         confirmButton='Delete'
-                        onClick={handleDelete}
+                        onClick={() => handleDelete(false)}
                         obeyWROLMode={true}
                     >Delete</APIButton>
                 </>;
@@ -442,6 +462,16 @@ function DocPage() {
         </Segment>
 
         <Tab menu={tabMenu} panes={tabPanes}/>
+
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await handleDelete(true);
+            }}
+        />
     </>;
 }
 

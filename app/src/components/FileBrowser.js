@@ -33,6 +33,7 @@ import {FilePreviewContext} from "./FilePreview";
 import {DragSelectionContext, DragSelectionProvider, SettingsContext, ThemeContext} from "../contexts/contexts";
 import {BulkTagModal} from "./BulkTagModal";
 import {InlineErrorBoundary} from "./ErrorBoundary";
+import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -431,38 +432,12 @@ export function FileBrowser() {
             paths={selectedPaths}
             onComplete={reset}
         />
-        <Modal
+        <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}
-            onClose={() => setTaggedFileGroups(null)}
-            closeIcon
-        >
-            <Modal.Header><Icon name='warning sign'/> Tagged Files Will Be Deleted</Modal.Header>
-            <Modal.Content>
-                <p>The following tagged files will be deleted:</p>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHeaderCell>File</TableHeaderCell>
-                            <TableHeaderCell>Tags</TableHeaderCell>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {taggedFileGroups && taggedFileGroups.map((fg, idx) => (
-                            <TableRow key={idx}>
-                                <TableCell>{fg.primary_path || fg.name}</TableCell>
-                                <TableCell>{(fg.tags || []).join(', ')}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </Modal.Content>
-            <Modal.Actions>
-                <Button onClick={() => setTaggedFileGroups(null)}>Cancel</Button>
-                <Button color='red' onClick={onForceDelete}>
-                    <Icon name='trash'/> Delete
-                </Button>
-            </Modal.Actions>
-        </Modal>
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={onForceDelete}
+        />
     </div>;
 
     const onFolderClick = async (folder) => {

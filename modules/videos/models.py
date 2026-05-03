@@ -90,10 +90,10 @@ class Video(ModelHelper, Base):
         )
         return d
 
-    def delete(self, add_to_skip_list: bool = True):
+    def delete(self, add_to_skip_list: bool = True, force: bool = False):
         """Remove all files and File records related to this video.  Delete this Video record.
         Add it to it's Channel's skip list."""
-        self.file_group.delete(add_to_skip_list=add_to_skip_list)
+        self.file_group.delete(add_to_skip_list=add_to_skip_list, force=force)
         session = Session.object_session(self)
         session.delete(self)
 

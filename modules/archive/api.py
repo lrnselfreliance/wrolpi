@@ -46,15 +46,21 @@ async def get_archive(request: Request, file_group_id: int):
 
 @archive_bp.delete('/<file_group_ids:int>', name='archive_delete_one')
 @archive_bp.delete('/<file_group_ids:[0-9,]+>', name='archive_delete_many')
-@openapi.description('Delete Archives by FileGroup IDs')
+@openapi.description('Delete Archives by FileGroup IDs.  Pass ?force=true to delete even tagged FileGroups.')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def delete_archive(_: Request, file_group_ids: str):
+async def delete_archive(request: Request, file_group_ids: str):
     try:
         file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
     except ValueError:
         raise ValidationError('Could not parse file group ids')
-    lib.delete_archives_by_file_group_ids(*file_group_ids)
+    force = request.args.get('force', '').lower() == 'true'
+    tagged = lib.delete_archives_by_file_group_ids(*file_group_ids, force=force)
+    if tagged:
+        return json_response(
+            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
+            HTTPStatus.CONFLICT,
+        )
     return response.empty()
 
 

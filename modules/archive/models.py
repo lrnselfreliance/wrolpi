@@ -140,8 +140,8 @@ class Archive(Base, ModelHelper):
 
         return self.file_group.published_datetime > other.file_group.published_datetime
 
-    def delete(self):
-        self.file_group.delete()
+    def delete(self, force: bool = False):
+        self.file_group.delete(force=force)
 
         session = Session.object_session(self)
         collection = self.collection

@@ -75,7 +75,7 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
 
 @video_bp.delete('/<file_group_ids:[0-9,]+>', name='Video Delete Many')
 @video_bp.delete('/<file_group_ids:int>', name='Video Delete One')
-@openapi.description('Delete videos.')
+@openapi.description('Delete videos.  Pass ?force=true to delete even tagged FileGroups.')
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
@@ -86,7 +86,13 @@ async def video_delete(request: Request, file_group_ids: str):
         raise ValidationError('Unable to parse file group ids')
 
     session = request.ctx.session
-    lib.delete_videos(session, *file_group_ids)
+    force = request.args.get('force', '').lower() == 'true'
+    tagged = lib.delete_videos(session, *file_group_ids, force=force)
+    if tagged:
+        return json_response(
+            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
+            HTTPStatus.CONFLICT,
+        )
 
     save_channels_config.activate_switch()
     Events.send_deleted(f'Deleted {len(file_group_ids)} videos')

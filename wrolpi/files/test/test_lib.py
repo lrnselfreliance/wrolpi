@@ -144,6 +144,39 @@ async def test_delete_tagged(await_switches, test_session, test_directory, make_
 
 
 @pytest.mark.asyncio
+async def test_get_tagged_file_groups_by_ids(test_session, test_directory, make_files_structure, tag_factory,
+                                             refresh_files, await_switches):
+    """`get_tagged_file_groups_by_ids` returns only the FileGroups with at least one TagFile."""
+    tag = await tag_factory()
+    make_files_structure({'a.txt': 'a', 'b.txt': 'b', 'c.txt': 'c'})
+    await refresh_files()
+
+    fgs = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert len(fgs) == 3
+    a_fg, b_fg, c_fg = fgs
+
+    # Tag two of the three FileGroups.
+    a_fg.add_tag(test_session, tag.id)
+    c_fg.add_tag(test_session, tag.id)
+    await await_switches()
+    test_session.commit()
+
+    # Empty input → empty list.
+    assert lib.get_tagged_file_groups_by_ids(test_session, []) == []
+
+    # Untagged FileGroup is excluded.
+    assert lib.get_tagged_file_groups_by_ids(test_session, [b_fg.id]) == []
+
+    # All-untagged batch is empty.
+    result = lib.get_tagged_file_groups_by_ids(test_session, [a_fg.id, b_fg.id, c_fg.id])
+    returned_ids = {fg['id'] for fg in result}
+    assert returned_ids == {a_fg.id, c_fg.id}
+    # Each returned FileGroup is serialized and includes its tag names.
+    for fg in result:
+        assert tag.name in fg.get('tags', [])
+
+
+@pytest.mark.asyncio
 async def test_delete_nested(test_session, make_files_structure):
     """Refuse to delete nested files in case user mis-clicks."""
     make_files_structure(['foo/bar'])

@@ -4,6 +4,7 @@ import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
 import {Button, Modal} from '../Theme';
 import {deleteArchives, deleteVideos} from '../../api';
 import {humanFileSize, isoDatetimeToString} from '../Common';
+import {TaggedDeleteConfirmModal} from '../TaggedDeleteConfirmModal';
 
 /**
  * Card component for a single conflicting file.
@@ -28,16 +29,26 @@ import {humanFileSize, isoDatetimeToString} from '../Common';
 function ConflictFileCard({file, onDelete, isRecommended}) {
     const [isDeleting, setIsDeleting] = useState(false);
     const [localError, setLocalError] = useState(null);
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
-    const handleDelete = async () => {
+    const performDelete = async (force) => {
+        if (file.model_type === 'video' && file.file_group_id) {
+            return await deleteVideos([file.file_group_id], force);
+        } else if (file.model_type === 'archive' && file.archive_id) {
+            return await deleteArchives([file.archive_id], force);
+        }
+        return null;
+    };
+
+    const handleDelete = async (force = false) => {
         setIsDeleting(true);
         setLocalError(null);
 
         try {
-            if (file.model_type === 'video' && file.file_group_id) {
-                await deleteVideos([file.file_group_id]);
-            } else if (file.model_type === 'archive' && file.archive_id) {
-                await deleteArchives([file.archive_id]);
+            const result = await performDelete(force);
+            if (result && result.tagged) {
+                setTaggedFileGroups(result.file_groups);
+                return;
             }
             onDelete(file);
         } catch (err) {
@@ -125,7 +136,7 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
                                 icon
                                 loading={isDeleting}
                                 disabled={isDeleting}
-                                onClick={handleDelete}
+                                onClick={() => handleDelete(false)}
                                 title='Delete this file'
                             >
                                 <Icon name='trash'/>
@@ -134,6 +145,15 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
                     </Grid.Row>
                 </Grid>
             </Card.Content>
+            <TaggedDeleteConfirmModal
+                open={taggedFileGroups !== null}
+                taggedFileGroups={taggedFileGroups}
+                onCancel={() => setTaggedFileGroups(null)}
+                onConfirm={async () => {
+                    setTaggedFileGroups(null);
+                    await handleDelete(true);
+                }}
+            />
         </Card>
     );
 }

@@ -12,7 +12,7 @@ feedparser==6.0.11
 jc==1.25.3
 libzim==3.5.0
 mock==5.1.0
-psutil==6.0.0
+psutil==7.2.2
 psycopg2-binary==2.9.9
 pydantic>=2.0.0
 PyMuPDF>=1.27.0

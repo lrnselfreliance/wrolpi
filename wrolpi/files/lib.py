@@ -55,7 +55,8 @@ logger = logger.getChild(__name__)
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
-           'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href']
+           'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
+           'get_tagged_file_groups_by_ids']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -213,6 +214,20 @@ def list_directories_contents(session: Session, directories_: List[str]) -> Dict
             paths[path.name] = _get_file_dict(session, path)
 
     return paths
+
+
+def get_tagged_file_groups_by_ids(session: Session, file_group_ids: List[int]) -> List[dict]:
+    """Return serialized FileGroups (subset of `file_group_ids`) that have at least one TagFile.
+
+    Used by Archive/Video/Doc deletion endpoints to require force-confirmation before deleting tagged files."""
+    if not file_group_ids:
+        return []
+    rows = session.query(FileGroup) \
+        .join(TagFile, TagFile.file_group_id == FileGroup.id) \
+        .filter(FileGroup.id.in_(file_group_ids)) \
+        .distinct() \
+        .all()
+    return [fg.__json__() for fg in rows]
 
 
 @wrol_mode_check

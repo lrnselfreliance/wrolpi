@@ -26,6 +26,7 @@ import {Button, darkTheme, Header, Icon, Loader, Segment, Tab} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
 import {Comment, CommentGroup, Input, Label, Transition} from "semantic-ui-react";
+import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 
 const MEDIA_PATH = '/media';
 
@@ -171,6 +172,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
     const navigate = useNavigate();
     const videoRef = React.useRef();
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
     useTitle(videoFile ? videoFile.title ? videoFile.title : videoFile.name : null);
     let video;
@@ -276,8 +278,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         return <PageContainer><Header as='h4'>Could not find video</Header></PageContainer>;
     }
 
-    const handleDeleteVideo = async (video_id) => {
-        await deleteVideos([video_id])
+    const handleDeleteVideo = async (video_id, force = false) => {
+        const result = await deleteVideos([video_id], force);
+        if (result && result.tagged) {
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
         navigate(-1);
     }
 
@@ -575,6 +581,15 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
             {prevNextVideosSegment}
         </Container>
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await handleDeleteVideo(videoFile.id, true);
+            }}
+        />
     </>
 }
 

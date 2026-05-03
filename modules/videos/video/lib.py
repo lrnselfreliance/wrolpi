@@ -12,9 +12,9 @@ from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager
-from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.files.lib import handle_file_group_search_results, get_tagged_file_groups_by_ids
 from wrolpi.files.models import FileGroup
-from wrolpi.tags import tag_append_sub_select_where
+from wrolpi.tags import tag_append_sub_select_where, save_tags_config
 from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
 from ..cookies import cookies_unlocked, cookies_for_download
 from ..errors import UnknownVideo
@@ -162,18 +162,32 @@ def search_videos(
     return results, total
 
 
-def delete_videos(session: Session, *file_group_ids: int):
+def delete_videos(session: Session, *file_group_ids: int, force: bool = False) -> Optional[List[dict]]:
+    """Delete Videos by their FileGroup IDs and all of their files.
+
+    If any FileGroup is tagged and force is False, returns the list of serialized tagged FileGroups
+    without deleting anything.  If force is True, deletes even tagged files and re-saves the tags
+    config so `tags.yaml` reflects the removed TagFiles.
+    """
     videos = list(session.query(Video).filter(Video.file_group_id.in_(file_group_ids)))
     if not videos:
         raise UnknownVideo('Could not find videos to delete')
+
+    tagged = get_tagged_file_groups_by_ids(session, [v.file_group_id for v in videos])
+    if tagged and not force:
+        return tagged
 
     logger.warning(f'Deleting {len(videos)} videos')
     # Get all URLs, skip them once (so config isn't saved multiple times).
     urls = list(filter(None, [i.file_group.url for i in videos]))
     download_manager.add_to_skip_list(*urls)
     for video in videos:
-        video.delete()
+        video.delete(force=force)
     session.commit()
+
+    if tagged:
+        save_tags_config.activate_switch()
+    return None
 
 
 def download_video_info_json(url: str) -> dict:

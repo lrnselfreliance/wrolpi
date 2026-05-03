@@ -52,6 +52,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
+import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {
     deleteVideos,
     deleteCookies,
@@ -88,6 +89,7 @@ export function VideosPage() {
     const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
     const [bulkTagOpen, setBulkTagOpen] = useState(false);
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
     const searchInputRef = React.useRef();
 
     useHotkeys('f', (e) => {
@@ -156,9 +158,13 @@ export function VideosPage() {
         setSelectedVideos(newSelectedVideos);
     }
 
-    const onDelete = async () => {
+    const onDelete = async (force = false) => {
         const fileGroupIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['id']);
-        await deleteVideos(fileGroupIds);
+        const result = await deleteVideos(fileGroupIds, force);
+        if (result && result.tagged) {
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
         await fetchVideos();
         setSelectedVideos([]);
     }
@@ -189,7 +195,7 @@ export function VideosPage() {
             disabled={_.isEmpty(selectedVideos)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these video files?  This cannot be undone.'
-            onClick={onDelete}
+            onClick={() => onDelete(false)}
         >Delete</APIButton>
         <Button
             color='grey'
@@ -265,6 +271,15 @@ export function VideosPage() {
         </Media>
         {body}
         {paginator}
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await onDelete(true);
+            }}
+        />
     </>
 }
 

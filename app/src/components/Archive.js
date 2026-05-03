@@ -60,6 +60,7 @@ import {
     updateArchiveDownloaderConfig,
 } from "../api";
 import {InputForm, useForm} from "../hooks/useForm";
+import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {CollectionReorganizeModal} from "./collections/CollectionReorganizeModal";
 import {BatchReorganizeModal} from "./collections/BatchReorganizeModal";
@@ -96,6 +97,7 @@ function ArchivePage() {
     const {fileGroupId} = useParams();
     const {archiveFile, history, fetchArchive} = useArchive(fileGroupId);
     const {theme} = useContext(ThemeContext);
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
     let title = archiveFile ? archiveFile.title ? archiveFile.title : archiveFile.name : null;
     useTitle(title);
@@ -132,8 +134,12 @@ function ArchivePage() {
         <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
         null;
 
-    const localDeleteArchive = async () => {
-        await deleteArchives([archiveFile.id]);
+    const localDeleteArchive = async (force = false) => {
+        const result = await deleteArchives([archiveFile.id], force);
+        if (result && result.tagged) {
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
         toast({
             type: 'success',
             title: 'Archive Deleted',
@@ -180,7 +186,7 @@ function ArchivePage() {
         color='red'
         confirmContent='Are you sure you want to delete this archive? All files will be deleted'
         confirmButton='Delete'
-        onClick={localDeleteArchive}
+        onClick={() => localDeleteArchive(false)}
         obeyWROLMode={true}
     >
         Delete
@@ -356,6 +362,16 @@ function ArchivePage() {
             />
             {historyList}
         </Segment>
+
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await localDeleteArchive(true);
+            }}
+        />
     </>
 }
 
@@ -1082,6 +1098,7 @@ function ArchiveSettingsPage() {
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
     const [bulkTagOpen, setBulkTagOpen] = useState(false);
+    const [taggedFileGroups, setTaggedFileGroups] = useState(null);
     const searchInputRef = React.useRef();
 
     useHotkeys('f', (e) => {
@@ -1132,10 +1149,17 @@ function ArchivesPage() {
         }
     }
 
-    const onDelete = async () => {
-        const archiveIds = archives.filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
-            .map(i => i['id']);
-        await deleteArchives(archiveIds);
+    const archiveIdsForSelection = () => archives
+        .filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
+        .map(i => i['id']);
+
+    const onDelete = async (force = false) => {
+        const archiveIds = archiveIdsForSelection();
+        const result = await deleteArchives(archiveIds, force);
+        if (result && result.tagged) {
+            setTaggedFileGroups(result.file_groups);
+            return;
+        }
         await fetchArchives();
         setSelectedArchives([]);
     }
@@ -1166,7 +1190,7 @@ function ArchivesPage() {
             disabled={_.isEmpty(selectedArchives)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these archives files?  This cannot be undone.'
-            onClick={onDelete}
+            onClick={() => onDelete(false)}
         >Delete</APIButton>
         <Button
             color='grey'
@@ -1263,6 +1287,15 @@ function ArchivesPage() {
         </Media>
         {body}
         {paginator}
+        <TaggedDeleteConfirmModal
+            open={taggedFileGroups !== null}
+            taggedFileGroups={taggedFileGroups}
+            onCancel={() => setTaggedFileGroups(null)}
+            onConfirm={async () => {
+                setTaggedFileGroups(null);
+                await onDelete(true);
+            }}
+        />
     </>
 }
 

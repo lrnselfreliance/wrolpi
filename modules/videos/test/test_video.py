@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from http import HTTPStatus
 
 import pytest
 
@@ -43,6 +44,59 @@ async def test_delete_video_with_tag(async_client, test_session, video_factory, 
     test_session.commit()
     assert test_session.query(Video).count() == 1
     assert test_session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_video_api_tagged_requires_force(async_client, test_session, video_factory, tag_factory,
+                                                     await_switches):
+    """DELETE /api/videos/<id> returns 409 for tagged videos until ?force=true is passed."""
+    video = video_factory(with_video_file=True, with_poster_ext='png')
+    tag = await tag_factory()
+    video.add_tag(test_session, tag.name)
+    test_session.commit()
+    file_group_id = video.file_group_id
+    paths = list(video.file_group.my_paths())
+
+    request, response = await async_client.delete(f'/api/videos/{file_group_id}')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
+    assert len(response.json['file_groups']) == 1
+    assert response.json['file_groups'][0]['id'] == file_group_id
+    assert tag.name in response.json['file_groups'][0]['tags']
+    # Nothing was deleted.
+    assert all(p.is_file() for p in paths)
+    assert test_session.query(Video).count() == 1
+
+    # With force=true, the Video is deleted.
+    request, response = await async_client.delete(f'/api/videos/{file_group_id}?force=true')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert all(not p.exists() for p in paths)
+    assert test_session.query(Video).count() == 0
+    assert test_session.query(FileGroup).count() == 0
+    await await_switches()
+
+
+@pytest.mark.asyncio
+async def test_delete_video_api_atomic_when_some_tagged(async_client, test_session, video_factory, tag_factory):
+    """When deleting multiple Videos and any are tagged, NONE are deleted until ?force=true."""
+    untagged = video_factory(with_video_file=True)
+    tagged = video_factory(with_video_file=True)
+    tag = await tag_factory()
+    tagged.add_tag(test_session, tag.name)
+    test_session.commit()
+    untagged_paths = list(untagged.file_group.my_paths())
+    tagged_paths = list(tagged.file_group.my_paths())
+
+    ids = f'{untagged.file_group_id},{tagged.file_group_id}'
+    request, response = await async_client.delete(f'/api/videos/{ids}')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
+    returned_ids = {fg['id'] for fg in response.json['file_groups']}
+    assert returned_ids == {tagged.file_group_id}
+    # Nothing was deleted.
+    assert all(p.is_file() for p in untagged_paths)
+    assert all(p.is_file() for p in tagged_paths)
+    assert test_session.query(Video).count() == 2
 
 
 @pytest.mark.asyncio

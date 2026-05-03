@@ -107,7 +107,7 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(deleteButtons[0]);
 
         await waitFor(() => {
-            expect(api.deleteVideos).toHaveBeenCalledWith([1]);
+            expect(api.deleteVideos).toHaveBeenCalledWith([1], false);
         });
 
         // File should be removed from UI (conflict resolved since only 1 file remains)
@@ -157,7 +157,7 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(deleteButton);
 
         await waitFor(() => {
-            expect(api.deleteArchives).toHaveBeenCalledWith([201]);
+            expect(api.deleteArchives).toHaveBeenCalledWith([201], false);
         });
     });
 
@@ -316,6 +316,39 @@ describe('ConflictResolutionModal', () => {
 
         // Should show "Recommended to Keep" badge (only on the first/highest ranked)
         expect(screen.getByText(/Recommended to Keep/i)).toBeInTheDocument();
+    });
+
+    it('shows tagged-delete confirmation modal when API returns FILE_GROUP_IS_TAGGED', async () => {
+        api.deleteVideos.mockResolvedValue({
+            tagged: true,
+            file_groups: [
+                {id: 1, primary_path: 'unique-tagged-path-12345.mp4', tags: ['unique-tag-zxcv']},
+            ],
+        });
+
+        renderWithProviders(<ConflictResolutionModal {...defaultProps} />);
+
+        const deleteButtons = screen.getAllByTitle('Delete this file');
+        fireEvent.click(deleteButtons[0]);
+
+        // Wait for the secondary confirmation modal to appear (use unique path/tag to avoid
+        // matching the parent ConflictResolutionModal's "Tagged" label).
+        await waitFor(() => {
+            expect(screen.getByText('unique-tagged-path-12345.mp4')).toBeInTheDocument();
+        });
+        expect(screen.getByText('unique-tag-zxcv')).toBeInTheDocument();
+
+        // Confirming should re-call deleteVideos with force=true.
+        api.deleteVideos.mockResolvedValueOnce({});
+        // The TaggedDeleteConfirmModal's Delete button has the trash icon.
+        const confirmButton = screen.getAllByRole('button')
+            .find(b => b.classList.contains('red') && b.textContent.includes('Delete')
+                && b.querySelector('.trash.icon'));
+        fireEvent.click(confirmButton);
+
+        await waitFor(() => {
+            expect(api.deleteVideos).toHaveBeenLastCalledWith([1], true);
+        });
     });
 
     it('does not show rank display for archives', () => {

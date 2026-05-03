@@ -510,3 +510,68 @@ async def test_archive_browsers_endpoint_dockerized(async_client):
         assert response.json['browsers'] == []
         assert response.json['available'] is False
         assert 'message' in response.json
+
+
+@pytest.mark.asyncio
+async def test_delete_archive_untagged(async_client, test_session, archive_factory):
+    """An untagged Archive can be deleted via DELETE /api/archive/<id> without force."""
+    archive = archive_factory('example.com', 'https://example.com/1')
+    test_session.commit()
+    paths = list(archive.my_paths())
+    assert paths and all(p.is_file() for p in paths)
+
+    request, response = await async_client.delete(f'/api/archive/{archive.file_group_id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert all(not p.exists() for p in paths)
+    assert test_session.query(Archive).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_archive_tagged_requires_force(async_client, test_session, archive_factory, tag_factory,
+                                                   await_switches):
+    """A tagged Archive returns 409 with FILE_GROUP_IS_TAGGED until force=true is set."""
+    tag = await tag_factory()
+    archive = archive_factory('example.com', 'https://example.com/1', tag_names=[tag.name])
+    test_session.commit()
+    paths = list(archive.my_paths())
+
+    request, response = await async_client.delete(f'/api/archive/{archive.file_group_id}')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
+    assert len(response.json['file_groups']) == 1
+    returned = response.json['file_groups'][0]
+    assert returned['id'] == archive.file_group_id
+    assert tag.name in returned['tags']
+    # Nothing was deleted.
+    assert all(p.is_file() for p in paths)
+    assert test_session.query(Archive).count() == 1
+
+    # With force=true, the Archive is deleted.
+    request, response = await async_client.delete(f'/api/archive/{archive.file_group_id}?force=true')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert all(not p.exists() for p in paths)
+    assert test_session.query(Archive).count() == 0
+    await await_switches()
+
+
+@pytest.mark.asyncio
+async def test_delete_archive_atomic_when_some_tagged(async_client, test_session, archive_factory, tag_factory):
+    """When deleting multiple Archives and any are tagged, NONE are deleted until force=true."""
+    tag = await tag_factory()
+    untagged = archive_factory('example.com', 'https://example.com/1')
+    tagged = archive_factory('example.com', 'https://example.com/2', tag_names=[tag.name])
+    test_session.commit()
+    untagged_paths = list(untagged.my_paths())
+    tagged_paths = list(tagged.my_paths())
+
+    ids = f'{untagged.file_group_id},{tagged.file_group_id}'
+    request, response = await async_client.delete(f'/api/archive/{ids}')
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
+    # Only the tagged FileGroup is in the response.
+    returned_ids = {fg['id'] for fg in response.json['file_groups']}
+    assert returned_ids == {tagged.file_group_id}
+    # Nothing was deleted.
+    assert all(p.is_file() for p in untagged_paths)
+    assert all(p.is_file() for p in tagged_paths)
+    assert test_session.query(Archive).count() == 2

@@ -1,6 +1,7 @@
 import React from "react";
 import {Button, Header, Icon, Segment} from "../Theme";
 import {Input, Message} from "semantic-ui-react";
+import {ThemeContext} from "../../contexts/contexts";
 
 // The WROLPi browser extension is distributed off-store: Chrome users
 // sideload the unpacked .zip; Firefox users get a Mozilla-signed .xpi that
@@ -145,6 +146,7 @@ export function ExtensionPage() {
     const [metadata, setMetadata] = React.useState(null);
     const [error, setError] = React.useState(null);
     const browser = detectBrowser();
+    const {s} = React.useContext(ThemeContext);
 
     React.useEffect(() => {
         let cancelled = false;
@@ -169,7 +171,7 @@ export function ExtensionPage() {
 
     return <>
         <Header as='h1'>Browser Extension</Header>
-        <p>
+        <p {...s}>
             Install the WROLPi browser extension to send pages, videos, and feeds to
             this WROLPi from any tab. The extension is open-source and not distributed
             via official browser stores — it ships with each WROLPi release.

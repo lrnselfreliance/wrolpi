@@ -120,31 +120,36 @@ async def test_delete_video_api(async_client, test_session, channel_factory, vid
 
     vid1_video_path, vid1_caption_path = vid1.video_path, vid1.caption_paths[0]
     vid2_video_path, vid2_info_json_path = vid2.video_path, vid2.info_json_path
+    # Capture URLs before deletion since cascade removes the Video rows from the session.
+    vid1_url, vid2_url = vid1.file_group.url, vid2.file_group.url
 
     # No videos have been deleted yet.
     assert vid1_video_path.is_file() and vid1_caption_path.is_file()
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await async_client.delete(f'/api/videos/{vid1.file_group_id}')
+    body = json.dumps({'file_group_ids': [vid1.file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
-    assert test_download_manager.is_skipped(vid1.file_group.url)
+    assert test_download_manager.is_skipped(vid1_url)
     # Video was deleted.
     assert test_session.query(Video).count() == 1
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = await async_client.delete(f'/api/videos/{vid2.file_group_id}')
+    body = json.dumps({'file_group_ids': [vid2.file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert test_download_manager.is_skipped(vid1.file_group.url, vid2.file_group.url)
+    assert test_download_manager.is_skipped(vid1_url, vid2_url)
     assert test_session.query(Video).count() == 0
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 
     # 3 does not exist.
-    request, response = await async_client.delete(f'/api/videos/3')
+    body = json.dumps({'file_group_ids': [3]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
@@ -169,7 +174,8 @@ async def test_wrol_mode(async_client, simple_channel, simple_video, wrol_mode_f
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't delete a video
-    _, resp = await async_client.delete(f'/api/videos/{simple_video.file_group_id}')
+    body = dumps({'file_group_ids': [simple_video.file_group_id]})
+    _, resp = await async_client.post('/api/files/delete_groups', content=body)
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 

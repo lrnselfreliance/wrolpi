@@ -54,7 +54,7 @@ import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statis
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {
-    deleteVideos,
+    deleteFileGroups,
     deleteCookies,
     fetchSuggestedUserAgent,
     fetchVideoDownloaderConfig,
@@ -160,7 +160,7 @@ export function VideosPage() {
 
     const onDelete = async (force = false) => {
         const fileGroupIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['id']);
-        const result = await deleteVideos(fileGroupIds, force);
+        const result = await deleteFileGroups(fileGroupIds, force);
         if (result && result.tagged) {
             setTaggedFileGroups(result.file_groups);
             return;

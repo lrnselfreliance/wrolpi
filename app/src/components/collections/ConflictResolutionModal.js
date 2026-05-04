@@ -2,7 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {Card, Grid, Icon, Image, Label, Segment, Button as SButton} from 'semantic-ui-react';
 import Message from 'semantic-ui-react/dist/commonjs/collections/Message';
 import {Button, Modal} from '../Theme';
-import {deleteArchives, deleteVideos} from '../../api';
+import {deleteFileGroups} from '../../api';
 import {humanFileSize, isoDatetimeToString} from '../Common';
 import {TaggedDeleteConfirmModal} from '../TaggedDeleteConfirmModal';
 
@@ -32,10 +32,8 @@ function ConflictFileCard({file, onDelete, isRecommended}) {
     const [taggedFileGroups, setTaggedFileGroups] = useState(null);
 
     const performDelete = async (force) => {
-        if (file.model_type === 'video' && file.file_group_id) {
-            return await deleteVideos([file.file_group_id], force);
-        } else if (file.model_type === 'archive' && file.archive_id) {
-            return await deleteArchives([file.archive_id], force);
+        if (file.file_group_id) {
+            return await deleteFileGroups([file.file_group_id], force);
         }
         return null;
     };

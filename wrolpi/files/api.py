@@ -12,6 +12,7 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
     background_task, walk, timer, TRACE_LEVEL, unique_by_predicate
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
+from wrolpi.events import Events
 from . import lib, schema
 from .worker import file_worker
 from ..api_utils import json_response, api_app
@@ -72,6 +73,38 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
             {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged_file_groups},
             HTTPStatus.CONFLICT,
         )
+    return response.empty()
+
+
+@files_bp.post('/delete_groups')
+@openapi.definition(
+    summary='Delete FileGroups (and their model records) by ID.  Pass force=true to delete'
+            ' even tagged FileGroups.',
+    body=schema.DeleteFileGroupsRequest,
+)
+@validate(schema.DeleteFileGroupsRequest)
+@wrol_mode_check
+async def delete_file_groups(request: Request, body: schema.DeleteFileGroupsRequest):
+    if not body.file_group_ids:
+        raise InvalidFile('file_group_ids cannot be empty')
+    session = request.ctx.session
+
+    if not body.force:
+        tagged = lib.get_tagged_file_groups_by_ids(session, body.file_group_ids)
+        if tagged:
+            return json_response(
+                {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
+                HTTPStatus.CONFLICT,
+            )
+
+    affected_models = lib.delete_file_groups(session, body.file_group_ids, force=body.force)
+
+    if 'video' in affected_models:
+        # A Channel's tracked downloads may have changed; rewrite channels.yaml.
+        from modules.videos.lib import save_channels_config
+        save_channels_config.activate_switch()
+
+    Events.send_deleted(f'Deleted {len(body.file_group_ids)} files')
     return response.empty()
 
 

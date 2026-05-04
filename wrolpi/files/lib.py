@@ -56,7 +56,7 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
-           'get_tagged_file_groups_by_ids']
+           'get_tagged_file_groups_by_ids', 'delete_file_groups']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -219,7 +219,7 @@ def list_directories_contents(session: Session, directories_: List[str]) -> Dict
 def get_tagged_file_groups_by_ids(session: Session, file_group_ids: List[int]) -> List[dict]:
     """Return serialized FileGroups (subset of `file_group_ids`) that have at least one TagFile.
 
-    Used by Archive/Video/Doc deletion endpoints to require force-confirmation before deleting tagged files."""
+    Used by the unified delete endpoint to require force-confirmation before deleting tagged files."""
     if not file_group_ids:
         return []
     rows = session.query(FileGroup) \
@@ -228,6 +228,92 @@ def get_tagged_file_groups_by_ids(session: Session, file_group_ids: List[int]) -
         .distinct() \
         .all()
     return [fg.__json__() for fg in rows]
+
+
+def get_tagged_file_groups_by_paths(session: Session, paths: Iterable[pathlib.Path]) -> List[FileGroup]:
+    """Return FileGroup objects under any of the given paths that have at least one TagFile.
+
+    For a file path, matches FileGroups whose primary_path shares the file's stem in the same
+    directory.  For a directory path, matches FileGroups whose `directory` is the path or a
+    descendant.  Used by the path-based delete endpoint to require force-confirmation before
+    deleting tagged files."""
+    paths = list(paths)
+    if not paths:
+        return []
+    tagged: List[FileGroup] = []
+    seen_ids = set()
+    for path in paths:
+        query = session.query(FileGroup) \
+            .join(TagFile, TagFile.file_group_id == FileGroup.id)
+        if path.is_file():
+            # Could be deleting a file in a FileGroup that has been tagged.
+            stem, _ = split_path_stem_and_suffix(path)
+            query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
+        else:
+            # Search for any FileGroups that have been tagged under this directory.
+            # Use indexed directory column for efficient lookup.
+            path_str = str(path)
+            query = query.filter(or_(
+                FileGroup.directory == path_str,
+                FileGroup.directory.like(f'{path_str}/%'),
+            ))
+        for file_group in query:
+            if path.is_dir() or any(p for p in paths if p in file_group.my_paths()):
+                if file_group.id not in seen_ids:
+                    seen_ids.add(file_group.id)
+                    tagged.append(file_group)
+    return tagged
+
+
+def delete_file_groups(session: Session, file_group_ids: List[int], force: bool = False) -> Set[str]:
+    """Delete FileGroups (and their model rows via FK CASCADE) by ID.
+
+    Returns the set of `FileGroup.model` values that were deleted, so the caller can fire any
+    model-specific post-delete switches (e.g., `save_channels_config` for videos).
+
+    The caller is expected to have already gated this on tag confirmation via
+    `get_tagged_file_groups_by_ids`.  `force` propagates to FileGroup.delete so the safety net
+    at FileGroup.delete (raises FileGroupIsTagged if force is False and tags exist) still
+    protects callers that skipped the pre-check."""
+    files = FileGroup.get_by_ids(session, file_group_ids)
+    if not files:
+        raise UnknownFile(f'No FileGroups found for ids: {file_group_ids}')
+
+    affected_models: Set[str] = {fg.model for fg in files if fg.model}
+    had_tagged = any(fg.tag_names for fg in files)
+
+    # Capture domain Collection IDs for any Archive FileGroups so we can prune empty ones after
+    # the cascade removes the Archive rows.  (Archive.delete used to do this per-archive; with
+    # cascade-based deletion we do it as a single post-pass.)
+    archive_collection_ids: Set[int] = set()
+    if 'archive' in affected_models:
+        from modules.archive.models import Archive
+        archive_collection_ids = {
+            collection_id for (collection_id,) in session.query(Archive.collection_id)
+            .filter(Archive.file_group_id.in_([fg.id for fg in files]))
+            if collection_id is not None
+        }
+
+    for fg in files:
+        fg.delete(force=force)
+
+    if archive_collection_ids:
+        # Flush so the FK CASCADE has removed the Archive rows before we count remaining.
+        session.flush()
+        from modules.archive.models import Archive
+        from wrolpi.collections.models import Collection
+        for collection_id in archive_collection_ids:
+            collection = session.query(Collection).filter_by(id=collection_id, kind='domain').one_or_none()
+            if collection is None:
+                continue
+            remaining = session.query(Archive).filter_by(collection_id=collection_id).count()
+            if remaining == 0:
+                session.delete(collection)
+
+    if had_tagged:
+        save_tags_config.activate_switch()
+
+    return affected_models
 
 
 @wrol_mode_check
@@ -251,34 +337,16 @@ async def delete(*paths: Union[str, pathlib.Path], force: bool = False):
                     continue
                 if p1 != p2 and p1 in p2.parents:
                     raise InvalidFile(f'Cannot deleted nested paths')
-    if not force:
-        tagged_file_groups = []
-        seen_ids = set()
-        with get_db_session() as session:
-            # Search for any files that have been tagged.
-            for path in paths:
-                query = session.query(FileGroup, TagFile) \
-                    .join(TagFile, TagFile.file_group_id == FileGroup.id)
-                if path.is_file():
-                    # Could be deleting a file in a FileGroup that has been tagged.
-                    stem, _ = split_path_stem_and_suffix(path)
-                    query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
-                else:
-                    # Search for any FileGroups that have been tagged under this directory.
-                    # Use indexed directory column for efficient lookup
-                    path_str = str(path)
-                    query = query.filter(or_(
-                        FileGroup.directory == path_str,
-                        FileGroup.directory.like(f'{path_str}/%')
-                    ))
-                for (file_group, tag_file) in query:
-                    if path.is_dir() or any(i for i in paths if i in file_group.my_paths()):
-                        if file_group.id not in seen_ids:
-                            seen_ids.add(file_group.id)
-                            tagged_file_groups.append(file_group)
-            if tagged_file_groups:
-                # Serialize while session is still active.
-                return [i.__json__() for i in tagged_file_groups]
+
+    # Discover any tagged FileGroups under these paths so we can either gate the deletion (when
+    # !force) or fire `save_tags_config` afterwards (when force=True and any were tagged).
+    with get_db_session() as session:
+        tagged_file_groups = get_tagged_file_groups_by_paths(session, paths)
+        if tagged_file_groups and not force:
+            # Serialize while session is still active.
+            return [i.__json__() for i in tagged_file_groups]
+        had_tagged = bool(tagged_file_groups)
+
     for path in paths:
         ignored_directories = get_wrolpi_config().ignored_directories
         if ignored_directories and str(path) in ignored_directories:
@@ -293,6 +361,10 @@ async def delete(*paths: Union[str, pathlib.Path], force: bool = False):
     # (e.g., upload API recreating the file).
     from wrolpi.files.worker import file_worker
     await file_worker.refresh_sync(list(paths))
+
+    if had_tagged:
+        # `tags.yaml` references TagFiles that the refresh just removed; rewrite it.
+        save_tags_config.activate_switch()
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):
@@ -1529,17 +1601,9 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False, force: bo
         if recursive:
             if not force:
                 with get_db_session() as session:
-                    # Use indexed directory column for efficient lookup
-                    directory_str = str(directory)
-                    tagged = session.query(FileGroup) \
-                        .filter(or_(
-                        FileGroup.directory == directory_str,
-                        FileGroup.directory.like(f'{directory_str}/%')
-                    )) \
-                        .join(TagFile, TagFile.file_group_id == FileGroup.id) \
-                        .limit(1).one_or_none()
+                    tagged = get_tagged_file_groups_by_paths(session, [directory])
                     if tagged:
-                        raise FileGroupIsTagged(f'Cannot delete {tagged} because it is tagged')
+                        raise FileGroupIsTagged(f'Cannot delete {tagged[0]} because it is tagged')
             shutil.rmtree(directory)
         else:
             directory.rmdir()
@@ -1733,7 +1797,7 @@ async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> 
                 # Mark download as completed
                 download.complete()
                 # Link the download to the location of the uploaded file.
-                model = file_group.get_model_record()
+                model = file_group.get_model_record(session)
                 download.location = model.location if model else file_group.location
 
         # Add tags if provided

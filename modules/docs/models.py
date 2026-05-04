@@ -77,6 +77,10 @@ class Doc(ModelHelper, Base):
         return d
 
     @staticmethod
+    def get_by_path(session: Session, path) -> Optional['Doc']:
+        return session.query(Doc).join(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
+
+    @staticmethod
     def can_model(file_group: FileGroup) -> bool:
         if file_group.mimetype and mimetype_is_doc(file_group.mimetype):
             return True

@@ -11,8 +11,7 @@ from wrolpi.collections.models import Collection
 from wrolpi.collections.types import collection_type_registry
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError
-from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype, get_tagged_file_groups_by_ids
-from wrolpi.tags import save_tags_config
+from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
 
 logger = logging.getLogger(__name__)
 
@@ -345,35 +344,6 @@ def _get_doc(session, file_group_id: int):
     if not doc:
         raise ValidationError(f'Doc with file_group_id {file_group_id} not found')
     return doc
-
-
-def _delete_docs(*file_group_ids, force: bool = False) -> Optional[List[dict]]:
-    """Delete Docs by their FileGroup IDs and all of their files.
-
-    If any FileGroup is tagged and force is False, returns the list of serialized tagged FileGroups
-    without deleting anything.  If force is True, deletes even tagged files and re-saves the tags
-    config so `tags.yaml` reflects the removed TagFiles.
-    """
-    from .models import Doc
-    with get_db_session(commit=True) as session:
-        docs = list(session.query(Doc).filter(Doc.file_group_id.in_(file_group_ids)))
-        if not docs:
-            raise ValidationError(
-                f'Could not find Docs to delete with file_group_ids: {", ".join(map(str, file_group_ids))}'
-            )
-
-        tagged = get_tagged_file_groups_by_ids(session, [d.file_group_id for d in docs])
-        if tagged and not force:
-            return tagged
-
-        # Delete the FileGroup, which removes the files on disk and cascades the Doc row via
-        # the ON DELETE CASCADE foreign key on Doc.file_group_id.
-        for doc in docs:
-            doc.file_group.delete(force=force)
-
-    if tagged:
-        save_tags_config.activate_switch()
-    return None
 
 
 def _search_docs(search_str=None, author=None, subject=None, language=None, mimetype=None,

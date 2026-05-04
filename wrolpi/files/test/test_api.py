@@ -164,6 +164,63 @@ async def test_delete_wrol_mode(async_client, wrol_mode_fixture):
 
 
 @pytest.mark.asyncio
+async def test_delete_file_groups_mixed_batch(async_client, test_session, video_factory, archive_factory):
+    """A single POST /api/files/delete_groups can delete a mixture of model types in one call."""
+    from modules.archive.models import Archive
+    video = video_factory(with_video_file=True)
+    archive = archive_factory('example.com', 'https://example.com/1')
+    test_session.commit()
+    video_paths = list(video.file_group.my_paths())
+    archive_paths = list(archive.my_paths())
+
+    body = json.dumps({'file_group_ids': [video.file_group_id, archive.file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    assert all(not p.exists() for p in video_paths)
+    assert all(not p.exists() for p in archive_paths)
+    assert test_session.query(Video).count() == 0
+    assert test_session.query(Archive).count() == 0
+    assert test_session.query(FileGroup).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_file_groups_default_deleter(async_client, test_session, make_files_structure,
+                                                  refresh_files):
+    """A FileGroup with no specialized model (e.g., a plain text file) is removed via FileGroup.delete."""
+    foo, = make_files_structure({'foo.txt': 'hello'})
+    await refresh_files()
+
+    fg = test_session.query(FileGroup).one()
+    assert fg.model is None  # plain text isn't modeled by Video/Archive/Doc/Zim
+    fg_id = fg.id
+
+    body = json.dumps({'file_group_ids': [fg_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    assert not foo.exists()
+    assert test_session.query(FileGroup).filter_by(id=fg_id).one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_file_groups_unknown_ids(async_client, test_session):
+    """Deleting non-existent IDs returns 404 from UnknownFile."""
+    body = json.dumps({'file_group_ids': [99999]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json['code'] == 'UNKNOWN_FILE'
+
+
+@pytest.mark.asyncio
+async def test_delete_file_groups_empty_ids(async_client):
+    """An empty file_group_ids list returns 400 (InvalidFile)."""
+    body = json.dumps({'file_group_ids': []})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_files_search_recent(test_session, test_directory, async_client, video_file_factory, refresh_files):
     """File search can return the most recently viewed files."""
     video_file_factory(test_directory / 'foo.mp4'), video_file_factory(test_directory / 'bar.mp4')
@@ -712,7 +769,7 @@ async def test_post_upload(test_session, async_client, test_directory, make_file
     assert not file_group.tag_names, 'No tags this time.'
     assert file_group.indexed, 'File should be indexed after upload.'
     assert file_group.model, 'File should be modeled'
-    assert isinstance(file_group.get_model_record(), Video)
+    assert isinstance(file_group.get_model_record(test_session), Video)
     assert file_group.location == f'/videos/{file_group.id}'
     # Video was modeled, but has no Channel.
     video: Video = test_session.query(Video).one()

@@ -6,8 +6,7 @@ import * as api from '../../api';
 
 // Mock the API functions
 jest.mock('../../api', () => ({
-    deleteVideos: jest.fn(),
-    deleteArchives: jest.fn(),
+    deleteFileGroups: jest.fn(),
 }));
 
 // Mock react-semantic-toasts-2
@@ -97,8 +96,8 @@ describe('ConflictResolutionModal', () => {
         expect(screen.getByText('2.0 MB')).toBeInTheDocument();
     });
 
-    it('calls deleteVideos when delete button is clicked for video', async () => {
-        api.deleteVideos.mockResolvedValue({});
+    it('calls deleteFileGroups when delete button is clicked for video', async () => {
+        api.deleteFileGroups.mockResolvedValue({});
 
         renderWithProviders(<ConflictResolutionModal {...defaultProps} />);
 
@@ -107,7 +106,7 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(deleteButtons[0]);
 
         await waitFor(() => {
-            expect(api.deleteVideos).toHaveBeenCalledWith([1], false);
+            expect(api.deleteFileGroups).toHaveBeenCalledWith([1], false);
         });
 
         // File should be removed from UI (conflict resolved since only 1 file remains)
@@ -123,7 +122,7 @@ describe('ConflictResolutionModal', () => {
         expect(defaultProps.onResolved).toHaveBeenCalled();
     });
 
-    it('calls deleteArchives when delete button is clicked for archive', async () => {
+    it('calls deleteFileGroups when delete button is clicked for archive', async () => {
         const archiveConflicts = [
             {
                 destination_path: 'archives/example.com/page.html',
@@ -143,7 +142,7 @@ describe('ConflictResolutionModal', () => {
             },
         ];
 
-        api.deleteArchives.mockResolvedValue({});
+        api.deleteFileGroups.mockResolvedValue({});
 
         renderWithProviders(
             <ConflictResolutionModal
@@ -157,7 +156,8 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(deleteButton);
 
         await waitFor(() => {
-            expect(api.deleteArchives).toHaveBeenCalledWith([201], false);
+            // Unified endpoint always uses FileGroup IDs.
+            expect(api.deleteFileGroups).toHaveBeenCalledWith([10], false);
         });
     });
 
@@ -319,7 +319,7 @@ describe('ConflictResolutionModal', () => {
     });
 
     it('shows tagged-delete confirmation modal when API returns FILE_GROUP_IS_TAGGED', async () => {
-        api.deleteVideos.mockResolvedValue({
+        api.deleteFileGroups.mockResolvedValue({
             tagged: true,
             file_groups: [
                 {id: 1, primary_path: 'unique-tagged-path-12345.mp4', tags: ['unique-tag-zxcv']},
@@ -338,8 +338,8 @@ describe('ConflictResolutionModal', () => {
         });
         expect(screen.getByText('unique-tag-zxcv')).toBeInTheDocument();
 
-        // Confirming should re-call deleteVideos with force=true.
-        api.deleteVideos.mockResolvedValueOnce({});
+        // Confirming should re-call deleteFileGroups with force=true.
+        api.deleteFileGroups.mockResolvedValueOnce({});
         // The TaggedDeleteConfirmModal's Delete button has the trash icon.
         const confirmButton = screen.getAllByRole('button')
             .find(b => b.classList.contains('red') && b.textContent.includes('Delete')
@@ -347,7 +347,7 @@ describe('ConflictResolutionModal', () => {
         fireEvent.click(confirmButton);
 
         await waitFor(() => {
-            expect(api.deleteVideos).toHaveBeenLastCalledWith([1], true);
+            expect(api.deleteFileGroups).toHaveBeenLastCalledWith([1], true);
         });
     });
 

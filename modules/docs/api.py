@@ -1,15 +1,14 @@
 from http import HTTPStatus
 
-from sanic import response, Request, Blueprint
+from sanic import Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
-from wrolpi.common import logger, wrol_mode_check, api_param_limiter
-from wrolpi.errors import ValidationError
+from wrolpi.common import logger, api_param_limiter
 from wrolpi.schema import JSONErrorResponse
 from . import schema
-from .lib import get_statistics, _doc_response, _get_doc, _delete_docs, _search_docs
+from .lib import get_statistics, _doc_response, _get_doc, _search_docs
 
 NAME = 'docs'
 
@@ -32,26 +31,6 @@ async def get_doc(request: Request, file_group_id: int):
     session = request.ctx.session
     doc = _get_doc(session, file_group_id)
     return json_response(_doc_response(doc))
-
-
-@docs_bp.delete('/<file_group_ids:int>', name='doc_delete_one')
-@docs_bp.delete('/<file_group_ids:[0-9,]+>', name='doc_delete_many')
-@openapi.description('Delete Docs by FileGroup IDs.  Pass ?force=true to delete even tagged FileGroups.')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@wrol_mode_check
-async def delete_docs(request: Request, file_group_ids: str):
-    try:
-        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
-    except ValueError:
-        raise ValidationError('Could not parse file group ids')
-    force = request.args.get('force', '').lower() == 'true'
-    tagged = _delete_docs(*file_group_ids, force=force)
-    if tagged:
-        return json_response(
-            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
-            HTTPStatus.CONFLICT,
-        )
-    return response.empty()
 
 
 doc_limit_limiter = api_param_limiter(100)

@@ -1,18 +1,16 @@
 from http import HTTPStatus
 
-from sanic import response, Blueprint
+from sanic import Blueprint
 from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.api_utils import json_response
-from wrolpi.common import logger, wrol_mode_check
-from wrolpi.errors import InvalidOrderBy, ValidationError
-from wrolpi.events import Events
+from wrolpi.common import logger
+from wrolpi.errors import InvalidOrderBy
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
-from ..lib import save_channels_config
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -73,27 +71,3 @@ async def search_videos(_: Request, body: schema.VideoSearchRequest):
     return json_response(ret)
 
 
-@video_bp.delete('/<file_group_ids:[0-9,]+>', name='Video Delete Many')
-@video_bp.delete('/<file_group_ids:int>', name='Video Delete One')
-@openapi.description('Delete videos.  Pass ?force=true to delete even tagged FileGroups.')
-@openapi.response(HTTPStatus.NO_CONTENT)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@wrol_mode_check
-async def video_delete(request: Request, file_group_ids: str):
-    try:
-        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
-    except Exception:
-        raise ValidationError('Unable to parse file group ids')
-
-    session = request.ctx.session
-    force = request.args.get('force', '').lower() == 'true'
-    tagged = lib.delete_videos(session, *file_group_ids, force=force)
-    if tagged:
-        return json_response(
-            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
-            HTTPStatus.CONFLICT,
-        )
-
-    save_channels_config.activate_switch()
-    Events.send_deleted(f'Deleted {len(file_group_ids)} videos')
-    return response.empty()

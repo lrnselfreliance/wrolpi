@@ -44,8 +44,8 @@ import {
     useTitle
 } from "./Common";
 import {
-    deleteArchives,
     deleteDomain,
+    deleteFileGroups,
     fetchArchiveBrowsers,
     fetchArchiveDownloaderConfig,
     generateArchiveScreenshot,
@@ -135,7 +135,7 @@ function ArchivePage() {
         null;
 
     const localDeleteArchive = async (force = false) => {
-        const result = await deleteArchives([archiveFile.id], force);
+        const result = await deleteFileGroups([archiveFile.id], force);
         if (result && result.tagged) {
             setTaggedFileGroups(result.file_groups);
             return;
@@ -1149,13 +1149,13 @@ function ArchivesPage() {
         }
     }
 
-    const archiveIdsForSelection = () => archives
+    const fileGroupIdsForSelection = () => archives
         .filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
         .map(i => i['id']);
 
     const onDelete = async (force = false) => {
-        const archiveIds = archiveIdsForSelection();
-        const result = await deleteArchives(archiveIds, force);
+        const fileGroupIds = fileGroupIdsForSelection();
+        const result = await deleteFileGroups(fileGroupIds, force);
         if (result && result.tagged) {
             setTaggedFileGroups(result.file_groups);
             return;

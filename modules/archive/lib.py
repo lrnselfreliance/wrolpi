@@ -27,10 +27,10 @@ from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.events import Events
-from wrolpi.files.lib import handle_file_group_search_results, get_tagged_file_groups_by_ids
+from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
-from wrolpi.tags import tag_append_sub_select_where, save_tags_config
+from wrolpi.tags import tag_append_sub_select_where
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -1125,28 +1125,15 @@ def get_archive_by_file_group_id(session: Session, file_group_id: int, skip_view
     return archive
 
 
-def delete_archives_by_file_group_ids(*file_group_ids: int, force: bool = False) -> Optional[List[dict]]:
-    """Delete Archives by their FileGroup IDs and all of their files.
-
-    If any FileGroup is tagged and force is False, returns the list of serialized tagged FileGroups
-    without deleting anything.  If force is True, deletes even tagged files and re-saves the tags
-    config so `tags.yaml` reflects the removed TagFiles.
-    """
+def delete_archives_by_file_group_ids(*file_group_ids: int, force: bool = False) -> None:
+    """Delete Archives by their FileGroup IDs and all of their files.  Pass force=True to delete
+    even tagged FileGroups (raises FileGroupIsTagged otherwise via FileGroup.delete)."""
     with get_db_session(commit=True) as session:
         archives: List[Archive] = list(session.query(Archive).filter(Archive.file_group_id.in_(file_group_ids)))
         if not archives:
             raise UnknownArchive(f'Unknown Archives with FileGroup IDs: {", ".join(map(str, file_group_ids))}')
-
-        tagged = get_tagged_file_groups_by_ids(session, [a.file_group_id for a in archives])
-        if tagged and not force:
-            return tagged
-
         for archive in archives:
             archive.delete(force=force)
-
-    if tagged:
-        save_tags_config.activate_switch()
-    return None
 
 
 def archive_strftime(dt: datetime) -> str:

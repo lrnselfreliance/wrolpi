@@ -22,6 +22,12 @@ class DeleteRequest:
 
 
 @dataclass
+class DeleteFileGroupsRequest:
+    file_group_ids: List[int] = field(default_factory=list)
+    force: bool = False
+
+
+@dataclass
 class FilesSearchRequest:
     search_str: Optional[str] = None
     limit: Optional[int] = 20

@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {useHotkeys} from 'react-hotkeys-hook';
-import {deleteVideos, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
+import {deleteFileGroups, downloadVideoMetadata, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router";
 import _ from "lodash";
 import {
@@ -278,8 +278,8 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         return <PageContainer><Header as='h4'>Could not find video</Header></PageContainer>;
     }
 
-    const handleDeleteVideo = async (video_id, force = false) => {
-        const result = await deleteVideos([video_id], force);
+    const handleDeleteVideo = async (fileGroupId, force = false) => {
+        const result = await deleteFileGroups([fileGroupId], force);
         if (result && result.tagged) {
             setTaggedFileGroups(result.file_groups);
             return;

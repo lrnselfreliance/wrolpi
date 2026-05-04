@@ -1,7 +1,7 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useLocation, useNavigate, useParams, useSearchParams} from "react-router";
 import {Grid, Icon as SIcon, Loader, StatisticLabel, StatisticValue} from "semantic-ui-react";
-import {deleteDocs, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
+import {deleteFileGroups, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {
     APIButton,
@@ -59,8 +59,8 @@ function DocsPage() {
     }
 
     const onDelete = async (force = false) => {
-        const docIds = docs.filter(i => selectedDocs.indexOf(i['primary_path']) >= 0).map(i => i['id']);
-        const result = await deleteDocs(docIds, force);
+        const fileGroupIds = docs.filter(i => selectedDocs.indexOf(i['primary_path']) >= 0).map(i => i['id']);
+        const result = await deleteFileGroups(fileGroupIds, force);
         if (result && result.tagged) {
             setTaggedFileGroups(result.file_groups);
             return;
@@ -262,7 +262,7 @@ function DocPage() {
 
     const handleDelete = async (force = false) => {
         if (doc && doc.id) {
-            const result = await deleteDocs([docFile.id], force);
+            const result = await deleteFileGroups([docFile.id], force);
             if (result && result.tagged) {
                 setTaggedFileGroups(result.file_groups);
                 return;

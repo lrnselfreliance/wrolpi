@@ -247,19 +247,19 @@ export async function getVideoCaptions(fileGroupId) {
     }
 }
 
-export async function deleteVideos(fileGroupIds, force = false) {
+export async function deleteFileGroups(fileGroupIds, force = false) {
     if (!fileGroupIds || fileGroupIds.length === 0) {
         toast({
             type: 'error',
             title: 'Empty request',
-            description: 'Unable to delete Videos because no IDs were passed.',
+            description: 'Unable to delete FileGroups because no IDs were passed.',
             time: 5000,
         });
+        return;
     }
-    console.info(`Deleting Videos: ${fileGroupIds}`);
-    const i = fileGroupIds.join(',');
-    const url = force ? `${VIDEOS_API}/${i}?force=true` : `${VIDEOS_API}/${i}`;
-    const response = await apiDelete(url);
+    console.info(`Deleting FileGroups: ${fileGroupIds}`);
+    const body = {file_group_ids: fileGroupIds, force};
+    const response = await apiPost(`${API_URI}/files/delete_groups`, body);
     if (response.ok) {
         return response;
     }
@@ -271,10 +271,10 @@ export async function deleteVideos(fileGroupIds, force = false) {
     } catch (e) {
         // Not JSON, fall through to generic error.
     }
-    const message = await getErrorMessage(response, 'Failed to delete videos.');
+    const message = await getErrorMessage(response, 'Failed to delete files.');
     toast({
         type: 'error',
-        title: 'Deleting Videos failed',
+        title: 'Delete failed',
         description: message,
         time: 5000,
     });
@@ -751,36 +751,6 @@ export async function deleteItems(itemIds) {
     return response
 }
 
-export async function deleteArchives(archiveIds, force = false) {
-    if (!archiveIds || archiveIds.length === 0) {
-        toast({
-            type: 'error',
-            title: 'Empty request',
-            description: 'Unable to delete Archives because no IDs were passed.',
-            time: 5000,
-        });
-    }
-    console.log(`Deleting Archives: ${archiveIds}`);
-    let i = archiveIds.join(',');
-    const url = force ? `${ARCHIVES_API}/${i}?force=true` : `${ARCHIVES_API}/${i}`;
-    const response = await apiDelete(url);
-    if (response.ok) {
-        return response;
-    }
-    try {
-        const json = await response.clone().json();
-        if (json.code === 'FILE_GROUP_IS_TAGGED' && json.file_groups) {
-            return {tagged: true, file_groups: json.file_groups};
-        }
-    } catch (e) {
-        // Not JSON, fall through to generic error.
-    }
-    const message = await getErrorMessage(response, 'Failed to delete archives');
-    toast({
-        type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-    });
-    throw Error('Failed to delete archives');
-}
 
 export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline) {
     // Build a search query to retrieve a list of videos from the API
@@ -2253,30 +2223,6 @@ export async function getDoc(fileGroupId) {
     return await apiGet(`${DOCS_API}/${fileGroupId}`);
 }
 
-export async function deleteDocs(docIds, force = false) {
-    const ids = Array.isArray(docIds) ? docIds.join(',') : docIds;
-    const url = force ? `${DOCS_API}/${ids}?force=true` : `${DOCS_API}/${ids}`;
-    const response = await apiDelete(url);
-    if (response.ok) {
-        return response;
-    }
-    try {
-        const json = await response.clone().json();
-        if (json.code === 'FILE_GROUP_IS_TAGGED' && json.file_groups) {
-            return {tagged: true, file_groups: json.file_groups};
-        }
-    } catch (e) {
-        // Not JSON, fall through to generic error.
-    }
-    const message = await getErrorMessage(response, 'Failed to delete documents.');
-    toast({
-        type: 'error',
-        title: 'Deleting Documents failed',
-        description: message,
-        time: 5000,
-    });
-    throw Error(message);
-}
 
 export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype) {
     offset = parseInt(offset || 0);

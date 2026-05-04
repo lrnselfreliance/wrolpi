@@ -544,6 +544,13 @@ class FileGroup(ModelHelper, Base):
             raise UnknownFile(f'Unable to find FileGroup with id {id_}')
         return fg
 
+    @classmethod
+    def get_by_ids(cls, session: Session, file_group_ids: List[int]) -> List['FileGroup']:
+        """Return FileGroups matching the given IDs (no error if some are missing)."""
+        if not file_group_ids:
+            return []
+        return session.query(cls).filter(cls.id.in_(file_group_ids)).all()
+
     @staticmethod
     def get_by_path(session: Session, path) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
@@ -741,12 +748,10 @@ class FileGroup(ModelHelper, Base):
         elif Zim.can_model(self):
             return Zim
 
-    def get_model_record(self) -> Optional[ModelHelper]:
+    def get_model_record(self, session: Session) -> Optional[ModelHelper]:
+        """Return this FileGroup's model record (Video/Archive/Doc/Zim) using the given session, or None."""
         klass = self.get_model_class()
-        if klass:
-            with get_db_session() as session:
-                return klass.get_by_path(session, self.primary_path)
-        return None
+        return klass.get_by_path(session, self.primary_path) if klass else None
 
     def do_model(self, session: Session) -> Optional[ModelHelper]:
         """Get/Create the Model record (Video/Archive/etc.) for this FileGroup, if any."""

@@ -11,7 +11,6 @@ from wrolpi.api_utils import json_response, api_app
 from wrolpi.cmd import get_installed_browsers
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter, TRACE_LEVEL
 from wrolpi.db import get_db_session
-from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
@@ -42,26 +41,6 @@ async def get_archive(request: Request, file_group_id: int):
     archive_file_group = archive.file_group.__json__()
     history = [i.file_group.__json__() for i in archive.history]
     return json_response({'file_group': archive_file_group, 'history': history})
-
-
-@archive_bp.delete('/<file_group_ids:int>', name='archive_delete_one')
-@archive_bp.delete('/<file_group_ids:[0-9,]+>', name='archive_delete_many')
-@openapi.description('Delete Archives by FileGroup IDs.  Pass ?force=true to delete even tagged FileGroups.')
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@wrol_mode_check
-async def delete_archive(request: Request, file_group_ids: str):
-    try:
-        file_group_ids = [int(i) for i in str(file_group_ids).split(',')]
-    except ValueError:
-        raise ValidationError('Could not parse file group ids')
-    force = request.args.get('force', '').lower() == 'true'
-    tagged = lib.delete_archives_by_file_group_ids(*file_group_ids, force=force)
-    if tagged:
-        return json_response(
-            {'code': 'FILE_GROUP_IS_TAGGED', 'file_groups': tagged},
-            HTTPStatus.CONFLICT,
-        )
-    return response.empty()
 
 
 archive_limit_limiter = api_param_limiter(100)

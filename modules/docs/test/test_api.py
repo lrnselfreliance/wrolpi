@@ -87,7 +87,8 @@ async def test_delete_doc(async_client, test_session, test_directory, example_ep
     paths = list(doc.file_group.my_paths())
     assert paths and all(p.is_file() for p in paths)
 
-    request, response = await async_client.delete(f'/api/docs/{file_group_id}')
+    body = json.dumps({'file_group_ids': [file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Doc, FileGroup, and on-disk files all removed.
@@ -99,7 +100,7 @@ async def test_delete_doc(async_client, test_session, test_directory, example_ep
 @pytest.mark.asyncio
 async def test_delete_doc_tagged_requires_force(async_client, test_session, doc_factory, tag_factory,
                                                 await_switches):
-    """DELETE /api/docs/<id> returns 409 for tagged docs until ?force=true is passed."""
+    """The unified delete endpoint returns 409 for tagged docs until force=true is passed."""
     from wrolpi.files.models import FileGroup
     tag = await tag_factory()
     doc = doc_factory()
@@ -108,7 +109,8 @@ async def test_delete_doc_tagged_requires_force(async_client, test_session, doc_
     file_group_id = doc.file_group_id
     paths = list(doc.file_group.my_paths())
 
-    request, response = await async_client.delete(f'/api/docs/{file_group_id}')
+    body = json.dumps({'file_group_ids': [file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.CONFLICT
     assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
     assert len(response.json['file_groups']) == 1
@@ -119,7 +121,8 @@ async def test_delete_doc_tagged_requires_force(async_client, test_session, doc_
     assert test_session.query(Doc).count() == 1
 
     # With force=true, the Doc is deleted.
-    request, response = await async_client.delete(f'/api/docs/{file_group_id}?force=true')
+    body = json.dumps({'file_group_ids': [file_group_id], 'force': True})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert all(not p.exists() for p in paths)
     assert test_session.query(Doc).count() == 0
@@ -129,7 +132,7 @@ async def test_delete_doc_tagged_requires_force(async_client, test_session, doc_
 
 @pytest.mark.asyncio
 async def test_delete_doc_atomic_when_some_tagged(async_client, test_session, doc_factory, tag_factory):
-    """When deleting multiple Docs and any are tagged, NONE are deleted until ?force=true."""
+    """When deleting multiple Docs and any are tagged, NONE are deleted until force=true."""
     untagged = doc_factory()
     tagged = doc_factory()
     tag = await tag_factory()
@@ -138,8 +141,8 @@ async def test_delete_doc_atomic_when_some_tagged(async_client, test_session, do
     untagged_paths = list(untagged.file_group.my_paths())
     tagged_paths = list(tagged.file_group.my_paths())
 
-    ids = f'{untagged.file_group_id},{tagged.file_group_id}'
-    request, response = await async_client.delete(f'/api/docs/{ids}')
+    body = json.dumps({'file_group_ids': [untagged.file_group_id, tagged.file_group_id]})
+    request, response = await async_client.post('/api/files/delete_groups', content=body)
     assert response.status_code == HTTPStatus.CONFLICT
     assert response.json['code'] == 'FILE_GROUP_IS_TAGGED'
     returned_ids = {fg['id'] for fg in response.json['file_groups']}

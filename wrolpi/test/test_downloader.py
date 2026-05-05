@@ -584,6 +584,84 @@ async def test_skip_urls_none(test_session, test_download_manager, test_download
 
 
 @pytest.mark.asyncio
+async def test_skip_already_downloaded_via_filegroup(test_session, test_download_manager, assert_download_urls,
+                                                    test_downloader):
+    """When skip_already_downloaded is set, URLs already present in FileGroup.url are filtered out."""
+    test_downloader.set_test_success()
+    # The downloader reports any URL with 'existing' in it as already downloaded.
+    test_downloader.already_downloaded = lambda session, *urls: [
+        type('FG', (), {'url': u})() for u in urls if 'existing' in u
+    ]
+
+    test_download_manager.create_downloads(
+        test_session,
+        [
+            'https://example.com/new1',
+            'https://example.com/existing1',
+            'https://example.com/new2',
+            'https://example.com/existing2',
+        ],
+        downloader_name=test_downloader.name,
+        settings={'skip_already_downloaded': True},
+    )
+    assert_download_urls({'https://example.com/new1', 'https://example.com/new2'})
+
+
+@pytest.mark.asyncio
+async def test_skip_already_downloaded_via_completed_download(test_session, test_download_manager,
+                                                             assert_download_urls, test_downloader):
+    """When skip_already_downloaded is set, URLs of completed Downloads are filtered out."""
+    # Pre-existing completed download.
+    completed = Download(url='https://example.com/done', status='complete', downloader=test_downloader.name)
+    test_session.add(completed)
+    test_session.commit()
+
+    test_downloader.set_test_success()
+    test_download_manager.create_downloads(
+        test_session,
+        ['https://example.com/fresh', 'https://example.com/done'],
+        downloader_name=test_downloader.name,
+        settings={'skip_already_downloaded': True},
+    )
+    # The completed URL is excluded; fresh URL is queued.  The completed Download row remains.
+    # Row-count + URL-set checks confirm no new row was inserted for 'done'.
+    completed_id = completed.id
+    assert test_session.query(Download).count() == 2
+    assert_download_urls({'https://example.com/done', 'https://example.com/fresh'})
+    fresh = test_session.query(Download).filter_by(url='https://example.com/fresh').one()
+    assert fresh.status == 'new'
+    done = test_session.query(Download).filter_by(url='https://example.com/done').one()
+    # Status unchanged and id preserved — confirms the filter prevented renew().
+    assert done.status == 'complete'
+    assert done.id == completed_id
+
+
+@pytest.mark.asyncio
+async def test_skip_already_downloaded_disabled(test_session, test_download_manager, assert_download_urls,
+                                               test_downloader):
+    """Without skip_already_downloaded, existing URLs are still queued (renewed)."""
+    completed = Download(url='https://example.com/done', status='complete', downloader=test_downloader.name)
+    test_session.add(completed)
+    test_session.commit()
+
+    test_downloader.set_test_success()
+    # Even though already_downloaded() returns the URL, we don't call it without the setting.
+    test_downloader.already_downloaded = lambda session, *urls: [
+        type('FG', (), {'url': 'https://example.com/done'})()
+    ]
+
+    test_download_manager.create_downloads(
+        test_session,
+        ['https://example.com/done'],
+        downloader_name=test_downloader.name,
+    )
+    # The existing Download row is reused and renewed (status reset to new).
+    assert_download_urls({'https://example.com/done'})
+    download = test_session.query(Download).filter_by(url='https://example.com/done').one()
+    assert download.status == 'new'
+
+
+@pytest.mark.asyncio
 async def test_process_runner_timeout(async_client, test_session, test_directory):
     """A Downloader can cancel its download using a timeout."""
     # Default timeout of 3 seconds.

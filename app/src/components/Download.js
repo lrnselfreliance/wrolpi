@@ -504,6 +504,31 @@ function AdvancedVideoSettings({form, isVideoLevel = false, isConfigLoaded = tru
     </Accordion>
 }
 
+function AdvancedDownloadSettings({form}) {
+    const [active, setActive] = React.useState(false);
+
+    return <Accordion fluid>
+        <Accordion.Title active={active} onClick={() => setActive(!active)}>
+            <Icon name='dropdown'/>
+            Advanced Settings
+        </Accordion.Title>
+        <Accordion.Content active={active}>
+            <Grid stackable>
+                <Grid.Row columns={1}>
+                    <Grid.Column>
+                        <ToggleForm
+                            form={form}
+                            label='Skip URLs already downloaded'
+                            name='skip_already_downloaded'
+                            path='settings.skip_already_downloaded'
+                        />
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Accordion.Content>
+    </Accordion>
+}
+
 export function VideosDownloadForm({
                                        singleDownload = true,
                                        onCancel,
@@ -1076,6 +1101,7 @@ export function ArchiveDownloadForm({
             downloader: formData.downloader,
             tag_names: formData.tag_names,
             urls: formData.urls.split(/\r?\n/),
+            settings: formData.settings,
         }
         await postDownload(downloadData);
     });
@@ -1084,6 +1110,9 @@ export function ArchiveDownloadForm({
         downloader: Downloaders.Archive,
         urls: '',
         tag_names: [],
+        settings: {
+            skip_already_downloaded: false,
+        },
     };
 
     const onSuccess = () => {
@@ -1125,6 +1154,11 @@ export function ArchiveDownloadForm({
             <Grid.Row>
                 <Grid.Column>
                     <DownloadTagsSelector form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <AdvancedDownloadSettings form={form}/>
                 </Grid.Column>
             </Grid.Row>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
@@ -1440,6 +1474,7 @@ export function FilesDownloadForm({
             tag_names: formData.tag_names,
             destination: formData.destination,
             urls: formData.urls.split(/\r?\n/),
+            settings: formData.settings,
         }
         await postDownload(downloadData);
     });
@@ -1448,6 +1483,9 @@ export function FilesDownloadForm({
         destination: null,
         tag_names: [],
         urls: '',
+        settings: {
+            skip_already_downloaded: false,
+        },
     };
 
     const form = useForm({
@@ -1478,6 +1516,11 @@ export function FilesDownloadForm({
             <Grid.Row>
                 <Grid.Column>
                     <DestinationForm required form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <AdvancedDownloadSettings form={form}/>
                 </Grid.Column>
             </Grid.Row>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}

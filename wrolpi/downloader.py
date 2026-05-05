@@ -391,7 +391,9 @@ class Downloader:
         raise NotImplementedError()
 
     def already_downloaded(self, session: Session, *urls: List[str]):
-        raise NotImplementedError()
+        # Subclasses that can detect prior downloads via a stored URL (e.g. FileGroup.url)
+        # should override.  Default returns nothing so callers can opt into the dedup check.
+        return []
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
                              timeout: int = None, debug: bool = True,
@@ -765,12 +767,25 @@ class DownloadManager:
 
         downloads = []
         # Throws an error if no downloader is found.
-        self.find_downloader_by_name(downloader_name)
+        downloader = self.find_downloader_by_name(downloader_name)
 
         if destination:
             destination = pathlib.Path(destination) if isinstance(destination, str) else destination
             if not destination.is_absolute():
                 destination = get_absolute_media_path(destination)
+
+        if settings and settings.get('skip_already_downloaded') and urls:
+            # Filter out URLs that already exist on disk (FileGroup.url) or as a completed Download.
+            existing_urls = {fg.url for fg in downloader.already_downloaded(session, *urls) if fg.url}
+            existing_urls.update(
+                row[0] for row in session.query(Download.url)
+                .filter(Download.url.in_(urls), Download.status == DownloadStatus.complete)
+            )
+            if existing_urls:
+                urls = [u for u in urls if u not in existing_urls]
+                logger.info(f'Skipped {len(existing_urls)} URL(s) already downloaded')
+                if not urls:
+                    logger.info('All requested URLs were already downloaded; nothing to queue')
 
         for url in urls:
             if url in get_download_manager_config().skip_urls and override_skip:

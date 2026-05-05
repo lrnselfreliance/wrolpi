@@ -975,7 +975,7 @@ class FileWorker:
         self.public_queue.put_nowait(task)
         return job_id
 
-    async def refresh_sync(self, paths: list[pathlib.Path]):
+    async def refresh_sync(self, paths: list[pathlib.Path], post_processing: bool = True):
         """Synchronously refresh specific files. Use sparingly - prefer queue_refresh."""
         if not paths:
             return
@@ -983,7 +983,12 @@ class FileWorker:
         self._cleanup_modified_models(result.modified)
         await self._upsert_file_groups(result.new + result.modified)
         await self._delete_file_groups(result.deleted)
-        await self._apply_post_processing(is_global_refresh=False)
+        if post_processing and (result.new or result.modified or result.deleted):
+            # Skip global modelers/indexers when the caller opts out (e.g. `lib.delete` from the
+            # upload path defers that to the post-upload `upsert_file`) or when nothing changed.
+            # Without this guard a synchronous caller would block on the entire backlog of
+            # unindexed files and could exceed Sanic's RESPONSE_TIMEOUT.
+            await self._apply_post_processing(is_global_refresh=False)
 
     def transfer_queue(self):
         """Transfer items from the public queue to the private queue."""

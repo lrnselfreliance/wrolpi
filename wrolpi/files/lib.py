@@ -317,12 +317,16 @@ def delete_file_groups(session: Session, file_group_ids: List[int], force: bool 
 
 
 @wrol_mode_check
-async def delete(*paths: Union[str, pathlib.Path], force: bool = False):
+async def delete(*paths: Union[str, pathlib.Path], force: bool = False, post_processing: bool = True):
     """
     Delete a file or directory in the media directory.
 
     If any files are tagged and force is False, returns a list of tagged FileGroups without deleting.
-    If force is True, deletes even tagged files."""
+    If force is True, deletes even tagged files.
+
+    If post_processing is False, the synchronous DB cleanup still runs but global modelers/indexers
+    are skipped — use this when the caller will trigger modeling itself (e.g. the upload endpoint
+    follows up with `upsert_file`)."""
     media_directory = get_media_directory()
     paths = [media_directory / i for i in paths]
     if any(i == media_directory for i in paths):
@@ -360,7 +364,7 @@ async def delete(*paths: Union[str, pathlib.Path], force: bool = False):
     # This ensures deleted FileGroups are removed before the caller continues
     # (e.g., upload API recreating the file).
     from wrolpi.files.worker import file_worker
-    await file_worker.refresh_sync(list(paths))
+    await file_worker.refresh_sync(list(paths), post_processing=post_processing)
 
     if had_tagged:
         # `tags.yaml` references TagFiles that the refresh just removed; rewrite it.

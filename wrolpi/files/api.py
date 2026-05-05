@@ -472,7 +472,8 @@ async def post_upload(request: Request):
     if chunk_num == 0:
         try:
             # Delete any conflicting FileGroups if the user is overwriting.
-            await lib.delete(output)
+            # Skip post-processing, that will be done after upload.
+            await lib.delete(output, post_processing=False)
         except InvalidFile:
             # No conflicting files, good.
             pass

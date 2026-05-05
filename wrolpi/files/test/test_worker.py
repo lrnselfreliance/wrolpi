@@ -1495,3 +1495,29 @@ async def test_move_planning_tracks_progress(async_client, test_session, test_di
     # Check that at least one update has a non-zero total
     has_total = any(u.get('operation_total', 0) > 0 for u in planning_statuses)
     assert has_total
+
+
+@pytest.mark.asyncio
+async def test_refresh_sync_skips_post_processing_when_unchanged(async_client, test_session, test_directory):
+    """`refresh_sync` must not invoke global modelers/indexers when nothing changed.
+
+    Regression: every chunk-0 of an upload calls `lib.delete(target)` on a path that does not
+    yet exist; that path used to trigger `_apply_post_processing`, which runs the entire backlog
+    of modelers + indexers and was timing out the upload request (Sanic 503 Response Timeout)."""
+    missing_path = test_directory / 'does-not-exist.txt'
+
+    called = False
+    original = file_worker._apply_post_processing
+
+    async def tracking(*args, **kwargs):
+        nonlocal called
+        called = True
+        return await original(*args, **kwargs)
+
+    file_worker._apply_post_processing = tracking
+    try:
+        await file_worker.refresh_sync([missing_path])
+    finally:
+        file_worker._apply_post_processing = original
+
+    assert called is False, '_apply_post_processing should be skipped when no files changed'

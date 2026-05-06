@@ -710,17 +710,19 @@ async def request_screenshot(url: str, singlefile_path: pathlib.Path) -> Optiona
     return screenshot
 
 
-async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes,
-                               destination: pathlib.Path = None) -> Archive:
-    """
-    Convert results from ArchiveDownloader into real files.  Create Archive record.
+@dataclass
+class WrittenArchiveFiles:
+    """The on-disk artifacts produced by write_archive_files."""
+    url: str
+    paths: List[pathlib.Path]
 
-    Args:
-        url: The URL that was archived
-        singlefile: The HTML content from SingleFile
-        readability: The readability extraction results
-        screenshot: The screenshot bytes
-        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
+
+def write_archive_files(url: str, singlefile: str, readability: Optional[dict],
+                        screenshot: Optional[bytes],
+                        destination: Optional[pathlib.Path] = None) -> WrittenArchiveFiles:
+    """Pure I/O: write the singlefile/readability/screenshot/json files to disk.
+
+    Returns the URL and the list of paths to register, leaving DB work to register_archive.
     """
     readability = readability.copy() if readability else readability
     # First try to get the title from Readability.
@@ -770,22 +772,47 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
         archive_files.screenshot)
     paths = list(filter(None, paths))
 
+    return WrittenArchiveFiles(url=url, paths=paths)
+
+
+def register_archive(session: Session, written: WrittenArchiveFiles) -> Archive:
+    """Pure DB: create the Archive record from already-written files. Caller commits."""
+    archive = Archive.from_paths(session, *written.paths)
+    archive.file_group.download_datetime = now()
+    archive.url = written.url
+    archive.collection = get_or_create_domain_collection(session, written.url)
+
+    # Update collection's file_format to track the format used for this file
+    config = get_archive_downloader_config()
+    if archive.collection and config.file_name_format:
+        if not archive.collection.file_format:
+            # Set initial file_format on collection
+            archive.collection.file_format = config.file_name_format
+            save_domains_config.activate_switch()
+
+    archive.flush()
+    return archive
+
+
+async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes,
+                               destination: pathlib.Path = None) -> Archive:
+    """
+    Convert results from ArchiveDownloader into real files.  Create Archive record.
+
+    Thin wrapper around write_archive_files + register_archive that opens its own
+    transaction.  New code (notably the phase-split ArchiveDownloader) should call
+    the helpers directly so the caller controls the session.
+
+    Args:
+        url: The URL that was archived
+        singlefile: The HTML content from SingleFile
+        readability: The readability extraction results
+        screenshot: The screenshot bytes
+        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
+    """
+    written = write_archive_files(url, singlefile, readability, screenshot, destination=destination)
     with get_db_session(commit=True) as session:
-        archive = Archive.from_paths(session, *paths)
-        archive.file_group.download_datetime = now()
-        archive.url = url
-        archive.collection = get_or_create_domain_collection(session, url)
-
-        # Update collection's file_format to track the format used for this file
-        config = get_archive_downloader_config()
-        if archive.collection and config.file_name_format:
-            if not archive.collection.file_format:
-                # Set initial file_format on collection
-                archive.collection.file_format = config.file_name_format
-                save_domains_config.activate_switch()
-
-        archive.flush()
-
+        archive = register_archive(session, written)
     return archive
 
 
@@ -1421,43 +1448,63 @@ async def html_to_readability(html: str | bytes, url: str, timeout: int = 120):
             raise RuntimeError(f'Failed to extract readability for {url} got {result.return_code}') from e
 
 
-async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = None) -> Archive:
-    """
-    Convert a SingleFile to an Archive.
+@dataclass
+class SinglefileArtifacts:
+    """Pure-data result of running a singlefile through readability + screenshot extraction."""
+    url: str
+    singlefile: bytes
+    readability: dict
+    screenshot: Optional[bytes]
 
-    This is done by extracting readability, creating a screenshot, then attaching them to an Archive/FileGroup.
 
-    Args:
-        singlefile: The SingleFile HTML bytes
-        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
-    """
-    # Get URL first because it does some simple checking of `singlefile`
+async def extract_singlefile_artifacts(singlefile: bytes) -> SinglefileArtifacts:
+    """Pure async I/O: extract readability and screenshot from a singlefile. No DB."""
+    # Get URL first because it does some simple checking of `singlefile`.
     url = get_url_from_singlefile(singlefile)
     singlefile = singlefile.encode() if isinstance(singlefile, str) else singlefile
 
     if DOCKERIZED:
         # Perform the archive in the Archive docker container.  (Typically in the development environment).
-        singlefile = base64.b64encode(singlefile).decode()
-        logger.debug(f'singlefile_to_archive sending to archive service: {url}')
-        singlefile, readability, screenshot = await request_archive(url, singlefile=singlefile)
+        encoded = base64.b64encode(singlefile).decode()
+        logger.debug(f'extract_singlefile_artifacts sending to archive service: {url}')
+        singlefile, readability, screenshot = await request_archive(url, singlefile=encoded)
     else:
         # JSON from readability-extractor
         readability = dict()
         try:
-            logger.debug(f'singlefile_to_archive extracting readability: {url}')
+            logger.debug(f'extract_singlefile_artifacts extracting readability: {url}')
             readability = await html_to_readability(singlefile, url)
         except RuntimeError as e:
             logger.error(f'Failed to extract readability from: {url}', exc_info=e)
 
         screenshot = None
         try:
-            logger.debug(f'singlefile_to_archive creating screenshot: {url}')
+            logger.debug(f'extract_singlefile_artifacts creating screenshot: {url}')
             screenshot = html_screenshot(singlefile)
         except Exception as e:
             logger.error(f'Failed to extract screenshot from: {url}', exc_info=e)
 
-    logger.trace(f'singlefile_to_archive modeling: {url}')
-    archive: Archive = await model_archive_result(url, singlefile, readability, screenshot, destination=destination)
+    return SinglefileArtifacts(url=url, singlefile=singlefile, readability=readability, screenshot=screenshot)
+
+
+async def singlefile_to_archive(singlefile: bytes, destination: pathlib.Path = None) -> Archive:
+    """
+    Convert a SingleFile to an Archive.
+
+    Thin wrapper around extract_singlefile_artifacts + write_archive_files + register_archive
+    that opens its own transaction.  New code should call the helpers directly so the caller
+    controls the session.
+
+    Args:
+        singlefile: The SingleFile HTML bytes
+        destination: Optional directory to save files to. If provided, files go here instead of archive/<domain>
+    """
+    artifacts = await extract_singlefile_artifacts(singlefile)
+    logger.trace(f'singlefile_to_archive modeling: {artifacts.url}')
+    written = write_archive_files(artifacts.url, artifacts.singlefile, artifacts.readability,
+                                  artifacts.screenshot, destination=destination)
+    with get_db_session(commit=True) as session:
+        archive = register_archive(session, written)
     return archive
 
 

@@ -9,7 +9,26 @@ import pytz
 
 from modules.archive.lib import archive_strftime
 from modules.archive.models import Archive
+from wrolpi.cmd import run_command
 from wrolpi.collections import Collection
+from wrolpi.downloader import DownloadContext
+
+
+def make_test_ctx(*, is_cancelled=None, can_download=None,
+                  outside_download_window=None, run_command_=None,
+                  download_timeout=None) -> DownloadContext:
+    """Build a DownloadContext suitable for downloader unit tests.
+
+    Defaults to a never-cancelled context that uses the real run_command.  Tests can
+    override any callable to simulate cancellation, throttling, or fake subprocess output.
+    """
+    return DownloadContext(
+        is_cancelled=is_cancelled or (lambda: False),
+        can_download=can_download or (lambda: True),
+        outside_download_window=outside_download_window or (lambda: False),
+        run_command=run_command_ or run_command,
+        download_timeout=download_timeout,
+    )
 
 
 @pytest.fixture

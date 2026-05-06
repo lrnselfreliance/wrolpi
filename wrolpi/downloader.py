@@ -17,7 +17,7 @@ from enum import Enum
 from http import HTTPStatus
 from itertools import filterfalse
 from typing import List, Dict, Generator, Iterable, Coroutine, Any
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable, Awaitable
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -171,6 +171,38 @@ class DownloadResult:
     retry_seconds: int = None
     success: bool = False
     settings: dict = field(default_factory=dict)
+
+
+@dataclass
+class DownloadContext:
+    """Per-download seam between DownloadManager and a Downloader.
+
+    Carries cancellation queries, the subprocess runner, and the effective timeout.
+    Production builds these as closures over api_app.shared_ctx and the singleton
+    DownloadManager (see DownloadContext.production); tests construct them directly
+    so a Downloader can run without Sanic's mp stack.
+    """
+    is_cancelled: Callable[[], bool]
+    can_download: Callable[[], bool]
+    outside_download_window: Callable[[], bool]
+    run_command: Callable[..., Awaitable[CommandResult]]
+    download_timeout: Optional[int]
+
+    @classmethod
+    def production(cls, manager: 'DownloadManager', download_id: int) -> 'DownloadContext':
+        """Build a context whose closures read shared_ctx + the manager.
+
+        This is the only place that knows about Sanic's multiprocessing model.
+        Cross-worker cancellation still flows through
+        api_app.shared_ctx.download_manager_data['killed_downloads']; this just
+        names the seam."""
+        return cls(
+            is_cancelled=lambda: download_id in api_app.shared_ctx.download_manager_data['killed_downloads'],
+            can_download=lambda: manager.can_download,
+            outside_download_window=lambda: manager.outside_download_window,
+            run_command=run_command,
+            download_timeout=get_wrolpi_config().download_timeout or None,
+        )
 
 
 class DownloadStatus(str, Enum):
@@ -387,7 +419,30 @@ class Downloader:
     def __repr__(self):
         return f'<Downloader name={self.name}>'
 
-    async def do_download(self, download: Download) -> DownloadResult:
+    async def do_download(self, download: Download, ctx: 'DownloadContext' = None) -> DownloadResult:
+        """Legacy single-phase entry point.
+
+        Subclasses opting in to the phase-split API override prepare_download /
+        execute_download / finalize_download instead and leave this unimplemented.
+        """
+        raise NotImplementedError()
+
+    def prepare_download(self, session: Session, download: Download) -> Optional[Any]:
+        """Synchronous DB-bound prep. Caller (DownloadManager) opens and commits the session.
+
+        Returning None signals the subclass has not opted in to the phase-split API and
+        DownloadManager should fall back to do_download.  Returning any other value
+        (typically a dataclass) is passed unchanged to execute_download.
+        """
+        return None
+
+    async def execute_download(self, prepared: Any, ctx: 'DownloadContext') -> Any:
+        """Async I/O-bound work.  No DB session — does network and subprocess work,
+        returns plain data for finalize_download to persist."""
+        raise NotImplementedError()
+
+    def finalize_download(self, session: Session, download: Download, executed: Any) -> DownloadResult:
+        """Synchronous DB-bound persistence. Caller opens and commits the session."""
         raise NotImplementedError()
 
     def already_downloaded(self, session: Session, *urls: List[str]):
@@ -397,24 +452,33 @@ class Downloader:
 
     async def process_runner(self, download: Download, cmd: Tuple[str | pathlib.Path, ...], cwd: pathlib.Path,
                              timeout: int = None, debug: bool = True,
-                             stdout_callback: callable = None, env: dict = None) -> CommandResult:
+                             stdout_callback: callable = None, env: dict = None,
+                             ctx: 'DownloadContext' = None) -> CommandResult:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
+
+        When ctx is provided, ctx.run_command and ctx.download_timeout are used and cancellation
+        is polled through ctx.  When ctx is None (legacy callers), behavior is unchanged.
         """
         if cwd and not cwd.is_dir():
             raise RuntimeError('cwd directory does not exist')
 
-        config_timeout = get_wrolpi_config().download_timeout
+        if ctx is not None:
+            config_timeout = ctx.download_timeout
+            runner = ctx.run_command
+        else:
+            config_timeout = get_wrolpi_config().download_timeout
+            runner = run_command
         # 0 means no timeout. Prefer config timeout, then argument, then class default.
         if config_timeout:
             timeout = config_timeout
         elif timeout is None:
             timeout = self.timeout
-        coro = run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug,
-                           stdout_callback=stdout_callback, env=env)
-        result = await self.cancel_wrapper(coro, download)
+        coro = runner(cmd, cwd=cwd, timeout=timeout, log_command=debug,
+                      stdout_callback=stdout_callback, env=env)
+        result = await self.cancel_wrapper(coro, download, ctx=ctx)
 
         if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
             for line in result.stdout.decode().splitlines():
@@ -425,17 +489,26 @@ class Downloader:
         return result
 
     @staticmethod
-    async def cancel_wrapper(coro: Coroutine, download: Download):
+    async def cancel_wrapper(coro: Coroutine, download: Download, ctx: 'DownloadContext' = None):
         """
         Converts an async coroutine to a task.  If DownloadManager receives a kill request, this method will cancel
         the task.
+
+        When ctx is provided, cancellation is polled through ctx.is_cancelled / ctx.can_download /
+        ctx.outside_download_window.  When ctx is None, the global download_manager singleton is
+        used (legacy path for unmigrated subclasses).
         """
         download_id = download.id
         task = asyncio.create_task(coro)
         try:
             while not task.done():
-                if download_manager.download_is_killed(download_id) or not download_manager.can_download:
+                if ctx is not None:
+                    cancelled = ctx.is_cancelled() or not ctx.can_download()
+                    outside_window = ctx.outside_download_window()
+                else:
+                    cancelled = download_manager.download_is_killed(download_id) or not download_manager.can_download
                     outside_window = download_manager.outside_download_window
+                if cancelled:
                     logger.warning(f'Cancel download of {download.url}')
                     task.cancel()
                     try:
@@ -449,7 +522,16 @@ class Downloader:
                             error=error,
                         )
                     finally:
-                        download_manager.unkill_download(download_id)
+                        if ctx is None:
+                            download_manager.unkill_download(download_id)
+                        else:
+                            # Manager still owns the killed-downloads list; clear via singleton.
+                            # The ctx is read-only with respect to cancellation state.
+                            try:
+                                download_manager.unkill_download(download_id)
+                            except Exception:
+                                # In tests without a manager, silently ignore.
+                                pass
                 else:
                     # Wait for the download to complete.  Cancel if requested.
                     await asyncio.sleep(0.1)
@@ -1449,11 +1531,30 @@ async def signal_download_download(download_id: int, download_url: str):
 
             try_again = True
             try:
-                # Create download coroutine.  Wrap it, so it can be canceled.
-                if not inspect.iscoroutinefunction(downloader.do_download):
-                    raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
-                coro = downloader.do_download(download)
-                result = await downloader.cancel_wrapper(coro, download)
+                # Phase-split path: subclass opts in by overriding prepare_download to return non-None.
+                # Legacy path: do_download remains the single entry point.
+                ctx = DownloadContext.production(download_manager, download_id)
+                with get_db_session(commit=True) as s:
+                    prepared = downloader.prepare_download(s, download)
+
+                if prepared is not None:
+                    # New phase-split path: caller (us) owns transaction boundaries.
+                    coro = downloader.execute_download(prepared, ctx)
+                    executed = await downloader.cancel_wrapper(coro, download, ctx=ctx)
+                    if isinstance(executed, DownloadResult):
+                        # cancel_wrapper short-circuited with a cancel result.
+                        result = executed
+                    else:
+                        with get_db_session(commit=True) as s:
+                            result = downloader.finalize_download(s, download, executed)
+                else:
+                    # Legacy path.  Subclasses on this path have signature do_download(self, download)
+                    # without ctx, so we must NOT pass ctx as a positional arg.  cancel_wrapper continues
+                    # to use the global download_manager (ctx=None).
+                    if not inspect.iscoroutinefunction(downloader.do_download):
+                        raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
+                    coro = downloader.do_download(download)
+                    result = await downloader.cancel_wrapper(coro, download)
             except BotBlockedDownloadError as e:
                 # Bot detection or invalid cookies - stop all pending downloads from this domain.
                 worker_logger.warning(f'BotBlockedDownloadError for {url}', exc_info=e)

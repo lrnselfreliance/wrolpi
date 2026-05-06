@@ -1185,8 +1185,12 @@ async def test_archive_download_uses_domain_collection_directory(async_client, t
     test_session.add(download)
     test_session.commit()
 
-    # Call the archive downloader
-    result = await archive_downloader.do_download(download)
+    # Drive the phase-split API directly: prepare → execute → finalize.
+    from modules.archive.conftest import make_test_ctx
+    prepared = archive_downloader.prepare_download(test_session, download)
+    executed = await archive_downloader.execute_download(prepared, make_test_ctx())
+    result = archive_downloader.finalize_download(test_session, download, executed)
+    test_session.commit()
 
     # Verify the download was successful
     assert result.success is True
@@ -1247,8 +1251,12 @@ async def test_archive_download_explicit_destination_overrides_domain_collection
     test_session.add(download)
     test_session.commit()
 
-    # Call the archive downloader
-    result = await archive_downloader.do_download(download)
+    # Drive the phase-split API directly: prepare → execute → finalize.
+    from modules.archive.conftest import make_test_ctx
+    prepared = archive_downloader.prepare_download(test_session, download)
+    executed = await archive_downloader.execute_download(prepared, make_test_ctx())
+    result = archive_downloader.finalize_download(test_session, download, executed)
+    test_session.commit()
 
     # Verify the download was successful
     assert result.success is True

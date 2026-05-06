@@ -2,7 +2,8 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from typing import Callable, List, Tuple, Iterable
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Tuple, Iterable
 
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
@@ -12,14 +13,15 @@ from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html, TRACE_LEVEL
 from wrolpi.db import get_db_session
-from wrolpi.downloader import Downloader, Download, DownloadResult
+from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT
 from . import lib
 from .api import archive_bp  # noqa
 from .errors import InvalidArchive
-from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER, get_url_from_singlefile
+from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER, get_url_from_singlefile, \
+    SinglefileArtifacts, WrittenArchiveFiles, extract_singlefile_artifacts, register_archive, write_archive_files
 from .models import Archive
 
 PRETTY_NAME = 'Archive'
@@ -27,6 +29,24 @@ PRETTY_NAME = 'Archive'
 logger = logger.getChild(__name__)
 
 __all__ = ['ArchiveDownloader', 'archive_downloader', 'model_archive']
+
+
+@dataclass
+class PreparedArchive:
+    """Plan produced by ArchiveDownloader.prepare_download.
+
+    Holds everything execute_download needs (URL, destination, settings) so the I/O
+    phase has no DB session.
+    """
+    url: str
+    destination: Optional[pathlib.Path]
+    settings: dict
+
+
+@dataclass
+class ExecutedArchive:
+    """Output of ArchiveDownloader.execute_download: files are on disk and ready to register."""
+    written: WrittenArchiveFiles
 
 
 class ArchiveDownloader(Downloader, ABC):
@@ -40,59 +60,57 @@ class ArchiveDownloader(Downloader, ABC):
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
         return file_groups
 
-    async def do_download(self, download: Download) -> DownloadResult:
-        if download.attempts > 3:
+    def prepare_download(self, session: Session, download: Download) -> PreparedArchive:
+        """Resolve destination directory.  Caller commits (or rolls back on raise)."""
+        if (download.attempts or 0) > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        # Get destination from settings (passed by RSS downloader from download.destination column)
-        destination = None
-        if download.settings and download.settings.get('destination'):
-            destination = pathlib.Path(download.settings['destination'])
+        settings = download.settings or dict()
+        # Destination from settings (e.g. set by the RSS sub-downloader) wins over collection lookup.
+        destination = pathlib.Path(settings['destination']) if settings.get('destination') else None
 
-        # If no destination provided, use the domain collection's directory
-        # get_or_set_directory will format from template and save on first use
         if not destination:
-            with get_db_session(commit=True) as session:
-                collection = lib.get_or_create_domain_collection(session, download.url)
-                if collection:
-                    destination = collection.get_or_set_directory(session)
+            collection = lib.get_or_create_domain_collection(session, download.url)
+            if collection:
+                destination = collection.get_or_set_directory(session)
 
+        return PreparedArchive(url=download.url, destination=destination, settings=settings)
+
+    async def execute_download(self, prepared: PreparedArchive, ctx: DownloadContext) -> ExecutedArchive:
+        """Run the archive container or local singlefile + readability/screenshot extraction,
+        then write the artifacts to disk.  No DB."""
         if DOCKERIZED or PYTEST:
-            # Perform the archive in the Archive docker container.  (Typically in the development environment).
-            singlefile, readability, screenshot = await request_archive(download.url)
-            archive: Archive = await lib.model_archive_result(
-                download.url, singlefile, readability, screenshot, destination=destination)
-            archive_id = archive.id
+            singlefile, readability, screenshot = await request_archive(prepared.url)
+            artifacts = SinglefileArtifacts(url=prepared.url, singlefile=singlefile,
+                                            readability=readability, screenshot=screenshot)
         else:
-            # Perform the archive using locally installed executables.
-            singlefile = await self.do_singlefile(download)
-            archive = await lib.singlefile_to_archive(singlefile, destination=destination)
-            archive_id = archive.id
+            singlefile_bytes = await self.do_singlefile(prepared, ctx)
+            artifacts = await extract_singlefile_artifacts(singlefile_bytes)
+
+        written = write_archive_files(artifacts.url, artifacts.singlefile, artifacts.readability,
+                                      artifacts.screenshot, destination=prepared.destination)
+        return ExecutedArchive(written=written)
+
+    def finalize_download(self, session: Session, download: Download,
+                          executed: ExecutedArchive) -> DownloadResult:
+        """Register the Archive record, apply tags, persist parent_download_url. Caller commits."""
+        archive = register_archive(session, executed.written)
+
+        if tag_names := download.tag_names:
+            for name in tag_names:
+                archive.add_tag(session, name)
 
         settings = download.settings or dict()
+        if parent_download_url := settings.get('parent_download_url'):
+            try:
+                archive.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
+            except ValueError as e:
+                logger.warning(f'Failed to update wrolpi json for {archive}: {e}')
 
-        with get_db_session() as session:
-            archive = Archive.find_by_id(session, archive_id)
-            need_commit = False
-            if tag_names := download.tag_names:
-                for name in tag_names:
-                    archive.add_tag(session, name)
-                    need_commit = True
+        logger.info(f'Successfully downloaded Archive {download.url} {archive}')
+        return DownloadResult(success=True, location=archive.location)
 
-                if need_commit:
-                    session.commit()
-
-            if parent_download_url := settings.get('parent_download_url'):
-                try:
-                    archive.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
-                except ValueError as e:
-                    logger.warning(f'Failed to update wrolpi json for {archive}: {e}')
-
-            logger.info(f'Successfully downloaded Archive {download.url} {archive}')
-
-            return DownloadResult(success=True, location=archive.location)
-
-    async def do_singlefile(self, download: Download) -> bytes:
+    async def do_singlefile(self, prepared: PreparedArchive, ctx: DownloadContext) -> bytes:
         """Create a Singlefile from the archive's URL."""
         # Get browser settings from config
         config = lib.get_archive_downloader_config()
@@ -119,11 +137,12 @@ class ArchiveDownloader(Downloader, ABC):
                '--user-agent', user_agent,
                '--dump-content',
                '--load-deferred-images-dispatch-scroll-event',
-               download.url,
+               prepared.url,
                )
         cwd = pathlib.Path('/home/wrolpi')
         cwd = cwd if cwd.is_dir() else None
-        result = await self.process_runner(download, cmd, cwd)
+        # cancel_wrapper reads cancellation from ctx; the Download is only for log messages.
+        result = await self.process_runner(Download(url=prepared.url), cmd, cwd, ctx=ctx)
 
         stderr = result.stderr.decode()
         log_output = stderr or result.stdout.decode() or 'No stderr or stdout!'
@@ -134,11 +153,11 @@ class ArchiveDownloader(Downloader, ABC):
 
         if not result.stdout:
             e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'Singlefile created was empty: {download.url}') from e
+            raise RuntimeError(f'Singlefile created was empty: {prepared.url}') from e
 
         if SINGLEFILE_HEADER.encode() not in result.stdout:
             e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+            raise RuntimeError(f'Singlefile created was invalid: {prepared.url}') from e
 
         return result.stdout
 

@@ -242,6 +242,7 @@ class DownloadSettings:
     video_format: Optional[str] = None
     video_resolutions: List[str] = field(default_factory=list)
     parent_download_url: Optional[str] = None
+    skip_already_downloaded: Optional[bool] = None
     # Inheritable video settings (Optional so they're only set when user overrides)
     writesubtitles: Optional[bool] = None
     writeautomaticsub: Optional[bool] = None

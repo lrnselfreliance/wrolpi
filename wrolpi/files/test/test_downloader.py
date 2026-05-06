@@ -2,10 +2,13 @@ import hashlib
 from http import HTTPStatus
 from unittest import mock
 
+import pytest
+
 from wrolpi import common
 from wrolpi.common import DownloadFileInfo
 from wrolpi.downloader import Download
-from wrolpi.files.downloader import FileDownloader
+from wrolpi.errors import UnrecoverableDownloadError
+from wrolpi.files.downloader import FileDownloader, PreparedFile, file_downloader
 from wrolpi.test.common import skip_circleci
 
 
@@ -190,3 +193,90 @@ async def test_file_downloader_meta4_no_output_flag(test_directory):
     assert '-o' not in captured_cmd
     # But -M should be present.
     assert '-M' in captured_cmd
+
+
+# ---------------------------------------------------------------------------
+# Phase-split unit tests for prepare_download.
+#
+# These exercise validation invariants in isolation — no async_client, no
+# test_download_manager, no aria2c.  They prove FileDownloader's prep phase
+# rejects bad inputs cleanly without needing the Sanic stack.
+# ---------------------------------------------------------------------------
+
+
+def test_prepare_max_attempts_raises(test_session, test_directory):
+    """prepare_download enforces the attempt cap before any I/O."""
+    download = Download(
+        url='https://example.com/file.zip',
+        downloader='file',
+        attempts=4,
+        destination=str(test_directory / 'downloads'),
+    )
+
+    with pytest.raises(UnrecoverableDownloadError):
+        file_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_requires_destination(test_session):
+    """No destination on the column or in settings → unrecoverable."""
+    download = Download(
+        url='https://example.com/file.zip',
+        downloader='file',
+        settings={},
+    )
+
+    with pytest.raises(UnrecoverableDownloadError, match='without a destination'):
+        file_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_rejects_destination_outside_media_dir(test_session, test_directory, tmp_path):
+    """Destinations outside the media directory are rejected.  test_directory sets up
+    TEST_MEDIA_DIRECTORY; tmp_path lives outside it as a sibling temp dir."""
+    outside = tmp_path / 'somewhere_else'
+    outside.mkdir()
+    # Sanity-check that tmp_path is genuinely outside the test media directory.
+    assert not str(outside.resolve()).startswith(str(test_directory.resolve()))
+
+    download = Download(
+        url='https://example.com/file.zip',
+        downloader='file',
+        destination=str(outside),
+    )
+
+    with pytest.raises(UnrecoverableDownloadError, match='outside media directory'):
+        file_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_creates_destination_within_media_dir(test_session, test_directory):
+    """A destination inside the media dir that doesn't exist yet is created."""
+    dest = test_directory / 'new_downloads_subdir'
+    assert not dest.exists()
+
+    download = Download(
+        url='https://example.com/file.zip',
+        downloader='file',
+        destination=str(dest),
+    )
+
+    prepared = file_downloader.prepare_download(test_session, download)
+
+    assert isinstance(prepared, PreparedFile)
+    assert prepared.url == 'https://example.com/file.zip'
+    assert prepared.destination == dest.resolve()
+    assert dest.is_dir()
+
+
+def test_prepare_uses_settings_destination_fallback(test_session, test_directory):
+    """When download.destination is empty, settings['destination'] is used."""
+    dest = test_directory / 'from_settings'
+    download = Download(
+        url='https://example.com/file.zip',
+        downloader='file',
+        destination=None,
+        settings={'destination': str(dest)},
+    )
+
+    prepared = file_downloader.prepare_download(test_session, download)
+
+    assert prepared.destination == dest.resolve()
+    assert dest.is_dir()

@@ -436,9 +436,15 @@ class Downloader:
         """
         return None
 
-    async def execute_download(self, prepared: Any, ctx: 'DownloadContext') -> Any:
+    async def execute_download(self, prepared: Any, ctx: 'DownloadContext',
+                               download: Download = None) -> Any:
         """Async I/O-bound work.  No DB session — does network and subprocess work,
-        returns plain data for finalize_download to persist."""
+        returns plain data for finalize_download to persist.
+
+        download is passed through by the manager so subclasses that drive parent
+        helpers (download_file, process_runner) can attribute logs/progress to the
+        right download.  It is optional so unit tests can construct a stub or omit it.
+        """
         raise NotImplementedError()
 
     def finalize_download(self, session: Session, download: Download, executed: Any) -> DownloadResult:
@@ -571,7 +577,8 @@ class Downloader:
 
     async def download_file(self, download: Download, url: str, destination: pathlib.Path,
                             check_for_meta4: bool = True, concurrent: int = 3,
-                            meta4_xml: bytes = None) -> pathlib.Path:
+                            meta4_xml: bytes = None,
+                            ctx: 'DownloadContext' = None) -> pathlib.Path:
         from wrolpi.files.lib import glob_shared_stem
 
         if not ARIA2C_PATH:
@@ -614,7 +621,8 @@ class Downloader:
                 on_stdout = make_progress_callback(download.id, parse_aria2c_progress)
 
                 try:
-                    result = await self.process_runner(download, cmd, destination, stdout_callback=on_stdout)
+                    result = await self.process_runner(download, cmd, destination,
+                                                       stdout_callback=on_stdout, ctx=ctx)
                 finally:
                     clear_download_progress(download.id)
                 stderr = result.stderr.decode() if getattr(result, 'stderr', None) else ''
@@ -1539,7 +1547,7 @@ async def signal_download_download(download_id: int, download_url: str):
 
                 if prepared is not None:
                     # New phase-split path: caller (us) owns transaction boundaries.
-                    coro = downloader.execute_download(prepared, ctx)
+                    coro = downloader.execute_download(prepared, ctx, download=download)
                     executed = await downloader.cancel_wrapper(coro, download, ctx=ctx)
                     if isinstance(executed, DownloadResult):
                         # cancel_wrapper short-circuited with a cancel result.

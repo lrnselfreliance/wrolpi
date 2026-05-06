@@ -388,6 +388,17 @@ async def fetch_video_duration(url: str) -> int:
     return duration
 
 
+YOUTUBE_RSS_FEED_URL_RE = re.compile(
+    r'^https?://([\w.-]+\.)?youtube\.com/feeds/videos\.xml(\?|/|$)',
+    re.IGNORECASE,
+)
+
+
+def is_youtube_rss_feed_url(url: str) -> bool:
+    """Return True if `url` is a YouTube RSS feed URL (e.g. /feeds/videos.xml?channel_id=...)."""
+    return bool(YOUTUBE_RSS_FEED_URL_RE.match(url or ''))
+
+
 class ChannelDownloader(Downloader, ABC):
     """Handles downloading of videos in a Channel or Playlist."""
     name = 'video_channel'
@@ -405,6 +416,13 @@ class ChannelDownloader(Downloader, ABC):
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         _log_ytdlp_versions()
+        if is_youtube_rss_feed_url(download.url):
+            # yt-dlp returns no `uploader` or `channel_id` for an RSS feed URL, so falling through
+            # would create a junk channel named after `webpage_url_basename` ("videos.xml").
+            raise UnrecoverableDownloadError(
+                f'Refusing to handle RSS feed URL with ChannelDownloader: {download.url}.'
+                f' Use the RSS Downloader (sub_downloader=video) instead.'
+            )
         try:
             info = extract_info(download.url, process=False)
         except Exception as e:

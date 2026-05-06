@@ -10,7 +10,7 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
     prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download, \
-    parse_ytdlp_progress
+    parse_ytdlp_progress, is_youtube_rss_feed_url
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -441,6 +441,52 @@ def test_bad_downloader(test_session, video_download_manager):
     """
     with pytest.raises(InvalidDownload):
         video_download_manager.create_download(test_session, 'https://example.com', downloader_name='bad downloader')
+
+
+@pytest.mark.parametrize('url,expected', [
+    ('https://www.youtube.com/feeds/videos.xml?channel_id=UC2JGH5ZBtWQJuTYCyfI3M3Q', True),
+    ('http://youtube.com/feeds/videos.xml?channel_id=UC123', True),
+    ('https://www.youtube.com/feeds/videos.xml', True),
+    ('https://www.youtube.com/@SomeChannel/videos', False),
+    ('https://www.youtube.com/watch?v=abc123', False),
+    ('https://example.com/feeds/videos.xml', False),
+    ('', False),
+    (None, False),
+])
+def test_is_youtube_rss_feed_url(url, expected):
+    """Detect YouTube RSS feed URLs so ChannelDownloader can refuse to process them."""
+    assert is_youtube_rss_feed_url(url) is expected
+
+
+@pytest.mark.asyncio
+async def test_channel_downloader_rejects_rss_feed_url(test_session, mock_video_extract_info):
+    """ChannelDownloader must refuse YouTube RSS feed URLs.
+
+    Previously, yt-dlp would return no `uploader`/`channel_id` for an RSS feed, so
+    `name = info.get('uploader') or info.get('webpage_url_basename')` fell back to
+    'videos.xml' and `source_id` fell back to 'videos', creating a junk channel named
+    'videos.xml' in directory 'videos/videos.xml' that never received any videos.
+    """
+    download = Download(
+        url='https://www.youtube.com/feeds/videos.xml?channel_id=UC2JGH5ZBtWQJuTYCyfI3M3Q',
+        downloader=channel_downloader.name,
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    # If the rejection was missing, ChannelDownloader would call extract_info and create a channel.
+    mock_video_extract_info.return_value = {
+        'id': 'videos',
+        'webpage_url_basename': 'videos.xml',
+        'entries': [],
+    }
+
+    with pytest.raises(UnrecoverableDownloadError):
+        await channel_downloader.do_download(download)
+
+    # No Channel should have been created from the RSS URL.
+    assert test_session.query(Channel).count() == 0
+    mock_video_extract_info.assert_not_called()
 
 
 @pytest.mark.asyncio

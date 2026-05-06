@@ -100,7 +100,8 @@ class ScrapeHTMLDownloader(Downloader):
             destination=destination,
         )
 
-    async def execute_download(self, prepared: PreparedScrape, ctx: DownloadContext) -> ExecutedScrape:
+    async def execute_download(self, prepared: PreparedScrape, ctx: DownloadContext,
+                               download: Download = None) -> ExecutedScrape:
         """Crawl HTML pages up to depth, collecting links that match the configured suffix."""
         urls = [prepared.url]
         download_urls: List[str] = []

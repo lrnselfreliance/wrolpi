@@ -76,7 +76,8 @@ class ArchiveDownloader(Downloader, ABC):
 
         return PreparedArchive(url=download.url, destination=destination, settings=settings)
 
-    async def execute_download(self, prepared: PreparedArchive, ctx: DownloadContext) -> ExecutedArchive:
+    async def execute_download(self, prepared: PreparedArchive, ctx: DownloadContext,
+                               download: Download = None) -> ExecutedArchive:
         """Run the archive container or local singlefile + readability/screenshot extraction,
         then write the artifacts to disk.  No DB."""
         if DOCKERIZED or PYTEST:

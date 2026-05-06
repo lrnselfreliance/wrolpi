@@ -1,9 +1,13 @@
 import pathlib
 from copy import copy
+from dataclasses import dataclass
+from typing import List
 from urllib.parse import urlparse
 
+from sqlalchemy.orm import Session
+
 from wrolpi.common import logger, get_html_soup, aiohttp_get
-from wrolpi.downloader import Downloader, Download, DownloadResult
+from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 
 logger = logger.getChild(__name__)
@@ -25,6 +29,27 @@ def resolve_url(parent_url: str, url: str):
     return f'{parent_url}/{url}'
 
 
+@dataclass
+class PreparedScrape:
+    """Plan produced by ScrapeHTMLDownloader.prepare_download."""
+    url: str
+    depth: int
+    suffix: str           # already lowercased
+    max_pages: int
+    destination: pathlib.Path
+
+
+@dataclass
+class ExecutedScrape:
+    """Output of ScrapeHTMLDownloader.execute_download: URLs collected, plus enough state
+    for finalize_download to build the user-facing DownloadResult."""
+    download_urls: List[str]
+    page_count: int
+    max_pages: int
+    suffix: str
+    destination: pathlib.Path
+
+
 class ScrapeHTMLDownloader(Downloader):
     """Scrape downloads HTML pages searching for files with a particular suffix.
 
@@ -42,16 +67,19 @@ class ScrapeHTMLDownloader(Downloader):
         async with aiohttp_get(url, timeout=60 * 5) as response:
             return await response.text()
 
-    async def do_download(self, download: Download) -> DownloadResult:
-        if download.attempts > 3:
+    def prepare_download(self, session: Session, download: Download) -> PreparedScrape:
+        """Validate settings and ensure the destination directory exists.
+
+        session is unused here — scrape has no DB work in any phase — but the API still
+        requires it.
+        """
+        if (download.attempts or 0) > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        urls = [download.url, ]
-        download_urls = list()
-
-        depth = download.settings.get('depth') or 1
-        suffix = download.settings.get('suffix')
-        max_pages = download.settings.get('max_pages') or 100
+        settings = download.settings or {}
+        depth = settings.get('depth') or 1
+        suffix = settings.get('suffix')
+        max_pages = settings.get('max_pages') or 100
         destination = download.destination
 
         if 0 > depth > 10:
@@ -64,16 +92,26 @@ class ScrapeHTMLDownloader(Downloader):
         if not destination.is_dir():
             destination.mkdir(parents=True)
 
-        suffix = suffix.lower()
+        return PreparedScrape(
+            url=download.url,
+            depth=depth,
+            suffix=suffix.lower(),
+            max_pages=max_pages,
+            destination=destination,
+        )
 
+    async def execute_download(self, prepared: PreparedScrape, ctx: DownloadContext) -> ExecutedScrape:
+        """Crawl HTML pages up to depth, collecting links that match the configured suffix."""
+        urls = [prepared.url]
+        download_urls: List[str] = []
         page_count = 0
 
-        for i in range(depth):
+        for _ in range(prepared.depth):
             # Copy the found URLs at this depth.  Accumulate all anchors (<a href>) found.
             local_urls = urls.copy()
             urls = list()
             for url in local_urls:
-                if page_count >= max_pages:
+                if page_count >= prepared.max_pages:
                     logger.warning('Reached max page count.')
                     break
 
@@ -99,7 +137,7 @@ class ScrapeHTMLDownloader(Downloader):
                         logger.debug(f'Not a real anchor: {a}')
                         continue
                     child_url = resolve_url(url, href)
-                    if child_url and child_url.lower().endswith(suffix):
+                    if child_url and child_url.lower().endswith(prepared.suffix):
                         # Found a file that the User requested.
                         logger.info(f'ScrapeHTMLDownloader will download {child_url}')
                         download_urls.append(child_url)
@@ -107,20 +145,31 @@ class ScrapeHTMLDownloader(Downloader):
                         logger.debug(f'ScrapeHTMLDownloader scraping {child_url}')
                         urls.append(child_url)
 
-        if not download_urls:
+        return ExecutedScrape(
+            download_urls=download_urls,
+            page_count=page_count,
+            max_pages=prepared.max_pages,
+            suffix=prepared.suffix,
+            destination=prepared.destination,
+        )
+
+    def finalize_download(self, session: Session, download: Download,
+                          executed: ExecutedScrape) -> DownloadResult:
+        """Build the DownloadResult.  No DB work; session is unused."""
+        if not executed.download_urls:
             return DownloadResult(
                 success=False,
-                error=f'No files with {suffix} found in {page_count} pages!'
+                error=f'No files with {executed.suffix} found in {executed.page_count} pages!',
             )
 
-        settings = copy(download.settings)
-        settings['destination'] = str(download.destination)  # Use str for json conversion.
+        settings = copy(download.settings) if download.settings else {}
+        settings['destination'] = str(executed.destination)  # Use str for json conversion.
         return DownloadResult(
             success=True,
-            downloads=download_urls,
+            downloads=executed.download_urls,
             settings=settings,
-            error='Reached max page count.' if page_count >= max_pages else None,
-            location=f'/files?folders={destination}'
+            error='Reached max page count.' if executed.page_count >= executed.max_pages else None,
+            location=f'/files?folders={executed.destination}',
         )
 
 

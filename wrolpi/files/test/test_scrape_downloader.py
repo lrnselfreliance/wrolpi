@@ -4,9 +4,15 @@ import mock
 import pytest
 
 from wrolpi.dates import Seconds
-from wrolpi.downloader import DownloadResult
+from wrolpi.downloader import Download, DownloadResult
+from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.downloader import FileDownloader
-from wrolpi.scrape_downloader import ScrapeHTMLDownloader
+from wrolpi.scrape_downloader import (
+    ExecutedScrape,
+    PreparedScrape,
+    ScrapeHTMLDownloader,
+    scrape_html_downloader,
+)
 
 EXAMPLE_HTTP = '''
 <html>
@@ -94,3 +100,164 @@ async def test_scrape_html_downloader_api(async_client, test_session, test_downl
         settings=dict(depth=1, max_pages=1, suffix='.mp4'))
     request, response = await async_client.post('/api/download', json=body)
     assert response.status == HTTPStatus.BAD_REQUEST
+
+
+# ---------------------------------------------------------------------------
+# Phase-split unit tests.
+#
+# These exercise prepare_download / execute_download / finalize_download in
+# isolation — no async_client, no test_download_manager, no
+# wait_for_all_downloads polling.  They reuse make_test_ctx from the archive
+# conftest so we don't need to duplicate the helper.
+# ---------------------------------------------------------------------------
+
+from modules.archive.conftest import make_test_ctx  # noqa: E402
+
+
+def test_prepare_max_attempts_raises(test_session):
+    """prepare_download enforces the attempt cap before any I/O."""
+    download = Download(
+        url='https://example.com/x',
+        downloader='scrape_html',
+        attempts=4,
+        destination='/tmp/dest',
+        settings={'suffix': '.pdf'},
+    )
+
+    with pytest.raises(UnrecoverableDownloadError):
+        scrape_html_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_requires_suffix(test_session, test_directory):
+    """Missing settings['suffix'] is unrecoverable."""
+    download = Download(
+        url='https://example.com/x',
+        downloader='scrape_html',
+        destination=str(test_directory / 'dest'),
+        settings={},
+    )
+
+    with pytest.raises(UnrecoverableDownloadError, match='Suffix'):
+        scrape_html_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_requires_destination(test_session):
+    """Missing destination is unrecoverable."""
+    download = Download(
+        url='https://example.com/x',
+        downloader='scrape_html',
+        settings={'suffix': '.pdf'},
+    )
+
+    with pytest.raises(UnrecoverableDownloadError, match='Destination'):
+        scrape_html_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_lowercases_suffix_and_creates_destination(test_session, test_directory):
+    """Suffix is normalised to lowercase and the destination directory is created."""
+    dest = test_directory / 'new_dest'
+    assert not dest.exists()
+    download = Download(
+        url='https://example.com/x',
+        downloader='scrape_html',
+        destination=str(dest),
+        settings={'suffix': '.PDF', 'depth': 2, 'max_pages': 50},
+    )
+
+    prepared = scrape_html_downloader.prepare_download(test_session, download)
+
+    assert isinstance(prepared, PreparedScrape)
+    assert prepared.suffix == '.pdf'
+    assert prepared.depth == 2
+    assert prepared.max_pages == 50
+    assert prepared.destination == dest
+    assert dest.is_dir()
+
+
+@pytest.mark.asyncio
+async def test_execute_collects_matching_urls(test_directory):
+    """execute_download walks pages and returns URLs matching the suffix.  No DB,
+    no Sanic, no DownloadManager — the I/O phase is fully isolated."""
+    prepared = PreparedScrape(
+        url='https://example.com/dir',
+        depth=1,
+        suffix='.pdf',
+        max_pages=100,
+        destination=test_directory,
+    )
+
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html):
+        executed = await scrape_html_downloader.execute_download(prepared, make_test_ctx())
+
+    assert isinstance(executed, ExecutedScrape)
+    assert sorted(executed.download_urls) == sorted([
+        'https://example.com/one.pdf',
+        'https://example.com/two.pdf',
+        'https://example.com/dir/three.pdf',
+    ])
+    assert executed.page_count == 1
+    assert executed.suffix == '.pdf'
+
+
+@pytest.mark.asyncio
+async def test_execute_respects_max_pages(test_directory):
+    """max_pages caps the crawl; deeper pages are skipped after the limit."""
+    prepared = PreparedScrape(
+        url='https://example.com/dir',
+        depth=3,
+        suffix='.html',          # links to other.html mean each page yields more pages
+        max_pages=1,
+        destination=test_directory,
+    )
+
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html):
+        executed = await scrape_html_downloader.execute_download(prepared, make_test_ctx())
+
+    assert executed.page_count == 1
+    assert executed.max_pages == 1
+    # Only the first page was crawled, but its other.html link should still be collected.
+    assert 'https://example.com/dir/other.html' in executed.download_urls
+
+
+def test_finalize_returns_failure_when_no_urls_found(test_session, test_directory):
+    """No matching URLs → DownloadResult with success=False and a descriptive error."""
+    executed = ExecutedScrape(
+        download_urls=[],
+        page_count=5,
+        max_pages=100,
+        suffix='.pdf',
+        destination=test_directory,
+    )
+    download = Download(url='https://example.com/x', downloader='scrape_html', settings={'suffix': '.pdf'})
+
+    result = scrape_html_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is False
+    assert '.pdf' in (result.error or '')
+    assert '5 pages' in (result.error or '')
+
+
+def test_finalize_returns_success_with_downloads_and_settings(test_session, test_directory):
+    """Populated executed → success result; settings get destination injected; max_pages
+    triggers the warning."""
+    executed = ExecutedScrape(
+        download_urls=['https://example.com/a.pdf', 'https://example.com/b.pdf'],
+        page_count=10,
+        max_pages=10,            # equal to page_count → warning is set
+        suffix='.pdf',
+        destination=test_directory / 'dest',
+    )
+    download = Download(
+        url='https://example.com/x',
+        downloader='scrape_html',
+        settings={'suffix': '.pdf', 'depth': 1},
+    )
+
+    result = scrape_html_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is True
+    assert result.downloads == executed.download_urls
+    assert result.settings['destination'] == str(executed.destination)
+    assert result.settings['suffix'] == '.pdf'    # original setting preserved
+    assert result.error == 'Reached max page count.'
+    assert result.location == f'/files?folders={executed.destination}'

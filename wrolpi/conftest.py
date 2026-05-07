@@ -1059,7 +1059,8 @@ def mock_downloader_download_file():
     """Mock the Downloader.download_file method."""
     contents = None
 
-    async def _download_file(self, id_, url, destination):
+    async def _download_file(self, id_, url, destination, **kwargs):
+        # **kwargs absorbs ctx= and any future optional args added to Downloader.download_file.
         name = url.split('/')[-1]
         output_path = destination / name
         output_path.write_bytes(contents or b'')

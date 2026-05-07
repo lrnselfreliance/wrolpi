@@ -2143,12 +2143,38 @@ class RSSDownloader(Downloader):
             # (e.g., youtube.com/watch?v=ABC123) to match what is stored in the database.
             from modules.videos.normalize_video_url import normalize_video_url
             urls = [normalize_video_url(i) for i in urls]
-            # Duration filtering performs network I/O (yt-dlp duration probe) — must run
-            # in execute, not finalize.  This may probe URLs that DB-dedupe would have
-            # eliminated; fetch_video_duration is cached, so duplicate probes are cheap.
+
+            # Pre-filter against DB + skip-list BEFORE duration filtering: each duration
+            # probe sleeps random.randint(1, 3) seconds inside filter_videos, so checking
+            # the DB first avoids dozens of unnecessary sleeps for feeds where most videos
+            # are already downloaded.  Mirrors the legacy filter ordering.  The session is
+            # opened locally and closed before the long-running filter_videos await — the
+            # manager's outer session is not held across this work.
+            urls = self._filter_already_known(prepared.sub_downloader, urls)
+
+            # Duration filtering performs network I/O (yt-dlp duration probe).  Now every
+            # probe is on a genuinely new URL.
             urls = await self.filter_videos(log_stub, urls)
 
         return ExecutedRSS(yt_channel_id=yt_channel_id, candidate_urls=urls)
+
+    @staticmethod
+    def _filter_already_known(sub_downloader: 'Downloader', urls: List[str]) -> List[str]:
+        """Drop URLs already downloaded, already queued, or on the skip list.
+
+        Opens a short-lived self-managed session for the DB queries; the manager's
+        outer session is not held across this call.
+        """
+        if not urls:
+            return urls
+        with get_db_session() as session:
+            already = sub_downloader.already_downloaded(session, *urls)
+            already_urls = {a.url for a in already}
+            urls = [u for u in urls if u not in already_urls]
+            existing_download_urls = {d[0] for d in session.query(Download.url).filter(Download.url.in_(urls))}
+            urls = [u for u in urls if u not in existing_download_urls]
+        urls = [u for u in urls if not download_manager.is_skipped(u)]
+        return urls
 
     def finalize_download(self, session: Session, download: Download,
                           executed: ExecutedRSS) -> DownloadResult:
@@ -2159,21 +2185,20 @@ class RSSDownloader(Downloader):
         if executed.yt_channel_id and not (download.location or download.collection_id):
             self.apply_yt_channel(session, download, executed.yt_channel_id)
 
-        # Resolve sub_downloader via the manager (matches prepare; cheap dict lookup).
-        sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
         urls = executed.candidate_urls
 
-        # DB dedupe: drop URLs already downloaded under this sub_downloader, plus URLs
-        # already queued in the Download table.
-        if sub_downloader and urls:
-            already = sub_downloader.already_downloaded(session, *urls)
-            already_urls = {a.url for a in already}
-            urls = [u for u in urls if u not in already_urls]
-            existing_download_urls = {d[0] for d in session.query(Download.url).filter(Download.url.in_(urls))}
-            urls = [u for u in urls if u not in existing_download_urls]
-
-        # Skip-list filter (manager-owned shared_ctx state, not DB).
-        urls = [u for u in urls if not download_manager.is_skipped(u)]
+        # Video URLs were already deduped in execute_download (pre-duration-filter, to
+        # avoid wasted sleeps).  Non-video sub_downloaders skip the in-execute filter
+        # because they don't run filter_videos, so dedupe them here.
+        if download.sub_downloader != 'video':
+            sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
+            if sub_downloader and urls:
+                already = sub_downloader.already_downloaded(session, *urls)
+                already_urls = {a.url for a in already}
+                urls = [u for u in urls if u not in already_urls]
+                existing_download_urls = {d[0] for d in session.query(Download.url).filter(Download.url.in_(urls))}
+                urls = [u for u in urls if u not in existing_download_urls]
+            urls = [u for u in urls if not download_manager.is_skipped(u)]
 
         logger.info(f'Successfully got {len(urls)} new URLs from RSS {download.url}')
 

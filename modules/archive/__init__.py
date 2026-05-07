@@ -85,7 +85,7 @@ class ArchiveDownloader(Downloader, ABC):
             artifacts = SinglefileArtifacts(url=prepared.url, singlefile=singlefile,
                                             readability=readability, screenshot=screenshot)
         else:
-            singlefile_bytes = await self.do_singlefile(prepared, ctx)
+            singlefile_bytes = await self.do_singlefile(prepared, ctx, download=download)
             artifacts = await extract_singlefile_artifacts(singlefile_bytes)
 
         written = write_archive_files(artifacts.url, artifacts.singlefile, artifacts.readability,
@@ -111,8 +111,13 @@ class ArchiveDownloader(Downloader, ABC):
         logger.info(f'Successfully downloaded Archive {download.url} {archive}')
         return DownloadResult(success=True, location=archive.location)
 
-    async def do_singlefile(self, prepared: PreparedArchive, ctx: DownloadContext) -> bytes:
-        """Create a Singlefile from the archive's URL."""
+    async def do_singlefile(self, prepared: PreparedArchive, ctx: DownloadContext,
+                            download: Download = None) -> bytes:
+        """Create a Singlefile from the archive's URL.
+
+        download is the original Download row when called via the manager dispatch; tests
+        may omit it and a stub is built so process_runner has a url for log messages.
+        """
         # Get browser settings from config
         config = lib.get_archive_downloader_config()
 
@@ -142,8 +147,10 @@ class ArchiveDownloader(Downloader, ABC):
                )
         cwd = pathlib.Path('/home/wrolpi')
         cwd = cwd if cwd.is_dir() else None
-        # cancel_wrapper reads cancellation from ctx; the Download is only for log messages.
-        result = await self.process_runner(Download(url=prepared.url), cmd, cwd, ctx=ctx)
+        # cancel_wrapper reads cancellation from ctx; the Download is forwarded so
+        # the real download id is used for unkill cleanup and log attribution.
+        result = await self.process_runner(download or Download(url=prepared.url),
+                                           cmd, cwd, ctx=ctx)
 
         stderr = result.stderr.decode()
         log_output = stderr or result.stdout.decode() or 'No stderr or stdout!'

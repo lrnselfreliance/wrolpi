@@ -98,7 +98,7 @@ async def test_download_no_channel(test_session, video_download_manager, test_di
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     mock_video_extract_info.return_value = info_json
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
         video_download_manager.create_download(test_session, url, video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
@@ -118,7 +118,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     mock_video_extract_info.return_value = copy(example_video_json)
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
         settings = dict(tag_names=[tag1.name, tag2.name])
         video_download_manager.create_download(test_session, url, video_downloader.name, settings=settings)
@@ -512,7 +512,7 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
     part_path.touch()
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
@@ -549,7 +549,7 @@ async def test_download_result(test_session, test_directory, video_download_mana
     image_file.rename(video_file.with_suffix('.jpg'))
 
     mock_video_extract_info.return_value = example_video_json
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = [video_file, {'id': 'foo'}]
         video_download_manager.create_download(test_session, 'https://example.com', video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
@@ -670,13 +670,12 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
 
     mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download:
-        mock_video_do_download.return_value = DownloadResult(success=True)  # Don't download the videos.
-        # Drive the phase-split API directly: prepare → execute → finalize.
-        from modules.archive.conftest import make_test_ctx
-        prepared = channel_downloader.prepare_download(test_session, download)
-        executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
-        result = channel_downloader.finalize_download(test_session, download, executed)
+    # Drive the phase-split API directly: prepare → execute → finalize.  No dispatch
+    # loop, so child video downloads are never spawned here — no need to stub them.
+    from modules.archive.conftest import make_test_ctx
+    prepared = channel_downloader.prepare_download(test_session, download)
+    executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+    result = channel_downloader.finalize_download(test_session, download, executed)
     assert result.success is True, 'Download was not successful'
     assert set(result.downloads) == {
         'https://www.youtube.com/watch?v=video_2_url',  # Shorts is converted to regular URL.
@@ -904,11 +903,12 @@ async def test_channel_downloader_sets_collection_id(test_session, channel_facto
     }
     mock_video_extract_info.return_value = mock_info
 
-    # Mock Channel.refresh_files and file_worker.wait_for_job to avoid background tasks
-    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
-         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+    # Drive the phase-split API directly — no dispatch loop fires, so child video
+    # downloads are never spawned and don't need stubbing.  refresh_files and
+    # file_worker.wait_for_job are still patched because ChannelDownloader's
+    # prepare_channel_for_downloads calls them inline.
+    with mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
-        mock_video_do_download.return_value = DownloadResult(success=True)
         from modules.archive.conftest import make_test_ctx
         prepared = channel_downloader.prepare_download(test_session, download)
         executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
@@ -956,10 +956,9 @@ async def test_channel_passes_all_inheritable_settings_to_video(test_session, ch
     }
     mock_video_extract_info.return_value = mock_info
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
-         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+    # Direct phase-split call — child video downloads are never dispatched here.
+    with mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
-        mock_video_do_download.return_value = DownloadResult(success=True)
         from modules.archive.conftest import make_test_ctx
         prepared = channel_downloader.prepare_download(test_session, download)
         executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
@@ -1003,10 +1002,9 @@ async def test_channel_does_not_pass_continue_dl_nooverwrites(test_session, chan
     }
     mock_video_extract_info.return_value = mock_info
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
-         mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
+    # Direct phase-split call — child video downloads are never dispatched here.
+    with mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
-        mock_video_do_download.return_value = DownloadResult(success=True)
         from modules.archive.conftest import make_test_ctx
         prepared = channel_downloader.prepare_download(test_session, download)
         executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
@@ -1035,7 +1033,7 @@ async def test_video_download_uses_effective_settings(test_session, test_directo
     # Download with writesubtitles=False override (global default is True)
     settings = {'writesubtitles': False, 'sleep_requests': 5.0}
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         mock_video_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
@@ -1073,7 +1071,7 @@ async def test_live_video_retry_seconds(test_session, test_directory, mock_video
     url = 'https://www.youtube.com/watch?v=live_video'
     mock_video_extract_info.return_value = example_video_json
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         # Return a path that won't exist (video wasn't downloaded because it's live).
         mock_prepare_filename.return_value = (simple_channel.directory / 'live video.mp4', {'id': 'foo'})
 
@@ -1134,7 +1132,7 @@ async def test_video_download_playlist_appended_extension(test_session, test_dir
     url = 'https://x.com/example/status/123'
     mock_video_extract_info.return_value = example_video_json
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+    with mock.patch('modules.videos.downloader.prepare_video_filename') as mock_prepare_filename:
         # prepare_filename returns the path without the real extension (ending in .NA).
         bogus_path = video_path_na.parent / video_path_na.stem  # Removes .mp4, leaving .NA as "extension"
         mock_prepare_filename.return_value = (bogus_path, {'id': 'foo'})

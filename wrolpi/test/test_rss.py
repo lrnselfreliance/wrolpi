@@ -480,3 +480,50 @@ def test_finalize_passes_destination_from_column(test_session, test_download_man
 
     assert result.success is True
     assert result.settings['destination'].endswith('archive/custom/path')
+
+
+@pytest.mark.asyncio
+async def test_execute_dedupes_before_filter_videos(test_session, video_factory):
+    """Regression: filter_videos must see only URLs that aren't already downloaded.
+
+    Each call inside filter_videos sleeps 1-3s per URL; running it on already-downloaded
+    videos is wasted work.  The legacy code did dedupe BEFORE the duration filter, and
+    the phase-split must preserve that ordering.
+
+    A spy on filter_videos captures exactly what reaches it.
+    """
+    from modules.videos.downloader import video_downloader
+    from wrolpi.downloader import rss_downloader
+
+    # One video already in the DB; the other URL is new.
+    v = video_factory(source_id='ABC123')
+    v.file_group.url = 'https://www.youtube.com/watch?v=ABC123'
+    test_session.commit()
+
+    seen_by_filter = []
+
+    async def spy_filter_videos(_download, urls):
+        seen_by_filter.extend(urls)
+        return urls
+
+    # filter_videos is @staticmethod; patching with a plain function rebinds self,
+    # so wrap in staticmethod() to preserve the original calling convention.
+    spy = staticmethod(spy_filter_videos)
+
+    prepared = PreparedRSS(
+        url='https://example.com/feed',
+        sub_downloader_name='video',
+        sub_downloader=video_downloader,
+        settings={'maximum_duration': 600},   # any min/max triggers filter_videos
+    )
+
+    feed = dict(bozo=0, entries=[
+        dict(link='https://www.youtube.com/shorts/ABC123'),  # already in DB
+        dict(link='https://www.youtube.com/shorts/NEW789'),  # new
+    ])
+
+    with mock.patch('wrolpi.downloader.parse_feed', return_value=feed), \
+            mock.patch.object(RSSDownloader, 'filter_videos', spy):
+        await rss_downloader.execute_download(prepared, make_test_ctx())
+
+    assert seen_by_filter == ['https://www.youtube.com/watch?v=NEW789']

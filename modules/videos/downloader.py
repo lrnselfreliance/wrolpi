@@ -272,6 +272,91 @@ def extract_info(url: str, ydl: YoutubeDL = YDL, process: bool = False) -> dict:
     return ydl.extract_info(url, download=False, process=process)
 
 
+def prepare_video_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str,
+                           audio_only: bool = False, audio_format: str = 'mp3') \
+        -> Tuple[pathlib.Path, dict]:
+    """Predict the on-disk path of a video/audio file from its URL using yt-dlp.
+
+    Module-level (rather than a method on VideoDownloader) so tests can patch it once
+    and avoid the descriptor-binding pitfalls of patching `Class.method`.  Returns the
+    absolute path the file will land at plus the yt-dlp entry dict for the URL.
+    """
+    if not out_dir.is_dir():
+        raise ValueError(f'Output directory does not exist! {out_dir=}')
+
+    # YoutubeDL expects specific options, add onto the default options.
+    # Deep copy to avoid mutating the shared singleton config dict.
+    config = get_videos_downloader_config()
+    options = copy.deepcopy(config.yt_dlp_options)
+
+    if audio_only:
+        options['format'] = 'bestaudio'
+        options['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': audio_format,
+        }]
+        # merge_output_format is not used for audio-only.
+        options.pop('merge_output_format', None)
+    else:
+        options['merge_output_format'] = video_format
+        options['format'] = video_resolutions
+
+    # Convert WROLPi-specific variables to yt-dlp syntax
+    converted_format = convert_wrolpi_filename_format(config.file_name_format)
+    # yt-dlp expects the absolute path.
+    options['outtmpl'] = f'{out_dir}/{converted_format}'
+    options['cachdir'] = YTDLP_CACHE_DIR
+
+    output_ext = audio_output_extension(audio_format) if audio_only else video_format
+
+    # Create a new YoutubeDL for the output directory.
+    ydl = YoutubeDL(copy.deepcopy(options))
+    ydl.params['logger'] = ydl_logger
+    ydl.add_default_info_extractors()
+
+    # Get the path where the file will be saved.
+    try:
+        entry = extract_info(url, ydl=ydl, process=True)
+        # If the entry is a playlist (e.g. Twitter/X post with multiple videos),
+        # use the first entry for filename preparation.
+        if entry.get('entries'):
+            entries = list(entry['entries']) if not isinstance(entry['entries'], list) else entry['entries']
+            if entries:
+                entry = entries[0]
+        final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
+    except DownloadError as e:
+        if ' Cannot write ' in str(e):
+            # yt-dlp does not handle long file names well, get the name from the error (lol)
+            last_line = str(e).splitlines()[-1]
+            full_path = last_line.split(' file ')[-1].strip()
+            if not full_path.startswith('/'):
+                logger.error(f'Failed to extract filename from {last_line}')
+                raise
+        else:
+            raise
+
+        # Split filename from parent.
+        full_path = pathlib.Path(full_path)
+        parent = full_path.parent
+        filename, _ = split_path_stem_and_suffix(full_path.name)
+
+        # Trim long filename, add output suffix, add back into parent directory.
+        filename = escape_file_name(filename)
+        final_filename = parent / f'{filename}.{output_ext}'
+        final_filename = trim_file_name(final_filename)
+        logger.debug(f'File name was too long.  Trimmed to: {final_filename.name}')
+
+        # Get entry info json.
+        options['outtmpl'] = str(final_filename)
+        ydl = YoutubeDL(copy.deepcopy(options))
+        ydl.params['logger'] = ydl_logger
+        ydl.add_default_info_extractors()
+        entry = extract_info(url, ydl=ydl, process=True)
+
+    logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
+    return final_filename, entry
+
+
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
     """Get filename from YoutubeDL.  Separated for testing."""
     dir_name, file_name = os.path.split(ydl.prepare_filename(entry))
@@ -822,7 +907,7 @@ class VideoDownloader(Downloader, ABC):
             video_resolutions = effective['video_resolutions']
             video_resolutions_str = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
             video_format = effective['video_format']
-            video_path, entry = self.prepare_filename(url, out_dir, video_resolutions_str, video_format,
+            video_path, entry = prepare_video_filename(url, out_dir, video_resolutions_str, video_format,
                                                       audio_only=audio_only, audio_format=audio_format)
 
             if settings.get('download_metadata_only'):
@@ -1082,86 +1167,6 @@ class VideoDownloader(Downloader, ABC):
 
         logger.warning('Could not find channel')
         return None
-
-    @staticmethod
-    def prepare_filename(url: str, out_dir: pathlib.Path, video_resolutions: str, video_format: str,
-                         audio_only: bool = False, audio_format: str = 'mp3') \
-            -> Tuple[pathlib.Path, dict]:
-        """Get the full path of a video/audio file from its URL using yt-dlp."""
-        if not out_dir.is_dir():
-            raise ValueError(f'Output directory does not exist! {out_dir=}')
-
-        # YoutubeDL expects specific options, add onto the default options.
-        # Deep copy to avoid mutating the shared singleton config dict.
-        config = get_videos_downloader_config()
-        options = copy.deepcopy(config.yt_dlp_options)
-
-        if audio_only:
-            options['format'] = 'bestaudio'
-            options['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': audio_format,
-            }]
-            # merge_output_format is not used for audio-only.
-            options.pop('merge_output_format', None)
-        else:
-            options['merge_output_format'] = video_format
-            options['format'] = video_resolutions
-
-        # Convert WROLPi-specific variables to yt-dlp syntax
-        converted_format = convert_wrolpi_filename_format(config.file_name_format)
-        # yt-dlp expects the absolute path.
-        options['outtmpl'] = f'{out_dir}/{converted_format}'
-        options['cachdir'] = YTDLP_CACHE_DIR
-
-        output_ext = audio_output_extension(audio_format) if audio_only else video_format
-
-        # Create a new YoutubeDL for the output directory.
-        ydl = YoutubeDL(copy.deepcopy(options))
-        ydl.params['logger'] = ydl_logger
-        ydl.add_default_info_extractors()
-
-        # Get the path where the file will be saved.
-        try:
-            entry = extract_info(url, ydl=ydl, process=True)
-            # If the entry is a playlist (e.g. Twitter/X post with multiple videos),
-            # use the first entry for filename preparation.
-            if entry.get('entries'):
-                entries = list(entry['entries']) if not isinstance(entry['entries'], list) else entry['entries']
-                if entries:
-                    entry = entries[0]
-            final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
-        except DownloadError as e:
-            if ' Cannot write ' in str(e):
-                # yt-dlp does not handle long file names well, get the name from the error (lol)
-                last_line = str(e).splitlines()[-1]
-                full_path = last_line.split(' file ')[-1].strip()
-                if not full_path.startswith('/'):
-                    logger.error(f'Failed to extract filename from {last_line}')
-                    raise
-            else:
-                raise
-
-            # Split filename from parent.
-            full_path = pathlib.Path(full_path)
-            parent = full_path.parent
-            filename, _ = split_path_stem_and_suffix(full_path.name)
-
-            # Trim long filename, add output suffix, add back into parent directory.
-            filename = escape_file_name(filename)
-            final_filename = parent / f'{filename}.{output_ext}'
-            final_filename = trim_file_name(final_filename)
-            logger.debug(f'File name was too long.  Trimmed to: {final_filename.name}')
-
-            # Get entry info json.
-            options['outtmpl'] = str(final_filename)
-            ydl = YoutubeDL(copy.deepcopy(options))
-            ydl.params['logger'] = ydl_logger
-            ydl.add_default_info_extractors()
-            entry = extract_info(url, ydl=ydl, process=True)
-
-        logger.debug(f'Downloading {url} to {repr(str(final_filename))}')
-        return final_filename, entry
 
     @staticmethod
     async def download_info_json(download: Download, video_path: pathlib.Path) -> DownloadResult:

@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import inspect
 import logging
 import multiprocessing
 import os
@@ -419,22 +418,18 @@ class Downloader:
     def __repr__(self):
         return f'<Downloader name={self.name}>'
 
-    async def do_download(self, download: Download, ctx: 'DownloadContext' = None) -> DownloadResult:
-        """Legacy single-phase entry point.
+    def prepare_download(self, session: Session, download: Download) -> Any:
+        """DB-bound prep. Caller (DownloadManager) opens and commits the session.
 
-        Subclasses opting in to the phase-split API override prepare_download /
-        execute_download / finalize_download instead and leave this unimplemented.
+        Sync by default; subclasses may override with `async def prepare_download` when
+        they need network or subprocess work during prep (e.g. yt-dlp extract_info).
+        The dispatch awaits the coroutine.  Holding the session across an await means
+        the connection is in use — keep async prep work brief.
+
+        Subclasses must override and return a value (typically a dataclass) that is
+        passed unchanged to execute_download.
         """
         raise NotImplementedError()
-
-    def prepare_download(self, session: Session, download: Download) -> Optional[Any]:
-        """Synchronous DB-bound prep. Caller (DownloadManager) opens and commits the session.
-
-        Returning None signals the subclass has not opted in to the phase-split API and
-        DownloadManager should fall back to do_download.  Returning any other value
-        (typically a dataclass) is passed unchanged to execute_download.
-        """
-        return None
 
     async def execute_download(self, prepared: Any, ctx: 'DownloadContext',
                                download: Download = None) -> Any:
@@ -448,7 +443,12 @@ class Downloader:
         raise NotImplementedError()
 
     def finalize_download(self, session: Session, download: Download, executed: Any) -> DownloadResult:
-        """Synchronous DB-bound persistence. Caller opens and commits the session."""
+        """DB-bound persistence. Caller opens and commits the session.
+
+        Sync by default; subclasses may override with `async def finalize_download` when
+        post-download persistence requires async work (e.g. ffprobe metadata, dedupe
+        queries).  The dispatch awaits the coroutine.
+        """
         raise NotImplementedError()
 
     def already_downloaded(self, session: Session, *urls: List[str]):
@@ -465,25 +465,22 @@ class Downloader:
 
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
 
-        When ctx is provided, ctx.run_command and ctx.download_timeout are used and cancellation
-        is polled through ctx.  When ctx is None (legacy callers), behavior is unchanged.
+        ctx is required from the dispatch path; the kwarg default of None is a convenience
+        for unit tests that drive process_runner directly with a stub ctx.
         """
         if cwd and not cwd.is_dir():
             raise RuntimeError('cwd directory does not exist')
+        if ctx is None:
+            raise RuntimeError('process_runner requires a DownloadContext')
 
-        if ctx is not None:
-            config_timeout = ctx.download_timeout
-            runner = ctx.run_command
-        else:
-            config_timeout = get_wrolpi_config().download_timeout
-            runner = run_command
+        config_timeout = ctx.download_timeout
         # 0 means no timeout. Prefer config timeout, then argument, then class default.
         if config_timeout:
             timeout = config_timeout
         elif timeout is None:
             timeout = self.timeout
-        coro = runner(cmd, cwd=cwd, timeout=timeout, log_command=debug,
-                      stdout_callback=stdout_callback, env=env)
+        coro = ctx.run_command(cmd, cwd=cwd, timeout=timeout, log_command=debug,
+                               stdout_callback=stdout_callback, env=env)
         result = await self.cancel_wrapper(coro, download, ctx=ctx)
 
         if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
@@ -497,23 +494,17 @@ class Downloader:
     @staticmethod
     async def cancel_wrapper(coro: Coroutine, download: Download, ctx: 'DownloadContext' = None):
         """
-        Converts an async coroutine to a task.  If DownloadManager receives a kill request, this method will cancel
-        the task.
-
-        When ctx is provided, cancellation is polled through ctx.is_cancelled / ctx.can_download /
-        ctx.outside_download_window.  When ctx is None, the global download_manager singleton is
-        used (legacy path for unmigrated subclasses).
+        Converts an async coroutine to a task.  If DownloadManager receives a kill request,
+        this method will cancel the task.  Cancellation state is read through ctx.
         """
+        if ctx is None:
+            raise RuntimeError('cancel_wrapper requires a DownloadContext')
         download_id = download.id
         task = asyncio.create_task(coro)
         try:
             while not task.done():
-                if ctx is not None:
-                    cancelled = ctx.is_cancelled() or not ctx.can_download()
-                    outside_window = ctx.outside_download_window()
-                else:
-                    cancelled = download_manager.download_is_killed(download_id) or not download_manager.can_download
-                    outside_window = download_manager.outside_download_window
+                cancelled = ctx.is_cancelled() or not ctx.can_download()
+                outside_window = ctx.outside_download_window()
                 if cancelled:
                     logger.warning(f'Cancel download of {download.url}')
                     task.cancel()
@@ -528,16 +519,13 @@ class Downloader:
                             error=error,
                         )
                     finally:
-                        if ctx is None:
+                        # The killed-downloads list lives on the manager; clear via the
+                        # singleton.  Tests that bypass the dispatch may not have a manager
+                        # singleton wired up — silently ignore in that case.
+                        try:
                             download_manager.unkill_download(download_id)
-                        else:
-                            # Manager still owns the killed-downloads list; clear via singleton.
-                            # The ctx is read-only with respect to cancellation state.
-                            try:
-                                download_manager.unkill_download(download_id)
-                            except Exception:
-                                # In tests without a manager, silently ignore.
-                                pass
+                        except Exception:
+                            pass
                 else:
                     # Wait for the download to complete.  Cancel if requested.
                     await asyncio.sleep(0.1)
@@ -1539,30 +1527,33 @@ async def signal_download_download(download_id: int, download_url: str):
 
             try_again = True
             try:
-                # Phase-split path: subclass opts in by overriding prepare_download to return non-None.
-                # Legacy path: do_download remains the single entry point.
+                # Phase-split dispatch.  Caller (us) owns transaction boundaries: a session
+                # is opened for prepare_download (committing any pre-flight DB work like
+                # destination resolution) and a fresh session for finalize_download (so we
+                # don't hold a connection across the long-running execute_download).
+                # cancel_wrapper may short-circuit with a DownloadResult instead of an
+                # ExecutedX dataclass; subclasses also use that protocol to skip finalize
+                # for early-exit cases (e.g. metadata-only video downloads).
                 ctx = DownloadContext.production(download_manager, download_id)
                 with get_db_session(commit=True) as s:
                     prepared = downloader.prepare_download(s, download)
+                    # Subclasses with unavoidable async prep work (e.g. VideoDownloader's
+                    # extract_info / channel resolution) may declare prepare_download as
+                    # `async def`; await the coroutine here.
+                    if asyncio.iscoroutine(prepared):
+                        prepared = await prepared
 
-                if prepared is not None:
-                    # New phase-split path: caller (us) owns transaction boundaries.
-                    coro = downloader.execute_download(prepared, ctx, download=download)
-                    executed = await downloader.cancel_wrapper(coro, download, ctx=ctx)
-                    if isinstance(executed, DownloadResult):
-                        # cancel_wrapper short-circuited with a cancel result.
-                        result = executed
-                    else:
-                        with get_db_session(commit=True) as s:
-                            result = downloader.finalize_download(s, download, executed)
+                coro = downloader.execute_download(prepared, ctx, download=download)
+                executed = await downloader.cancel_wrapper(coro, download, ctx=ctx)
+                if isinstance(executed, DownloadResult):
+                    # cancel_wrapper or execute_download short-circuited with a result.
+                    result = executed
                 else:
-                    # Legacy path.  Subclasses on this path have signature do_download(self, download)
-                    # without ctx, so we must NOT pass ctx as a positional arg.  cancel_wrapper continues
-                    # to use the global download_manager (ctx=None).
-                    if not inspect.iscoroutinefunction(downloader.do_download):
-                        raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
-                    coro = downloader.do_download(download)
-                    result = await downloader.cancel_wrapper(coro, download)
+                    with get_db_session(commit=True) as s:
+                        result = downloader.finalize_download(s, download, executed)
+                        # finalize_download may also be async (same rationale as prepare).
+                        if asyncio.iscoroutine(result):
+                            result = await result
             except BotBlockedDownloadError as e:
                 # Bot detection or invalid cookies - stop all pending downloads from this domain.
                 worker_logger.warning(f'BotBlockedDownloadError for {url}', exc_info=e)
@@ -2048,6 +2039,34 @@ def parse_feed(url: str) -> FeedParserDict:
     return feedparser.parse(url)
 
 
+@dataclass
+class PreparedRSS:
+    """Plan produced by RSSDownloader.prepare_download.
+
+    sub_downloader is the resolved Downloader instance used both for already_downloaded
+    DB queries and to detect the 'video' branch (where URL normalization + duration
+    filtering applies).  Carries the original Download stand-in fields execute and
+    finalize need so neither phase has to reach back to the DB row.
+    """
+    url: str
+    sub_downloader_name: str
+    sub_downloader: 'Downloader'
+    settings: dict
+
+
+@dataclass
+class ExecutedRSS:
+    """Output of RSSDownloader.execute_download.
+
+    candidate_urls is the post-filter, post-duration-check URL list ready for DB dedupe
+    in finalize.  yt_channel_id (when present) lets finalize apply Channel info to the
+    Download row.  error covers feed-parse failures.
+    """
+    yt_channel_id: Optional[str]
+    candidate_urls: List[str]
+    error: Optional[str] = None
+
+
 class RSSDownloader(Downloader):
     """Downloads an RSS feed and creates new downloads for every unique link in the feed."""
     name = 'rss'
@@ -2057,27 +2076,34 @@ class RSSDownloader(Downloader):
     def __repr__(self):
         return '<RSSDownloader>'
 
-    async def do_download(self, download: Download) -> DownloadResult:
+    def prepare_download(self, session: Session, download: Download) -> PreparedRSS:
         sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
         if not sub_downloader:
             raise ValueError(f'Unable to find sub_downloader for {download.url}')
+        return PreparedRSS(
+            url=download.url,
+            sub_downloader_name=download.sub_downloader,
+            sub_downloader=sub_downloader,
+            settings=download.settings or dict(),
+        )
 
-        feed: FeedParserDict = parse_feed(download.url)
+    async def execute_download(self, prepared: PreparedRSS, ctx: 'DownloadContext',
+                               download: Download = None) -> ExecutedRSS:
+        feed: FeedParserDict = parse_feed(prepared.url)
         if feed['bozo'] and not self.acceptable_bozo_errors(feed):
-            # Feed did not parse
-            return DownloadResult(success=False, error='Failed to parse RSS feed')
+            return ExecutedRSS(yt_channel_id=None, candidate_urls=[],
+                               error='Failed to parse RSS feed')
 
         if not isinstance(feed, dict) or not feed.get('entries'):
-            # RSS parsed but does not have entries.
-            return DownloadResult(success=False, error='RSS feed did not have any entries')
+            return ExecutedRSS(yt_channel_id=None, candidate_urls=[],
+                               error='RSS feed did not have any entries')
 
-        # Apply YT channel to the Download, if not already applied.
-        if yt_channel_id := feed.get('feed', dict()).get('yt_channelid'):
-            if not (download.location or download.collection_id):
-                self.apply_yt_channel(download.id, yt_channel_id)
+        yt_channel_id = feed.get('feed', dict()).get('yt_channelid')
 
-        # Filter entries using Download.settings.
-        entries = self.filter_entries(download, feed['entries'])
+        # Filter entries using settings; preserve filter_entries' Download-keyed signature
+        # by passing a stand-in (test_rss.py calls filter_entries directly with a Download).
+        log_stub = Download(url=prepared.url, settings=prepared.settings)
+        entries = self.filter_entries(log_stub, feed['entries'])
 
         # Filter URL links.
         urls = []
@@ -2087,24 +2113,43 @@ class RSSDownloader(Downloader):
             else:
                 logger.warning(f'RSS entry {idx} did not have a link!')
 
-        if download.sub_downloader == 'video':
+        if prepared.sub_downloader_name == 'video':
             # Normalize video URLs before checking if already downloaded.
             # YouTube Shorts URLs (e.g., youtube.com/shorts/ABC123) must be converted to watch URLs
             # (e.g., youtube.com/watch?v=ABC123) to match what is stored in the database.
             from modules.videos.normalize_video_url import normalize_video_url
             urls = [normalize_video_url(i) for i in urls]
+            # Duration filtering performs network I/O (yt-dlp duration probe) — must run
+            # in execute, not finalize.  This may probe URLs that DB-dedupe would have
+            # eliminated; fetch_video_duration is cached, so duplicate probes are cheap.
+            urls = await self.filter_videos(log_stub, urls)
 
-        # Only download new URLs.
-        with get_db_session() as session:
-            urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(session, *urls)]]
-            # Filter out URLs already in the Download table (pending downloads).
+        return ExecutedRSS(yt_channel_id=yt_channel_id, candidate_urls=urls)
+
+    def finalize_download(self, session: Session, download: Download,
+                          executed: ExecutedRSS) -> DownloadResult:
+        if executed.error:
+            return DownloadResult(success=False, error=executed.error)
+
+        # Apply YT channel info to the Download, if not already applied.
+        if executed.yt_channel_id and not (download.location or download.collection_id):
+            self.apply_yt_channel(session, download, executed.yt_channel_id)
+
+        # Resolve sub_downloader via the manager (matches prepare; cheap dict lookup).
+        sub_downloader = download_manager.find_downloader_by_name(download.sub_downloader)
+        urls = executed.candidate_urls
+
+        # DB dedupe: drop URLs already downloaded under this sub_downloader, plus URLs
+        # already queued in the Download table.
+        if sub_downloader and urls:
+            already = sub_downloader.already_downloaded(session, *urls)
+            already_urls = {a.url for a in already}
+            urls = [u for u in urls if u not in already_urls]
             existing_download_urls = {d[0] for d in session.query(Download.url).filter(Download.url.in_(urls))}
-            urls = [url for url in urls if url not in existing_download_urls]
-        # Remove skipped URLs before duration checks. (Typically done after this by the download worker).
-        urls = [i for i in urls if not download_manager.is_skipped(i)]
+            urls = [u for u in urls if u not in existing_download_urls]
 
-        if download.sub_downloader == 'video':  # VideoDownloader
-            urls = await self.filter_videos(download, urls)
+        # Skip-list filter (manager-owned shared_ctx state, not DB).
+        urls = [u for u in urls if not download_manager.is_skipped(u)]
 
         logger.info(f'Successfully got {len(urls)} new URLs from RSS {download.url}')
 
@@ -2123,12 +2168,7 @@ class RSSDownloader(Downloader):
             # Fallback to legacy settings for backwards compatibility
             next_download_settings['destination'] = i
 
-        result = DownloadResult(
-            success=True,
-            downloads=urls,
-            settings=next_download_settings,
-        )
-        return result
+        return DownloadResult(success=True, downloads=urls, settings=next_download_settings)
 
     @staticmethod
     async def filter_videos(download: Download, urls: list[str]) -> list[str]:
@@ -2190,17 +2230,17 @@ class RSSDownloader(Downloader):
         return entries
 
     @staticmethod
-    def apply_yt_channel(download_id: int, yt_channel_id: str):
-        """Get Channel that matches this Download, apply Channel/Collection information to the Download."""
-        with get_db_session() as session:
-            from modules.videos.models import Channel
-            channel = Channel.get_by_source_id(session, f'UC{yt_channel_id}')
-            if channel:
-                download_ = Download.get_by_id(session, download_id)
-                download_.collection = channel.collection
-                download_.collection_id = channel.collection_id
-                download_.location = download_.location or channel.location
-                session.commit()
+    def apply_yt_channel(session: Session, download: Download, yt_channel_id: str):
+        """Apply Channel/Collection information to the given Download row.
+
+        Caller (finalize_download) owns the session and commits.
+        """
+        from modules.videos.models import Channel
+        channel = Channel.get_by_source_id(session, f'UC{yt_channel_id}')
+        if channel:
+            download.collection = channel.collection
+            download.collection_id = channel.collection_id
+            download.location = download.location or channel.location
 
     @staticmethod
     def acceptable_bozo_errors(feed):

@@ -9,9 +9,17 @@ from wrolpi.downloader import Download, DownloadResult, Downloader, DownloadMana
 
 
 class RSSHTTPDownloader(Downloader):
+    """Test fixture: a no-op sub-downloader RSS hands child URLs to."""
     name = 'rss_http'
 
-    async def do_download(self, download: Download) -> DownloadResult:
+    def prepare_download(self, session: Session, download: Download):
+        # Return a non-None sentinel so the dispatch routes to the phase-split path.
+        return object()
+
+    async def execute_download(self, prepared, ctx, download: Download = None):
+        return None
+
+    def finalize_download(self, session: Session, download: Download, executed) -> DownloadResult:
         return DownloadResult(success=True)
 
     def already_downloaded(self, session: Session, *urls: List[str]):
@@ -295,3 +303,180 @@ async def test_rss_downloader_normalizes_skipped_youtube_shorts_urls(test_sessio
     # The new video should be added for download with the normalized URL.
     assert 'https://www.youtube.com/watch?v=NEW456' in download_urls, \
         'New video should be added to downloads with normalized URL'
+
+
+# ---------------------------------------------------------------------------
+# Phase-split unit tests.
+#
+# These exercise prepare_download / execute_download / finalize_download in
+# isolation.  They drive the new code paths directly rather than through the
+# DownloadManager + wait_for_all_downloads polling loop the integration tests
+# above use.
+# ---------------------------------------------------------------------------
+from wrolpi.downloader import ExecutedRSS, PreparedRSS  # noqa: E402
+
+from modules.archive.conftest import make_test_ctx  # noqa: E402
+
+
+def test_prepare_resolves_sub_downloader(test_session, test_download_manager):
+    """prepare_download finds the sub_downloader instance and surfaces settings."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    download = Download(
+        url='https://example.com/feed',
+        downloader='rss',
+        sub_downloader='rss_http',
+        settings={'title_include': 'foo'},
+    )
+
+    prepared = rss_downloader.prepare_download(test_session, download)
+
+    assert isinstance(prepared, PreparedRSS)
+    assert prepared.url == 'https://example.com/feed'
+    assert prepared.sub_downloader_name == 'rss_http'
+    assert prepared.sub_downloader is http_downloader
+    assert prepared.settings == {'title_include': 'foo'}
+
+
+def test_prepare_unknown_sub_downloader_raises(test_session, test_download_manager):
+    """No matching sub_downloader → manager raises InvalidDownload (manager will record
+    the failure as a deferred download).  The unreachable ValueError branch in the legacy
+    code was dead because find_downloader_by_name raises rather than returning None."""
+    from wrolpi.errors import InvalidDownload
+
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+
+    download = Download(
+        url='https://example.com/feed',
+        downloader='rss',
+        sub_downloader='no_such_downloader',
+    )
+
+    with pytest.raises(InvalidDownload, match='Cannot find downloader'):
+        rss_downloader.prepare_download(test_session, download)
+
+
+@pytest.mark.asyncio
+async def test_execute_failed_parse_returns_error(test_session, test_download_manager):
+    """A bozo feed without acceptable errors short-circuits with executed.error."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    prepared = PreparedRSS(
+        url='https://example.com/feed',
+        sub_downloader_name='rss_http',
+        sub_downloader=http_downloader,
+        settings={},
+    )
+
+    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
+        mock_parse_feed.return_value = dict(bozo=1, bozo_exception=Exception('nope'), entries=[])
+        executed = await rss_downloader.execute_download(prepared, make_test_ctx())
+
+    assert executed.candidate_urls == []
+    assert executed.error == 'Failed to parse RSS feed'
+
+
+@pytest.mark.asyncio
+async def test_execute_collects_links_and_yt_channel(test_session, test_download_manager):
+    """A well-formed feed yields candidate_urls plus the yt_channelid for finalize."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    prepared = PreparedRSS(
+        url='https://example.com/feed',
+        sub_downloader_name='rss_http',
+        sub_downloader=http_downloader,
+        settings={},
+    )
+
+    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
+        mock_parse_feed.return_value = dict(
+            bozo=0,
+            feed=dict(yt_channelid='abc123'),
+            entries=[
+                dict(link='https://example.com/a'),
+                dict(link='https://example.com/b'),
+            ],
+        )
+        executed = await rss_downloader.execute_download(prepared, make_test_ctx())
+
+    assert executed.error is None
+    assert executed.yt_channel_id == 'abc123'
+    assert executed.candidate_urls == ['https://example.com/a', 'https://example.com/b']
+
+
+def test_finalize_propagates_executed_error(test_session, test_download_manager):
+    """An executed-phase error becomes a failure DownloadResult."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+
+    download = Download(url='https://example.com/feed', downloader='rss', sub_downloader='rss_http')
+    executed = ExecutedRSS(yt_channel_id=None, candidate_urls=[], error='Failed to parse RSS feed')
+
+    result = rss_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is False
+    assert result.error == 'Failed to parse RSS feed'
+
+
+def test_finalize_dedupes_existing_downloads(test_session, test_download_manager):
+    """URLs already present in the Download table are filtered out before being returned
+    as child downloads."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    # Pre-existing pending download for /a.
+    test_session.add(Download(url='https://example.com/a', downloader='rss_http'))
+    test_session.commit()
+
+    download = Download(
+        url='https://example.com/feed',
+        downloader='rss',
+        sub_downloader='rss_http',
+    )
+    executed = ExecutedRSS(
+        yt_channel_id=None,
+        candidate_urls=['https://example.com/a', 'https://example.com/b', 'https://example.com/c'],
+    )
+
+    result = rss_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is True
+    assert sorted(result.downloads) == ['https://example.com/b', 'https://example.com/c']
+
+
+def test_finalize_passes_destination_from_column(test_session, test_download_manager, test_directory):
+    """Child downloads inherit destination from the RSS row's destination column."""
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+    http_downloader = RSSHTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    dest_path = test_directory / 'archive/custom/path'
+    download = Download(
+        url='https://example.com/feed',
+        downloader='rss',
+        sub_downloader='rss_http',
+        destination=str(dest_path),
+        settings={},
+    )
+    executed = ExecutedRSS(
+        yt_channel_id=None,
+        candidate_urls=['https://example.com/x'],
+    )
+
+    result = rss_downloader.finalize_download(test_session, download, executed)
+
+    assert result.success is True
+    assert result.settings['destination'].endswith('archive/custom/path')

@@ -213,12 +213,14 @@ async def test_channel_download_requires_refresh(
 
     downloaded_urls = []
 
-    async def do_download(_, download):
-        # Track all downloaded URLs.
-        downloaded_urls.append(download.url)
+    async def fake_execute(_, prepared, ctx, download=None):
+        # Track all downloaded URLs and short-circuit by returning a DownloadResult.
+        # Per the dispatch contract (wrolpi/downloader.py: signal_download_download),
+        # if execute_download returns a DownloadResult, finalize_download is skipped.
+        downloaded_urls.append(prepared.url)
         return DownloadResult(success=True)
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download):
+    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download', fake_execute):
         entries = [
             dict(id=vid.source_id, view_count=0, webpage_url='https://example.com/1'),  # Already downloaded.
             dict(id='not downloaded', view_count=0, webpage_url='https://example.com/2'),

@@ -482,7 +482,9 @@ async def test_channel_downloader_rejects_rss_feed_url(test_session, mock_video_
     }
 
     with pytest.raises(UnrecoverableDownloadError):
-        await channel_downloader.do_download(download)
+        # RSS-feed rejection happens in the prepare phase (sync), so we don't even
+        # need to drive execute_download here.
+        channel_downloader.prepare_download(test_session, download)
 
     # No Channel should have been created from the RSS URL.
     assert test_session.query(Channel).count() == 0
@@ -668,9 +670,13 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
 
     mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download:
+    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download:
         mock_video_do_download.return_value = DownloadResult(success=True)  # Don't download the videos.
-        result = await channel_downloader.do_download(download)
+        # Drive the phase-split API directly: prepare → execute → finalize.
+        from modules.archive.conftest import make_test_ctx
+        prepared = channel_downloader.prepare_download(test_session, download)
+        executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+        result = channel_downloader.finalize_download(test_session, download, executed)
     assert result.success is True, 'Download was not successful'
     assert set(result.downloads) == {
         'https://www.youtube.com/watch?v=video_2_url',  # Shorts is converted to regular URL.
@@ -899,11 +905,14 @@ async def test_channel_downloader_sets_collection_id(test_session, channel_facto
     mock_video_extract_info.return_value = mock_info
 
     # Mock Channel.refresh_files and file_worker.wait_for_job to avoid background tasks
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
          mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
         mock_video_do_download.return_value = DownloadResult(success=True)
-        await channel_downloader.do_download(download)
+        from modules.archive.conftest import make_test_ctx
+        prepared = channel_downloader.prepare_download(test_session, download)
+        executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+        channel_downloader.finalize_download(test_session, download, executed)
 
     await await_switches()
 
@@ -947,11 +956,14 @@ async def test_channel_passes_all_inheritable_settings_to_video(test_session, ch
     }
     mock_video_extract_info.return_value = mock_info
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
          mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
         mock_video_do_download.return_value = DownloadResult(success=True)
-        result = await channel_downloader.do_download(download)
+        from modules.archive.conftest import make_test_ctx
+        prepared = channel_downloader.prepare_download(test_session, download)
+        executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+        result = channel_downloader.finalize_download(test_session, download, executed)
 
     # Verify all channel-level inheritable settings are passed through
     for key in ('video_resolutions', 'video_format', 'writesubtitles', 'sleep_requests', 'user_agent'):
@@ -991,11 +1003,14 @@ async def test_channel_does_not_pass_continue_dl_nooverwrites(test_session, chan
     }
     mock_video_extract_info.return_value = mock_info
 
-    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download, \
+    with mock.patch('modules.videos.downloader.VideoDownloader.execute_download') as mock_video_do_download, \
          mock.patch.object(Channel, 'refresh_files', return_value='test-job-id'), \
          mock.patch('modules.videos.downloader.file_worker.wait_for_job', new_callable=mock.AsyncMock):
         mock_video_do_download.return_value = DownloadResult(success=True)
-        result = await channel_downloader.do_download(download)
+        from modules.archive.conftest import make_test_ctx
+        prepared = channel_downloader.prepare_download(test_session, download)
+        executed = await channel_downloader.execute_download(prepared, make_test_ctx(), download=download)
+        result = channel_downloader.finalize_download(test_session, download, executed)
 
     assert 'continue_dl' not in result.settings, 'continue_dl should not be passed to child video downloads'
     assert 'nooverwrites' not in result.settings, 'nooverwrites should not be passed to child video downloads'
@@ -1063,7 +1078,12 @@ async def test_live_video_retry_seconds(test_session, test_directory, mock_video
         mock_prepare_filename.return_value = (simple_channel.directory / 'live video.mp4', {'id': 'foo'})
 
         download = Download(url=url, downloader='video', attempts=0)
-        result = await video_downloader.do_download(download)
+        # Drive the phase-split API directly: when execute_download detects a live video
+        # it short-circuits with a DownloadResult (the dispatch surfaces it verbatim and
+        # skips finalize_download).
+        from modules.archive.conftest import make_test_ctx
+        prepared = video_downloader.prepare_download(test_session, download)
+        result = await video_downloader.execute_download(prepared, make_test_ctx(), download=download)
 
     assert result.success is False
     assert result.retry_seconds == 3600
@@ -1252,3 +1272,70 @@ async def test_channel_download_preserves_skip_list(test_session, test_directory
     once_downloads = video_download_manager.get_once_downloads(test_session)
     video_downloads = [i for i in once_downloads if 'watch' in i.url]
     assert {i.url for i in video_downloads} == {'https://youtube.com/watch?v=video_2_url'}
+
+
+# ---------------------------------------------------------------------------
+# Phase-split unit tests for VideoDownloader.prepare_download.
+#
+# These exercise the sync prep invariants in isolation — no async_client, no
+# extract_info, no subprocess.  Heavier execute/finalize behavior is covered by
+# the integration tests above (which drive through video_download_manager).
+# ---------------------------------------------------------------------------
+from modules.videos.downloader import PreparedVideo  # noqa: E402
+
+
+def test_prepare_max_attempts_raises(test_session):
+    """prepare_download enforces the 10-attempt cap (videos retry more than other
+    downloaders because YouTube transients are common)."""
+    download = Download(url='https://youtube.com/watch?v=foo', downloader='video', attempts=10)
+
+    with pytest.raises(UnrecoverableDownloadError, match='Max download attempts'):
+        video_downloader.prepare_download(test_session, download)
+
+
+def test_prepare_normalizes_url(test_session):
+    """Shorts URLs become watch URLs in the PreparedVideo (matches DB-stored format)."""
+    download = Download(
+        url='https://www.youtube.com/shorts/ABC123',
+        downloader='video',
+        settings={},
+    )
+
+    prepared = video_downloader.prepare_download(test_session, download)
+
+    assert isinstance(prepared, PreparedVideo)
+    assert prepared.url == 'https://www.youtube.com/watch?v=ABC123'
+
+
+def test_prepare_copies_upstream_settings_onto_download(test_session):
+    """ChannelDownloader passes destination + tag_names via settings; prep copies them
+    onto the Download row so downstream code sees them as columns."""
+    download = Download(
+        url='https://youtube.com/watch?v=foo',
+        downloader='video',
+        destination=None,
+        tag_names=None,
+        settings={'destination': '/media/wrolpi/videos/foo', 'tag_names': ['news', 'tech']},
+    )
+
+    prepared = video_downloader.prepare_download(test_session, download)
+
+    assert download.destination == '/media/wrolpi/videos/foo'
+    assert download.tag_names == ['news', 'tech']
+    assert prepared.tag_names == ['news', 'tech']
+
+
+def test_prepare_uses_existing_video_location(test_session, video_factory):
+    """If a Video already exists at the URL, prep captures its location for error
+    attribution (so a failed re-download still tells the user where the previous file is)."""
+    url = 'https://youtube.com/watch?v=existing'
+    existing = video_factory(with_video_file=True)
+    existing.file_group.url = url
+    test_session.commit()
+
+    download = Download(url=url, downloader='video', settings={})
+
+    prepared = video_downloader.prepare_download(test_session, download)
+
+    assert prepared.location == existing.location
+    assert prepared.location is not None

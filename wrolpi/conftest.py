@@ -380,12 +380,13 @@ def assert_downloads(test_session) -> Callable[[List[Dict]], None]:
 
 def make_test_ctx(*, is_cancelled=None, can_download=None,
                   outside_download_window=None, run_command_=None,
-                  download_timeout=None) -> DownloadContext:
+                  download_timeout=None,
+                  report_progress=None, clear_progress=None) -> DownloadContext:
     """Build a DownloadContext suitable for downloader unit tests.
 
     Defaults: never-cancelled, can_download True, no window restriction, real run_command,
-    no global timeout.  Override any callable to simulate cancellation, throttling, or
-    fake subprocess output.
+    no global timeout, progress reporting is a no-op.  Override any callable to simulate
+    cancellation, throttling, fake subprocess output, or to record progress events.
 
     Lives in wrolpi/conftest.py so any test (including primitive tests of process_runner /
     cancel_wrapper) can construct a ctx without crossing module boundaries.
@@ -396,6 +397,8 @@ def make_test_ctx(*, is_cancelled=None, can_download=None,
         outside_download_window=outside_download_window or (lambda: False),
         run_command=run_command_ or run_command,
         download_timeout=download_timeout,
+        report_progress=report_progress or (lambda p: None),
+        clear_progress=clear_progress or (lambda: None),
     )
 
 

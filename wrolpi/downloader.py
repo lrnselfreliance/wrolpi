@@ -99,12 +99,13 @@ def clear_download_progress(download_id: int):
     api_app.shared_ctx.download_manager_data.update(data)
 
 
-def make_progress_callback(download_id: int, parse_fn: callable) -> callable:
-    """Create a stdout callback that parses progress lines and updates shared_ctx.
+def make_progress_callback(report: Callable[[dict], None], parse_fn: callable) -> callable:
+    """Create a stdout callback that parses progress lines and forwards them to `report`.
 
     The callback throttles updates to at most once per second.
 
-    :param download_id: The download ID to update progress for.
+    :param report: A function that takes a progress dict and persists it (production
+        wires this to set_download_progress; tests can pass a no-op or recorder).
     :param parse_fn: A function that takes a line string and returns a progress dict or None.
     """
     last_update = [0.0]
@@ -120,7 +121,7 @@ def make_progress_callback(download_id: int, parse_fn: callable) -> callable:
             progress = parse_fn(segment)
             if progress:
                 last_update[0] = now_
-                set_download_progress(download_id, progress)
+                report(progress)
                 return
 
     return on_stdout
@@ -176,16 +177,28 @@ class DownloadResult:
 class DownloadContext:
     """Per-download seam between DownloadManager and a Downloader.
 
-    Carries cancellation queries, the subprocess runner, and the effective timeout.
-    Production builds these as closures over api_app.shared_ctx and the singleton
-    DownloadManager (see DownloadContext.production); tests construct them directly
-    so a Downloader can run without Sanic's mp stack.
+    Carries cancellation queries, the subprocess runner, progress reporting, the effective
+    timeout, and the yt-dlp metadata fetcher.  Production builds these as closures over
+    api_app.shared_ctx and the singleton DownloadManager (see DownloadContext.production);
+    tests construct them directly so a Downloader can run without Sanic's mp stack.
     """
     is_cancelled: Callable[[], bool]
     can_download: Callable[[], bool]
     outside_download_window: Callable[[], bool]
     run_command: Callable[..., Awaitable[CommandResult]]
     download_timeout: Optional[int]
+    # Progress reporting: report writes a progress dict (parsed from subprocess stdout
+    # by make_progress_callback); clear removes it on completion or cancel.  Production
+    # wires these to api_app.shared_ctx.download_manager_data['download_progress'] so
+    # the API server (potentially a different Sanic worker) can read it.  Tests pass
+    # no-ops or recorders.
+    report_progress: Callable[[dict], None]
+    clear_progress: Callable[[], None]
+    # Optional: yt-dlp metadata fetcher.  Only the videos module wires this; other
+    # downloaders ignore it.  Tests can substitute a fake to bypass network I/O without
+    # patching the module-level extract_info function.  None outside the videos path so
+    # the import isn't forced on every consumer.
+    extract_info: Optional[Callable[..., dict]] = None
 
     @classmethod
     def production(cls, manager: 'DownloadManager', download_id: int) -> 'DownloadContext':
@@ -195,12 +208,23 @@ class DownloadContext:
         Cross-worker cancellation still flows through
         api_app.shared_ctx.download_manager_data['killed_downloads']; this just
         names the seam."""
+        # Lazy import: extract_info lives in modules.videos and doesn't exist when the
+        # videos module is unavailable (e.g. trimmed deployments).  We resolve it at
+        # context-construction time so the import is cheap and only happens once per
+        # download.
+        try:
+            from modules.videos.downloader import extract_info as _extract_info
+        except Exception:
+            _extract_info = None
         return cls(
             is_cancelled=lambda: download_id in api_app.shared_ctx.download_manager_data['killed_downloads'],
             can_download=lambda: manager.can_download,
             outside_download_window=lambda: manager.outside_download_window,
             run_command=run_command,
             download_timeout=get_wrolpi_config().download_timeout or None,
+            report_progress=lambda p: set_download_progress(download_id, p),
+            clear_progress=lambda: clear_download_progress(download_id),
+            extract_info=_extract_info,
         )
 
 
@@ -606,13 +630,13 @@ class Downloader:
                     # the URL redirects to a CDN path that doesn't match the original filename.
                     cmd = (*cmd, '-o', output_path.name)
 
-                on_stdout = make_progress_callback(download.id, parse_aria2c_progress)
+                on_stdout = make_progress_callback(ctx.report_progress, parse_aria2c_progress)
 
                 try:
                     result = await self.process_runner(download, cmd, destination,
                                                        stdout_callback=on_stdout, ctx=ctx)
                 finally:
-                    clear_download_progress(download.id)
+                    ctx.clear_progress()
                 stderr = result.stderr.decode() if getattr(result, 'stderr', None) else ''
                 stdout = result.stdout.decode() if getattr(result, 'stdout', None) else ''
 

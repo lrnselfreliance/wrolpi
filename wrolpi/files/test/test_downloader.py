@@ -144,12 +144,14 @@ async def test_file_downloader_aria2c_uses_output_flag(test_directory):
 
     fake_info = DownloadFileInfo(name='somefile.tar.gz', size=1024, status=200)
 
+    from wrolpi.conftest import make_test_ctx
     with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
-            mock.patch.object(file_downloader, 'process_runner', fake_process_runner), \
-            mock.patch('wrolpi.downloader.clear_download_progress'):
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
         download = mock.MagicMock()
         url = 'https://github.com/user/repo/releases/download/v1.0/somefile.tar.gz'
-        await file_downloader.download_file(download, url, destination)
+        # ctx.clear_progress (no-op in make_test_ctx) replaces the legacy
+        # mock.patch('wrolpi.downloader.clear_download_progress') hack.
+        await file_downloader.download_file(download, url, destination, ctx=make_test_ctx())
 
     # The command should include -o with the expected filename.
     assert '-o' in captured_cmd
@@ -181,13 +183,13 @@ async def test_file_downloader_meta4_no_output_flag(test_directory):
 
     fake_info = DownloadFileInfo(name='somefile.tar.gz', size=1024, status=200)
 
+    from wrolpi.conftest import make_test_ctx
     with mock.patch('wrolpi.downloader.get_download_info', mock.AsyncMock(return_value=fake_info)), \
             mock.patch.object(file_downloader, 'get_meta4_contents', mock.AsyncMock(return_value=b'<metalink/>')), \
-            mock.patch.object(file_downloader, 'process_runner', fake_process_runner), \
-            mock.patch('wrolpi.downloader.clear_download_progress'):
+            mock.patch.object(file_downloader, 'process_runner', fake_process_runner):
         download = mock.MagicMock()
         url = 'https://example.com/somefile.tar.gz'
-        await file_downloader.download_file(download, url, destination)
+        await file_downloader.download_file(download, url, destination, ctx=make_test_ctx())
 
     # When metalink is used, -o should NOT be in the command.
     assert '-o' not in captured_cmd

@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import wrolpi.root_api  # noqa
 from wrolpi import flags
 from wrolpi.api_utils import api_app
-from wrolpi.cmd import CommandResult
+from wrolpi.cmd import CommandResult, run_command
 from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode, timer, TRACE_LEVEL, \
     get_wrolpi_config
 from wrolpi.common import logger, await_background_tasks as await_background_tasks_, BACKGROUND_TASKS
@@ -43,7 +43,7 @@ from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
+from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
@@ -378,16 +378,52 @@ def assert_downloads(test_session) -> Callable[[List[Dict]], None]:
     return asserter
 
 
+def make_test_ctx(*, is_cancelled=None, can_download=None,
+                  outside_download_window=None, run_command_=None,
+                  download_timeout=None) -> DownloadContext:
+    """Build a DownloadContext suitable for downloader unit tests.
+
+    Defaults: never-cancelled, can_download True, no window restriction, real run_command,
+    no global timeout.  Override any callable to simulate cancellation, throttling, or
+    fake subprocess output.
+
+    Lives in wrolpi/conftest.py so any test (including primitive tests of process_runner /
+    cancel_wrapper) can construct a ctx without crossing module boundaries.
+    """
+    return DownloadContext(
+        is_cancelled=is_cancelled or (lambda: False),
+        can_download=can_download or (lambda: True),
+        outside_download_window=outside_download_window or (lambda: False),
+        run_command=run_command_ or run_command,
+        download_timeout=download_timeout,
+    )
+
+
 @pytest.fixture
 def test_downloader(test_download_manager) -> Downloader:
     class TestDownloader(Downloader, ABC):
-        """A testing Downloader"""
+        """A testing Downloader.
+
+        prepare_download returns a non-None sentinel so the manager's phase-split dispatch
+        routes through this subclass.  execute_download is an AsyncMock — tests wire its
+        side_effect via the set_test_* methods.  Returning a DownloadResult from
+        execute_download tells the dispatch to skip finalize (see signal_download_download).
+        """
         name = 'test_downloader'
 
         def __repr__(self):
             return '<TESTING Downloader>'
 
-        do_download = AsyncMock()
+        execute_download = AsyncMock()
+
+        def prepare_download(self, session, download):
+            return object()  # sentinel; activates the phase-split path
+
+        def finalize_download(self, session, download, executed):
+            # execute_download returns a DownloadResult directly, so the dispatch
+            # short-circuits before reaching finalize.  Provided here only to satisfy
+            # the abstract contract.
+            return DownloadResult(success=True)
 
         def set_test_success(self):
             async def _(*a, **kwargs):
@@ -395,7 +431,7 @@ def test_downloader(test_download_manager) -> Downloader:
                 await asyncio.sleep(1)
                 return DownloadResult(success=True)
 
-            self.do_download.side_effect = _
+            self.execute_download.side_effect = _
 
         def set_test_failure(self):
             async def _(*a, **kwargs):
@@ -403,7 +439,7 @@ def test_downloader(test_download_manager) -> Downloader:
                 await asyncio.sleep(1)
                 return DownloadResult(success=False)
 
-            self.do_download.side_effect = _
+            self.execute_download.side_effect = _
 
         def set_test_exception(self, exception: Exception = Exception('Test downloader exception')):
             async def _(*a, **kwargs):
@@ -411,7 +447,7 @@ def test_downloader(test_download_manager) -> Downloader:
                 await asyncio.sleep(1)
                 raise exception
 
-            self.do_download.side_effect = _
+            self.execute_download.side_effect = _
 
         def set_test_unrecoverable_exception(self):
             async def _(*a, **kwargs):
@@ -419,7 +455,7 @@ def test_downloader(test_download_manager) -> Downloader:
                 await asyncio.sleep(1)
                 raise UnrecoverableDownloadError()
 
-            self.do_download.side_effect = _
+            self.execute_download.side_effect = _
 
     test_downloader = TestDownloader()
     # Default to successful download.

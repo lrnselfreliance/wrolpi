@@ -115,6 +115,7 @@ async def test_make_progress_callback(async_client):
 @pytest.mark.asyncio
 async def test_cancel_wrapper_outer_cancellation(test_session, test_download_manager, test_downloader):
     """cancel_wrapper propagates outer CancelledError and cancels the inner task."""
+    from wrolpi.conftest import make_test_ctx
     download = test_download_manager.create_download(test_session, 'https://example.com/cancel', test_downloader.name)
     test_session.commit()
 
@@ -127,7 +128,7 @@ async def test_cancel_wrapper_outer_cancellation(test_session, test_download_man
             inner_cancelled.set()
             raise
 
-    wrapper_task = asyncio.create_task(Downloader.cancel_wrapper(slow_coro(), download))
+    wrapper_task = asyncio.create_task(Downloader.cancel_wrapper(slow_coro(), download, ctx=make_test_ctx()))
     # Give the wrapper time to start polling.
     await asyncio.sleep(0.3)
 
@@ -461,7 +462,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
 
     # Download is processed and successful, no longer "new".
     await test_download_manager.wait_for_all_downloads()
-    test_downloader.do_download.assert_called_once()
+    test_downloader.execute_download.assert_called_once()
     assert list(test_download_manager.get_new_downloads(test_session)) == []
     downloads = list(test_download_manager.get_recurring_downloads(test_session))
     assert len(downloads) == 1
@@ -487,10 +488,10 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.last_successful_download == now_
 
     # Try the download, but it fails.
-    test_downloader.do_download.reset_mock()
+    test_downloader.execute_download.reset_mock()
     test_downloader.set_test_failure()
     await test_download_manager.wait_for_all_downloads()
-    test_downloader.do_download.assert_called_once()
+    test_downloader.execute_download.assert_called_once()
     download = test_session.query(Download).one()
     # Download is deferred, last successful download remains the same.
     assert download.is_deferred, download.status_code
@@ -500,12 +501,12 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.next_download == expected
 
     # Try the download again, it finally succeeds.
-    test_downloader.do_download.reset_mock()
+    test_downloader.execute_download.reset_mock()
     now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1, tzinfo=pytz.UTC))
     test_downloader.set_test_success()
     test_download_manager.renew_recurring_downloads()
     await test_download_manager.wait_for_all_downloads()
-    test_downloader.do_download.assert_called_once()
+    test_downloader.execute_download.assert_called_once()
     download = test_session.query(Download).one()
     assert download.is_complete, download.status_code
     assert download.last_successful_download == now_
@@ -664,31 +665,36 @@ async def test_skip_already_downloaded_disabled(test_session, test_download_mana
 @pytest.mark.asyncio
 async def test_process_runner_timeout(async_client, test_session, test_directory):
     """A Downloader can cancel its download using a timeout."""
+    from wrolpi.conftest import make_test_ctx
     # Default timeout of 3 seconds.
     downloader = Downloader('downloader', timeout=3)
 
     # Sleep for 8 seconds really takes 8 seconds.
     start = datetime.now()
-    await downloader.process_runner(Download(), ('sleep', '8'), test_directory, timeout=10)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory,
+                                    timeout=10, ctx=make_test_ctx())
     elapsed = datetime.now() - start
     assert elapsed.total_seconds() >= 8
 
-    # Download.timeout is obeyed.
+    # Downloader.timeout (class default) is obeyed.
     start = datetime.now()
-    await downloader.process_runner(Download(), ('sleep', '8'), test_directory)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory, ctx=make_test_ctx())
     elapsed = datetime.now() - start
     assert 3 < elapsed.total_seconds() < 5
 
     # One-off timeout is obeyed.
     start = datetime.now()
-    await downloader.process_runner(Download(), ('sleep', '8'), test_directory, timeout=1)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory,
+                                    timeout=1, ctx=make_test_ctx())
     elapsed = datetime.now() - start
     assert 1 < elapsed.total_seconds() < 3
 
-    # Global timeout is obeyed.
-    get_wrolpi_config().download_timeout = 3
+    # ctx.download_timeout takes precedence over class/per-call timeouts.
+    # Production builds ctx.download_timeout from get_wrolpi_config().download_timeout
+    # (see DownloadContext.production); we bake the value directly here.
     start = datetime.now()
-    await downloader.process_runner(Download(), ('sleep', '8'), test_directory)
+    await downloader.process_runner(Download(), ('sleep', '8'), test_directory,
+                                    ctx=make_test_ctx(download_timeout=3))
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 5
 
@@ -707,6 +713,7 @@ exit 123
 
 @pytest.mark.asyncio
 async def test_process_runner_output(async_client, test_directory, test_downloader):
+    from wrolpi.conftest import make_test_ctx
     script = test_directory / 'echo_script.sh'
     script.write_text(GOOD_SCRIPT)
     cmd = ('/bin/bash', script)
@@ -714,7 +721,8 @@ async def test_process_runner_output(async_client, test_directory, test_download
         Download(),
         cmd,
         test_directory,
-        timeout=1
+        timeout=1,
+        ctx=make_test_ctx(),
     )
     assert result.return_code == 0
     assert result.stdout == b'standard output\n'
@@ -726,7 +734,8 @@ async def test_process_runner_output(async_client, test_directory, test_download
         Download(),
         cmd,
         test_directory,
-        timeout=1
+        timeout=1,
+        ctx=make_test_ctx(),
     )
     assert result.return_code == 123
     assert result.stdout == b'bad standard output\n'
@@ -1123,16 +1132,17 @@ async def test_child_downloads_have_parent_download_url(test_session, test_downl
     # Track which URLs have been processed to avoid returning children for child downloads
     processed_urls = set()
 
-    # Configure the test_downloader to return child downloads only for the parent URL
-    async def download_with_children(download, *a, **kwargs):
+    # Configure the test_downloader to return child downloads only for the parent URL.
+    # New signature matches Downloader.execute_download(prepared, ctx, download=...).
+    async def download_with_children(prepared, ctx, *, download=None, **kwargs):
         await asyncio.sleep(0.1)
-        if download.url == parent_url and parent_url not in processed_urls:
+        if download is not None and download.url == parent_url and parent_url not in processed_urls:
             processed_urls.add(parent_url)
             return DownloadResult(success=True, downloads=child_urls)
         # Return success without children for child downloads
         return DownloadResult(success=True)
 
-    test_downloader.do_download.side_effect = download_with_children
+    test_downloader.execute_download.side_effect = download_with_children
 
     # Create the parent download with a sub_downloader specified
     test_download_manager.create_download(test_session, parent_url, test_downloader.name,

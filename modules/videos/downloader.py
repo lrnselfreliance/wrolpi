@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import copy
+import dataclasses
 import json
 import logging
 import os.path
@@ -8,6 +9,7 @@ import re
 import time
 import traceback
 from abc import ABC
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Tuple, List, Dict, Optional
 from urllib.parse import urlparse, parse_qs
@@ -24,7 +26,7 @@ from wrolpi.common import logger, get_media_directory, escape_file_name, resolve
     trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.downloader import Downloader, Download, DownloadResult, \
+from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult, \
     clear_download_progress, _parse_size, make_progress_callback, get_download_cache_config
 from wrolpi.errors import UnrecoverableDownloadError, BotBlockedDownloadError, ValidationError
 from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
@@ -399,6 +401,40 @@ def is_youtube_rss_feed_url(url: str) -> bool:
     return bool(YOUTUBE_RSS_FEED_URL_RE.match(url or ''))
 
 
+@dataclass
+class PreparedChannel:
+    """Plan produced by ChannelDownloader.prepare_download.
+
+    Cheap pre-flight: validates the URL is not an RSS feed, snapshots the settings
+    fields execute and finalize need so they don't have to read back through the
+    Download row.  All real work — yt-dlp metadata fetch, channel resolution, file
+    indexing — happens in execute_download.
+    """
+    url: str
+    settings: dict
+    destination: Optional[str]
+    tag_names: Optional[List[str]]
+
+
+@dataclass
+class ExecutedChannel:
+    """Output of ChannelDownloader.execute_download.
+
+    `info_json` is the resolved yt-dlp metadata; `channel_id` and `collection_id` are
+    the IDs assigned by the channel-resolution helper.  `child_settings` is the dict
+    that will be passed to every child VideoDownloader.  `error` is set when the
+    catalog update raised — finalize converts that into a failure DownloadResult
+    while still mutating the parent Download with sub_downloader/info_json so the
+    next attempt has them.
+    """
+    info_json: Optional[dict]
+    channel_id: Optional[int]
+    collection_id: Optional[int]
+    location: Optional[str]
+    child_settings: dict
+    error: Optional[str] = None
+
+
 class ChannelDownloader(Downloader, ABC):
     """Handles downloading of videos in a Channel or Playlist."""
     name = 'video_channel'
@@ -413,9 +449,7 @@ class ChannelDownloader(Downloader, ABC):
         # A playlist may have an id different from its channel.
         return info['id'] != info.get('channel_id')
 
-    async def do_download(self, download: Download) -> DownloadResult:
-        """Update a Channel's catalog, then schedule downloads of every missing video."""
-        _log_ytdlp_versions()
+    def prepare_download(self, session: Session, download: Download) -> PreparedChannel:
         if is_youtube_rss_feed_url(download.url):
             # yt-dlp returns no `uploader` or `channel_id` for an RSS feed URL, so falling through
             # would create a junk channel named after `webpage_url_basename` ("videos.xml").
@@ -423,8 +457,23 @@ class ChannelDownloader(Downloader, ABC):
                 f'Refusing to handle RSS feed URL with ChannelDownloader: {download.url}.'
                 f' Use the RSS Downloader (sub_downloader=video) instead.'
             )
+        return PreparedChannel(
+            url=download.url,
+            settings=download.settings or dict(),
+            destination=str(download.destination) if download.destination else None,
+            tag_names=download.tag_names,
+        )
+
+    async def execute_download(self, prepared: PreparedChannel, ctx: DownloadContext,
+                               download: Download = None) -> ExecutedChannel:
+        """Fetch the channel/playlist metadata via yt-dlp, get/create the local Channel
+        record, and update its catalog.  Channel creation + catalog update use a
+        short-lived self-managed session so the manager's outer session isn't held
+        during the file_worker await.
+        """
+        _log_ytdlp_versions()
         try:
-            info = extract_info(download.url, process=False)
+            info = extract_info(prepared.url, process=False)
         except Exception as e:
             if _bot_blocked(e):
                 raise BotBlockedDownloadError(str(e)) from e
@@ -434,86 +483,103 @@ class ChannelDownloader(Downloader, ABC):
         entries = info.get('entries')
         if entries and isinstance(entries[0], Dict) and entries[0].get('entries'):
             # Entries contains more channels/playlist, tell the Maintainer to specify the URL.
-            raise UnrecoverableDownloadError(f'Unable to download {download.url} because the URL is ambiguous.'
+            raise UnrecoverableDownloadError(f'Unable to download {prepared.url} because the URL is ambiguous.'
                                              f' Try requesting the videos only:'
                                              f' https://example.com -> https://example.com/videos')
 
-        download_settings = download.settings or dict()
-        channel_tag_name = i[0] if (i := download_settings.get('channel_tag_name')) else None
-
-        download.sub_downloader = video_downloader.name
-        download.info_json = info
-        if session := Session.object_session(download):
-            # May not have a session during testing.
-            session.commit()
-
+        channel_tag_name = i[0] if (i := prepared.settings.get('channel_tag_name')) else None
         name = info.get('uploader') or info.get('webpage_url_basename')
         if not name:
             raise ValueError(f'Could not find name')
         channel_source_id = info.get('channel_id') or info.get('id')
-        channel_url = info.get('channel_url') or info.get('uploader_url') or download.url
-        channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name,
-                                        destination=download.destination)
-        channel.dict()  # get all attributes while we have the session.
+        channel_url = info.get('channel_url') or info.get('uploader_url') or prepared.url
 
-        # Link this channel download to the channel's collection.
-        if channel and channel.collection_id and not download.collection_id:
-            download.collection_id = channel.collection_id
-            if session:
-                session.commit()
+        channel_id = None
+        collection_id = None
+        location = None
+        with get_db_session(commit=True) as session:
+            channel = get_or_create_channel(session, channel_source_id, channel_url, name, channel_tag_name,
+                                            destination=prepared.destination)
+            channel.dict()  # get all attributes while we have the session.
+            if channel and channel.id:
+                channel_id = channel.id
+                collection_id = channel.collection_id
+                location = f'/videos/channel/{channel.id}/video'
 
-        location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
-
-        # The settings to send to the VideoDownloader.
-        settings = dict()
-        if channel:
-            settings.update(dict(collection_id=channel.collection_id, channel_url=download.url))
-        if download.destination:
-            destination = get_absolute_media_path(download.destination)
-            settings['destination'] = str(destination)  # Need str for JSON conversion
-        if download.tag_names:
-            settings['tag_names'] = download.tag_names
+        # The settings to send to the VideoDownloader children.
+        child_settings = dict()
+        if channel_id:
+            child_settings.update(dict(collection_id=collection_id, channel_url=prepared.url))
+        if prepared.destination:
+            destination_abs = get_absolute_media_path(prepared.destination)
+            child_settings['destination'] = str(destination_abs)  # Need str for JSON conversion
+        if prepared.tag_names:
+            child_settings['tag_names'] = prepared.tag_names
         # Pass all channel-level inheritable settings to child video downloads.
         for key in CHANNEL_INHERITABLE_SETTINGS:
-            if key in download_settings:
-                settings[key] = download_settings[key]
+            if key in prepared.settings:
+                child_settings[key] = prepared.settings[key]
 
         is_a_playlist = self.is_a_playlist(info)
         try:
-            if not is_a_playlist:
-                await self.prepare_channel_for_downloads(download, channel)
-            else:
+            if not is_a_playlist and channel_id is not None:
+                await self.prepare_channel_for_downloads(info, channel_id)
+            elif is_a_playlist:
                 logger.debug('Not updating channel because this is a playlist')
-
-            downloads = self.get_missing_videos(session, download)
-            return DownloadResult(
-                success=True,
-                location=location,
-                downloads=downloads,
-                settings=settings,
-            )
         except Exception as e:
             if PYTEST:
                 raise
             kind = 'playlist' if is_a_playlist else 'channel'
-            logger.error(f'Failed to update catalog of {kind} {download.url}', exc_info=e)
-            return DownloadResult(
-                success=False,
-                location=location,
+            logger.error(f'Failed to update catalog of {kind} {prepared.url}', exc_info=e)
+            return ExecutedChannel(
+                info_json=info, channel_id=channel_id, collection_id=collection_id,
+                location=location, child_settings=child_settings,
                 error=str(traceback.format_exc()),
-                settings=settings,
             )
 
+        return ExecutedChannel(
+            info_json=info, channel_id=channel_id, collection_id=collection_id,
+            location=location, child_settings=child_settings,
+        )
+
+    def finalize_download(self, session: Session, download: Download,
+                          executed: ExecutedChannel) -> DownloadResult:
+        """Mutate the parent Download (sub_downloader / info_json / collection_id) and
+        return the list of missing video URLs as child downloads."""
+        download.sub_downloader = video_downloader.name
+        download.info_json = executed.info_json
+        if executed.collection_id and not download.collection_id:
+            download.collection_id = executed.collection_id
+
+        if executed.error:
+            return DownloadResult(
+                success=False,
+                location=executed.location,
+                error=executed.error,
+                settings=executed.child_settings,
+            )
+
+        downloads = self.get_missing_videos(session, download)
+        return DownloadResult(
+            success=True,
+            location=executed.location,
+            downloads=downloads,
+            settings=executed.child_settings,
+        )
+
     @classmethod
-    async def prepare_channel_for_downloads(cls, download: Download, channel: Channel):
-        """Update the Channel's video catalog.  Refresh the Channel's files if necessary."""
-        logger.debug(f'Preparing {channel} for downloads')
-        channel_id = channel.id
+    async def prepare_channel_for_downloads(cls, info_json: dict, channel_id: int):
+        """Update the Channel's video catalog.  Refresh the Channel's files if necessary.
 
-        update_channel_catalog(channel, download.info_json)
-
+        Takes channel_id (not Channel) and info_json (not Download) so the caller doesn't
+        have to hold the manager's session open while we await the file_worker job.
+        """
         with get_db_session() as session:
             channel = get_channel(session, channel_id=channel_id, return_dict=False)
+            logger.debug(f'Preparing {channel} for downloads')
+
+            update_channel_catalog(channel, info_json)
+
             if not channel.videos or not channel.refreshed:
                 logger.warning(f'Refreshing videos in {channel.directory} for channel {channel}')
                 job_id = channel.refresh_files(channel.id, send_events=False)
@@ -589,6 +655,42 @@ class ChannelDownloader(Downloader, ABC):
         return downloads
 
 
+@dataclass
+class PreparedVideo:
+    """Plan produced by VideoDownloader.prepare_download.
+
+    `info_json` is None unless the upstream download row already has it (e.g. set by
+    ChannelDownloader before queuing this child).  `location` is the existing
+    Video.location if any, used for error attribution if the new download fails.
+    """
+    url: str                                   # normalized
+    settings: dict
+    tag_names: List[str] = field(default_factory=list)
+    destination: Optional[pathlib.Path] = None
+    info_json: Optional[dict] = None
+    location: Optional[str] = None             # existing video, for error reports
+
+
+@dataclass
+class ExecutedVideo:
+    """Output of VideoDownloader.execute_download once the file is on disk and validated.
+
+    Carries everything finalize_download needs to persist the Video record without
+    re-running any I/O.  When the metadata-only flow runs, execute returns a
+    DownloadResult directly and the dispatch skips finalize_download entirely.
+    """
+    url: str                                   # normalized
+    video_path: pathlib.Path
+    video_paths: List[pathlib.Path]            # all files in the FileGroup, post-glob+normalize
+    info_json: dict
+    entry: dict
+    channel_id: Optional[int]
+    audio_only: bool
+    tag_names: List[str]
+    settings: dict
+    location: Optional[str]                    # for error reporting
+
+
 class VideoDownloader(Downloader, ABC):
     """Downloads a single video.
 
@@ -608,84 +710,126 @@ class VideoDownloader(Downloader, ABC):
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'video'))
         return file_groups
 
-    async def do_download(self, download: Download) -> DownloadResult:
+    def prepare_download(self, session: Session, download: Download) -> PreparedVideo:
+        """Sync prep: validate attempts cap, normalize URL, copy upstream-provided settings
+        onto the Download row, and look up any pre-existing Video for error attribution.
+
+        Holding the session here is brief: no network or subprocess work runs in this
+        phase.  extract_info and channel resolution move to execute_download.
+        """
+        if (download.attempts or 0) >= 10:
+            raise UnrecoverableDownloadError('Max download attempts reached')
+
+        url = normalize_video_url(download.url)
+
+        # ChannelDownloader passes destination/tag_names via settings; copy onto the row
+        # so the rest of the flow can read them off the Download object as before.
+        settings = download.settings or dict()
+        download.destination = download.destination or settings.get('destination')
+        tag_names = download.tag_names = download.tag_names or settings.get('tag_names') or []
+
+        # If a Video already exists at this URL, capture its location so a failure later
+        # can still tell the user where the previous attempt landed.
+        existing = Video.get_by_url(session, url)
+        location = existing.location if existing else None
+
+        return PreparedVideo(
+            url=url,
+            settings=settings,
+            tag_names=list(tag_names),
+            destination=download.destination,
+            info_json=download.info_json,
+            location=location,
+        )
+
+    async def execute_download(self, prepared: PreparedVideo, ctx: DownloadContext,
+                               download: Download = None):
+        """Async I/O phase: extract_info, channel resolution (brief session),
+        yt-dlp subprocess, file resolution, ffmpeg validation, sibling file globbing.
+
+        Returns either an ExecutedVideo (file is on disk; finalize persists) or a
+        DownloadResult (an early-exit case the dispatch will surface verbatim — used
+        for the metadata-only refresh flow and recoverable failures like a missing
+        file or incomplete stream).
+        """
         _log_ytdlp_versions()
-        with get_db_session() as session:
-            if download.attempts >= 10:
-                raise UnrecoverableDownloadError('Max download attempts reached')
+        url = prepared.url
+        settings = prepared.settings
+        location = prepared.location
 
-            url = normalize_video_url(download.url)
-
-            # Copy settings into Download (they may be from the ChannelDownloader)
-            settings = download.settings or dict()
-            download.destination = download.destination or settings.get('destination')
-            tag_names = download.tag_names = download.tag_names or settings.get('tag_names')
-
-            # Video may have been downloaded previously, get its location for error reporting.
-            video_ = Video.get_by_url(session, url)
-            location = video_.location if video_ else None
-
+        # extract_info is sync but expensive; legacy held a session across it.  We don't.
+        info_json = prepared.info_json
+        if not info_json:
             try:
-                download.info_json = download.info_json or extract_info(url)
+                info_json = extract_info(url)
             except yt_dlp.utils.DownloadError as e:
                 if _bot_blocked(e):
                     raise BotBlockedDownloadError(str(e)) from e
-                # Video may be private.
+                # Video may be private — surface as a recoverable failure.
                 try:
                     raise RuntimeError('Failed to extract_info') from e
-                except Exception as e:
+                except Exception as e2:
                     return DownloadResult(
                         success=False,
                         location=location,
-                        error='\n'.join(traceback.format_exception(e)),
+                        error='\n'.join(traceback.format_exception(e2)),
                     )
 
-            if not download.info_json:
-                raise ValueError(f'Cannot download video with no info_json.')
+        if not info_json:
+            raise ValueError(f'Cannot download video with no info_json.')
 
-            channel = await self._get_channel(session, download)
+        # Brief session for channel resolution.  _get_channel reads info_json (already
+        # populated above) and may create a Channel record.
+        download_for_channel = download if download is not None else Download(
+            url=url, settings=settings, destination=prepared.destination,
+        )
+        download_for_channel.info_json = info_json
+        with get_db_session(commit=True) as session:
+            channel = await self._get_channel(session, download_for_channel)
             channel_id = channel.id if channel else None
-            destination = download.destination
+            channel_directory = channel.directory if channel else None
 
-            if destination:
-                # Download to the directory specified in the settings.
-                out_dir = destination
-                logger.debug(f'Downloading {url} to destination {destination} from settings')
-            elif channel:
-                out_dir = channel.directory
-                logger.debug(f'Downloading {url} to channel directory: {channel.directory}')
-            else:
-                # Download to the default directory if this video has no channel.
-                out_dir = get_no_channel_directory()
-                logger.debug(f'Downloading {url} to default directory')
+        if prepared.destination:
+            out_dir = prepared.destination
+            logger.debug(f'Downloading {url} to destination {prepared.destination} from settings')
+        elif channel_directory:
+            out_dir = channel_directory
+            logger.debug(f'Downloading {url} to channel directory: {channel_directory}')
+        else:
+            out_dir = get_no_channel_directory()
+            logger.debug(f'Downloading {url} to default directory')
+        out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
+        out_dir = get_absolute_media_path(out_dir)
+        out_dir.mkdir(exist_ok=True, parents=True)
 
-            # Make output directory.  (Maybe string from settings)
-            out_dir = out_dir if isinstance(out_dir, pathlib.Path) else pathlib.Path(out_dir)
-            out_dir = get_absolute_media_path(out_dir)
-            out_dir.mkdir(exist_ok=True, parents=True)
-
-            if tag_names and logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f'Downloading {url} with {tag_names=}')
+        if prepared.tag_names and logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Downloading {url} with tag_names={prepared.tag_names}')
 
         effective = get_effective_video_settings(settings)
         audio_only = effective.get('audio_only', False)
         audio_format = effective.get('audio_format', 'mp3')
 
-        logs = None  # noqa
+        # download_for_log carries .id (for progress) and .url (for log messages).
+        # Falling back to a stub keeps unit tests viable.
+        download_for_log = download if download is not None else Download(url=url)
+
         try:
             video_resolutions = effective['video_resolutions']
-            # yt-dlp expects a string like so: 299+140,298+140,bestvideo*+bestaudio/best
             video_resolutions_str = ','.join(j for i in video_resolutions for j in VIDEO_RESOLUTION_MAP[i])
-
             video_format = effective['video_format']
             video_path, entry = self.prepare_filename(url, out_dir, video_resolutions_str, video_format,
                                                       audio_only=audio_only, audio_format=audio_format)
 
             if settings.get('download_metadata_only'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
-                return await self.download_info_json(download, video_path)
+                # download_info_json manages its own DB sessions; we surface its DownloadResult
+                # directly and the dispatch skips finalize_download.
+                download_for_metadata = download if download is not None else Download(
+                    url=url, settings=settings,
+                )
+                download_for_metadata.info_json = info_json
+                return await self.download_info_json(download_for_metadata, video_path)
 
-            # Common yt-dlp flags shared by both video and audio-only downloads.
             cmd = (
                 str(YT_DLP_BIN),
                 '--match-filter', '!is_live',
@@ -719,27 +863,26 @@ class VideoDownloader(Downloader, ABC):
             if effective['sleep_requests'] > 0:
                 cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
 
-            on_stdout = make_progress_callback(download.id, parse_ytdlp_progress)
+            on_stdout = make_progress_callback(download_for_log.id, parse_ytdlp_progress)
 
             try:
                 if cookies_unlocked():
-                    # Use encrypted cookies file
                     logger.info(f'Using encrypted cookies for video download: {url}')
                     with cookies_for_download() as cookies_path:
                         cmd = (*cmd, '--cookies', str(cookies_path))
                         if effective['user_agent']:
                             cmd = (*cmd, '--add-headers', f'User-Agent:{effective["user_agent"]}')
                         cmd = (*cmd, '-o', video_path, url)
-                        result = await self.process_runner(download, cmd, out_dir, debug=True,
-                                                          stdout_callback=on_stdout)
+                        result = await self.process_runner(download_for_log, cmd, out_dir, debug=True,
+                                                           stdout_callback=on_stdout, ctx=ctx)
                 else:
-                    # No cookies available
                     logger.info(f'No cookies available for video download: {url}')
                     cmd = (*cmd, '-o', video_path, url)
-                    result = await self.process_runner(download, cmd, out_dir, debug=True,
-                                                      stdout_callback=on_stdout)
+                    result = await self.process_runner(download_for_log, cmd, out_dir, debug=True,
+                                                       stdout_callback=on_stdout, ctx=ctx)
             finally:
-                clear_download_progress(download.id)
+                clear_download_progress(download_for_log.id)
+
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()
 
@@ -747,36 +890,27 @@ class VideoDownloader(Downloader, ABC):
                 error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {result.return_code}'
                 if _bot_blocked(error):
                     raise BotBlockedDownloadError(f'Bot detection or invalid cookies: {error}')
-                return DownloadResult(
-                    success=False,
-                    error=error,
-                    location=location,
-                )
+                return DownloadResult(success=False, error=error, location=location)
 
             output_format = audio_output_extension(audio_format) if audio_only else video_format
             preferred_path = video_path.with_suffix(f'.{output_format}')
             if not video_path.is_file() and preferred_path.is_file():
-                # Prepared filename does not exist, but file with preferred extension does, it was probably
-                # remuxed/converted by yt-dlp.
                 video_path = preferred_path
                 logger.info(f'Using preferred file which exists: {preferred_path}')
 
             if not video_path.is_file():
-                # yt-dlp may have appended the real extension to a bogus one (e.g. .NA.mp4 from a playlist entry).
+                # yt-dlp may have appended the real extension to a bogus one.
                 appended_path = video_path.parent / f'{video_path.name}.{output_format}'
                 if appended_path.is_file():
                     video_path = appended_path
                     logger.info(f'Using file with appended extension: {appended_path}')
 
             if video_path.suffix == '.part':
-                return DownloadResult(
-                    success=False,
-                    error=f'Video file that completed was a .part file: {video_path}',
-                )
+                return DownloadResult(success=False,
+                                      error=f'Video file that completed was a .part file: {video_path}')
 
             if not video_path.is_file():
-                error = f'{stdout}\n\n\n{stderr}\n\n' \
-                        f'Video file could not be found!  {video_path}'
+                error = f'{stdout}\n\n\n{stderr}\n\nVideo file could not be found!  {video_path}'
                 retry_seconds = None
                 if '!is_live' in stdout:
                     error = f'{stdout}\n\nVideo was live and did not finish downloading.'
@@ -784,82 +918,29 @@ class VideoDownloader(Downloader, ABC):
                 if ' live event ' in stdout:
                     error = f'{stdout}\n\nVideo will be live and did not finish downloading.'
                     retry_seconds = 3600
-                return DownloadResult(
-                    success=False,
-                    error=error,
-                    location=location,
-                    retry_seconds=retry_seconds,
-                )
+                return DownloadResult(success=False, error=error, location=location,
+                                      retry_seconds=retry_seconds)
 
             if not audio_only and not ffmpeg_video_complete(video_path):
-                return DownloadResult(
-                    success=False,
-                    error='Video was incomplete',
-                    location=location,
-                )
+                return DownloadResult(success=False, error='Video was incomplete', location=location)
 
-            with get_db_session(commit=True) as session:
-                # Find any files downloaded with the video (poster, caption, etc.).
-                video_paths = glob_shared_stem(video_path)
-                # Delete any leftover part files now that we have verified the video is complete.
-                video_paths = self._delete_part_files(video_path, video_paths)
-                # Rename any special files that do not match the stem.
-                video_paths = self.normalize_video_file_names(video_path, video_paths)
-                # Create the Video record.
-                video = Video.from_paths(session, *video_paths)
-                video.source_id = entry['id']
-                video.channel_id = channel_id
-                video_id, video_info_json_path = video.id, video.info_json_path
-                if video_info_json_path and (new_info_json := video.clean_info_json()):
-                    video.replace_info_json(new_info_json, clean=False)
+            # File is on disk and complete.  Glob siblings, drop part files, normalize names.
+            video_paths = glob_shared_stem(video_path)
+            video_paths = self._delete_part_files(video_path, video_paths)
+            video_paths = self.normalize_video_file_names(video_path, video_paths)
 
-                if parent_download_url := settings.get('parent_download_url'):
-                    try:
-                        video.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
-                    except ValueError as e:
-                        logger.warning(f'Failed to update wrolpi json for {video}: {e}')
-
-                # Update channel's collection's file_format to track the format used
-                if channel_id:
-                    from modules.videos.models import Channel
-                    from modules.videos.lib import save_channels_config
-                    channel_obj = session.query(Channel).get(channel_id)
-                    if channel_obj and channel_obj.collection and not channel_obj.collection.file_format:
-                        video_config = get_videos_downloader_config()
-                        channel_obj.collection.file_format = video_config.file_name_format
-                        save_channels_config.activate_switch()
-
-                session.commit()
-
-            with get_db_session(commit=True) as session:
-                # Second session is started because SQLAlchemy will forget what we have done.
-                video = Video.get_by_id(session, video_id)
-                if tag_names:
-                    existing_names = video.file_group.tag_names
-                    for name in tag_names:
-                        if name not in existing_names:
-                            video.add_tag(session, name)
-                location = video.location
-
-                await video.get_ffprobe_json()
-
-                # Check that the download has the expected streams.
-                if not audio_only and not video.get_streams_by_codec_type('video'):
-                    return DownloadResult(
-                        success=False,
-                        error='Video was downloaded but did not contain video stream',
-                        location=location,
-                    )
-                if not video.get_streams_by_codec_type('audio'):
-                    return DownloadResult(
-                        success=False,
-                        error='Download did not contain audio stream',
-                        location=location,
-                    )
-                logger.info(f'Successfully downloaded video {url} {video}')
-
-            with get_db_session(commit=True) as session:
-                await Video.delete_duplicate_videos(session, download.url, entry['id'], video_path)
+            return ExecutedVideo(
+                url=url,
+                video_path=video_path,
+                video_paths=video_paths,
+                info_json=info_json,
+                entry=entry,
+                channel_id=channel_id,
+                audio_only=audio_only,
+                tag_names=prepared.tag_names,
+                settings=settings,
+                location=location,
+            )
 
         except BotBlockedDownloadError:
             raise
@@ -874,30 +955,73 @@ class VideoDownloader(Downloader, ABC):
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 try:
-                    source_id = download.info_json.get('id')
+                    source_id = (info_json or {}).get('id')
                     logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                    f'attempt to download it again.')
-                    download.add_to_skip_list()
+                    if download is not None:
+                        download.add_to_skip_list()
                 except Exception:
-                    # Could not skip this video, it may not have a channel.
                     logger.warning(f'Could not skip video {url}')
-
-                # Skipped downloads should not be tried again.
                 raise UnrecoverableDownloadError() from e
-            # Download did not succeed, try again later.
-            if logs and (stderr := logs.get('stderr')):
-                error = f'{stderr}\n\n{traceback.format_exc()}'
-            else:
-                error = str(traceback.format_exc())
-            return DownloadResult(success=False, error=error, location=location)
+            return DownloadResult(success=False, error=str(traceback.format_exc()), location=location)
 
-        logger.debug(f'Downloaded video {location=}')
+    async def finalize_download(self, session: Session, download: Download,
+                                executed: ExecutedVideo) -> DownloadResult:
+        """Async DB-bound persistence: create the Video record, normalize info_json,
+        update the channel's collection format, apply tags, run ffprobe, validate
+        streams, and dedupe.  Caller commits.
+        """
+        # Create the Video record.
+        video = Video.from_paths(session, *executed.video_paths)
+        video.source_id = executed.entry['id']
+        video.channel_id = executed.channel_id
+        if video.info_json_path and (new_info_json := video.clean_info_json()):
+            video.replace_info_json(new_info_json, clean=False)
 
-        result = DownloadResult(
-            success=True,
-            location=location,
-        )
-        return result
+        if parent_download_url := executed.settings.get('parent_download_url'):
+            try:
+                video.file_group.update_wrolpi_json({'parent_download_url': parent_download_url})
+            except ValueError as e:
+                logger.warning(f'Failed to update wrolpi json for {video}: {e}')
+
+        # Update channel's collection's file_format to track the format used.
+        if executed.channel_id:
+            from modules.videos.lib import save_channels_config
+            channel_obj = session.query(Channel).get(executed.channel_id)
+            if channel_obj and channel_obj.collection and not channel_obj.collection.file_format:
+                video_config = get_videos_downloader_config()
+                channel_obj.collection.file_format = video_config.file_name_format
+                save_channels_config.activate_switch()
+
+        # Apply tags now that the file_group is bound to the session.
+        if executed.tag_names:
+            existing_names = video.file_group.tag_names
+            for name in executed.tag_names:
+                if name not in existing_names:
+                    video.add_tag(session, name)
+
+        location = video.location
+
+        # ffprobe runs the ffprobe subprocess (may persist .ffprobe.json on disk).
+        await video.get_ffprobe_json()
+
+        if not executed.audio_only and not video.get_streams_by_codec_type('video'):
+            return DownloadResult(success=False,
+                                  error='Video was downloaded but did not contain video stream',
+                                  location=location)
+        if not video.get_streams_by_codec_type('audio'):
+            return DownloadResult(success=False,
+                                  error='Download did not contain audio stream',
+                                  location=location)
+
+        logger.info(f'Successfully downloaded video {executed.url} {video}')
+
+        # Delete duplicate Videos that share the URL or source_id.  Runs against the same
+        # session as the new Video record so deletion is atomic with creation.
+        await Video.delete_duplicate_videos(session, download.url, executed.entry['id'],
+                                            executed.video_path)
+
+        return DownloadResult(success=True, location=location)
 
     @staticmethod
     async def _get_channel(session: Session, download: Download) -> Optional[Channel]:

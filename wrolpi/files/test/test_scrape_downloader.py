@@ -53,7 +53,7 @@ async def test_scrape_html_downloader(test_directory, test_session, test_downloa
     assert_download_urls(['https://example.com/dir', ])
 
     with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
-            mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
+            mock.patch('wrolpi.files.downloader.FileDownloader.execute_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
         await await_switches()
 
@@ -77,7 +77,7 @@ async def test_scrape_html_downloader_html(test_directory, test_session, test_do
     assert_download_urls(['https://example.com/dir', ])
 
     with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', fake_fetch_html), \
-            mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
+            mock.patch('wrolpi.files.downloader.FileDownloader.execute_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
         await await_switches()
 

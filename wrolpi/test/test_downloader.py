@@ -62,7 +62,13 @@ def test_parse_aria2c_progress_not_progress_line():
 
 @pytest.mark.asyncio
 async def test_set_and_clear_download_progress(async_client):
-    """set_download_progress stores progress in shared_ctx and clear_download_progress removes it."""
+    """set_download_progress stores progress in shared_ctx and clear_download_progress removes it.
+
+    The two functions are the production wiring for ctx.report_progress / ctx.clear_progress;
+    this test asserts they actually move state through shared_ctx so the API server can
+    read it cross-worker.  async_client is required because shared_ctx itself only exists
+    when the Sanic app is initialised.
+    """
     from wrolpi.api_utils import api_app
     # No progress initially.
     data = dict(api_app.shared_ctx.download_manager_data)
@@ -80,36 +86,40 @@ async def test_set_and_clear_download_progress(async_client):
     assert 42 not in data.get('download_progress', {})
 
 
-@pytest.mark.asyncio
-async def test_make_progress_callback(async_client):
-    """make_progress_callback creates a callback that throttles and updates shared_ctx."""
-    from wrolpi.api_utils import api_app
+def test_make_progress_callback():
+    """make_progress_callback throttles and forwards parsed progress to its `report` callable.
+
+    Pure-logic test — no Sanic, no shared_ctx.  We pass a list-append closure as `report`
+    and assert what landed in it.
+    """
+    reported = []
 
     def fake_parse(line):
         if 'progress' in line:
             return dict(percent=50)
         return None
 
-    callback = make_progress_callback(99, fake_parse)
+    callback = make_progress_callback(reported.append, fake_parse)
 
     # Non-matching line does nothing.
     callback('some other line')
-    data = dict(api_app.shared_ctx.download_manager_data)
-    assert 99 not in data.get('download_progress', {})
+    assert reported == []
 
-    # Matching line updates shared_ctx.
+    # Matching line invokes `report`.
     with mock.patch('wrolpi.downloader.time') as mock_time:
         mock_time.monotonic.return_value = 100.0
         callback('progress line')
-        data = dict(api_app.shared_ctx.download_manager_data)
-        assert data['download_progress'][99] == dict(percent=50)
+        assert reported == [dict(percent=50)]
 
-        # A call within 1 second is throttled (uses a different progress value to verify).
+        # A call within 1 second is throttled.
         mock_time.monotonic.return_value = 100.5
-        callback('progress line')  # Would update, but throttled.
+        callback('progress line')
+        assert reported == [dict(percent=50)]  # unchanged — throttle held
 
-    # Clean up.
-    clear_download_progress(99)
+        # After the throttle window passes, the next matching line is reported.
+        mock_time.monotonic.return_value = 102.0
+        callback('progress line')
+        assert reported == [dict(percent=50), dict(percent=50)]
 
 
 @pytest.mark.asyncio

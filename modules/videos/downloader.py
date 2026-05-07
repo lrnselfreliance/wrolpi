@@ -472,8 +472,11 @@ class ChannelDownloader(Downloader, ABC):
         during the file_worker await.
         """
         _log_ytdlp_versions()
+        # Prefer ctx.extract_info when provided so tests can inject a fake without
+        # patching the module-level function.  Falls back to the global for back-compat.
+        _extract = ctx.extract_info if ctx.extract_info else extract_info
         try:
-            info = extract_info(prepared.url, process=False)
+            info = _extract(prepared.url, process=False)
         except Exception as e:
             if _bot_blocked(e):
                 raise BotBlockedDownloadError(str(e)) from e
@@ -758,10 +761,12 @@ class VideoDownloader(Downloader, ABC):
         location = prepared.location
 
         # extract_info is sync but expensive; legacy held a session across it.  We don't.
+        # Prefer ctx.extract_info for testability; fall back to the module global.
+        _extract = ctx.extract_info if ctx.extract_info else extract_info
         info_json = prepared.info_json
         if not info_json:
             try:
-                info_json = extract_info(url)
+                info_json = _extract(url)
             except yt_dlp.utils.DownloadError as e:
                 if _bot_blocked(e):
                     raise BotBlockedDownloadError(str(e)) from e
@@ -863,7 +868,7 @@ class VideoDownloader(Downloader, ABC):
             if effective['sleep_requests'] > 0:
                 cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
 
-            on_stdout = make_progress_callback(download_for_log.id, parse_ytdlp_progress)
+            on_stdout = make_progress_callback(ctx.report_progress, parse_ytdlp_progress)
 
             try:
                 if cookies_unlocked():
@@ -881,7 +886,7 @@ class VideoDownloader(Downloader, ABC):
                     result = await self.process_runner(download_for_log, cmd, out_dir, debug=True,
                                                        stdout_callback=on_stdout, ctx=ctx)
             finally:
-                clear_download_progress(download_for_log.id)
+                ctx.clear_progress()
 
             stdout = result.stdout.decode()
             stderr = result.stderr.decode()

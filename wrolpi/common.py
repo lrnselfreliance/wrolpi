@@ -810,6 +810,7 @@ class WROLPiConfigValidator:
     map_destination: str = None
     nav_color: str = None
     require_cookies_unlocked: bool = None
+    require_media_mounted: bool = None
     save_ffprobe_json: bool = None
     tags_directory: bool = None
     throttle_on_startup: bool = None
@@ -989,6 +990,7 @@ class WROLPiConfig(ConfigFile):
         map_destination='map',
         nav_color='violet',
         require_cookies_unlocked=True,
+        require_media_mounted=True,
         save_ffprobe_json=True,
         tags_directory=True,
         throttle_on_startup=False,
@@ -1057,6 +1059,14 @@ class WROLPiConfig(ConfigFile):
     @require_cookies_unlocked.setter
     def require_cookies_unlocked(self, value: bool):
         self.update({'require_cookies_unlocked': value})
+
+    @property
+    def require_media_mounted(self) -> bool:
+        return self._config.get('require_media_mounted', True)
+
+    @require_media_mounted.setter
+    def require_media_mounted(self, value: bool):
+        self.update({'require_media_mounted': value})
 
     @property
     def download_timeout(self) -> int:

@@ -1,8 +1,8 @@
 import React from 'react';
 import {render, screen} from '@testing-library/react';
 import {MemoryRouter} from 'react-router';
-import {Getters} from './DashboardPage';
-import {StatusContext, ThemeContext} from './contexts/contexts';
+import {Getters, FlagsMessages} from './DashboardPage';
+import {SettingsContext, StatusContext, ThemeContext} from './contexts/contexts';
 
 // Replace DownloadMenu with a stub that records its props. The deep-link
 // behavior under test is just "Getters reads URL params and forwards them
@@ -76,3 +76,35 @@ describe('DashboardPage Getters deep-link', () => {
 // newlines into the `download` prop's `urls` field) is exercised in the
 // browser via manual verification, not unit-tested here — reaching into the
 // per-form trees pulls in heavy fetch-driven components.
+
+function renderFlagsMessages({flags = {}, settings = {}} = {}) {
+    const status = {flags: {refresh_complete: true, db_up: true, have_internet: true, ...flags}};
+    return render(
+        <MemoryRouter>
+            <SettingsContext.Provider value={{settings, fetchSettings: () => {}}}>
+                <StatusContext.Provider value={{status}}>
+                    <FlagsMessages/>
+                </StatusContext.Provider>
+            </SettingsContext.Provider>
+        </MemoryRouter>
+    );
+}
+
+describe('DashboardPage no-drive-mounted banner', () => {
+    it('shows the banner when media_mounted is false', () => {
+        renderFlagsMessages({flags: {media_mounted: false}});
+        expect(screen.getByText(/No drive mounted/i)).toBeInTheDocument();
+        const link = screen.getByText(/Open the Controller/i);
+        expect(link).toHaveAttribute('href', '/admin/controller');
+    });
+
+    it('hides the banner when media_mounted is true', () => {
+        renderFlagsMessages({flags: {media_mounted: true}});
+        expect(screen.queryByText(/No drive mounted/i)).toBeNull();
+    });
+
+    it('hides the banner when media_mounted is undefined (status not yet loaded)', () => {
+        renderFlagsMessages();
+        expect(screen.queryByText(/No drive mounted/i)).toBeNull();
+    });
+});

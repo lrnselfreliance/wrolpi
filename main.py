@@ -347,6 +347,19 @@ async def perpetual_have_internet_worker():
 
 
 @perpetual_signal(sleep=30)
+async def perpetual_media_mounted_worker():
+    try:
+        if flags._destinations_have_mounted_storage():
+            flags.media_mounted.set()
+            # Re-check less often once all destinations are covered.
+            await asyncio.sleep(float(Seconds.minute * 5))
+        else:
+            flags.media_mounted.clear()
+    except Exception as e:
+        logger.error('Failed to check media mount status', exc_info=e)
+
+
+@perpetual_signal(sleep=30)
 async def perpetual_start_video_missing_comments_download():
     from modules.videos.video.lib import get_missing_videos_comments
 

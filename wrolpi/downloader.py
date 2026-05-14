@@ -768,6 +768,10 @@ class DownloadManager:
         if wrol_mode_enabled():
             # Do not download with WROL Mode enabled.
             return False
+        if get_wrolpi_config().require_media_mounted \
+                and not flags.media_mounted.is_set():
+            # No mounted drive backs every destination; refuse to fill the root disk.
+            return False
         if get_wrolpi_config().require_cookies_unlocked \
                 and flags.cookies_exist.is_set() \
                 and not flags.cookies_unlocked.is_set():

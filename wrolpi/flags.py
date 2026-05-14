@@ -3,10 +3,12 @@ import contextlib
 import multiprocessing
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Column, Boolean, Integer
 
-from wrolpi.common import logger, Base
+from wrolpi.common import logger, Base, get_media_directory, get_wrolpi_config
+from wrolpi.vars import DOCKERIZED
 
 __all__ = [
     'get_flags',
@@ -110,6 +112,9 @@ db_up = Flag('db_up')
 outdated_zims = Flag('outdated_zims', store_db=True)
 # Used to disable or enable downloading when Internet is down.
 have_internet = Flag('have_internet')
+# Every configured destination (videos/archive/zims/map) has a mounted drive at or above it.
+# Cleared when at least one destination would write to the unmounted root filesystem.
+media_mounted = Flag('media_mounted')
 
 # The FileWorker is busy (refreshing, moving, tagging, or renaming files).
 file_worker_busy = Flag('file_worker_busy')
@@ -149,6 +154,7 @@ def get_flags() -> dict:
         global_refresh_active=global_refresh_active.is_set(),
         have_internet=have_internet.is_set(),
         map_search_building=map_search_building.is_set(),
+        media_mounted=media_mounted.is_set(),
         outdated_zims=outdated_zims.is_set(),
         refresh_complete=refresh_complete.is_set(),
     )
@@ -165,6 +171,68 @@ class WROLPiFlag(Base):
         return f'<WROLPiFlag' \
                f' refresh_complete={self.refresh_complete}' \
                f' outdated_zims={self.outdated_zims}>'
+
+
+def _destinations_have_mounted_storage() -> bool:
+    """True when every configured destination is backed by a mounted drive.
+
+    Walks each destination (videos/archive/zims/map) from its static path
+    prefix up through the media directory; if any ancestor in that range is
+    a mount point, the destination is considered covered.  All destinations
+    must be covered for this to return True — otherwise a download could
+    silently write to the SD card on a Raspberry Pi.
+
+    Docker mode is exempt: the media directory is always a bind mount and
+    the user cannot remount drives from inside the container.
+    """
+    if DOCKERIZED:
+        return True
+
+    media_dir = get_media_directory().resolve()
+
+    config = get_wrolpi_config()
+    destinations = [
+        config.videos_destination,
+        config.archive_destination,
+        config.zims_destination,
+        config.map_destination,
+    ]
+
+    for dest in destinations:
+        if not dest:
+            continue
+        # Templated paths like 'videos/%(channel_tag)s/...' can't be fully
+        # resolved without a real channel; use the static prefix.
+        static_prefix = dest.split('%', 1)[0].rstrip('/')
+        candidate = (media_dir / static_prefix) if static_prefix else media_dir
+        # Resolve to normalize '..' segments before the walk; otherwise a
+        # destination like '../outside' would still walk back through
+        # media_dir and falsely report covered.
+        candidate = candidate.resolve()
+
+        # If the destination escapes the media directory entirely, the
+        # download would land outside any drive we control — treat as
+        # uncovered so the warning fires.
+        if candidate != media_dir and media_dir not in candidate.parents:
+            return False
+
+        covered = False
+        cursor = candidate
+        while True:
+            try:
+                if cursor.is_mount():
+                    covered = True
+                    break
+            except OSError:
+                # Path doesn't exist yet (e.g. fresh install); keep walking.
+                pass
+            if cursor == media_dir:
+                break
+            cursor = cursor.parent
+        if not covered:
+            return False
+
+    return True
 
 
 def check_db_is_up():

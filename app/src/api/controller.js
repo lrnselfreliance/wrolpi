@@ -180,10 +180,17 @@ export async function getMounts() {
     return controllerFetch('/disks/mounts');
 }
 
-export async function mountDisk(device, mountPoint, fstype = null, options = 'defaults', persist = false) {
+export async function mountDisk(device, mountPoint, fstype = null, options = 'defaults', persist = false, forceShadowed = false) {
     return controllerFetch('/disks/mount', {
         method: 'POST',
-        body: JSON.stringify({device, mount_point: mountPoint, fstype, options, persist}),
+        body: JSON.stringify({
+            device,
+            mount_point: mountPoint,
+            fstype,
+            options,
+            persist,
+            force_shadowed: forceShadowed,
+        }),
     });
 }
 

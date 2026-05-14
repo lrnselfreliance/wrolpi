@@ -651,10 +651,23 @@ const formatSize = (size) => {
 };
 
 
+function formatBytes(bytes) {
+    if (!bytes || bytes < 1) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let n = bytes;
+    while (n >= 1024 && i < units.length - 1) {
+        n /= 1024;
+        i++;
+    }
+    return `${n.toFixed(n >= 10 ? 0 : 1)} ${units[i]}`;
+}
+
 function MountModal({disk, open, onClose, onMount}) {
     const [mountPoint, setMountPoint] = React.useState('');
     const [persist, setPersist] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
+    const [shadowed, setShadowed] = React.useState(null);
 
     // Set default mount point when disk changes
     React.useEffect(() => {
@@ -662,23 +675,21 @@ function MountModal({disk, open, onClose, onMount}) {
             const defaultMount = disk.label ? `/media/${disk.label}` : `/media/${disk.name}`;
             setMountPoint(defaultMount);
             setPersist(false);
+            setShadowed(null);
         }
     }, [disk]);
 
-    const handleMount = async () => {
-        if (!mountPoint.trim()) {
-            toast({
-                type: 'error',
-                title: 'Mount point required',
-                description: 'Please enter a mount point.',
-                time: 3000,
-            });
-            return;
-        }
-
+    const performMount = async (forceShadowed) => {
         setLoading(true);
         try {
-            await mountDisk(disk.path, mountPoint.trim(), disk.fstype, 'defaults', persist);
+            const result = await mountDisk(disk.path, mountPoint.trim(), disk.fstype, 'defaults', persist, forceShadowed);
+
+            // Soft-block: target contains data that would be hidden by the mount.
+            if (result && result.success === false && result.needs_force === 'shadowed') {
+                setShadowed(result.shadowed_data || {entries: [], size_bytes: 0});
+                return;
+            }
+
             toast({
                 type: 'success',
                 title: 'Disk Mounted',
@@ -699,7 +710,62 @@ function MountModal({disk, open, onClose, onMount}) {
         }
     };
 
+    const handleMount = async () => {
+        if (!mountPoint.trim()) {
+            toast({
+                type: 'error',
+                title: 'Mount point required',
+                description: 'Please enter a mount point.',
+                time: 3000,
+            });
+            return;
+        }
+        await performMount(false);
+    };
+
+    const handleForceMount = () => performMount(true);
+
+    const handleCancel = () => {
+        setShadowed(null);
+        onClose();
+    };
+
     if (!disk) return null;
+
+    if (shadowed) {
+        const entries = (shadowed.entries || []).join(', ') || '(unknown)';
+        return (
+            <Modal open={open} onClose={handleCancel} size='small'>
+                <Modal.Header>
+                    <Icon name='warning sign' color='yellow'/>
+                    Existing Files Detected
+                </Modal.Header>
+                <Modal.Content>
+                    <p>
+                        Mounting <strong>{disk.name}</strong> at <code>{mountPoint}</code> would
+                        hide existing files that are already there.
+                    </p>
+                    <p>
+                        Found <strong>{entries}</strong> ({formatBytes(shadowed.size_bytes)}) at the mount target.
+                    </p>
+                    <p style={{color: '#a00'}}>
+                        Those files will continue to consume space on the underlying filesystem
+                        (typically the SD card on a Raspberry Pi) and can fill it up.
+                    </p>
+                    <p>
+                        Recommended: cancel, move or delete the existing files, then mount.
+                    </p>
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button onClick={handleCancel} disabled={loading}>Cancel</Button>
+                    <Button color='yellow' onClick={handleForceMount} loading={loading} disabled={loading}>
+                        <Icon name='exclamation triangle'/>
+                        Mount Anyway
+                    </Button>
+                </Modal.Actions>
+            </Modal>
+        );
+    }
 
     return (
         <Modal open={open} onClose={onClose} size='small'>

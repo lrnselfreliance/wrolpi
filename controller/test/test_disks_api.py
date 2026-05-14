@@ -74,6 +74,39 @@ class TestMountEndpoint:
             )
             assert response.status_code == 500
 
+    def test_shadowed_data_soft_blocks_mount(self, test_client):
+        """Existing data at the mount target soft-blocks the mount."""
+        shadowed = {"size_bytes": 1024, "entries": ["videos"]}
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=shadowed), \
+                mock.patch("controller.api.disks.mount_drive") as mock_mount:
+            response = test_client.post(
+                "/api/disks/mount",
+                json={"device": "/dev/sda1", "mount_point": "/media/test"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert data["needs_force"] == "shadowed"
+            assert data["shadowed_data"] == shadowed
+            mock_mount.assert_not_called()
+
+    def test_force_shadowed_overrides_soft_block(self, test_client):
+        """force_shadowed=True bypasses the shadowed-data check."""
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value={"size_bytes": 1, "entries": ["a"]}) as mock_check, \
+                mock.patch("controller.api.disks.mount_drive", return_value={"success": True, "mount_point": "/media/test"}):
+            response = test_client.post(
+                "/api/disks/mount",
+                json={
+                    "device": "/dev/sda1",
+                    "mount_point": "/media/test",
+                    "force_shadowed": True,
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["success"] is True
+            # Check skipped entirely when force is set.
+            mock_check.assert_not_called()
+
 
 class TestUnmountEndpoint:
     """Tests for /api/disks/unmount endpoint."""

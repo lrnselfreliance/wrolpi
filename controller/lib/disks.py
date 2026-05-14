@@ -254,6 +254,49 @@ def is_mount_busy(mount_point: str) -> bool:
         return False
 
 
+def check_shadowed_data(target: str) -> Optional[dict]:
+    """Look for user data at `target` that would be hidden by a mount over it.
+
+    Returns a dict with `size_bytes` and `entries` when non-config content is
+    present, or None when the target is empty (or contains only `config/`).
+
+    `config/` is whitelisted because it is created transiently by
+    `generate_certificates.sh` before the primary drive is mounted; that is
+    expected, not user data.
+
+    Returns None for non-existent targets.
+    """
+    target_path = Path(target)
+    if not target_path.exists() or not target_path.is_dir():
+        return None
+
+    try:
+        entries = [e.name for e in target_path.iterdir() if e.name != "config"]
+    except OSError:
+        return None
+    if not entries:
+        return None
+
+    size_bytes = 0
+    for entry in entries:
+        entry_path = target_path / entry
+        try:
+            if entry_path.is_dir():
+                for path in entry_path.rglob("*"):
+                    try:
+                        if path.is_file() and not path.is_symlink():
+                            size_bytes += path.stat().st_size
+                    except OSError:
+                        # File disappeared mid-walk or unreadable; skip.
+                        continue
+            elif entry_path.is_file() and not entry_path.is_symlink():
+                size_bytes += entry_path.stat().st_size
+        except OSError:
+            continue
+
+    return {"size_bytes": size_bytes, "entries": sorted(entries)}
+
+
 def get_mounts() -> list[dict]:
     """
     Get current mounts under /media.

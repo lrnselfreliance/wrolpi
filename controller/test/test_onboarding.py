@@ -2,6 +2,7 @@
 Unit tests for onboarding orchestration logic.
 """
 
+import contextlib
 from pathlib import Path
 from unittest import mock
 
@@ -278,8 +279,12 @@ class TestCommitOnboarding:
         assert str(media_dir) in result["mounts"]
         assert result["repair_started"] is True
 
-    def test_fresh_drive_with_force(self, mock_docker_mode, tmp_path):
-        """Fresh drive with force=True should succeed."""
+    def test_fresh_drive_proceeds(self, mock_docker_mode, tmp_path):
+        """A fresh drive with no config on it still mounts cleanly.
+
+        The probe + UI button copy is the user-facing gate for the "no config"
+        case; the backend does not enforce its own check.
+        """
         media_dir = tmp_path / "wrolpi"
 
         with mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir), \
@@ -289,7 +294,7 @@ class TestCommitOnboarding:
              mock.patch("controller.lib.onboarding.reload_config_from_drive", return_value=False), \
              mock.patch("controller.lib.onboarding.save_config"), \
              mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}):
-            result = commit_onboarding("/dev/sda1", "ext4", force=True)
+            result = commit_onboarding("/dev/sda1", "ext4")
 
         assert result["success"] is True
         assert result["repair_started"] is True
@@ -437,3 +442,77 @@ class TestCancelProbe:
 
         assert result["success"] is True
         mock_cleanup.assert_called_once()
+
+
+class TestCommitOnboardingShadowedData:
+    """Tests for commit_onboarding's shadowed-data soft-block."""
+
+    def _patched_mount_calls(self, media_dir):
+        return [
+            mock.patch("controller.lib.onboarding.get_media_directory", return_value=media_dir),
+            mock.patch("controller.lib.onboarding._cleanup_temp_mount"),
+            mock.patch("controller.lib.onboarding.mount_drive", return_value={"success": True}),
+            mock.patch("controller.lib.onboarding.add_fstab_entry", return_value={"success": True}),
+            mock.patch("controller.lib.onboarding.reload_config_from_drive", return_value=False),
+            mock.patch("controller.lib.onboarding.save_config"),
+            mock.patch("controller.lib.onboarding.start_script", return_value={"success": True}),
+        ]
+
+    def test_empty_target_proceeds(self, mock_docker_mode, tmp_path):
+        """Empty target → no shadow block → mount proceeds."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4")
+
+        assert result["success"] is True
+        assert "needs_force" not in result or result.get("needs_force") is None
+
+    def test_config_only_target_proceeds(self, mock_docker_mode, tmp_path):
+        """A target containing only `config/` is the expected pre-mount state."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        (media_dir / "config").mkdir()
+        (media_dir / "config" / "ssl.crt").write_text("cert")
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4")
+
+        assert result["success"] is True
+
+    def test_shadowed_data_blocks_without_force(self, mock_docker_mode, tmp_path):
+        """A target with non-config data should soft-block."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        (media_dir / "videos").mkdir()
+        (media_dir / "videos" / "movie.mp4").write_bytes(b"x" * 1024)
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4")
+
+        assert result["success"] is False
+        assert result["needs_force"] == "shadowed"
+        assert result["shadowed_data"]["entries"] == ["videos"]
+        assert result["shadowed_data"]["size_bytes"] == 1024
+        assert result["mounts"] == []
+
+    def test_force_shadowed_proceeds(self, mock_docker_mode, tmp_path):
+        """force_shadowed=True overrides the soft-block."""
+        media_dir = tmp_path / "wrolpi"
+        media_dir.mkdir()
+        (media_dir / "videos").mkdir()
+        (media_dir / "videos" / "movie.mp4").write_bytes(b"x" * 1024)
+
+        with contextlib.ExitStack() as stack:
+            for p in self._patched_mount_calls(media_dir):
+                stack.enter_context(p)
+            result = commit_onboarding("/dev/sda1", "ext4", force_shadowed=True)
+
+        assert result["success"] is True

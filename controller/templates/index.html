@@ -841,7 +841,7 @@
         <div id="onboarding-config-found" style="display: none;">
             <p>Found WROLPi configuration on this drive.</p>
             <p id="onboarding-mounts-info"></p>
-            <button class="btn btn-primary" onclick="commitOnboarding(false)">Set Up This Drive</button>
+            <button class="btn btn-primary" onclick="commitOnboarding({})">Set Up This Drive</button>
             <button class="btn btn-secondary" onclick="cancelOnboarding()">Choose Different Drive</button>
         </div>
         <div id="onboarding-no-config" style="display: none;">
@@ -849,9 +849,22 @@
                 <p><strong>No WROLPi configuration found on this drive.</strong></p>
                 <p>This may be a new drive or the wrong drive. You can still use it as a fresh WROLPi drive.</p>
             </div>
-            <button class="btn btn-primary" onclick="commitOnboarding(true)">Use Anyway</button>
+            <button class="btn btn-primary" onclick="commitOnboarding({})">Use Anyway</button>
             <button class="btn btn-secondary" onclick="cancelOnboarding()">Choose Different Drive</button>
         </div>
+    </div>
+
+    <!-- Step 2b: Shadowed-data warning -->
+    <div id="onboarding-shadowed" style="display: none;">
+        <h2>Existing Files Detected</h2>
+        <div class="warning-msg">
+            <p><strong>Mounting this drive would hide existing files at the mount point.</strong></p>
+            <p id="onboarding-shadowed-msg"></p>
+            <p>If you mount anyway, those files will continue to consume space on the underlying filesystem (typically the SD card on a Raspberry Pi) and can fill it up.</p>
+            <p>Recommended: cancel, move or delete the existing files, then mount.</p>
+        </div>
+        <button class="btn btn-primary" onclick="confirmShadowedMount()">Mount Anyway</button>
+        <button class="btn btn-secondary" onclick="cancelOnboarding()">Cancel</button>
     </div>
 
     <!-- Step 3: Progress -->
@@ -2166,10 +2179,22 @@
     let onboardingFstype = null;
 
     function showOnboardingStep(step) {
-        ['select', 'confirm', 'progress', 'complete', 'error'].forEach(s => {
+        ['select', 'confirm', 'shadowed', 'progress', 'complete', 'error'].forEach(s => {
             const el = document.getElementById('onboarding-' + s);
             if (el) el.style.display = (s === step) ? 'block' : 'none';
         });
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes < 1) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        let n = bytes;
+        while (n >= 1024 && i < units.length - 1) {
+            n /= 1024;
+            i++;
+        }
+        return `${n.toFixed(n >= 10 ? 0 : 1)} ${units[i]}`;
     }
 
     async function loadOnboardingCandidates() {
@@ -2261,7 +2286,10 @@
         }
     }
 
-    async function commitOnboarding(force) {
+    async function commitOnboarding(opts) {
+        opts = opts || {};
+        const forceShadowed = !!opts.force_shadowed;
+
         showOnboardingStep('progress');
         document.querySelector('#onboarding-progress p').textContent = 'Mounting drives and starting repair. Please wait...';
 
@@ -2272,7 +2300,7 @@
                 body: JSON.stringify({
                     device_path: onboardingDevicePath,
                     fstype: onboardingFstype,
-                    force: force
+                    force_shadowed: forceShadowed,
                 }),
                 signal: AbortSignal.timeout(60000)
             });
@@ -2283,6 +2311,17 @@
             }
 
             const data = await resp.json();
+
+            // Soft-block: target contains existing data that would be shadowed.
+            if (data.success === false && data.needs_force === 'shadowed') {
+                const shadowed = data.shadowed_data || {entries: [], size_bytes: 0};
+                const entries = (shadowed.entries || []).join(', ') || '(unknown)';
+                document.getElementById('onboarding-shadowed-msg').textContent =
+                    `Found ${entries} (${formatBytes(shadowed.size_bytes)}) at the mount target.`;
+                showOnboardingStep('shadowed');
+                return;
+            }
+
             showOnboardingStep('complete');
 
             if (data.repair_started) {
@@ -2300,6 +2339,10 @@
             document.getElementById('onboarding-error-msg').textContent = e.message;
             showOnboardingStep('error');
         }
+    }
+
+    function confirmShadowedMount() {
+        commitOnboarding({force_shadowed: true});
     }
 
     async function cancelOnboarding() {

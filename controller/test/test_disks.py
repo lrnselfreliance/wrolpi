@@ -9,6 +9,7 @@ import pytest
 
 from controller.lib.disks import (
     BlockDevice,
+    check_shadowed_data,
     get_block_devices,
     get_uuid,
     get_wrolpi_uid_gid,
@@ -407,5 +408,53 @@ class TestGetMounts:
             assert len(result) == 2
             assert result[0]["mount_point"] == "/media/wrolpi"
             assert result[1]["mount_point"] == "/media/usb"
+
+
+class TestCheckShadowedData:
+    """Tests for check_shadowed_data."""
+
+    def test_returns_none_for_missing_target(self, tmp_path):
+        assert check_shadowed_data(str(tmp_path / "nope")) is None
+
+    def test_returns_none_for_empty_target(self, tmp_path):
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        assert check_shadowed_data(str(target)) is None
+
+    def test_returns_none_when_only_config_present(self, tmp_path):
+        """`config/` is whitelisted — it's expected pre-mount state."""
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "config").mkdir()
+        (target / "config" / "ssl.crt").write_text("cert")
+        assert check_shadowed_data(str(target)) is None
+
+    def test_detects_directory_entry(self, tmp_path):
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "videos").mkdir()
+        (target / "videos" / "a.mp4").write_bytes(b"x" * 100)
+        result = check_shadowed_data(str(target))
+        assert result == {"size_bytes": 100, "entries": ["videos"]}
+
+    def test_detects_file_entry(self, tmp_path):
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "stray.txt").write_bytes(b"hello")
+        result = check_shadowed_data(str(target))
+        assert result == {"size_bytes": 5, "entries": ["stray.txt"]}
+
+    def test_sums_sizes_across_multiple_entries(self, tmp_path):
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "config").mkdir()  # ignored
+        (target / "videos").mkdir()
+        (target / "videos" / "a.mp4").write_bytes(b"x" * 200)
+        (target / "videos" / "b.mp4").write_bytes(b"x" * 300)
+        (target / "zims").mkdir()
+        (target / "zims" / "z.zim").write_bytes(b"x" * 500)
+        result = check_shadowed_data(str(target))
+        assert result["size_bytes"] == 1000
+        assert result["entries"] == ["videos", "zims"]
 
 

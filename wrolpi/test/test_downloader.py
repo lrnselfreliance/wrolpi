@@ -1415,3 +1415,53 @@ def test_get_local_time_without_configured_timezone(test_download_manager):
     # Should return the system's local time conversion.
     expected = mock_utc.astimezone().time()
     assert result == expected
+
+
+def test_require_media_mounted_config_default(test_download_manager, test_wrolpi_config):
+    """require_media_mounted defaults to True (safe default for fresh installs)."""
+    assert get_wrolpi_config().require_media_mounted is True
+
+
+def test_require_media_mounted_gate_blocks_when_flag_clear(test_download_manager, test_wrolpi_config, flags_lock):
+    """can_download returns False when the gate is on and the media_mounted flag is clear.
+
+    Bypasses the PYTEST short-circuit at the top of can_download so the gate logic runs.
+    """
+    from wrolpi import flags
+    config = get_wrolpi_config()
+    config.require_media_mounted = True
+    flags.media_mounted.clear()
+    flags.have_internet.set()  # other gates must pass
+
+    with mock.patch('wrolpi.downloader.PYTEST', False), \
+            mock.patch('wrolpi.downloader.wrol_mode_enabled', return_value=False):
+        assert test_download_manager.can_download is False
+
+
+def test_require_media_mounted_gate_allows_when_flag_set(test_download_manager, test_wrolpi_config, flags_lock):
+    """The gate stops blocking once media_mounted is set."""
+    from wrolpi import flags
+    config = get_wrolpi_config()
+    config.require_media_mounted = True
+    flags.media_mounted.set()
+    flags.have_internet.set()
+    # Make successful_import True so the function reaches the final return True.
+    get_download_manager_config().successful_import = True
+
+    with mock.patch('wrolpi.downloader.PYTEST', False), \
+            mock.patch('wrolpi.downloader.wrol_mode_enabled', return_value=False):
+        assert test_download_manager.can_download is True
+
+
+def test_require_media_mounted_gate_opt_out(test_download_manager, test_wrolpi_config, flags_lock):
+    """When the user opts out via the config, the gate is skipped even with the flag clear."""
+    from wrolpi import flags
+    config = get_wrolpi_config()
+    config.require_media_mounted = False
+    flags.media_mounted.clear()
+    flags.have_internet.set()
+    get_download_manager_config().successful_import = True
+
+    with mock.patch('wrolpi.downloader.PYTEST', False), \
+            mock.patch('wrolpi.downloader.wrol_mode_enabled', return_value=False):
+        assert test_download_manager.can_download is True

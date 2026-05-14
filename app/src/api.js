@@ -332,6 +332,7 @@ export async function getSettings() {
             nav_color: content.nav_color,
             media_directory: content.media_directory,
             require_cookies_unlocked: content.require_cookies_unlocked,
+            require_media_mounted: content.require_media_mounted,
             save_ffprobe_json: content.save_ffprobe_json,
             tags_directory: content.tags_directory,
             throttle_on_startup: content.throttle_on_startup,

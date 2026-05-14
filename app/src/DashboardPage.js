@@ -38,7 +38,7 @@ import {DateSelectorButton} from "./components/DatesSelector";
 import {useCalculators} from "./components/Calculators";
 import {classifyAndEvaluate} from "./components/calculators/mathConfig";
 
-function FlagsMessages() {
+export function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {status} = useContext(StatusContext);
 
@@ -88,9 +88,20 @@ function FlagsMessages() {
         </ErrorMessage>;
     }
 
+    let mediaUnmountedMessage;
+    if (flags.media_mounted === false) {
+        mediaUnmountedMessage = <ErrorMessage icon='hdd outline'>
+            <Message.Header>No drive mounted</Message.Header>
+            WROLPi has no media drive mounted for one or more storage locations.
+            Downloads would write to the root filesystem and can fill it.
+            {' '}<Link to='/admin/controller'>Open the Controller</Link> to mount a drive.
+        </ErrorMessage>;
+    }
+
     return <>
         {refreshingMessage}
         {dbDownMessage || refreshRequiredMessage}
+        {mediaUnmountedMessage}
         {settings && settings['ignore_outdated_zims'] === false && flags.outdated_zims ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
         {internetDownMessage}

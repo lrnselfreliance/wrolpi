@@ -32,6 +32,7 @@ class SettingsResponse:
     nav_color: str
     media_directory: str
     require_cookies_unlocked: bool
+    require_media_mounted: bool
     tags_directory: bool
     throttle_on_startup: bool
     throttle_status: str
@@ -84,6 +85,7 @@ class SettingsRequest:
     wrol_mode: Optional[bool] = None
     zims_destination: Optional[str] = None
     require_cookies_unlocked: Optional[bool] = None
+    require_media_mounted: Optional[bool] = None
     save_ffprobe_json: Optional[bool] = None
     timezone: Optional[str] = None
 
@@ -104,6 +106,7 @@ class FlagsStatusResponse:
     file_worker_modeling: bool
     global_refresh_active: bool
     have_internet: bool
+    media_mounted: bool
     outdated_zims: bool
     refresh_complete: bool
 

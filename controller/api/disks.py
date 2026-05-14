@@ -14,6 +14,7 @@ from controller.lib.config import (
     update_config,
 )
 from controller.lib.disks import (
+    check_shadowed_data,
     get_block_devices,
     get_mounts,
     mount_drive,
@@ -39,6 +40,10 @@ class MountRequest(BaseModel):
     fstype: Optional[str] = Field(default=None, description="Filesystem type (auto-detected if not specified)")
     options: str = Field(default="defaults", description="Mount options")
     persist: bool = Field(default=False, description="Add to fstab for persistent mounting")
+    force_shadowed: bool = Field(
+        default=False,
+        description="Proceed even if existing data at the mount target would be hidden by the new mount",
+    )
 
 
 class UnmountRequest(BaseModel):
@@ -97,6 +102,24 @@ async def list_mounts():
 async def disk_mount(request: MountRequest):
     """Mount a partition."""
     _check_native_mode()
+
+    # Soft-block if the mount target already contains user data that would
+    # be hidden by the new mount. The UI re-submits with force_shadowed=True
+    # to override.
+    if not request.force_shadowed:
+        shadowed = check_shadowed_data(request.mount_point)
+        if shadowed:
+            return {
+                "success": False,
+                "needs_force": "shadowed",
+                "shadowed_data": shadowed,
+                "error": (
+                    f"{request.mount_point} contains {len(shadowed['entries'])} "
+                    f"existing data "
+                    f"{'entry' if len(shadowed['entries']) == 1 else 'entries'}. "
+                    f"Mounting now would hide them on the underlying filesystem."
+                ),
+            }
 
     result = mount_drive(
         device=request.device,

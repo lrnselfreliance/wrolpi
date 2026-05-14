@@ -12,6 +12,7 @@ from controller.api.schemas import (
     OnboardingCommitResponse,
     OnboardingProbeRequest,
     OnboardingProbeResponse,
+    ShadowedDataInfo,
 )
 from controller.lib.config import is_docker_mode, is_primary_drive_mounted
 from controller.lib.onboarding import (
@@ -78,8 +79,22 @@ async def commit(request: OnboardingCommitRequest):
     result = commit_onboarding(
         device_path=request.device_path,
         fstype=request.fstype,
-        force=request.force,
+        force_shadowed=request.force_shadowed,
     )
+
+    # Soft-block: existing data at the mount target would be hidden. Return
+    # a structured response (200 OK with success=False) so the UI can prompt
+    # the user to override.
+    if not result.get("success") and result.get("needs_force") == "shadowed":
+        shadowed = result.get("shadowed_data") or {}
+        return OnboardingCommitResponse(
+            success=False,
+            error=result.get("error"),
+            mounts=[],
+            repair_started=False,
+            needs_force="shadowed",
+            shadowed_data=ShadowedDataInfo(**shadowed) if shadowed else None,
+        )
 
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Onboarding failed"))

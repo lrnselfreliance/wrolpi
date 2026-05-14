@@ -152,6 +152,50 @@ class TestOnboardingCommitEndpoint:
             )
             assert response.status_code == 500
 
+    def test_commit_shadowed_data_returns_structured_block(self, test_client):
+        """Shadowed-data soft-block returns 200 with needs_force=shadowed."""
+        with mock.patch(
+            "controller.api.onboarding.commit_onboarding",
+            return_value={
+                "success": False,
+                "needs_force": "shadowed",
+                "shadowed_data": {"size_bytes": 1024, "entries": ["videos"]},
+                "error": "Existing data",
+                "mounts": [],
+                "repair_started": False,
+            },
+        ):
+            response = test_client.post(
+                "/api/onboarding/commit",
+                json={"device_path": "/dev/sda1", "fstype": "ext4"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is False
+            assert data["needs_force"] == "shadowed"
+            assert data["shadowed_data"] == {"size_bytes": 1024, "entries": ["videos"]}
+
+    def test_commit_forwards_force_shadowed(self, test_client):
+        """force_shadowed is forwarded to commit_onboarding."""
+        with mock.patch(
+            "controller.api.onboarding.commit_onboarding",
+            return_value={"success": True, "mounts": [], "repair_started": False},
+        ) as mock_commit:
+            response = test_client.post(
+                "/api/onboarding/commit",
+                json={
+                    "device_path": "/dev/sda1",
+                    "fstype": "ext4",
+                    "force_shadowed": True,
+                },
+            )
+            assert response.status_code == 200
+            mock_commit.assert_called_once_with(
+                device_path="/dev/sda1",
+                fstype="ext4",
+                force_shadowed=True,
+            )
+
 
 class TestOnboardingCancelEndpoint:
     """Tests for POST /api/onboarding/cancel."""

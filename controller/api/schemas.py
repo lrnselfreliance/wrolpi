@@ -467,7 +467,17 @@ class OnboardingCommitRequest(BaseModel):
 
     device_path: str = Field(description="Device path to use as primary drive")
     fstype: str = Field(description="Filesystem type")
-    force: bool = Field(default=False, description="Proceed even if no config found on drive")
+    force_shadowed: bool = Field(
+        default=False,
+        description="Proceed even if existing data at the mount target would be hidden by the new mount",
+    )
+
+
+class ShadowedDataInfo(BaseModel):
+    """Information about data that would be hidden by a mount."""
+
+    size_bytes: int = Field(description="Total size of data that would be shadowed")
+    entries: list[str] = Field(description="Top-level entries that would be hidden")
 
 
 class OnboardingCommitResponse(BaseModel):
@@ -477,3 +487,12 @@ class OnboardingCommitResponse(BaseModel):
     error: Optional[str] = Field(default=None, description="Error message if failed")
     mounts: list[str] = Field(default_factory=list, description="Mount points that were mounted")
     repair_started: bool = Field(default=False, description="Whether repair script was started")
+    needs_force: Optional[str] = Field(
+        default=None,
+        description="If set, the request was soft-blocked. Re-submit with the matching force flag. "
+                    "Currently: 'shadowed'.",
+    )
+    shadowed_data: Optional[ShadowedDataInfo] = Field(
+        default=None,
+        description="Populated when needs_force='shadowed'.",
+    )

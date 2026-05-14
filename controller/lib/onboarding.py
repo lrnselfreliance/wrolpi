@@ -21,7 +21,7 @@ from controller.lib.config import (
     save_config,
     update_config,
 )
-from controller.lib.disks import get_block_devices, mount_drive, unmount_drive
+from controller.lib.disks import check_shadowed_data, get_block_devices, mount_drive, unmount_drive
 from controller.lib.fstab import add_fstab_entry
 from controller.lib.scripts import start_script
 
@@ -165,25 +165,32 @@ def cancel_probe() -> dict:
     return {"success": True}
 
 
-def commit_onboarding(device_path: str, fstype: str, force: bool = False) -> dict:
+def commit_onboarding(
+    device_path: str,
+    fstype: str,
+    force_shadowed: bool = False,
+) -> dict:
     """
     Execute the full onboarding setup.
 
     1. Unmount temp mount
-    2. Mount primary drive at /media/wrolpi
-    3. Add fstab entry for primary
-    4. Reload config
-    5. Mount secondary drives per config
-    6. Add fstab entries for secondary drives
-    7. Start repair
+    2. Check for shadowed data at the mount target
+    3. Mount primary drive at /media/wrolpi
+    4. Add fstab entry for primary
+    5. Reload config
+    6. Mount secondary drives per config
+    7. Add fstab entries for secondary drives
+    8. Start repair
 
     Args:
         device_path: Device path
         fstype: Filesystem type
-        force: If True, proceed even without config on drive
+        force_shadowed: If True, proceed even when existing data at the
+            mount target would be hidden by the new mount
 
     Returns:
-        dict with success, error, mounts, repair_started
+        dict with success, error, mounts, repair_started, and on a shadowed
+        block, `needs_force` and `shadowed_data`
     """
     media_dir = str(get_media_directory())
     mounted_mounts = []
@@ -200,6 +207,26 @@ def commit_onboarding(device_path: str, fstype: str, force: bool = False) -> dic
             import shutil
             shutil.rmtree(transient_config)
             logger.info("Removed transient config directory at %s", transient_config)
+
+        # Step 1c: Check for shadowed data. If the user has been downloading
+        # to /media/wrolpi without a drive mounted, mounting now would hide
+        # those files on the SD card / root filesystem.
+        if not force_shadowed:
+            shadowed = check_shadowed_data(media_dir)
+            if shadowed:
+                return {
+                    "success": False,
+                    "needs_force": "shadowed",
+                    "shadowed_data": shadowed,
+                    "error": (
+                        f"{media_dir} contains {len(shadowed['entries'])} "
+                        f"existing data "
+                        f"{'entry' if len(shadowed['entries']) == 1 else 'entries'}. "
+                        f"Mounting now would hide them on the underlying filesystem."
+                    ),
+                    "mounts": [],
+                    "repair_started": False,
+                }
 
         # Step 2: Mount primary drive
         result = mount_drive(device_path, media_dir, fstype=fstype)

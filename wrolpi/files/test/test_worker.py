@@ -1,5 +1,6 @@
 """Tests for the file comparison worker."""
 import asyncio
+from unittest import mock
 
 import pytest
 
@@ -301,6 +302,34 @@ async def test_compare_file_groups_ignores_outside_root(test_session, test_direc
     assert len(result.deleted) == 0  # archives FileGroup should be ignored
     assert len(result.new) == 0
     assert len(result.modified) == 0
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_survives_concurrent_commit(
+        test_session, test_directory, make_files_structure):
+    """compare_file_groups must succeed even when its shared session is committed mid-scan.
+
+    In production each get_db_session() call gets a fresh connection, but tests share one
+    session across all callers, so any get_db_session(commit=True) elsewhere commits this
+    session too. The work table must survive that commit.
+    """
+    make_files_structure(['docs/file1.txt', 'docs/file2.txt'])
+
+    from wrolpi.files import worker as worker_mod
+    original = worker_mod._stream_filesystem_paths
+
+    async def commit_after_first(root):
+        first = True
+        async for p in original(root):
+            yield p
+            if first:
+                first = False
+                test_session.commit()
+
+    with mock.patch.object(worker_mod, '_stream_filesystem_paths', commit_after_first):
+        result = await compare_file_groups(test_directory)
+
+    assert len(result.new) == 2
 
 
 @pytest.mark.asyncio

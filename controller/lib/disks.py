@@ -18,7 +18,7 @@ from controller.lib.config import is_docker_mode
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_FILESYSTEMS = {"ext4", "btrfs", "vfat", "exfat"}
+SUPPORTED_FILESYSTEMS = {"ext4", "btrfs", "vfat", "exfat", "ntfs", "ntfs3"}
 
 
 def get_wrolpi_uid_gid() -> tuple[int, int]:
@@ -171,9 +171,10 @@ def mount_drive(
     # Create mount point if needed
     Path(mount_point).mkdir(parents=True, exist_ok=True)
 
-    # For exfat/vfat, add uid/gid options to set ownership to wrolpi user
-    # These filesystems don't support POSIX permissions natively
-    if fstype in ("exfat", "vfat"):
+    # For filesystems without native POSIX permissions, set ownership to
+    # the wrolpi user via uid/gid mount options. Covers FAT family and
+    # both NTFS drivers (ntfs-3g FUSE and the in-kernel ntfs3).
+    if fstype in ("exfat", "vfat", "ntfs", "ntfs3"):
         uid, gid = get_wrolpi_uid_gid()
         options = f"{options},uid={uid},gid={gid}"
 
@@ -281,6 +282,13 @@ def check_shadowed_data(target: str) -> Optional[dict]:
     for entry in entries:
         entry_path = target_path / entry
         try:
+            # Skip symlinks: a symlink-to-directory at the mount target would
+            # otherwise be walked, inflating size_bytes with content from
+            # outside the would-be-shadowed area (e.g. /etc, /). The symlink
+            # itself is still listed in `entries` so the user is warned about
+            # it; it just contributes 0 bytes.
+            if entry_path.is_symlink():
+                continue
             if entry_path.is_dir():
                 for path in entry_path.rglob("*"):
                     try:
@@ -289,7 +297,7 @@ def check_shadowed_data(target: str) -> Optional[dict]:
                     except OSError:
                         # File disappeared mid-walk or unreadable; skip.
                         continue
-            elif entry_path.is_file() and not entry_path.is_symlink():
+            elif entry_path.is_file():
                 size_bytes += entry_path.stat().st_size
         except OSError:
             continue

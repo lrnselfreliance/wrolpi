@@ -11,6 +11,7 @@ import shlex
 import shutil
 import stat as stat_module
 import time
+import uuid
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -282,13 +283,13 @@ async def _stream_filesystem_paths(root: Path) -> AsyncGenerator[str, None]:
             await proc.wait()
 
 
-def _insert_fs_batch(session, batch: list):
+def _insert_fs_batch(session, table_name: str, batch: list):
     """Bulk insert filesystem files using unnest for speed."""
     if not batch:
         return
     session.execute(
-        text("""
-             INSERT INTO fs_files (directory, filename, stem)
+        text(f"""
+             INSERT INTO {table_name} (directory, filename, stem)
              SELECT *
              FROM unnest(
                      CAST(:dirs AS text[]),
@@ -313,7 +314,7 @@ async def compare_file_groups(
     """
     Compare FileGroups in DB to filesystem. Memory efficient for Raspberry Pi.
 
-    Uses a temporary PostgreSQL table to handle millions of files without
+    Uses a uniquely-named PostgreSQL work table to handle millions of files without
     loading everything into Python memory.
 
     Returns which FileGroups are new, deleted, modified, or unchanged.
@@ -322,165 +323,175 @@ async def compare_file_groups(
     the subprocess scanning the filesystem.
     """
     root = root or get_media_directory()
+    # Per-call table name so concurrent scans don't collide, and so commits on the
+    # session (which can come from unrelated callers in tests, where get_db_session
+    # is mocked to share one session) don't drop the table mid-scan.
+    table_name = f'fs_files_{uuid.uuid4().hex[:12]}'
 
     with get_db_session() as session:
-        # Create temp table for filesystem files with computed stems
-        session.execute(text("""
-                             CREATE TEMP TABLE IF NOT EXISTS fs_files
-                             (
-                                 directory TEXT NOT NULL,
-                                 filename  TEXT NOT NULL,
-                                 stem      TEXT NOT NULL,
-                                 PRIMARY KEY (directory, filename)
-                             ) ON COMMIT DROP
-                             """))
-        session.execute(text("TRUNCATE fs_files"))
-
-        # Stream filesystem files into temp table with stems
-        batch = []
-        file_count = 0
-        path_gen = _stream_filesystem_paths(root)
         try:
-            async for path in path_gen:
-                p = Path(path)
-                directory = str(p.parent)
-                filename = p.name
-                stem, _ = split_path_stem_and_suffix(p)
-                batch.append((directory, filename, stem))
+            session.execute(text(f"""
+                                 CREATE TABLE {table_name}
+                                 (
+                                     directory TEXT NOT NULL,
+                                     filename  TEXT NOT NULL,
+                                     stem      TEXT NOT NULL,
+                                     PRIMARY KEY (directory, filename)
+                                 )
+                                 """))
 
-                if len(batch) >= batch_size:
-                    _insert_fs_batch(session, batch)
-                    file_count += len(batch)
-                    batch = []
-                    if progress_callback:
-                        progress_callback(file_count)
-                    await asyncio.sleep(0)  # Cancellation yield point
-        finally:
-            await path_gen.aclose()  # Ensure subprocess is killed on cancellation
+            # Stream filesystem files into work table with stems
+            batch = []
+            file_count = 0
+            path_gen = _stream_filesystem_paths(root)
+            try:
+                async for path in path_gen:
+                    p = Path(path)
+                    directory = str(p.parent)
+                    filename = p.name
+                    stem, _ = split_path_stem_and_suffix(p)
+                    batch.append((directory, filename, stem))
 
-        if batch:
-            _insert_fs_batch(session, batch)
-            file_count += len(batch)
+                    if len(batch) >= batch_size:
+                        _insert_fs_batch(session, table_name, batch)
+                        file_count += len(batch)
+                        batch = []
+                        if progress_callback:
+                            progress_callback(file_count)
+                        await asyncio.sleep(0)  # Cancellation yield point
+            finally:
+                await path_gen.aclose()  # Ensure subprocess is killed on cancellation
 
-        logger.info(f'Scanned {file_count} files from filesystem')
+            if batch:
+                _insert_fs_batch(session, table_name, batch)
+                file_count += len(batch)
 
-        # Index for fast grouping
-        session.execute(text("CREATE INDEX IF NOT EXISTS fs_files_stem_idx ON fs_files(directory, stem)"))
-        session.execute(text("ANALYZE fs_files"))
+            logger.info(f'Scanned {file_count} files from filesystem')
 
-        # Get filesystem files grouped by (directory, stem)
-        fs_groups: Dict[Tuple[str, str], Set[str]] = {}
-        result = session.execute(text("""
-                                      SELECT directory, stem, array_agg(filename) as files
-                                      FROM fs_files
-                                      GROUP BY directory, stem
-                                      """))
-        for row in result:
-            fs_groups[(row.directory, row.stem)] = set(row.files)
+            # Index for fast grouping
+            session.execute(text(f"CREATE INDEX ON {table_name}(directory, stem)"))
+            session.execute(text(f"ANALYZE {table_name}"))
 
-        logger.info(f'Found {len(fs_groups)} file groups on filesystem')
+            # Get filesystem files grouped by (directory, stem)
+            fs_groups: Dict[Tuple[str, str], Set[str]] = {}
+            result = session.execute(text(f"""
+                                          SELECT directory, stem, array_agg(filename) as files
+                                          FROM {table_name}
+                                          GROUP BY directory, stem
+                                          """))
+            for row in result:
+                fs_groups[(row.directory, row.stem)] = set(row.files)
 
-        # Get all DB FileGroups within root directory (both with files and empty)
-        # Collect ALL FileGroups per (directory, stem) key — duplicates are deduped after.
-        db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]] = defaultdict(list)
-        root_str = str(root)
-        empty_count = 0
+            logger.info(f'Found {len(fs_groups)} file groups on filesystem')
 
-        result = session.execute(text("""
-                                      SELECT fg.id,
-                                             fg.directory,
-                                             fg.primary_path,
-                                             fg.files IS NULL OR fg.files = '[]'::jsonb   as is_empty,
-                                             EXTRACT(EPOCH FROM fg.modification_datetime) as mtime_epoch,
-                                             CASE
-                                                 WHEN fg.files IS NOT NULL AND jsonb_typeof(fg.files) = 'array' AND
-                                                      fg.files != '[]'::jsonb
-                                                     THEN (SELECT array_agg(f ->> 'path')
-                                                           FROM jsonb_array_elements(fg.files) as f)
-                                                 ELSE NULL
-                                                 END                                      as files
-                                      FROM file_group fg
-                                      WHERE fg.directory IS NOT NULL
-                                        AND (fg.directory = :root OR fg.directory LIKE :root_pattern)
-                                      """), {"root": root_str, "root_pattern": f"{root_str}/%"})
+            # Get all DB FileGroups within root directory (both with files and empty)
+            # Collect ALL FileGroups per (directory, stem) key — duplicates are deduped after.
+            db_groups: Dict[Tuple[str, str], List[Tuple[int, Set[str], float]]] = defaultdict(list)
+            root_str = str(root)
+            empty_count = 0
 
-        for row in result:
-            if row.is_empty:
-                empty_count += 1
-                stem, _ = split_path_stem_and_suffix(Path(row.primary_path))
-                key = (row.directory, stem)
-                db_groups[key].append((row.id, set(), row.mtime_epoch or 0))
-            elif row.files:
-                first_file = row.files[0]
-                stem, _ = split_path_stem_and_suffix(Path(row.directory) / first_file)
-                key = (row.directory, stem)
-                db_groups[key].append((row.id, set(row.files), row.mtime_epoch or 0))
+            result = session.execute(text("""
+                                          SELECT fg.id,
+                                                 fg.directory,
+                                                 fg.primary_path,
+                                                 fg.files IS NULL OR fg.files = '[]'::jsonb   as is_empty,
+                                                 EXTRACT(EPOCH FROM fg.modification_datetime) as mtime_epoch,
+                                                 CASE
+                                                     WHEN fg.files IS NOT NULL AND jsonb_typeof(fg.files) = 'array' AND
+                                                          fg.files != '[]'::jsonb
+                                                         THEN (SELECT array_agg(f ->> 'path')
+                                                               FROM jsonb_array_elements(fg.files) as f)
+                                                     ELSE NULL
+                                                     END                                      as files
+                                          FROM file_group fg
+                                          WHERE fg.directory IS NOT NULL
+                                            AND (fg.directory = :root OR fg.directory LIKE :root_pattern)
+                                          """), {"root": root_str, "root_pattern": f"{root_str}/%"})
 
-        logger.info(f'Found {len(db_groups)} file groups in database')
-        if empty_count:
-            logger.debug(f'Found {empty_count} FileGroups with empty files arrays')
+            for row in result:
+                if row.is_empty:
+                    empty_count += 1
+                    stem, _ = split_path_stem_and_suffix(Path(row.primary_path))
+                    key = (row.directory, stem)
+                    db_groups[key].append((row.id, set(), row.mtime_epoch or 0))
+                elif row.files:
+                    first_file = row.files[0]
+                    stem, _ = split_path_stem_and_suffix(Path(row.directory) / first_file)
+                    key = (row.directory, stem)
+                    db_groups[key].append((row.id, set(row.files), row.mtime_epoch or 0))
 
-        # Deduplicate: keep one FileGroup per key, mark the rest for deletion
-        deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
+            logger.info(f'Found {len(db_groups)} file groups in database')
+            if empty_count:
+                logger.debug(f'Found {empty_count} FileGroups with empty files arrays')
 
-        unchanged = []
-        new = []
-        deleted = list(duplicate_diffs)
-        modified = []
+            # Deduplicate: keep one FileGroup per key, mark the rest for deletion
+            deduplicated, duplicate_diffs = _deduplicate_db_groups(db_groups)
 
-        all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
+            unchanged = []
+            new = []
+            deleted = list(duplicate_diffs)
+            modified = []
 
-        for key in all_keys:
-            directory, stem = key
-            fs_files = fs_groups.get(key, set())
-            db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
+            all_keys = set(fs_groups.keys()) | set(deduplicated.keys())
 
-            diff = FileGroupDiff(
-                directory=Path(directory),
-                stem=stem,
-                db_files=db_files,
-                fs_files=fs_files,
-                file_group_id=db_id,
+            for key in all_keys:
+                directory, stem = key
+                fs_files = fs_groups.get(key, set())
+                db_id, db_files, db_mtime = deduplicated.get(key, (None, set(), 0))
+
+                diff = FileGroupDiff(
+                    directory=Path(directory),
+                    stem=stem,
+                    db_files=db_files,
+                    fs_files=fs_files,
+                    file_group_id=db_id,
+                )
+
+                if diff.is_new:
+                    new.append(diff)
+                elif diff.is_deleted:
+                    deleted.append(diff)
+                elif diff.needs_update:
+                    modified.append(diff)
+                elif diff.is_unchanged:
+                    # Files match by name - check if content changed via mtime
+                    # Get max mtime from filesystem files
+                    try:
+                        dir_path = Path(directory)
+                        fs_mtime = max(
+                            (dir_path / filename).stat().st_mtime
+                            for filename in fs_files
+                        )
+                        # If filesystem mtime is newer than DB mtime, content changed
+                        if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
+                            modified.append(diff)
+                        else:
+                            unchanged.append(diff)
+                    except (OSError, ValueError):
+                        # If we can't stat files, treat as unchanged
+                        unchanged.append(diff)
+                elif db_id is not None and not fs_files and not db_files:
+                    # Empty FileGroup with no files on disk — orphan, delete it
+                    deleted.append(diff)
+
+            logger.info(
+                f'Comparison complete: {len(unchanged)} unchanged, {len(new)} new, '
+                f'{len(deleted)} deleted, {len(modified)} modified'
             )
 
-            if diff.is_new:
-                new.append(diff)
-            elif diff.is_deleted:
-                deleted.append(diff)
-            elif diff.needs_update:
-                modified.append(diff)
-            elif diff.is_unchanged:
-                # Files match by name - check if content changed via mtime
-                # Get max mtime from filesystem files
-                try:
-                    dir_path = Path(directory)
-                    fs_mtime = max(
-                        (dir_path / filename).stat().st_mtime
-                        for filename in fs_files
-                    )
-                    # If filesystem mtime is newer than DB mtime, content changed
-                    if fs_mtime > float(db_mtime) + MTIME_TOLERANCE_SECONDS:
-                        modified.append(diff)
-                    else:
-                        unchanged.append(diff)
-                except (OSError, ValueError):
-                    # If we can't stat files, treat as unchanged
-                    unchanged.append(diff)
-            elif db_id is not None and not fs_files and not db_files:
-                # Empty FileGroup with no files on disk — orphan, delete it
-                deleted.append(diff)
-
-        logger.info(
-            f'Comparison complete: {len(unchanged)} unchanged, {len(new)} new, '
-            f'{len(deleted)} deleted, {len(modified)} modified'
-        )
-
-        return FileComparisonResult(
-            unchanged=unchanged,
-            new=new,
-            deleted=deleted,
-            modified=modified,
-        )
+            return FileComparisonResult(
+                unchanged=unchanged,
+                new=new,
+                deleted=deleted,
+                modified=modified,
+            )
+        finally:
+            # Drop the work table regardless of success/failure. Isolate cleanup
+            # in its own try so a broken transaction doesn't mask the original error.
+            try:
+                session.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+            except Exception:
+                logger.exception(f'Failed to drop work table {table_name}')
 
 
 async def build_move_plan_bulk(

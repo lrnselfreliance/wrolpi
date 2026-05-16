@@ -14,7 +14,7 @@
     "mathjs": "^15.2.0",
     "pmtiles": "^4.4.0",
     "protomaps-themes-base": "^4.5.0",
-    "query-string": "^8.1.0",
+    "query-string": "^9.3.1",
     "react": "^18.2.0",
     "react-colorful": "^5.6.1",
     "react-dom": "^18.2.0",

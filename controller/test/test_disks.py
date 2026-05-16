@@ -268,85 +268,31 @@ class TestMountDrive:
                     assert result["success"] is False
                     assert "mount failed" in result["error"]
 
-    def test_exfat_mount_includes_uid_gid(self):
-        """Should add uid/gid options when mounting exfat."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
-                with mock.patch("pathlib.Path.mkdir"):
-                    with mock.patch("subprocess.run") as mock_run:
-                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
-                        result = mount_drive("/dev/sda1", "/media/test", fstype="exfat")
-                        assert result["success"] is True
-                        # Verify mount was called with uid/gid options
-                        call_args = mock_run.call_args[0][0]
-                        assert "-o" in call_args
-                        options_idx = call_args.index("-o") + 1
-                        options = call_args[options_idx]
-                        assert "uid=1001" in options
-                        assert "gid=1001" in options
-
-    def test_ext4_mount_does_not_include_uid_gid(self):
-        """Should not add uid/gid options when mounting ext4."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("pathlib.Path.mkdir"):
-                with mock.patch("subprocess.run") as mock_run:
-                    mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
-                    result = mount_drive("/dev/sda1", "/media/test", fstype="ext4")
-                    assert result["success"] is True
-                    # Verify mount was called without uid/gid options
-                    call_args = mock_run.call_args[0][0]
-                    assert "-o" in call_args
-                    options_idx = call_args.index("-o") + 1
-                    options = call_args[options_idx]
-                    assert "uid=" not in options
-                    assert "gid=" not in options
-
-    def test_vfat_mount_includes_uid_gid(self):
-        """Should add uid/gid options when mounting vfat (FAT32)."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
-                with mock.patch("pathlib.Path.mkdir"):
-                    with mock.patch("subprocess.run") as mock_run:
-                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
-                        result = mount_drive("/dev/sda1", "/media/test", fstype="vfat")
-                        assert result["success"] is True
-                        # Verify mount was called with uid/gid options
-                        call_args = mock_run.call_args[0][0]
-                        assert "-o" in call_args
-                        options_idx = call_args.index("-o") + 1
-                        options = call_args[options_idx]
-                        assert "uid=1001" in options
-                        assert "gid=1001" in options
-
-    def test_ntfs_mount_includes_uid_gid(self):
-        """Should add uid/gid options when mounting ntfs (Windows-formatted drive)."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
-                with mock.patch("pathlib.Path.mkdir"):
-                    with mock.patch("subprocess.run") as mock_run:
-                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
-                        result = mount_drive("/dev/sda1", "/media/test", fstype="ntfs")
-                        assert result["success"] is True
-                        call_args = mock_run.call_args[0][0]
-                        options_idx = call_args.index("-o") + 1
-                        options = call_args[options_idx]
-                        assert "uid=1001" in options
-                        assert "gid=1001" in options
-
-    def test_ntfs3_mount_includes_uid_gid(self):
-        """Same handling for the in-kernel ntfs3 driver (kernel 5.15+)."""
-        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
-            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
-                with mock.patch("pathlib.Path.mkdir"):
-                    with mock.patch("subprocess.run") as mock_run:
-                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
-                        result = mount_drive("/dev/sda1", "/media/test", fstype="ntfs3")
-                        assert result["success"] is True
-                        call_args = mock_run.call_args[0][0]
-                        options_idx = call_args.index("-o") + 1
-                        options = call_args[options_idx]
-                        assert "uid=1001" in options
-                        assert "gid=1001" in options
+    @pytest.mark.parametrize("fstype,expect_uid_gid", [
+        ("exfat", True),
+        ("vfat", True),    # FAT32
+        ("ntfs", True),    # ntfs-3g userspace driver
+        ("ntfs3", True),   # in-kernel ntfs3 driver (kernel 5.15+)
+        ("ext4", False),   # POSIX permissions; no uid/gid mount opts
+    ])
+    def test_mount_uid_gid_options_by_fstype(self, fstype, expect_uid_gid):
+        """Foreign-fs mounts (exfat/vfat/ntfs/ntfs3) inject uid/gid; ext4 must not."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)), \
+                mock.patch("pathlib.Path.mkdir"), \
+                mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            result = mount_drive("/dev/sda1", "/media/test", fstype=fstype)
+            assert result["success"] is True
+            call_args = mock_run.call_args[0][0]
+            assert "-o" in call_args
+            options = call_args[call_args.index("-o") + 1]
+            if expect_uid_gid:
+                assert "uid=1001" in options
+                assert "gid=1001" in options
+            else:
+                assert "uid=" not in options
+                assert "gid=" not in options
 
 
 class TestGetWrolpiUidGid:

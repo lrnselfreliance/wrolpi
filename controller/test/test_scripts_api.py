@@ -4,6 +4,21 @@ Integration tests for Controller scripts API endpoints.
 
 from unittest import mock
 
+import pytest
+
+
+class TestDockerModeRejectsScriptsEndpoints:
+    """Scripts action endpoints should return 501 in Docker mode."""
+
+    @pytest.mark.parametrize("method,endpoint", [
+        ("post", "/api/scripts/repair/start"),
+        ("get", "/api/scripts/repair/output"),
+    ])
+    def test_action_rejected_in_docker(self, test_client_docker_mode, method, endpoint):
+        response = getattr(test_client_docker_mode, method)(endpoint)
+        assert response.status_code == 501
+        assert "Docker" in response.json()["detail"]
+
 
 class TestScriptsListEndpoint:
     """Tests for /api/scripts endpoint."""
@@ -69,12 +84,6 @@ class TestScriptsStatusEndpoint:
 class TestScriptsStartEndpoint:
     """Tests for /api/scripts/{name}/start endpoint."""
 
-    def test_scripts_start_returns_501_in_docker(self, test_client_docker_mode):
-        """Scripts start should return 501 in Docker mode."""
-        response = test_client_docker_mode.post("/api/scripts/repair/start")
-        assert response.status_code == 501
-        assert "Docker" in response.json()["detail"]
-
     def test_scripts_start_returns_400_for_unknown_script(self, test_client):
         """Scripts start should return 400 for unknown script."""
         with mock.patch("controller.lib.scripts.is_docker_mode", return_value=False):
@@ -95,12 +104,6 @@ class TestScriptsStartEndpoint:
 
 class TestScriptsOutputEndpoint:
     """Tests for /api/scripts/{name}/output endpoint."""
-
-    def test_scripts_output_returns_501_in_docker(self, test_client_docker_mode):
-        """Scripts output should return 501 in Docker mode."""
-        response = test_client_docker_mode.get("/api/scripts/repair/output")
-        assert response.status_code == 501
-        assert "Docker" in response.json()["detail"]
 
     def test_scripts_output_returns_200(self, test_client):
         """Scripts output should return 200 when not in Docker mode."""
@@ -152,14 +155,4 @@ class TestScriptsOutputEndpoint:
                 assert "5000" in call_args
 
 
-class TestOpenAPIIncludesScriptsEndpoints:
-    """Tests that OpenAPI documentation includes scripts endpoints."""
-
-    def test_openapi_has_scripts_paths(self, test_client):
-        """OpenAPI schema should include scripts paths."""
-        response = test_client.get("/openapi.json")
-        data = response.json()
-        assert "/api/scripts" in data["paths"]
-        assert "/api/scripts/status" in data["paths"]
-        assert "/api/scripts/{name}/start" in data["paths"]
-        assert "/api/scripts/{name}/output" in data["paths"]
+# OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.

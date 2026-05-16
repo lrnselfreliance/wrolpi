@@ -119,78 +119,37 @@ class TestGetBluetoothStatus:
                 assert result == BluetoothStatus.unknown
 
 
-class TestEnableBluetooth:
-    """Tests for enable_bluetooth function."""
+class TestBluetoothEnableDisable:
+    """Tests for enable_bluetooth / disable_bluetooth — they share the same shape."""
 
     @pytest.mark.asyncio
-    async def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = await enable_bluetooth()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
-    @pytest.mark.asyncio
-    async def test_calls_rfkill_unblock(self):
-        """Should call rfkill unblock bluetooth."""
+    @pytest.mark.parametrize("func,rfkill_arg", [
+        (enable_bluetooth, "unblock"),
+        (disable_bluetooth, "block"),
+    ])
+    async def test_calls_rfkill_with_correct_action(self, func, rfkill_arg):
+        """Each function should invoke rfkill with the expected action."""
         mock_proc = mock.AsyncMock()
         mock_proc.communicate.return_value = (b"", b"")
         mock_proc.returncode = 0
 
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
-                result = await enable_bluetooth()
+                result = await func()
                 assert result["success"] is True
                 mock_exec.assert_called_once_with(
-                    "/usr/sbin/rfkill", "unblock", "bluetooth",
+                    "/usr/sbin/rfkill", rfkill_arg, "bluetooth",
                     stdout=mock.ANY,
                     stderr=mock.ANY,
                 )
 
     @pytest.mark.asyncio
-    async def test_handles_rfkill_not_found(self):
+    @pytest.mark.parametrize("func", [enable_bluetooth, disable_bluetooth])
+    async def test_handles_rfkill_not_found(self, func):
         """Should handle rfkill not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
-                result = await enable_bluetooth()
-                assert result["success"] is False
-                assert "rfkill" in result.get("error", "").lower()
-
-
-class TestDisableBluetooth:
-    """Tests for disable_bluetooth function."""
-
-    @pytest.mark.asyncio
-    async def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = await disable_bluetooth()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
-    @pytest.mark.asyncio
-    async def test_calls_rfkill_block(self):
-        """Should call rfkill block bluetooth."""
-        mock_proc = mock.AsyncMock()
-        mock_proc.communicate.return_value = (b"", b"")
-        mock_proc.returncode = 0
-
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
-                result = await disable_bluetooth()
-                assert result["success"] is True
-                mock_exec.assert_called_once_with(
-                    "/usr/sbin/rfkill", "block", "bluetooth",
-                    stdout=mock.ANY,
-                    stderr=mock.ANY,
-                )
-
-    @pytest.mark.asyncio
-    async def test_handles_rfkill_not_found(self):
-        """Should handle rfkill not being available."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
-            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
-                result = await disable_bluetooth()
+                result = await func()
                 assert result["success"] is False
 
 
@@ -336,15 +295,34 @@ class TestGetHotspotStatusDict:
             assert result["enabled"] is True
 
 
+class TestDockerModeErrors:
+    """Admin functions should return an error result when running in Docker mode."""
+
+    @pytest.mark.parametrize("func,is_async,args", [
+        (enable_bluetooth, True, ()),
+        (disable_bluetooth, True, ()),
+        (enable_hotspot, False, ()),
+        (disable_hotspot, False, ()),
+        (enable_throttle, False, ()),
+        (disable_throttle, False, ()),
+        (shutdown_system, False, ()),
+        (reboot_system, False, ()),
+        (restart_all_services, True, ()),
+        (set_timezone, False, ("America/Denver",)),
+    ])
+    @pytest.mark.asyncio
+    async def test_returns_error_in_docker_mode(self, func, is_async, args):
+        """In Docker mode each function should refuse with a Docker-mentioning error."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = await func(*args) if is_async else func(*args)
+            assert result["success"] is False
+            # set_timezone uses "error" string verbatim; others use the same shape.
+            error = result.get("error", "")
+            assert "Docker" in error
+
+
 class TestEnableHotspot:
     """Tests for enable_hotspot function."""
-
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = enable_hotspot()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
 
     def test_handles_nmcli_not_found(self):
         """Should handle nmcli not being available."""
@@ -424,13 +402,6 @@ class TestEnableHotspot:
 class TestDisableHotspot:
     """Tests for disable_hotspot function."""
 
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = disable_hotspot()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
     def test_handles_nmcli_not_found(self):
         """Should handle nmcli not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
@@ -478,37 +449,8 @@ class TestGetThrottleStatus:
             assert isinstance(result, GovernorStatus)
 
 
-class TestEnableThrottle:
-    """Tests for enable_throttle function."""
-
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = enable_throttle()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
-
-class TestDisableThrottle:
-    """Tests for disable_throttle function."""
-
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = disable_throttle()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
-
 class TestShutdownSystem:
     """Tests for shutdown_system function."""
-
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = shutdown_system()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
 
     def test_handles_shutdown_not_found(self):
         """Should handle shutdown command not being available."""
@@ -537,13 +479,6 @@ class TestShutdownSystem:
 class TestRebootSystem:
     """Tests for reboot_system function."""
 
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = reboot_system()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
-
     def test_handles_reboot_not_found(self):
         """Should handle reboot command not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
@@ -570,14 +505,6 @@ class TestRebootSystem:
 
 class TestRestartAllServices:
     """Tests for restart_all_services function."""
-
-    @pytest.mark.asyncio
-    async def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = await restart_all_services()
-            assert result["success"] is False
-            assert "Docker" in result.get("error", "")
 
     @pytest.mark.asyncio
     async def test_restarts_services(self):
@@ -646,13 +573,6 @@ class TestGetTimezoneStatus:
 
 class TestSetTimezone:
     """Tests for set_timezone function."""
-
-    def test_returns_error_in_docker_mode(self):
-        """Should return error when in Docker mode."""
-        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
-            result = set_timezone("America/Denver")
-            assert result["success"] is False
-            assert "Docker" in result["error"]
 
     def test_sets_timezone_successfully(self):
         """Should set timezone via timedatectl."""

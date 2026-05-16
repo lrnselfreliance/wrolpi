@@ -1,6 +1,7 @@
 """
 Pytest fixtures for Controller tests.
 """
+import asyncio
 import copy
 import tempfile
 from pathlib import Path
@@ -11,6 +12,50 @@ import pytest
 from fastapi.testclient import TestClient
 
 from controller.defaults import DEFAULT_CONFIG
+
+
+_FAKE_CACHED_STATUS = {
+    "cpu_stats": {
+        "percent": 0.0, "cores": 1,
+        "cur_frequency": 0, "max_frequency": 0, "min_frequency": 0,
+        "temperature": None, "high_temperature": None, "critical_temperature": None,
+    },
+    "memory_stats": {"total": 1, "used": 0, "free": 1, "cached": 0},
+    "load_stats": {"minute_1": "0.00", "minute_5": "0.00", "minute_15": "0.00"},
+    "drives_stats": [],
+    "nic_bandwidth_stats": {},
+    "power_stats": {"under_voltage": False, "over_current": False},
+    "iostat_stats": {"percent_iowait": None},
+    "processes_stats": [],
+    "disk_bandwidth_stats": {},
+    "uptime_stats": {"uptime_seconds": 0},
+    "last_status": "1970-01-01T00:00:00",
+}
+
+
+async def _noop_status_worker(app, base_sleep: float = 5.0):
+    """Replacement for status_worker_loop during tests.
+
+    The real worker calls blocking samplers (psutil with interval=1.0, iostat)
+    via asyncio.to_thread; those threads can't be cancelled, so TestClient
+    teardown waits ~2s for each test. Also pre-populates cached_status so the
+    dashboard route doesn't fall back to direct sampling on the request path.
+    """
+    app.state.cached_status = dict(_FAKE_CACHED_STATUS)
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        raise
+
+
+@pytest.fixture(autouse=True)
+def _patch_status_worker():
+    """Replace the real status worker with a no-op for every test.
+
+    See _noop_status_worker for why this is necessary.
+    """
+    with mock.patch("controller.main.status_worker_loop", _noop_status_worker):
+        yield
 
 
 @pytest.fixture

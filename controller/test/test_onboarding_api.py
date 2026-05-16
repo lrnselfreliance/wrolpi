@@ -4,22 +4,37 @@ Integration tests for onboarding API endpoints.
 
 from unittest import mock
 
+import pytest
+
+
+class TestOnboardingDockerAndMounted:
+    """Cross-cutting behaviour: Docker mode → 501; drive already mounted → 409."""
+
+    @pytest.mark.parametrize("method,endpoint,payload", [
+        ("get", "/api/onboarding/candidates", None),
+        ("post", "/api/onboarding/probe", {"device_path": "/dev/sda1", "fstype": "ext4"}),
+        ("post", "/api/onboarding/commit", {"device_path": "/dev/sda1", "fstype": "ext4"}),
+        ("post", "/api/onboarding/cancel", None),
+    ])
+    def test_endpoint_returns_501_in_docker(self, test_client_docker_mode, method, endpoint, payload):
+        client_call = getattr(test_client_docker_mode, method)
+        response = client_call(endpoint, json=payload) if payload else client_call(endpoint)
+        assert response.status_code == 501
+
+    @pytest.mark.parametrize("method,endpoint,payload", [
+        ("get", "/api/onboarding/candidates", None),
+        ("post", "/api/onboarding/probe", {"device_path": "/dev/sda1", "fstype": "ext4"}),
+    ])
+    def test_endpoint_returns_409_when_drive_mounted(self, test_client, method, endpoint, payload):
+        """Onboarding endpoints reject when the primary drive is already mounted."""
+        with mock.patch("controller.api.onboarding.is_primary_drive_mounted", return_value=True):
+            client_call = getattr(test_client, method)
+            response = client_call(endpoint, json=payload) if payload else client_call(endpoint)
+            assert response.status_code == 409
+
 
 class TestOnboardingCandidatesEndpoint:
     """Tests for GET /api/onboarding/candidates."""
-
-    def test_returns_501_in_docker_mode(self, test_client_docker_mode):
-        """Should return 501 in Docker mode."""
-        response = test_client_docker_mode.get("/api/onboarding/candidates")
-        assert response.status_code == 501
-
-    def test_returns_409_when_drive_mounted(self, test_client):
-        """Should return 409 when primary drive is already mounted."""
-        with mock.patch(
-            "controller.api.onboarding.is_primary_drive_mounted", return_value=True,
-        ):
-            response = test_client.get("/api/onboarding/candidates")
-            assert response.status_code == 409
 
     def test_returns_candidates(self, test_client):
         """Should return list of unmounted drives."""
@@ -52,25 +67,6 @@ class TestOnboardingCandidatesEndpoint:
 
 class TestOnboardingProbeEndpoint:
     """Tests for POST /api/onboarding/probe."""
-
-    def test_returns_501_in_docker_mode(self, test_client_docker_mode):
-        """Should return 501 in Docker mode."""
-        response = test_client_docker_mode.post(
-            "/api/onboarding/probe",
-            json={"device_path": "/dev/sda1", "fstype": "ext4"},
-        )
-        assert response.status_code == 501
-
-    def test_returns_409_when_drive_mounted(self, test_client):
-        """Should return 409 when primary drive is already mounted."""
-        with mock.patch(
-            "controller.api.onboarding.is_primary_drive_mounted", return_value=True,
-        ):
-            response = test_client.post(
-                "/api/onboarding/probe",
-                json={"device_path": "/dev/sda1", "fstype": "ext4"},
-            )
-            assert response.status_code == 409
 
     def test_probe_success_with_config(self, test_client):
         """Should return probe result with config found."""
@@ -112,14 +108,6 @@ class TestOnboardingProbeEndpoint:
 
 class TestOnboardingCommitEndpoint:
     """Tests for POST /api/onboarding/commit."""
-
-    def test_returns_501_in_docker_mode(self, test_client_docker_mode):
-        """Should return 501 in Docker mode."""
-        response = test_client_docker_mode.post(
-            "/api/onboarding/commit",
-            json={"device_path": "/dev/sda1", "fstype": "ext4"},
-        )
-        assert response.status_code == 501
 
     def test_commit_success(self, test_client):
         """Should return success on commit."""
@@ -199,11 +187,6 @@ class TestOnboardingCommitEndpoint:
 
 class TestOnboardingCancelEndpoint:
     """Tests for POST /api/onboarding/cancel."""
-
-    def test_returns_501_in_docker_mode(self, test_client_docker_mode):
-        """Should return 501 in Docker mode."""
-        response = test_client_docker_mode.post("/api/onboarding/cancel")
-        assert response.status_code == 501
 
     def test_cancel_success(self, test_client):
         """Should return success on cancel."""

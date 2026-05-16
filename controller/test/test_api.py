@@ -1,6 +1,7 @@
 """
 Integration tests for Controller API endpoints.
 """
+import re
 from unittest import mock
 
 import pytest
@@ -37,133 +38,99 @@ class TestHealthEndpoint:
 class TestDashboardEndpoint:
     """Tests for / dashboard endpoint (UI)."""
 
-    def test_dashboard_returns_200(self, test_client):
-        """Dashboard endpoint should return 200 OK."""
+    def test_dashboard_basic_response(self, test_client):
+        """Dashboard should return 200 with HTML content-type and a recognisable body."""
         response = test_client.get("/")
         assert response.status_code == 200
-
-    def test_dashboard_returns_html(self, test_client):
-        """Dashboard endpoint should return HTML."""
-        response = test_client.get("/")
         assert "text/html" in response.headers["content-type"]
-
-    def test_dashboard_contains_title(self, test_client):
-        """Dashboard should contain title."""
-        response = test_client.get("/")
-        # Title format is "Controller - {hostname} WROLPi"
         assert b"Controller" in response.content
         assert b"WROLPi" in response.content
 
-    def test_dashboard_contains_status_cards(self, test_client):
-        """Dashboard should contain status cards."""
+    @pytest.mark.parametrize("needle", [
+        # Status cards.
+        "CPU", "Memory", "Load", "Storage",
+        # Sections / structural ids.
+        "Disks", 'id="disks"', "Services", 'id="services"',
+        # System actions.
+        "System Actions", "Restart All Services",
+        # Mount modal.
+        'id="mount-modal"', 'id="mount-point-input"', 'id="mount-persist-checkbox"',
+        "Persistent (survive reboots)",
+        # Disks JS table.
+        "<th>Persist</th>", "function togglePersist", "api/disks/fstab",
+    ])
+    def test_dashboard_contains(self, test_client, needle):
+        """Dashboard body should contain each expected fragment (native mode)."""
         response = test_client.get("/")
-        content = response.text
-        assert "CPU" in content
-        assert "Memory" in content
-        assert "Load" in content
-        assert "Storage" in content
+        assert needle in response.text
 
-    def test_dashboard_contains_disks_section(self, test_client):
-        """Dashboard should contain disks section."""
-        response = test_client.get("/")
-        content = response.text
-        assert "Disks" in content
-        assert 'id="disks"' in content
-
-    def test_dashboard_contains_services_section(self, test_client):
-        """Dashboard should contain services section."""
-        response = test_client.get("/")
-        content = response.text
-        assert "Services" in content
-        assert 'id="services"' in content
-
-    def test_dashboard_contains_system_actions(self, test_client):
-        """Dashboard should contain system actions section."""
-        response = test_client.get("/")
-        content = response.text
-        assert "System Actions" in content
-        assert "Restart All Services" in content
-
-    def test_dashboard_shows_docker_banner_when_dockerized(self, test_client_docker_mode):
-        """Dashboard should show Docker mode banner when in Docker."""
-        response = test_client_docker_mode.get("/")
-        content = response.text
-        assert "Running in Docker mode" in content
-
-    def test_dashboard_no_docker_banner_when_not_dockerized(self, test_client):
-        """Dashboard should not show Docker mode banner when not in Docker."""
-        response = test_client.get("/")
-        content = response.text
-        assert "Running in Docker mode" not in content
-
-    def test_dashboard_shows_boot_column_when_not_dockerized(self, test_client):
-        """Dashboard should show Boot column in services table when not in Docker."""
+    def test_dashboard_native_mode_shows_boot_column_and_hides_docker_banner(self, test_client):
+        """Native (non-Docker) mode: Boot column visible, no Docker banner."""
         response = test_client.get("/")
         content = response.text
         assert "<th>Boot</th>" in content
-        # Should have toggle switches
         assert 'class="toggle"' in content
+        assert "Running in Docker mode" not in content
 
-    def test_dashboard_no_boot_column_when_dockerized(self, test_client_docker_mode):
-        """Dashboard should not show Boot column in services table when in Docker."""
+    def test_dashboard_docker_mode_shows_banner_and_hides_boot_column(self, test_client_docker_mode):
+        """Docker mode: Docker banner visible, no Boot toggles in rendered tbody."""
         response = test_client_docker_mode.get("/")
         content = response.text
+        assert "Running in Docker mode" in content
         assert "<th>Boot</th>" not in content
-        # The table body (rendered server-side) should not have boot toggles
-        # Note: JavaScript template literals may contain 'id="boot-' for dynamic updates,
-        # but the actual rendered <tbody> should not have boot toggles in Docker mode
-        import re
+        # JS template literals may mention 'id="boot-' but the server-rendered tbody must not.
         tbody_match = re.search(r'<tbody>(.*?)</tbody>', content, re.DOTALL)
         if tbody_match:
-            tbody_content = tbody_match.group(1)
-            assert 'id="boot-' not in tbody_content
-
-    def test_dashboard_has_mount_modal(self, test_client):
-        """Dashboard should have mount modal for disk mounting."""
-        response = test_client.get("/")
-        content = response.text
-        assert 'id="mount-modal"' in content
-        assert 'id="mount-point-input"' in content
-        assert 'id="mount-persist-checkbox"' in content
-        assert "Persistent (survive reboots)" in content
-
-    def test_dashboard_has_persist_column_in_disks_js(self, test_client):
-        """Dashboard JavaScript should include Persist column in disk table."""
-        response = test_client.get("/")
-        content = response.text
-        # The loadDisks() function should create a table with Persist column
-        assert "<th>Persist</th>" in content
-        # Should have togglePersist function
-        assert "function togglePersist" in content
-        # Should fetch fstab entries
-        assert "api/disks/fstab" in content
+            assert 'id="boot-' not in tbody_match.group(1)
 
 
-class TestOpenAPIEndpoint:
-    """Tests for OpenAPI documentation endpoint."""
+class TestOpenAPI:
+    """Tests for the OpenAPI schema and its expected endpoint coverage."""
 
-    def test_openapi_returns_200(self, test_client):
-        """OpenAPI endpoint should return 200 OK."""
+    @pytest.fixture
+    def openapi(self, test_client):
+        """Fetch the OpenAPI schema once per parametrized test."""
         response = test_client.get("/openapi.json")
         assert response.status_code == 200
+        return response.json()
 
-    def test_openapi_has_title(self, test_client):
-        """OpenAPI schema should have correct title."""
-        response = test_client.get("/openapi.json")
-        data = response.json()
-        assert data["info"]["title"] == "WROLPi Controller"
+    def test_openapi_metadata(self, openapi):
+        """Schema title and version should match the package metadata."""
+        assert openapi["info"]["title"] == "WROLPi Controller"
+        assert openapi["info"]["version"] == __version__
 
-    def test_openapi_has_version(self, test_client):
-        """OpenAPI schema should have version."""
-        response = test_client.get("/openapi.json")
-        data = response.json()
-        assert data["info"]["version"] == __version__
+    @pytest.mark.parametrize("path", [
+        # Health.
+        "/api/health",
+        # Stats (per-resource + aggregated).
+        "/api/stats/cpu", "/api/stats/memory", "/api/stats/load",
+        "/api/stats/drives/primary", "/api/stats/network", "/api/stats/power",
+        # Admin: hotspot, bluetooth, throttle, timezone, power.
+        "/api/hotspot/status", "/api/hotspot/enable", "/api/hotspot/disable",
+        "/api/bluetooth/status", "/api/bluetooth/enable", "/api/bluetooth/disable",
+        "/api/throttle/status", "/api/throttle/enable", "/api/throttle/disable",
+        "/api/timezone/status", "/api/timezone/set",
+        "/api/shutdown", "/api/reboot", "/api/restart",
+        # Disks.
+        "/api/disks", "/api/disks/mounts", "/api/disks/mount", "/api/disks/unmount",
+        "/api/disks/fstab", "/api/disks/smart",
+        # Services.
+        "/api/services", "/api/services/{name}",
+        "/api/services/{name}/start", "/api/services/{name}/stop",
+        "/api/services/{name}/restart", "/api/services/{name}/enable",
+        "/api/services/{name}/disable", "/api/services/{name}/logs",
+        # Scripts.
+        "/api/scripts", "/api/scripts/status",
+        "/api/scripts/{name}/start", "/api/scripts/{name}/output",
+    ])
+    def test_openapi_has_path(self, openapi, path):
+        """Every documented API path should be present in the OpenAPI schema."""
+        assert path in openapi["paths"], f"OpenAPI schema is missing {path}"
 
-    def test_openapi_has_api_paths(self, test_client):
-        """OpenAPI schema should have API paths defined."""
-        response = test_client.get("/openapi.json")
-        data = response.json()
-        assert "/api/health" in data["paths"]
+    def test_openapi_has_aggregated_stats(self, openapi):
+        """Aggregated /api/stats endpoint (may register with or without trailing slash)."""
+        paths = openapi["paths"]
+        assert "/api/stats" in paths or "/api/stats/" in paths
 
 
 class TestDocsEndpoint:

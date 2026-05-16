@@ -162,18 +162,4 @@ class TestServiceLogsEndpoint:
             assert response.status_code == 200
 
 
-class TestOpenAPIIncludesServicesEndpoints:
-    """Tests that OpenAPI documentation includes services endpoints."""
-
-    def test_openapi_has_services_paths(self, test_client):
-        """OpenAPI schema should include services paths."""
-        response = test_client.get("/openapi.json")
-        data = response.json()
-        assert "/api/services" in data["paths"]
-        assert "/api/services/{name}" in data["paths"]
-        assert "/api/services/{name}/start" in data["paths"]
-        assert "/api/services/{name}/stop" in data["paths"]
-        assert "/api/services/{name}/restart" in data["paths"]
-        assert "/api/services/{name}/enable" in data["paths"]
-        assert "/api/services/{name}/disable" in data["paths"]
-        assert "/api/services/{name}/logs" in data["paths"]
+# OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.

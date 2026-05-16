@@ -3,6 +3,7 @@ import asyncio
 from unittest import mock
 
 import pytest
+from sqlalchemy import text
 
 from wrolpi.conftest import await_switches
 from wrolpi.dates import from_timestamp
@@ -330,6 +331,39 @@ async def test_compare_file_groups_survives_concurrent_commit(
         result = await compare_file_groups(test_directory)
 
     assert len(result.new) == 2
+
+
+@pytest.mark.asyncio
+async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
+        test_session, test_directory, make_files_structure):
+    """When compare_file_groups raises after a concurrent commit has put the
+    session into an aborted-transaction state, the work table must still be
+    dropped (no orphan tables left behind)."""
+    make_files_structure(['docs/file1.txt'])
+
+    from wrolpi.files import worker as worker_mod
+    original = worker_mod._stream_filesystem_paths
+
+    async def commit_then_abort_then_raise(root):
+        async for p in original(root):
+            yield p
+            test_session.commit()
+            # Poison the transaction so any later DDL fails unless rolled back.
+            try:
+                test_session.execute(text('SELECT FROM does_not_exist_xyz'))
+            except Exception:
+                pass
+            raise RuntimeError('simulated crash mid-scan')
+
+    with mock.patch.object(worker_mod, '_stream_filesystem_paths', commit_then_abort_then_raise):
+        with pytest.raises(RuntimeError):
+            await compare_file_groups(test_directory)
+
+    test_session.rollback()
+    leftover = [row.tablename for row in test_session.execute(text(
+        "SELECT tablename FROM pg_tables WHERE tablename LIKE 'fs_files_%'"
+    ))]
+    assert leftover == [], f'orphaned work tables: {leftover}'
 
 
 @pytest.mark.asyncio

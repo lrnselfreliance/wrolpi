@@ -486,12 +486,23 @@ async def compare_file_groups(
                 modified=modified,
             )
         finally:
-            # Drop the work table regardless of success/failure. Isolate cleanup
-            # in its own try so a broken transaction doesn't mask the original error.
+            # Drop the work table regardless of success/failure. Prefer the caller's
+            # session so the DROP joins the same transaction as the CREATE (cleanup
+            # follows whatever the caller does with the tx). If the tx is aborted —
+            # e.g. an external commit + later SQL error left us mid-error — Postgres
+            # rejects DDL on the session; fall back to a fresh connection so the
+            # already-committed work table doesn't orphan.
             try:
                 session.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
             except Exception:
-                logger.exception(f'Failed to drop work table {table_name}')
+                from wrolpi.db import get_db_context
+                try:
+                    engine, _ = get_db_context()
+                    with engine.connect() as conn:
+                        with conn.begin():
+                            conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+                except Exception:
+                    logger.exception(f'Failed to drop work table {table_name}')
 
 
 async def build_move_plan_bulk(

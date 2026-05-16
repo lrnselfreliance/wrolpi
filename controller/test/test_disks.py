@@ -107,7 +107,7 @@ class TestGetBlockDevices:
                     "type": "disk",
                     "children": [
                         {"name": "sda1", "path": "/dev/sda1", "size": "100G", "type": "part", "fstype": "ext4"},
-                        {"name": "sda2", "path": "/dev/sda2", "size": "100G", "type": "part", "fstype": "ntfs"},
+                        {"name": "sda2", "path": "/dev/sda2", "size": "100G", "type": "part", "fstype": "xfs"},
                     ]
                 }
             ]
@@ -318,6 +318,36 @@ class TestMountDrive:
                         assert "uid=1001" in options
                         assert "gid=1001" in options
 
+    def test_ntfs_mount_includes_uid_gid(self):
+        """Should add uid/gid options when mounting ntfs (Windows-formatted drive)."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                with mock.patch("pathlib.Path.mkdir"):
+                    with mock.patch("subprocess.run") as mock_run:
+                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+                        result = mount_drive("/dev/sda1", "/media/test", fstype="ntfs")
+                        assert result["success"] is True
+                        call_args = mock_run.call_args[0][0]
+                        options_idx = call_args.index("-o") + 1
+                        options = call_args[options_idx]
+                        assert "uid=1001" in options
+                        assert "gid=1001" in options
+
+    def test_ntfs3_mount_includes_uid_gid(self):
+        """Same handling for the in-kernel ntfs3 driver (kernel 5.15+)."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                with mock.patch("pathlib.Path.mkdir"):
+                    with mock.patch("subprocess.run") as mock_run:
+                        mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+                        result = mount_drive("/dev/sda1", "/media/test", fstype="ntfs3")
+                        assert result["success"] is True
+                        call_args = mock_run.call_args[0][0]
+                        options_idx = call_args.index("-o") + 1
+                        options = call_args[options_idx]
+                        assert "uid=1001" in options
+                        assert "gid=1001" in options
+
 
 class TestGetWrolpiUidGid:
     """Tests for get_wrolpi_uid_gid function."""
@@ -456,5 +486,44 @@ class TestCheckShadowedData:
         result = check_shadowed_data(str(target))
         assert result["size_bytes"] == 1000
         assert result["entries"] == ["videos", "zims"]
+
+    def test_does_not_follow_symlinks_to_directories(self, tmp_path):
+        """A symlink at the mount target must not have its target walked.
+
+        Regression: previously a symlink-to-dir was detected by is_dir()
+        (which follows symlinks), then rglob walked the target — so
+        `ln -s /etc /media/wrolpi/x` would sum the size of /etc.
+        """
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        # A few large files outside the mount target.
+        (outside / "a").write_bytes(b"x" * 10_000)
+        (outside / "b").write_bytes(b"x" * 20_000)
+
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "videos").mkdir()
+        (target / "videos" / "movie.mp4").write_bytes(b"x" * 100)
+        # Symlink pointing outside the mount target.
+        (target / "external").symlink_to(outside)
+
+        result = check_shadowed_data(str(target))
+        # `external` is listed (the user should know it's there) but it
+        # contributes 0 to the size — only the real `videos` data counts.
+        assert result["entries"] == ["external", "videos"]
+        assert result["size_bytes"] == 100
+
+    def test_does_not_follow_symlinks_to_files(self, tmp_path):
+        """A symlink-to-file is listed but contributes 0 bytes."""
+        outside_file = tmp_path / "big.bin"
+        outside_file.write_bytes(b"x" * 50_000)
+
+        target = tmp_path / "wrolpi"
+        target.mkdir()
+        (target / "link.bin").symlink_to(outside_file)
+
+        result = check_shadowed_data(str(target))
+        assert result["entries"] == ["link.bin"]
+        assert result["size_bytes"] == 0
 
 

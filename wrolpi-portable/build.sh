@@ -32,7 +32,8 @@ while getopts ":hb:" option; do
 done
 
 # Get version from the target git branch (not local checkout) so output filename matches actual content.
-VERSION=$(curl -sL "https://raw.githubusercontent.com/lrnselfreliance/wrolpi/${BRANCH}/wrolpi/version.txt")
+# Strip whitespace so newlines/spaces in version.txt don't corrupt the lb config metadata strings below.
+VERSION=$(curl -sL "https://raw.githubusercontent.com/lrnselfreliance/wrolpi/${BRANCH}/wrolpi/version.txt" | tr -d '[:space:]')
 if [ -z "${VERSION}" ]; then
   echo "ERROR: Could not fetch version from branch '${BRANCH}'"
   exit 1
@@ -113,7 +114,10 @@ fi
 cp "${BLOB_CACHE}/map-fonts.tar.gz" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
 cp "${BLOB_CACHE}/map-overview.pmtiles" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
 
+# pipefail so an lb build failure isn't masked by tee's success exit code.
+set -o pipefail
 time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
+set +o pipefail
 
 grep "9999-wrolpi.hook.chroot completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "build hook failed!" && exit 1)
 

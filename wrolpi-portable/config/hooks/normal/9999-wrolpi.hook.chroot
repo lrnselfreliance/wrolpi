@@ -37,9 +37,11 @@ npm install
 # Install Node console commands.
 npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
-# Install Deno runtime.
+# Install Deno runtime.  Hash pinned to detect tampering of the upstream release artifact.
 DENO_VERSION="v2.2.4"
+DENO_SHA256="9a260a624cab6e61f7603957f94f638d68739d8c6ac8c38bc337521266603a7c"
 curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c -
 unzip /tmp/deno.zip -d /usr/local/bin/
 chmod +x /usr/local/bin/deno
 rm /tmp/deno.zip
@@ -90,9 +92,14 @@ mkdir /media/wrolpi
 # Bake in pmtiles CLI so first boot does not need internet.
 # Mirrors scripts/install_protomaps.sh; duplicated here because that script's
 # migration logic relies on a running systemd, which is not present in chroot.
+# Hash pinned to detect tampering of the upstream release artifact.
 PMTILES_VERSION="v1.30.1"
-curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_amd64.tar.gz" \
-  | tar -xz -C /usr/local/bin/ pmtiles
+PMTILES_SHA256="23a2a2222f658320b539ccd06ac3b9b3b803ecbdd39a6cb5249d2ce2e16e38ae"
+curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_x86_64.tar.gz" \
+  -o /tmp/pmtiles.tar.gz
+echo "${PMTILES_SHA256}  /tmp/pmtiles.tar.gz" | sha256sum -c -
+tar -xz -C /usr/local/bin/ -f /tmp/pmtiles.tar.gz pmtiles
+rm /tmp/pmtiles.tar.gz
 chmod +x /usr/local/bin/pmtiles
 pmtiles version
 
@@ -129,13 +136,17 @@ systemctl enable wrolpi-controller.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
 
-# Drop the default Postgres cluster created by the postgresql-15 package.
+# Drop the default Postgres cluster created by the postgresql-* package.
 # On first boot, the persistence partition will be bind-mounted over
 # /var/lib/postgresql; with the default cluster baked into the squashfs, the
 # mount would mask it and Postgres would fail to start against an empty data
 # dir. Phase 2's firstboot service creates a fresh cluster directly on the
 # persistence partition.
-pg_dropcluster --stop 15 main
+# Version derived from the installed cluster so this stays correct if the
+# package list is later bumped past postgresql-15.
+PG_VERSION=$(pg_lsclusters -h | awk 'NR==1{print $1}')
+[ -n "${PG_VERSION}" ] || (echo "ERROR: no Postgres cluster found to drop" && exit 1)
+pg_dropcluster --stop "${PG_VERSION}" main
 
 # Protect blob files from accidental modification or deletion.
 if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then

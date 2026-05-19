@@ -1,0 +1,153 @@
+#!/usr/bin/bash
+# Chroot hook for WROLPi Portable — composes the full WROLPi stack into the
+# live system during live-build's chroot phase. Closely mirrors the installer
+# ISO hook in ../../../debian-live-config/config/hooks/normal/, with two
+# Portable-specific additions: bake in pmtiles/tippecanoe (offline-first
+# first-boot) and drop the default Postgres cluster (Phase 2 firstboot will
+# recreate it on the persistence partition).
+
+set -e
+set -x
+
+# Generate and set default locale to avoid perl warnings.
+# Users can change this later via: sudo dpkg-reconfigure locales
+sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=en_US.UTF-8' > /etc/default/locale
+export LANG=en_US.UTF-8
+
+cat >>/etc/profile <<'EOF'
+alias ll='ls -lh'
+alias la='ll -a'
+EOF
+
+git --version
+
+WROLPI_BRANCH="release"
+[ -f /opt/wrolpi-branch ] && WROLPI_BRANCH=$(cat /opt/wrolpi-branch)
+git clone -b "${WROLPI_BRANCH}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+rm -f /opt/wrolpi-branch
+
+# Install webapp.
+cd /opt/wrolpi/app
+npm --version
+node --version
+npm install
+
+# Install Node console commands.
+npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
+
+# Install Deno runtime.
+DENO_VERSION="v2.2.4"
+curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+unzip /tmp/deno.zip -d /usr/local/bin/
+chmod +x /usr/local/bin/deno
+rm /tmp/deno.zip
+deno --version
+
+# Install Python requirements.  Try multiple times because pypi may stop responding.
+python3 --version
+python3 -m venv /opt/wrolpi/venv
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
+  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt ||
+  /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+
+# Install Controller with separate venv.
+echo "Pre-installing WROLPi Controller..."
+python3 -m venv /opt/wrolpi/controller/venv
+/opt/wrolpi/controller/venv/bin/pip install --upgrade pip
+/opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
+  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt ||
+  /opt/wrolpi/controller/venv/bin/pip install -r /opt/wrolpi/controller/requirements.txt
+echo "Controller pre-installed"
+
+# Install Caddy from official apt repo.
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+apt-get update
+apt-get install -y caddy
+
+# Configure Caddy.
+mkdir -p /etc/caddy
+cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile
+mkdir -p /var/www
+cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
+
+# WROLPi needs a few privileged commands.
+cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
+chmod 0440 /etc/sudoers.d/90-wrolpi
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
+
+mkdir /media/wrolpi
+
+# Verify blob files were copied in by includes.chroot (downloaded by build.sh).
+[[ -f /opt/wrolpi-blobs/map-fonts.tar.gz && -s /opt/wrolpi-blobs/map-fonts.tar.gz ]] || \
+  (echo "ERROR: map-fonts.tar.gz missing from /opt/wrolpi-blobs!" && exit 1)
+[[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
+  (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
+
+# Bake in pmtiles CLI so first boot does not need internet.
+# Mirrors scripts/install_protomaps.sh; duplicated here because that script's
+# migration logic relies on a running systemd, which is not present in chroot.
+PMTILES_VERSION="v1.30.1"
+curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_amd64.tar.gz" \
+  | tar -xz -C /usr/local/bin/ pmtiles
+chmod +x /usr/local/bin/pmtiles
+pmtiles version
+
+# Build and bake in tippecanoe (used to build map search indexes).
+TIPPECANOE_VERSION="2.79.0"
+TIPPECANOE_BUILD_DIR=$(mktemp -d)
+curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
+  | tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1
+(cd "${TIPPECANOE_BUILD_DIR}" && make -j"$(nproc)" && make install)
+rm -rf "${TIPPECANOE_BUILD_DIR}"
+tippecanoe --version
+
+# Install WROLPi Help.
+/opt/wrolpi/scripts/install_help_service.sh
+
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.timer /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
+# Copy MOTD scripts, delete original.
+cp /opt/wrolpi/etc/raspberrypios/motd/20-wrolpi.motd /etc/update-motd.d/20-wrolpi
+cp /opt/wrolpi/etc/raspberrypios/motd/30-wrolpi-first.motd /etc/update-motd.d/30-wrolpi
+chmod +x /etc/update-motd.d/*
+truncate -s 0 /etc/motd
+
+# NetworkManager for the hotspot.
+systemctl enable NetworkManager
+
+# Enable iperf3 for speed testing.
+systemctl enable iperf3
+# Enable first startup script to generate certificates and start Caddy.
+systemctl enable wrolpi-first-startup.service
+# Enable Controller service to start on boot.
+systemctl enable wrolpi-controller.service
+# Enable weekly certificate renewal check.
+systemctl enable wrolpi-cert-renew.timer
+
+# Drop the default Postgres cluster created by the postgresql-15 package.
+# On first boot, the persistence partition will be bind-mounted over
+# /var/lib/postgresql; with the default cluster baked into the squashfs, the
+# mount would mask it and Postgres would fail to start against an empty data
+# dir. Phase 2's firstboot service creates a fresh cluster directly on the
+# persistence partition.
+pg_dropcluster --stop 15 main
+
+# Protect blob files from accidental modification or deletion.
+if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then
+  chown -R root:root /opt/wrolpi-blobs
+  chmod 444 /opt/wrolpi-blobs/*
+  chattr +i /opt/wrolpi-blobs/*
+fi
+
+set +x
+
+echo
+echo "======================================================================"
+echo "9999-wrolpi.hook.chroot completed"
+echo "======================================================================"
+echo

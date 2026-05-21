@@ -21,6 +21,28 @@ alias ll='ls -lh'
 alias la='ll -a'
 EOF
 
+# Pre-create the wrolpi user. Same account is used for interactive desktop
+# login (password 'wrolpi') AND as the User= for the wrolpi-* systemd
+# services. live-config sees this existing user at boot and skips its own
+# user creation (preserving our chosen password); the boot params set
+# live-config.username=wrolpi so live-config's other scripts (sudo,
+# lightdm autologin) target this account.
+useradd -m -s /bin/bash -U -G sudo,audio,video,cdrom,plugdev,netdev wrolpi
+echo "wrolpi:wrolpi" | chpasswd
+
+# Rebrand from generic Debian so users don't think they have the wrong USB.
+echo "wrolpi" > /etc/hostname
+sed -i 's/127\.0\.1\.1.*/127.0.1.1\twrolpi/' /etc/hosts 2>/dev/null || \
+  echo "127.0.1.1	wrolpi" >> /etc/hosts
+cat > /etc/issue <<'EOF'
+WROLPi Portable \n (\l)
+
+EOF
+cat > /etc/issue.net <<'EOF'
+WROLPi Portable %h
+
+EOF
+
 git --version
 
 WROLPI_BRANCH="release"
@@ -135,6 +157,20 @@ systemctl enable wrolpi-first-startup.service
 systemctl enable wrolpi-controller.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
+
+# Plymouth — replace Debian-branded splash with a minimal theme. live-build's
+# initramfs regeneration at the end of the chroot phase will pick up this
+# change so the new theme is used at boot.
+plymouth-set-default-theme text || true
+
+# LightDM greeter — add a WROLPi banner so the login screen identifies the
+# system instead of looking like a stock Debian.
+mkdir -p /etc/lightdm/lightdm-gtk-greeter.conf.d
+cat > /etc/lightdm/lightdm-gtk-greeter.conf.d/50-wrolpi.conf <<'EOF'
+[greeter]
+banner-message-enable=true
+banner-message-text=WROLPi Portable
+EOF
 
 # Drop the default Postgres cluster created by the postgresql-* package.
 # On first boot, the persistence partition will be bind-mounted over

@@ -73,7 +73,7 @@ lb config \
  --clean \
  --color \
  --linux-packages "linux-image linux-headers" \
- --bootappend-live "boot=live components quiet splash noswap" \
+ --bootappend-live "boot=live components quiet splash noswap live-config.username=wrolpi live-config.user-fullname=WROLPi live-config.hostname=wrolpi" \
  --iso-volume "WROLPi Portable v${VERSION}" \
  --iso-application "WROLPi Portable v${VERSION}" \
  --iso-preparer WROLPi \

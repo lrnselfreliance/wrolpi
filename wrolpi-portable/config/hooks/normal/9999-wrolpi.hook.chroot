@@ -158,6 +158,13 @@ systemctl enable wrolpi-controller.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
 
+# Bootstrap service: creates the persistence partition on first boot,
+# Postgres cluster + DB on every boot (idempotent).  The wrolpi-* runtime
+# services (api/app/kiwix) are enabled BY this bootstrap, not here, so they
+# cannot start until persistence + DB are ready.
+chmod +x /usr/local/sbin/wrolpi-portable-bootstrap.sh
+systemctl enable wrolpi-portable-bootstrap.service
+
 # Plymouth — replace Debian-branded splash with a minimal theme. live-build's
 # initramfs regeneration at the end of the chroot phase will pick up this
 # change so the new theme is used at boot.

@@ -1,0 +1,18 @@
+[Unit]
+Description=WROLPi Portable bootstrap (persistence partition + DB)
+Documentation=https://github.com/lrnselfreliance/wrolpi
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=postgresql.service wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi-controller.service wrolpi-first-startup.service wrolpi.target
+Wants=local-fs.target
+RequiresMountsFor=/usr/lib/live/mount/medium
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/wrolpi-portable-bootstrap.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

@@ -46,9 +46,16 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-# Clear out old builds.
-[ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
-mkdir "${BUILD_DIR}"
+# Clear out old builds. Strip immutable flag from blob files first — the
+# chroot hook applies chattr +i to /opt/wrolpi-blobs/*; without removing
+# that here, rm -rf leaves them behind and the next lb build's
+# chroot_includes_after_packages rsync fails with "Operation not permitted"
+# trying to overwrite them.
+if [ -d "${BUILD_DIR}" ]; then
+  find "${BUILD_DIR}" -path '*/opt/wrolpi-blobs/*' -type f -exec chattr -i {} + 2>/dev/null || true
+  rm -rf "${BUILD_DIR}"
+fi
+mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)
 set -e
 

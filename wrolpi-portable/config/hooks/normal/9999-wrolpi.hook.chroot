@@ -172,6 +172,17 @@ banner-message-enable=true
 banner-message-text=WROLPi Portable
 EOF
 
+# LightDM auto-login — drop straight into the XFCE session as wrolpi without
+# a password prompt. The wrolpi password ('wrolpi') is still required for
+# sudo and screen unlock.
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-wrolpi-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user=wrolpi
+autologin-user-timeout=0
+autologin-session=xfce
+EOF
+
 # Drop the default Postgres cluster created by the postgresql-* package.
 # On first boot, the persistence partition will be bind-mounted over
 # /var/lib/postgresql; with the default cluster baked into the squashfs, the

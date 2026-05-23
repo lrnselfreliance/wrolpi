@@ -55,8 +55,18 @@ log "live medium $BOOT_PART on $BOOT_DRIVE"
 PERSIST_PART=$(blkid -L persistence 2>/dev/null || true)
 if [ -z "$PERSIST_PART" ]; then
   progress "Creating persistence partition on $BOOT_DRIVE..."
-  # Compute next 1-MiB-aligned start sector after the last existing partition.
-  LAST_END=$(sfdisk -d "$BOOT_DRIVE" | awk '/^\/dev\// {n=$4+$6} END{print n}')
+  # Compute next 1-MiB-aligned start sector after the highest-ending existing
+  # partition.  We need MAX(start+size), not LAST: iso-hybrid layouts list a
+  # small ESP (sdb2) AFTER the main data partition (sdb1) in sfdisk -d output
+  # even though sdb1 ends much later on disk.  Parse via sed because sfdisk -d
+  # pads values with spaces ("start=          64,") which breaks naive awk.
+  LAST_END=$(sfdisk -d "$BOOT_DRIVE" \
+    | sed -n 's|^/dev/[^ ]* *: *start= *\([0-9]\+\), *size= *\([0-9]\+\).*|\1 \2|p' \
+    | awk '{e=$1+$2; if(e>m) m=e} END{print m+0}')
+  if [ "${LAST_END:-0}" -lt 1 ]; then
+    log "ERROR: failed to compute LAST_END from $BOOT_DRIVE partition table"
+    exit 1
+  fi
   START=$(( ((LAST_END + 2047) / 2048) * 2048 ))
   # --no-reread --force: required because the live medium is mounted from
   # this same drive.  Adding a new partition entry past the mounted one is
@@ -148,9 +158,15 @@ mkdir -p /media/wrolpi/config
 chown wrolpi:wrolpi /media/wrolpi/config
 
 # --- Enable and start the WROLPi runtime services -----------------------
+# These units declare `After=wrolpi-portable-bootstrap.service` (via our
+# Before= here in this unit), so a blocking `systemctl --now` would deadlock:
+# the runtime units won't start until bootstrap finishes, and bootstrap won't
+# finish until systemctl returns.  Enable, then start with --no-block so
+# systemd queues the starts after we exit.
 
 progress "Starting WROLPi services..."
-systemctl enable --now wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
+systemctl enable wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
+systemctl start --no-block wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
 
 progress "WROLPi Portable is ready."
 log "bootstrap complete"

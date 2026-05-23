@@ -74,12 +74,24 @@ if [ -z "$PERSIST_PART" ]; then
   # a re-read of the whole partition table.
   echo "start=$START, type=83" | sfdisk --append --no-reread --force "$BOOT_DRIVE"
   partx -a "$BOOT_DRIVE" 2>/dev/null || true
-  udevadm settle || true
-  PERSIST_PART=$(blkid -L persistence 2>/dev/null || true)
-  if [ -z "$PERSIST_PART" ]; then
-    PERSIST_PART=$(lsblk -lnpo NAME "$BOOT_DRIVE" | tail -1)
-  fi
-  if ! [ -b "$PERSIST_PART" ]; then
+
+  # Identify the new partition by the start sector we just assigned to it.
+  # We deliberately avoid `lsblk | tail -1` here: if partx -a or udev have
+  # not registered the new node yet, that fallback would return the
+  # existing last partition (typically the ESP or the live data partition)
+  # — and the mkfs.ext4 -F below would wipe it.  Matching on start sector
+  # is unambiguous: no existing partition can share it.  Retry up to 5s
+  # for udev to settle and the partition node to appear.
+  PERSIST_PART=""
+  for _i in 1 2 3 4 5; do
+    udevadm settle || true
+    PERSIST_PART=$(lsblk -lnpo NAME,START "$BOOT_DRIVE" 2>/dev/null \
+      | awk -v s="$START" '$2 == s {print $1; exit}')
+    [ -n "$PERSIST_PART" ] && [ -b "$PERSIST_PART" ] && break
+    PERSIST_PART=""
+    sleep 1
+  done
+  if [ -z "$PERSIST_PART" ] || ! [ -b "$PERSIST_PART" ]; then
     log "ERROR: failed to locate the newly created persistence partition"
     exit 1
   fi

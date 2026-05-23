@@ -1,11 +1,63 @@
 """
 Integration tests for Controller disks API endpoints.
+
+The API writes fstab.yaml and asks wrolpi-mounts.service to reconcile.
+Tests inject:
+
+- a FakeMountExecutor in place of the production SubprocessMountExecutor,
+- a fake ``_trigger_reconcile`` that simulates the service by running the
+  real Reconciler against the fake executor + a tmp_path fstab.yaml.
+
+The only mocks are ``mock.patch`` for the read helpers (get_block_devices,
+get_mounts, get_uuid, SMART) that touch the host's real disks.  The
+mount/unmount/fstab paths use real I/O against tmp_path and the
+FakeMountExecutor.
 """
 
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from controller.lib import fstab_yaml
+from controller.lib.mount_executor import FakeMountExecutor
+from controller.lib.reconciler import Reconciler
+
+
+@pytest.fixture
+def disks_env(monkeypatch, tmp_path):
+    """Replace production wiring with a real Reconciler driving a fake
+    executor against a tmp_path fstab.yaml.  Returns ``(fake, fstab_path)``.
+
+    Calling the API mutates the real fstab.yaml on disk and then runs the
+    real Reconciler.apply() — verifying the same code path that boot uses.
+    """
+    fstab_path = tmp_path / "fstab.yaml"
+    managed_path = tmp_path / "managed"
+    monkeypatch.setattr(fstab_yaml, "DEFAULT_PATH", fstab_path)
+
+    fake = FakeMountExecutor()
+
+    def fake_trigger():
+        # Run the real reconciler.  This is exactly the work the service
+        # would do when systemctl restarts it.
+        Reconciler(
+            executor=fake,
+            fstab_path=fstab_path,
+            managed_path=managed_path,
+            wrolpi_uid=1001,
+            wrolpi_gid=1001,
+        ).apply()
+        return True, None
+
+    from controller.api import disks as disks_module
+    monkeypatch.setattr(disks_module, "_executor", fake)
+    monkeypatch.setattr(disks_module, "_trigger_reconcile", fake_trigger)
+
+    return {"fake": fake, "fstab_path": fstab_path}
+
+
+# --- Docker mode ----------------------------------------------------------
 
 class TestDockerModeRejectsDisksEndpoints:
     """All /api/disks/* endpoints should return 501 in Docker mode."""
@@ -20,18 +72,19 @@ class TestDockerModeRejectsDisksEndpoints:
         ("delete", "/api/disks/fstab/media/test", None),
         ("get", "/api/disks/smart", None),
     ])
-    def test_disks_endpoint_rejected_in_docker(self, test_client_docker_mode, method, endpoint, payload):
-        """Docker mode rejects every disks endpoint with 501."""
+    def test_disks_endpoint_rejected_in_docker(
+        self, test_client_docker_mode, method, endpoint, payload,
+    ):
         client_call = getattr(test_client_docker_mode, method)
         response = client_call(endpoint, json=payload) if payload else client_call(endpoint)
         assert response.status_code == 501
 
 
+# --- Read-only endpoints --------------------------------------------------
+
 class TestDisksListEndpoint:
-    """Tests for /api/disks endpoint."""
 
     def test_returns_list_in_native_mode(self, test_client):
-        """Should return list of disks in native mode."""
         with mock.patch("controller.api.disks.get_block_devices", return_value=[]):
             response = test_client.get("/api/disks")
             assert response.status_code == 200
@@ -39,10 +92,8 @@ class TestDisksListEndpoint:
 
 
 class TestMountsEndpoint:
-    """Tests for /api/disks/mounts endpoint."""
 
     def test_returns_mounts(self, test_client):
-        """Should return current mounts."""
         mock_mounts = [{"mount_point": "/media/wrolpi", "device": "/dev/sda1"}]
         with mock.patch("controller.api.disks.get_mounts", return_value=mock_mounts):
             response = test_client.get("/api/disks/mounts")
@@ -50,266 +101,217 @@ class TestMountsEndpoint:
             assert response.json() == mock_mounts
 
 
+# --- /api/disks/mount -----------------------------------------------------
+
 class TestMountEndpoint:
-    """Tests for /api/disks/mount endpoint."""
 
-    def test_mounts_drive_successfully(self, test_client):
-        """Should mount drive successfully."""
-        with mock.patch(
-                "controller.api.disks.mount_drive",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
+    def test_mounts_drive_successfully(self, test_client, disks_env):
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=None), \
+                mock.patch("controller.api.disks.get_uuid", return_value="abc-123"):
             response = test_client.post(
                 "/api/disks/mount",
-                json={"device": "/dev/sda1", "mount_point": "/media/test"}
+                json={"device": "/dev/sda1", "mount_point": "/media/wrolpi/usb",
+                      "fstype": "ext4"},
             )
-            assert response.status_code == 200
-            assert response.json()["success"] is True
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["device"] == "UUID=abc-123"
+        assert body["mount_point"] == "/media/wrolpi/usb"
+        # Drive is now in fstab.yaml AND live in the fake executor.
+        assert disks_env["fake"].current_mount_points() == {"/media/wrolpi/usb"}
+        data = fstab_yaml.load(disks_env["fstab_path"])
+        assert data.mount_points() == {"/media/wrolpi/usb"}
 
-    def test_returns_500_on_failure(self, test_client):
-        """Should return 500 on mount failure."""
-        with mock.patch(
-                "controller.api.disks.mount_drive",
-                return_value={"success": False, "error": "Mount failed"}
-        ):
+    def test_returns_500_when_reconciler_fails(self, test_client, disks_env, monkeypatch):
+        # Force the fake executor to refuse the mount; reconciler runs but
+        # the live state will not include the mount point.
+        disks_env["fake"].fail_for_mount = frozenset({"/media/wrolpi/usb"})
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=None), \
+                mock.patch("controller.api.disks.get_uuid", return_value="abc-123"):
             response = test_client.post(
                 "/api/disks/mount",
-                json={"device": "/dev/sda1", "mount_point": "/media/test"}
+                json={"device": "/dev/sda1", "mount_point": "/media/wrolpi/usb",
+                      "fstype": "ext4"},
             )
-            assert response.status_code == 500
+        assert response.status_code == 500
+        assert "did not mount" in response.json()["detail"]
+        # The entry is still in fstab.yaml — it'll be retried next reconcile.
+        assert fstab_yaml.load(disks_env["fstab_path"]).mount_points() == {"/media/wrolpi/usb"}
 
-    def test_shadowed_data_soft_blocks_mount(self, test_client):
-        """Existing data at the mount target soft-blocks the mount."""
+    def test_replaces_existing_entry_for_same_device(self, test_client, disks_env):
+        # Seed fstab.yaml with an existing entry, then mount the same device
+        # to a different path.  The old row should drop, not accumulate.
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[FstabEntry(
+            "UUID=abc-123", "/media/wrolpi/old", "ext4", "defaults")]),
+            disks_env["fstab_path"])
+
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=None), \
+                mock.patch("controller.api.disks.get_uuid", return_value="abc-123"):
+            response = test_client.post(
+                "/api/disks/mount",
+                json={"device": "/dev/sda1", "mount_point": "/media/wrolpi/new",
+                      "fstype": "ext4"},
+            )
+        assert response.status_code == 200
+        data = fstab_yaml.load(disks_env["fstab_path"])
+        assert data.mount_points() == {"/media/wrolpi/new"}
+
+    def test_shadowed_data_soft_blocks_mount(self, test_client, disks_env):
         shadowed = {"size_bytes": 1024, "entries": ["videos"]}
-        with mock.patch("controller.api.disks.check_shadowed_data", return_value=shadowed), \
-                mock.patch("controller.api.disks.mount_drive") as mock_mount:
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=shadowed):
             response = test_client.post(
                 "/api/disks/mount",
-                json={"device": "/dev/sda1", "mount_point": "/media/test"},
+                json={"device": "/dev/sda1", "mount_point": "/media/wrolpi/usb"},
             )
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is False
-            assert data["needs_force"] == "shadowed"
-            assert data["shadowed_data"] == shadowed
-            mock_mount.assert_not_called()
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is False
+        assert body["needs_force"] == "shadowed"
+        # No fstab.yaml mutation.
+        assert disks_env["fstab_path"].exists() is False
+        assert disks_env["fake"].mount_calls == []
 
-    def test_force_shadowed_overrides_soft_block(self, test_client):
-        """force_shadowed=True bypasses the shadowed-data check."""
-        with mock.patch("controller.api.disks.check_shadowed_data", return_value={"size_bytes": 1, "entries": ["a"]}) as mock_check, \
-                mock.patch("controller.api.disks.mount_drive", return_value={"success": True, "mount_point": "/media/test"}):
+    def test_force_shadowed_overrides_soft_block(self, test_client, disks_env):
+        shadowed = {"size_bytes": 1, "entries": ["a"]}
+        with mock.patch("controller.api.disks.check_shadowed_data", return_value=shadowed) as chk, \
+                mock.patch("controller.api.disks.get_uuid", return_value="abc-123"):
             response = test_client.post(
                 "/api/disks/mount",
                 json={
                     "device": "/dev/sda1",
-                    "mount_point": "/media/test",
+                    "mount_point": "/media/wrolpi/usb",
+                    "fstype": "ext4",
                     "force_shadowed": True,
                 },
             )
-            assert response.status_code == 200
-            assert response.json()["success"] is True
-            # Check skipped entirely when force is set.
-            mock_check.assert_not_called()
+        assert response.status_code == 200
+        chk.assert_not_called()
+        assert "/media/wrolpi/usb" in disks_env["fake"].current_mount_points()
 
+
+# --- /api/disks/unmount ---------------------------------------------------
 
 class TestUnmountEndpoint:
-    """Tests for /api/disks/unmount endpoint."""
 
-    def test_unmounts_drive_successfully(self, test_client):
-        """Should unmount drive successfully."""
-        with mock.patch(
-                "controller.api.disks.unmount_drive",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
-            response = test_client.post(
-                "/api/disks/unmount",
-                json={"mount_point": "/media/test"}
-            )
-            assert response.status_code == 200
+    def test_unmounts_and_removes_from_fstab(self, test_client, disks_env):
+        # Seed: drive is live AND in fstab.yaml AND managed by reconciler.
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[FstabEntry(
+            "UUID=abc-123", "/media/wrolpi/usb", "ext4", "defaults")]),
+            disks_env["fstab_path"])
+        disks_env["fake"]._live.add("/media/wrolpi/usb")
+        # Tell reconciler we own it (so a removal triggers an unmount).
+        (disks_env["fstab_path"].parent / "managed").write_text(
+            "/media/wrolpi/usb\n")
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi/usb"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["removed_from_fstab"] is True
+        # Live unmounted, fstab.yaml empty.
+        assert disks_env["fake"].current_mount_points() == set()
+        assert fstab_yaml.load(disks_env["fstab_path"]).mounts == []
+
+    def test_unmount_returns_500_when_still_mounted(self, test_client, disks_env):
+        # Reconciler refuses the unmount — surface the failure.
+        disks_env["fake"]._live.add("/media/wrolpi/usb")
+        disks_env["fake"].fail_for_unmount = frozenset({"/media/wrolpi/usb"})
+        (disks_env["fstab_path"].parent / "managed").write_text(
+            "/media/wrolpi/usb\n")
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi/usb"},
+        )
+        assert response.status_code == 500
+        assert "still mounted" in response.json()["detail"]
 
 
-class TestFstabEndpoints:
-    """Tests for /api/disks/fstab endpoints."""
+# --- /api/disks/fstab read endpoint ---------------------------------------
 
-    def test_list_fstab_returns_entries(self, test_client):
-        """Should return fstab entries."""
-        mock_entries = [{"mount_point": "/media/wrolpi", "device": "UUID=1234"}]
-        with mock.patch("controller.api.disks.get_wrolpi_fstab_entries", return_value=mock_entries):
-            response = test_client.get("/api/disks/fstab")
-            assert response.status_code == 200
-            assert response.json() == mock_entries
+class TestFstabReadEndpoint:
 
-    def test_add_fstab_entry(self, test_client):
-        """Should add fstab entry."""
-        with mock.patch(
-                "controller.api.disks.add_fstab_entry",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
+    def test_returns_empty_when_no_fstab_yaml(self, test_client, disks_env):
+        response = test_client.get("/api/disks/fstab")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_returns_entries_in_legacy_shape(self, test_client, disks_env):
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[
+            FstabEntry("UUID=abc", "/media/wrolpi/usb", "ext4", "defaults"),
+        ]), disks_env["fstab_path"])
+        response = test_client.get("/api/disks/fstab")
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == 1
+        assert body[0]["type"] == "mount"
+        assert body[0]["device"] == "UUID=abc"
+        assert body[0]["mount_point"] == "/media/wrolpi/usb"
+
+
+# --- /api/disks/fstab POST / DELETE (no reconcile) ------------------------
+
+class TestFstabMutateEndpoints:
+    """POST and DELETE on /fstab modify fstab.yaml without triggering a
+    reconcile — used to stage changes without immediately applying."""
+
+    def test_post_adds_entry_to_fstab_only(self, test_client, disks_env):
+        with mock.patch("controller.api.disks.get_uuid", return_value="abc-123"):
             response = test_client.post(
                 "/api/disks/fstab",
-                json={"device": "/dev/sda1", "mount_point": "/media/test", "fstype": "ext4"}
+                json={"device": "/dev/sda1",
+                      "mount_point": "/media/wrolpi/usb",
+                      "fstype": "ext4"},
             )
-            assert response.status_code == 200
+        assert response.status_code == 200
+        assert response.json()["device"] == "UUID=abc-123"
+        # fstab.yaml updated, but the executor was NOT asked to mount.
+        assert fstab_yaml.load(disks_env["fstab_path"]).mount_points() == {"/media/wrolpi/usb"}
+        assert disks_env["fake"].mount_calls == []
 
+    def test_delete_removes_entry_from_fstab_only(self, test_client, disks_env):
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[
+            FstabEntry("UUID=abc", "/media/wrolpi/usb", "ext4", "defaults"),
+            FstabEntry("UUID=def", "/media/wrolpi/other", "ext4", "defaults"),
+        ]), disks_env["fstab_path"])
+
+        response = test_client.delete("/api/disks/fstab/media/wrolpi/usb")
+        assert response.status_code == 200
+        # Other entry preserved.
+        remaining = fstab_yaml.load(disks_env["fstab_path"]).mount_points()
+        assert remaining == {"/media/wrolpi/other"}
+        # No unmount issued — DELETE is config-only.
+        assert disks_env["fake"].unmount_calls == []
+
+    def test_delete_returns_404_for_missing_entry(self, test_client, disks_env):
+        response = test_client.delete("/api/disks/fstab/media/missing")
+        assert response.status_code == 404
+
+
+# --- SMART ----------------------------------------------------------------
 
 class TestSmartEndpoints:
-    """Tests for /api/disks/smart endpoints."""
 
     def test_list_smart_when_not_available(self, test_client):
-        """Should return unavailable when SMART not available."""
         with mock.patch("controller.api.disks.is_smart_available", return_value=False):
             response = test_client.get("/api/disks/smart")
             assert response.status_code == 200
-            data = response.json()
-            assert data["available"] is False
+            assert response.json()["available"] is False
 
     def test_list_smart_returns_drives(self, test_client):
-        """Should return SMART data for all drives."""
         mock_drives = [{"device": "sda", "assessment": "PASS"}]
-        with mock.patch("controller.api.disks.is_smart_available", return_value=True):
-            with mock.patch("controller.api.disks.get_all_smart_status", return_value=mock_drives):
-                response = test_client.get("/api/disks/smart")
-                assert response.status_code == 200
-                data = response.json()
-                assert data["available"] is True
-                assert len(data["drives"]) == 1
-
-
-class TestMountPersistSavesConfig:
-    """Tests for mount with persist=true saving to controller.yaml."""
-
-    def test_mount_with_persist_saves_config(self, test_client):
-        """Mount with persist=true should save to controller.yaml."""
-        with mock.patch(
-                "controller.api.disks.mount_drive",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
-            with mock.patch(
-                    "controller.api.disks.add_fstab_entry",
-                    return_value={"success": True, "device": "UUID=1234", "mount_point": "/media/test"}
-            ):
-                with mock.patch("controller.api.disks.save_config") as mock_save:
-                    with mock.patch("controller.api.disks.get_config_value", return_value=[]):
-                        with mock.patch("controller.api.disks.update_config") as mock_update:
-                            response = test_client.post(
-                                "/api/disks/mount",
-                                json={
-                                    "device": "/dev/sda1",
-                                    "mount_point": "/media/test",
-                                    "fstype": "ext4",
-                                    "options": "defaults",
-                                    "persist": True
-                                }
-                            )
-                            assert response.status_code == 200
-                            # Check that update_config was called with correct mount entry
-                            mock_update.assert_called_once()
-                            call_args = mock_update.call_args
-                            assert call_args[0][0] == "drives.mounts"
-                            mounts = call_args[0][1]
-                            assert len(mounts) == 1
-                            assert mounts[0]["device"] == "UUID=1234"
-                            assert mounts[0]["mount_point"] == "/media/test"
-                            # Check that save_config was called
-                            mock_save.assert_called_once()
-
-    def test_mount_without_persist_does_not_save_config(self, test_client):
-        """Mount without persist=true should not save to controller.yaml."""
-        with mock.patch(
-                "controller.api.disks.mount_drive",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
-            with mock.patch("controller.api.disks.save_config") as mock_save:
-                response = test_client.post(
-                    "/api/disks/mount",
-                    json={
-                        "device": "/dev/sda1",
-                        "mount_point": "/media/test",
-                        "persist": False
-                    }
-                )
-                assert response.status_code == 200
-                mock_save.assert_not_called()
-
-    def test_mount_replaces_existing_entry_for_same_device(self, test_client):
-        """Mount should replace existing entry for same device UUID."""
-        existing_mounts = [
-            {"device": "UUID=1234", "mount_point": "/media/old", "fstype": "ext4", "options": "defaults"}
-        ]
-        with mock.patch(
-                "controller.api.disks.mount_drive",
-                return_value={"success": True}
-        ):
-            with mock.patch(
-                    "controller.api.disks.add_fstab_entry",
-                    return_value={"success": True, "device": "UUID=1234", "mount_point": "/media/new"}
-            ):
-                with mock.patch("controller.api.disks.save_config"):
-                    with mock.patch("controller.api.disks.get_config_value", return_value=existing_mounts):
-                        with mock.patch("controller.api.disks.update_config") as mock_update:
-                            response = test_client.post(
-                                "/api/disks/mount",
-                                json={
-                                    "device": "/dev/sda1",
-                                    "mount_point": "/media/new",
-                                    "fstype": "ext4",
-                                    "persist": True
-                                }
-                            )
-                            assert response.status_code == 200
-                            # Should have replaced the old entry
-                            call_args = mock_update.call_args
-                            mounts = call_args[0][1]
-                            assert len(mounts) == 1
-                            assert mounts[0]["mount_point"] == "/media/new"
-
-
-class TestDeleteFstabRemovesConfig:
-    """Tests for delete_fstab removing from controller.yaml."""
-
-    def test_delete_fstab_removes_from_config(self, test_client):
-        """Delete fstab entry should remove from controller.yaml."""
-        existing_mounts = [
-            {"device": "UUID=1234", "mount_point": "/media/test", "fstype": "ext4", "options": "defaults"}
-        ]
-        with mock.patch(
-                "controller.api.disks.remove_fstab_entry",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
-            with mock.patch("controller.api.disks.save_config") as mock_save:
-                with mock.patch("controller.api.disks.get_config_value", return_value=existing_mounts):
-                    with mock.patch("controller.api.disks.update_config") as mock_update:
-                        response = test_client.delete("/api/disks/fstab/media/test")
-                        assert response.status_code == 200
-                        # Check that update_config was called with empty list
-                        mock_update.assert_called_once()
-                        call_args = mock_update.call_args
-                        assert call_args[0][0] == "drives.mounts"
-                        mounts = call_args[0][1]
-                        assert len(mounts) == 0
-                        # Check that save_config was called
-                        mock_save.assert_called_once()
-
-    def test_delete_fstab_preserves_other_mounts(self, test_client):
-        """Delete fstab should only remove the specified mount."""
-        existing_mounts = [
-            {"device": "UUID=1234", "mount_point": "/media/test", "fstype": "ext4", "options": "defaults"},
-            {"device": "UUID=5678", "mount_point": "/media/other", "fstype": "ext4", "options": "defaults"},
-        ]
-        with mock.patch(
-                "controller.api.disks.remove_fstab_entry",
-                return_value={"success": True, "mount_point": "/media/test"}
-        ):
-            with mock.patch("controller.api.disks.save_config"):
-                with mock.patch("controller.api.disks.get_config_value", return_value=existing_mounts):
-                    with mock.patch("controller.api.disks.update_config") as mock_update:
-                        response = test_client.delete("/api/disks/fstab/media/test")
-                        assert response.status_code == 200
-                        # Should preserve the other mount
-                        call_args = mock_update.call_args
-                        mounts = call_args[0][1]
-                        assert len(mounts) == 1
-                        assert mounts[0]["mount_point"] == "/media/other"
-
-
-# OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.
+        with mock.patch("controller.api.disks.is_smart_available", return_value=True), \
+                mock.patch("controller.api.disks.get_all_smart_status", return_value=mock_drives):
+            response = test_client.get("/api/disks/smart")
+            assert response.status_code == 200
+            body = response.json()
+            assert body["available"] is True
+            assert len(body["drives"]) == 1

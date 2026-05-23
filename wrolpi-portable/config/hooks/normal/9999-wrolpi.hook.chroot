@@ -167,6 +167,9 @@ systemctl enable iperf3
 systemctl enable wrolpi-first-startup.service
 # Enable Controller service to start on boot.
 systemctl enable wrolpi-controller.service
+# Apply controller.yaml drives.mounts at boot (replaces /etc/fstab for
+# secondary mounts so the mount table travels with the drive).
+systemctl enable wrolpi-mounts.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
 

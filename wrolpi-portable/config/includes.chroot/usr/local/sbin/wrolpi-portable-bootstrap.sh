@@ -157,6 +157,16 @@ chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || true
 mkdir -p /media/wrolpi/config
 chown wrolpi:wrolpi /media/wrolpi/config
 
+# Signal to the Controller that the primary drive is set up.  The Controller
+# treats /media/wrolpi/config/controller.yaml as the "drive is configured"
+# sentinel (see controller.lib.config.is_primary_drive_mounted); without it
+# the Controller renders its onboarding wizard and offers the persistence
+# partition as an unconfigured candidate.  Empty YAML is valid and yields
+# the defaults.
+if [ ! -e /media/wrolpi/config/controller.yaml ]; then
+  install -o wrolpi -g wrolpi -m 0644 /dev/null /media/wrolpi/config/controller.yaml
+fi
+
 # --- Enable and start the WROLPi runtime services -----------------------
 # These units declare `After=wrolpi-portable-bootstrap.service` (via our
 # Before= here in this unit), so a blocking `systemctl --now` would deadlock:

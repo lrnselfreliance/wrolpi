@@ -1,45 +1,67 @@
 """
 Disk management API endpoints for WROLPi Controller.
+
+The Controller defines what should be mounted (writes fstab.yaml on the
+WROLPi drive) but never calls mount(8) or umount(8) itself.  After every
+write to fstab.yaml the Controller triggers wrolpi-mounts.service via
+``systemctl restart``; the service reconciles live state to match.  The
+Controller verifies the outcome by reading /proc/mounts through the same
+MountExecutor abstraction the service uses.
 """
 
+import logging
+import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from controller.lib.config import (
-    get_config_value,
-    is_docker_mode,
-    save_config,
-    update_config,
-)
+from controller.lib.config import is_docker_mode
 from controller.lib.disks import (
     check_shadowed_data,
     get_block_devices,
     get_mounts,
-    mount_drive,
-    unmount_drive,
+    get_uuid,
+    validate_mount_point,
 )
-from controller.lib.fstab import (
-    add_fstab_entry,
-    get_wrolpi_fstab_entries,
-    remove_fstab_entry,
+from controller.lib.fstab_yaml import (
+    FstabEntry,
+    load as load_fstab,
+    save as save_fstab,
+)
+from controller.lib.mount_executor import (
+    MountExecutor,
+    SubprocessMountExecutor,
 )
 from controller.lib.smart import (
     get_all_smart_status,
     is_smart_available,
 )
+from controller.lib.wrol_mode import require_normal_mode
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/disks", tags=["disks"])
+
+# Module-level executor — production uses the real subprocess-backed one.
+# Tests rebind this attribute (and ``_trigger_reconcile``) via monkeypatch
+# to inject a FakeMountExecutor without touching subprocess or /proc.
+_executor: MountExecutor = SubprocessMountExecutor()
+
+RECONCILE_TIMEOUT_SECONDS = 60
 
 
 class MountRequest(BaseModel):
     """Request model for mounting a drive."""
     device: str = Field(description="Device path (e.g., /dev/sda1)")
     mount_point: str = Field(description="Where to mount (must be under /media)")
-    fstype: Optional[str] = Field(default=None, description="Filesystem type (auto-detected if not specified)")
+    fstype: Optional[str] = Field(default=None,
+                                  description="Filesystem type (auto-detected if not specified)")
     options: str = Field(default="defaults", description="Mount options")
-    persist: bool = Field(default=False, description="Add to fstab for persistent mounting")
+    # `persist` is accepted for API compatibility but no longer
+    # meaningful: every Controller-initiated mount goes through fstab.yaml
+    # and the Reconciler.  A future UI cleanup will remove the field.
+    persist: bool = Field(default=True, description="(Deprecated; always persistent.)")
     force_shadowed: bool = Field(
         default=False,
         description="Proceed even if existing data at the mount target would be hidden by the new mount",
@@ -47,17 +69,17 @@ class MountRequest(BaseModel):
 
 
 class UnmountRequest(BaseModel):
-    """Request model for unmounting a drive."""
     mount_point: str = Field(description="Mount point to unmount")
-    lazy: bool = Field(default=False, description="Use lazy unmount if busy")
+    lazy: bool = Field(default=False,
+                       description="(Deprecated; reconciler chooses the strategy.)")
 
 
 class FstabRequest(BaseModel):
-    """Request model for adding an fstab entry."""
     device: str = Field(description="Device path")
     mount_point: str = Field(description="Where to mount")
     fstype: str = Field(description="Filesystem type")
-    options: str = Field(default="defaults,nofail,x-systemd.device-timeout=10s", description="Mount options")
+    options: str = Field(default="defaults",
+                         description="Mount options")
 
 
 def _check_native_mode():
@@ -70,11 +92,43 @@ def _check_native_mode():
         )
 
 
+def _to_uuid_spec(device: str) -> str:
+    """Convert a /dev/sdX path to UUID=... if possible; passthrough otherwise.
+
+    Persistent mount entries must be UUID-keyed so they travel with the
+    drive between hosts.  Already-formatted UUID=/PARTUUID=/LABEL= specs
+    pass through unchanged.
+    """
+    if not device.startswith("/dev/"):
+        return device
+    uuid = get_uuid(device)
+    return f"UUID={uuid}" if uuid else device
+
+
+def _trigger_reconcile() -> tuple[bool, Optional[str]]:
+    """Ask systemd to re-run wrolpi-mounts.service.  Blocks until the
+    oneshot completes; returns (ok, error_or_none)."""
+    cmd = ["systemctl", "restart", "wrolpi-mounts.service"]
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=RECONCILE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"systemctl restart wrolpi-mounts.service timed out " \
+                      f"after {RECONCILE_TIMEOUT_SECONDS}s"
+    if result.returncode != 0:
+        return False, (result.stderr.strip()
+                       or f"systemctl exit {result.returncode}")
+    return True, None
+
+
+# --- Read endpoints (no fstab.yaml mutation) ------------------------------
+
 @router.get("")
 async def list_disks():
     """List all detected disks/partitions."""
     _check_native_mode()
-
     devices = get_block_devices()
     return [
         {
@@ -98,13 +152,15 @@ async def list_mounts():
     return get_mounts()
 
 
+# --- Mount / unmount ------------------------------------------------------
+
 @router.post("/mount")
 async def disk_mount(request: MountRequest):
-    """Mount a partition."""
+    """Add a mount to fstab.yaml and reconcile."""
     _check_native_mode()
 
     # Soft-block if the mount target already contains user data that would
-    # be hidden by the new mount. The UI re-submits with force_shadowed=True
+    # be hidden by the new mount.  UI re-submits with force_shadowed=True
     # to override.
     if not request.force_shadowed:
         shadowed = check_shadowed_data(request.mount_point)
@@ -121,116 +177,165 @@ async def disk_mount(request: MountRequest):
                 ),
             }
 
-    result = mount_drive(
-        device=request.device,
+    try:
+        require_normal_mode("mount")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    try:
+        validate_mount_point(request.mount_point)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    device_spec = _to_uuid_spec(request.device)
+    entry = FstabEntry(
+        device=device_spec,
         mount_point=request.mount_point,
-        fstype=request.fstype,
-        options=request.options,
+        fstype=request.fstype or "auto",
+        options=request.options or "defaults",
     )
 
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Mount failed"))
+    data = load_fstab()
+    data.add_or_replace(entry)
+    save_fstab(data)
 
-    # Add to fstab if requested
-    if request.persist:
-        fstab_result = add_fstab_entry(
-            device=request.device,
-            mount_point=request.mount_point,
-            fstype=request.fstype or "auto",
+    ok, err = _trigger_reconcile()
+    if not ok:
+        raise HTTPException(status_code=500,
+                            detail=f"Failed to reconcile mounts: {err}")
+
+    if request.mount_point not in _executor.current_mount_points():
+        # Entry is in fstab.yaml and will be retried on next reconcile, but
+        # this attempt did not produce a live mount — surface the failure.
+        raise HTTPException(
+            status_code=500,
+            detail=f"Reconciler ran but {request.mount_point} did not mount. "
+                   f"Check journalctl -u wrolpi-mounts.service.",
         )
-        result["fstab"] = fstab_result
 
-        # Save to controller.yaml to track WROLPi-managed mounts
-        if fstab_result.get("success"):
-            mount_entry = {
-                "device": fstab_result.get("device", request.device),
-                "mount_point": request.mount_point,
-                "fstype": request.fstype or "auto",
-                "options": request.options,
-            }
-
-            # Get current mounts, filter out any existing entry for same mount_point or device
-            current_mounts = get_config_value("drives.mounts", [])
-            current_mounts = [
-                m for m in current_mounts
-                if m.get("mount_point") != request.mount_point
-                and m.get("device") != mount_entry["device"]
-            ]
-            current_mounts.append(mount_entry)
-
-            update_config("drives.mounts", current_mounts)
-            try:
-                save_config()
-            except RuntimeError:
-                pass  # Primary drive not mounted - can't save yet
-
-    return result
+    return {
+        "success": True,
+        "device": device_spec,
+        "mount_point": request.mount_point,
+    }
 
 
 @router.post("/unmount")
 async def disk_unmount(request: UnmountRequest):
-    """Unmount a partition."""
+    """Remove a mount from fstab.yaml and reconcile."""
     _check_native_mode()
 
-    result = unmount_drive(
-        mount_point=request.mount_point,
-        lazy=request.lazy,
-    )
+    try:
+        require_normal_mode("unmount")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Unmount failed"))
+    try:
+        validate_mount_point(request.mount_point)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    return result
+    data = load_fstab()
+    removed = data.remove_by_mount_point(request.mount_point)
+    save_fstab(data)
 
+    ok, err = _trigger_reconcile()
+    if not ok:
+        raise HTTPException(status_code=500,
+                            detail=f"Failed to reconcile mounts: {err}")
+
+    if request.mount_point in _executor.current_mount_points():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Reconciler ran but {request.mount_point} is still mounted. "
+                   f"Check journalctl -u wrolpi-mounts.service.",
+        )
+
+    return {
+        "success": True,
+        "mount_point": request.mount_point,
+        "removed_from_fstab": removed,
+    }
+
+
+# --- fstab.yaml read/write endpoints --------------------------------------
 
 @router.get("/fstab")
 async def list_fstab():
-    """Get WROLPi-related fstab entries."""
+    """Return the WROLPi-managed mount table (fstab.yaml)."""
     _check_native_mode()
-    return get_wrolpi_fstab_entries()
+    data = load_fstab()
+    return [
+        {
+            "type": "mount",
+            "device": e.device,
+            "mount_point": e.mount_point,
+            "fstype": e.fstype,
+            "options": e.options,
+            "dump": "0",
+            "pass": "2",
+        }
+        for e in data.mounts
+    ]
 
 
 @router.post("/fstab")
 async def add_fstab(request: FstabRequest):
-    """Add an fstab entry for persistent mounting."""
+    """Add a row to fstab.yaml without triggering a reconcile.
+
+    Use disk_mount() to add AND apply.  This endpoint is for callers that
+    want to stage changes without immediately mounting.
+    """
     _check_native_mode()
 
-    result = add_fstab_entry(
-        device=request.device,
+    try:
+        require_normal_mode("add fstab entry")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    try:
+        validate_mount_point(request.mount_point)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    device_spec = _to_uuid_spec(request.device)
+    data = load_fstab()
+    data.add_or_replace(FstabEntry(
+        device=device_spec,
         mount_point=request.mount_point,
         fstype=request.fstype,
-        options=request.options,
-    )
+        options=request.options or "defaults",
+    ))
+    save_fstab(data)
 
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
-
-    return result
+    return {"success": True, "device": device_spec,
+            "mount_point": request.mount_point}
 
 
 @router.delete("/fstab/{mount_point:path}")
 async def delete_fstab(mount_point: str):
-    """Remove an fstab entry."""
+    """Remove a row from fstab.yaml without triggering a reconcile."""
     _check_native_mode()
 
     # URL decode the mount point
     mount_point = f"/{mount_point}"
 
-    result = remove_fstab_entry(mount_point)
-
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
-
-    # Remove from controller.yaml - mount is no longer persistent
-    current_mounts = get_config_value("drives.mounts", [])
-    current_mounts = [m for m in current_mounts if m.get("mount_point") != mount_point]
-    update_config("drives.mounts", current_mounts)
     try:
-        save_config()
-    except RuntimeError:
-        pass  # Primary drive not mounted - can't save
+        require_normal_mode("remove fstab entry")
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
-    return result
+    try:
+        validate_mount_point(mount_point)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    data = load_fstab()
+    if not data.remove_by_mount_point(mount_point):
+        raise HTTPException(status_code=404,
+                            detail=f"No entry found for {mount_point}")
+    save_fstab(data)
+    return {"success": True, "mount_point": mount_point}
 
 
 # --- SMART ---
@@ -241,7 +346,8 @@ async def list_smart():
     _check_native_mode()
 
     if not is_smart_available():
-        return {"available": False, "reason": "pySMART not installed or not supported"}
+        return {"available": False,
+                "reason": "pySMART not installed or not supported"}
 
     return {
         "available": True,

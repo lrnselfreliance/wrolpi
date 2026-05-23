@@ -297,8 +297,9 @@ def commit_onboarding(
             mount_result = mount_drive(mount_device, mount_point, fstype=mount_fstype, options=mount_options)
             if mount_result.get("success"):
                 mounted_mounts.append(mount_point)
-                # Add fstab entry
-                add_fstab_entry(mount_device, mount_point, mount_fstype, options=mount_options)
+                # No /etc/fstab write — entry already lives in drives.mounts
+                # (it's the source we just read), so wrolpi-mounts.service
+                # will re-apply it on every subsequent boot.
             else:
                 logger.warning(
                     "Failed to mount secondary drive %s at %s: %s",

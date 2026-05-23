@@ -79,6 +79,7 @@ systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 systemctl enable wrolpi-help.service
+systemctl enable wrolpi-mounts.service
 systemctl enable wrolpi-cert-renew.timer
 
 # Repair Controller (offline-safe - no pip install)

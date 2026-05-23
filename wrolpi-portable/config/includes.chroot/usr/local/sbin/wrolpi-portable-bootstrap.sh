@@ -102,10 +102,16 @@ chown wrolpi:wrolpi /mnt/persistence/wrolpi
 
 # Write persistence.conf so live-boot's initramfs persistence machinery can
 # apply these bind mounts before systemd starts on subsequent boots.
+#
+# `bind` (not `union`) is critical: `union` instructs live-boot to apply an
+# OverlayFS union mount, which PostgreSQL explicitly does not support and
+# which would silently corrupt data from the second boot onward.  On first
+# boot bind_if_unmounted below does a real bind mount; on subsequent boots
+# live-boot's initramfs reads this file and must do the same.
 cat > /mnt/persistence/persistence.conf <<EOF
-/var/lib/postgresql union,source=postgresql-data
-/etc/postgresql union,source=postgresql-config
-/media/wrolpi union,source=wrolpi
+/var/lib/postgresql bind,source=postgresql-data
+/etc/postgresql bind,source=postgresql-config
+/media/wrolpi bind,source=wrolpi
 EOF
 
 # --- Bind mounts (idempotent — only mount if not already mounted) -------
@@ -121,13 +127,22 @@ bind_if_unmounted /mnt/persistence/postgresql-config /etc/postgresql
 bind_if_unmounted /mnt/persistence/wrolpi            /media/wrolpi
 
 # --- Postgres cluster ----------------------------------------------------
+# Derive version from the installed Postgres binary so this stays correct if
+# the package list is later bumped past postgresql-15.  This matches what
+# the chroot hook does when dropping the default cluster.
 
-if ! pg_lsclusters -h | awk '{print $1,$2}' | grep -q "^15 main$"; then
+PG_VERSION=$(ls /usr/lib/postgresql 2>/dev/null | sort -n | tail -1)
+if [ -z "$PG_VERSION" ]; then
+  log "ERROR: no postgresql server package found under /usr/lib/postgresql"
+  exit 1
+fi
+
+if ! pg_lsclusters -h | awk '{print $1,$2}' | grep -q "^${PG_VERSION} main$"; then
   progress "Setting up Postgres cluster..."
-  pg_createcluster 15 main
+  pg_createcluster "${PG_VERSION}" main
 fi
 progress "Starting Postgres..."
-systemctl start postgresql@15-main.service
+systemctl start "postgresql@${PG_VERSION}-main.service"
 
 # --- WROLPi DB schema + initial config import ----------------------------
 

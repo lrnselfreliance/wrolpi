@@ -1,3 +1,4 @@
+alsa-utils
 apt-transport-https
 aria2
 autoconf
@@ -30,6 +31,7 @@ git
 git-doc
 gnupg-agent
 gpsd
+gvfs
 hostapd
 htop
 iotop
@@ -53,16 +55,21 @@ libssl-dev
 libtiff5-dev
 libtool
 libxml2-dev
+lxpolkit
 netcat-openbsd
 network-manager
+network-manager-gnome
 nicstat
 nodejs
 npm
 ntfs-3g
 parted
+pavucontrol
 pkg-config
 postgresql-15
 postgresql-doc
+pulseaudio
+pulseaudio-utils
 pv
 python3-dev
 python3-doc
@@ -78,6 +85,7 @@ sysstat
 tar
 tcpdump
 tmux
+tumbler
 unrar-free
 unzip
 vim

@@ -1,5 +1,10 @@
 #!/usr/bin/bash
-# This script is used to generate a Debian Live ISO image.
+# Chroot hook for the combined WROLPi Live + Installer ISO.
+#
+# Composes the full WROLPi stack into the live system during live-build's
+# chroot phase.  The resulting squashfs is what runs in live mode AND what
+# the Calamares installer (phase 2) will copy onto the target disk, so any
+# customisation here applies to both deployments.
 
 set -e
 set -x
@@ -16,6 +21,28 @@ alias ll='ls -lh'
 alias la='ll -a'
 EOF
 
+# Pre-create the wrolpi user.  Same account is used for interactive desktop
+# login (password 'wrolpi') AND as the User= for the wrolpi-* systemd
+# services.  live-config sees this existing user at boot and skips its own
+# user creation (preserving our chosen password); the boot params set
+# live-config.username=wrolpi so live-config's other scripts (sudo,
+# lightdm autologin) target this account.
+useradd -m -s /bin/bash -U -G sudo,audio,video,cdrom,plugdev,netdev wrolpi
+echo "wrolpi:wrolpi" | chpasswd
+
+# Rebrand from generic Debian so users don't think they have the wrong USB.
+echo "wrolpi" > /etc/hostname
+sed -i 's/127\.0\.1\.1.*/127.0.1.1\twrolpi/' /etc/hosts 2>/dev/null || \
+  echo "127.0.1.1	wrolpi" >> /etc/hosts
+cat > /etc/issue <<'EOF'
+WROLPi \n (\l)
+
+EOF
+cat > /etc/issue.net <<'EOF'
+WROLPi %h
+
+EOF
+
 git --version
 
 WROLPI_BRANCH="release"
@@ -29,12 +56,21 @@ npm --version
 node --version
 npm install
 
+# Build the React production bundle.  Without this, /opt/wrolpi/app/build/
+# does not exist and wrolpi-app.service (`serve build -l 3000 ...`) returns
+# 404 for every request.  Baking the build into the squashfs means the
+# live image works offline immediately and the installed deployment skips
+# a multi-minute first-boot step.
+BROWSERSLIST_IGNORE_OLD_DATA=true npm run build
+
 # Install Node console commands.
 npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
-# Install Deno runtime.
+# Install Deno runtime.  Hash pinned to detect tampering of the upstream release artifact.
 DENO_VERSION="v2.2.4"
+DENO_SHA256="9a260a624cab6e61f7603957f94f638d68739d8c6ac8c38bc337521266603a7c"
 curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
+echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c -
 unzip /tmp/deno.zip -d /usr/local/bin/
 chmod +x /usr/local/bin/deno
 rm /tmp/deno.zip
@@ -82,6 +118,34 @@ mkdir /media/wrolpi
 [[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
   (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
 
+# Bake in pmtiles CLI so first boot does not need internet.
+# Mirrors scripts/install_protomaps.sh; duplicated here because that script's
+# migration logic relies on a running systemd, which is not present in chroot.
+# Hash pinned to detect tampering of the upstream release artifact.
+PMTILES_VERSION="v1.30.1"
+PMTILES_SHA256="23a2a2222f658320b539ccd06ac3b9b3b803ecbdd39a6cb5249d2ce2e16e38ae"
+curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_x86_64.tar.gz" \
+  -o /tmp/pmtiles.tar.gz
+echo "${PMTILES_SHA256}  /tmp/pmtiles.tar.gz" | sha256sum -c -
+tar -xz -C /usr/local/bin/ -f /tmp/pmtiles.tar.gz pmtiles
+rm /tmp/pmtiles.tar.gz
+chmod +x /usr/local/bin/pmtiles
+pmtiles version
+
+# Build and bake in tippecanoe (used to build map search indexes).
+# Hash pinned to detect tampering of the upstream release tarball.
+TIPPECANOE_VERSION="2.79.0"
+TIPPECANOE_SHA256="b0fd9df49b6efc988288ea48774822c6de19eb48428017f27ee0b3b01d44f05d"
+TIPPECANOE_BUILD_DIR=$(mktemp -d)
+curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
+  -o /tmp/tippecanoe.tar.gz
+echo "${TIPPECANOE_SHA256}  /tmp/tippecanoe.tar.gz" | sha256sum -c -
+tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1 -f /tmp/tippecanoe.tar.gz
+rm /tmp/tippecanoe.tar.gz
+(cd "${TIPPECANOE_BUILD_DIR}" && make -j"$(nproc)" && make install)
+rm -rf "${TIPPECANOE_BUILD_DIR}"
+tippecanoe --version
+
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh
 
@@ -103,10 +167,54 @@ systemctl enable iperf3
 systemctl enable wrolpi-first-startup.service
 # Enable Controller service to start on boot.
 systemctl enable wrolpi-controller.service
+# Apply controller.yaml drives.mounts at boot (replaces /etc/fstab for
+# secondary mounts so the mount table travels with the drive).
+systemctl enable wrolpi-mounts.service
 # Enable weekly certificate renewal check.
 systemctl enable wrolpi-cert-renew.timer
-# Enable weekly certificate renewal check.
-systemctl enable wrolpi-cert-renew.timer
+
+# Bootstrap service: on a Live USB it creates the persistence partition on
+# first boot; on every boot (Live or Installed) it ensures a Postgres
+# cluster exists on /media/wrolpi/config/postgresql and the wrolpi-* runtime
+# services are enabled.  Installed deployments find no live medium and
+# short-circuit the partition step.
+chmod +x /usr/local/sbin/wrolpi-bootstrap.sh
+systemctl enable wrolpi-bootstrap.service
+
+# Plymouth — replace Debian-branded splash with a minimal theme. live-build's
+# initramfs regeneration at the end of the chroot phase will pick up this
+# change so the new theme is used at boot.
+plymouth-set-default-theme text || true
+
+# LightDM greeter — add a WROLPi banner so the login screen identifies the
+# system instead of looking like a stock Debian.
+mkdir -p /etc/lightdm/lightdm-gtk-greeter.conf.d
+cat > /etc/lightdm/lightdm-gtk-greeter.conf.d/50-wrolpi.conf <<'EOF'
+[greeter]
+banner-message-enable=true
+banner-message-text=WROLPi
+EOF
+
+# LightDM auto-login — drop straight into the XFCE session as wrolpi without
+# a password prompt. The wrolpi password ('wrolpi') is still required for
+# sudo and screen unlock.
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-wrolpi-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user=wrolpi
+autologin-user-timeout=0
+autologin-session=xfce
+EOF
+
+# Drop the default Postgres cluster created by the postgresql-* package.
+# wrolpi-bootstrap.service creates a fresh cluster on /media/wrolpi/config/postgresql
+# at first boot regardless of deployment shape; the cluster files installed
+# here would be masked by the bind-mount on Live and orphaned on Installed.
+# Version derived from the installed binary so this stays correct if the
+# package list is later bumped past postgresql-15.
+PG_VERSION=$(pg_lsclusters -h | awk 'NR==1{print $1}')
+[ -n "${PG_VERSION}" ] || (echo "ERROR: no Postgres cluster found to drop" && exit 1)
+pg_dropcluster --stop "${PG_VERSION}" main
 
 # Protect blob files from accidental modification or deletion.
 if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then

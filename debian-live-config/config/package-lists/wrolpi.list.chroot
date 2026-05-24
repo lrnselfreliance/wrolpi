@@ -11,8 +11,10 @@ catdoc
 chromium
 cpufrequtils
 curl
+dosfstools
 ethtool
 exfat-fuse
+exfatprogs
 fdupes
 ffmpeg
 firefox-esr
@@ -21,6 +23,7 @@ fonts-noto-hinted
 fonts-noto-unhinted
 gcc
 gcc-doc
+gdisk
 git
 git-doc
 gnupg-agent
@@ -43,6 +46,7 @@ libicu-dev
 libpq-dev
 libproj-dev
 libreoffice
+libsqlite3-dev
 libssl-dev
 libtiff5-dev
 libtool
@@ -53,6 +57,7 @@ nicstat
 nodejs
 npm
 ntfs-3g
+parted
 pkg-config
 postgresql-15
 postgresql-doc
@@ -78,3 +83,4 @@ vlc
 wget
 wpasupplicant
 zim-tools
+zlib1g-dev

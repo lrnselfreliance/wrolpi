@@ -4,7 +4,7 @@ Documentation=https://github.com/lrnselfreliance/wrolpi
 # Read drives.mounts from controller.yaml and apply each entry that isn't
 # already mounted.  Replaces /etc/fstab entries for secondary drives so the
 # mount table travels with the drive itself.
-After=local-fs.target wrolpi-portable-bootstrap.service
+After=local-fs.target wrolpi-bootstrap.service
 RequiresMountsFor=/media/wrolpi
 # Run before WROLPi services so secondary drives are ready when they start.
 Before=wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi.target

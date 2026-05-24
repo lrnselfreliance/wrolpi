@@ -53,10 +53,13 @@ the user's library so a drive moved between hosts keeps its full state:
 - [x] **Phase 1 — merged live + chroot config**:  Single `debian-live-config/`
       produces a Debian Live ISO with the full WROLPi stack, XFCE auto-login
       as `wrolpi`, persistence partition created on first boot.
-- [ ] **Phase 2 — Calamares installer**:  Add `calamares` package and a
-      desktop launcher so users can install WROLPi to disk.
-- [ ] **Phase 3 — branding + release**:  WROLPi branding for Calamares,
-      CI on tag, hosting, wrolpi.org docs.
+- [x] **Phase 2 — Calamares installer**:  `calamares` package and a desktop
+      launcher.  Users can install WROLPi to disk via the "Install WROLPi to
+      disk" icon on the desktop.
+- [x] **Phase 3 — branding**:  WROLPi product name, logo, colors applied
+      to the Calamares wizard via `etc/calamares/branding/wrolpi/`.  Orphan
+      launcher cleaned up post-install by a Calamares shellprocess module.
+- [ ] **Release**:  CI on tag, hosting, wrolpi.org docs.
 
 ## References
 

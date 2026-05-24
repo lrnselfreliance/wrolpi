@@ -1,0 +1,38 @@
+---
+componentName:         wrolpi
+welcomeStyleCalamares: true
+welcomeExpandingLogo:  true
+windowExpanding:       normal
+windowSize:            800px,520px
+windowPlacement:       center
+
+strings:
+    productName:         WROLPi
+    shortProductName:    WROLPi
+    version:             Debian 12 (bookworm)
+    shortVersion:        12
+    versionedName:       WROLPi on Debian 12
+    shortVersionedName:  WROLPi
+    bootloaderEntryName: WROLPi
+    productUrl:          https://wrolpi.org
+    supportUrl:          https://wrolpi.org
+    knownIssuesUrl:      https://github.com/lrnselfreliance/wrolpi/issues
+    releaseNotesUrl:     https://github.com/lrnselfreliance/wrolpi/releases
+    donateUrl:           https://wrolpi.org
+
+images:
+    productLogo:         "wrolpi-logo.png"
+    productIcon:         "wrolpi-logo.png"
+    productWelcome:      "wrolpi-logo.png"
+
+# Slideshow omitted — the upstream Debian slideshow doesn't ship with the
+# WROLPi branding, and producing our own QML is deferred polish.  Calamares
+# falls back to a static welcome screen.
+
+style:
+    sidebarBackground:    "#5d2961"
+    sidebarText:          "#FFFFFF"
+    sidebarTextSelect:    "#8d4d92"
+    sidebarTextHighlight: "#FFFFFF"
+
+slideshowAPI: 2

@@ -210,9 +210,8 @@ EOF
 # placed in ~/Desktop; we use the upstream install-debian wrapper script
 # (pulled in by calamares-settings-debian) but rebrand the launcher entry.
 # Marked executable so XFCE will launch it without a "trusted application"
-# warning.  After install Calamares removes calamares-settings-debian, which
-# takes install-debian with it; the orphan icon is cleaned up in a
-# follow-up Calamares shellprocess (phase 3).
+# warning.  Cleanup of this file on the installed system is handled by
+# the shellprocess Calamares module (see etc/calamares/modules/shellprocess.conf).
 mkdir -p /home/wrolpi/Desktop
 cp /usr/share/applications/install-debian.desktop /home/wrolpi/Desktop/install-wrolpi.desktop
 chmod +x /home/wrolpi/Desktop/install-wrolpi.desktop

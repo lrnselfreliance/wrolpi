@@ -1,4 +1,12 @@
 #!/bin/bash
+# Build the WROLPi Debian Live + installer ISO.
+#
+# Output: an iso-hybrid image that boots into a full WROLPi system on any
+# x86 PC.  Users can run WROLPi directly off the USB (persistence partition
+# created on first boot) or install to disk via the Calamares launcher on
+# the desktop.  Calamares wiring lands in phase 2; phase 1 ships the
+# live-only flow.
+#
 # https://live-team.pages.debian.net/live-manual/html/live-manual/index.en.html
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
@@ -23,8 +31,10 @@ while getopts ":hb:" option; do
   esac
 done
 
-# Get version from the target git branch (not local checkout) so output filename matches actual content.
-VERSION=$(curl -sL "https://raw.githubusercontent.com/lrnselfreliance/wrolpi/${BRANCH}/wrolpi/version.txt")
+# Get version from the target git branch (not local checkout) so output
+# filename matches actual content.  Strip whitespace so stray newlines or
+# spaces in version.txt do not corrupt the lb config metadata strings.
+VERSION=$(curl -sL "https://raw.githubusercontent.com/lrnselfreliance/wrolpi/${BRANCH}/wrolpi/version.txt" | tr -d '[:space:]')
 if [ -z "${VERSION}" ]; then
   echo "ERROR: Could not fetch version from branch '${BRANCH}'"
   exit 1
@@ -37,20 +47,30 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-# Clear out old builds.
-[ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
-mkdir "${BUILD_DIR}"
+# Clear out old builds.  Strip immutable flag from blob files first — the
+# chroot hook applies chattr +i to /opt/wrolpi-blobs/*; without removing
+# that here, rm -rf leaves them behind and the next lb build's
+# chroot_includes_after_packages rsync fails with "Operation not permitted"
+# trying to overwrite them.
+if [ -d "${BUILD_DIR}" ]; then
+  find "${BUILD_DIR}" -path '*/opt/wrolpi-blobs/*' -type f -exec chattr -i {} + 2>/dev/null || true
+  rm -rf "${BUILD_DIR}"
+fi
+mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)
 set -e
 
+# Pure live config — no --debian-installer flags.  The graphical installer
+# (Calamares) is added in phase 2 as a package + desktop launcher rather
+# than via lb's --debian-installer mechanism.  noswap prevents the live
+# system from activating swap partitions found on the host machine's
+# internal disks.
 lb config \
  --binary-images iso-hybrid \
  --mode debian \
  --architectures amd64 \
  --linux-flavours amd64 \
  --distribution bookworm \
- --debian-installer live \
- --debian-installer-gui true \
  --archive-areas "main contrib non-free non-free-firmware" \
  --updates true \
  --security true \
@@ -63,6 +83,7 @@ lb config \
  --color \
  --linux-packages "linux-image linux-headers" \
  --memtest memtest86+ \
+ --bootappend-live "boot=live components quiet splash noswap persistence persistence-storage=filesystem persistence-media=removable persistence-label=persistence live-config.username=wrolpi live-config.user-fullname=WROLPi live-config.hostname=wrolpi" \
  --iso-volume "WROLPi v${VERSION}" \
  --iso-application "WROLPi v${VERSION}" \
  --iso-preparer WROLPi \
@@ -103,13 +124,16 @@ fi
 cp "${BLOB_CACHE}/map-fonts.tar.gz" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
 cp "${BLOB_CACHE}/map-overview.pmtiles" "${BUILD_DIR}/config/includes.chroot/opt/wrolpi-blobs/"
 
+# pipefail so an lb build failure isn't masked by tee's success exit code.
+set -o pipefail
 time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
+set +o pipefail
 
 grep "9999-wrolpi.hook.chroot completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "build hook failed!" && exit 1)
 
 cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
 chmod 644 "${SCRIPT_DIR}"/*iso
-chown 1000:1000 "${SCRIPT_DIR}"/*iso
+chown "${SUDO_UID:-1000}:${SUDO_GID:-1000}" "${SCRIPT_DIR}"/*iso
 DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"
 [ -f "${DEST}" ] && (echo "Removing conflicting ISO" && rm "${DEST}")
 mv "${SCRIPT_DIR}"/*.iso "${DEST}"

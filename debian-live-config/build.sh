@@ -60,17 +60,20 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)
 set -e
 
-# Pure live config — no --debian-installer flags.  The graphical installer
-# (Calamares) is added in phase 2 as a package + desktop launcher rather
-# than via lb's --debian-installer mechanism.  noswap prevents the live
-# system from activating swap partitions found on the host machine's
-# internal disks.
+# Live + Debian Installer.  The installer is the stock Debian d-i with
+# `--debian-installer live`, which copies the running squashfs onto the
+# target disk (much faster than a network-based install) and presents the
+# usual graphical/text installer flow.  GRUB gets "Install" + "Graphical
+# install" + "Live" entries.  noswap prevents the live system from
+# activating swap partitions found on the host machine's internal disks.
 lb config \
  --binary-images iso-hybrid \
  --mode debian \
  --architectures amd64 \
  --linux-flavours amd64 \
  --distribution bookworm \
+ --debian-installer live \
+ --debian-installer-gui true \
  --archive-areas "main contrib non-free non-free-firmware" \
  --updates true \
  --security true \

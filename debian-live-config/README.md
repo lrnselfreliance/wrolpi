@@ -53,12 +53,14 @@ the user's library so a drive moved between hosts keeps its full state:
 - [x] **Phase 1 — merged live + chroot config**:  Single `debian-live-config/`
       produces a Debian Live ISO with the full WROLPi stack, XFCE auto-login
       as `wrolpi`, persistence partition created on first boot.
-- [x] **Phase 2 — Calamares installer**:  `calamares` package and a desktop
-      launcher.  Users can install WROLPi to disk via the "Install WROLPi to
-      disk" icon on the desktop.
-- [x] **Phase 3 — branding**:  WROLPi product name, logo, colors applied
-      to the Calamares wizard via `etc/calamares/branding/wrolpi/`.  Orphan
-      launcher cleaned up post-install by a Calamares shellprocess module.
+- [x] **Phase 2 — Debian Installer**:  Standard `debian-installer` bundled
+      via `lb config --debian-installer live --debian-installer-gui true`.
+      GRUB exposes "Live", "Install", and "Graphical Install" entries.
+      Live boots into WROLPi; Install/Graphical Install copy the running
+      squashfs onto the target disk via Debian's `live-installer` flow.
+      (We previously tried Calamares-as-the-installer; the XFCE
+      desktop-icon click path proved unreliable in the wrolpi auto-login
+      session and the upstream d-i path is better-tested.)
 - [ ] **Release**:  CI on tag, hosting, wrolpi.org docs.
 
 ## References

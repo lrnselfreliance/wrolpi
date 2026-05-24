@@ -5,6 +5,8 @@ bind9-dnsutils
 build-essential
 bzip2
 ca-certificates
+calamares
+calamares-settings-debian
 calibre
 cargo
 catdoc

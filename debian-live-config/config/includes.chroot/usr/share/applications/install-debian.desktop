@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install WROLPi to disk
+GenericName=Calamares Installer
+Exec=install-debian
+Comment=Install WROLPi onto this computer's internal drive
+Keywords=calamares;system;install;wrolpi;
+Icon=install-debian
+Terminal=false
+Categories=Qt;System;
+StartupWMClass=calamares
+StartupNotify=True

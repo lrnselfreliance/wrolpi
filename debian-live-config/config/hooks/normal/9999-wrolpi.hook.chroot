@@ -206,6 +206,18 @@ autologin-user-timeout=0
 autologin-session=xfce
 EOF
 
+# Calamares launcher on the user's desktop.  XFCE shows .desktop files
+# placed in ~/Desktop; we use the upstream install-debian wrapper script
+# (pulled in by calamares-settings-debian) but rebrand the launcher entry.
+# Marked executable so XFCE will launch it without a "trusted application"
+# warning.  After install Calamares removes calamares-settings-debian, which
+# takes install-debian with it; the orphan icon is cleaned up in a
+# follow-up Calamares shellprocess (phase 3).
+mkdir -p /home/wrolpi/Desktop
+cp /usr/share/applications/install-debian.desktop /home/wrolpi/Desktop/install-wrolpi.desktop
+chmod +x /home/wrolpi/Desktop/install-wrolpi.desktop
+chown -R wrolpi:wrolpi /home/wrolpi/Desktop
+
 # Drop the default Postgres cluster created by the postgresql-* package.
 # wrolpi-bootstrap.service creates a fresh cluster on /media/wrolpi/config/postgresql
 # at first boot regardless of deployment shape; the cluster files installed

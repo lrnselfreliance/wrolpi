@@ -2,3 +2,5 @@ task-xfce-desktop
 task-ssh-server
 user-setup
 plymouth-themes
+xfce4-notifyd
+xfce4-power-manager

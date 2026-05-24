@@ -206,16 +206,37 @@ autologin-user-timeout=0
 autologin-session=xfce
 EOF
 
-# Calamares launcher on the user's desktop.  XFCE shows .desktop files
-# placed in ~/Desktop; we use the upstream install-debian wrapper script
-# (pulled in by calamares-settings-debian) but rebrand the launcher entry.
-# Marked executable so XFCE will launch it without a "trusted application"
-# warning.  Cleanup of this file on the installed system is handled by
-# the shellprocess Calamares module (see etc/calamares/modules/shellprocess.conf).
+# Calamares launcher on the user's desktop.
+#
+# Written as a Type=Link rather than Type=Application: a Type=Application
+# .desktop file under ~/Desktop is subject to XFCE Bookworm's "trusted
+# launcher" check (metadata::trusted, metadata::xfce-exe-checksum) and
+# silently refuses to launch if the metadata isn't set in the user's
+# session at click time.  Type=Link bypasses that check entirely — XFCE
+# just opens the URL via xdg-open, which dispatches to the upstream
+# install-debian.desktop in /usr/share/applications/, which runs the
+# install-debian wrapper.  Cleanup of this file on the installed system
+# is handled by the shellprocess Calamares module (see
+# etc/calamares/modules/shellprocess.conf).
 mkdir -p /home/wrolpi/Desktop
-cp /usr/share/applications/install-debian.desktop /home/wrolpi/Desktop/install-wrolpi.desktop
+cat > /home/wrolpi/Desktop/install-wrolpi.desktop <<'EOF'
+[Desktop Entry]
+Type=Link
+Name=Install WROLPi to disk
+Comment=Install WROLPi onto this computer's internal drive
+Icon=install-debian
+URL=/usr/share/applications/install-debian.desktop
+EOF
 chmod +x /home/wrolpi/Desktop/install-wrolpi.desktop
 chown -R wrolpi:wrolpi /home/wrolpi/Desktop
+
+# Suppress the upstream calamares-settings-debian autostart that runs
+# add-calamares-desktop-icon at every login.  Without this it would drop
+# a second "Install Debian" .desktop next to ours (and on the system we
+# tested with, that copy came out as a 0-byte file for unclear reasons).
+# It would also be removed anyway with calamares-settings-debian
+# post-install via Calamares' packages module.
+rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
 
 # Drop the default Postgres cluster created by the postgresql-* package.
 # wrolpi-bootstrap.service creates a fresh cluster on /media/wrolpi/config/postgresql

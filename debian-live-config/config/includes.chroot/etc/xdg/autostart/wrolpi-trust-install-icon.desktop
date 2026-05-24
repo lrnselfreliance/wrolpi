@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=WROLPi Install Icon Trust
+Comment=Mark the install launcher as trusted so xfdesktop will execute it
+Exec=/usr/local/bin/wrolpi-trust-install-icon
+StartupNotify=false
+NoDisplay=true
+X-KDE-autostart-phase=1

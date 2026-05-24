@@ -25,9 +25,10 @@ images:
     productIcon:         "wrolpi-logo.png"
     productWelcome:      "wrolpi-logo.png"
 
-# Slideshow omitted — the upstream Debian slideshow doesn't ship with the
-# WROLPi branding, and producing our own QML is deferred polish.  Calamares
-# falls back to a static welcome screen.
+# Calamares fails to start without a slideshow key, even if there is no
+# real slideshow content to show.  show.qml renders the WROLPi logo + a
+# single welcome line during the install.
+slideshow:               "show.qml"
 
 style:
     sidebarBackground:    "#5d2961"

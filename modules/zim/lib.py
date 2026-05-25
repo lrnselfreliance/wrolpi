@@ -638,7 +638,7 @@ async def restart_kiwix():
 
     logger.info('Restarting Kiwix serve')
 
-    cmd = ('sudo', '/usr/bin/systemctl', 'restart' 'wrolpi-kiwix.service')
+    cmd = ('sudo', '/usr/bin/systemctl', 'restart', 'wrolpi-kiwix.service')
     result = await run_command(cmd)
     logger.debug(f'systemctl returned {result.return_code}')
     if result.return_code != 0 and result.stderr:

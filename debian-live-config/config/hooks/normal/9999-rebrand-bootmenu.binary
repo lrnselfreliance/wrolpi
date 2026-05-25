@@ -1,0 +1,40 @@
+#!/bin/sh
+# Rebrand the live-build generated boot menus.
+#
+# live-build templates substitute @LINUX_LIVE@ etc. with text like
+# "Live system (amd64)" (see /usr/lib/live/build/binary_grub_cfg) and
+# similar strings into ISOLINUX live.cfg.  We can't override the
+# substitution source without patching live-build itself; instead this
+# hook runs in the binary stage after the generated files exist and
+# seds the strings in place.
+#
+# splash.png on the GRUB / ISOLINUX menus is replaced via
+# config/includes.binary/{boot/grub,isolinux}/splash.png — those land
+# during chroot_includes_after_packages and overwrite the auto-generated
+# Debian splash (which contained the yellow hardhat and a "Debian
+# GNU/Linux 12 (bookworm) amd64" line).
+
+set -e
+
+# GRUB (UEFI + grub-pc)
+for f in binary/boot/grub/grub.cfg \
+         binary/boot/grub/install_start.cfg \
+         binary/boot/grub/install.cfg; do
+  [ -f "$f" ] && sed -i \
+    -e 's|Live system (amd64)|Run WROLPi (live)|g' \
+    -e 's|Live system (amd64 fail-safe mode)|Run WROLPi (live, fail-safe)|g' \
+    -e "s|'Start installer'|'Install WROLPi'|g" \
+    -e "s|'Start installer with speech synthesis'|'Install WROLPi (speech)'|g" \
+    "$f"
+done
+
+# ISOLINUX (BIOS)
+for f in binary/isolinux/live.cfg \
+         binary/isolinux/install.cfg; do
+  [ -f "$f" ] && sed -i \
+    -e 's|Live system (amd64)|Run WROLPi (live)|g' \
+    -e 's|Live system (amd64 fail-safe mode)|Run WROLPi (live, fail-safe)|g' \
+    -e 's|Start ^installer|Install WROLPi|g' \
+    -e 's|Start installer with ^speech synthesis|Install WROLPi (speech)|g' \
+    "$f"
+done

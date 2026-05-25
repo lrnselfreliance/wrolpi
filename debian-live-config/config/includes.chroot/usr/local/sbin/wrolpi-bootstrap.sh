@@ -86,7 +86,15 @@ if [ -n "$BOOT_DRIVE" ]; then
       log "ERROR: failed to compute LAST_END from $BOOT_DRIVE partition table"
       exit 1
     fi
-    START=$(( ((LAST_END + 2047) / 2048) * 2048 ))
+    # Reserve 8 GiB of unused space between the ISO partition and the new
+    # persistence partition.  The `wrolpi-usb.sh upgrade` tool overwrites
+    # the ISO partition with a (potentially larger) new ISO; without
+    # headroom, growth past the current ISO size would clobber the
+    # persistence partition's data.  8 GiB covers ~2x the current ISO
+    # size — enough for several future releases.  Cost: ~8 GiB of
+    # persistence space the user doesn't see.
+    HEADROOM_SECTORS=$(( 8 * 1024 * 1024 * 1024 / 512 ))
+    START=$(( (((LAST_END + HEADROOM_SECTORS) + 2047) / 2048) * 2048 ))
     # --no-reread --force: required because the live medium is mounted from
     # this same drive.  Adding a new partition entry past the mounted one
     # is safe; we use partx -a below to inform the running kernel without

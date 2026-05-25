@@ -1,10 +1,36 @@
 """Tests for the restart_kiwix switch handler triggered by model_zim()."""
+from unittest import mock
+
 import pytest
 
 from modules.zim import lib
 from modules.zim.models import Zim
 from wrolpi.api_utils import api_app
 from wrolpi.files.models import FileGroup
+
+
+@pytest.mark.asyncio
+async def test_restart_kiwix_systemctl_command_shape():
+    """restart_kiwix() must call systemctl with `restart` and the unit name as
+    separate argv entries.  Adjacent-string-literal typos (missing comma in
+    a Python tuple) silently produce 'restartwrolpi-kiwix.service' as a single
+    argument, which systemctl rejects."""
+    captured = {}
+
+    async def fake_run_command(cmd):
+        captured['cmd'] = cmd
+        return mock.MagicMock(return_code=0, stderr=b'')
+
+    with mock.patch.object(lib, 'PYTEST', False), \
+            mock.patch.object(lib, 'DOCKERIZED', False), \
+            mock.patch.object(lib, 'run_command', side_effect=fake_run_command):
+        await lib.restart_kiwix()
+
+    cmd = captured['cmd']
+    assert 'restart' in cmd
+    assert 'wrolpi-kiwix.service' in cmd
+    # 'restart' and the unit must NOT be concatenated into one argv entry.
+    assert 'restartwrolpi-kiwix.service' not in cmd
 
 
 @pytest.mark.asyncio

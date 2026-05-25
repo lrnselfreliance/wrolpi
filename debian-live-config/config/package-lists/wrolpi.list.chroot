@@ -90,5 +90,6 @@ vim
 vlc
 wget
 wpasupplicant
+zenity
 zim-tools
 zlib1g-dev

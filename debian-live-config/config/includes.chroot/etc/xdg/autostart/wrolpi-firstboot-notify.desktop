@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=WROLPi First-Boot Notification
+Comment=Show a summary of what WROLPi bootstrap did on first boot
+Exec=/usr/local/bin/wrolpi-firstboot-notify
+StartupNotify=false
+NoDisplay=true

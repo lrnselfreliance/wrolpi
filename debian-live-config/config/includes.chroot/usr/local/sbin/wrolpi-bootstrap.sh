@@ -36,6 +36,17 @@ progress() {
   log "$1"
 }
 
+# Accumulate human-readable notes about anything non-trivial we did this
+# boot.  If anything ends up in $SUMMARY by end-of-run we write it to a
+# file under /tmp/ that the wrolpi user's XFCE autostart picks up to show
+# a zenity dialog (see /usr/local/bin/wrolpi-firstboot-notify).  /tmp is
+# tmpfs so the file is naturally per-boot; subsequent uneventful boots
+# show no dialog.
+SUMMARY=""
+SUMMARY_FILE=/tmp/wrolpi-firstboot-summary.txt
+note_action() { SUMMARY="${SUMMARY}- $1
+"; }
+
 progress "Preparing WROLPi..."
 
 # --- Detect Live vs Installed -------------------------------------------
@@ -105,6 +116,8 @@ if [ -n "$BOOT_DRIVE" ]; then
     fi
     progress "Formatting $PERSIST_PART as ext4..."
     mkfs.ext4 -L persistence -F "$PERSIST_PART"
+    PERSIST_SIZE=$(lsblk -bno SIZE "$PERSIST_PART" 2>/dev/null | numfmt --to=iec --suffix=B || echo "?")
+    note_action "Created persistence partition ${PERSIST_PART} (${PERSIST_SIZE}) on ${BOOT_DRIVE}"
   fi
 
   # Mount the persistence partition + lay out the on-disk structure.
@@ -183,6 +196,7 @@ fi
 if ! pg_lsclusters -h | awk '{print $1,$2}' | grep -q "^${PG_VERSION} main$"; then
   progress "Setting up Postgres cluster..."
   pg_createcluster "${PG_VERSION}" main
+  note_action "Set up PostgreSQL ${PG_VERSION} cluster at /media/wrolpi/config/postgresql/"
 fi
 progress "Starting Postgres..."
 systemctl start "postgresql@${PG_VERSION}-main.service"
@@ -192,6 +206,7 @@ systemctl start "postgresql@${PG_VERSION}-main.service"
 if ! sudo -iu postgres psql -lqt | cut -d \| -f 1 | grep -qw wrolpi; then
   progress "Initializing WROLPi database (this can take a minute)..."
   /opt/wrolpi/scripts/initialize_api_db.sh
+  note_action "Initialized the WROLPi database"
 fi
 
 # --- Certificates -------------------------------------------------------
@@ -226,6 +241,20 @@ fi
 progress "Starting WROLPi services..."
 systemctl enable wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
 systemctl start --no-block wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service
+
+# If we did anything notable, leave a summary for the XFCE autostart to
+# show as a zenity dialog once the user lands on the desktop.
+if [ -n "$SUMMARY" ]; then
+  cat > "$SUMMARY_FILE" <<EOF
+WROLPi finished setting itself up:
+
+$SUMMARY
+These persist between reboots:
+  /media/wrolpi          — your library (videos, archives, zims, ...)
+  /media/wrolpi/config   — configuration + Postgres data
+EOF
+  chmod 0644 "$SUMMARY_FILE"
+fi
 
 progress "WROLPi is ready."
 log "bootstrap complete"

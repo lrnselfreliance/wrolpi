@@ -1,0 +1,23 @@
+#!/bin/sh
+# Surface the first-boot bootstrap summary as a zenity dialog once the
+# XFCE session is up.
+#
+# wrolpi-bootstrap.service writes /tmp/wrolpi-firstboot-summary.txt when
+# it does notable work (creates the persistence partition, initialises
+# the Postgres cluster, runs the DB schema migration).  This script —
+# autostarted via /etc/xdg/autostart/wrolpi-firstboot-notify.desktop —
+# reads it, shows the contents to the user, and removes the file.
+#
+# /tmp is tmpfs, so the file is naturally per-boot.  Uneventful boots
+# (where bootstrap was a no-op) leave nothing to display.
+
+F=/tmp/wrolpi-firstboot-summary.txt
+[ -f "$F" ] || exit 0
+
+if command -v zenity >/dev/null 2>&1; then
+  zenity --info --width=520 --title="Welcome to WROLPi" --text="$(cat "$F")"
+elif command -v notify-send >/dev/null 2>&1; then
+  notify-send -t 30000 "WROLPi setup complete" "$(cat "$F")"
+fi
+
+rm -f "$F"

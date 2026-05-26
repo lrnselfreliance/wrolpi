@@ -2,7 +2,11 @@
 Description=WROLPi bootstrap (persistence partition + Postgres bind-mounts + DB)
 Documentation=https://github.com/lrnselfreliance/wrolpi
 After=local-fs.target systemd-tmpfiles-setup.service
-Before=postgresql.service wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi-controller.service wrolpi-first-startup.service wrolpi-mounts.service wrolpi.target
+# Block lightdm (and any other display manager) until bootstrap finishes.
+# Otherwise XFCE autologin can land before bootstrap has written the
+# first-boot summary file, and the wrolpi-firstboot-notify autostart
+# fires too early and shows nothing.
+Before=postgresql.service wrolpi-api.service wrolpi-app.service wrolpi-kiwix.service wrolpi-controller.service wrolpi-first-startup.service wrolpi-mounts.service wrolpi.target display-manager.service lightdm.service
 Wants=local-fs.target
 # live-boot uses one of these mount points depending on version; on
 # Installed none of them exist and RequiresMountsFor resolves to the

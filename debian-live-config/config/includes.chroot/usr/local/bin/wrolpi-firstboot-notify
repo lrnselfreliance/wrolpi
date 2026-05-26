@@ -10,14 +10,35 @@
 #
 # /tmp is tmpfs, so the file is naturally per-boot.  Uneventful boots
 # (where bootstrap was a no-op) leave nothing to display.
+#
+# Logs every invocation to /tmp/wrolpi-firstboot-notify.log so we can
+# tell from a deployed system whether xfce4-session ever fired the
+# autostart at all.
+
+set +e   # never fail silently; we always want the log line
+
+LOG=/tmp/wrolpi-firstboot-notify.log
+exec >>"$LOG" 2>&1
+echo "===== $(date) invoked (user=$(id -un) display=${DISPLAY:-?}) ====="
 
 F=/tmp/wrolpi-firstboot-summary.txt
-[ -f "$F" ] || exit 0
+if [ ! -f "$F" ]; then
+  echo "no summary file at $F — nothing to do"
+  exit 0
+fi
 
 if command -v zenity >/dev/null 2>&1; then
+  echo "launching zenity..."
   zenity --info --width=520 --title="Welcome to WROLPi" --text="$(cat "$F")"
+  echo "zenity returned $?"
 elif command -v notify-send >/dev/null 2>&1; then
+  echo "zenity missing; falling back to notify-send"
   notify-send -t 30000 "WROLPi setup complete" "$(cat "$F")"
 fi
 
-rm -f "$F"
+# bootstrap.sh writes the summary as root; /tmp's sticky bit means a
+# non-root rm fails.  Try via sudo (passwordless on WROLPi) so the file
+# doesn't survive into another login session.
+sudo rm -f "$F" 2>/dev/null || rm -f "$F" 2>/dev/null || true
+
+echo "done"

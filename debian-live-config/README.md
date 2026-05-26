@@ -48,6 +48,36 @@ the user's library so a drive moved between hosts keeps its full state:
       config/                            ← bind-mounted to /etc/postgresql
 ```
 
+## Booting via Ventoy or other multiboot USBs
+
+Booting WROLPi via Ventoy, YUMI, Easy2Boot, AIO Boot, GLIM, or any other
+tool that loop-mounts the ISO **works**, but only in ephemeral mode.
+
+When the live medium appears under `/dev/loop*`, `/dev/dm-*`, or
+`/dev/mapper/*` (the kernel's tell-tale for a loop/device-mapper-backed
+file rather than a real partition), `wrolpi-bootstrap.sh` refuses to
+create a persistence partition.  The underlying disk in that case is the
+user's Ventoy stick, not a blank target — appending a new ext4 partition
+to it would risk corrupting the user's other ISOs and data.
+
+Instead the script mounts a `tmpfs` at `/media/wrolpi` (sized to half of
+RAM by default), and the rest of the boot is unchanged.  Postgres
+bind-mounts and DB initialisation all succeed, just into RAM.  The user
+sees a "Running ephemerally…" notice in the first-boot dialog.
+
+Everything written to the WROLPi library — downloads, archives, video
+metadata, the database — is lost on reboot.  This mode is intended for
+trying WROLPi out without committing a USB stick; for any real use,
+flash the ISO directly to its own drive with `dd` or Etcher.
+
+Direct (dd/Etcher) boot is distinguished by the live medium living under
+`/dev/sd*`, `/dev/nvme*`, or `/dev/mmcblk*`; this is the only shape
+where `wrolpi-bootstrap.sh` will touch the partition table.
+
+(Future work: integrate with Ventoy's native `persistence.dat` flow so
+the user can opt into a persistent ephemeral-style image without
+needing a dedicated drive.)
+
 ## Implementation status
 
 - [x] **Phase 1 — merged live + chroot config**:  Single `debian-live-config/`
@@ -61,6 +91,10 @@ the user's library so a drive moved between hosts keeps its full state:
       (We previously tried Calamares-as-the-installer; the XFCE
       desktop-icon click path proved unreliable in the wrolpi auto-login
       session and the upstream d-i path is better-tested.)
+- [x] **Phase 3 — Ventoy/multiboot safety**:  `wrolpi-bootstrap.sh`
+      detects when it's been booted via a loop-mounted ISO (Ventoy and
+      friends) and falls back to a tmpfs-backed `/media/wrolpi` instead
+      of writing a new partition onto the user's multiboot stick.
 - [ ] **Release**:  CI on tag, hosting, wrolpi.org docs.
 
 ## References

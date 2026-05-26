@@ -237,6 +237,14 @@ Type=Link
 URL=https://localhost:8086/
 Icon=help-browser
 EOF
+cat > /home/wrolpi/Desktop/wrolpi-help-files.desktop <<'EOF'
+[Desktop Entry]
+Encoding=UTF-8
+Name=WROLPi Help Files
+Type=Link
+URL=file:///opt/wrolpi-help/docs/
+Icon=folder-documents
+EOF
 cat > /home/wrolpi/Desktop/wrolpi-kiwix.desktop <<'EOF'
 [Desktop Entry]
 Encoding=UTF-8

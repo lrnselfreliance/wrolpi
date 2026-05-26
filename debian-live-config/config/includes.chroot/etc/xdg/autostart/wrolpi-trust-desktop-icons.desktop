@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WROLPi Trust Desktop Icons
+Comment=Mark all desktop launchers as trusted so XFCE will launch them
+Exec=/usr/local/bin/wrolpi-trust-desktop-icons
+TryExec=/usr/local/bin/wrolpi-trust-desktop-icons
+Icon=dialog-information
+Terminal=false
+Categories=System;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

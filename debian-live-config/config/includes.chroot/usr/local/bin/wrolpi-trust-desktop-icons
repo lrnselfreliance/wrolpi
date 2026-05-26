@@ -1,0 +1,28 @@
+#!/bin/sh
+# Mark every .desktop file in ~/Desktop as trusted so XFCE will actually
+# launch it on double-click.  XFCE Bookworm requires trust metadata
+# (metadata::trusted + metadata::xfce-exe-checksum) even for Type=Link
+# entries.
+#
+# Runs at user session start via /etc/xdg/autostart/.  Idempotent — safe
+# to re-run; gio set is a no-op if the metadata already matches.
+#
+# Requires gvfs (for the metadata service that `gio set` talks to).
+
+LOG=/tmp/wrolpi-trust-desktop-icons.log
+exec >>"$LOG" 2>&1
+echo "===== $(date) invoked (user=$(id -un)) ====="
+
+DESKTOP="$HOME/Desktop"
+[ -d "$DESKTOP" ] || exit 0
+
+for f in "$DESKTOP"/*.desktop; do
+  [ -f "$f" ] || continue
+  gio set --type=string "$f" metadata::trusted true 2>&1 || true
+  gio set --type=string "$f" metadata::xfce-exe-checksum \
+      "$(sha256sum "$f" | cut -d' ' -f1)" 2>&1 || true
+  touch "$f"
+  echo "trusted: $f"
+done
+
+echo "done"

@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
 # WROLPi bootstrap — runs at every boot via wrolpi-bootstrap.service.
-# Idempotent throughout.  Works in all three deployment shapes:
+# Idempotent throughout.  Works in all four deployment shapes:
 #
-# 1. Live USB, first boot.  No persistence partition exists.  This script
-#    creates one in the free space at the end of the boot drive, formats it
-#    as ext4 (label `persistence`), writes a persistence.conf so future
-#    boots pick it up automatically via live-boot, bind-mounts the
-#    persistence root over /media/wrolpi, creates the Postgres cluster
-#    under /media/wrolpi/config/postgresql/, runs initialize_api_db.sh,
-#    and enables the WROLPi runtime services.
+# 1. Live USB (direct), first boot.  No persistence partition exists.
+#    This script creates one in the free space at the end of the boot
+#    drive, formats it as ext4 (label `persistence`), writes a
+#    persistence.conf so future boots pick it up automatically via
+#    live-boot, bind-mounts the persistence root over /media/wrolpi,
+#    creates the Postgres cluster under /media/wrolpi/config/postgresql/,
+#    runs initialize_api_db.sh, and enables the WROLPi runtime services.
 #
-# 2. Live USB, subsequent boot.  live-boot's initramfs has already applied
-#    the /media/wrolpi bind mount from persistence.conf.  Cluster and DB
-#    already exist.  Most steps no-op; we always regenerate the leaf TLS
-#    cert and ensure services are enabled.
+# 2. Live USB (direct), subsequent boot.  live-boot's initramfs has
+#    already applied the /media/wrolpi bind mount from persistence.conf.
+#    Cluster and DB already exist.  Most steps no-op; we always
+#    regenerate the leaf TLS cert and ensure services are enabled.
 #
-# 3. Installed (Calamares).  No live medium present; partition-creation
-#    branch is skipped.  /media/wrolpi is mounted via /etc/fstab on an
-#    external drive, or is a plain directory on the root filesystem if
-#    the user installed without one.  The Postgres bind-mounts happen at
-#    every boot here because /etc/fstab doesn't own them — see Before=
-#    in the .service unit.
+# 3. Live USB (loop / Ventoy / multiboot).  The ISO is loop-mounted by a
+#    multiboot tool, so we cannot safely write a new partition to the
+#    underlying disk (it's the user's Ventoy stick, not a blank target).
+#    /media/wrolpi is backed by tmpfs and everything runs from RAM.  All
+#    user data is lost on reboot.  Surfaced to the user via the
+#    first-boot zenity dialog.
+#
+# 4. Installed.  No live medium present; partition-creation branch is
+#    skipped.  /media/wrolpi is mounted via /etc/fstab on an external
+#    drive, or is a plain directory on the root filesystem if the user
+#    installed without one.  The Postgres bind-mounts happen at every
+#    boot here because /etc/fstab doesn't own them — see Before= in the
+#    .service unit.
 
 set -euo pipefail
 
@@ -49,27 +56,56 @@ note_action() { SUMMARY="${SUMMARY}- $1
 
 progress "Preparing WROLPi..."
 
-# --- Detect Live vs Installed -------------------------------------------
-# Live: one of the live-boot mount points is active and points at our USB.
-# Installed: none of them exist; this script proceeds straight to the
-# Postgres bind-mount section.
+# --- Detect deployment mode ---------------------------------------------
+# Three mutually-exclusive shapes:
+#
+#   direct       Live USB flashed with dd/Etcher: the ISO partition is a
+#                real partition on a real disk.  Create + manage a
+#                persistence partition on that disk.
+#
+#   loop         Live medium is a loop or device-mapper node — typical
+#                of Ventoy, YUMI, Easy2Boot, GLIM, AIO Boot, etc.  The
+#                underlying block device is the user's data drive; we
+#                must NOT try to sfdisk-append a partition onto it.
+#                Run ephemerally: /media/wrolpi backed by tmpfs, lost
+#                on reboot.
+#
+#   installed    No live medium at all.  Skip partition logic entirely;
+#                /media/wrolpi is either on /etc/fstab or a plain dir
+#                on the root filesystem.
 
+MODE=installed
 BOOT_DRIVE=""
+LIVE_MEDIUM=""
 for mp in /usr/lib/live/mount/medium /run/live/medium /lib/live/mount/medium; do
   if part=$(findmnt -nr -o SOURCE "$mp" 2>/dev/null) && [ -n "$part" ]; then
-    BOOT_DRIVE="/dev/$(lsblk -no PKNAME "$part")"
-    log "live medium $part on $BOOT_DRIVE"
+    LIVE_MEDIUM=$part
+    case "$part" in
+      /dev/sd*|/dev/nvme*|/dev/mmcblk*)
+        MODE=direct
+        BOOT_DRIVE="/dev/$(lsblk -no PKNAME "$part")"
+        log "live medium $part on $BOOT_DRIVE (mode: direct)"
+        ;;
+      /dev/loop*|/dev/dm-*|/dev/mapper/*)
+        MODE=loop
+        log "live medium $part is a loop/dm device (mode: loop — ephemeral)"
+        ;;
+      *)
+        MODE=loop
+        log "live medium $part has unrecognised shape (mode: loop — safe default)"
+        ;;
+    esac
     break
   fi
 done
 
-if [ -z "$BOOT_DRIVE" ]; then
+if [ "$MODE" = "installed" ]; then
   log "no live medium detected — running in Installed mode"
 fi
 
-# --- Find or create persistence partition (Live only) -------------------
+# --- Find or create persistence partition (direct mode only) ------------
 
-if [ -n "$BOOT_DRIVE" ]; then
+if [ "$MODE" = "direct" ]; then
   PERSIST_PART=$(blkid -L persistence 2>/dev/null || true)
   if [ -z "$PERSIST_PART" ]; then
     progress "Creating persistence partition on $BOOT_DRIVE..."
@@ -154,6 +190,25 @@ EOF
     mkdir -p /media/wrolpi
     mount --bind /mnt/persistence/wrolpi /media/wrolpi
   fi
+fi
+
+# --- Ephemeral (loop mode) ----------------------------------------------
+# Booted via Ventoy / multiboot tool / loop-mounted ISO.  We cannot tell
+# which underlying disk is the user's data drive — appending a partition
+# would risk corrupting their Ventoy stick or whatever else they had on
+# that device.  Run from RAM instead.  Anything written to /media/wrolpi
+# vanishes on reboot, but the rest of WROLPi (Postgres bind-mounts,
+# config layout, services) works identically.
+
+if [ "$MODE" = "loop" ]; then
+  if ! mountpoint -q /media/wrolpi; then
+    mkdir -p /media/wrolpi
+    # No explicit size= — defaults to half-RAM, plenty for an
+    # exploratory session and capped so we can't OOM the box.
+    mount -t tmpfs -o mode=0755 tmpfs /media/wrolpi
+    log "ephemeral mode: /media/wrolpi is tmpfs (data lost on reboot)"
+  fi
+  note_action "Running ephemerally from RAM (Ventoy / multiboot USB detected). Your data WILL NOT persist across reboots."
 fi
 
 # --- /media/wrolpi/config + Postgres data layout ------------------------
@@ -253,7 +308,20 @@ systemctl start --no-block wrolpi-api.service wrolpi-app.service wrolpi-kiwix.se
 # If we did anything notable, leave a summary for the XFCE autostart to
 # show as a zenity dialog once the user lands on the desktop.
 if [ -n "$SUMMARY" ]; then
-  cat > "$SUMMARY_FILE" <<EOF
+  if [ "$MODE" = "loop" ]; then
+    cat > "$SUMMARY_FILE" <<EOF
+WROLPi is running, but NOT writing to disk.
+
+$SUMMARY
+You appear to have booted from Ventoy or a similar multiboot tool.
+WROLPi can't safely write a persistence partition in that case, so
+everything lives in RAM and will be lost when you reboot or power off.
+
+To get a persistent install, flash the ISO directly to a USB drive
+with dd or Etcher and boot from that drive instead.
+EOF
+  else
+    cat > "$SUMMARY_FILE" <<EOF
 WROLPi finished setting itself up:
 
 $SUMMARY
@@ -261,6 +329,7 @@ These persist between reboots:
   /media/wrolpi          — your library (videos, archives, zims, ...)
   /media/wrolpi/config   — configuration + Postgres data
 EOF
+  fi
   chmod 0644 "$SUMMARY_FILE"
 fi
 

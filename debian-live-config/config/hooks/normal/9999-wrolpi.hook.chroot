@@ -208,60 +208,17 @@ EOF
 
 mkdir -p /home/wrolpi/Desktop
 
-# Desktop shortcuts to WROLPi's HTTPS services and the on-drive media
-# directory.  Type=Link entries dispatch via xdg-open, which sidesteps
-# XFCE's executable-launcher trust check (the check only applies to
-# Type=Application entries with an Exec field).  All URLs go through
-# Caddy on localhost, configured in /etc/caddy/Caddyfile.
-cat > /home/wrolpi/Desktop/wrolpi-app.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi
-Type=Link
-URL=https://localhost/
-Icon=/opt/wrolpi/icon.png
-EOF
-cat > /home/wrolpi/Desktop/wrolpi-controller.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Controller
-Type=Link
-URL=https://localhost/controller/
-Icon=/opt/wrolpi/etc/raspberrypios/controller-logo.png
-EOF
-cat > /home/wrolpi/Desktop/wrolpi-help.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Help
-Type=Link
-URL=https://localhost:8086/
-Icon=help-browser
-EOF
-cat > /home/wrolpi/Desktop/wrolpi-help-files.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Help Files
-Type=Link
-URL=file:///opt/wrolpi-help/docs/
-Icon=folder-documents
-EOF
-cat > /home/wrolpi/Desktop/wrolpi-kiwix.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=Kiwix Library
-Type=Link
-URL=https://localhost:8085/
-Icon=accessories-dictionary
-EOF
-cat > /home/wrolpi/Desktop/wrolpi-files.desktop <<'EOF'
-[Desktop Entry]
-Encoding=UTF-8
-Name=WROLPi Files
-Type=Link
-URL=file:///media/wrolpi/
-Icon=folder
-EOF
+# Desktop shortcuts to WROLPi's services.  Use the canonical .desktop
+# files from the repo (etc/raspberrypios/) so updates to those files
+# propagate to the live ISO without touching the chroot hook.
+# wrolpi-trust-desktop-icons.desktop autostart marks each as trusted at
+# session start so XFCE will launch them on double-click.
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.desktop          /home/wrolpi/Desktop/
+cp /opt/wrolpi/etc/raspberrypios/controller.desktop      /home/wrolpi/Desktop/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-help.desktop     /home/wrolpi/Desktop/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-help-files.desktop /home/wrolpi/Desktop/
 
+chmod +x /home/wrolpi/Desktop/*.desktop
 chown -R wrolpi:wrolpi /home/wrolpi/Desktop
 
 # Drop the default Postgres cluster created by the postgresql-* package.

@@ -81,6 +81,17 @@ sanity_check_device() {
     for child in $(lsblk -lnpo NAME "$dev" | tail -n +2); do
       umount "$child" 2>/dev/null || true
     done
+    # Re-check: a busy partition (open file handle, daemon, etc.) will
+    # have swallowed our umount silently.  dd-ing a device whose
+    # partition is still mounted corrupts the live filesystem.  Bail
+    # loudly before any destructive operation.
+    mounted=$(lsblk -no MOUNTPOINTS "$dev" 2>/dev/null | grep -v '^$' || true)
+    if [ -n "$mounted" ]; then
+      info "Still mounted after umount attempt:"
+      echo "$mounted" | sed 's/^/  /'
+      die "could not unmount $dev (a partition is in use).  Close any " \
+          "open file handles or run `sudo lsof $dev*` to find them, then retry."
+    fi
   fi
 }
 
@@ -130,11 +141,19 @@ cmd_upgrade() {
   local iso_size; iso_size=$(stat -c %s "$iso")
   local headroom_bytes=$((persist_start * 512 - iso_size))
 
-  info "ISO:               $iso ($(numfmt --to=iec --suffix=B $iso_size))"
+  info "ISO:               $iso ($(numfmt --to=iec --suffix=B "$iso_size"))"
   info "Target device:     $dev ($(lsblk -no MODEL,SIZE "$dev" | head -1))"
-  info "Persistence:       $persist_part starts at sector $persist_start ($(numfmt --to=iec --suffix=B $((persist_start * 512))))"
-  info "Headroom for ISO:  $(numfmt --to=iec --suffix=B $((persist_start * 512)))"
-  info "Headroom vs ISO:   $(numfmt --to=iec --suffix=B $headroom_bytes) free"
+  info "Persistence:       $persist_part starts at sector $persist_start ($(numfmt --to=iec --suffix=B "$((persist_start * 512))"))"
+  info "Headroom for ISO:  $(numfmt --to=iec --suffix=B "$((persist_start * 512))")"
+  # numfmt treats a leading dash as an option flag.  Format the absolute
+  # value and prefix the sign manually so a negative headroom doesn't
+  # crash the script under `set -euo pipefail` before the descriptive
+  # error message below has a chance to print.
+  if [ "$headroom_bytes" -ge 0 ]; then
+    info "Headroom vs ISO:   $(numfmt --to=iec --suffix=B "$headroom_bytes") free"
+  else
+    info "Headroom vs ISO:   -$(numfmt --to=iec --suffix=B "$(( -headroom_bytes ))") (ISO is too large)"
+  fi
 
   if [ "$headroom_bytes" -lt 0 ]; then
     cat >&2 <<EOF

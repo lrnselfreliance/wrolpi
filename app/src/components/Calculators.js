@@ -8,6 +8,7 @@ import {DipoleAntennaCalculator} from "./calculators/HamCalculators";
 import {Link} from "react-router";
 import {RatioCalculators} from "./calculators/RatioCalculator";
 import {QRCodeCalculator} from "./calculators/QRCodeCalculator";
+import {DriveCalculator} from "./calculators/DriveCalculator";
 
 export const useCalculators = () => {
     const [calc, setCalc] = useCalcQuery();
@@ -15,6 +16,7 @@ export const useCalculators = () => {
     const calculators = [
         {key: 'ratio', icon: 'th large', button: 'Ratio', contents: <RatioCalculators/>},
         {key: 'electrical', icon: 'lightning', button: 'Electrical', contents: <ElectricalCalculators/>},
+        {key: 'drive', icon: 'cogs', button: 'Drive Ratio', contents: <DriveCalculator/>},
         {key: 'antenna', icon: 'signal', button: 'Antenna', contents: <DipoleAntennaCalculator/>},
         {key: 'temperature', icon: 'thermometer', button: 'Temperature', contents: <TemperatureCalculator/>},
         {key: 'qrCode', icon: 'qrcode', button: 'QR Code', contents: <QRCodeCalculator/>},

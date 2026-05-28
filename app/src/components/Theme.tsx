@@ -285,7 +285,9 @@ export function Divider(props: DividerProps) {
 
 export function Header(props: HeaderProps) {
     const {t} = useContext(ThemeContext);
-    return <SHeader {...t} {...props}/>
+    // Merge the caller's style on top of the theme's text style; a bare `{...props}`
+    // would let an incoming `style` prop replace (and drop) the theme's text color.
+    return <SHeader {...t} {...props} style={{...t.style, ...props.style}}/>
 }
 
 export function Icon(props: IconProps) {

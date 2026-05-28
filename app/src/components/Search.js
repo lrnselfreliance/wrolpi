@@ -51,6 +51,11 @@ const SUGGESTED_APPS = [
         title: 'Antenna Calculator',
         description: 'Calculate dipole length, wavelength.'
     },
+    {
+        location: '/more/calculators?calc=drive',
+        title: 'Drive Ratio Calculator',
+        description: 'Calculate pulley, gear, and sprocket ratios, RPM, torque, belt and chain length.'
+    },
 ];
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

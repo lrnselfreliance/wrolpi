@@ -16,12 +16,6 @@ import {Media} from "../../contexts/contexts";
 // result comes back in those same units.  The React component picks imperial vs metric and
 // supplies the matching per-category rates and container capacities.
 
-// Divide `a` by `b`, returning null when the result would not be a finite number.
-const safeDiv = (a, b) => {
-    const result = a / b;
-    return Number.isFinite(result) ? result : null;
-};
-
 // Total water the household needs per day: sum of (count * rate) for each category.
 // Missing/blank/non-positive counts or rates contribute nothing rather than NaN.
 export function dailyDemand(counts, rates) {
@@ -151,7 +145,8 @@ const DEMAND_INFO = 'Per-person daily water includes drinking plus basic hygiene
     + 'adequate-intake figures (men ~3.7 L, women ~2.7 L of total water per day). The '
     + 'Pregnant/Nursing category adds the extra CDC/Ready.gov calls out — about +0.5 gallon '
     + 'for pregnant and +1 gallon for nursing women. CDC also advises storing more for sick '
-    + 'people, pets, and hot climates — edit the rates to match your household.';
+    + 'people, pets, and hot climates. Use the "Additional daily demand" field below for pets, '
+    + 'livestock, or other needs not covered by the per-person categories.';
 
 // Per-category colors (Paul Tol bright palette) so the count inputs read at a glance.
 const CATEGORY_META = [
@@ -178,13 +173,25 @@ function fmt(value, unit) {
     return unit ? `${roundDigits(value, 2)} ${unit}` : `${roundDigits(value, 2)}`;
 }
 
+// Keep a numeric input non-negative without disrupting in-progress decimal entry.
+// A <input type=number> can only become negative via a leading "-", so stripping it is
+// enough; returning the raw string otherwise lets the user finish typing "1.5".
+function clampNonNegative(value) {
+    if (value === '') {
+        return '';
+    }
+    return value.startsWith('-') ? value.slice(1) : value;
+}
+
 export function WaterCalculator() {
     const [metric, setMetric] = useLocalStorage('water_calculator_metric', false);
     const [preset, setPreset] = useLocalStorage('water_calculator_preset', 'minimum');
     const [counts, setCounts] = useLocalStorage('water_calculator_counts',
         {men: '1', women: '1', children: '', pregnant: ''});
+    const [extra, setExtra] = useLocalStorage('water_calculator_extra', '');
     const [rates, setRates] = React.useState({...WATER_PRESETS.minimum.imperial});
-    const [durationIndex, setDurationIndex] = React.useState(DURATION_STOPS.indexOf(14));
+    const [durationIndex, setDurationIndex] = useLocalStorage('water_calculator_duration_index',
+        DURATION_STOPS.indexOf(14));
 
     // Reset the editable rates to the preset's defaults whenever the preset or unit changes.
     React.useEffect(() => {
@@ -195,9 +202,13 @@ export function WaterCalculator() {
     const volumeUnit = metric ? 'L' : 'gal';
     const rateUnit = metric ? 'L/day' : 'gal/day';
     const weightUnit = metric ? 'kg' : 'lb';
-    const days = DURATION_STOPS[durationIndex];
+    // A persisted index could fall out of range if DURATION_STOPS ever changes; clamp it.
+    const durationStop = Math.min(Math.max(0, durationIndex), DURATION_STOPS.length - 1);
+    const days = DURATION_STOPS[durationStop];
 
-    const daily = dailyDemand(counts, rates);
+    const baseDaily = dailyDemand(counts, rates);
+    const extraDaily = Number(extra) > 0 ? Number(extra) : 0;
+    const daily = baseDaily + extraDaily;
     const total = totalWater(daily, days);
     const weight = waterWeight(total, metric);
 
@@ -215,13 +226,34 @@ export function WaterCalculator() {
     const rateInput = ({key, label, color}) =>
         <Input {...inputProps} min={0} step={0.1} name={`rate-${key}`}
                labelPosition='left' value={rates[key]}
-               onChange={e => setRates({...rates, [key]: e.target.value})}
+               onChange={e => setRates({...rates, [key]: clampNonNegative(e.target.value)})}
                label={<Label style={{backgroundColor: color, color: textColorFor(color), borderColor: color}}>
                    {label}</Label>}/>;
 
-    const presetButtons = <Toggle label={`${WATER_PRESETS[preset].label} — ${WATER_PRESETS[preset].description}`}
-                                   checked={preset === 'comfortable'}
-                                   onChange={() => setPreset(preset === 'comfortable' ? 'minimum' : 'comfortable')}/>;
+    const presetButtons = (
+        <div>
+            {Object.entries(WATER_PRESETS).map(([key, p]) => (
+                <button
+                    key={key}
+                    type="button"
+                    onClick={() => setPreset(key)}
+                    style={{
+                        marginRight: '0.5em',
+                        padding: '0.4em 0.8em',
+                        border: preset === key ? '2px solid #2185d0' : '1px solid #ccc',
+                        background: preset === key ? '#e8f4fc' : 'white',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    <strong>{p.label}</strong> — {p.description}
+                </button>
+            ))}
+            <span style={{fontSize: '0.85em', opacity: 0.7, marginLeft: '0.5em'}}>
+                (switching resets rates to preset defaults)
+            </span>
+        </div>
+    );
 
     // One row per container: how many of it the total water would fill, and the spare
     // capacity in the last one.  Shown for every container so the user can compare.
@@ -265,10 +297,21 @@ export function WaterCalculator() {
                 <GridColumn key={meta.key}>{rateInput(meta)}</GridColumn>)}
         </Grid>
 
+        <Header as='h3' style={{marginTop: '1em'}}>Additional daily demand</Header>
+        <div style={{maxWidth: '320px'}}>
+            <Input {...inputProps} min={0} step={0.1} name="extra"
+                   labelPosition='left' value={extra}
+                   onChange={e => setExtra(clampNonNegative(e.target.value))}
+                   label={<Label>Extra {rateUnit}</Label>}/>
+            <p style={{fontSize: '0.85em', opacity: 0.7, marginTop: '0.25em'}}>
+                Pets, livestock, guests, sick household members, or anything else not covered above.
+            </p>
+        </div>
+
         <Header as='h3' style={{marginTop: '1em'}}>How long?</Header>
         <div style={{padding: '0 0.5em'}}>
             <input type='range' min={0} max={DURATION_STOPS.length - 1} step={1}
-                   value={durationIndex} aria-label='Duration'
+                   value={durationStop} aria-label='Duration'
                    onChange={e => setDurationIndex(Number(e.target.value))}
                    style={{width: '100%'}}/>
             <Header as='h2' textAlign='center' style={{marginTop: '0.25em'}}>
@@ -288,7 +331,7 @@ export function WaterCalculator() {
                         <TableCell>{fmt(total, volumeUnit)}</TableCell>
                     </TableRow>
                     <TableRow>
-                        <TableCell>Total Weight</TableCell>
+                        <TableCell>Water Weight</TableCell>
                         <TableCell>{fmt(weight, weightUnit)}</TableCell>
                     </TableRow>
                 </TableBody>

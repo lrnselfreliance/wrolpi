@@ -56,6 +56,11 @@ const SUGGESTED_APPS = [
         title: 'Drive Ratio Calculator',
         description: 'Calculate pulley, gear, and sprocket ratios, RPM, torque, belt and chain length.'
     },
+    {
+        location: '/more/calculators?calc=water',
+        title: 'Water Storage Calculator',
+        description: 'Calculate water storage for your household: drinking and hygiene needs, how much to store, and how many drums, buckets, or bottles you need.'
+    },
 ];
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

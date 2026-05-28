@@ -307,7 +307,6 @@ function driveReducer(state, action) {
         const elements = state.elements.map((el, i) =>
             i === index ? {...el, [field]: clamped} : el);
         const lastUpdated = [index, ...state.lastUpdated.filter((i) => i !== index)];
-        console.debug('[DriveCalc] field', {index, field, value: clamped, lastUpdated: [...lastUpdated]});
         // Only update the field the user is actively typing. Solving is debounced in the component.
         return {...state, elements, lastUpdated};
     }
@@ -423,7 +422,6 @@ export function DriveCalculator() {
     const {sizeLabel, button, toothed} = MODES[mode];
     const {elements} = state;
     const twoElements = elements.length === 2;
-    console.debug('[DriveCalc] render', elements.map((e, i) => ({i, size: e.size, rpm: e.rpm})), 'lastUpdated:', state.lastUpdated);
     const lengthUnit = metric ? 'mm' : 'in';
     const torqueUnit = metric ? 'N·m' : 'lb·ft';
     // Pulley diameters carry a length unit; gear/sprocket teeth are unitless.

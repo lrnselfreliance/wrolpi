@@ -81,7 +81,12 @@ for mp in /usr/lib/live/mount/medium /run/live/medium /lib/live/mount/medium; do
   if part=$(findmnt -nr -o SOURCE "$mp" 2>/dev/null) && [ -n "$part" ]; then
     LIVE_MEDIUM=$part
     case "$part" in
-      /dev/sd*|/dev/nvme*|/dev/mmcblk*)
+      /dev/sd*|/dev/nvme*|/dev/mmcblk*|/dev/vd*|/dev/xvd*|/dev/hd*)
+        # Real partitions on real (or virtual) disks: SCSI/USB (sd*),
+        # NVMe, SD/eMMC (mmcblk*), VirtIO (vd*), Xen (xvd*), legacy
+        # IDE (hd*).  A blank VM disk imaged with the ISO can safely
+        # hold a persistence partition, so treat virtual disks as direct
+        # rather than letting them fall through to the ephemeral default.
         MODE=direct
         BOOT_DRIVE="/dev/$(lsblk -no PKNAME "$part")"
         log "live medium $part on $BOOT_DRIVE (mode: direct)"
@@ -207,8 +212,11 @@ if [ "$MODE" = "loop" ]; then
     # exploratory session and capped so we can't OOM the box.
     mount -t tmpfs -o mode=0755 tmpfs /media/wrolpi
     log "ephemeral mode: /media/wrolpi is tmpfs (data lost on reboot)"
+    # Inside the guard so a manual service restart mid-session (tmpfs
+    # already mounted) doesn't re-trigger the "NOT writing to disk"
+    # first-boot dialog.
+    note_action "Running ephemerally from RAM (Ventoy / multiboot USB detected). Your data WILL NOT persist across reboots."
   fi
-  note_action "Running ephemerally from RAM (Ventoy / multiboot USB detected). Your data WILL NOT persist across reboots."
 fi
 
 # --- /media/wrolpi/config + Postgres data layout ------------------------

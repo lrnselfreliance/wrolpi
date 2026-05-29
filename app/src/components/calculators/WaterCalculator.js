@@ -57,6 +57,29 @@ export function waterWeight(volume, metric) {
     return metric ? volume * 1 : volume * 8.345;
 }
 
+/**
+ * Pure function that computes the main derived values the UI shows,
+ * given the same inputs the component works with. This is primarily
+ * exposed to enable high-quality lifecycle / integration-style tests.
+ */
+export function computeStorage({ counts, rates, extra = '', days, metric = false }) {
+    const baseDaily = dailyDemand(counts, rates);
+    const extraDaily = Number(extra) > 0 ? Number(extra) : 0;
+    const daily = baseDaily + extraDaily;
+
+    const total = totalWater(daily, days);
+    const weight = waterWeight(total, metric);
+
+    // Convenient container results for common sizes used in tests
+    const bucketCapacity = metric ? 18.9 : 5; // ~5 gal bucket or ~19 L
+    const bucket = total !== null ? containersNeeded(total, bucketCapacity) : null;
+
+    const ibcCapacity = metric ? 1041 : 275;
+    const ibc = total !== null ? containersNeeded(total, ibcCapacity) : null;
+
+    return { daily, total, weight, bucket, ibc };
+}
+
 // Human-friendly label for a duration in days: days up to a week, then weeks, then months,
 // then whole years.  Keeps the slider from showing awkward values like "68 days".
 export function formatDuration(days) {
@@ -176,7 +199,7 @@ function fmt(value, unit) {
 // Keep a numeric input non-negative without disrupting in-progress decimal entry.
 // A <input type=number> can only become negative via a leading "-", so stripping it is
 // enough; returning the raw string otherwise lets the user finish typing "1.5".
-function clampNonNegative(value) {
+export function clampNonNegative(value) {
     if (value === '') {
         return '';
     }

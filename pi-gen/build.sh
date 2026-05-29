@@ -125,4 +125,28 @@ chown -R 1000:1000 "${SCRIPT_DIR}"
 
 set +x
 
+# Sanity-check the resulting image before declaring success, so a truncated or
+# corrupt build never ships.
+IMG="${SCRIPT_DIR}/WROLPi-v${VERSION}-aarch64-desktop.img.xz"
+MIN_IMG_BYTES=$((1024 * 1024 * 1024))         # 1 GiB floor; compressed is ~5 GiB.
+MIN_UNCOMPRESSED_BYTES=$((2 * 1024 * 1024 * 1024))  # 2 GiB floor; real is ~8 GiB.
+
+IMG_BYTES=$(stat -c%s "${IMG}")
+if [ "${IMG_BYTES}" -lt "${MIN_IMG_BYTES}" ]; then
+  echo "ERROR: image is only ${IMG_BYTES} bytes (< ${MIN_IMG_BYTES}); build likely truncated." >&2
+  exit 1
+fi
+# Full decompression test: catches any corruption in the .xz stream.
+if ! xz -t "${IMG}"; then
+  echo "ERROR: ${IMG} failed xz integrity check." >&2
+  exit 1
+fi
+# Confirm the uncompressed image is a sane size (field 5 of the robot totals).
+UNCOMPRESSED_BYTES=$(xz --robot -l "${IMG}" 2>/dev/null | awk -F'\t' '/^totals/{print $5}')
+if [ -n "${UNCOMPRESSED_BYTES}" ] && [ "${UNCOMPRESSED_BYTES}" -lt "${MIN_UNCOMPRESSED_BYTES}" ]; then
+  echo "ERROR: uncompressed image is only ${UNCOMPRESSED_BYTES} bytes (< ${MIN_UNCOMPRESSED_BYTES})." >&2
+  exit 1
+fi
+echo "Image sanity checks passed ($(numfmt --to=iec "${IMG_BYTES}" 2>/dev/null || echo "${IMG_BYTES} bytes") compressed, xz OK)."
+
 echo "Build completed successfully"

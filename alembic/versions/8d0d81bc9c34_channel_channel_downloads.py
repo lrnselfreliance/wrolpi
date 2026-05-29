@@ -15,7 +15,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, deferred, relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from modules.videos.lib import link_channel_and_downloads
 from wrolpi.common import ModelHelper
 from wrolpi.dates import TZDateTime
 from wrolpi.downloader import DownloadStatus
@@ -83,6 +82,47 @@ class MDownload(ModelHelper, Base):
     channel = relationship('MChannel', primaryjoin='MDownload.channel_id==MChannel.id', back_populates='downloads')
 
 
+def _link_channel_and_downloads(session: Session):
+    """Associate each Download with its Channel via `Download.channel_id`.
+
+    This is a frozen copy of the linking logic as it existed when this migration was written.  It deliberately does
+    NOT import `modules.videos.lib.link_channel_and_downloads`; that function has since been rewritten for the
+    Collections feature and now relies on `Download.collection_id` / `Download.destination`, neither of which exists at
+    this point in the migration chain.  A migration must remain frozen against the schema it targets.
+    """
+    downloads = list(session.query(MDownload).all())
+    downloads_by_url = {i.url: i for i in downloads}
+    downloads_by_destination = {i.settings['destination']: i
+                                for i in downloads if 'destination' in (i.settings or dict())}
+    channels = session.query(MChannel).all()
+
+    need_commit = False
+    for channel in channels:
+        directory = str(channel.directory)
+        download = downloads_by_destination.get(directory) or downloads_by_url.get(channel.url)
+        if download and not download.channel_id:
+            download.channel_id = channel.id
+            need_commit = True
+
+        # Get any Downloads for a Channel's RSS feed.
+        rss_url = channel.get_rss_url()
+        download = downloads_by_url.get(rss_url) if rss_url else None
+        if download and not download.channel_id:
+            download.channel_id = channel.id
+            need_commit = True
+
+    # Associate any Download which shares a Channel's URL.
+    for download in downloads:
+        if download.url and not download.channel_id:
+            channel = MChannel.get_by_url(download.url, session)
+            if channel:
+                download.channel_id = channel.id
+                need_commit = True
+
+    if need_commit:
+        session.commit()
+
+
 def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
@@ -90,7 +130,7 @@ def upgrade():
     session.execute('ALTER TABLE download ADD CONSTRAINT download_url_unique UNIQUE (url)')
     session.execute('ALTER TABLE download ADD COLUMN channel_id INTEGER REFERENCES channel(id)')
 
-    link_channel_and_downloads(session, MChannel, MDownload)
+    _link_channel_and_downloads(session)
 
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS match_regex')
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS download_frequency')

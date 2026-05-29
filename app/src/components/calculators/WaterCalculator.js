@@ -3,7 +3,6 @@ import {GridColumn, Input, Label, TableBody, TableCell, TableHeader, TableHeader
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Form, Header, Segment, Table} from "../Theme";
 import {InfoPopup, roundDigits, Toggle, useLocalStorage} from "../Common";
-import {Media} from "../../contexts/contexts";
 
 // Pure calculation functions for the Water Storage calculator.
 //
@@ -54,7 +53,7 @@ export function waterWeight(volume, metric) {
     if (!(volume > 0)) {
         return null;
     }
-    return metric ? volume * 1 : volume * 8.345;
+    return metric ? volume : volume * 8.345;
 }
 
 /**
@@ -217,8 +216,10 @@ export function WaterCalculator() {
         DURATION_STOPS.indexOf(14));
 
     // Reset the editable rates to the preset's defaults whenever the preset or unit changes.
+    // Fall back to the minimum preset if localStorage holds an unrecognized/stale key, so a
+    // bad persisted value can never crash the component on mount.
     React.useEffect(() => {
-        const p = WATER_PRESETS[preset];
+        const p = WATER_PRESETS[preset] ?? WATER_PRESETS.minimum;
         setRates(metric ? {...p.metric} : {...p.imperial});
     }, [preset, metric]);
 

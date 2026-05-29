@@ -117,7 +117,10 @@ if ! git -C /opt/wrolpi verify-commit origin/"${BRANCH}" 2>&1; then
 fi
 
 # Signature verified, safe to apply.
-(cd /opt/wrolpi && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+# Force the checkout so local working-tree changes (e.g. app/package-lock.json
+# rewritten by npm install during a prior upgrade) cannot abort the switch; the
+# following reset --hard discards them anyway.
+(cd /opt/wrolpi && git checkout -f "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
 # Verify HEAD again after checkout in case the branch was swapped between fetch and checkout.
 if ! git -C /opt/wrolpi verify-commit HEAD 2>&1; then

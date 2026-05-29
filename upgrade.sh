@@ -56,6 +56,12 @@ fi
 if [ -z "$WROLPI_UPGRADE_SERVICE" ]; then
   trap 'echo ""; echo "Note: The upgrade service is still running in the background."; echo "Monitor with: journalctl -fu wrolpi-upgrade.service"' INT
   echo "Delegating upgrade to wrolpi-upgrade.service..."
+  # Self-heal: ensure the unit is installed and current before starting it.
+  # repair.sh installs it normally, but that runs late in the upgrade, so a
+  # missing or stale unit would otherwise break delegation entirely.
+  install -m644 /opt/wrolpi/etc/raspberrypios/wrolpi-upgrade.service \
+    /etc/systemd/system/wrolpi-upgrade.service
+  systemctl daemon-reload
   # Write branch config for the service.
   echo "BRANCH=${BRANCH}" >/tmp/wrolpi-upgrade.env
   chown wrolpi:wrolpi /tmp/wrolpi-upgrade.env

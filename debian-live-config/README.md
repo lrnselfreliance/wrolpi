@@ -26,6 +26,38 @@ Flash with Etcher, Rufus, Raspberry Pi Imager, or:
 sudo dd if=WROLPi-v${VERSION}-amd64.iso of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
+## Upgrading an existing WROLPi USB
+
+A WROLPi USB carries two partitions: the ISO (boot) partition and a
+`persistence` partition created on first boot that holds your library,
+database, and configuration.  To move to a newer ISO without losing the
+persistence partition, use `scripts/wrolpi-usb.sh` from any Linux host:
+
+```
+sudo ./scripts/wrolpi-usb.sh upgrade WROLPi-v${VERSION}-amd64.iso /dev/sdX
+```
+
+It backs up the partition table, overwrites only the ISO partition, and
+re-adds the persistence partition entry at its original location.  The
+ISO partition reserves 8 GiB of headroom so a larger future ISO still
+fits ahead of the persistence partition.
+
+## Converting an existing data drive (not supported)
+
+There is no in-place conversion of a drive that already holds your data
+into a WROLPi USB — flashing the ISO erases the whole drive, and there
+is no safe, filesystem-agnostic way to graft WROLPi onto a full drive.
+`scripts/wrolpi-usb.sh install` only prints this procedure:
+
+1. Back up everything on the drive to another disk.
+2. Flash the whole drive with the ISO (`dd`/Etcher/Rufus — this erases it).
+3. Boot once so WROLPi creates its persistence partition and sets itself up.
+4. Copy your data into `/media/wrolpi/`, then let WROLPi refresh/repair to
+   index the restored files.
+
+Afterwards, future ISO upgrades preserve your library via the
+`upgrade` command above.
+
 ## Layout on disk
 
 The drive carries everything WROLPi needs.  Postgres data lives alongside

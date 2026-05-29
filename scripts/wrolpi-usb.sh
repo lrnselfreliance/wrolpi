@@ -8,16 +8,15 @@
 #     ISO.  The persistence partition (your library + database +
 #     configuration) is preserved.
 #
-#   sudo ./wrolpi-usb.sh install <iso> <device>
-#     [not yet implemented]
-#     Convert an existing ext4 drive into a WROLPi USB by shrinking the
-#     existing partition from the end, adding WROLPi boot partitions in
-#     the freed space, and relabelling the existing partition as the
-#     persistence partition.
+#   sudo ./wrolpi-usb.sh install
+#     Converting an existing data drive into a WROLPi USB in place is
+#     NOT supported.  Running this prints the supported procedure:
+#     back up your data, flash the whole drive with the ISO, boot once
+#     to create the persistence partition, then restore your data.
 #
-# Both commands save the current partition table to
+# The upgrade command saves the current partition table to
 # /tmp/wrolpi-usb-<device>-<timestamp>.sfdisk before any destructive
-# operation, and refuse to run on non-removable disks.
+# operation, and refuses to run on non-removable disks.
 
 set -euo pipefail
 
@@ -210,7 +209,34 @@ This operation cannot be undone."
 }
 
 cmd_install() {
-  die "install is not yet implemented (planned: see scripts/wrolpi-usb.sh comments)"
+  # In-place conversion of an existing data drive is intentionally not
+  # supported.  A WROLPi USB is a dd-flashed iso-hybrid image with its
+  # persistence partition appended on first boot; there is no safe,
+  # filesystem-agnostic way to graft that onto a drive that is already
+  # full of the user's data without risking it.  Point the user at the
+  # supported backup -> flash -> restore path instead.
+  cat >&2 <<'EOF'
+Converting an existing drive into a WROLPi USB in place is not supported.
+
+A WROLPi USB is created by flashing the whole drive with the ISO, which
+erases everything already on it.  To turn a drive you already use into a
+WROLPi USB without losing your files:
+
+  1. Back up everything on the drive to another disk.
+  2. Flash the whole drive with the ISO (this erases it):
+       sudo dd if=<iso> of=<device> bs=4M status=progress conv=fsync
+     (or use Etcher / Rufus / Raspberry Pi Imager)
+  3. Boot the drive once.  WROLPi creates its persistence partition and
+     sets itself up on first boot.
+  4. Copy your backed-up data into /media/wrolpi/ on the running system,
+     then let WROLPi refresh/repair so it indexes the restored files.
+
+Once a drive has been set up this way, future ISO upgrades preserve your
+library and are done with:
+
+  sudo ./wrolpi-usb.sh upgrade <iso> <device>
+EOF
+  exit 2
 }
 
 # ---------------------------------------------------------------------------
@@ -224,10 +250,9 @@ main() {
       cmd_upgrade "$@"
       ;;
     install)
-      shift
-      [ $# -eq 2 ] || { usage; exit 1; }
-      require_root
-      cmd_install "$@"
+      # No args required: install only prints the supported procedure
+      # and exits.  Don't require root or an iso/device.
+      cmd_install
       ;;
     -h|--help|help|"")
       usage

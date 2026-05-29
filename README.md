@@ -22,9 +22,8 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 * [Demo](#demo)
 * [Download](#download)
 * [Try WROLPi](#try-wrolpi)
+* [Install WROLPi](INSTALL.md)
 * [Docker Documentation](docker/README.md)
-* [Debian 12 Install](#debian-12-install)
-* [Raspberry Pi Install](#raspberrypi-install)
 * [Charter](#charter)
 * [Upgrading WROLPi](UPGRADE.md)
 * [Join](#join)
@@ -91,34 +90,14 @@ You can try out WROLPi by running the docker containers.
 
 More Docker documentation is available in [docker/README.md](docker/README.md)
 
-# Debian 12 Install
+# Install WROLPi
 
-Steps necessary to initialize your WROLPi after installing the Debian image from wrolpi.org
+Full installation instructions are in [INSTALL.md](INSTALL.md).  Pick the option that matches your hardware:
 
-1. Download and copy a pre-built Debian image from https://wrolpi.org onto a USB thumb-drive (USB 2 recommended)
-2. Insert the thumb-drive into the laptop, boot to the thumb-drive
-    1. Select "Start Installer"
-    2. Install Debian 12 as you would like.
-        1. It is recommended to use the hostname **wrolpi**
-        2. (WROLPi will be installed during the installation without your intervention.)
-3. Unplug the thumb-drive after the installation has completed
-4. Login as the user _you_ created during installation.
-5. Switch to the root user: `su -`
-6. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
-7. Reboot: `reboot`
-8. Browse to https://wrolpi.local or the IP address of your WROLPi!
-
-# Raspberry Pi Install
-
-Steps necessary to initialize your WROLPi after installing the Raspberry Pi image from wrolpi.org
-
-1. Download and copy a pre-built image from https://wrolpi.org onto an SD card.
-2. Boot the Raspberry Pi, login with username pi and password wrolpi.
-3. Modify fstab to mount your external drive to /media/wrolpi (modify this command to match your system).
-    * `echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | sudo tee -a /etc/fstab`
-4. Initialize the WROLPi databases using the repair script: `sudo /opt/wrolpi/repair.sh`
-5. Reboot `sudo reboot`
-6. Join the Hotspot or browse to https://wrolpi.local or the IP address of your WROLPi!
+* **[WROLPi Portable (Live USB)](INSTALL.md#wrolpi-portable-live-usb)** — boot a complete WROLPi from a USB stick on any x86 PC or laptop.  Nothing is installed to the computer; the first boot creates a persistence partition on the USB so your library, database, and configuration survive reboots.
+* **[Debian 12](INSTALL.md#debian-12-install)** — install WROLPi onto an x86 PC or laptop.
+* **[Raspberry Pi](INSTALL.md#raspberry-pi-install)** — install WROLPi onto a Raspberry Pi with an external drive.
+* **[Docker](docker/README.md)** — run the WROLPi containers on an existing Linux host.
 
 # Charter
 

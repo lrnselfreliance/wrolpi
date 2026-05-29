@@ -141,4 +141,29 @@ DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"
 [ -f "${DEST}" ] && (echo "Removing conflicting ISO" && rm "${DEST}")
 mv "${SCRIPT_DIR}"/*.iso "${DEST}"
 
+# Sanity-check the resulting ISO before declaring success, so a truncated or
+# corrupt build never ships.
+MIN_ISO_BYTES=$((1024 * 1024 * 1024))   # 1 GiB floor; a real ISO is ~3 GiB.
+ISO_BYTES=$(stat -c%s "${DEST}")
+if [ "${ISO_BYTES}" -lt "${MIN_ISO_BYTES}" ]; then
+  echo "ERROR: ISO is only ${ISO_BYTES} bytes (< ${MIN_ISO_BYTES}); build likely truncated." >&2
+  exit 1
+fi
+# The ISO 9660 primary volume descriptor carries the "CD001" magic at byte
+# offset 32769.  It is present even in iso-hybrid images, where `file` reports
+# the leading MBR instead.
+if [ "$(dd if="${DEST}" bs=1 skip=32769 count=5 2>/dev/null)" != "CD001" ]; then
+  echo "ERROR: ${DEST} is not a valid ISO 9660 image (missing CD001 magic)." >&2
+  exit 1
+fi
+# Cross-check with blkid when available.
+if command -v blkid >/dev/null 2>&1; then
+  ISO_FSTYPE=$(blkid -o value -s TYPE "${DEST}" 2>/dev/null || true)
+  if [ -n "${ISO_FSTYPE}" ] && [ "${ISO_FSTYPE}" != "iso9660" ]; then
+    echo "ERROR: blkid reports filesystem '${ISO_FSTYPE}', expected iso9660." >&2
+    exit 1
+  fi
+fi
+echo "ISO sanity checks passed ($(numfmt --to=iec "${ISO_BYTES}" 2>/dev/null || echo "${ISO_BYTES} bytes"), iso9660)."
+
 echo "Build has completed. ISO output ${DEST}"

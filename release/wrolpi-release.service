@@ -1,0 +1,32 @@
+# WROLPi release poller (oneshot, driven by wrolpi-release.timer).
+#
+# Checks GitHub for a newly-published release and builds + publishes it.
+# This is OUTBOUND polling only -- GitHub never connects to this machine.
+#
+# Install (as root):
+#   cp release/wrolpi-release.service release/wrolpi-release.timer /etc/systemd/system/
+#   # edit paths/user below to match this host, then:
+#   systemctl daemon-reload
+#   systemctl enable --now wrolpi-release.timer
+#
+# The builds need root (chroot), so this runs as root.  s3cmd therefore reads
+# /root/.s3cfg by default -- either place the Spaces credentials there or point
+# S3CFG at another location below.
+
+[Unit]
+Description=WROLPi release poller (build & publish new GitHub releases)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Adjust to wherever the WROLPi repo lives on this host (production: /opt/wrolpi).
+WorkingDirectory=/opt/wrolpi/release
+ExecStart=/opt/wrolpi/release/release-watch.sh
+# Persistent state (failure markers, build lock): /var/lib/wrolpi-release
+StateDirectory=wrolpi-release
+Environment=STATE_DIR=/var/lib/wrolpi-release
+# Uncomment if the s3cmd config is not at /root/.s3cfg:
+#Environment=S3CFG=/home/wrolpi/.s3cfg
+# A full release builds two images and can run for hours.
+TimeoutStartSec=0

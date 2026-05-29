@@ -1,0 +1,18 @@
+# Fire the WROLPi release poller once an hour.
+#
+# Hourly is well within GitHub's unauthenticated API limit and means freshly
+# built images land within roughly six hours of a release (the two image
+# builds run sequentially).  Persistent=true catches a release published while
+# this host was powered off.
+
+[Unit]
+Description=Hourly WROLPi release poll
+
+[Timer]
+OnCalendar=hourly
+# Spread the load off the exact top of the hour.
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

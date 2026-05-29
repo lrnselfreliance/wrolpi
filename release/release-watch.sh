@@ -1,0 +1,91 @@
+#!/bin/bash
+# Poll GitHub for a newly-published WROLPi release and build it.
+#
+# This is the *outbound* poller that replaces an inbound webhook: GitHub never
+# connects to this machine.  Once an hour (via the systemd timer) we ask the
+# public GitHub API for the newest release, compare its version to whatever is
+# already published in latest.json on the CDN, and if they differ we run
+# release.sh to build and publish it.  latest.json is the source of truth for
+# "already built" -- there is no local bookkeeping for success.
+#
+# A local state file is used only to throttle retries of a release that fails
+# to build, so a permanently-broken release does not rebuild every hour
+# forever.
+#
+#   ./release-watch.sh        # check once and act
+#
+# Honors $S3CFG (passed through to release.sh) and these optional env vars:
+#   STATE_DIR   where to keep the lock + failure marker (default /var/lib/wrolpi-release)
+#   MAX_RETRIES how many times to auto-retry a failing tag (default 3)
+
+set -euo pipefail
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+REPO="lrnselfreliance/wrolpi"
+CDN_BASE="https://wrolpi.nyc3.cdn.digitaloceanspaces.com"
+STATE_DIR="${STATE_DIR:-/var/lib/wrolpi-release}"
+MAX_RETRIES="${MAX_RETRIES:-3}"
+
+LOCK="${STATE_DIR}/build.lock"
+FAIL_STATE="${STATE_DIR}/failed-tag"
+
+mkdir -p "${STATE_DIR}"
+
+log() { echo "[release-watch] $*"; }
+
+# Normalize a release tag to a version string (drop a leading 'v').
+normalize() { echo "${1#v}"; }
+
+# Newest non-draft release tag (includes prereleases / -beta).  Read-only and
+# unauthenticated; the public 60 req/hr limit is irrelevant at hourly cadence.
+LATEST_TAG=$(curl -fsSL -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/repos/${REPO}/releases" \
+  | jq -r '[.[] | select(.draft == false)][0].tag_name // empty')
+[ -n "${LATEST_TAG}" ] || { log "No releases found; nothing to do."; exit 0; }
+
+# What is already published?  A missing manifest (404) means "nothing yet".
+PUBLISHED_VERSION=$(curl -fsSL "${CDN_BASE}/latest.json" 2>/dev/null \
+  | jq -r '.version // empty' || true)
+
+LATEST_VERSION=$(normalize "${LATEST_TAG}")
+
+if [ "${LATEST_VERSION}" = "${PUBLISHED_VERSION}" ]; then
+  log "Up to date (published v${PUBLISHED_VERSION}); nothing to do."
+  exit 0
+fi
+
+log "New release ${LATEST_TAG} (published: ${PUBLISHED_VERSION:-none})."
+
+# Skip a tag that has already failed MAX_RETRIES times -- needs a human.
+if [ -f "${FAIL_STATE}" ]; then
+  read -r failed_tag failed_count < "${FAIL_STATE}" || true
+  if [ "${failed_tag}" = "${LATEST_TAG}" ] && [ "${failed_count:-0}" -ge "${MAX_RETRIES}" ]; then
+    log "ERROR: ${LATEST_TAG} has failed ${failed_count} times; not auto-retrying."
+    log "Investigate, then run release.sh manually or remove ${FAIL_STATE}."
+    exit 1
+  fi
+fi
+
+# Only one build at a time.  If the timer fires mid-build, just exit.
+exec 9>"${LOCK}"
+if ! flock -n 9; then
+  log "A build is already running; skipping this check."
+  exit 0
+fi
+
+log "Building ${LATEST_TAG}..."
+if "${SCRIPT_DIR}/release.sh" -b "${LATEST_TAG}"; then
+  log "Published ${LATEST_TAG}."
+  rm -f "${FAIL_STATE}"
+else
+  rc=$?
+  count=1
+  if [ -f "${FAIL_STATE}" ]; then
+    read -r ft fc < "${FAIL_STATE}" || true
+    [ "${ft}" = "${LATEST_TAG}" ] && count=$(( ${fc:-0} + 1 ))
+  fi
+  echo "${LATEST_TAG} ${count}" > "${FAIL_STATE}"
+  log "ERROR: build of ${LATEST_TAG} failed (attempt ${count}, exit ${rc})."
+  exit "${rc}"
+fi

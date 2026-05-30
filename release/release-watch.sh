@@ -34,28 +34,31 @@ mkdir -p "${STATE_DIR}"
 
 log() { echo "[release-watch] $*"; }
 
-# Normalize a release tag to a version string (drop a leading 'v').
-normalize() { echo "${1#v}"; }
-
-# Newest non-draft release tag (includes prereleases / -beta).  Read-only and
-# unauthenticated; the public 60 req/hr limit is irrelevant at hourly cadence.
+# Newest non-draft release tag.  GitHub's /releases list is ordered by creation
+# date, so [0] is the most recently *published* release -- exactly the trigger
+# we want.  Prereleases (-beta) are intentionally included (every WROLPi release
+# is a prerelease), so we deliberately do NOT filter on `.prerelease`.  Read-only
+# and unauthenticated; the 60 req/hr public limit is irrelevant at hourly cadence.
 LATEST_TAG=$(curl -fsSL -H "Accept: application/vnd.github+json" \
   "https://api.github.com/repos/${REPO}/releases" \
   | jq -r '[.[] | select(.draft == false)][0].tag_name // empty')
 [ -n "${LATEST_TAG}" ] || { log "No releases found; nothing to do."; exit 0; }
 
-# What is already published?  A missing manifest (404) means "nothing yet".
-PUBLISHED_VERSION=$(curl -fsSL "${CDN_BASE}/latest.json" 2>/dev/null \
-  | jq -r '.version // empty' || true)
+# What is already built?  release.sh records the git ref it built in the
+# manifest's `.tag`.  Compare that directly against the release tag: it is an
+# exact match and immune to any divergence between a tag name and the
+# version.txt content it carries.  (Comparing versions could loop forever -- a
+# build that succeeds but whose .version never equals the tag would rebuild
+# every hour.)  A missing manifest (404) means "nothing built yet".
+PUBLISHED_TAG=$(curl -fsSL "${CDN_BASE}/latest.json" 2>/dev/null \
+  | jq -r '.tag // empty' || true)
 
-LATEST_VERSION=$(normalize "${LATEST_TAG}")
-
-if [ "${LATEST_VERSION}" = "${PUBLISHED_VERSION}" ]; then
-  log "Up to date (published v${PUBLISHED_VERSION}); nothing to do."
+if [ "${PUBLISHED_TAG}" = "${LATEST_TAG}" ]; then
+  log "Up to date (published ${LATEST_TAG}); nothing to do."
   exit 0
 fi
 
-log "New release ${LATEST_TAG} (published: ${PUBLISHED_VERSION:-none})."
+log "New release ${LATEST_TAG} (published: ${PUBLISHED_TAG:-none})."
 
 # Skip a tag that has already failed MAX_RETRIES times -- needs a human.
 if [ -f "${FAIL_STATE}" ]; then

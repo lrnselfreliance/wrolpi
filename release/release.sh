@@ -64,11 +64,32 @@ S3CMD=(s3cmd)
 log() { echo "[release] $*"; }
 die() { echo "[release] ERROR: $*" >&2; exit 1; }
 
+# Optional completion hook.  Set WROLPI_RELEASE_NOTIFY to a command that accepts
+# a single message argument; it is invoked on success and on failure.  Unset by
+# default, so this public script names no notifier and no path.
+notify() {
+  [ -n "${WROLPI_RELEASE_NOTIFY:-}" ] || return 0
+  "${WROLPI_RELEASE_NOTIFY}" "$1" || true
+}
+
+# Report the outcome via the notify hook (skipped for dry runs).  Installed
+# only after the version resolves, so help/early-exit paths stay silent.
+on_exit() {
+  local rc=$?
+  [ "${DRY_RUN}" -eq 1 ] && return
+  if [ "${rc}" -eq 0 ]; then
+    notify "WROLPi v${VERSION} released -- ${CDN_BASE}/latest.json"
+  else
+    notify "WROLPi release FAILED (exit ${rc}) for v${VERSION:-?}"
+  fi
+}
+
 # Resolve the version straight from the target ref so the artifact names match
 # the code that gets built.
 VERSION=$(curl -fsSL "https://raw.githubusercontent.com/${REPO}/${REF}/wrolpi/version.txt" | tr -d '[:space:]')
 [ -n "${VERSION}" ] || die "Could not fetch version from ref '${REF}'"
 log "Releasing WROLPi v${VERSION} (ref: ${REF})"
+trap on_exit EXIT
 
 ISO="${REPO_DIR}/debian-live-config/WROLPi-v${VERSION}-amd64.iso"
 IMG="${REPO_DIR}/pi-gen/WROLPi-v${VERSION}-aarch64-desktop.img.xz"
@@ -105,6 +126,9 @@ IMG_NAME=$(basename "${IMG}")
 RELEASED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Build latest.json.  jq -n keeps the values properly escaped/typed.
+# `.tag` is the git ref that was built: a release tag for automated builds
+# (release-watch.sh compares it to decide what is already published) or a
+# branch name for manual runs.  Use `.version` for a display version.
 MANIFEST=$(jq -n \
   --arg version "${VERSION}" \
   --arg tag "${REF}" \

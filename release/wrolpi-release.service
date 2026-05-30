@@ -28,5 +28,8 @@ StateDirectory=wrolpi-release
 Environment=STATE_DIR=/var/lib/wrolpi-release
 # Uncomment if the s3cmd config is not at /root/.s3cfg:
 #Environment=S3CFG=/home/wrolpi/.s3cfg
+# Optional: command to notify on release success/failure (gets one message arg).
+# Keep the real path here on the host -- it is intentionally not in the repo.
+#Environment=WROLPI_RELEASE_NOTIFY=/home/wrolpi/bin/notify
 # A full release builds two images and can run for hours.
 TimeoutStartSec=0

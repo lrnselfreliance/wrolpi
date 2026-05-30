@@ -9,10 +9,20 @@ can seamlessly switch between data sources.
 """
 
 import statistics
+import time
 from pathlib import Path
 from typing import Optional
 
 import psutil
+
+from controller.lib.config import is_docker_mode
+
+# In the Docker development environment the compose file bind-mounts the host's
+# /proc and /sys read-only so the Controller can report real host metrics
+# instead of the tiny container namespace. We must tell psutil about it.
+# Note: PROCFS_PATH only exists on Linux/SunOS/AIX; guard the access.
+if is_docker_mode() and hasattr(psutil, "PROCFS_PATH"):
+    psutil.PROCFS_PATH = "/host/proc"
 
 # State for bandwidth rate calculations
 _previous_network_stats: dict[str, dict] = {}
@@ -26,10 +36,15 @@ def reset_bandwidth_stats():
     _previous_disk_stats = {}
 
 
-# CPU frequency paths
-MIN_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq')
-MAX_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq')
-CUR_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
+# CPU frequency paths (remapped in Docker dev to the host mounts)
+if is_docker_mode():
+    MIN_FREQUENCY_PATH = Path('/host/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq')
+    MAX_FREQUENCY_PATH = Path('/host/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq')
+    CUR_FREQUENCY_PATH = Path('/host/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
+else:
+    MIN_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq')
+    MAX_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq')
+    CUR_FREQUENCY_PATH = Path('/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq')
 
 
 def get_cpu_status() -> dict:
@@ -357,14 +372,25 @@ def get_processes_status() -> list[dict]:
     processes = []
 
     try:
-        # Get processes sorted by CPU usage
-        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'cmdline']):
+        # Two-pass sampling is required for accurate cpu_percent.
+        # First pass: prime the per-process CPU time counters.
+        procs = []
+        for proc in psutil.process_iter(['pid', 'name', 'memory_percent', 'cmdline']):
             try:
-                info = proc.info
-                cpu_percent = info.get('cpu_percent', 0)
+                proc.cpu_percent()  # prime (result ignored)
+                procs.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
 
-                # Only include processes using > 1% CPU
+        # Short sample interval. 0.2s is a good balance for "top" display.
+        time.sleep(0.2)
+
+        # Second pass: read the actual percentage since the prime call.
+        for proc in procs:
+            try:
+                cpu_percent = proc.cpu_percent()
                 if cpu_percent and cpu_percent > 1:
+                    info = proc.info
                     cmdline = info.get('cmdline') or [info.get('name', '')]
                     command = ' '.join(cmdline) if cmdline else info.get('name', '')
 
@@ -376,7 +402,7 @@ def get_processes_status() -> list[dict]:
                         "pid": info.get('pid'),
                         "percent_cpu": int(cpu_percent),
                         "percent_mem": int(info.get('memory_percent', 0)),
-                        "command": command[:512],  # Limit command length
+                        "command": command[:512],
                     })
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass

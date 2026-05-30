@@ -71,6 +71,14 @@ async def lifespan(app: FastAPI):
     logger.info("WROLPi Controller v%s starting...", __version__)
     logger.info("Docker mode: %s", is_docker_mode())
 
+    # When running under Docker dev, status.py will have already remapped
+    # psutil.PROCFS_PATH to /host/proc (and the sysfs paths) so we report
+    # real host metrics instead of the container's tiny namespace.
+    if is_docker_mode():
+        import psutil
+        procfs_path = getattr(psutil, "PROCFS_PATH", "N/A (not supported on this platform)")
+        logger.info("Using host procfs for stats: %s", procfs_path)
+
     # Try to load config from drive if mounted
     if is_primary_drive_mounted():
         if reload_config_from_drive():

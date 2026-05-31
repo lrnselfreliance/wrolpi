@@ -26,6 +26,8 @@ ExecStart=/opt/wrolpi/release/release-watch.sh
 # Persistent state (failure markers, build lock): /var/lib/wrolpi-release
 StateDirectory=wrolpi-release
 Environment=STATE_DIR=/var/lib/wrolpi-release
+# systemd leaves HOME unset; the pi-gen chroot's `git config --global` needs it.
+Environment=HOME=/root
 # Uncomment if the s3cmd config is not at /root/.s3cfg:
 #Environment=S3CFG=/home/wrolpi/.s3cfg
 # Optional: command to notify on release success/failure (gets one message arg).

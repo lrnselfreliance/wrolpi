@@ -37,6 +37,9 @@ deno --version
 
 # Put the latest WROLPi in /opt/wrolpi.
 git clone -b "${WROLPI_BRANCH:-release}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+# `git config --global` needs HOME, which is empty when the build runs under
+# systemd (the release poller service has no HOME); set it to root's home.
+export HOME=/root
 git config --global --add safe.directory /opt/wrolpi
 
 # Install Python requirements.  Try multiple times because pypi may stop responding.

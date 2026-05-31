@@ -66,7 +66,7 @@ class ChannelDownloadRequest:
         if not self.url:
             raise ValidationError('url cannot be empty')
 
-        # Validate settings contents.  Remove empty values.
+        # Validate settings contents. Remove empty values.
         from wrolpi.schema import DownloadSettings
         self.settings = {k: v for k, v in DownloadSettings(**self.settings).__dict__.items() if v not in ([], None)}
 

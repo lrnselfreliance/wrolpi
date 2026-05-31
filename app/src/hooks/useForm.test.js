@@ -348,6 +348,28 @@ describe('useForm', () => {
             expect(typeof result.current.formData.count).toBe('number');
         });
 
+        it('handleInputEvent preserves decimals for float-friendly number inputs (e.g. sleep_requests)', () => {
+            const {result} = renderHook(() => useForm({
+                defaultFormData: {sleep_requests: ''},
+                submitter: jest.fn(),
+            }));
+
+            act(() => {
+                result.current.handleInputEvent({
+                    preventDefault: jest.fn(),
+                    target: {
+                        type: 'number',
+                        value: '0.75',
+                        name: 'sleep_requests',
+                        dataset: {},
+                    },
+                });
+            });
+
+            expect(typeof result.current.formData.sleep_requests).toBe('number');
+            expect(result.current.formData.sleep_requests).toBe(0.75);
+        });
+
         it('handleInputEvent uses data-path attribute when available', () => {
             const {result} = renderHook(() => useForm({
                 defaultFormData: {nested: {field: ''}},

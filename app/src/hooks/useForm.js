@@ -151,7 +151,11 @@ export function useForm({
         let {path} = e.target.dataset;
         path = path || e.target.name;
         if (type === 'number' && !isNaN(value)) {
-            value = parseInt(value);
+            // Use parseFloat (not parseInt) so decimal values (sleep_requests=0.75, durations, etc.)
+            // coming from <input type="number" step="0.25"> are preserved as floats.
+            // This fixes the TypeError when those values later reach Python's > 0 comparison.
+            // Whole numbers (e.g. 42) remain proper numbers.
+            value = parseFloat(value);
         }
         console.debug('handleInputEvent', 'path=', path, 'type=', type, 'value=', value);
 
@@ -365,7 +369,7 @@ export function NumberInputForm({
                                 }) {
     // Default to positive number.
     validator = validator || ((value) => {
-        value = _.isNumber(value) ? value : parseInt(value);
+        value = _.isNumber(value) ? value : parseFloat(value);
         if (value < 0) {
             return 'Number must be positive'
         }

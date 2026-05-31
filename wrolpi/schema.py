@@ -223,6 +223,18 @@ class EchoResponse:
     method: str
 
 
+def _coerce_optional_number(value, kind=float):
+    """Coerce a value (possibly str from forms) to int/float or None.
+    Empty strings and unparsable values become None (and are filtered by callers).
+    """
+    if value in (None, ''):
+        return None
+    try:
+        return kind(value)
+    except (ValueError, TypeError):
+        return None
+
+
 @dataclass
 class DownloadSettings:
     channel_id: Optional[int] = None
@@ -267,6 +279,16 @@ class DownloadSettings:
 
         if self.suffix and not self.suffix.startswith('.'):
             raise ValidationError('suffix must start with .')
+
+        # Coerce numeric settings that may arrive as strings from forms, old YAML,
+        # or direct API calls. Empty/bad values become None and are filtered later.
+        self.depth = _coerce_optional_number(self.depth, int)
+        self.max_pages = _coerce_optional_number(self.max_pages, int)
+        self.maximum_duration = _coerce_optional_number(self.maximum_duration, int)
+        self.minimum_duration = _coerce_optional_number(self.minimum_duration, int)
+        self.video_count_limit = _coerce_optional_number(self.video_count_limit, int)
+        self.sleep_requests = _coerce_optional_number(self.sleep_requests, float)
+
         self.title_exclude = self.title_exclude or None
         self.title_include = self.title_include or None
         if not self.download_metadata_only:
@@ -312,7 +334,7 @@ class DownloadRequest:
 
         self.tag_names = self.tag_names or []
 
-        # Validate settings contents.  Remove empty values.
+        # Validate settings contents. Remove empty values.
         settings = self.settings or dict()
         self.settings = {k: v for k, v in DownloadSettings(**settings).__dict__.items() if v not in ([], None)}
 

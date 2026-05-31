@@ -950,8 +950,12 @@ class VideoDownloader(Downloader, ABC):
                 cmd = (*cmd, '--write-info-json')
             if effective['yt_dlp_extra_args']:
                 cmd = (*cmd, *effective['yt_dlp_extra_args'].split(' '))
-            if effective['sleep_requests'] > 0:
-                cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
+            if effective.get('sleep_requests'):
+                try:
+                    if float(effective['sleep_requests']) > 0:
+                        cmd = (*cmd, '--sleep-requests', str(effective['sleep_requests']))
+                except (TypeError, ValueError):
+                    pass
 
             on_stdout = make_progress_callback(ctx.report_progress, parse_ytdlp_progress)
 

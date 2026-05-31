@@ -792,6 +792,38 @@ async def test_crud_download(async_client, test_session, test_download_manager, 
     await asyncio.sleep(1)
 
 
+def test_download_settings_coerces_numeric_strings():
+    """String values for numeric fields (from forms or legacy data) are coerced to
+    proper types and bad/empty values are dropped. This is the core of the
+    sleep_requests TypeError fix."""
+    from wrolpi.schema import DownloadSettings, DownloadRequest
+
+    raw = {
+        'sleep_requests': '0.75',
+        'depth': '3',
+        'max_pages': '',
+        'maximum_duration': '120',
+        'video_count_limit': '0',
+        'writesubtitles': False,
+        'user_agent': '',
+    }
+
+    ds = DownloadSettings(**raw)
+    cleaned = {k: v for k, v in ds.__dict__.items() if v not in ([], None)}
+
+    assert cleaned['sleep_requests'] == 0.75 and isinstance(cleaned['sleep_requests'], float)
+    assert cleaned['depth'] == 3 and isinstance(cleaned['depth'], int)
+    assert 'max_pages' not in cleaned
+    assert cleaned['video_count_limit'] == 0
+    assert cleaned['writesubtitles'] is False
+
+    # Full DownloadRequest path (what the API actually uses)
+    req = DownloadRequest(urls=['https://ex.com/v'], downloader='video', settings=raw)
+    assert req.settings['sleep_requests'] == 0.75
+    assert isinstance(req.settings['sleep_requests'], float)
+    assert 'max_pages' not in req.settings
+
+
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):

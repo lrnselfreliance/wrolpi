@@ -24,7 +24,11 @@ set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 REPO="lrnselfreliance/wrolpi"
-CDN_BASE="https://wrolpi.nyc3.cdn.digitaloceanspaces.com"
+# Read the manifest for the dedup from the Spaces ORIGIN, not the CDN.  The CDN
+# caches latest.json (~5 min), so a watcher run firing right after a release
+# publishes can still read the previous tag and trigger a redundant rebuild.
+# The origin is strongly consistent, so it always reflects the latest publish.
+MANIFEST_URL="https://wrolpi.nyc3.digitaloceanspaces.com/latest.json"
 STATE_DIR="${STATE_DIR:-/var/lib/wrolpi-release}"
 MAX_RETRIES="${MAX_RETRIES:-1}"
 
@@ -51,7 +55,7 @@ LATEST_TAG=$(curl -fsSL -H "Accept: application/vnd.github+json" \
 # version.txt content it carries.  (Comparing versions could loop forever -- a
 # build that succeeds but whose .version never equals the tag would rebuild
 # every hour.)  A missing manifest (404) means "nothing built yet".
-PUBLISHED_TAG=$(curl -fsSL "${CDN_BASE}/latest.json" 2>/dev/null \
+PUBLISHED_TAG=$(curl -fsSL "${MANIFEST_URL}" 2>/dev/null \
   | jq -r '.tag // empty' || true)
 
 if [ "${PUBLISHED_TAG}" = "${LATEST_TAG}" ]; then

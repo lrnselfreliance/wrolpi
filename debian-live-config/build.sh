@@ -134,12 +134,22 @@ set +o pipefail
 
 grep "9999-wrolpi.hook.chroot completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "build hook failed!" && exit 1)
 
-cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
-chmod 644 "${SCRIPT_DIR}"/*iso
-chown "${SUDO_UID:-1000}:${SUDO_GID:-1000}" "${SCRIPT_DIR}"/*iso
+# Copy the freshly built ISO directly to its final name.  Take the single ISO
+# out of BUILD_DIR (which is wiped each build, so it holds exactly one) rather
+# than globbing SCRIPT_DIR -- a leftover ISO from a previous build would
+# otherwise make a `*.iso` glob match multiple files and break the move.
 DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"
-[ -f "${DEST}" ] && (echo "Removing conflicting ISO" && rm "${DEST}")
-mv "${SCRIPT_DIR}"/*.iso "${DEST}"
+shopt -s nullglob
+BUILT_ISOS=("${BUILD_DIR}"/*.iso)
+shopt -u nullglob
+if [ "${#BUILT_ISOS[@]}" -eq 0 ]; then
+  echo "Build failed. No ISOs were found!"
+  exit 1
+fi
+rm -f "${DEST}"
+cp "${BUILT_ISOS[0]}" "${DEST}"
+chmod 644 "${DEST}"
+chown "${SUDO_UID:-1000}:${SUDO_GID:-1000}" "${DEST}"
 
 # Sanity-check the resulting ISO before declaring success, so a truncated or
 # corrupt build never ships.

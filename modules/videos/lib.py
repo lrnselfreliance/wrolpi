@@ -689,7 +689,10 @@ class VideoDownloaderConfig(ConfigFile):
 
     @property
     def sleep_requests(self) -> float:
-        return self._config.get('sleep_requests', 0.75)
+        try:
+            return float(self._config.get('sleep_requests', 0.75))
+        except (TypeError, ValueError):
+            return 0.75
 
     @sleep_requests.setter
     def sleep_requests(self, value: float):
@@ -778,6 +781,15 @@ def get_effective_video_settings(download_settings: dict = None) -> dict:
         for key in INHERITABLE_VIDEO_SETTINGS:
             if key in download_settings:
                 effective[key] = download_settings[key]
+
+    # Safety net for already-persisted downloads that may contain string values
+    # for numeric settings (from before the DownloadSettings coercion fix).
+    # This is the single chokepoint so downstream code can assume correct types.
+    if effective.get('sleep_requests') not in (None, ''):
+        try:
+            effective['sleep_requests'] = float(effective['sleep_requests'])
+        except (TypeError, ValueError):
+            effective['sleep_requests'] = 0.0
     return effective
 
 
@@ -798,8 +810,11 @@ def get_yt_dlp_sleep_opts() -> dict:
     This adds a delay between HTTP requests during metadata extraction,
     helping avoid bot detection. Does not affect video file download speed."""
     config = get_videos_downloader_config()
-    if config.sleep_requests > 0:
-        return {'sleep_requests': config.sleep_requests}
+    try:
+        if float(config.sleep_requests) > 0:
+            return {'sleep_requests': config.sleep_requests}
+    except (TypeError, ValueError):
+        pass
     return {}
 
 

@@ -789,7 +789,9 @@ def get_effective_video_settings(download_settings: dict = None) -> dict:
         try:
             effective['sleep_requests'] = float(effective['sleep_requests'])
         except (TypeError, ValueError):
-            effective['sleep_requests'] = 0.0
+            # Remove corrupt value so the global config default (already populated
+            # earlier via _extract_global_inheritable) takes effect.
+            del effective['sleep_requests']
     return effective
 
 

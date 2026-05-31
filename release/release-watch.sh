@@ -8,15 +8,16 @@
 # release.sh to build and publish it.  latest.json is the source of truth for
 # "already built" -- there is no local bookkeeping for success.
 #
-# A local state file is used only to throttle retries of a release that fails
-# to build, so a permanently-broken release does not rebuild every hour
-# forever.
+# A local state file records a tag that failed to build.  Builds are expensive
+# (hours), so by default a failed tag is attempted once and then NOT auto-retried
+# -- the notify hook alerts you, and you investigate and clear the marker (or run
+# release.sh manually) instead of burning hours on blind retries.
 #
 #   ./release-watch.sh        # check once and act
 #
 # Honors $S3CFG (passed through to release.sh) and these optional env vars:
 #   STATE_DIR   where to keep the lock + failure marker (default /var/lib/wrolpi-release)
-#   MAX_RETRIES how many times to auto-retry a failing tag (default 3)
+#   MAX_RETRIES build attempts before giving up on a tag (default 1 = no auto-retry)
 
 set -euo pipefail
 
@@ -25,7 +26,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO="lrnselfreliance/wrolpi"
 CDN_BASE="https://wrolpi.nyc3.cdn.digitaloceanspaces.com"
 STATE_DIR="${STATE_DIR:-/var/lib/wrolpi-release}"
-MAX_RETRIES="${MAX_RETRIES:-3}"
+MAX_RETRIES="${MAX_RETRIES:-1}"
 
 LOCK="${STATE_DIR}/build.lock"
 FAIL_STATE="${STATE_DIR}/failed-tag"

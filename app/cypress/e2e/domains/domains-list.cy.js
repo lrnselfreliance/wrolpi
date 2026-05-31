@@ -124,7 +124,12 @@ describe('Domains List Page', () => {
     });
 
     it('filters domains with search', () => {
-        cy.get('input[placeholder="Domain filter..."]').type('example');
+        cy.get('input[placeholder="Domain filter..."]')
+            .type('example')
+            // Confirm the input itself stabilized before asserting downstream effects.
+            .should('have.value', 'example');
+        // The filter is driven by the URL query param; wait for the router to commit it.
+        cy.url().should('include', 'domain=example');
         // Chain assertions so they retry together with the extended timeout
         cy.get('table:visible tbody tr', {timeout: 10000})
             .should('have.length', 1)

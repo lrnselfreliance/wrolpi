@@ -435,14 +435,14 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
     const [submitted, setSubmitted] = useState(false);
 
     React.useEffect(() => {
-        // Search was changed above.
-        if (searchStr !== value) {
-            setValue(searchStr);
+        // `searchStr` is the source of truth from the parent (often an async URL query param).
+        // Depend ONLY on `searchStr` -- never on `value` -- otherwise a transient render where the
+        // local `value` has advanced (e.g. "ex") but `searchStr` still trails ("e") fires this
+        // effect and reverts `value`, garbling fast typing (flaky filter test).
+        if ((searchStr || '') !== value) {
+            setValue(searchStr || '');
         }
-        if (!searchStr) {
-            setValue('');
-        }
-    }, [searchStr, value]);
+    }, [searchStr]);
 
     const handleChange = (e) => {
         if (e) {

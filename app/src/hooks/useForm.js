@@ -150,11 +150,10 @@ export function useForm({
         let {type, value} = e.target;
         let {path} = e.target.dataset;
         path = path || e.target.name;
-        if (type === 'number' && !isNaN(value)) {
+        if (type === 'number' && value !== '' && !isNaN(value)) {
             // Use parseFloat (not parseInt) so decimal values (sleep_requests=0.75, durations, etc.)
             // coming from <input type="number" step="0.25"> are preserved as floats.
-            // This fixes the TypeError when those values later reach Python's > 0 comparison.
-            // Whole numbers (e.g. 42) remain proper numbers.
+            // The explicit empty-string check prevents isNaN('') === false from producing NaN in state.
             value = parseFloat(value);
         }
         console.debug('handleInputEvent', 'path=', path, 'type=', type, 'value=', value);

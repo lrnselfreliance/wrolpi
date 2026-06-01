@@ -93,6 +93,14 @@ fi
 [[ -f "${BLOB_CACHE}/map-overview.pmtiles" && -s "${BLOB_CACHE}/map-overview.pmtiles" ]] || \
   (echo "ERROR: Failed to download map overview!" && exit 1)
 
+# Clear leftovers from a previous build before unpacking.  The EXIT trap
+# normally cleans up, but a SIGTERM/kill (e.g. `systemctl stop`) skips it and
+# leaves BUILD_DIR behind -- the `mv` below would then nest the new tree inside
+# the stale one and break the build.  Strip the immutable flag off blob files
+# first (the chroot sets chattr +i), or rm -rf cannot remove them.
+chattr -i "${BUILD_DIR}"/work/*/stage*/rootfs/opt/wrolpi-blobs/* 2>/dev/null || :
+rm -rf "${BUILD_DIR}" /var/tmp/pi-gen-bookworm-arm64 /var/tmp/bookworm-arm64.zip
+
 # Get the latest pi-gen code.
 wget https://github.com/RPi-Distro/pi-gen/archive/refs/heads/bookworm-arm64.zip -O /var/tmp/bookworm-arm64.zip
 unzip /var/tmp/bookworm-arm64.zip -d /var/tmp

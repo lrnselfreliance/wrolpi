@@ -4,7 +4,7 @@
 # Web framework
 fastapi>=0.136.1
 uvicorn[standard]>=0.46.0
-pydantic>=2.13.3
+pydantic>=2.13.4
 
 # Templates
 jinja2>=3.1.6

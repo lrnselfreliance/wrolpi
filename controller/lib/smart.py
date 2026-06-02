@@ -62,7 +62,16 @@ def _get_device_smart(device) -> dict:
 
 
 def _get_temperature(device) -> Optional[int]:
-    """Get drive temperature from SMART attributes."""
+    """Get drive temperature.
+
+    Prefer pySMART's `temperature` property: it parses real-world raw
+    values like "52 (Min/Max 16/57)" that int() cannot, and works for
+    NVMe devices which have no ATA attribute table.  Fall back to the
+    plain attributes for devices where the property is unavailable.
+    """
+    temp = getattr(device, "temperature", None)
+    if isinstance(temp, int):
+        return temp
     temp = _get_attribute(device, "Temperature_Celsius")
     if temp is None:
         temp = _get_attribute(device, "Airflow_Temperature_Cel")

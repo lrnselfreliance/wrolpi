@@ -32,6 +32,10 @@ CDN_BASE="https://wrolpi.nyc3.cdn.digitaloceanspaces.com"
 # immutable versioned images for a year.
 MANIFEST_CACHE="public, max-age=300"
 IMAGE_CACHE="public, max-age=31536000, immutable"
+# How many times to attempt each upload before giving up.  Spaces occasionally
+# returns a transient 400 mid-multipart on the multi-GB images, so a single
+# failed part should not doom an otherwise-good multi-hour build.
+UPLOAD_RETRIES=3
 
 REF="release"
 DRY_RUN=0
@@ -155,6 +159,19 @@ MANIFEST=$(jq -n \
 MANIFEST_FILE="${SCRIPT_DIR}/latest.json"
 echo "${MANIFEST}" > "${MANIFEST_FILE}"
 
+# Abort any in-progress multipart upload for a key.  A failed multi-GB upload
+# leaves orphaned parts behind that incur storage cost and can interfere with a
+# clean retry, so we clear them before re-attempting.  Small files never use
+# multipart, so this is a harmless no-op for them.
+abort_multipart() {
+  local name="$1"
+  "${S3CMD[@]}" multipart "${BUCKET}" 2>/dev/null \
+    | awk -v k="${BUCKET}/${name}" '$2 == k { print $3 }' \
+    | while read -r id; do
+        [ -n "${id}" ] && "${S3CMD[@]}" abortmp "${BUCKET}/${name}" "${id}" >/dev/null 2>&1 || true
+      done
+}
+
 put() {
   # put <local> <mime> <cache-control>
   local src="$1" mime="$2" cache="$3"
@@ -163,10 +180,20 @@ put() {
     log "DRY RUN would upload: ${name}  (${mime})"
     return
   fi
-  "${S3CMD[@]}" put --acl-public --no-progress \
-    --mime-type="${mime}" \
-    --add-header="Cache-Control:${cache}" \
-    "${src}" "${BUCKET}/${name}"
+  local attempt
+  for attempt in $(seq 1 "${UPLOAD_RETRIES}"); do
+    if "${S3CMD[@]}" put --acl-public --no-progress \
+        --mime-type="${mime}" \
+        --add-header="Cache-Control:${cache}" \
+        "${src}" "${BUCKET}/${name}"; then
+      return 0
+    fi
+    log "Upload of ${name} failed (attempt ${attempt}/${UPLOAD_RETRIES})."
+    # Clear any partial multipart upload before retrying, then back off briefly.
+    abort_multipart "${name}"
+    [ "${attempt}" -lt "${UPLOAD_RETRIES}" ] && sleep 5
+  done
+  die "Upload of ${name} failed after ${UPLOAD_RETRIES} attempts."
 }
 
 log "Uploading artifacts to ${BUCKET}..."

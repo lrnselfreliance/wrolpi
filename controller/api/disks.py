@@ -2,14 +2,21 @@
 Disk management API endpoints for WROLPi Controller.
 
 The Controller defines what should be mounted (writes fstab.yaml on the
-WROLPi drive) but never calls mount(8) or umount(8) itself.  After every
-write to fstab.yaml the Controller triggers wrolpi-mounts.service via
+WROLPi drive) but never calls mount(8) itself.  After every write to
+fstab.yaml the Controller triggers wrolpi-mounts.service via
 ``systemctl restart``; the service reconciles live state to match.  The
 Controller verifies the outcome by reading /proc/mounts through the same
 MountExecutor abstraction the service uses.
+
+One exception: the reconciler deliberately never unmounts paths it has
+not claimed, so foreign mounts (udisks2 desktop automounts, manual
+mounts) under /media/ would otherwise be impossible to remove from the
+UI.  When a reconcile leaves the requested mount point live, /unmount
+falls back to a direct umount(8) for non-reserved /media/ paths.
 """
 
 import logging
+import os
 import subprocess
 from typing import Optional
 
@@ -33,6 +40,7 @@ from controller.lib.mount_executor import (
     MountExecutor,
     SubprocessMountExecutor,
 )
+from controller.lib.reconciler import RESERVED_MOUNT_POINTS
 from controller.lib.smart import (
     get_all_smart_status,
     is_smart_available,
@@ -222,7 +230,12 @@ async def disk_mount(request: MountRequest):
 
 @router.post("/unmount")
 async def disk_unmount(request: UnmountRequest):
-    """Remove a mount from fstab.yaml and reconcile."""
+    """Remove a mount from fstab.yaml and reconcile.
+
+    Falls back to a direct umount when the mount survives the reconcile —
+    a foreign mount (udisks2 automount, manual mount) the reconciler never
+    claimed, or a managed mount the reconciler could not release.
+    """
     _check_native_mode()
 
     try:
@@ -235,6 +248,22 @@ async def disk_unmount(request: UnmountRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # The direct-umount fallback below runs as root, so be strict about
+    # what we will pass to umount(8): a normalized path strictly under
+    # /media/ that is not the primary drive.
+    normalized = os.path.normpath(request.mount_point)
+    if normalized in RESERVED_MOUNT_POINTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot unmount {request.mount_point}: it is the primary "
+                   f"WROLPi drive.",
+        )
+    if not normalized.startswith("/media/"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Refusing to unmount {normalized}: not under /media/.",
+        )
+
     data = load_fstab()
     removed = data.remove_by_mount_point(request.mount_point)
     save_fstab(data)
@@ -244,12 +273,15 @@ async def disk_unmount(request: UnmountRequest):
         raise HTTPException(status_code=500,
                             detail=f"Failed to reconcile mounts: {err}")
 
-    if request.mount_point in _executor.current_mount_points():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Reconciler ran but {request.mount_point} is still mounted. "
-                   f"Check journalctl -u wrolpi-mounts.service.",
-        )
+    if normalized in _executor.current_mount_points():
+        # The reconciler did not release it — either a foreign mount it
+        # never claimed, or the umount failed.  Try directly.
+        result = _executor.unmount(normalized)
+        if not result.ok:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{normalized} is still mounted: {result.error}",
+            )
 
     return {
         "success": True,

@@ -219,7 +219,8 @@ class TestUnmountEndpoint:
         assert fstab_yaml.load(disks_env["fstab_path"]).mounts == []
 
     def test_unmount_returns_500_when_still_mounted(self, test_client, disks_env):
-        # Reconciler refuses the unmount — surface the failure.
+        # Reconciler refuses the unmount (e.g. busy) — the direct fallback
+        # fails the same way; surface the failure.
         disks_env["fake"]._live.add("/media/wrolpi/usb")
         disks_env["fake"].fail_for_unmount = frozenset({"/media/wrolpi/usb"})
         (disks_env["fstab_path"].parent / "managed").write_text(
@@ -231,6 +232,54 @@ class TestUnmountEndpoint:
         )
         assert response.status_code == 500
         assert "still mounted" in response.json()["detail"]
+
+    def test_unmount_foreign_mount_falls_back_to_direct_umount(
+        self, test_client, disks_env,
+    ):
+        # A udisks2 desktop automount: live, but never in fstab.yaml and
+        # never claimed by the reconciler.  The reconciler will not touch
+        # it, so the endpoint must unmount it directly.
+        foreign = "/media/wrolpi/31a8ecf1-c00b-4691-b26f-b0966073659f"
+        disks_env["fake"]._live.add(foreign)
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": foreign},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["removed_from_fstab"] is False
+        assert disks_env["fake"].current_mount_points() == set()
+
+    @pytest.mark.parametrize("mount_point", [
+        "/media",            # not strictly under /media/
+        "/media_evil",       # prefix-collides with /media
+        "/media/wrolpi/../wrolpi",  # normalizes to the reserved primary
+    ])
+    def test_unmount_rejects_paths_outside_media(
+        self, test_client, disks_env, mount_point,
+    ):
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": mount_point},
+        )
+        assert response.status_code == 400
+        assert disks_env["fake"].unmount_calls == []
+
+    def test_unmount_reserved_mount_point_rejected(self, test_client, disks_env):
+        # The primary WROLPi drive must never be unmountable from the API.
+        disks_env["fake"]._live.add("/media/wrolpi")
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi"},
+        )
+        assert response.status_code == 400
+        assert "primary" in response.json()["detail"].lower()
+        # No umount was attempted, directly or via the reconciler.
+        assert disks_env["fake"].unmount_calls == []
+        assert disks_env["fake"].current_mount_points() == {"/media/wrolpi"}
 
 
 # --- /api/disks/fstab read endpoint ---------------------------------------

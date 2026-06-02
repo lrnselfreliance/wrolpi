@@ -119,10 +119,46 @@ class TestGetTemperature:
     def test_returns_none_if_not_found(self):
         """Should return None if no temperature attribute."""
         mock_device = mock.Mock()
+        mock_device.temperature = None
         mock_device.attributes = []
 
         result = _get_temperature(mock_device)
         assert result is None
+
+    def test_prefers_pysmart_temperature_property(self):
+        """Real drives report raw values like '52 (Min/Max 16/57)' which
+        int() cannot parse; pySMART's temperature property handles them."""
+        mock_attr = mock.Mock()
+        mock_attr.name = "Temperature_Celsius"
+        mock_attr.raw = "52 (Min/Max 16/57)"
+
+        mock_device = mock.Mock()
+        mock_device.temperature = 52
+        mock_device.attributes = [mock_attr]
+
+        result = _get_temperature(mock_device)
+        assert result == 52
+
+    def test_pysmart_temperature_property_for_nvme(self):
+        """NVMe devices have no ATA attribute table, only the property."""
+        mock_device = mock.Mock()
+        mock_device.temperature = 38
+        mock_device.attributes = None
+
+        result = _get_temperature(mock_device)
+        assert result == 38
+
+    def test_ignores_non_int_temperature_property(self):
+        """A missing/bogus temperature property falls back to attributes."""
+        mock_attr = mock.Mock()
+        mock_attr.name = "Temperature_Celsius"
+        mock_attr.raw = "35"
+
+        mock_device = mock.Mock()  # .temperature is a Mock, not an int
+        mock_device.attributes = [mock_attr]
+
+        result = _get_temperature(mock_device)
+        assert result == 35
 
 
 class TestGetAttribute:

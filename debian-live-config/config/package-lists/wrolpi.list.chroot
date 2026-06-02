@@ -30,6 +30,7 @@ git-doc
 gnupg-agent
 gpsd
 gvfs
+hdparm
 hostapd
 htop
 iotop

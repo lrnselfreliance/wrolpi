@@ -27,6 +27,7 @@ gnome-disk-utility
 gnupg-agent
 gpsd
 gpsd-tools
+hdparm
 hostapd
 iotop
 iperf3

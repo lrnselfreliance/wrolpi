@@ -633,7 +633,7 @@ function SmartDetailsModal({drive, open, onClose}) {
 
 
 // Protected mount points that should not be unmounted
-const PROTECTED_MOUNTS = ['/', '/boot', '/boot/firmware'];
+const PROTECTED_MOUNTS = ['/', '/boot', '/boot/firmware', '/media/wrolpi'];
 
 // Helper to format disk size
 const formatSize = (size) => {

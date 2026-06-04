@@ -1,7 +1,7 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '@testing-library/react';
-import {usePages, useDriveTemperature} from './customHooks';
+import {usePages, useDriveTemperature, useDriveHealth} from './customHooks';
 import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
@@ -159,6 +159,69 @@ describe('useDriveTemperature', () => {
             {wrapper: makeStatusWrapper(status)});
         expect(result.current.device).toBeNull();
         expect(result.current.temperature).toBe(0);
+    });
+});
+
+describe('useDriveHealth', () => {
+    const makeStatusWrapper = (status) => ({children}) => (
+        <StatusContext.Provider value={{status}}>
+            {children}
+        </StatusContext.Provider>
+    );
+
+    test('flags drives whose SMART assessment is FAIL', () => {
+        const status = {
+            smart_stats: {
+                drives: [
+                    {device: 'sda', assessment: 'PASS'},
+                    {device: 'sdb', assessment: 'FAIL'},
+                ],
+            },
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failing).toBe(true);
+        expect(result.current.failingDevices).toEqual(['sdb']);
+    });
+
+    test('reports every failing drive', () => {
+        const status = {
+            smart_stats: {
+                drives: [
+                    {device: 'sda', assessment: 'FAIL'},
+                    {device: 'sdb', assessment: 'FAIL'},
+                ],
+            },
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failingDevices).toEqual(['sda', 'sdb']);
+    });
+
+    test('does not warn when all drives PASS', () => {
+        const status = {
+            smart_stats: {drives: [{device: 'sda', assessment: 'PASS'}]},
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failing).toBe(false);
+        expect(result.current.failingDevices).toEqual([]);
+    });
+
+    test('ignores drives with an unknown (null) assessment', () => {
+        const status = {
+            smart_stats: {drives: [{device: 'sda', assessment: null}]},
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failing).toBe(false);
+    });
+
+    test('does not warn when smart_stats is absent', () => {
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper({})});
+        expect(result.current.failing).toBe(false);
+        expect(result.current.failingDevices).toEqual([]);
     });
 });
 

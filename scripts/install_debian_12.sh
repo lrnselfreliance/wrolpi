@@ -15,6 +15,8 @@ npm -v
 
 # Install serve, and archiving tools.
 single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
+# Install puppeteer-core for the Scrape Downloader's real-browser crawler (crawl.js).
+npm ls -g puppeteer-core@21.11.0 >/dev/null 2>&1 || sudo npm i -g puppeteer-core@21.11.0
 
 # Build React app in background job.
 cd /opt/wrolpi/app || exit 5

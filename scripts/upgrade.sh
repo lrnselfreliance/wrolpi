@@ -42,6 +42,9 @@ upgrade_controller || echo "Controller upgrade failed, continuing..."
 cd /opt/wrolpi/app || exit 1
 npm install || npm install || npm install || npm install # try install multiple times  :(
 
+# Ensure puppeteer-core is installed for the Scrape Downloader's real-browser crawler (crawl.js).
+npm ls -g puppeteer-core@21.11.0 >/dev/null 2>&1 || sudo npm i -g puppeteer-core@21.11.0 || echo "puppeteer-core install failed, continuing..."
+
 # Install/upgrade Deno runtime.
 upgrade_deno() {
     DENO_VERSION="v2.2.4"

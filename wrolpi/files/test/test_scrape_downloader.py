@@ -261,3 +261,99 @@ def test_finalize_returns_success_with_downloads_and_settings(test_session, test
     assert result.settings['suffix'] == '.pdf'    # original setting preserved
     assert result.error == 'Reached max page count.'
     assert result.location == f'/files?folders={executed.destination}'
+
+
+# ---------------------------------------------------------------------------
+# render_js (real-browser crawl) tests.  PYTEST routes crawl() through the archive
+# service client (_request_crawl), which is mocked here — no real browser runs.
+# ---------------------------------------------------------------------------
+
+
+async def fake_crawl(self, prepared, ctx, download=None):
+    return {
+        'found_urls': ['https://example.com/a.mp4', 'https://example.com/sub/b.mp4'],
+        'pages_visited': 3,
+        'capped': False,
+    }
+
+
+def test_prepare_sets_render_js(test_session, test_directory):
+    """render_js setting flows into PreparedScrape (default False when absent)."""
+    dest = test_directory / 'dest'
+    base = dict(url='https://example.com/x', downloader='scrape_html', destination=str(dest))
+
+    off = scrape_html_downloader.prepare_download(test_session, Download(settings={'suffix': '.mp4'}, **base))
+    assert off.render_js is False
+
+    on = scrape_html_downloader.prepare_download(
+        test_session, Download(settings={'suffix': '.mp4', 'render_js': True}, **base))
+    assert on.render_js is True
+
+
+@pytest.mark.asyncio
+async def test_execute_render_js_uses_crawl(test_directory):
+    """With render_js, execute_download returns the crawl's found_urls and ignores raw fetch_html."""
+    prepared = PreparedScrape(
+        url='https://example.com/dir',
+        depth=2,
+        suffix='.mp4',
+        max_pages=100,
+        destination=test_directory,
+        render_js=True,
+    )
+
+    async def boom(self, url):
+        raise AssertionError('fetch_html must not be called when render_js is enabled')
+
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.crawl', fake_crawl), \
+            mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_html', boom):
+        executed = await scrape_html_downloader.execute_download(prepared, make_test_ctx())
+
+    assert isinstance(executed, ExecutedScrape)
+    assert sorted(executed.download_urls) == ['https://example.com/a.mp4', 'https://example.com/sub/b.mp4']
+    assert executed.page_count == 3
+    assert executed.suffix == '.mp4'
+
+
+@pytest.mark.asyncio
+async def test_crawl_routes_to_archive_service_under_pytest(test_directory):
+    """Under PYTEST the crawl() seam calls the archive-service client, not a local browser."""
+    prepared = PreparedScrape(
+        url='https://example.com/dir', depth=1, suffix='.mp4', max_pages=5,
+        destination=test_directory, render_js=True,
+    )
+    expected = {'found_urls': ['https://example.com/x.mp4'], 'pages_visited': 1, 'capped': False}
+
+    async def fake_request_crawl(p):
+        assert p is prepared
+        return expected
+
+    with mock.patch('wrolpi.scrape_downloader._request_crawl', fake_request_crawl):
+        result = await scrape_html_downloader.crawl(prepared, make_test_ctx())
+
+    assert result == expected
+
+
+async def test_render_js_end_to_end(test_directory, test_session, test_download_manager, assert_download_urls,
+                                    await_switches):
+    """A render_js scrape hands the browser-discovered files to the FileDownloader."""
+    test_download_manager.register_downloader(ScrapeHTMLDownloader())
+    test_download_manager.register_downloader(FileDownloader())
+    destination = test_directory / 'destination'
+    destination.mkdir()
+
+    settings = {'depth': 1, 'suffix': '.mp4', 'render_js': True}
+    test_download_manager.create_download(test_session, 'https://example.com/dir', 'scrape_html', settings=settings,
+                                          sub_downloader_name='file', destination=destination)
+    assert_download_urls(['https://example.com/dir', ])
+
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.crawl', fake_crawl), \
+            mock.patch('wrolpi.files.downloader.FileDownloader.execute_download', fake_file_do_download):
+        await test_download_manager.wait_for_all_downloads()
+        await await_switches()
+
+    assert_download_urls([
+        'https://example.com/dir',
+        'https://example.com/a.mp4',
+        'https://example.com/sub/b.mp4',
+    ])

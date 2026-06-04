@@ -9,6 +9,7 @@ import json
 import logging
 import os.path
 import pathlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,18 @@ BROWSER_EXEC = pathlib.Path('/usr/bin/google-chrome')
 if not BROWSER_EXEC.is_file():
     print('Unable to find browser!', file=sys.stderr)
     sys.exit(1)
+
+
+def _node_modules_dir() -> pathlib.Path:
+    """Locate the node_modules dir (where puppeteer-core lives) by walking up from SingleFile."""
+    for parent in SINGLEFILE_PATH.parents:
+        if parent.name == 'node_modules':
+            return parent
+    return pathlib.Path('/usr/src/app/node_modules')
+
+
+NODE_MODULES = _node_modules_dir()
+CRAWL_JS = pathlib.Path('/app/crawl.js')
 
 
 # Increase response timeout, archiving can take several minutes.
@@ -269,6 +282,40 @@ async def post_archive(request: Request):
         logger.error(f'Failed to archive {url}', exc_info=e)
         error = str(traceback.format_exc())
         return response.json({'error': f'Failed to archive {url} traceback is below... \n\n {error}'})
+
+
+@app.post('/crawl')
+async def post_crawl(request: Request):
+    """Drive a real browser to discover files matching a suffix, following links up to depth.
+
+    Returns {found_urls, pages_visited, capped}.  Does not download the files.
+    """
+    url = request.json['url']
+    try:
+        args = dict(
+            url=url,
+            depth=request.json.get('depth') or 1,
+            suffix=request.json['suffix'],
+            max_pages=request.json.get('max_pages') or 100,
+            user_agent=request.json.get('user_agent'),
+            executable_path=str(BROWSER_EXEC),
+        )
+        logger.info(f'Crawling {url} ({args["suffix"]}, depth={args["depth"]}, max_pages={args["max_pages"]})')
+        # shlex.quote safely single-quotes the JSON for the shell (handles embedded quotes).
+        cmd = f'NODE_PATH={shlex.quote(str(NODE_MODULES))} node {shlex.quote(str(CRAWL_JS))} ' \
+              f'{shlex.quote(json.dumps(args))}'
+        stdout, stderr, return_code = await check_output(cmd, timeout=RESPONSE_TIMEOUT - 30)
+        if return_code != 0 or not stdout:
+            raise RuntimeError(f'crawl exited with {return_code}')
+
+        result = json.loads(stdout)
+        logger.info(f'Crawl of {url} found {len(result.get("found_urls", []))} files '
+                    f'across {result.get("pages_visited")} pages')
+        return response.json(result)
+    except Exception as e:
+        logger.error(f'Failed to crawl {url}', exc_info=e)
+        error = str(traceback.format_exc())
+        return response.json({'error': f'Failed to crawl {url} traceback is below... \n\n {error}'})
 
 
 if __name__ == '__main__':

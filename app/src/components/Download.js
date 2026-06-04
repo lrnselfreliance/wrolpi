@@ -1595,6 +1595,7 @@ export function ScrapeFilesDownloadForm({
             depth: 1,
             max_pages: 1,
             suffix: '',
+            render_js: false,
         }
     };
 
@@ -1623,7 +1624,8 @@ export function ScrapeFilesDownloadForm({
 
     return <Form>
         <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
-        <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
+        <p>Search each of the URLs for files matching the suffix (.pdf, etc.). Enable "Use real
+            browser" to find files on JavaScript-heavy sites where a normal scrape finds nothing.</p>
 
         <Grid>
             <Grid.Row>
@@ -1645,6 +1647,17 @@ export function ScrapeFilesDownloadForm({
                 </Grid.Column>
                 <Grid.Column width={4}>
                     <MaximumPagesInputForm form={form} required={true}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <ToggleForm
+                        form={form}
+                        label='Use real browser (renders JavaScript, much slower)'
+                        name='render_js'
+                        path='settings.render_js'
+                        icon='globe'
+                    />
                 </Grid.Column>
             </Grid.Row>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}

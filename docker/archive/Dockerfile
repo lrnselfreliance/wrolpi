@@ -9,8 +9,8 @@ RUN apt update && apt install -y python3 python3-dev python3-venv curl && ln -sf
 RUN python3 -m venv /app/venv
 RUN . /app/venv/bin/activate
 
-# Install a newer singlefile and Readability.
-RUN npm install -g single-file-cli@2.0.73 readability-extractor@0.0.6
+# Install a newer singlefile and Readability, plus puppeteer-core for the Scrape Downloader crawler.
+RUN npm install -g single-file-cli@2.0.73 readability-extractor@0.0.6 puppeteer-core@21.11.0
 
 # Install the Python wrapper and it's requirements.
 COPY docker/archive/requirements.txt /app/requirements.txt

@@ -80,6 +80,7 @@ services:
       dockerfile: docker/archive/Dockerfile
     volumes:
       - './docker/archive/main.py:/app/main.py'
+      - './docker/archive/crawl.js:/app/crawl.js'
     ports:
       - '8083:8080'
     healthcheck:

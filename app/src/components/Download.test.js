@@ -2,6 +2,7 @@ import React from 'react';
 import {render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {DestinationForm} from './Download';
+import {ToggleForm} from '../hooks/useForm';
 import {createTestForm} from '../test-utils';
 
 // Mock DirectorySearch component - simplified to avoid useState/useEffect warnings
@@ -248,6 +249,36 @@ describe('DestinationForm', () => {
 
             const input = screen.getByTestId('directory-search-input');
             expect(input).toHaveValue('');
+        });
+    });
+});
+
+describe('Scrape render_js toggle', () => {
+    it('renders the real-browser toggle and updates settings.render_js', async () => {
+        const form = createTestForm(
+            {settings: {render_js: false}},
+            {overrides: {ready: true, loading: false}}
+        );
+
+        render(
+            <ToggleForm
+                form={form}
+                label='Use real browser (renders JavaScript, much slower)'
+                name='render_js'
+                path='settings.render_js'
+                icon='globe'
+            />
+        );
+
+        expect(screen.getByText(/use real browser/i)).toBeInTheDocument();
+
+        // The toggle reflects and updates the nested settings.render_js path.
+        const toggle = screen.getByRole('checkbox');
+        expect(toggle).toBeInTheDocument();
+        await userEvent.click(toggle);
+
+        await waitFor(() => {
+            expect(form.formData.settings.render_js).toBe(true);
         });
     });
 });

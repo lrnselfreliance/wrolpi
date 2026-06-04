@@ -12,7 +12,7 @@ from time import time
 from typing import Optional
 
 from wrolpi.common import logger, TRACE_LEVEL
-from wrolpi.vars import PYTEST, DOCKERIZED
+from wrolpi.vars import PYTEST, DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild(__name__)
 
@@ -87,6 +87,15 @@ READABILITY_BIN = which('readability-extractor',
                         '/usr/bin/readability-extractor',  # rpi os
                         '/usr/local/bin/readability-extractor',  # debian
                         )
+
+# Real-browser crawler used by the Scrape Downloader's render_js mode.
+NODE_BIN = which('node', '/usr/bin/node', '/usr/local/bin/node')
+CRAWL_JS = PROJECT_DIR / 'docker' / 'archive' / 'crawl.js'
+# Where globally-installed node modules (e.g. puppeteer-core) live; Node accepts an os.pathsep list.
+NODE_PATH = os.pathsep.join([
+    '/usr/lib/node_modules',        # debian / rpi nodesource default
+    '/usr/local/lib/node_modules',  # npm default prefix
+])
 
 # Known browser definitions for SingleFile
 KNOWN_BROWSERS = {

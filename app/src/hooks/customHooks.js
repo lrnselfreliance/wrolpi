@@ -1335,6 +1335,28 @@ export const useCPUTemperature = () => {
     return {temperature, highTemperature, criticalTemperature}
 }
 
+// Reports the hottest drive's SMART temperature so the navbar can warn about
+// an overheating disk, mirroring useCPUTemperature.  Drives without a
+// temperature reading (USB flash, unsupported bridges, spun-down) are ignored.
+export const useDriveTemperature = () => {
+    const {status} = React.useContext(StatusContext);
+    const smart = status?.smart_stats;
+    const highTemperature = smart?.high_temperature || 55;
+    const criticalTemperature = smart?.critical_temperature || 65;
+
+    const drives = Array.isArray(smart?.drives) ? smart.drives : [];
+    const hottest = drives
+        .filter((d) => typeof d.temperature === 'number')
+        .reduce((max, d) => (max === null || d.temperature > max.temperature ? d : max), null);
+
+    return {
+        device: hottest?.device || null,
+        temperature: hottest?.temperature || 0,
+        highTemperature,
+        criticalTemperature,
+    }
+}
+
 export const useLoad = () => {
     const {status} = React.useContext(StatusContext);
     let minute_1 = status?.load_stats?.minute_1;

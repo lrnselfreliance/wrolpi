@@ -7,9 +7,13 @@ from unittest import mock
 from controller.lib.smart import (
     is_smart_available,
     get_all_smart_status,
+    build_smart_stats,
     _get_device_smart,
     _get_temperature,
     _get_attribute,
+    _drive_is_asleep,
+    HDD_HIGH_TEMPERATURE,
+    HDD_CRITICAL_TEMPERATURE,
 )
 
 
@@ -203,3 +207,95 @@ class TestGetAttribute:
 
         result = _get_attribute(mock_device, "Power_On_Hours")
         assert result is None
+
+
+class TestDriveIsAsleep:
+    """Tests for _drive_is_asleep function (smartctl -n standby)."""
+
+    def test_returns_true_for_standby(self):
+        completed = mock.Mock(stdout="Device is in STANDBY mode, exit(2)\n")
+        with mock.patch("controller.lib.smart.subprocess.run", return_value=completed):
+            assert _drive_is_asleep("/dev/sda") is True
+
+    def test_returns_true_for_sleep(self):
+        # smartctl -n standby also bails on the deeper SLEEP power mode;
+        # that drive must NOT be woken for a read either.
+        completed = mock.Mock(stdout="Device is in SLEEP mode, exit(2)\n")
+        with mock.patch("controller.lib.smart.subprocess.run", return_value=completed):
+            assert _drive_is_asleep("/dev/sda") is True
+
+    def test_returns_false_for_active(self):
+        # A normal `-i` read on an awake drive never mentions STANDBY.
+        completed = mock.Mock(stdout="Model Family: WDC\nDevice Model: WD100EMAZ\n")
+        with mock.patch("controller.lib.smart.subprocess.run", return_value=completed):
+            assert _drive_is_asleep("/dev/sda") is False
+
+    def test_returns_false_on_error(self):
+        """smartctl missing / errors out → treat as awake (safe fallback)."""
+        with mock.patch("controller.lib.smart.subprocess.run",
+                        side_effect=OSError("boom")):
+            assert _drive_is_asleep("/dev/sda") is False
+
+
+class TestBuildSmartStats:
+    """Tests for build_smart_stats — the navbar/Disk Management payload."""
+
+    def test_returns_thresholds_when_unavailable(self):
+        """Docker / no pySMART → empty drive list but thresholds present."""
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=False):
+            stats = build_smart_stats()
+        assert stats["drives"] == []
+        assert stats["high_temperature"] == HDD_HIGH_TEMPERATURE
+        assert stats["critical_temperature"] == HDD_CRITICAL_TEMPERATURE
+
+    def test_reads_awake_drives(self):
+        fake_device = mock.Mock()
+        fake_device.name = "sda"
+        fake_device.model = "WDC WD100EMAZ"
+        fake_device.serial = "S1"
+        fake_device.capacity = "10.0 TB"
+        fake_device.assessment = "PASS"
+        fake_device.smart_enabled = True
+        fake_device.temperature = 52
+        fake_device.attributes = []
+
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart._scan_devices",
+                           return_value=[("/dev/sda", "sat")]), \
+                mock.patch("controller.lib.smart._drive_is_asleep", return_value=False), \
+                mock.patch("controller.lib.smart.Device", return_value=fake_device) as Dev:
+            stats = build_smart_stats()
+
+        Dev.assert_called_once_with("/dev/sda", interface="sat")
+        assert len(stats["drives"]) == 1
+        assert stats["drives"][0]["device"] == "sda"
+        assert stats["drives"][0]["temperature"] == 52
+
+    def test_sleeping_drive_is_not_read_and_reuses_previous(self):
+        """A standby drive must NOT be read (would wake it); reuse old data."""
+        previous = {
+            "drives": [{"device": "sda", "path": "/dev/sda", "temperature": 49}],
+            "high_temperature": HDD_HIGH_TEMPERATURE,
+            "critical_temperature": HDD_CRITICAL_TEMPERATURE,
+        }
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart._scan_devices",
+                           return_value=[("/dev/sda", "sat")]), \
+                mock.patch("controller.lib.smart._drive_is_asleep", return_value=True), \
+                mock.patch("controller.lib.smart.Device") as Dev:
+            stats = build_smart_stats(previous=previous)
+
+        Dev.assert_not_called()
+        assert stats["drives"] == [{"device": "sda", "path": "/dev/sda", "temperature": 49}]
+
+    def test_sleeping_drive_without_previous_is_skipped(self):
+        """Standby drive with no prior reading is simply omitted (not hot)."""
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart._scan_devices",
+                           return_value=[("/dev/sda", "sat")]), \
+                mock.patch("controller.lib.smart._drive_is_asleep", return_value=True), \
+                mock.patch("controller.lib.smart.Device") as Dev:
+            stats = build_smart_stats(previous=None)
+
+        Dev.assert_not_called()
+        assert stats["drives"] == []

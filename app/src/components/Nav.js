@@ -4,7 +4,15 @@ import {Dropdown, Icon as SIcon, Menu} from "semantic-ui-react";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
-import {useCPUTemperature, useIOStats, useLoad, useMemoryStats, usePowerStats, useWROLMode} from "../hooks/customHooks";
+import {
+    useCPUTemperature,
+    useDriveTemperature,
+    useIOStats,
+    useLoad,
+    useMemoryStats,
+    usePowerStats,
+    useWROLMode
+} from "../hooks/customHooks";
 import {useReorganizationStatus} from "../contexts/FileWorkerStatusContext";
 import {SearchIconButton} from "./Search";
 import {Icon, Popup} from "./Theme";
@@ -174,6 +182,21 @@ export function NavBar() {
         temperatureIcon = <Popup content={`CPU: ${temperature.toFixed()}°C`} trigger={link}/>;
     }
 
+    // Hard-drive temperature.  An overheating drive risks data loss.
+    const {
+        device: hotDrive,
+        temperature: driveTemperature,
+        highTemperature: driveHighTemperature,
+        criticalTemperature: driveCriticalTemperature,
+    } = useDriveTemperature();
+    let driveTemperatureIcon;
+    if (driveTemperature && driveTemperature >= driveHighTemperature) {
+        const color = driveTemperature >= driveCriticalTemperature ? highWarningColor : lowWarningColor;
+        const icon = <Icon data-testid='driveTemperatureIcon' name='hdd' size='large' color={color}/>
+        const link = <Link to='/admin/status'>{icon}</Link>;
+        driveTemperatureIcon = <Popup content={`${hotDrive}: ${driveTemperature.toFixed()}°C`} trigger={link}/>;
+    }
+
     // Power issues, this is always displayed if detected.
     const {underVoltage, overCurrent} = usePowerStats();
     let powerIcon;
@@ -189,7 +212,7 @@ export function NavBar() {
     // Display the temperature icon first because it can cause the system to throttle.  The rest are in order of effects
     // that will slow down the system and the user should address.  Generic load is last because it is probably not an
     // issue.
-    const warningIcon = temperatureIcon || diskWaitIcon || memoryIcon || systemLoadIcon;
+    const warningIcon = temperatureIcon || driveTemperatureIcon || diskWaitIcon || memoryIcon || systemLoadIcon;
 
     const {isReorganizing, taskType, collectionId, collectionKind} = useReorganizationStatus();
 

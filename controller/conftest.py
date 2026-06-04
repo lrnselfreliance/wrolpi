@@ -29,6 +29,7 @@ _FAKE_CACHED_STATUS = {
     "processes_stats": [],
     "disk_bandwidth_stats": {},
     "uptime_stats": {"uptime_seconds": 0},
+    "smart_stats": {"drives": [], "high_temperature": 55, "critical_temperature": 65},
     "last_status": "1970-01-01T00:00:00",
 }
 

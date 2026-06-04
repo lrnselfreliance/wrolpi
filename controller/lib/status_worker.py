@@ -13,6 +13,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from controller.lib.smart import build_smart_stats
 from controller.lib.status import (
     get_cpu_status,
     get_disk_bandwidth_status,
@@ -29,13 +30,21 @@ from controller.lib.status import (
 # Type alias for cached status dict
 CachedStatus = dict
 
+# SMART reads can wake spun-down USB drives, so collect them far less often
+# than the fast (5s) stats.
+SMART_REFRESH_SECONDS = 60
 
-async def collect_all_status() -> CachedStatus:
+
+async def collect_all_status(smart_stats: Optional[dict] = None) -> CachedStatus:
     """
     Collect all status information concurrently.
 
     Returns a dict with all status types. Individual failures return None
     for that stat type rather than failing the entire collection.
+
+    ``smart_stats`` is collected on a slower cadence by the worker loop (see
+    ``status_worker_loop``) and passed in so it lands in the same cached
+    payload as the fast 5s stats.
     """
     # Run all status collections concurrently using asyncio.to_thread
     # since the status functions are synchronous (use psutil)
@@ -65,6 +74,7 @@ async def collect_all_status() -> CachedStatus:
         "processes_stats": processes if not isinstance(processes, Exception) else [],
         "disk_bandwidth_stats": disk_bandwidth if not isinstance(disk_bandwidth, Exception) else {},
         "uptime_stats": uptime if not isinstance(uptime, Exception) else None,
+        "smart_stats": smart_stats,
         "last_status": datetime.now().isoformat(),
     }
 
@@ -101,6 +111,30 @@ def get_adaptive_sleep(load_stats: Optional[dict], base_sleep: float = 5.0) -> f
     return base_sleep
 
 
+async def refresh_smart_stats(app, now: datetime) -> dict:
+    """Collect SMART stats, but no more than once per SMART_REFRESH_SECONDS.
+
+    SMART reads can wake spun-down USB drives, so this runs on a slow
+    cadence independent of the fast status loop.  The result and its
+    timestamp are cached on ``app.state``; between refreshes the cached
+    value is returned unchanged.  ``build_smart_stats`` is given the prior
+    result so it can reuse readings for drives that are now asleep.
+    """
+    last = getattr(app.state, "smart_last_collected", None)
+    cache = getattr(app.state, "smart_cache", None)
+    due = (
+        cache is None
+        or last is None
+        or (now - last).total_seconds() >= SMART_REFRESH_SECONDS
+    )
+    if due:
+        # build_smart_stats shells out to smartctl/hdparm; keep it off the loop.
+        cache = await asyncio.to_thread(build_smart_stats, cache)
+        app.state.smart_cache = cache
+        app.state.smart_last_collected = now
+    return cache
+
+
 async def status_worker_loop(app, base_sleep: float = 5.0):
     """
     Background loop that continuously collects status data.
@@ -116,8 +150,11 @@ async def status_worker_loop(app, base_sleep: float = 5.0):
 
     while True:
         try:
+            # SMART on its own slow cadence; everything else every cycle.
+            smart_stats = await refresh_smart_stats(app, datetime.now())
+
             # Collect all status data
-            status = await collect_all_status()
+            status = await collect_all_status(smart_stats=smart_stats)
 
             # Store in app.state (thread-safe for reading in single-worker uvicorn)
             app.state.cached_status = status

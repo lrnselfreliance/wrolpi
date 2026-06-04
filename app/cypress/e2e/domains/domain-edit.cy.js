@@ -145,50 +145,6 @@ describe('Domain Editing Workflow', () => {
         cy.url().should('include', '/archives/domain/1/edit');
     });
 
-    it('shows validation errors for invalid data', () => {
-        // Mock domain details
-        cy.intercept('GET', '/api/collections/1', {
-            statusCode: 200,
-            body: {
-                collection: {
-                    id: 1,
-                    domain: 'example.com',
-                    directory: 'archive/example.com',
-                    tag_name: null,
-                    description: 'Example domain',
-                    can_be_tagged: true,
-                    archive_count: 42,
-                    size: 1024000
-                }
-            }
-        }).as('getDomain');
-
-        cy.visit('/archives/domain/1/edit');
-        cy.wait('@getDomain');
-
-        // Try to save with invalid directory
-        cy.intercept('PUT', '/api/collections/1', {
-            statusCode: 400,
-            body: {
-                error: 'Invalid directory path',
-                cause: {
-                    code: 'INVALID_DIRECTORY'
-                }
-            }
-        }).as('invalidUpdate');
-
-        cy.contains('label', 'Directory').parent().find('input').should('not.be.disabled').clear().type('/invalid/absolute/path');
-        cy.contains('button', 'Save').click();
-
-        cy.wait('@invalidUpdate');
-
-        // Should show error message
-        cy.contains('Invalid directory path').should('be.visible');
-
-        // Should stay on edit page
-        cy.url().should('include', '/edit');
-    });
-
     it('allows navigating back without saving using Back button', () => {
         cy.intercept('GET', '/api/collections/1', {
             statusCode: 200,

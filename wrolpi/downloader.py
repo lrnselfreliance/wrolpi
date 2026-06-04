@@ -1563,8 +1563,12 @@ async def signal_download_download(download_id: int, download_url: str):
                 # ExecutedX dataclass; subclasses also use that protocol to skip finalize
                 # for early-exit cases (e.g. metadata-only video downloads).
                 ctx = DownloadContext.production(download_manager, download_id)
-                with get_db_session(commit=True) as s:
-                    prepared = downloader.prepare_download(s, download)
+                with get_db_session(commit=True) as session:
+                    # Re-load the Download attached to this session so prepare_download's mutations
+                    # (e.g. VideoDownloader resolving destination/tag_names onto the row) persist; the
+                    # `download` loaded above is detached and writes to it would be silently lost.
+                    download = Download.find_by_id(session, download_id)
+                    prepared = downloader.prepare_download(session, download)
                     # Subclasses with unavoidable async prep work (e.g. VideoDownloader's
                     # extract_info / channel resolution) may declare prepare_download as
                     # `async def`; await the coroutine here.
@@ -1577,8 +1581,12 @@ async def signal_download_download(download_id: int, download_url: str):
                     # cancel_wrapper or execute_download short-circuited with a result.
                     result = executed
                 else:
-                    with get_db_session(commit=True) as s:
-                        result = downloader.finalize_download(s, download, executed)
+                    with get_db_session(commit=True) as session:
+                        # Re-load the Download attached to this session so finalize_download's mutations
+                        # (sub_downloader, info_json, collection_id) are persisted.  The `download` loaded above
+                        # is detached (its session has closed), so writes to it would be silently lost.
+                        download = Download.find_by_id(session, download_id)
+                        result = downloader.finalize_download(session, download, executed)
                         # finalize_download may also be async (same rationale as prepare).
                         if asyncio.iscoroutine(result):
                             result = await result
@@ -1648,13 +1656,23 @@ async def signal_download_download(download_id: int, download_url: str):
                 else:
                     download.next_download = download_manager.calculate_next_download(session, download)
 
-                urls = download.filter_excluded(result.downloads) if result.downloads else None
-                if urls:
-                    worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                    child_settings = dict(result.settings) if result.settings else {}
-                    child_settings['parent_download_url'] = download.url
-                    download_manager.create_downloads(session, urls, downloader_name=download.sub_downloader,
-                                                      settings=child_settings, reset_attempts=True)
+            # Enqueue any child downloads in a separate transaction.  The parent's status is already committed,
+            # so a failure here (e.g. an unresolvable sub_downloader) cannot roll it back or leave it silently
+            # "pending" — the error is logged and the parent stays finalized.
+            if result.downloads:
+                try:
+                    with get_db_session(commit=True) as session:
+                        download = Download.find_by_id(session, download_id)
+                        urls = download.filter_excluded(result.downloads)
+                        if urls:
+                            worker_logger.info(f'Adding {len(urls)} downloads from result of {download.url}')
+                            child_settings = dict(result.settings) if result.settings else {}
+                            child_settings['parent_download_url'] = download.url
+                            download_manager.create_downloads(session, urls,
+                                                              downloader_name=download.sub_downloader,
+                                                              settings=child_settings, reset_attempts=True)
+                except Exception as e:
+                    worker_logger.error(f'Failed to enqueue child downloads from {url}', exc_info=e)
 
             # Remove this domain from the running list.
             download_manager._delete_processing_domain(download_domain)

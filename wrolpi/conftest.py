@@ -2,6 +2,7 @@
 Fixtures for Pytest tests.
 """
 import asyncio
+import contextlib
 import copy
 import http.server
 import json
@@ -30,6 +31,7 @@ from PIL import Image
 from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 # Import root api so blueprints are attached.
 import wrolpi.root_api  # noqa
@@ -400,6 +402,40 @@ def make_test_ctx(*, is_cancelled=None, can_download=None,
         report_progress=report_progress or (lambda p: None),
         clear_progress=clear_progress or (lambda: None),
     )
+
+
+@contextlib.contextmanager
+def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]:
+    """Patch get_db_session to hand out a *fresh* Session per call, like production.
+
+    The `test_session` fixture reuses one shared Session for every `get_db_session` call, so an object loaded in
+    one `with` block stays attached for the next and exceptions never roll back.  That convenience masks
+    detached-object and transaction-rollback bugs that only bite production's per-call sessions.  Use this to
+    exercise that behavior: the yielded sessionmaker creates independent Sessions so a test can verify committed
+    DB state the way a separate worker would see it.
+
+    A dedicated NullPool engine is used and disposed on exit so its connections are released before the test DB
+    is dropped during fixture teardown.
+    """
+    engine = create_engine(test_session.get_bind().url, poolclass=NullPool)
+    maker = sessionmaker(bind=engine)
+    sessions = []
+
+    def factory():
+        session = maker()
+        sessions.append(session)
+        return engine, session
+
+    try:
+        with mock.patch('wrolpi.db._get_db_session', factory):
+            yield maker
+    finally:
+        for session in sessions:
+            try:
+                session.close()
+            except Exception:
+                pass
+        engine.dispose()
 
 
 @pytest.fixture

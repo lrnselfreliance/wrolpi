@@ -155,9 +155,11 @@ def _drive_is_asleep(path: str) -> bool:
         )
     except (subprocess.SubprocessError, OSError):
         return False
-    # When in standby, smartctl prints e.g. "Device is in STANDBY mode,
-    # exit(2)" and skips the data read.  An awake -i read never says STANDBY.
-    return "STANDBY" in result.stdout.upper()
+    # In a low-power mode smartctl prints e.g. "Device is in STANDBY mode,
+    # exit(2)" (or "SLEEP" for the deeper mode) and skips the data read.  An
+    # awake -i read mentions neither.
+    output = result.stdout.upper()
+    return "STANDBY" in output or "SLEEP" in output
 
 
 def build_smart_stats(previous: Optional[dict] = None) -> dict:

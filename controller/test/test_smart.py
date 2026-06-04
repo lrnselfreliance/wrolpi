@@ -217,6 +217,13 @@ class TestDriveIsAsleep:
         with mock.patch("controller.lib.smart.subprocess.run", return_value=completed):
             assert _drive_is_asleep("/dev/sda") is True
 
+    def test_returns_true_for_sleep(self):
+        # smartctl -n standby also bails on the deeper SLEEP power mode;
+        # that drive must NOT be woken for a read either.
+        completed = mock.Mock(stdout="Device is in SLEEP mode, exit(2)\n")
+        with mock.patch("controller.lib.smart.subprocess.run", return_value=completed):
+            assert _drive_is_asleep("/dev/sda") is True
+
     def test_returns_false_for_active(self):
         # A normal `-i` read on an awake drive never mentions STANDBY.
         completed = mock.Mock(stdout="Model Family: WDC\nDevice Model: WD100EMAZ\n")

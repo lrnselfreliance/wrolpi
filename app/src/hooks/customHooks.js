@@ -1351,7 +1351,7 @@ export const useDriveTemperature = () => {
 
     return {
         device: hottest?.device || null,
-        temperature: hottest?.temperature || 0,
+        temperature: hottest?.temperature ?? 0,
         highTemperature,
         criticalTemperature,
     }

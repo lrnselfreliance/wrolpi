@@ -433,8 +433,10 @@ def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]
         for session in sessions:
             try:
                 session.close()
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort: engine.dispose() below releases the connections regardless, so a failed
+                # close() is inconsequential.  Log at debug so it surfaces under -vvv without noising CI.
+                logger.debug(f'production_like_sessions: failed to close a session: {e}')
         engine.dispose()
 
 

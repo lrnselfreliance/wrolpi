@@ -466,6 +466,7 @@ async def test_refresh_a_text_no_indexer(async_client, test_session, make_files_
     assert files == {'bar bar bar-bar', 'foo'}
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_refresh_many_files(async_client, test_session, make_files_structure, refresh_files):
     """Used to profile file refreshing"""

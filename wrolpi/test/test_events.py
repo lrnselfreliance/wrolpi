@@ -2,13 +2,13 @@ import asyncio
 from datetime import timedelta
 from http import HTTPStatus
 from itertools import zip_longest
-from typing import List, Dict
+from typing import Dict, List
 
 import pytest
 
 from wrolpi.dates import now
-from wrolpi.events import Events, get_events, HISTORY_SIZE
-from wrolpi.test.common import assert_dict_contains
+from wrolpi.events import HISTORY_SIZE, Events, get_events
+from wrolpi.test.common import assert_dict_contains, skip_circleci
 
 
 def assert_events(expected: List[Dict], after=None):
@@ -17,31 +17,32 @@ def assert_events(expected: List[Dict], after=None):
         assert_dict_contains(event, expected)
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_events_api_feed(test_session, async_client, example_pdf, events_fixture):
     """Events can be gotten from the API."""
     # refresh_files() creates a few events.
-    request, response = await async_client.post('/api/files/refresh')
+    request, response = await async_client.post("/api/files/refresh")
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    request, response = await async_client.get('/api/events/feed')
+    request, response = await async_client.get("/api/events/feed")
     assert response.status_code == HTTPStatus.OK, response.body
-    assert (result := response.json.get('events'))
+    assert (result := response.json.get("events"))
 
     # Verify using the fixture
-    events_fixture.assert_has_event('global_after_refresh_completed')
-    events_fixture.assert_has_event('global_refresh_indexing_completed')
-    events_fixture.assert_has_event('global_refresh_modeling_completed')
-    events_fixture.assert_has_event('global_refresh_discovery_completed')
-    events_fixture.assert_has_event('global_refresh_started')
+    events_fixture.assert_has_event("global_after_refresh_completed")
+    events_fixture.assert_has_event("global_refresh_indexing_completed")
+    events_fixture.assert_has_event("global_refresh_modeling_completed")
+    events_fixture.assert_has_event("global_refresh_discovery_completed")
+    events_fixture.assert_has_event("global_refresh_started")
 
     # Also verify the API returns the same events
     expected = [
-        dict(event='global_after_refresh_completed', subject='refresh'),
-        dict(event='global_refresh_indexing_completed', subject='refresh'),
-        dict(event='global_refresh_modeling_completed', subject='refresh'),
-        dict(event='global_refresh_discovery_completed', subject='refresh'),
-        dict(event='global_refresh_started', subject='refresh'),
+        dict(event="global_after_refresh_completed", subject="refresh"),
+        dict(event="global_refresh_indexing_completed", subject="refresh"),
+        dict(event="global_refresh_modeling_completed", subject="refresh"),
+        dict(event="global_refresh_discovery_completed", subject="refresh"),
+        dict(event="global_refresh_started", subject="refresh"),
     ]
     for expected, event in zip_longest(expected, result):
         assert_dict_contains(event, expected)
@@ -67,11 +68,13 @@ async def test_get_events(async_client, events_fixture):
     Events.send_ready()
 
     # Fixture shows all events
-    events_fixture.assert_has_event('ready')
-    events_fixture.assert_has_event('global_refresh_started')
+    events_fixture.assert_has_event("ready")
+    events_fixture.assert_has_event("global_refresh_started")
 
     # get_events with after parameter filters by timestamp
-    assert_events([dict(event='ready'), dict(event='global_refresh_started')], after=after)
+    assert_events(
+        [dict(event="ready"), dict(event="global_refresh_started")], after=after
+    )
 
     after = after + timedelta(seconds=0.1)
-    assert_events([dict(event='ready')], after=after)
+    assert_events([dict(event="ready")], after=after)

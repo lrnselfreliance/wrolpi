@@ -247,6 +247,7 @@ class DownloadSettings:
     download_order: Optional[str] = None
     excluded_urls: Optional[str] = None
     max_pages: Optional[int] = None
+    render_js: Optional[bool] = None  # Scrape Downloader: discover files with a real browser.
     maximum_duration: Optional[int] = None
     minimum_duration: Optional[int] = None
     suffix: Optional[str] = None

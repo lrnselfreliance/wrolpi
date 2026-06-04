@@ -6,6 +6,7 @@ import {DarkModeToggle, HotspotStatusIcon, useLocalStorage} from "./Common";
 import {ShareButton} from "./Share";
 import {
     useCPUTemperature,
+    useDriveHealth,
     useDriveTemperature,
     useIOStats,
     useLoad,
@@ -197,6 +198,20 @@ export function NavBar() {
         driveTemperatureIcon = <Popup content={`${hotDrive}: ${driveTemperature.toFixed()}°C`} trigger={link}/>;
     }
 
+    // A drive's SMART self-assessment is failing — imminent drive failure.
+    // Always displayed (like power); too important to hide behind a transient
+    // warning in the priority chain.
+    const {failingDevices, failing: driveFailing} = useDriveHealth();
+    let driveHealthIcon;
+    if (driveFailing) {
+        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large' color={highWarningColor}/>;
+        const link = <Link to='/admin/status'>{icon}</Link>;
+        const message = failingDevices.length === 1
+            ? `Drive ${failingDevices[0]} is failing its SMART health check! Back up your data.`
+            : `Drives failing SMART health check: ${failingDevices.join(', ')}. Back up your data.`;
+        driveHealthIcon = <Popup content={message} trigger={link}/>;
+    }
+
     // Power issues, this is always displayed if detected.
     const {underVoltage, overCurrent} = usePowerStats();
     let powerIcon;
@@ -274,6 +289,7 @@ export function NavBar() {
         <NavIconWrapper>{apiDownIcon}</NavIconWrapper>
         <NavIconWrapper>{processingIcon}</NavIconWrapper>
         <NavIconWrapper>{upgradeIcon}</NavIconWrapper>
+        <NavIconWrapper>{driveHealthIcon}</NavIconWrapper>
         <NavIconWrapper>{powerIcon}</NavIconWrapper>
         <NavIconWrapper>{warningIcon}</NavIconWrapper>
         <NavIconWrapper><ShareButton/></NavIconWrapper>

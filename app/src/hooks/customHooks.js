@@ -1357,6 +1357,18 @@ export const useDriveTemperature = () => {
     }
 }
 
+// Reports drives whose SMART self-assessment is failing, so the navbar can
+// warn of an imminent drive failure.  pySMART reports 'PASS', 'FAIL', or null
+// (unknown); only 'FAIL' is a problem.
+export const useDriveHealth = () => {
+    const {status} = React.useContext(StatusContext);
+    const drives = Array.isArray(status?.smart_stats?.drives) ? status.smart_stats.drives : [];
+    const failingDevices = drives
+        .filter((d) => d.assessment === 'FAIL')
+        .map((d) => d.device);
+    return {failingDevices, failing: failingDevices.length > 0};
+}
+
 export const useLoad = () => {
     const {status} = React.useContext(StatusContext);
     let minute_1 = status?.load_stats?.minute_1;

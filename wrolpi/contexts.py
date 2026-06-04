@@ -138,6 +138,7 @@ def reset_shared_contexts(app: Sanic):
         processing_domains=[],
         killed_downloads=[],
         download_progress={},
+        running_downloads={},
     ))
 
     # Configs

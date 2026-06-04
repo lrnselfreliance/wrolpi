@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import pathlib
 from abc import ABC
@@ -149,6 +150,81 @@ async def test_cancel_wrapper_outer_cancellation(test_session, test_download_man
 
     # The inner coroutine should have been cancelled too.
     assert inner_cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_reap_orphaned_downloads(test_session, test_download_manager, test_downloader):
+    """A Download left `pending` by a worker that died is renewed; one with a live worker is left alone.
+
+    `Download.started()` sets a Download to `pending`.  If the worker process dies (restart, OOM) or is
+    cancelled without finalizing, the row is stuck `pending` forever (dispatch only queries `new`, and
+    renew_recurring skips `pending`).  reap_orphaned_downloads uses the in-process running registry to tell a
+    live download apart from an orphan."""
+    from wrolpi import downloader as downloader_module
+
+    orphan = test_download_manager.create_download(test_session, 'https://example.com/orphan', test_downloader.name)
+    live = test_download_manager.create_download(test_session, 'https://example.com/live', test_downloader.name)
+    fresh = test_download_manager.create_download(test_session, 'https://example.com/fresh', test_downloader.name)
+    orphan.started()  # pending, but no worker is running it (the worker died).
+    live.started()  # pending, and a worker is actively running it.
+    test_session.commit()
+    assert orphan.status == 'pending' and live.status == 'pending' and fresh.status == 'new'
+
+    # Simulate that `live` is actively being downloaded in this process.
+    downloader_module.register_running_download(live.id)
+    try:
+        test_download_manager.reap_orphaned_downloads()
+    finally:
+        downloader_module.unregister_running_download(live.id)
+
+    test_session.expire_all()
+    assert orphan.status == 'new', 'Orphaned pending download should be renewed.'
+    assert orphan.error and 'interrupted' in orphan.error
+    assert live.status == 'pending', 'Download with a live worker should be left alone.'
+    assert fresh.status == 'new', 'A new download is unaffected.'
+
+
+@pytest.mark.asyncio
+async def test_do_downloads_recovers_orphaned_download(test_session, test_download_manager, test_downloader, fake_now):
+    """do_downloads reaps an orphaned `pending` download so it is retried without a process restart."""
+    test_downloader.set_test_success()
+    download = test_download_manager.recurring_download(test_session, 'https://example.com/orphan',
+                                                        DownloadFrequency.daily, test_downloader.name)
+    download.started()  # Stuck pending, no live worker (its worker crashed).
+    test_session.commit()
+    assert download.status == 'pending'
+
+    # do_downloads reaps the orphan (-> new) and dispatches it.
+    await test_download_manager.do_downloads()
+    await test_download_manager.wait_for_all_downloads()
+
+    test_session.expire_all()
+    assert download.is_complete, f'Orphaned download should be recovered and completed, got {download.status}'
+
+
+@pytest.mark.asyncio
+async def test_signal_download_cancelled_renews_download(test_session, test_download_manager, test_downloader):
+    """If the download worker task is cancelled mid-flight, the Download is renewed, not left pending."""
+    from wrolpi.downloader import signal_download_download, running_download_ids
+
+    download = test_download_manager.create_download(test_session, 'https://example.com/cancelme',
+                                                     test_downloader.name)
+    test_session.commit()
+    test_downloader.set_test_success()  # sleeps 1s inside execute_download
+
+    task = asyncio.create_task(signal_download_download(download.id, download.url))
+    await asyncio.sleep(0.3)  # Let the worker reach `started()` and enter execute_download.
+    test_session.expire_all()
+    assert download.status == 'pending'
+    assert download.id in running_download_ids()
+
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+
+    test_session.expire_all()
+    assert download.status == 'new', f'Cancelled download should be renewed, got {download.status}'
+    assert download.id not in running_download_ids(), 'Cancelled download must be unregistered.'
 
 
 @pytest.mark.asyncio

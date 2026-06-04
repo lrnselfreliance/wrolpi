@@ -99,6 +99,33 @@ def clear_download_progress(download_id: int):
     api_app.shared_ctx.download_manager_data.update(data)
 
 
+# `running_downloads` lives in shared_ctx (alongside processing_domains/killed_downloads/download_progress) and
+# maps download_id -> start time for downloads whose worker is currently running.  It is cleared on startup (see
+# contexts.py), so any Download that is `pending` in the DB but absent here belongs to a worker that died or was
+# cancelled without finalizing.  `DownloadManager.reap_orphaned_downloads` uses it to recover such orphans.
+def register_running_download(download_id: int):
+    """Record that a download worker for `download_id` is running."""
+    data = dict(api_app.shared_ctx.download_manager_data)
+    running = dict(data.get('running_downloads', {}))
+    running[download_id] = time.time()
+    data['running_downloads'] = running
+    api_app.shared_ctx.download_manager_data.update(data)
+
+
+def unregister_running_download(download_id: int):
+    """Record that the download worker for `download_id` has stopped (finished, failed, or cancelled)."""
+    data = dict(api_app.shared_ctx.download_manager_data)
+    running = dict(data.get('running_downloads', {}))
+    running.pop(download_id, None)
+    data['running_downloads'] = running
+    api_app.shared_ctx.download_manager_data.update(data)
+
+
+def running_download_ids() -> set:
+    """Return the ids of downloads whose workers are currently running."""
+    return set(api_app.shared_ctx.download_manager_data.get('running_downloads', {}))
+
+
 def make_progress_callback(report: Callable[[dict], None], parse_fn: callable) -> callable:
     """Create a stdout callback that parses progress lines and forwards them to `report`.
 
@@ -1062,6 +1089,12 @@ class DownloadManager:
             return
 
         try:
+            # Recover downloads left `pending` by a worker that died/was cancelled without finalizing.
+            self.reap_orphaned_downloads()
+        except Exception as e:
+            self.log_error(f'Unable to reap orphaned downloads!', exc_info=e)
+
+        try:
             self.renew_recurring_downloads()
         except Exception as e:
             self.log_error(f'Unable to renew downloads!', exc_info=e)
@@ -1157,6 +1190,27 @@ class DownloadManager:
             query = query.limit(limit)
         downloads = query.all()
         return downloads
+
+    def reap_orphaned_downloads(self):
+        """Renew any `pending` Download that no live worker is running.
+
+        `Download.started()` sets a Download to `pending` when a worker picks it up.  If that worker dies
+        (process restart, OOM-kill) or is cancelled (shutdown) without reaching the status-update block in
+        `signal_download_download`, the row is left `pending` forever: `dispatch_downloads` only queries `new`
+        Downloads, and `renew_recurring_downloads` deliberately skips `pending` ones.  The `running_downloads`
+        registry is cleared on startup and tracks live workers, so any `pending` Download whose id is absent from
+        it belongs to a worker that no longer exists; renew it so it will be retried."""
+        running = running_download_ids()
+        reaped = []
+        with get_db_session(commit=True) as session:
+            pending = session.query(Download).filter(Download.status == DownloadStatus.pending).all()
+            for download in pending:
+                if download.id not in running:
+                    download.renew()
+                    download.error = 'Download was interrupted before it finished and has been restarted'
+                    reaped.append(download.url)
+        if reaped:
+            self.log_warning(f'Reaped {len(reaped)} orphaned download(s) left pending by a stopped worker: {reaped}')
 
     def renew_recurring_downloads(self):
         """Mark any recurring downloads that are due for download as "new".  Start a download."""
@@ -1543,6 +1597,10 @@ async def signal_download_download(download_id: int, download_url: str):
         try:
             worker_logger.debug(f'Got download {download_id}')
 
+            # Record liveness BEFORE marking the Download `pending` so reap_orphaned_downloads never mistakes a
+            # running download for an orphan.  These happen with no await between them.
+            register_running_download(download_id)
+
             with get_db_session(commit=True) as session:
                 # Mark the download as started in new session so the change is committed.
                 download = Download.find_by_id(session, download_id)
@@ -1671,15 +1729,37 @@ async def signal_download_download(download_id: int, download_url: str):
                     pass  # shared_ctx not initialized
         except asyncio.CancelledError as e:
             worker_logger.warning('Canceled!', exc_info=e)
+            # The worker was cancelled (e.g. shutdown) before finalizing.  Renew the Download so it is not left
+            # stuck `pending` forever.  Best-effort: the event loop may be tearing down.
+            _renew_interrupted_download(download_id, 'Download was canceled before it finished')
             return
         except Exception as e:
             worker_logger.warning(f'Unexpected error', exc_info=e)
+            # An error escaped the normal handling above, leaving the Download `pending`.  Renew it so it retries.
+            _renew_interrupted_download(download_id, str(traceback.format_exc()))
         finally:
+            # This worker is no longer running this download.
+            unregister_running_download(download_id)
             # Remove this domain from the running list.
             if download_domain:
                 download_manager._delete_processing_domain(download_domain)
             # Ensure download progress is always cleaned up.
             clear_download_progress(download_id)
+
+
+def _renew_interrupted_download(download_id: int, error: str):
+    """Best-effort: renew a Download that is still `pending` because its worker was interrupted.
+
+    Guarded on `is_pending` so a Download whose status was already finalized (complete/failed/deferred) is not
+    clobbered.  Swallows all errors because this runs on cancellation/shutdown paths where the DB may be gone."""
+    try:
+        with get_db_session(commit=True) as session:
+            download = Download.get_by_id(session, download_id)
+            if download and download.is_pending:
+                download.renew()
+                download.error = error
+    except Exception:
+        pass
 
 
 @dataclass

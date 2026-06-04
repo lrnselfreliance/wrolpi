@@ -20,10 +20,28 @@ class TestCollectAllStatus:
 
         for key in (
             "cpu_stats", "memory_stats", "load_stats", "drives_stats",
-            "nic_bandwidth_stats", "power_stats", "last_status",
+            "nic_bandwidth_stats", "power_stats", "smart_stats", "last_status",
         ):
             assert key in status
         datetime.fromisoformat(status["last_status"])
+
+    @pytest.mark.asyncio
+    async def test_smart_stats_passed_through(self):
+        """The smart_stats kwarg should land in the cached payload verbatim."""
+        from controller.lib.status_worker import collect_all_status
+
+        smart = {"drives": [{"device": "sda", "temperature": 52}],
+                 "high_temperature": 55, "critical_temperature": 65}
+        status = await collect_all_status(smart_stats=smart)
+        assert status["smart_stats"] is smart
+
+    @pytest.mark.asyncio
+    async def test_smart_stats_defaults_to_none(self):
+        """Without the kwarg, smart_stats is None (worker fills it in)."""
+        from controller.lib.status_worker import collect_all_status
+
+        status = await collect_all_status()
+        assert status["smart_stats"] is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("collector,result_key,failure_value", [
@@ -46,6 +64,65 @@ class TestCollectAllStatus:
         # At least one other collector should still have produced real data.
         other_keys = [k for k in ("cpu_stats", "memory_stats") if k != result_key]
         assert any(status[k] is not None for k in other_keys)
+
+
+class TestRefreshSmartStats:
+    """SMART must be collected on a slow cadence, not every status cycle."""
+
+    def _fake_app(self):
+        app = mock.Mock()
+        app.state = mock.Mock(spec=[])  # no smart_cache / smart_last_collected yet
+        return app
+
+    @pytest.mark.asyncio
+    async def test_collects_on_first_call(self):
+        from controller.lib.status_worker import refresh_smart_stats
+
+        sentinel = {"drives": [], "high_temperature": 55, "critical_temperature": 65}
+        with mock.patch("controller.lib.status_worker.build_smart_stats",
+                        return_value=sentinel) as build:
+            app = self._fake_app()
+            now = datetime(2026, 6, 3, 12, 0, 0)
+            result = await refresh_smart_stats(app, now)
+
+        build.assert_called_once()
+        assert result is sentinel
+        assert app.state.smart_cache is sentinel
+        assert app.state.smart_last_collected == now
+
+    @pytest.mark.asyncio
+    async def test_reuses_cache_before_interval(self):
+        """A second call a few seconds later must NOT re-read SMART."""
+        from controller.lib.status_worker import refresh_smart_stats
+
+        with mock.patch("controller.lib.status_worker.build_smart_stats",
+                        side_effect=[{"n": 1}, {"n": 2}]) as build:
+            app = self._fake_app()
+            t0 = datetime(2026, 6, 3, 12, 0, 0)
+            first = await refresh_smart_stats(app, t0)
+            # 5s later — well within the 60s window.
+            second = await refresh_smart_stats(app, datetime(2026, 6, 3, 12, 0, 5))
+
+        assert build.call_count == 1
+        assert first == {"n": 1}
+        assert second == {"n": 1}
+
+    @pytest.mark.asyncio
+    async def test_refreshes_after_interval(self):
+        """After >= 60s, SMART is re-read and the prior result is passed in."""
+        from controller.lib.status_worker import refresh_smart_stats
+
+        with mock.patch("controller.lib.status_worker.build_smart_stats",
+                        side_effect=[{"n": 1}, {"n": 2}]) as build:
+            app = self._fake_app()
+            t0 = datetime(2026, 6, 3, 12, 0, 0)
+            await refresh_smart_stats(app, t0)
+            result = await refresh_smart_stats(app, datetime(2026, 6, 3, 12, 1, 0))
+
+        assert build.call_count == 2
+        # The prior cache is handed to build_smart_stats for spin-down reuse.
+        assert build.call_args_list[1].args[0] == {"n": 1}
+        assert result == {"n": 2}
 
 
 class TestGetAdaptiveSleep:
@@ -121,11 +198,14 @@ class TestAggregatedStatsEndpoint:
 
         for key in (
             "cpu_stats", "memory_stats", "load_stats", "drives_stats",
-            "nic_bandwidth_stats", "power_stats", "last_status",
+            "nic_bandwidth_stats", "power_stats", "smart_stats", "last_status",
         ):
             assert key in data
         # last_status is an ISO timestamp.
         datetime.fromisoformat(data["last_status"])
+        # SMART carries its thresholds for the frontend warning.
+        for field in ("drives", "high_temperature", "critical_temperature"):
+            assert field in data["smart_stats"]
         # Sub-field shape spot-checks.
         for field in ("percent", "cores"):
             assert field in data["cpu_stats"]

@@ -1,8 +1,8 @@
 import React from 'react';
 import {act, renderHook} from '@testing-library/react';
 import {render, screen} from '@testing-library/react';
-import {usePages} from './customHooks';
-import {QueryContext} from '../contexts/contexts';
+import {usePages, useDriveTemperature} from './customHooks';
+import {QueryContext, StatusContext} from '../contexts/contexts';
 import {Paginator} from '../components/Common';
 
 // Build a wrapper that provides a controlled QueryContext so usePages can read
@@ -92,6 +92,73 @@ describe('usePages.setTotal -> totalPages', () => {
         // setPage stores (page - 1) * limit as `o` in the query.
         const lastOffset = (result.current.totalPages - 1) * limit;
         expect(lastOffset).toBeLessThan(total);
+    });
+});
+
+describe('useDriveTemperature', () => {
+    const makeStatusWrapper = (status) => ({children}) => (
+        <StatusContext.Provider value={{status}}>
+            {children}
+        </StatusContext.Provider>
+    );
+
+    test('selects the hottest drive and reads thresholds from the payload', () => {
+        const status = {
+            smart_stats: {
+                drives: [
+                    {device: 'sda', temperature: 51},
+                    {device: 'sdb', temperature: 60},
+                ],
+                high_temperature: 55,
+                critical_temperature: 65,
+            },
+        };
+        const {result} = renderHook(() => useDriveTemperature(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.device).toBe('sdb');
+        expect(result.current.temperature).toBe(60);
+        expect(result.current.highTemperature).toBe(55);
+        expect(result.current.criticalTemperature).toBe(65);
+    });
+
+    test('ignores drives without a numeric temperature', () => {
+        const status = {
+            smart_stats: {
+                drives: [
+                    {device: 'sda', temperature: null},
+                    {device: 'sdb', temperature: 48},
+                ],
+                high_temperature: 55,
+                critical_temperature: 65,
+            },
+        };
+        const {result} = renderHook(() => useDriveTemperature(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.device).toBe('sdb');
+        expect(result.current.temperature).toBe(48);
+    });
+
+    test('defaults to no warning and default thresholds when smart_stats is absent', () => {
+        const {result} = renderHook(() => useDriveTemperature(),
+            {wrapper: makeStatusWrapper({})});
+        expect(result.current.device).toBeNull();
+        expect(result.current.temperature).toBe(0);
+        expect(result.current.highTemperature).toBe(55);
+        expect(result.current.criticalTemperature).toBe(65);
+    });
+
+    test('returns no drive when none report a temperature', () => {
+        const status = {
+            smart_stats: {
+                drives: [{device: 'sda', temperature: null}],
+                high_temperature: 55,
+                critical_temperature: 65,
+            },
+        };
+        const {result} = renderHook(() => useDriveTemperature(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.device).toBeNull();
+        expect(result.current.temperature).toBe(0);
     });
 });
 

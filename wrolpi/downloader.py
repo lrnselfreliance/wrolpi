@@ -1563,8 +1563,12 @@ async def signal_download_download(download_id: int, download_url: str):
                 # ExecutedX dataclass; subclasses also use that protocol to skip finalize
                 # for early-exit cases (e.g. metadata-only video downloads).
                 ctx = DownloadContext.production(download_manager, download_id)
-                with get_db_session(commit=True) as s:
-                    prepared = downloader.prepare_download(s, download)
+                with get_db_session(commit=True) as session:
+                    # Re-load the Download attached to this session so prepare_download's mutations
+                    # (e.g. VideoDownloader resolving destination/tag_names onto the row) persist; the
+                    # `download` loaded above is detached and writes to it would be silently lost.
+                    download = Download.find_by_id(session, download_id)
+                    prepared = downloader.prepare_download(session, download)
                     # Subclasses with unavoidable async prep work (e.g. VideoDownloader's
                     # extract_info / channel resolution) may declare prepare_download as
                     # `async def`; await the coroutine here.
@@ -1577,12 +1581,12 @@ async def signal_download_download(download_id: int, download_url: str):
                     # cancel_wrapper or execute_download short-circuited with a result.
                     result = executed
                 else:
-                    with get_db_session(commit=True) as s:
+                    with get_db_session(commit=True) as session:
                         # Re-load the Download attached to this session so finalize_download's mutations
                         # (sub_downloader, info_json, collection_id) are persisted.  The `download` loaded above
                         # is detached (its session has closed), so writes to it would be silently lost.
-                        download = Download.find_by_id(s, download_id)
-                        result = downloader.finalize_download(s, download, executed)
+                        download = Download.find_by_id(session, download_id)
+                        result = downloader.finalize_download(session, download, executed)
                         # finalize_download may also be async (same rationale as prepare).
                         if asyncio.iscoroutine(result):
                             result = await result

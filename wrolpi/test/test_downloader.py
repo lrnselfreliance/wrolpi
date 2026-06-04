@@ -152,6 +152,95 @@ async def test_cancel_wrapper_outer_cancellation(test_session, test_download_man
 
 
 @pytest.mark.asyncio
+async def test_finalize_download_persists_mutations(test_session, test_download_manager, test_downloader):
+    """finalize_download's mutations to the Download (e.g. sub_downloader) must persist.
+
+    Reproduces the perpetually-pending bug: the phase-split dispatch passed a *detached* Download to
+    finalize_download, so `download.sub_downloader = ...` was silently lost.  The status block then re-read
+    sub_downloader=None and called create_downloads(downloader_name=None) -> InvalidDownload, which was
+    swallowed, rolling back the parent's complete() and leaving it stuck `pending`."""
+    from wrolpi.downloader import Downloader, DownloadResult, signal_download_download
+    from wrolpi.conftest import production_like_sessions
+
+    class FinalizeChannelLikeDownloader(Downloader, ABC):
+        """Mimics ChannelDownloader: execute returns a non-DownloadResult so finalize runs, and finalize sets
+        sub_downloader and returns child URLs to enqueue."""
+        name = 'finalize_channel_like'
+
+        def prepare_download(self, session, download):
+            return object()  # sentinel -> phase-split (finalize) path
+
+        async def execute_download(self, prepared, ctx, download=None):
+            await asyncio.sleep(0)
+            return object()  # not a DownloadResult -> finalize_download runs
+
+        def finalize_download(self, session, download, executed):
+            download.sub_downloader = test_downloader.name
+            return DownloadResult(success=True, downloads=['https://example.com/child-video'])
+
+    test_download_manager.register_downloader(FinalizeChannelLikeDownloader())
+    parent = test_download_manager.create_download(test_session, 'https://example.com/channel/videos',
+                                                   'finalize_channel_like')
+    parent_id = parent.id
+    test_session.commit()
+
+    with production_like_sessions(test_session) as maker:
+        await signal_download_download(parent_id, 'https://example.com/channel/videos')
+        verify = maker()
+        try:
+            parent = verify.query(Download).filter_by(id=parent_id).one()
+            assert parent.status == 'complete', f'parent should complete, got {parent.status}'
+            assert parent.sub_downloader == test_downloader.name, 'finalize_download mutation must persist'
+            child = verify.query(Download).filter_by(url='https://example.com/child-video').one()
+            assert child.downloader == test_downloader.name, 'child enqueued with the persisted sub_downloader'
+        finally:
+            verify.close()
+
+
+@pytest.mark.asyncio
+async def test_child_download_failure_does_not_leave_parent_pending(test_session, test_download_manager,
+                                                                    test_downloader):
+    """A failure while enqueuing child downloads must not roll back / strand the successful parent.
+
+    The parent download succeeded (it fetched the listing); enqueuing children is a separate concern.  If
+    create_downloads raises (here: an unresolvable sub_downloader), the parent must still be marked complete and
+    the error surfaced, not silently left `pending`."""
+    from wrolpi.downloader import Downloader, DownloadResult, signal_download_download
+    from wrolpi.conftest import production_like_sessions
+
+    class BadChildDownloader(Downloader, ABC):
+        name = 'bad_child'
+
+        def prepare_download(self, session, download):
+            return object()
+
+        async def execute_download(self, prepared, ctx, download=None):
+            await asyncio.sleep(0)
+            return object()
+
+        def finalize_download(self, session, download, executed):
+            # Success, but no sub_downloader set -> create_downloads(downloader_name=None) will raise.
+            return DownloadResult(success=True, downloads=['https://example.com/orphan-child'])
+
+    test_download_manager.register_downloader(BadChildDownloader())
+    parent = test_download_manager.create_download(test_session, 'https://example.com/bad/videos', 'bad_child')
+    parent_id = parent.id
+    test_session.commit()
+
+    with production_like_sessions(test_session) as maker:
+        await signal_download_download(parent_id, 'https://example.com/bad/videos')
+        verify = maker()
+        try:
+            parent = verify.query(Download).filter_by(id=parent_id).one()
+            assert parent.status == 'complete', \
+                f'parent must complete despite child-enqueue failure, got {parent.status}'
+            # The child could not be created, but the parent did not get stuck.
+            assert verify.query(Download).filter_by(url='https://example.com/orphan-child').count() == 0
+        finally:
+            verify.close()
+
+
+@pytest.mark.asyncio
 async def test_delete_old_once_downloads(test_session, test_download_manager, test_downloader):
     """Once-downloads over a month old should be deleted."""
     with mock.patch('wrolpi.downloader.now') as mock_now:

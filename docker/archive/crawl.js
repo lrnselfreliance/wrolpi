@@ -28,8 +28,11 @@
 
 const puppeteer = require('puppeteer-core');
 
-// Content types whose bodies we scan for file references (e.g. a JSON manifest listing .mp4 paths).
-const TEXTUAL_CT = /^(text\/|application\/(json|xml|xhtml\+xml|javascript)|.*\+json)/i;
+// Content types whose bodies we scan for file references.  Sites stash file URLs in different
+// places: JSON manifests (the real ben.kahn.studio), or inlined in JS bundles (some SPAs).  We scan
+// JSON, HTML, plain text, AND JavaScript; the path-like (slash-required) regex in scanBody is what
+// keeps JS-bundle noise such as the literal ".pdf,.mp4" out of the results.  CSS is excluded.
+const SCANNABLE_CT = /^(application\/(json|xml|xhtml\+xml|javascript)|.*\+json|text\/(html|plain|xml|javascript))/i;
 // Don't read enormous bodies into memory -- protect the Pi.
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const PAGE_TIMEOUT_MS = 3 * 60 * 1000; // Matches the SingleFile per-page budget.
@@ -81,9 +84,11 @@ function resolve(ref, base) {
 function scanBody(body, suffix, baseUrl, found) {
     // Escape regex metacharacters in the suffix (the leading dot, etc.).
     const escaped = suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match a run of non-quote/whitespace characters ending in the suffix, optionally followed by a
-    // query string.  Bounded by quotes, parens, or whitespace as they appear in JSON/HTML/JS.
-    const re = new RegExp('[^\\s"\'`()<>]+' + escaped + '(?:\\?[^\\s"\'`()<>]*)?', 'gi');
+    // Match a path-like token ending in the suffix: it must contain a "/" (a real path or URL) and
+    // must not span commas/quotes/brackets.  Requiring a slash rejects bare suffix-list tokens like
+    // ".pdf,.mp4" that appear in config blobs.  Real manifest references are always paths.
+    const tok = '[^\\s"\'`()<>,\\[\\]{}]';
+    const re = new RegExp(tok + '*/' + tok + '*' + escaped + '(?:\\?' + tok + '*)?', 'gi');
     const matches = body.match(re) || [];
     for (const m of matches) {
         const abs = resolve(m, baseUrl);
@@ -122,7 +127,10 @@ async function main() {
     const browser = await puppeteer.launch({
         executablePath: args.executable_path,
         headless: 'new',
-        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        // Accept self-signed/invalid certs: WROLPi runs on its own self-signed Root CA, and an
+        // offline archiving crawler should fetch content regardless of TLS validation.
+        ignoreHTTPSErrors: true,
+        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--ignore-certificate-errors'],
     });
 
     try {
@@ -153,7 +161,7 @@ async function main() {
                         found.add(respUrl);
                     }
 
-                    if (TEXTUAL_CT.test(ct)) {
+                    if (SCANNABLE_CT.test(ct)) {
                         const len = Number(resp.headers()['content-length'] || 0);
                         if (len && len > MAX_BODY_BYTES) return;
                         const buf = await resp.buffer();

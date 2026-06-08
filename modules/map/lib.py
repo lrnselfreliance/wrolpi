@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 from pathlib import Path
@@ -6,10 +7,44 @@ from typing import List, Dict
 from sqlalchemy.orm import Session
 
 from modules.map.catalog import MAP_REGIONS, MAP_REGIONS_BY_NAME, MAP_REGIONS_BY_REGION, MANIFEST_URL
-from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config, aiohttp_get, verify_gpg_signature
+from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config, aiohttp_get, verify_gpg_signature, \
+    url_screenshot
 from wrolpi.downloader import DownloadFrequency, Download, save_downloads_config, download_manager
+from wrolpi.vars import DOCKERIZED
 
 logger = logger.getChild(__name__)
+
+# The chrome-free map embed is served by Caddy on :8084.  From the archive container this is
+# reachable as the `web` service; on a native install it is local.
+MAP_EMBED_HOST = 'https://web:8084' if DOCKERIZED else 'https://127.0.0.1:8084'
+
+
+def _map_embed_url(lat: float, lon: float, zoom: float) -> str:
+    """Build the URL of the chrome-free map embed centered on a location (#lat,lon,zoom)."""
+    return f'{MAP_EMBED_HOST}/embed.html#{lat},{lon},{zoom}'
+
+
+async def screenshot_map(lat: float, lon: float, zoom: float = 12,
+                         width: int = 1280, height: int = 720) -> bytes:
+    """Render the map centered on a location to a PNG.
+
+    Uses the archive browser service when DOCKERIZED, otherwise a local headless browser.
+
+    @raise ValueError: if no screenshot could be produced.
+    """
+    url = _map_embed_url(lat, lon, zoom)
+    if DOCKERIZED:
+        # Local import to avoid a circular import (archive lib imports collections/common).
+        from modules.archive.lib import request_url_screenshot
+        png = await request_url_screenshot(url, width=width, height=height)
+    else:
+        # Selenium is blocking; run it off the event loop.
+        png = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: url_screenshot(url, width, height))
+
+    if not png:
+        raise ValueError(f'Failed to render map screenshot for {lat},{lon} z{zoom}')
+    return png
 
 
 def get_map_directory() -> Path:

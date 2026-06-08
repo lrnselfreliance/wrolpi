@@ -710,6 +710,35 @@ async def request_screenshot(url: str, singlefile_path: pathlib.Path) -> Optiona
     return screenshot
 
 
+async def request_url_screenshot(url: str, width: int = 1280, height: int = 720) -> Optional[bytes]:
+    """Ask the archive service to render a live URL to a PNG via Puppeteer.
+
+    Used to screenshot WebGL pages (e.g. the MapLibre map embed) which the plain
+    Chrome-CLI screenshot cannot capture.  Only available when DOCKERIZED.
+    """
+    logger.info(f'Sending url screenshot request to archive service: {url}')
+
+    data = dict(url=url, width=width, height=height)
+    try:
+        async with aiohttp_post(f'{ARCHIVE_SERVICE}/screenshot_url', json_=data, timeout=ARCHIVE_TIMEOUT) as response:
+            contents = await response.json()
+        if contents and (error := contents.get('error')):
+            raise Exception(f'Received error from archive service: {error}')
+
+        screenshot = contents.get('screenshot')
+        if not screenshot:
+            logger.warning(f'Failed to get url screenshot for {url=}')
+            return None
+    except Exception as e:
+        logger.error('Error when requesting url screenshot', exc_info=e)
+        raise
+
+    # Decode and decompress.
+    screenshot = base64.b64decode(screenshot)
+    screenshot = gzip.decompress(screenshot)
+    return screenshot
+
+
 @dataclass
 class WrittenArchiveFiles:
     """The on-disk artifacts produced by write_archive_files."""

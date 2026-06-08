@@ -42,7 +42,7 @@
             allLayers = allLayers.concat(layers);
         });
 
-        new maplibregl.Map({
+        var map = new maplibregl.Map({
             container: "map",
             style: {
                 version: 8,
@@ -56,9 +56,14 @@
             attributionControl: false,
             interactive: false,
         });
+        // Expose the map and a render-complete flag so a headless browser can wait
+        // for tiles to finish painting before taking a screenshot (see screenshot_url.js).
+        window.__wrolpiMap = map;
+        map.on("idle", function() { window.__wrolpiMapIdle = true; });
     }).catch(function(e) {
         console.error("Embed map error:", e);
         document.getElementById("map").textContent = "Map unavailable";
+        window.__wrolpiMapError = String(e && e.message || e);
     });
 })();
 </script>

@@ -100,6 +100,24 @@ async def update_pin(_: Request, pin_id: int, body: schema.MapPinUpdateRequest):
     return response.json({'error': 'Pin not found'}, HTTPStatus.NOT_FOUND)
 
 
+@map_bp.get('/screenshot')
+@openapi.description('Render the map centered on lat/lon/zoom to a PNG')
+async def get_map_screenshot(request: Request):
+    try:
+        lat = float(request.args.get('lat'))
+        lon = float(request.args.get('lon'))
+        zoom = float(request.args.get('zoom', 12))
+    except (ValueError, TypeError):
+        return json_response({'error': 'lat and lon query parameters are required'}, HTTPStatus.BAD_REQUEST)
+
+    try:
+        png = await lib.screenshot_map(lat, lon, zoom)
+    except Exception as e:
+        return json_response({'error': str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    return response.raw(png, content_type='image/png')
+
+
 @map_bp.get('/search')
 @openapi.description('Search for places in map search indexes')
 async def search_places(request: Request):

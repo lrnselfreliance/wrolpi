@@ -15,6 +15,7 @@ import socket
 import string
 import sys
 import tempfile
+import time
 from asyncio import Task
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
@@ -2538,6 +2539,48 @@ def html_screenshot(html: bytes | str) -> bytes:
             driver.set_window_size(1280, 720)
             screenshot = driver.get_screenshot_as_png()
             return screenshot
+
+
+def url_screenshot(url: str, width: int = 1280, height: int = 720, timeout: int = 45) -> bytes:
+    """Return a PNG screenshot of a live URL, rendering WebGL content (e.g. MapLibre maps).
+
+    Used on native (non-Docker) installs where there is no archive browser service.
+    SwiftShader provides software WebGL so this works without a GPU.  Waits for the page
+    to set ``window.__wrolpiMapIdle`` (see modules/map/static/embed.html), falling back to
+    a short settle delay when the flag is absent.
+    """
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--ignore-certificate-errors')
+    # Software WebGL so MapLibre renders without a GPU.
+    options.add_argument('--use-gl=angle')
+    options.add_argument('--use-angle=swiftshader')
+    options.add_argument('--enable-unsafe-swiftshader')
+    options.add_argument(f'--window-size={width},{height}')
+    options.set_capability('acceptInsecureCerts', True)
+
+    with webdriver.Chrome(options=options) as driver:
+        driver.set_window_size(width, height)
+        driver.get(url)
+
+        # Wait for the page's render-complete flag, falling back to a fixed delay.
+        deadline = time.monotonic() + timeout
+        has_flag = False
+        while time.monotonic() < deadline:
+            try:
+                if driver.execute_script('return typeof window.__wrolpiMapIdle !== "undefined"'):
+                    has_flag = True
+                if driver.execute_script('return window.__wrolpiMapIdle === true'):
+                    break
+            except Exception:
+                pass
+            time.sleep(0.25)
+        if not has_flag:
+            time.sleep(3)
+
+        return driver.get_screenshot_as_png()
 
 
 def chain(iterable: Union[List, Tuple], length: int) -> List:

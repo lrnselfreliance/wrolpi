@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import urllib.parse
 from json import JSONDecodeError
 
 from sanic import Sanic, response
@@ -152,6 +153,64 @@ async def take_screenshot(url: str) -> bytes:
         return png
 
 
+# Puppeteer is installed in the base browserless/chrome image; resolve node and its modules.
+NODE_BIN = pathlib.Path('/usr/src/.nvm/versions/node/v18.19.0/bin/node')
+if not NODE_BIN.is_file():
+    NODE_BIN = pathlib.Path('/usr/bin/node')
+PUPPETEER_NODE_PATH = '/usr/src/app/node_modules'
+SCREENSHOT_URL_SCRIPT = pathlib.Path('/app/screenshot_url.js')
+
+
+async def take_url_screenshot(url: str, width: int = 1280, height: int = 720) -> bytes:
+    """Render a live URL to a PNG using Puppeteer.
+
+    Unlike take_screenshot (Chrome CLI), this waits for the page to finish painting,
+    so WebGL content (MapLibre maps) is captured instead of a blank canvas.
+
+    Only http(s) URLs are allowed (a file:// URL would let Puppeteer read local files).
+    Arguments are passed as an argv list (no shell) so the URL cannot be used for command
+    injection.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname:
+        logger.error(f'Refusing to screenshot non-http(s) url: {url!r}')
+        return b''
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        out = pathlib.Path(tmp_dir) / 'screenshot.png'
+        argv = [str(NODE_BIN), str(SCREENSHOT_URL_SCRIPT), url, str(out), str(int(width)), str(int(height))]
+        env = {**os.environ, 'NODE_PATH': PUPPETEER_NODE_PATH}
+        logger.debug(f'URL screenshot argv: {argv}')
+
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv, cwd=tmp_dir, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=2 * 60)
+            for line in stderr.decode(errors='replace').splitlines():
+                logger.error(line)
+            if proc.returncode != 0:
+                raise ValueError(f'URL screenshot failed returncode={proc.returncode}')
+        except asyncio.TimeoutError:
+            if proc:
+                proc.kill()
+                await proc.wait()
+            logger.error(f'URL screenshot timed out for {url}')
+            return b''
+        except Exception as e:
+            logger.error(f'Failed to screenshot url {url}', exc_info=e)
+            return b''
+
+        if not out.is_file():
+            logger.warning(f'URL screenshot did not create a file for {url}')
+            return b''
+
+        png = out.read_bytes()
+        logger.info(f'Successful url screenshot of {url} ({len(png)} bytes)')
+        return png
+
+
 def prepare_bytes(b: bytes) -> str:
     """
     Compress and encode bytes for smaller response.
@@ -213,6 +272,26 @@ async def post_screenshot(request: Request):
         return response.json(ret)
     except Exception as e:
         logger.error(f'Failed to generate screenshot for {url}', exc_info=e)
+        error = str(traceback.format_exc())
+        return response.json({'error': f'Failed to generate screenshot for {url} traceback is below... \n\n {error}'})
+
+
+@app.post('/screenshot_url')
+async def post_screenshot_url(request: Request):
+    """Generate a screenshot of a live URL, rendering WebGL/MapLibre content via Puppeteer."""
+    url = request.json['url']
+    width = int(request.json.get('width') or 1280)
+    height = int(request.json.get('height') or 720)
+
+    try:
+        logger.info(f'Generating url screenshot for {url}')
+        screenshot = await take_url_screenshot(url, width, height)
+        if not screenshot:
+            raise ValueError(f'Failed to generate screenshot for {url}')
+
+        return response.json(dict(url=url, screenshot=prepare_bytes(screenshot)))
+    except Exception as e:
+        logger.error(f'Failed to generate url screenshot for {url}', exc_info=e)
         error = str(traceback.format_exc())
         return response.json({'error': f'Failed to generate screenshot for {url} traceback is below... \n\n {error}'})
 

@@ -799,6 +799,37 @@ async def test_settings_special_directories(async_client, test_wrolpi_config):
 
 
 @pytest.mark.asyncio
+async def test_settings_playlists_destination_validation(async_client, test_wrolpi_config):
+    """The playlists destination is strictly validated: the sync deletes files there, so traversal
+    and overlap with other content destinations are rejected."""
+    # A valid change works.
+    data = {'playlists_destination': 'my_playlists'}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert get_wrolpi_config().playlists_destination == 'my_playlists'
+
+    for invalid in (
+            '/absolute/not/allowed',
+            '../outside-media',
+            'a/../../b',
+            'videos',  # equals/overlaps videos_destination's base
+            'videos/playlists',  # inside videos_destination
+            'zims',
+            'tags',
+    ):
+        data = {'playlists_destination': invalid}
+        request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, \
+            f'{invalid!r} should have been rejected'
+
+    # Empty restores the default.
+    data = {'playlists_destination': ''}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert get_wrolpi_config().playlists_destination == 'playlists'
+
+
+@pytest.mark.asyncio
 async def test_settings_save_ffprobe_json(async_client, test_wrolpi_config):
     """Maintainer can toggle save_ffprobe_json setting."""
     config = get_wrolpi_config()

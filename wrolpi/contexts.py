@@ -32,7 +32,6 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.domains_config = manager.dict()
     app.shared_ctx.archive_downloader_config = manager.dict()
     app.shared_ctx.download_cache_config = manager.dict()
-    app.shared_ctx.collections_config = manager.dict()
     app.shared_ctx.map_pins_config = manager.dict()
     # Shared dicts.
     app.shared_ctx.refresh = manager.dict()
@@ -105,7 +104,6 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.domains_config.clear()
     app.shared_ctx.archive_downloader_config.clear()
     app.shared_ctx.download_cache_config.clear()
-    app.shared_ctx.collections_config.clear()
     # Shared dicts.
     app.shared_ctx.refresh.clear()
     app.shared_ctx.uploaded_files.clear()
@@ -264,12 +262,6 @@ def initialize_configs_contexts(app: Sanic):
         DOWNLOAD_CACHE_CONFIG.initialize(app.shared_ctx.download_cache_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory download cache config: {e}')
-
-    try:
-        from wrolpi.collections.config import collections_config as _collections_config
-        _collections_config.initialize(app.shared_ctx.collections_config)
-    except Exception as e:
-        logger.error(f'Failed to initialize in-memory collections config: {e}')
 
     try:
         from modules.map.pins import MAP_PINS_CONFIG

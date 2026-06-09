@@ -27,6 +27,7 @@ import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../ho
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
 import {CollectionTable} from "./collections/CollectionTable";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import {CbzViewer} from "./CbzViewer";
 import _ from "lodash";
 
@@ -438,6 +439,7 @@ function DocPage() {
                         onClick={() => handleDelete(false)}
                         obeyWROLMode={true}
                     >Delete</APIButton>
+                    <AddToPlaylistButton fileGroupId={docFile.id}/>
                 </>;
 
                 return <>

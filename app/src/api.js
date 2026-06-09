@@ -2264,3 +2264,85 @@ export async function searchDocs(offset, limit, searchStr, order, tagNames, auth
         throw Error(message);
     }
 }
+
+
+export async function fetchPlaylists() {
+    const response = await apiGet(`${COLLECTIONS_API}?kind=playlist`);
+    if (response.ok) {
+        return (await response.json())['collections'];
+    }
+    const message = await getErrorMessage(response, 'Failed to fetch playlists.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function getPlaylist(playlistId) {
+    const response = await apiGet(`${COLLECTIONS_API}/${playlistId}`);
+    if (response.ok) {
+        return (await response.json())['collection'];
+    }
+    const message = await getErrorMessage(response, 'Failed to fetch playlist.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function createPlaylist(name, description) {
+    // Trailing slash avoids Sanic's 302 redirect on the root POST route (which would drop the body).
+    const response = await apiPost(`${COLLECTIONS_API}/`, {name, description, kind: 'playlist'});
+    if (response.ok) {
+        return (await response.json())['collection'];
+    }
+    const message = await getErrorMessage(response, 'Failed to create playlist.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function deletePlaylist(playlistId) {
+    const response = await apiDelete(`${COLLECTIONS_API}/${playlistId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Failed to delete playlist.');
+        toast({type: 'error', title: 'Error', description: message, time: 5000});
+        throw Error(message);
+    }
+}
+
+export async function addPlaylistItem(playlistId, item) {
+    // item: {item_kind, url?, title?, file_group_id?, zim_id?, zim_entry?, position?}
+    const response = await apiPost(`${COLLECTIONS_API}/${playlistId}/items`, item);
+    if (response.ok) {
+        return (await response.json())['item'];
+    }
+    const message = await getErrorMessage(response, 'Failed to add item.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+export async function removePlaylistItem(playlistId, itemId) {
+    const response = await apiDelete(`${COLLECTIONS_API}/${playlistId}/items/${itemId}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Failed to remove item.');
+        toast({type: 'error', title: 'Error', description: message, time: 5000});
+        throw Error(message);
+    }
+}
+
+export async function reorderPlaylistItems(playlistId, itemIds) {
+    const response = await apiPut(`${COLLECTIONS_API}/${playlistId}/items/order`, {item_ids: itemIds});
+    if (response.ok) {
+        return (await response.json())['collection'];
+    }
+    const message = await getErrorMessage(response, 'Failed to reorder items.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+// Set (tagName) or clear (tagName='') a playlist's single tag.
+export async function setPlaylistTag(playlistId, tagName) {
+    const response = await apiPut(`${COLLECTIONS_API}/${playlistId}`, {tag_name: tagName || ''});
+    if (response.ok) {
+        return (await response.json())['collection'];
+    }
+    const message = await getErrorMessage(response, 'Failed to update playlist tag.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}

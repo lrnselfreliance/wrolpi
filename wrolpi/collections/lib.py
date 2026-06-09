@@ -19,6 +19,7 @@ from wrolpi.events import Events
 from wrolpi.tags import Tag
 from .errors import UnknownCollection
 from .models import Collection, validate_collection_directory
+from .types import collection_type_registry
 
 logger = logger.getChild(__name__)
 
@@ -26,6 +27,10 @@ __all__ = [
     'get_collections',
     'get_collection_with_stats',
     'get_domain_statistics',
+    'create_collection',
+    'add_collection_item',
+    'remove_collection_item',
+    'reorder_collection_items',
     'update_collection',
     'refresh_collection',
     'tag_collection',
@@ -216,12 +221,16 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
             data['total_size'] = 0
 
     else:
-        # Generic collections (author, subject, etc.): count actual CollectionItem rows.
+        # Generic collections (author, subject, playlist, etc.): count actual CollectionItem rows.
         from .models import CollectionItem
         item_count = session.query(func.count(CollectionItem.id)).filter(
             CollectionItem.collection_id == collection_id
         ).scalar()
         data['item_count'] = item_count or 0
+
+        # Playlists are manually curated and ordered, so return the full ordered item list.
+        if collection.kind == 'playlist':
+            data['items'] = [item.dict() for item in collection.items]
 
     return data
 
@@ -271,8 +280,9 @@ def update_collection(
     # Update tag if provided
     if tag_name is not None:
         if tag_name:
-            # Set or create tag
-            if not collection.directory:
+            # Set or create tag.  Playlists manage their own on-disk layout (the sync namespaces them
+            # under the tag), so they may be tagged without a `directory`; other kinds require one.
+            if collection.kind != 'playlist' and not collection.directory:
                 raise ValidationError(
                     f"Collection '{collection.name}' has no directory. "
                     f"Set a directory before tagging."
@@ -294,8 +304,126 @@ def update_collection(
         # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.lib import save_domains_config
         save_domains_config.activate_switch()
+    elif collection.kind == 'playlist':
+        # Persist the change and re-sync the on-disk playlist (a tag change moves its directory).
+        from .config import save_playlists_config
+        from .sync import sync_playlists_directory
+        save_playlists_config.activate_switch()
+        sync_playlists_directory.activate_switch()
 
     return collection
+
+
+def create_collection(session: Session, name: str, description: Optional[str] = None,
+                      kind: str = 'playlist') -> Collection:
+    """Create a new Collection (defaults to a 'playlist').
+
+    Raises:
+        ValidationError: if the name is empty/invalid for the kind, or a duplicate exists.
+    """
+    name = (name or '').strip()
+    if not name:
+        raise ValidationError('Collection name is required')
+    if not collection_type_registry.is_registered(kind):
+        raise ValidationError(f'Unknown collection kind: {kind!r}')
+    if not collection_type_registry.validate(kind, name):
+        description_msg = collection_type_registry.get_description(kind) or 'Invalid name format'
+        raise ValidationError(f'Invalid {kind} name {name!r}. {description_msg}')
+
+    existing = session.query(Collection).filter_by(name=name, kind=kind).first()
+    if existing:
+        raise ValidationError(f'A {kind} named {name!r} already exists')
+
+    collection = Collection(name=name, description=description, kind=kind)
+    session.add(collection)
+    session.flush([collection])
+
+    if kind == 'playlist':
+        from .config import save_playlists_config
+        save_playlists_config.activate_switch()
+    # Other kinds (channel/domain) persist via their own configs (channels.yaml/domains.yaml);
+    # authors/subjects are re-derived on refresh.  No generic collections config to save.
+    return collection
+
+
+def add_collection_item(session: Session, collection_id: int, item_kind: str,
+                        file_group_id: Optional[int] = None, zim_id: Optional[int] = None,
+                        zim_entry: Optional[str] = None, url: Optional[str] = None,
+                        title: Optional[str] = None, position: Optional[int] = None):
+    """Add a file/zim/url item to a collection.
+
+    Adding an item that already exists is idempotent: the existing CollectionItem is returned.
+
+    Returns:
+        (CollectionItem, created): ``created`` is False when the item already existed.
+
+    Raises:
+        UnknownCollection: if the collection does not exist.
+        ValidationError: if the item is invalid for its type.
+    """
+    from .models import CollectionItem
+    collection = Collection.find_by_id(session, collection_id)
+
+    if item_kind == 'file':
+        from wrolpi.files.models import FileGroup
+        if not file_group_id:
+            raise ValidationError('file_group_id is required for a file item')
+        file_group = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
+        if not file_group:
+            raise ValidationError(f'No FileGroup with id {file_group_id}')
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, file_group_id=file_group_id).first() is None
+        try:
+            item = collection.add_file_group(file_group, position=position, session=session)
+        except ValueError as e:
+            raise ValidationError(str(e))
+        if title:
+            item.title = title
+    elif item_kind == 'zim':
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, zim_id=zim_id, zim_entry=zim_entry).first() is None
+        try:
+            item = collection.add_zim_entry(session, zim_id, zim_entry, title=title, position=position)
+        except ValueError as e:
+            raise ValidationError(str(e))
+    elif item_kind == 'url':
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, url=url).first() is None
+        try:
+            item = collection.add_url(session, url, title=title, position=position)
+        except ValueError as e:
+            raise ValidationError(str(e))
+    else:
+        raise ValidationError(f'Unknown item_kind: {item_kind!r}')
+
+    session.flush()
+    from .config import save_playlists_config
+    save_playlists_config.activate_switch()
+    from .sync import sync_playlists_directory
+    sync_playlists_directory.activate_switch()
+    return item, created
+
+
+def remove_collection_item(session: Session, collection_id: int, item_id: int) -> bool:
+    """Remove an item from a collection by CollectionItem id.  Returns True if removed."""
+    collection = Collection.find_by_id(session, collection_id)
+    removed = collection.remove_item(session, item_id)
+    if removed:
+        from .config import save_playlists_config
+        save_playlists_config.activate_switch()
+        from .sync import sync_playlists_directory
+        sync_playlists_directory.activate_switch()
+    return removed
+
+
+def reorder_collection_items(session: Session, collection_id: int, item_ids: List[int]):
+    """Reorder a collection's items from a full list of CollectionItem ids."""
+    collection = Collection.find_by_id(session, collection_id)
+    collection.reorder_items(session, item_ids)
+    from .config import save_playlists_config
+    save_playlists_config.activate_switch()
+    from .sync import sync_playlists_directory
+    sync_playlists_directory.activate_switch()
 
 
 def _get_external_collection_file_paths(session, collection_id: int, directory: pathlib.Path) -> list[pathlib.Path]:
@@ -692,6 +820,13 @@ def delete_collection(
     # Delete the collection
     session.delete(collection)
     session.flush()
+
+    # Persist the deletion to the config and clean up the playlist's on-disk directory.
+    if collection_dict['kind'] == 'playlist':
+        from .config import save_playlists_config
+        from .sync import sync_playlists_directory
+        save_playlists_config.activate_switch()
+        sync_playlists_directory.activate_switch()
 
     return collection_dict
 

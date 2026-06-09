@@ -15,6 +15,12 @@ import {
     FormInput as SFormInput,
     Header as SHeader,
     Icon as SIcon,
+    List as SList,
+    ListContent as SListContent,
+    ListDescription as SListDescription,
+    ListHeader as SListHeader,
+    ListIcon as SListIcon,
+    ListItem as SListItem,
     Loader as SLoader,
     Menu as SMenu,
     Modal as SModal,
@@ -52,6 +58,12 @@ import {
     FormInputProps,
     HeaderProps,
     IconProps,
+    ListProps,
+    ListItemProps,
+    ListIconProps,
+    ListContentProps,
+    ListHeaderProps,
+    ListDescriptionProps,
     LoaderProps,
     MenuProps,
     ModalProps,
@@ -396,6 +408,39 @@ export const Modal: ModalComponent = Object.assign(ModalBase, {
     Content: ModalContent,
     Description: ModalDescription,
     Header: ModalHeader,
+});
+
+// ----------------------------------------------------------------------------
+// List Compound Component
+// ----------------------------------------------------------------------------
+// Semantic's List supports `inverted`; the inverted class on the parent handles the item text,
+// but List.Icon must also receive `inverted` so its color flips in dark mode (the parent's
+// inverted class alone does not restyle the icon).
+
+interface ListComponent extends React.FC<ListProps> {
+    Item: React.FC<ListItemProps>;
+    Icon: React.FC<ListIconProps>;
+    Content: React.FC<ListContentProps>;
+    Header: React.FC<ListHeaderProps>;
+    Description: React.FC<ListDescriptionProps>;
+}
+
+const ListBase: React.FC<ListProps> = (props) => {
+    const {i} = useContext(ThemeContext);
+    return <SList {...i} {...props}/>
+};
+
+const ListIcon: React.FC<ListIconProps> = (props) => {
+    const {i} = useContext(ThemeContext);
+    return <SListIcon {...i} {...props}/>
+};
+
+export const List: ListComponent = Object.assign(ListBase, {
+    Item: SListItem,
+    Icon: ListIcon,
+    Content: SListContent,
+    Header: SListHeader,
+    Description: SListDescription,
 });
 
 // ----------------------------------------------------------------------------

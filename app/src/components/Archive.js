@@ -85,6 +85,7 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
 import {taggedImageLabel, TagsSelector} from "../Tags";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import {toast} from "react-semantic-toasts-2";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
@@ -343,6 +344,7 @@ function ArchivePage() {
             {updateButton}
             {deleteButton}
             {generateScreenshotButton}
+            <AddToPlaylistButton fileGroupId={archiveFile.id}/>
         </Segment>
 
         <Segment>

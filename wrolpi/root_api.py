@@ -176,6 +176,7 @@ def get_settings(_: Request):
         'map_destination': wrolpi_config.map_destination,
         'nav_color': wrolpi_config.nav_color,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
+        'playlists_destination': wrolpi_config.playlists_destination,
         'tags_directory': wrolpi_config.tags_directory,
         'throttle_on_startup': wrolpi_config.throttle_on_startup,
         'version': __version__,
@@ -239,6 +240,23 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
         raise InvalidConfig('Zims directory must be relative to media directory')
     elif not body.zims_destination:
         new_config['zims_destination'] = wrolpi_config.default_config['zims_destination']
+
+    if body.playlists_destination:
+        # The playlists sync deletes files in its directory, so this destination gets stricter
+        # validation: no traversal, and no overlap with the other content destinations.  Compare
+        # against the destinations in this same request when provided.
+        from types import SimpleNamespace
+        from wrolpi.collections.sync import validate_playlists_destination
+        effective = SimpleNamespace(
+            videos_destination=body.videos_destination or wrolpi_config.videos_destination,
+            archive_destination=body.archive_destination or wrolpi_config.archive_destination,
+            map_destination=body.map_destination or wrolpi_config.map_destination,
+            zims_destination=body.zims_destination or wrolpi_config.zims_destination,
+        )
+        if error := validate_playlists_destination(body.playlists_destination, effective):
+            raise InvalidConfig(error)
+    else:
+        new_config['playlists_destination'] = wrolpi_config.default_config['playlists_destination']
 
     # Validate timezone if provided; empty string clears it.
     if body.timezone is not None:

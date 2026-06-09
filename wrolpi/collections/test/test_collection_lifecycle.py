@@ -1,10 +1,8 @@
 import pathlib
 
 import pytest
-import yaml
 from sqlalchemy.orm import Session
 
-from wrolpi.collections import collections_config
 from wrolpi.collections.models import Collection
 from wrolpi.common import get_media_directory
 
@@ -16,11 +14,10 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     Lifecycle:
     - Start with no collections
     - Create a directory-restricted collection with a unique directory containing some videos
-    - Dump to config (collections.yaml)
     - Add a new video to that directory; ensure collection fetches show it
     - Remove one video from the collection only (files remain)
     - Delete another video entirely (files removed and item gone from collection)
-    - Delete the collection; dump config; files remain (except the deleted video)
+    - Delete the collection; files remain (except the deleted video)
     """
     # 1) Start clean
     assert test_directory.is_dir()
@@ -57,19 +54,7 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     fg_ids = {i.file_group_id for i in items}
     assert {v1.file_group_id, v2.file_group_id, v3.file_group_id}.issubset(fg_ids)
 
-    # 4) Dump collections config; verify entry present
-    collections_config.dump_config()
-    config_file = collections_config.get_file()
-    assert config_file.is_file(), f"Expected config file at {config_file}"
-
-    data = yaml.safe_load(config_file.read_text())
-    assert isinstance(data, dict)
-    dumped = data.get('collections', [])
-    # Config stores relative paths for portability
-    assert any(c.get('name') == 'Lifecycle Test Collection' and c.get('directory') == str(rel_dir) and c.get(
-        'kind') == 'channel' for c in dumped)
-
-    # 5) Add a new video to the same directory; ensure fetch methods include it after population
+    # 4) Add a new video to the same directory; ensure fetch methods include it after population
     v4 = video_factory(with_video_file=coll_dir / 'v4.mp4')
     test_session.commit()
 
@@ -107,12 +92,7 @@ async def test_collection_lifecycle_end_to_end(async_client, test_session: Sessi
     # 8) Finally, delete the collection
     test_session.delete(coll)
     test_session.commit()
-
-    # Dump config again; collection should be removed from config
-    collections_config.dump_config()
-    data = yaml.safe_load(config_file.read_text())
-    dumped = data.get('collections', [])
-    assert not any(c.get('name') == 'Lifecycle Test Collection' and c.get('directory') == str(rel_dir) for c in dumped)
+    assert test_session.query(Collection).count() == 0
 
     # All remaining files should still exist except the one for the deleted video
     assert v1.file_group.primary_path.exists()

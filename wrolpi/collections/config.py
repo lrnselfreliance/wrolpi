@@ -3,7 +3,7 @@ import shutil
 from dataclasses import dataclass, field
 from typing import List
 
-from wrolpi.common import ConfigFile, get_media_directory, logger
+from wrolpi.common import ConfigFile, get_media_directory, get_relative_to_media_directory, logger
 from wrolpi.db import get_db_session
 from wrolpi.events import Events
 from wrolpi.switches import ActivateSwitchMethod, register_switch_handler
@@ -93,6 +93,10 @@ class PlaylistsConfig(ConfigFile):
                         collection = Collection(name=name, kind='playlist')
                         session.add(collection)
                     collection.description = data.get('description')
+
+                    # Optional custom directory (media-relative); None when not customized.
+                    directory = data.get('directory')
+                    collection.directory = (get_media_directory() / directory) if directory else None
 
                     tag_name = data.get('tag_name')
                     collection.tag = Tag.get_by_name(session, tag_name) if tag_name else None
@@ -242,6 +246,9 @@ class PlaylistsConfig(ConfigFile):
                     entry['description'] = collection.description
                 if collection.tag_name:
                     entry['tag_name'] = collection.tag_name
+                if collection.directory:
+                    # Custom playlist directory; stored relative to the media directory.
+                    entry['directory'] = str(get_relative_to_media_directory(collection.directory))
                 entry['items'] = [c for c in (i.to_config() for i in collection.items) if c]
                 data.append(entry)
             self._config['playlists'] = data

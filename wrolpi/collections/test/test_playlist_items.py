@@ -139,6 +139,71 @@ async def test_tag_playlist_without_directory(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_playlist_tag_info_suggests_managed_location(async_client, test_session):
+    """tag_info for a playlist suggests the managed tag location, like channels/domains."""
+    _, response = await async_client.post('/api/collections', json={'name': 'Fire Making'})
+    cid = response.json['collection']['id']
+
+    # With a tag: <playlists>/<tag>/<name>.
+    _, response = await async_client.post(f'/api/collections/{cid}/tag_info',
+                                          json={'tag_name': 'Survival'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['suggested_directory'] == 'playlists/Survival/Fire Making'
+    assert response.json['conflict'] is False
+
+    # Without a tag (untagging): <playlists>/<name>.
+    _, response = await async_client.post(f'/api/collections/{cid}/tag_info', json={'tag_name': None})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['suggested_directory'] == 'playlists/Fire Making'
+
+
+@pytest.mark.asyncio
+async def test_playlist_directory_matching_managed_location_is_cleared(async_client, test_session):
+    """Saving a directory equal to the managed tag location stores None (sync keeps auto-managing)."""
+    from wrolpi.collections.models import Collection
+
+    _, response = await async_client.post('/api/collections', json={'name': 'Managed'})
+    cid = response.json['collection']['id']
+
+    # Tag + move to the suggested (managed) location in one update, like the tag modal does.
+    _, response = await async_client.put(f'/api/collections/{cid}', json={
+        'tag_name': 'Survival', 'directory': 'playlists/Survival/Managed'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['collection']['tag_name'] == 'Survival'
+    # The directory equals the managed location, so it is normalized to None (auto-managed).
+    collection = test_session.query(Collection).filter_by(id=cid).one()
+    test_session.refresh(collection)
+    assert collection.directory is None
+
+    # A genuinely custom directory is kept.
+    _, response = await async_client.put(f'/api/collections/{cid}', json={
+        'directory': 'custom/spot'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['collection']['directory'] == 'custom/spot'
+
+
+@pytest.mark.asyncio
+async def test_rename_playlist(async_client, test_session):
+    """A playlist can be renamed; blank and duplicate names are rejected."""
+    _, response = await async_client.post('/api/collections', json={'name': 'Old Name'})
+    cid = response.json['collection']['id']
+
+    _, response = await async_client.put(f'/api/collections/{cid}', json={'name': 'New Name'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['collection']['name'] == 'New Name'
+
+    # Renaming to another playlist's name is rejected.
+    _, response = await async_client.post('/api/collections', json={'name': 'Other'})
+    assert response.status_code == HTTPStatus.CREATED
+    _, response = await async_client.put(f'/api/collections/{cid}', json={'name': 'Other'})
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # A blank name is rejected.
+    _, response = await async_client.put(f'/api/collections/{cid}', json={'name': '   '})
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_adding_duplicate_item_is_idempotent(async_client, test_session):
     """Re-adding the same url returns the existing item with 200 (not a new 201)."""
     _, response = await async_client.post('/api/collections', json={'name': 'Dups'})

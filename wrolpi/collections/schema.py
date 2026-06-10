@@ -45,6 +45,7 @@ class CollectionUpdateRequest:
     directory: Optional[str] = None
     tag_name: Optional[str] = None
     description: Optional[str] = None
+    name: Optional[str] = None
 
 
 @dataclass

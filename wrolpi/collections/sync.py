@@ -35,7 +35,8 @@ from wrolpi.switches import register_switch_handler, ActivateSwitchMethod
 
 logger = logger.getChild(__name__)
 
-__all__ = ['sync_playlists_directory', 'get_playlists_directory', 'validate_playlists_destination']
+__all__ = ['sync_playlists_directory', 'get_playlists_directory', 'validate_playlists_destination',
+           'cleanup_playlist_directory']
 
 # Files we create are prefixed with a zero-padded 1-based position, e.g. "0001_".
 MANAGED_NAME = re.compile(r'^\d{4}_')
@@ -156,16 +157,25 @@ def _hardlink_or_copy(source: pathlib.Path, link: pathlib.Path):
         shutil.copy2(source, link)
 
 
-def _playlist_subdir(playlists_directory: pathlib.Path, collection) -> pathlib.Path:
-    """The subdirectory a playlist's files live in.
-
-    Tagged playlists are namespaced under their tag (``<playlists>/<tag>/<name>``); untagged
-    playlists live directly under the playlists directory (``<playlists>/<name>``).
-    """
+def _default_playlist_subdir(playlists_directory: pathlib.Path, collection) -> pathlib.Path:
+    """The managed location for a playlist: tagged playlists are namespaced under their tag
+    (``<playlists>/<tag>/<name>``), untagged playlists live directly under the playlists
+    directory (``<playlists>/<name>``).  Ignores any explicit custom directory."""
     base = playlists_directory
     if collection.tag_name:
         base = base / escape_file_name(collection.tag_name)
     return base / escape_file_name(collection.name)
+
+
+def _playlist_subdir(playlists_directory: pathlib.Path, collection) -> pathlib.Path:
+    """The directory a playlist's files live in.
+
+    A playlist with an explicit custom ``directory`` uses it as-is (it may live anywhere in the
+    media directory); otherwise the managed location is used.
+    """
+    if collection.directory:
+        return pathlib.Path(collection.directory)
+    return _default_playlist_subdir(playlists_directory, collection)
 
 
 def _is_stub(path: pathlib.Path) -> bool:
@@ -194,6 +204,27 @@ def _safe_unlink_managed(path: pathlib.Path) -> bool:
         return True
     logger.warning(f'Refusing to delete playlist file without another hardlink: {path}')
     return False
+
+
+def cleanup_playlist_directory(directory: pathlib.Path):
+    """Clean up a directory a playlist no longer occupies (deleted, moved, or re-pointed).
+
+    Custom playlist directories live outside the playlists root, so the orphan pruning in
+    ``sync_playlists_directory`` never sees them -- the mutation that abandons the directory calls
+    this instead.  Managed (``NNNN_``) files are removed with the usual stub/hardlink safety, then
+    the directory is deleted only if it is empty; user files are never touched.
+    """
+    directory = pathlib.Path(directory)
+    if not directory.is_dir():
+        return
+    for child in list(directory.iterdir()):
+        if child.is_file() and MANAGED_NAME.match(child.name):
+            _safe_unlink_managed(child)
+    if next(directory.iterdir(), None) is None:
+        logger.debug(f'Removing abandoned playlist directory: {directory}')
+        directory.rmdir()
+    else:
+        logger.warning(f'Keeping abandoned playlist directory with remaining files: {directory}')
 
 
 def _sync_one_playlist(playlists_directory: pathlib.Path, collection) -> pathlib.Path:

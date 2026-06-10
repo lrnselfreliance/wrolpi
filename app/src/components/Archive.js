@@ -671,7 +671,7 @@ export function DomainEditPage() {
         type="button"
         size='small'
         onClick={() => setTagEditModalOpen(true)}
-        color='green'
+        color='violet'
         style={{marginTop: '1em'}}
     >Tag</Button>;
 

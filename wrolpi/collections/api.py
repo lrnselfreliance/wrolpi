@@ -197,7 +197,8 @@ async def put_collection_endpoint(request: Request, collection_id: int, body: sc
             collection_id=collection_id,
             directory=body.directory,
             tag_name=body.tag_name,
-            description=body.description
+            description=body.description,
+            name=body.name,
         )
 
         # Return updated collection data

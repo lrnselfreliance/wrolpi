@@ -193,3 +193,59 @@ def test_retag_moves_directory_and_prunes_empty_tag_dir(test_session, test_direc
     sync_playlists_directory()
     assert (get_playlists_directory() / 'Fire Making').is_dir(), 'moved to top level'
     assert not (get_playlists_directory() / 'Survival').exists(), 'empty tag dir pruned'
+
+
+def test_custom_directory_playlist(test_session, test_directory):
+    """A playlist with a custom `directory` syncs there instead of under the playlists root."""
+    custom = test_directory / 'survival' / 'fire'
+    collection = _make_playlist(test_session, 'Fire Making')
+    collection.directory = custom
+    collection.add_url(test_session, '/u/x', title='x')
+    test_session.commit()
+
+    sync_playlists_directory()
+
+    assert (custom / '0001_x.html').is_file()
+    # No directory is created under the playlists root for this playlist.
+    assert not (get_playlists_directory() / 'Fire Making').exists()
+
+
+def test_custom_directory_ignores_tag(test_session, test_directory):
+    """An explicit custom directory wins over tag namespacing."""
+    tag = Tag(name='Survival')
+    test_session.add(tag)
+    test_session.flush()
+    custom = test_directory / 'my' / 'spot'
+    collection = _make_playlist(test_session, 'Fire Making', tag=tag)
+    collection.directory = custom
+    collection.add_url(test_session, '/u/x', title='x')
+    test_session.commit()
+
+    sync_playlists_directory()
+
+    assert (custom / '0001_x.html').is_file()
+    assert not (get_playlists_directory() / 'Survival').exists()
+
+
+def test_cleanup_playlist_directory(test_session, test_directory):
+    """cleanup_playlist_directory removes managed files (safely) and the directory if empty."""
+    from wrolpi.collections.sync import cleanup_playlist_directory
+
+    custom = test_directory / 'old' / 'spot'
+    collection = _make_playlist(test_session, 'Mover')
+    collection.directory = custom
+    collection.add_url(test_session, '/u/x', title='x')
+    test_session.commit()
+    sync_playlists_directory()
+    assert (custom / '0001_x.html').is_file()
+
+    cleanup_playlist_directory(custom)
+    assert not custom.exists(), 'managed stub removed and empty dir deleted'
+
+    # A directory holding a non-managed file is kept (only managed files are removed).
+    custom2 = test_directory / 'old' / 'spot2'
+    custom2.mkdir(parents=True)
+    (custom2 / 'keep.txt').write_text('user file')
+    cleanup_playlist_directory(custom2)
+    assert (custom2 / 'keep.txt').is_file()
+    assert custom2.is_dir()

@@ -2336,9 +2336,25 @@ export async function reorderPlaylistItems(playlistId, itemIds) {
     throw Error(message);
 }
 
-// Set (tagName) or clear (tagName='') a playlist's single tag.
-export async function setPlaylistTag(playlistId, tagName) {
-    const response = await apiPut(`${COLLECTIONS_API}/${playlistId}`, {tag_name: tagName || ''});
+// Update a playlist's name, description, and/or custom directory ('' clears the directory).
+export async function updatePlaylist(playlistId, {name, description, directory}) {
+    const response = await apiPut(`${COLLECTIONS_API}/${playlistId}`, {name, description, directory});
+    if (response.ok) {
+        return (await response.json())['collection'];
+    }
+    const message = await getErrorMessage(response, 'Failed to update playlist.');
+    toast({type: 'error', title: 'Error', description: message, time: 5000});
+    throw Error(message);
+}
+
+// Set (tagName) or clear (tagName='') a playlist's single tag.  When `directory` is given, the
+// playlist also moves there (the managed tag location is normalized back to auto-managed).
+export async function setPlaylistTag(playlistId, tagName, directory) {
+    const body = {tag_name: tagName || ''};
+    if (directory !== null && directory !== undefined) {
+        body.directory = directory;
+    }
+    const response = await apiPut(`${COLLECTIONS_API}/${playlistId}`, body);
     if (response.ok) {
         return (await response.json())['collection'];
     }

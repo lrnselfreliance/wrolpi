@@ -6,9 +6,12 @@ import {toast} from "react-semantic-toasts-2";
 import {Button, Form, Header, Icon, Loader, Modal, Segment, Table} from "./Theme";
 import {
     APIButton,
+    BackButton,
+    DirectorySearch,
     encodeMediaPath,
     ErrorMessage,
     findPosterPath,
+    InfoPopup,
     mimetypeColor,
     mimetypeIconName,
     PageContainer,
@@ -18,17 +21,21 @@ import {
 } from "./Common";
 import {useOneQuery, useWROLMode} from "../hooks/customHooks";
 import {CollectionTable} from "./collections/CollectionTable";
-import {TagsSelector} from "../Tags";
+import {CollectionEditForm} from "./collections/CollectionEditForm";
+import {CollectionTagModal} from "./collections/CollectionTagModal";
 import {
     addPlaylistItem,
     createPlaylist,
     deletePlaylist,
     fetchPlaylists,
+    getCollectionTagInfo,
     getPlaylist,
     removePlaylistItem,
     reorderPlaylistItems,
     setPlaylistTag,
+    updatePlaylist,
 } from "../api";
+import {ThemeContext} from "../contexts/contexts";
 
 
 const PLAYLIST_COLUMNS = [
@@ -300,6 +307,7 @@ function PlaylistItemsTable({items, editable, onMove, onRemove}) {
 export function PlaylistViewPage() {
     const {playlistId} = useParams();
     const {playlist} = usePlaylist(playlistId);
+    const {t} = React.useContext(ThemeContext);
 
     useTitle(playlist && playlist.name ? `${playlist.name} Playlist` : 'Playlist');
 
@@ -313,11 +321,15 @@ export function PlaylistViewPage() {
     const items = playlist.items || [];
 
     return <>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1em'}}>
-            <Header as='h1' style={{marginTop: 0}}>{playlist.name}</Header>
-            <Button as={Link} to={`/playlists/${playlistId}/edit`} secondary icon='edit' content='Edit'/>
-        </div>
-        {playlist.description && <p>{playlist.description}</p>}
+        <BackButton/>
+
+        <Header as='h1'>
+            {playlist.name}
+            <Link to={`/playlists/${playlistId}/edit`}>
+                <Icon name='edit' style={{marginLeft: '0.5em'}}/>
+            </Link>
+        </Header>
+        {playlist.description && <p {...t}>{playlist.description}</p>}
 
         {items.length === 0
             ? <Message><Message.Header>This playlist is empty</Message.Header></Message>
@@ -326,7 +338,8 @@ export function PlaylistViewPage() {
 }
 
 
-// Edit playlist page (opened from the "Edit" button): reorder, remove, add URL items, delete playlist.
+// Edit playlist page (opened from the edit icon), mirroring ChannelEditPage: Back/View buttons at
+// the top, a form segment for name/description/tag, then a segment with the ordered items.
 export function PlaylistEditPage() {
     const {playlistId} = useParams();
     const {playlist, refetch} = usePlaylist(playlistId);
@@ -334,8 +347,23 @@ export function PlaylistEditPage() {
     const wrolMode = useWROLMode();
     const [url, setUrl] = useState('');
     const [urlTitle, setUrlTitle] = useState('');
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [directory, setDirectory] = useState('');
+    const [tagModalOpen, setTagModalOpen] = useState(false);
 
     useTitle(playlist && playlist.name ? `Edit ${playlist.name} Playlist` : 'Edit Playlist');
+
+    // Seed the form fields once the playlist loads (keyed on id so a refetch doesn't clobber edits).
+    const playlistDbId = playlist && playlist.id;
+    useEffect(() => {
+        if (playlistDbId) {
+            setName(playlist.name || '');
+            setDescription(playlist.description || '');
+            setDirectory(playlist.directory || '');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [playlistDbId]);
 
     if (playlist === undefined) {
         return <ErrorMessage>Could not fetch playlist</ErrorMessage>;
@@ -348,17 +376,28 @@ export function PlaylistEditPage() {
     // Editing is blocked while in WROL Mode (the API enforces this too); fall back to a read-only view.
     const editable = !wrolMode;
 
-    const handleAddTag = async (name) => {
+    const handleSave = async () => {
         try {
-            await setPlaylistTag(playlistId, name);
+            await updatePlaylist(playlistId, {
+                name: name.trim(),
+                description: description.trim(),
+                directory: directory.trim(),
+            });
+            toast({
+                type: 'success', title: 'Playlist Updated',
+                description: 'Playlist was successfully updated', time: 3000,
+            });
             await refetch();
         } catch (e) {
+            // Error toast already shown by the API client.
         }
     };
 
-    const handleRemoveTag = async () => {
+    // Set or clear (tagName=null) the playlist's tag from the tag modal.  `directory` is the
+    // modal's move-to suggestion (null when the move toggle is off).
+    const handleTagSave = async (tagName, directory) => {
         try {
-            await setPlaylistTag(playlistId, '');
+            await setPlaylistTag(playlistId, tagName || '', directory);
             await refetch();
         } catch (e) {
         }
@@ -407,36 +446,112 @@ export function PlaylistEditPage() {
         }
     };
 
+    const deleteButton = <APIButton
+        color='red'
+        size='small'
+        confirmContent='Are you sure you want to delete this playlist? Its directory will be removed.'
+        confirmButton='Delete'
+        confirmHeader='Delete Playlist?'
+        onClick={handleDelete}
+        obeyWROLMode={true}
+        style={{marginTop: '1em'}}
+    >Delete</APIButton>;
+
+    const tagButton = <Button
+        type="button"
+        size='small'
+        onClick={() => setTagModalOpen(true)}
+        color='violet'
+        disabled={!editable}
+        style={{marginTop: '1em'}}
+    >Tag</Button>;
+
+    const actionButtons = <>
+        {deleteButton}
+        {tagButton}
+    </>;
+
+    // Minimal form object for CollectionEditForm (mirrors the useForm interface it consumes).
+    const form = {error: null, loading: false, disabled: !editable || !name.trim(), ready: true};
+
     return <>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1em'}}>
-            <Header as='h1' style={{marginTop: 0}}>{playlist.name}</Header>
-            <Button as={Link} to={`/playlists/${playlistId}`} secondary icon='eye' content='View'/>
-        </div>
-        {playlist.description && <p>{playlist.description}</p>}
+        <BackButton/>
+        <Link to={`/playlists/${playlistId}`}>
+            <Button>View</Button>
+        </Link>
 
-        {wrolMode && <Message warning>
-            <Message.Header>WROL Mode</Message.Header>
-            <Message.Content>Editing playlists is disabled while in WROL Mode.</Message.Content>
-        </Message>}
+        <CollectionEditForm
+            form={form}
+            title='Edit Playlist'
+            wrolModeContent='Playlist editing is disabled while in WROL Mode.'
+            actionButtons={actionButtons}
+            appliedTagName={playlist.tag_name}
+            onSubmit={handleSave}
+        >
+            <Grid.Row>
+                <Grid.Column width={8}>
+                    <Form.Field>
+                        <label>Playlist Name</label>
+                        <Input
+                            placeholder='Playlist name...'
+                            value={name}
+                            disabled={!editable}
+                            onChange={(e, {value}) => setName(value)}
+                        />
+                    </Form.Field>
+                </Grid.Column>
+                <Grid.Column width={8}>
+                    <Form.Field>
+                        <label>
+                            Directory
+                            <InfoPopup content='Optional custom directory. When empty, the playlist
+                                lives in the Playlists Directory (under its tag, if tagged).'/>
+                        </label>
+                        <DirectorySearch
+                            value={directory}
+                            disabled={!editable}
+                            onSelect={value => setDirectory(value || '')}
+                        />
+                    </Form.Field>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <Form.Field>
+                        <label>Description</label>
+                        <Input
+                            placeholder='Optional description...'
+                            value={description}
+                            disabled={!editable}
+                            onChange={(e, {value}) => setDescription(value)}
+                        />
+                    </Form.Field>
+                </Grid.Column>
+            </Grid.Row>
+        </CollectionEditForm>
 
+        {/* Tag Modal */}
+        <CollectionTagModal
+            open={tagModalOpen}
+            onClose={() => setTagModalOpen(false)}
+            currentTagName={playlist.tag_name}
+            originalDirectory={playlist.directory || ''}
+            getTagInfo={(tagName) => getCollectionTagInfo(playlistId, tagName)}
+            onSave={handleTagSave}
+            collectionName="Playlist"
+        />
+
+        {/* Items Segment */}
         <Segment>
-            <TagsSelector
-                limit={1}
-                disabled={!editable}
-                selectedTagNames={playlist.tag_name ? [playlist.tag_name] : []}
-                onAdd={handleAddTag}
-                onRemove={handleRemoveTag}
-            />
-        </Segment>
+            <Header as='h1'>Items</Header>
 
-        {items.length === 0
-            ? <Message>
-                <Message.Header>This playlist is empty</Message.Header>
-                {editable && <Message.Content>Add a link below.</Message.Content>}
-            </Message>
-            : <PlaylistItemsTable items={items} editable={editable} onMove={move} onRemove={handleRemove}/>}
+            {items.length === 0
+                ? <Message>
+                    <Message.Header>This playlist is empty</Message.Header>
+                    {editable && <Message.Content>Add a link below.</Message.Content>}
+                </Message>
+                : <PlaylistItemsTable items={items} editable={editable} onMove={move} onRemove={handleRemove}/>}
 
-        <Segment>
             <Header as='h4'>Add a link</Header>
             <Form onSubmit={handleAddUrl}>
                 <Form.Group>
@@ -455,15 +570,6 @@ export function PlaylistEditPage() {
                 </Form.Group>
             </Form>
         </Segment>
-
-        <APIButton
-            color='red'
-            disabled={!editable}
-            confirmContent='Are you sure you want to delete this playlist? Its directory will be removed.'
-            confirmButton='Delete'
-            onClick={handleDelete}
-            obeyWROLMode={true}
-        >Delete Playlist</APIButton>
     </>;
 }
 

@@ -237,3 +237,28 @@ async def test_import_still_deletes_playlists_removed_from_config(
     test_session.expire_all()
     names = [c.name for c in test_session.query(Collection).filter_by(kind='playlist').all()]
     assert names == ['Kept']
+
+
+@pytest.mark.asyncio
+async def test_custom_directory_round_trips(test_session, test_directory, playlists_config):
+    """A playlist's custom directory survives a dump -> wipe -> import cycle."""
+    custom = test_directory / 'survival' / 'fire'
+    collection = _make_playlist(test_session, name='Custom Dir')
+    collection.directory = custom
+    test_session.commit()
+
+    playlists_config.dump_config()
+
+    # The config stores the directory relative to the media directory.
+    data = playlists_config.read_config_file()
+    entry = next(p for p in data['playlists'] if p['name'] == 'Custom Dir')
+    assert entry['directory'] == 'survival/fire'
+
+    # Wipe and re-import; the directory is restored.
+    test_session.query(Collection).filter_by(kind='playlist').delete()
+    test_session.commit()
+    playlists_config.import_config()
+
+    test_session.expire_all()
+    collection = test_session.query(Collection).filter_by(name='Custom Dir').one()
+    assert str(collection.directory) == str(custom)

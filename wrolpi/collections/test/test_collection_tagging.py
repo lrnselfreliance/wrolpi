@@ -182,3 +182,27 @@ async def test_tag_collection_removes_tag_and_updates_directory(test_session, te
 
     # Verify result contains correct directory
     assert result['directory'] == str(untagged_dir.relative_to(test_directory))
+
+
+@pytest.mark.asyncio
+async def test_tag_collection_creates_new_tag(test_session, test_directory, await_switches):
+    """Tagging a collection with a Tag that does not exist yet creates the Tag and links it."""
+    from wrolpi.collections.lib import tag_collection
+    from wrolpi.tags import Tag
+
+    directory = test_directory / 'archive' / 'example.com'
+    directory.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='example.com', kind='domain', directory=directory)
+    test_session.add(collection)
+    test_session.commit()
+
+    assert test_session.query(Tag).filter_by(name='Brand New').one_or_none() is None
+
+    result = await tag_collection(test_session, collection_id=collection.id, tag_name='Brand New')
+    test_session.commit()
+    await await_switches(timeout=2)
+
+    tag = test_session.query(Tag).filter_by(name='Brand New').one()
+    assert collection.tag_id == tag.id
+    assert collection.tag_name == 'Brand New'
+    assert result['tag_name'] == 'Brand New'

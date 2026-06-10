@@ -1,12 +1,6 @@
-from wrolpi.errors import APIError
+from wrolpi.errors import APIError, UnknownCollection
 
 __all__ = ['UnknownCollection', 'ReorganizationConflict']
-
-
-class UnknownCollection(APIError):
-    """Cannot find Collection"""
-    code = 'UNKNOWN_COLLECTION'
-    summary = 'Cannot find Collection'
 
 
 class ReorganizationConflict(APIError):

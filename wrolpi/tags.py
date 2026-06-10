@@ -252,6 +252,28 @@ class Tag(ModelHelper, Base):
         save_tags_config.activate_switch()
         sync_tags_directory.activate_switch()
 
+    @staticmethod
+    def get_or_create_tag(session: Session, name: str = None, id_: int = None) -> 'Tag':
+        """Gets or creates Tag object.
+
+        @warning: does not commit"""
+        if name and id_:
+            raise RuntimeError('Tag name and id cannot be used together')
+
+        if tag := session.query(Tag).filter(Tag.id == id_).one_or_none():
+            return tag
+        if tag := session.query(Tag).filter(Tag.name == name).one_or_none():
+            return tag
+
+        if not name:
+            raise InvalidTag('Tag name cannot be empty')
+
+        tag = Tag(name=name)
+        session.add(tag)
+        # Flush so the new Tag has an id (callers use `.id` immediately).
+        tag.flush(session)
+        return tag
+
 
 @event.listens_for(Tag, 'after_insert')
 @event.listens_for(Tag, 'after_update')

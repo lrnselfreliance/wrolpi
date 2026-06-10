@@ -24,6 +24,7 @@ const TYPE_LABELS = {
     domain: 'Domains',
     download: 'Downloads',
     inventory: 'Inventories',
+    playlist: 'Playlists',
 };
 
 const TYPE_COLUMNS = {
@@ -34,6 +35,7 @@ const TYPE_COLUMNS = {
     domain: [{key: 'name', header: 'Name'}, {key: 'directory', header: 'Directory'}],
     download: [{key: 'url', header: 'URL'}, {key: 'downloader', header: 'Downloader'}],
     inventory: [{key: 'name', header: 'Name'}],
+    playlist: [{key: 'name', header: 'Name'}, {key: 'items', header: 'Items'}],
 };
 
 function groupItemsByType(items) {

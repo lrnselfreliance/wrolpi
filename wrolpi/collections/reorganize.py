@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session
-from .errors import UnknownCollection
 from .models import Collection
 
 logger = logger.getChild(__name__)
@@ -236,9 +235,7 @@ def get_reorganization_preview(
         with get_db_session() as session:
             return get_reorganization_preview(collection_id, session, sample_size)
 
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     if not collection.directory:
         raise ValueError(f"Collection '{collection.name}' has no directory. Cannot reorganize.")
@@ -362,9 +359,7 @@ def get_batch_reorganization_preview(
     """
     from sqlalchemy.orm import joinedload
 
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     # Get the current file format from config
     current_config_format = collection._get_current_file_format()
@@ -891,9 +886,7 @@ def execute_reorganization(
         with get_db_session(commit=True) as session:
             return execute_reorganization(collection_id, session)
 
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     if not collection.directory:
         raise ValueError(f"Collection '{collection.name}' has no directory. Cannot reorganize.")

@@ -1,19 +1,14 @@
 import pathlib
 
 import pytest
-import yaml
 from sqlalchemy.orm import Session
 
-from wrolpi.collections import collections_config
 from wrolpi.collections.models import Collection
 from wrolpi.common import get_media_directory
 
 
-# from wrolpi.switches import await_switches
-
-
 @pytest.mark.asyncio
-async def test_tagging_directory_collection_moves_files_and_updates_config(
+async def test_tagging_directory_collection_moves_files(
         test_session: Session,
         test_directory: pathlib.Path,
         video_factory,
@@ -44,15 +39,6 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
     # Verify it populated
     assert {i.file_group_id for i in coll.get_items(test_session)} == {v1.file_group_id, v2.file_group_id}
 
-    # Dump config and verify (config stores relative paths for portability)
-    collections_config.dump_config()
-    cfg_file = collections_config.get_file()
-    data = yaml.safe_load(cfg_file.read_text())
-    dumped = data.get('collections', [])
-    assert any(
-        c.get('name') == 'Funny Clips' and c.get('directory') == str(rel_dir) and c.get('kind') == 'channel' for c in
-        dumped)
-
     # Tag the collection -> should move to videos/<Tag>/<Collection Name>
     tag = await tag_factory('Funny')
     coll.set_tag(tag.id)
@@ -79,18 +65,12 @@ async def test_tagging_directory_collection_moves_files_and_updates_config(
     assert str(dest_dir) in str(v1.file_group.primary_path)
     assert str(dest_dir) in str(v2.file_group.primary_path)
 
-    # Dump config again and verify updated directory and tag (config stores relative paths)
-    collections_config.dump_config()
-    data = yaml.safe_load(cfg_file.read_text())
-    dumped = data.get('collections', [])
-    rel_dest_dir = dest_dir.relative_to(get_media_directory())
-    assert any(
-        c.get('name') == 'Funny Clips' and c.get('directory') == str(rel_dest_dir) and c.get('tag_name') == 'Funny' for
-        c in dumped)
+    # The tag is recorded on the collection.
+    assert coll.tag_name == 'Funny'
 
 
 @pytest.mark.asyncio
-async def test_tagging_unrestricted_collection_updates_config_only(
+async def test_tagging_unrestricted_collection_does_not_move_files(
         test_session: Session,
         test_directory: pathlib.Path,
         make_files_structure,
@@ -105,44 +85,25 @@ async def test_tagging_unrestricted_collection_updates_config_only(
     fg1, fg2 = make_files_structure(files, file_groups=True, session=test_session)
     test_session.commit()
 
-    # Create an unrestricted collection and add both files
+    # Create an unrestricted collection (no directory) and add both files manually.
     coll = Collection.from_config(test_session, {'name': 'Loose Stuff', 'kind': 'channel'})
-    # Unrestricted, so add manually
     coll.add_file_groups(test_session, [fg1, fg2])
     test_session.commit()
+    assert coll.directory is None
 
-    # Dump config and verify directory is absent/None
-    collections_config.dump_config()
-    cfg_file = collections_config.get_file()
-    data = yaml.safe_load(cfg_file.read_text())
-    dumped = data.get('collections', [])
-    entry = next(c for c in dumped if c.get('name') == 'Loose Stuff')
-    assert 'directory' not in entry
-
-    # Tag the collection; files should not move
+    # Tag the collection; files should not move (no directory to move into).
     before_paths = (fg1.primary_path, fg2.primary_path)
-    # Create a Tag synchronously and assign by name
-    # from wrolpi.tags import Tag
-    # tag = Tag(name='Favorites', color='#00ff00')
-    # test_session.add(tag)
-    # test_session.commit()
     await tag_factory('Favorites')
     coll.set_tag('Favorites')
     test_session.commit()
 
-    # Assert paths unchanged
+    # Assert paths unchanged and the tag was applied, directory still unset.
     test_session.refresh(fg1)
     test_session.refresh(fg2)
     after_paths = (fg1.primary_path, fg2.primary_path)
     assert before_paths == after_paths
-
-    # Dump config and verify tag written, directory still not set
-    collections_config.dump_config()
-    data = yaml.safe_load(cfg_file.read_text())
-    dumped = data.get('collections', [])
-    entry = next(c for c in dumped if c.get('name') == 'Loose Stuff')
-    assert entry.get('tag_name') == 'Favorites'
-    assert 'directory' not in entry
+    assert coll.tag_name == 'Favorites'
+    assert coll.directory is None
 
 
 def test_set_tag_on_directory_less_domain_collection(test_session):
@@ -221,3 +182,27 @@ async def test_tag_collection_removes_tag_and_updates_directory(test_session, te
 
     # Verify result contains correct directory
     assert result['directory'] == str(untagged_dir.relative_to(test_directory))
+
+
+@pytest.mark.asyncio
+async def test_tag_collection_creates_new_tag(test_session, test_directory, await_switches):
+    """Tagging a collection with a Tag that does not exist yet creates the Tag and links it."""
+    from wrolpi.collections.lib import tag_collection
+    from wrolpi.tags import Tag
+
+    directory = test_directory / 'archive' / 'example.com'
+    directory.mkdir(parents=True, exist_ok=True)
+    collection = Collection(name='example.com', kind='domain', directory=directory)
+    test_session.add(collection)
+    test_session.commit()
+
+    assert test_session.query(Tag).filter_by(name='Brand New').one_or_none() is None
+
+    result = await tag_collection(test_session, collection_id=collection.id, tag_name='Brand New')
+    test_session.commit()
+    await await_switches(timeout=2)
+
+    tag = test_session.query(Tag).filter_by(name='Brand New').one()
+    assert collection.tag_id == tag.id
+    assert collection.tag_name == 'Brand New'
+    assert result['tag_name'] == 'Brand New'

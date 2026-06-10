@@ -40,6 +40,7 @@ class SettingsResponse:
     wrol_mode: bool
     archive_destination: str = 'archive/%(domain_tag)s/%(domain)s'
     map_destination: str = 'map'
+    playlists_destination: str = 'playlists'
     videos_destination: str = 'videos/%(channel_tag)s/%(channel_name)s'
     zims_destination: str = 'zims'
 
@@ -78,6 +79,7 @@ class SettingsRequest:
     map_destination: Optional[str] = None
     nav_color: Optional[str] = None
     media_directory: Optional[str] = None
+    playlists_destination: Optional[str] = None
     tags_directory: Optional[bool] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None

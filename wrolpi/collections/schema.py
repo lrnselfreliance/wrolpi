@@ -8,11 +8,44 @@ from typing import List, Optional
 
 
 @dataclass
+class CollectionCreateRequest:
+    """Request body for creating a collection (default kind 'playlist')."""
+    name: str
+    description: Optional[str] = None
+    kind: str = 'playlist'
+
+
+@dataclass
+class AddItemRequest:
+    """Request body for adding an item to a collection.
+
+    ``item_kind`` selects which fields are required:
+    - 'file': file_group_id
+    - 'zim':  zim_id + zim_entry
+    - 'url':  url
+    """
+    item_kind: str = 'file'
+    file_group_id: Optional[int] = None
+    zim_id: Optional[int] = None
+    zim_entry: Optional[str] = None
+    url: Optional[str] = None
+    title: Optional[str] = None
+    position: Optional[int] = None
+
+
+@dataclass
+class ReorderItemsRequest:
+    """Request body for reordering a collection's items by their ids."""
+    item_ids: List[int] = field(default_factory=list)
+
+
+@dataclass
 class CollectionUpdateRequest:
     """Request body for updating a collection."""
     directory: Optional[str] = None
     tag_name: Optional[str] = None
     description: Optional[str] = None
+    name: Optional[str] = None
 
 
 @dataclass

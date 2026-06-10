@@ -17,8 +17,8 @@ from wrolpi.errors import FileWorkerConflict
 from wrolpi.errors import ValidationError
 from wrolpi.events import Events
 from wrolpi.tags import Tag
-from .errors import UnknownCollection
 from .models import Collection, validate_collection_directory
+from .types import collection_type_registry
 
 logger = logger.getChild(__name__)
 
@@ -26,6 +26,10 @@ __all__ = [
     'get_collections',
     'get_collection_with_stats',
     'get_domain_statistics',
+    'create_collection',
+    'add_collection_item',
+    'remove_collection_item',
+    'reorder_collection_items',
     'update_collection',
     'refresh_collection',
     'tag_collection',
@@ -33,6 +37,23 @@ __all__ = [
     'delete_collection',
     'search_collections',
 ]
+
+
+def _activate_config_save(kind: str):
+    """Activate the config-save switch for the config that owns this kind of Collection.
+
+    Author/subject collections are re-derived on refresh and have no config."""
+    if kind == 'domain':
+        # Local import to avoid circular import: collections -> archive -> collections
+        from modules.archive.lib import save_domains_config
+        save_domains_config.activate_switch()
+    elif kind == 'channel':
+        # Local import to avoid circular import: collections -> videos -> collections
+        from modules.videos.lib import save_channels_config
+        save_channels_config.activate_switch()
+    elif kind == 'playlist':
+        from .config import save_playlists_config
+        save_playlists_config.activate_switch()
 
 
 def get_collections(session: Session, kind: Optional[str] = None) -> List[dict]:
@@ -169,10 +190,7 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
     Raises:
         UnknownCollection: If collection not found
     """
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     # Get base collection data
     data = collection.__json__()
@@ -216,12 +234,16 @@ def get_collection_with_stats(session: Session, collection_id: int) -> dict:
             data['total_size'] = 0
 
     else:
-        # Generic collections (author, subject, etc.): count actual CollectionItem rows.
+        # Generic collections (author, subject, playlist, etc.): count actual CollectionItem rows.
         from .models import CollectionItem
         item_count = session.query(func.count(CollectionItem.id)).filter(
             CollectionItem.collection_id == collection_id
         ).scalar()
         data['item_count'] = item_count or 0
+
+        # Playlists are manually curated and ordered, so return the full ordered item list.
+        if collection.kind == 'playlist':
+            data['items'] = [item.dict() for item in collection.items]
 
     return data
 
@@ -232,6 +254,7 @@ def update_collection(
         directory: Optional[str] = None,
         tag_name: Optional[str] = None,
         description: Optional[str] = None,
+        name: Optional[str] = None,
 ) -> Collection:
     """
     Update a collection's properties.
@@ -242,6 +265,7 @@ def update_collection(
         directory: New directory (relative or absolute path), or None to clear
         tag_name: New tag name, empty string to clear, or None to leave unchanged
         description: New description, or None to leave unchanged
+        name: New name (rename), or None to leave unchanged
 
     Returns:
         Updated Collection object
@@ -250,12 +274,27 @@ def update_collection(
         UnknownCollection: If collection not found
         ValidationError: If validation fails
     """
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
+    collection = Collection.find_by_id(session, collection_id)
 
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    # Rename if provided.
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise ValidationError('Collection name cannot be empty')
+        if name != collection.name:
+            if not collection_type_registry.validate(collection.kind, name):
+                raise ValidationError(f'Invalid {collection.kind} name {name!r}')
+            duplicate = session.query(Collection).filter(
+                Collection.name == name,
+                Collection.kind == collection.kind,
+                Collection.id != collection.id,
+            ).first()
+            if duplicate:
+                raise ValidationError(f'A {collection.kind} named {name!r} already exists')
+            collection.name = name
 
     # Update directory if provided
+    old_directory = collection.directory
     if directory is not None:
         if directory:
             # Convert relative path to absolute with validation
@@ -271,31 +310,155 @@ def update_collection(
     # Update tag if provided
     if tag_name is not None:
         if tag_name:
-            # Set or create tag
-            if not collection.directory:
+            # Set or create tag.  Playlists manage their own on-disk layout (the sync namespaces them
+            # under the tag), so they may be tagged without a `directory`; other kinds require one.
+            if collection.kind != 'playlist' and not collection.directory:
                 raise ValidationError(
                     f"Collection '{collection.name}' has no directory. "
                     f"Set a directory before tagging."
                 )
-            tag = session.query(Tag).filter_by(name=tag_name).one_or_none()
-            if not tag:
-                tag = Tag(name=tag_name)
-                session.add(tag)
-                session.flush()
+            tag = Tag.get_or_create_tag(session, name=tag_name)
+            # Assign the relationship too so `collection.tag_name` is fresh below.
+            collection.tag = tag
             collection.tag_id = tag.id
         elif tag_name == '':
             # Clear tag (empty string explicitly clears)
+            collection.tag = None
             collection.tag_id = None
 
     session.flush()
 
-    # Trigger domain config save if this is a domain collection
-    if collection.kind == 'domain':
-        # Local import to avoid circular import: collections -> archive -> collections
-        from modules.archive.lib import save_domains_config
-        save_domains_config.activate_switch()
+    if collection.kind == 'playlist':
+        from .sync import (cleanup_playlist_directory, get_playlists_directory,
+                           _default_playlist_subdir, sync_playlists_directory)
+        # A directory equal to the managed tag location is not "custom" -- store None so the sync
+        # keeps auto-managing it (future tag changes keep moving the playlist automatically).
+        if collection.directory and \
+                pathlib.Path(collection.directory) == _default_playlist_subdir(get_playlists_directory(), collection):
+            collection.directory = None
+            session.flush()
+        # Commit before the cleanup and switch activations so the background sync reads the NEW
+        # state -- otherwise it can run against the pre-commit row, re-create the old directory,
+        # and undo the cleanup (same pattern as tag_collection).
+        session.commit()
+        # A custom directory lives outside the playlists root, so the sync's orphan pruning never
+        # sees it -- clean up the abandoned directory here when the playlist moves away from it.
+        if old_directory and str(old_directory) != str(collection.directory or ''):
+            cleanup_playlist_directory(old_directory)
+        # Re-sync the on-disk playlist (a tag/directory change moves it).
+        sync_playlists_directory.activate_switch()
+
+    _activate_config_save(collection.kind)
 
     return collection
+
+
+def create_collection(session: Session, name: str, description: Optional[str] = None,
+                      kind: str = 'playlist') -> Collection:
+    """Create a new Collection (defaults to a 'playlist').
+
+    Raises:
+        ValidationError: if the name is empty/invalid for the kind, or a duplicate exists.
+    """
+    name = (name or '').strip()
+    if not name:
+        raise ValidationError('Collection name is required')
+    if not collection_type_registry.is_registered(kind):
+        raise ValidationError(f'Unknown collection kind: {kind!r}')
+    if not collection_type_registry.validate(kind, name):
+        description_msg = collection_type_registry.get_description(kind) or 'Invalid name format'
+        raise ValidationError(f'Invalid {kind} name {name!r}. {description_msg}')
+
+    existing = session.query(Collection).filter_by(name=name, kind=kind).first()
+    if existing:
+        raise ValidationError(f'A {kind} named {name!r} already exists')
+
+    collection = Collection(name=name, description=description, kind=kind)
+    session.add(collection)
+    session.flush([collection])
+
+    _activate_config_save(kind)
+    return collection
+
+
+def add_collection_item(session: Session, collection_id: int, item_kind: str,
+                        file_group_id: Optional[int] = None, zim_id: Optional[int] = None,
+                        zim_entry: Optional[str] = None, url: Optional[str] = None,
+                        title: Optional[str] = None, position: Optional[int] = None):
+    """Add a file/zim/url item to a collection.
+
+    Adding an item that already exists is idempotent: the existing CollectionItem is returned.
+
+    Returns:
+        (CollectionItem, created): ``created`` is False when the item already existed.
+
+    Raises:
+        UnknownCollection: if the collection does not exist.
+        ValidationError: if the item is invalid for its type.
+    """
+    from .models import CollectionItem
+    collection = Collection.find_by_id(session, collection_id)
+
+    if item_kind == 'file':
+        from wrolpi.files.models import FileGroup
+        if not file_group_id:
+            raise ValidationError('file_group_id is required for a file item')
+        file_group = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
+        if not file_group:
+            raise ValidationError(f'No FileGroup with id {file_group_id}')
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, file_group_id=file_group_id).first() is None
+        try:
+            item = collection.add_file_group(file_group, position=position, session=session)
+        except ValueError as e:
+            raise ValidationError(str(e))
+        if title:
+            item.title = title
+    elif item_kind == 'zim':
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, zim_id=zim_id, zim_entry=zim_entry).first() is None
+        try:
+            item = collection.add_zim_entry(session, zim_id, zim_entry, title=title, position=position)
+        except ValueError as e:
+            raise ValidationError(str(e))
+    elif item_kind == 'url':
+        created = session.query(CollectionItem).filter_by(
+            collection_id=collection_id, url=url).first() is None
+        try:
+            item = collection.add_url(session, url, title=title, position=position)
+        except ValueError as e:
+            raise ValidationError(str(e))
+    else:
+        raise ValidationError(f'Unknown item_kind: {item_kind!r}')
+
+    session.flush()
+    from .config import save_playlists_config
+    save_playlists_config.activate_switch()
+    from .sync import sync_playlists_directory
+    sync_playlists_directory.activate_switch()
+    return item, created
+
+
+def remove_collection_item(session: Session, collection_id: int, item_id: int) -> bool:
+    """Remove an item from a collection by CollectionItem id.  Returns True if removed."""
+    collection = Collection.find_by_id(session, collection_id)
+    removed = collection.remove_item(session, item_id)
+    if removed:
+        from .config import save_playlists_config
+        save_playlists_config.activate_switch()
+        from .sync import sync_playlists_directory
+        sync_playlists_directory.activate_switch()
+    return removed
+
+
+def reorder_collection_items(session: Session, collection_id: int, item_ids: List[int]):
+    """Reorder a collection's items from a full list of CollectionItem ids."""
+    collection = Collection.find_by_id(session, collection_id)
+    collection.reorder_items(session, item_ids)
+    from .config import save_playlists_config
+    save_playlists_config.activate_switch()
+    from .sync import sync_playlists_directory
+    sync_playlists_directory.activate_switch()
 
 
 def _get_external_collection_file_paths(session, collection_id: int, directory: pathlib.Path) -> list[pathlib.Path]:
@@ -351,10 +514,7 @@ def refresh_collection(collection_id: int, send_events: bool = True) -> None:
     from wrolpi.files.worker import file_worker
 
     with get_db_session() as session:
-        collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-
-        if not collection:
-            raise UnknownCollection(f"Collection with ID {collection_id} not found")
+        collection = Collection.find_by_id(session, collection_id)
 
         if not collection.directory:
             raise ValidationError(
@@ -416,85 +576,17 @@ async def tag_collection(
         ValidationError: If tagging requirements not met
         FileWorkerConflict: If a file operation is in progress and directory change is requested
     """
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     # Track old directory before any changes for potential file moving
     old_directory = collection.directory
 
-    # If tag_name is None, remove the tag from the collection
-    if tag_name is None:
-        collection.tag_id = None
-
-        # Update directory if provided (user may want to move files when removing tag)
-        if directory:
-            target_directory = validate_collection_directory(directory)
-        else:
-            target_directory = collection.directory
-
-        # Check if we need to move files
-        need_to_move = (
-                target_directory is not None and
-                old_directory is not None and
-                target_directory != old_directory
-        )
-
-        if __debug__ and logger.isEnabledFor(TRACE_LEVEL):
-            logger.trace(f'tag_collection: {repr(collection.name)} need_to_move={need_to_move}, '
-                         f'{old_directory} -> {target_directory}')
-
-        if need_to_move and flags.file_worker_busy.is_set():
-            raise FileWorkerConflict('Refusing to move collection while FileWorker is busy')
-
-        session.flush()
-
-        # Trigger config save based on collection kind
-        if collection.kind == 'domain':
-            # Local import to avoid circular import: collections -> archive -> collections
-            from modules.archive.lib import save_domains_config
-            save_domains_config.activate_switch()
-        elif collection.kind == 'channel':
-            # Local import to avoid circular import: collections -> videos -> collections
-            from modules.videos.lib import save_channels_config
-            save_channels_config.activate_switch()
-
-        # Move files if directory changed - run in background so closing tab won't cancel it
-        if need_to_move:
-            target_directory.mkdir(parents=True, exist_ok=True)
-            # Commit tag changes before starting background move
-            session.commit()
-            background_task(_background_move_collection(collection.id, target_directory))
-
-        # Return info about the un-tagging operation
-        relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
-        return {
-            'collection_id': collection.id,
-            'collection_name': collection.name,
-            'tag_name': None,
-            'directory': str(relative_dir) if relative_dir else None,
-            'will_move_files': need_to_move,
-        }
-
-    # Get or create the tag
-    tag = session.query(Tag).filter_by(name=tag_name).one_or_none()
-    if not tag:
-        tag = Tag(name=tag_name)
-        session.add(tag)
-        session.flush()
-
-    # Determine target directory
+    # Determine target directory.  Collections can be tagged without a directory for UI
+    # search/filtering, so a missing directory is left missing.
     if directory:
-        # User specified a directory - validate it
         target_directory = validate_collection_directory(directory)
-    elif collection.directory:
-        # Use existing directory
-        target_directory = collection.directory
     else:
-        # No directory provided and collection has none - keep it that way
-        # Collections can be tagged without a directory for UI search/filtering
-        target_directory = None
+        target_directory = collection.directory
 
     # Check if we need to move files
     need_to_move = (
@@ -510,24 +602,19 @@ async def tag_collection(
     if need_to_move and flags.file_worker_busy.is_set():
         raise FileWorkerConflict('Refusing to move collection while FileWorker is busy')
 
-    # Apply the tag
-    collection.tag_id = tag.id
-    # Only update directory if we have a target (don't auto-generate for directory-less collections)
-    # Note: directory update is handled by move_collection if need_to_move, otherwise set directly
-    if target_directory is not None and not need_to_move:
-        collection.directory = target_directory
+    # Apply (or remove) the tag
+    if tag_name is None:
+        collection.tag_id = None
+    else:
+        collection.tag_id = Tag.get_or_create_tag(session, name=tag_name).id
+        # Only update directory if we have a target (don't auto-generate for directory-less
+        # collections).  Directory update is handled by move_collection if need_to_move.
+        if target_directory is not None and not need_to_move:
+            collection.directory = target_directory
 
     session.flush()
 
-    # Trigger config save based on collection kind
-    if collection.kind == 'domain':
-        # Local import to avoid circular import: collections -> archive -> collections
-        from modules.archive.lib import save_domains_config
-        save_domains_config.activate_switch()
-    elif collection.kind == 'channel':
-        # Local import to avoid circular import: collections -> videos -> collections
-        from modules.videos.lib import save_channels_config
-        save_channels_config.activate_switch()
+    _activate_config_save(collection.kind)
 
     # Move files if directory changed - run in background so closing tab won't cancel it
     if need_to_move:
@@ -536,7 +623,6 @@ async def tag_collection(
         session.commit()
         background_task(_background_move_collection(collection.id, target_directory))
 
-    # Return info about the tagging operation
     relative_dir = get_relative_to_media_directory(target_directory) if target_directory else None
     return {
         'collection_id': collection.id,
@@ -569,10 +655,22 @@ def get_tag_info(
     Raises:
         UnknownCollection: If collection not found
     """
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
+    collection = Collection.find_by_id(session, collection_id)
 
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    # Playlists: suggest the managed tag location (<playlists>/<tag>/<name>), even when the
+    # playlist has no explicit directory (most don't -- the sync manages their location).
+    if collection.kind == 'playlist':
+        from wrolpi.common import escape_file_name
+        from .sync import get_playlists_directory
+        base = get_playlists_directory()
+        if tag_name:
+            base = base / escape_file_name(tag_name)
+        suggested = base / escape_file_name(collection.name)
+        return {
+            'suggested_directory': str(get_relative_to_media_directory(suggested)),
+            'conflict': False,
+            'conflict_message': None,
+        }
 
     # For collections without a directory, return None - no directory suggestions needed
     if collection.directory is None:
@@ -643,10 +741,7 @@ def delete_collection(
     Raises:
         UnknownCollection: If collection not found
     """
-    collection = session.query(Collection).filter_by(id=collection_id).one_or_none()
-
-    if not collection:
-        raise UnknownCollection(f"Collection with ID {collection_id} not found")
+    collection = Collection.find_by_id(session, collection_id)
 
     collection_dict = {
         'id': collection.id,
@@ -656,22 +751,17 @@ def delete_collection(
 
     # Orphan child Archives if this is a domain collection
     if collection.kind == 'domain':
-        # Local imports to avoid circular import: collections -> archive -> collections
+        # Local import to avoid circular import: collections -> archive -> collections
         from modules.archive.models import Archive
-        from modules.archive.lib import save_domains_config
         archives = session.query(Archive).filter_by(collection_id=collection_id).all()
         for archive in archives:
             archive.collection_id = None
         session.flush()
 
-        # Trigger domain config save
-        save_domains_config.activate_switch()
-
     # Orphan child Videos and delete Channel if this is a channel collection
     elif collection.kind == 'channel':
         # Local imports to avoid circular import: collections -> videos -> collections
         from modules.videos.models import Channel, Video
-        from modules.videos.lib import save_channels_config
 
         # Find the Channel that references this Collection
         channel = session.query(Channel).filter_by(collection_id=collection_id).one_or_none()
@@ -686,12 +776,26 @@ def delete_collection(
             session.delete(channel)
             session.flush()
 
-        # Trigger channel config save
-        save_channels_config.activate_switch()
+    # A playlist's custom directory lives outside the playlists root; remember it so its managed
+    # files can be cleaned up after the delete (the sync's orphan pruning only covers the root).
+    playlist_custom_directory = collection.directory if collection.kind == 'playlist' else None
 
     # Delete the collection
     session.delete(collection)
     session.flush()
+
+    # Clean up the playlist's on-disk directory and re-sync.
+    if collection_dict['kind'] == 'playlist':
+        from .sync import cleanup_playlist_directory, sync_playlists_directory
+        # Commit before the cleanup and switch activations so the background sync reads the NEW
+        # state (the deleted row); a sync of pre-commit state would re-create the directory.
+        session.commit()
+        if playlist_custom_directory:
+            cleanup_playlist_directory(playlist_custom_directory)
+        sync_playlists_directory.activate_switch()
+
+    # Persist the deletion to the owning config.
+    _activate_config_save(collection_dict['kind'])
 
     return collection_dict
 

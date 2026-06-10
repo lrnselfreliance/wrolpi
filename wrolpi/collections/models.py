@@ -2,7 +2,7 @@ import pathlib
 from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, Index, UniqueConstraint, func, BigInteger, \
-    or_
+    or_, CheckConstraint
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -761,6 +761,105 @@ class Collection(ModelHelper, Base):
         ).update({'position': CollectionItem.position + shift_by})
         session.flush()
 
+    def _next_position(self, session: Session) -> int:
+        """Return the position to use when appending a new item to the end."""
+        max_position = session.query(func.max(CollectionItem.position)).filter_by(
+            collection_id=self.id
+        ).scalar()
+        return (max_position or 0) + 1
+
+    def _place_item(self, session: Session, item: 'CollectionItem', position: Optional[int]):
+        """Assign ``position`` to ``item`` (appending or inserting with a shift) and persist it."""
+        if position is None:
+            item.position = self._next_position(session)
+        else:
+            self._shift_positions(session, position, shift_by=1)
+            item.position = position
+        session.add(item)
+        session.flush([item])
+
+    def add_url(self, session: Session, url: str, title: Optional[str] = None,
+                position: Optional[int] = None) -> 'CollectionItem':
+        """Add a `url` item (a link the WROLPi browser can open).  Idempotent per URL."""
+        if not url:
+            raise ValueError('A url item requires a url')
+
+        existing = session.query(CollectionItem).filter_by(collection_id=self.id, url=url).first()
+        if existing:
+            logger.warning(f'URL {url!r} already in Collection {self.id}')
+            return existing
+
+        item = CollectionItem(collection_id=self.id, item_kind='url', url=url, title=title)
+        self._place_item(session, item, position)
+        return item
+
+    def add_zim_entry(self, session: Session, zim_id: int, zim_entry: str, title: Optional[str] = None,
+                      position: Optional[int] = None) -> 'CollectionItem':
+        """Add a `zim` item (a single article within a Zim file).  Idempotent per (zim, entry)."""
+        # Local import to avoid a circular import (zim -> tags -> collections).
+        from modules.zim.models import Zim
+
+        zim = session.query(Zim).filter_by(id=zim_id).one_or_none()
+        if not zim:
+            raise ValueError(f'No Zim with id {zim_id}')
+        # Validate the entry exists within the Zim.
+        try:
+            zim.find_entry(zim_entry)
+        except Exception as e:
+            raise ValueError(f'Zim entry not found: {zim_entry!r}') from e
+
+        existing = session.query(CollectionItem).filter_by(
+            collection_id=self.id, zim_id=zim_id, zim_entry=zim_entry).first()
+        if existing:
+            logger.warning(f'Zim entry {zim_entry!r} already in Collection {self.id}')
+            return existing
+
+        item = CollectionItem(collection_id=self.id, item_kind='zim', zim_id=zim_id,
+                              zim_entry=zim_entry, title=title)
+        self._place_item(session, item, position)
+        return item
+
+    def remove_item(self, session: Session, item_id: int) -> bool:
+        """Remove an item by its CollectionItem id (any item_kind).  Returns True if removed."""
+        item = session.query(CollectionItem).filter_by(collection_id=self.id, id=item_id).first()
+        if not item:
+            return False
+        position = item.position
+        session.delete(item)
+        session.flush()
+        # Close the gap left behind.
+        self._shift_positions(session, position + 1, shift_by=-1)
+        return True
+
+    def reorder_items(self, session: Session, ordered_item_ids: List[int]):
+        """Set item order from a full list of CollectionItem ids (for drag-and-drop reordering).
+
+        Any items not present in ``ordered_item_ids`` are appended after, keeping their prior order.
+
+        @raise ValueError: if an id does not belong to this collection.
+        """
+        items = session.query(CollectionItem).filter_by(collection_id=self.id).all()
+        by_id = {i.id: i for i in items}
+        for item_id in ordered_item_ids:
+            if item_id not in by_id:
+                raise ValueError(f'Item {item_id} is not in Collection {self.id}')
+
+        position = 1
+        seen = set()
+        for item_id in ordered_item_ids:
+            if item_id in seen:
+                # Ignore duplicate ids so positions stay contiguous (no gaps).
+                continue
+            by_id[item_id].position = position
+            seen.add(item_id)
+            position += 1
+        # Preserve any unlisted items after the explicitly-ordered ones.
+        for item in sorted(items, key=lambda i: i.position):
+            if item.id not in seen:
+                item.position = position
+                position += 1
+        session.flush()
+
     def get_items(self, session: Session, limit: Optional[int] = None, offset: int = 0) -> List['CollectionItem']:
         """Get items in this collection, ordered by position."""
 
@@ -1041,14 +1140,35 @@ class Collection(ModelHelper, Base):
 
 class CollectionItem(ModelHelper, Base):
     """
-    Junction table between Collection and FileGroup.
-    Maintains ordering and metadata about the relationship.
+    An ordered item within a Collection.
+
+    An item is one of three kinds (``item_kind``):
+    - ``file``: references a FileGroup (video, archive, ebook, image, doc, ...).
+    - ``zim``: references a single Zim article (``zim_id`` + ``zim_entry`` path), like TagZimEntry.
+    - ``url``: an arbitrary URL the WROLPi browser can open (e.g. a map location ``/map?lat=&lon=``).
+
+    Exactly one kind's columns are populated; enforced by a CHECK constraint.
     """
     __tablename__ = 'collection_item'
 
+    ITEM_KINDS = ('file', 'zim', 'url')
+
     id = Column(Integer, primary_key=True)
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='CASCADE'), nullable=False)
-    file_group_id = Column(Integer, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False)
+
+    # Which kind of item this is.
+    item_kind = Column(String, nullable=False, server_default='file', default='file')
+
+    # `file` items: a FileGroup.
+    file_group_id = Column(Integer, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=True)
+    # `zim` items: a single article within a Zim file.
+    zim_id = Column(Integer, ForeignKey('zim.id', ondelete='CASCADE'), nullable=True)
+    zim_entry = Column(Text, nullable=True)
+    # `url` items: any URL.
+    url = Column(Text, nullable=True)
+
+    # Display title (used for `url`/`zim` items, and as the on-disk stem; optional for `file`).
+    title = Column(Text, nullable=True)
 
     # Position in the collection (for ordering)
     position = Column(Integer, nullable=False, default=0)
@@ -1059,6 +1179,7 @@ class CollectionItem(ModelHelper, Base):
     # Relationships
     collection = relationship('Collection', back_populates='items')
     file_group: FileGroup = relationship('FileGroup')
+    zim = relationship('Zim')
 
     # Indexes for performance
     __table_args__ = (
@@ -1066,15 +1187,56 @@ class CollectionItem(ModelHelper, Base):
         Index('idx_collection_item_collection_position', 'collection_id', 'position'),
         Index('idx_collection_item_file_group_id', 'file_group_id'),
         Index('idx_collection_item_position', 'position'),
+        # A FileGroup/Zim-article/URL appears at most once per collection.  NULLs are distinct in
+        # Postgres, so each unique constraint only applies to items of that kind.
         UniqueConstraint('collection_id', 'file_group_id', name='uq_collection_file_group'),
+        UniqueConstraint('collection_id', 'zim_id', 'zim_entry', name='uq_collection_zim_entry'),
+        UniqueConstraint('collection_id', 'url', name='uq_collection_url'),
+        # Exactly one kind's columns are populated.
+        CheckConstraint(
+            "(item_kind = 'file' AND file_group_id IS NOT NULL AND zim_id IS NULL AND url IS NULL)"
+            " OR (item_kind = 'zim' AND zim_id IS NOT NULL AND zim_entry IS NOT NULL"
+            " AND file_group_id IS NULL AND url IS NULL)"
+            " OR (item_kind = 'url' AND url IS NOT NULL AND file_group_id IS NULL AND zim_id IS NULL)",
+            name='ck_collection_item_kind',
+        ),
     )
 
     def __repr__(self):
-        return f'<CollectionItem collection={self.collection_id} file_group={self.file_group_id} position={self.position}>'
+        return (f'<CollectionItem collection={self.collection_id} kind={self.item_kind} '
+                f'position={self.position}>')
 
     def dict(self) -> dict:
         """Return dictionary representation."""
         d = super(CollectionItem, self).dict()
-        if self.file_group:
+        if self.item_kind == 'file' and self.file_group:
             d['file_group'] = self.file_group.__json__()
+        elif self.item_kind == 'zim' and self.zim:
+            d['zim'] = {'id': self.zim_id, 'entry': self.zim_entry, 'path': str(self.zim.path)}
         return d
+
+    def to_config(self) -> Optional[dict]:
+        """Serialize this item for playlists.yaml.
+
+        Files/Zims are referenced by their media-relative path so they survive a DB rebuild.
+        Returns None if the item cannot currently be represented (e.g. missing relationship).
+        """
+        if self.item_kind == 'file' and self.file_group:
+            try:
+                ref = str(get_relative_to_media_directory(self.file_group.primary_path))
+            except ValueError:
+                ref = str(self.file_group.primary_path)
+            data = {'file': ref}
+        elif self.item_kind == 'zim' and self.zim:
+            try:
+                ref = str(get_relative_to_media_directory(self.zim.path))
+            except ValueError:
+                ref = str(self.zim.path)
+            data = {'zim': ref, 'entry': self.zim_entry}
+        elif self.item_kind == 'url':
+            data = {'url': self.url}
+        else:
+            return None
+        if self.title:
+            data['title'] = self.title
+        return data

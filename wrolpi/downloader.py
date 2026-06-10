@@ -376,16 +376,14 @@ class Download(ModelHelper, Base):  # noqa
         session.delete(self)
         session.commit()
 
-        # Save appropriate config based on collection kind
+        # Save appropriate config based on collection kind.  Channels/domains own their configs;
+        # other kinds have no generic collections config to save.
         if collection_kind == 'channel':
             from modules.videos.lib import save_channels_config
             save_channels_config.activate_switch()
         elif collection_kind == 'domain':
             from modules.archive.lib import save_domains_config
             save_domains_config.activate_switch()
-        elif collection_kind:
-            from wrolpi.collections.config import save_collections_config
-            save_collections_config.activate_switch()
 
         # Save download config again because this download is now removed from the download lists.
         save_downloads_config.activate_switch()

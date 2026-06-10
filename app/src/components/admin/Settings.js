@@ -473,6 +473,7 @@ export function SettingsPage() {
             throttle_on_startup: settings.throttle_on_startup,
             videos_destination: settings.videos_destination,
             zims_destination: settings.zims_destination,
+            playlists_destination: settings.playlists_destination,
             save_ffprobe_json: settings.save_ffprobe_json,
         });
     }, [JSON.stringify(settings)]);
@@ -858,6 +859,19 @@ export function SettingsPage() {
                                     value={state.zims_destination}
                                     disabled={!editSpecialDirectories}
                                     onChange={(e, d) => handleInputChange(e, 'zims_destination', d.value)}
+                                />
+                            </Form.Field>
+                        </GridColumn>
+                    </GridRow>
+                    <GridRow columns={2}>
+                        <GridColumn>
+                            <Form.Field>
+                                <label>Playlists Directory</label>
+                                <Input
+                                    label={mediaDirectoryLabel}
+                                    value={state.playlists_destination}
+                                    disabled={!editSpecialDirectories}
+                                    onChange={(e, d) => handleInputChange(e, 'playlists_destination', d.value)}
                                 />
                             </Form.Field>
                         </GridColumn>

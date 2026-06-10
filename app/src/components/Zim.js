@@ -45,6 +45,7 @@ import {
 } from "./Common";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {TagsSelector} from "../Tags";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import {
     deleteOutdatedZims,
     fetchZims,
@@ -201,10 +202,13 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
             </Modal.Content>
             <Modal.Actions>
                 <Grid>
-                    <Grid.Column mobile={10} tablet={14}>
+                    <Grid.Column mobile={10} tablet={12}>
                         <TagsSelector selectedTagNames={tag_names} onAdd={localAddTag} onRemove={localUntag}/>
                     </Grid.Column>
-                    <Grid.Column width={2}>
+                    <Grid.Column width={4} textAlign='right'>
+                        <AddToPlaylistButton
+                            zim={{zimId, entry: path, title: (title || path).replace(/<[^>]*>/g, '')}}
+                            content={null} title='Add to Playlist'/>
                         <Button color='blue' as='a' href={url} target='_blank' rel='noopener noreferrer'>Open</Button>
                     </Grid.Column>
                 </Grid>

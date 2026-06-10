@@ -53,6 +53,7 @@ const allLinks = [
     {text: 'Docs', to: '/docs', key: 'docs'},
     {text: 'Map', to: '/map', key: 'map'},
     {text: 'Files', to: '/files', key: 'files'},
+    {text: 'Playlists', to: '/playlists', key: 'playlists'},
     {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
     {to: '/more/otp', text: 'One Time Pad', key: 'otp', end: true},

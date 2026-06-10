@@ -1241,6 +1241,10 @@ class FileWorker:
         if is_global_refresh:
             flags.refresh_complete.set()
             flags.global_refresh_active.clear()
+            # After a DB rebuild, playlists.yaml was imported before any files were indexed, so its
+            # file/zim items were skipped.  They are indexed now; re-import to restore them.
+            from wrolpi.collections.config import import_playlists_config
+            import_playlists_config.activate_switch()
 
         # Mark job as complete if tracking
         self._complete_job(task.job_id)

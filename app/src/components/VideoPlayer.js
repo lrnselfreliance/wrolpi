@@ -25,6 +25,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Loader, Segment, Tab} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import {Comment, CommentGroup, Input, Label, Transition} from "semantic-ui-react";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 
@@ -568,6 +569,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                         obeyWROLMode={true}
                         disabled={!videoFile.url}
                     >Refresh</APIButton>
+                    <AddToPlaylistButton fileGroupId={videoFile.id}/>
                 </p>
             </Segment>
 

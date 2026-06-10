@@ -2544,17 +2544,23 @@ def format_html_file(file: pathlib.Path):
 
 def html_screenshot(html: bytes | str) -> bytes:
     """Return a PNG screenshot of the provided HTML."""
+    from wrolpi import cmd  # Avoid circular import.
+
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
     options = webdriver.ChromeOptions()
     options.add_argument('headless')
     options.add_argument('disable-gpu')
     options.add_argument('window-size=1280x720')
 
+    # Use the system chromedriver; Selenium Manager downloads drivers from the internet, and has no binary for
+    # linux/aarch64 (Raspberry Pi).
+    service = webdriver.ChromeService(executable_path=str(cmd.CHROMEDRIVER_BIN)) if cmd.CHROMEDRIVER_BIN else None
+
     with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
         fh.write(html.encode() if isinstance(html, str) else html)
         fh.flush()
 
-        with webdriver.Chrome(options=options) as driver:
+        with webdriver.Chrome(options=options, service=service) as driver:
             driver.get(f'file://{fh.name}')
             driver.set_window_size(1280, 720)
             screenshot = driver.get_screenshot_as_png()

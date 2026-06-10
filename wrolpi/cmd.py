@@ -79,6 +79,9 @@ CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
                  )
+CHROMEDRIVER_BIN = which('chromedriver',
+                         '/usr/bin/chromedriver',  # rpi os / debian
+                         )
 FIREFOX = which('firefox', 'firefox-esr',
                 '/usr/bin/firefox',
                 '/usr/bin/firefox-esr',

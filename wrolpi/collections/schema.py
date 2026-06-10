@@ -13,6 +13,7 @@ class CollectionCreateRequest:
     name: str
     description: Optional[str] = None
     kind: str = 'playlist'
+    tag_name: Optional[str] = None
 
 
 @dataclass

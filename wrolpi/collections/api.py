@@ -68,7 +68,8 @@ async def create_collection_endpoint(request: Request, body: schema.CollectionCr
     session = request.ctx.session
     try:
         collection = lib.create_collection(
-            session, name=body.name, description=body.description, kind=body.kind or 'playlist')
+            session, name=body.name, description=body.description, kind=body.kind or 'playlist',
+            tag_name=body.tag_name)
     except ValidationError as e:
         return json_response({'error': str(e)}, status=HTTPStatus.BAD_REQUEST)
 

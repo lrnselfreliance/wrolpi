@@ -956,6 +956,13 @@ class Collection(ModelHelper, Base):
             except ValueError:
                 # Directory is not relative to media directory, return as-is
                 directory_str = str(self.directory)
+        elif self.kind == 'playlist':
+            # A playlist without an explicit directory lives at the managed location
+            # (<playlists>/<tag>/<name>).  Report that location so the directory is known even
+            # before the sync creates it; the DB keeps None so the sync auto-manages it.
+            from wrolpi.collections.sync import get_playlists_directory, _default_playlist_subdir
+            directory_str = str(get_relative_to_media_directory(
+                _default_playlist_subdir(get_playlists_directory(), self)))
 
         return {
             'id': self.id,

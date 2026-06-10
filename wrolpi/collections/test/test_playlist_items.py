@@ -21,6 +21,71 @@ async def test_create_playlist(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_new_playlist_reports_managed_directory(async_client, test_session):
+    """A new playlist's directory is reported immediately (the managed location), even though the
+    sync has not yet created it on disk and the DB stores None (auto-managed)."""
+    _, response = await async_client.post('/api/collections', json={'name': 'Fire Making'})
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    assert response.json['collection']['directory'] == 'playlists/Fire Making'
+
+    # The DB keeps None so the sync auto-manages the location.
+    collection = test_session.query(Collection).filter_by(name='Fire Making').one()
+    assert collection.directory is None
+
+    # Tagging moves the reported managed location under the tag.
+    cid = response.json['collection']['id']
+    _, response = await async_client.put(f'/api/collections/{cid}', json={'tag_name': 'Survival'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['collection']['directory'] == 'playlists/Survival/Fire Making'
+
+    # The playlist list reports the managed location too.
+    _, response = await async_client.get('/api/collections?kind=playlist')
+    assert response.json['collections'][0]['directory'] == 'playlists/Survival/Fire Making'
+
+
+@pytest.mark.asyncio
+async def test_rename_playlist_round_trips_managed_directory(async_client, test_session):
+    """Renaming while the UI round-trips the displayed (pre-rename) managed directory keeps the
+    playlist auto-managed at its new location, instead of pinning it to the old path."""
+    _, response = await async_client.post('/api/collections', json={'name': 'Old Name'})
+    cid = response.json['collection']['id']
+
+    # The edit form submits the directory it displayed (the old managed location) with the rename.
+    _, response = await async_client.put(f'/api/collections/{cid}', json={
+        'name': 'New Name', 'directory': 'playlists/Old Name'})
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['collection']['name'] == 'New Name'
+    assert response.json['collection']['directory'] == 'playlists/New Name'
+
+    collection = test_session.query(Collection).filter_by(id=cid).one()
+    test_session.refresh(collection)
+    assert collection.directory is None, 'playlist must stay auto-managed'
+
+
+@pytest.mark.asyncio
+async def test_create_playlist_with_initial_tag(async_client, test_session):
+    """A playlist can be created with an initial tag; its managed directory is tag-namespaced."""
+    from wrolpi.tags import Tag
+
+    _, response = await async_client.post('/api/collections',
+                                          json={'name': 'Fire Making', 'tag_name': 'Survival'})
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    assert response.json['collection']['tag_name'] == 'Survival'
+    assert response.json['collection']['directory'] == 'playlists/Survival/Fire Making'
+
+    # The tag was created, and the playlist remains auto-managed (no stored directory).
+    assert test_session.query(Tag).filter_by(name='Survival').one()
+    collection = test_session.query(Collection).filter_by(name='Fire Making').one()
+    assert collection.tag_name == 'Survival'
+    assert collection.directory is None
+
+    # Non-playlist kinds cannot be created with a tag (they need a directory first).
+    _, response = await async_client.post('/api/collections', json={
+        'name': 'example.com', 'kind': 'domain', 'tag_name': 'Survival'})
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_create_playlist_rejects_blank_and_duplicate(async_client, test_session):
     _, response = await async_client.post('/api/collections', json={'name': '   '})
     assert response.status_code == HTTPStatus.BAD_REQUEST

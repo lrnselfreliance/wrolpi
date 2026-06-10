@@ -194,6 +194,8 @@ const ZimSearchEntry = ({zimId, onTag, onUntag, entry}) => {
             <Modal.Content>
                 <div className='preview-fit'>
                     <ZimViewer src={url} style={{
+                        // Override IframeViewer's `fixed` so the iframe stays inside the Modal.
+                        position: 'static',
                         height: '100%', width: '100%', border: 'none',
                         // Use white to avoid iframe displaying with dark-theme.
                         backgroundColor: '#ffffff',

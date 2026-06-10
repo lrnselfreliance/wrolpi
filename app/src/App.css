@@ -160,6 +160,13 @@ input:checked + .slider:before {
     justify-content: center;
 }
 
+/* Fresnel (Media) wraps iframes in a div which would otherwise shrink to the
+   default iframe size; make it fill the preview so the iframe's 100% works. */
+.preview-fit .fresnel-container {
+    width: 100%;
+    height: 100%;
+}
+
 td.file-path {
     cursor: pointer;
 }

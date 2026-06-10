@@ -331,6 +331,7 @@ export async function getSettings() {
             map_destination: content.map_destination,
             nav_color: content.nav_color,
             media_directory: content.media_directory,
+            playlists_destination: content.playlists_destination,
             require_cookies_unlocked: content.require_cookies_unlocked,
             require_media_mounted: content.require_media_mounted,
             save_ffprobe_json: content.save_ffprobe_json,
@@ -2286,9 +2287,10 @@ export async function getPlaylist(playlistId) {
     throw Error(message);
 }
 
-export async function createPlaylist(name, description) {
+export async function createPlaylist(name, description, tagName) {
     // Trailing slash avoids Sanic's 302 redirect on the root POST route (which would drop the body).
-    const response = await apiPost(`${COLLECTIONS_API}/`, {name, description, kind: 'playlist'});
+    const response = await apiPost(`${COLLECTIONS_API}/`,
+        {name, description, tag_name: tagName || null, kind: 'playlist'});
     if (response.ok) {
         return (await response.json())['collection'];
     }

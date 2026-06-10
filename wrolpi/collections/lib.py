@@ -276,6 +276,14 @@ def update_collection(
     """
     collection = Collection.find_by_id(session, collection_id)
 
+    # The managed location before any rename/retag.  The API reports this location for a playlist
+    # whose stored directory is None, so the UI round-trips it back; recognize it below and keep
+    # storing None (auto-managed) instead of freezing the playlist at the pre-rename path.
+    old_default = None
+    if collection.kind == 'playlist':
+        from .sync import get_playlists_directory, _default_playlist_subdir
+        old_default = _default_playlist_subdir(get_playlists_directory(), collection)
+
     # Rename if provided.
     if name is not None:
         name = name.strip()
@@ -333,8 +341,10 @@ def update_collection(
                            _default_playlist_subdir, sync_playlists_directory)
         # A directory equal to the managed tag location is not "custom" -- store None so the sync
         # keeps auto-managing it (future tag changes keep moving the playlist automatically).
-        if collection.directory and \
-                pathlib.Path(collection.directory) == _default_playlist_subdir(get_playlists_directory(), collection):
+        # The location is compared both before (`old_default`) and after this update, so a managed
+        # playlist stays managed when the UI round-trips the displayed directory with a rename.
+        new_default = _default_playlist_subdir(get_playlists_directory(), collection)
+        if collection.directory and pathlib.Path(collection.directory) in (new_default, old_default):
             collection.directory = None
             session.flush()
         # Commit before the cleanup and switch activations so the background sync reads the NEW
@@ -354,8 +364,8 @@ def update_collection(
 
 
 def create_collection(session: Session, name: str, description: Optional[str] = None,
-                      kind: str = 'playlist') -> Collection:
-    """Create a new Collection (defaults to a 'playlist').
+                      kind: str = 'playlist', tag_name: Optional[str] = None) -> Collection:
+    """Create a new Collection (defaults to a 'playlist'), optionally with an initial tag.
 
     Raises:
         ValidationError: if the name is empty/invalid for the kind, or a duplicate exists.
@@ -368,12 +378,21 @@ def create_collection(session: Session, name: str, description: Optional[str] = 
     if not collection_type_registry.validate(kind, name):
         description_msg = collection_type_registry.get_description(kind) or 'Invalid name format'
         raise ValidationError(f'Invalid {kind} name {name!r}. {description_msg}')
+    # Same rule as update_collection: only playlists can be tagged without a directory, and a new
+    # collection never has one yet.
+    if tag_name and kind != 'playlist':
+        raise ValidationError(f'A new {kind} cannot be created with a tag.  Set a directory first.')
 
     existing = session.query(Collection).filter_by(name=name, kind=kind).first()
     if existing:
         raise ValidationError(f'A {kind} named {name!r} already exists')
 
     collection = Collection(name=name, description=description, kind=kind)
+    if tag_name:
+        tag = Tag.get_or_create_tag(session, name=tag_name)
+        # Assign the relationship too so `collection.tag_name` is fresh for serialization.
+        collection.tag = tag
+        collection.tag_id = tag.id
     session.add(collection)
     session.flush([collection])
 

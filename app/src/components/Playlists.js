@@ -36,6 +36,7 @@ import {
     updatePlaylist,
 } from "../api";
 import {ThemeContext} from "../contexts/contexts";
+import {TagsSelector} from "../Tags";
 
 
 const PLAYLIST_COLUMNS = [
@@ -95,6 +96,7 @@ export function PlaylistsPage() {
     const [searchStr, setSearchStr] = useOneQuery('name');
     const [modalOpen, setModalOpen] = useState(false);
     const [name, setName] = useState('');
+    const [tagName, setTagName] = useState(null);
     const searchInputRef = React.useRef();
     const navigate = useNavigate();
 
@@ -102,9 +104,10 @@ export function PlaylistsPage() {
         const trimmed = name.trim();
         if (!trimmed) return;
         try {
-            const playlist = await createPlaylist(trimmed);
+            const playlist = await createPlaylist(trimmed, undefined, tagName);
             toast({type: 'success', title: 'Playlist created', description: trimmed, time: 3000});
             setName('');
+            setTagName(null);
             setModalOpen(false);
             if (playlist && playlist.id) {
                 navigate(`/playlists/${playlist.id}`);
@@ -146,6 +149,19 @@ export function PlaylistsPage() {
                     <label>Name</label>
                     <Input autoFocus placeholder='Playlist name...' value={name}
                            onChange={(e, {value}) => setName(value)}/>
+                </Form.Field>
+                <Form.Field>
+                    <label>
+                        Tag
+                        <InfoPopup content='Optional. A tagged playlist lives under its tag in the
+                            Playlists Directory.'/>
+                    </label>
+                    <TagsSelector
+                        limit={1}
+                        selectedTagNames={tagName ? [tagName] : []}
+                        onAdd={setTagName}
+                        onRemove={() => setTagName(null)}
+                    />
                 </Form.Field>
             </Form>
         </Modal.Content>
@@ -504,8 +520,9 @@ export function PlaylistEditPage() {
                     <Form.Field>
                         <label>
                             Directory
-                            <InfoPopup content='Optional custom directory. When empty, the playlist
-                                lives in the Playlists Directory (under its tag, if tagged).'/>
+                            <InfoPopup content='Where the playlist lives on disk. By default it is
+                                managed automatically in the Playlists Directory (under its tag, if
+                                tagged); choose a different directory to manage it manually.'/>
                         </label>
                         <DirectorySearch
                             value={directory}

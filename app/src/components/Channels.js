@@ -191,7 +191,7 @@ export function ChannelEditPage() {
         type="button"
         size='small'
         onClick={() => setTagEditModalOpen(true)}
-        color='green'
+        color='violet'
         style={{marginTop: '1em'}}
     >Tag</Button>;
 

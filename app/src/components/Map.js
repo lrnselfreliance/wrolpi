@@ -29,6 +29,7 @@ import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
 import {Modal} from "./Theme";
 import MapViewer from "./MapViewer";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import maplibregl from "maplibre-gl";
 import {Protocol} from "pmtiles";
 import layers from "protomaps-themes-base";
@@ -532,6 +533,12 @@ function MapPins() {
             <TableCell>{pin.created}</TableCell>
             <TableCell collapsing>
                 <Button size='tiny' icon='edit' onClick={() => setEditingId(pin.id)}/>
+                <AddToPlaylistButton
+                    size='tiny'
+                    icon='list'
+                    content=''
+                    url={{url: `/map?lat=${pin.lat}&lon=${pin.lon}&z=14`, title: pin.label}}
+                />
                 <APIButton
                     size='tiny'
                     color='red'

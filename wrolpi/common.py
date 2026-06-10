@@ -456,7 +456,7 @@ def get_media_directory() -> Path:
 
 
 DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml', 'inventories.yaml',
-                        'collections.yaml'}
+                        'playlists.yaml'}
 
 
 class ConfigFile:
@@ -809,6 +809,7 @@ class WROLPiConfigValidator:
     map_default_location: dict = None
     map_destination: str = None
     nav_color: str = None
+    playlists_destination: str = None
     require_cookies_unlocked: bool = None
     require_media_mounted: bool = None
     save_ffprobe_json: bool = None
@@ -858,13 +859,13 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if download_cache_config := get_download_cache_config():
         all_configs[download_cache_config.file_name] = download_cache_config
 
-    from wrolpi.collections.config import collections_config as _collections_config
-    if _collections_config:
-        all_configs[_collections_config.file_name] = _collections_config
-
     from modules.map.pins import get_map_pins_config
     if map_pins_config := get_map_pins_config():
         all_configs[map_pins_config.file_name] = map_pins_config
+
+    from wrolpi.collections.config import get_playlists_config
+    if playlists_config := get_playlists_config():
+        all_configs[playlists_config.file_name] = playlists_config
 
     return all_configs
 
@@ -938,15 +939,18 @@ async def import_all_db_configs() -> dict[str, bool]:
         logger.warning(f'Failed to import inventories config: {e}')
         results['inventories'] = False
 
-    # Collections (uses tags for tag_name)
+    # Playlists (kind='playlist' collections; uses tags for tag_name).
+    # NOTE: there is no generic collections config — channels/domains are owned by their own configs
+    # (channels.yaml/domains.yaml), and authors/subjects are re-derived on refresh.  Playlists are
+    # user-curated with no other config home, so they own playlists.yaml.
     try:
-        from wrolpi.collections.config import collections_config as _collections_config
-        _collections_config.import_config()
-        results['collections'] = True
-        logger.debug('collections config imported')
+        from wrolpi.collections.config import playlists_config
+        playlists_config.import_config()
+        results['playlists'] = True
+        logger.debug('playlists config imported')
     except Exception as e:
-        logger.warning(f'Failed to import collections config: {e}')
-        results['collections'] = False
+        logger.warning(f'Failed to import playlists config: {e}')
+        results['playlists'] = False
 
     # Map pins (YAML-only, no DB)
     try:
@@ -989,6 +993,7 @@ class WROLPiConfig(ConfigFile):
         map_default_location=None,
         map_destination='map',
         nav_color='violet',
+        playlists_destination='playlists',
         require_cookies_unlocked=True,
         require_media_mounted=True,
         save_ffprobe_json=True,
@@ -1033,6 +1038,14 @@ class WROLPiConfig(ConfigFile):
             self._config['map_destination'] = self.map_destination or self.default_config['map_destination']
             self._config['videos_destination'] = self.videos_destination or self.default_config['videos_destination']
             self._config['zims_destination'] = self.zims_destination or self.default_config['zims_destination']
+            self._config['playlists_destination'] = \
+                self.playlists_destination or self.default_config['playlists_destination']
+
+            # The playlists directory holds WROLPi-managed hardlinks/stubs; never index it.
+            ignored = list(self._config.get('ignored_directories') or [])
+            if self._config['playlists_destination'] not in ignored:
+                ignored.append(self._config['playlists_destination'])
+                self._config['ignored_directories'] = ignored
 
             self.successful_import = True
         except Exception as e:
@@ -1213,6 +1226,14 @@ class WROLPiConfig(ConfigFile):
     @archive_destination.setter
     def archive_destination(self, value: str):
         self.update({'archive_destination': value})
+
+    @property
+    def playlists_destination(self) -> str:
+        return self._config['playlists_destination']
+
+    @playlists_destination.setter
+    def playlists_destination(self, value: str):
+        self.update({'playlists_destination': value})
 
     @property
     def map_default_location(self) -> dict:

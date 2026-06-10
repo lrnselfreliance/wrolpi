@@ -11,6 +11,7 @@ import {Button, Modal} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
+import {AddToPlaylistButton} from "./AddToPlaylist";
 import {pathDirectory} from "./FileBrowser";
 import {InlineErrorBoundary} from "./ErrorBoundary";
 import {useLocation} from "react-router";
@@ -496,6 +497,9 @@ export function FilePreviewProvider({children}) {
                         {downloadButton}
                         {directoryButton}
                         <ShareButton/>
+                        {previewFile && previewFile['id'] &&
+                            <AddToPlaylistButton fileGroupId={previewFile['id']} content={null} size='small'
+                                                 title='Add to Playlist'/>}
                     </div>
                     <div className='preview-toolbar-tags'>{tagsDisplay}</div>
                     <div className='preview-toolbar-group'>

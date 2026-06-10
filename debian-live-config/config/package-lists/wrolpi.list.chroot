@@ -10,6 +10,7 @@ calibre
 cargo
 catdoc
 chromium
+chromium-driver
 cpufrequtils
 curl
 dosfstools

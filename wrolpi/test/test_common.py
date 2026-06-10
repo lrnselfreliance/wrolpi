@@ -893,6 +893,18 @@ def test_html_screenshot(singlefile_contents_factory):
     assert common.html_screenshot(singlefile_contents_factory())
 
 
+def test_html_screenshot_webdriver_kwargs(singlefile_contents_factory):
+    """Selenium 4.10 removed the `chrome_options` kwarg; `webdriver.Chrome` must be called with `options`."""
+    with mock.patch('wrolpi.common.webdriver.Chrome') as mock_chrome:
+        driver = mock_chrome.return_value.__enter__.return_value
+        driver.get_screenshot_as_png.return_value = b'PNG'
+
+        assert common.html_screenshot(singlefile_contents_factory()) == b'PNG'
+
+    assert mock_chrome.call_args.kwargs.keys() == {'options'}
+    assert isinstance(mock_chrome.call_args.kwargs['options'], common.webdriver.ChromeOptions)
+
+
 @pytest.mark.parametrize('color,expected', [
     ('#ffffff', True),
     ('#FFFFFF', True),

@@ -2554,7 +2554,7 @@ def html_screenshot(html: bytes | str) -> bytes:
         fh.write(html.encode() if isinstance(html, str) else html)
         fh.flush()
 
-        with webdriver.Chrome(chrome_options=options) as driver:
+        with webdriver.Chrome(options=options) as driver:
             driver.get(f'file://{fh.name}')
             driver.set_window_size(1280, 720)
             screenshot = driver.get_screenshot_as_png()

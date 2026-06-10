@@ -894,15 +894,32 @@ def test_html_screenshot(singlefile_contents_factory):
 
 
 def test_html_screenshot_webdriver_kwargs(singlefile_contents_factory):
-    """Selenium 4.10 removed the `chrome_options` kwarg; `webdriver.Chrome` must be called with `options`."""
-    with mock.patch('wrolpi.common.webdriver.Chrome') as mock_chrome:
+    """Selenium 4.10 removed the `chrome_options` kwarg; `webdriver.Chrome` must be called with `options`.
+
+    The system chromedriver must be passed explicitly because Selenium Manager downloads drivers from the
+    internet, and has no binary for linux/aarch64 (Raspberry Pi)."""
+    contents = singlefile_contents_factory()
+
+    with mock.patch('wrolpi.common.webdriver.Chrome') as mock_chrome, \
+            mock.patch('wrolpi.cmd.CHROMEDRIVER_BIN', pathlib.Path('/usr/bin/chromedriver')):
         driver = mock_chrome.return_value.__enter__.return_value
         driver.get_screenshot_as_png.return_value = b'PNG'
 
-        assert common.html_screenshot(singlefile_contents_factory()) == b'PNG'
+        assert common.html_screenshot(contents) == b'PNG'
 
-    assert mock_chrome.call_args.kwargs.keys() == {'options'}
+    assert mock_chrome.call_args.kwargs.keys() == {'options', 'service'}
     assert isinstance(mock_chrome.call_args.kwargs['options'], common.webdriver.ChromeOptions)
+    assert mock_chrome.call_args.kwargs['service'].path == '/usr/bin/chromedriver'
+
+    # Without a system chromedriver (development machines), fall back to Selenium Manager.
+    with mock.patch('wrolpi.common.webdriver.Chrome') as mock_chrome, \
+            mock.patch('wrolpi.cmd.CHROMEDRIVER_BIN', None):
+        driver = mock_chrome.return_value.__enter__.return_value
+        driver.get_screenshot_as_png.return_value = b'PNG'
+
+        assert common.html_screenshot(contents) == b'PNG'
+
+    assert mock_chrome.call_args.kwargs['service'] is None
 
 
 @pytest.mark.parametrize('color,expected', [

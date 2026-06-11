@@ -1156,7 +1156,7 @@ export function ArchiveDownloadForm({
         if (compress_singlefile !== undefined && compress_singlefile !== defaultCompressSinglefile) {
             setDefaultCompressSinglefile(compress_singlefile);
         }
-    }, [form.formData]);
+    }, [form.formData, defaultCompressSinglefile]);
 
     const localOnCancel = (e) => {
         if (e) e.preventDefault();
@@ -1314,7 +1314,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         if (compress_singlefile !== undefined && compress_singlefile !== defaultCompressSinglefile) {
             setDefaultCompressSinglefile(compress_singlefile);
         }
-    }, [form.formData]);
+    }, [form.formData, defaultCompressSinglefile]);
 
     // Default to "new" download buttons.
     actions = actions || DownloadFormButtons;

@@ -665,8 +665,8 @@ async def request_archive(url: str, singlefile: str = None, compress: bool = Fal
     # Decode and decompress.
     singlefile = base64.b64decode(singlefile)
     singlefile = gzip.decompress(singlefile)
+    # A compressed (SingleFileZ) singlefile is binary and must stay bytes; only decode regular singlefiles.
     if not is_compressed_singlefile(singlefile):
-        # A compressed (SingleFileZ) singlefile is binary and must stay bytes.
         singlefile = singlefile.decode()
 
     if not screenshot:

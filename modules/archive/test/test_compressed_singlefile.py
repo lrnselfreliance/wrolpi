@@ -4,7 +4,6 @@ A compressed singlefile is a self-extracting HTML file which is also a valid ZIP
 uncompressed page as index.html.  Only the singlefile .html is compressed; readability files are
 always written uncompressed.
 """
-import io
 import pathlib
 import zipfile
 
@@ -27,28 +26,8 @@ from wrolpi.files.models import FileGroup
 from wrolpi.schema import DownloadRequest
 
 
-def make_fake_compressed_singlefile(url: str = 'https://example.com', title: str = 'compressed title') -> bytes:
-    """Mimic the file created by `single-file --compress-content`: an HTML prelude containing the
-    SingleFile comment header, followed by a ZIP containing the uncompressed page as index.html."""
-    prelude = '<!DOCTYPE html> <html data-sfz><!--\n' \
-              ' Page saved with SingleFile \n' \
-              f' url: {url} \n' \
-              ' saved date: Thu Jun 11 2026 22:49:39 GMT+0000 (Coordinated Universal Time)\n' \
-              '--><meta charset=windows-1252><title></title>'
-    index_html = '<html><!--\n Page saved with SingleFile \n' \
-                 f' url: {url} \n' \
-                 f'-->\n<head><title>{title}</title></head><body>test compressed singlefile</body></html>'
-    buf = io.BytesIO()
-    buf.write(prelude.encode())
-    # Deflate like the real single-file CLI; the page must not be readable as plain text.
-    with zipfile.ZipFile(buf, 'a', compression=zipfile.ZIP_DEFLATED) as zip_:
-        zip_.writestr('index.html', index_html)
-        zip_.writestr('manifest.json', '{}')
-    return buf.getvalue()
-
-
-def test_is_compressed_singlefile(singlefile_contents_factory):
-    compressed = make_fake_compressed_singlefile()
+def test_is_compressed_singlefile(compressed_singlefile_factory, singlefile_contents_factory):
+    compressed = compressed_singlefile_factory()
     assert is_compressed_singlefile(compressed) is True
 
     # A regular singlefile is not compressed.
@@ -62,9 +41,9 @@ def test_is_compressed_singlefile(singlefile_contents_factory):
     assert b'<title>compressed title</title>' in index
 
 
-def test_get_url_from_compressed_singlefile():
+def test_get_url_from_compressed_singlefile(compressed_singlefile_factory):
     """The URL can be extracted from the plain-text prelude despite the binary ZIP tail."""
-    compressed = make_fake_compressed_singlefile(url='https://wrolpi.org/some-article')
+    compressed = compressed_singlefile_factory(url='https://wrolpi.org/some-article')
     assert get_url_from_singlefile(compressed) == 'https://wrolpi.org/some-article'
 
 
@@ -75,27 +54,28 @@ def test_get_url_from_compressed_singlefile():
         ('foo.txt', False),
     ]
 )
-def test_is_singlefile_file_compressed(name, expected, make_files_structure):
+def test_is_singlefile_file_compressed(name, expected, make_files_structure, compressed_singlefile_factory):
     """A compressed singlefile is recognized even though it has a binary ZIP tail."""
     path, = make_files_structure([name])
-    path.write_bytes(make_fake_compressed_singlefile())
+    path.write_bytes(compressed_singlefile_factory())
     assert is_singlefile_file(path) == expected
 
 
-def test_compressed_singlefile_mimetype(make_files_structure):
+def test_compressed_singlefile_mimetype(make_files_structure, compressed_singlefile_factory):
     """A compressed singlefile must be `text/html` so the archive modeler finds it."""
     # `magic` reports application/octet-stream for the real (binary) compressed singlefile.
     assert _mimetype_suffix_map(pathlib.Path('foo.html'), 'application/octet-stream') == 'text/html'
 
     path, = make_files_structure(['archive/2000-01-01-00-00-00_compressed.html'])
-    path.write_bytes(make_fake_compressed_singlefile())
+    path.write_bytes(compressed_singlefile_factory())
     assert get_mimetype(path) == 'text/html'
 
 
-def test_write_archive_files_compressed(test_directory, test_session, image_bytes_factory):
+def test_write_archive_files_compressed(test_directory, test_session, image_bytes_factory,
+                                        compressed_singlefile_factory):
     """The compressed singlefile is written verbatim (prettifying would corrupt the ZIP);
     readability files are written uncompressed."""
-    compressed = make_fake_compressed_singlefile()
+    compressed = compressed_singlefile_factory()
     readability = dict(content='<html>readability content</html>', textContent='readability text', title='a title')
     destination = test_directory / 'archive/example.com'
     destination.mkdir(parents=True)
@@ -115,9 +95,9 @@ def test_write_archive_files_compressed(test_directory, test_session, image_byte
     assert 'readability text' in readability_txt_path.read_text()
 
 
-def test_write_archive_files_compressed_title_fallback(test_directory, test_session):
+def test_write_archive_files_compressed_title_fallback(test_directory, test_session, compressed_singlefile_factory):
     """Without a readability title, the title comes from the ZIP's index.html."""
-    compressed = make_fake_compressed_singlefile(title='the fallback title')
+    compressed = compressed_singlefile_factory(title='the fallback title')
     destination = test_directory / 'archive/example.com'
     destination.mkdir(parents=True)
 
@@ -129,10 +109,10 @@ def test_write_archive_files_compressed_title_fallback(test_directory, test_sess
 
 
 @pytest.mark.asyncio
-async def test_execute_download_compressed(test_session, test_directory, monkeypatch):
+async def test_execute_download_compressed(test_session, test_directory, monkeypatch, compressed_singlefile_factory):
     """The compress_singlefile setting is forwarded to the archive service, and the compressed
     bytes returned are written to disk unchanged."""
-    compressed = make_fake_compressed_singlefile()
+    compressed = compressed_singlefile_factory()
     _, readability, screenshot = make_fake_archive_result()
     request_archive_kwargs = {}
 
@@ -158,13 +138,14 @@ async def test_execute_download_compressed(test_session, test_directory, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_model_archive_compressed(async_client, test_session, test_directory, make_files_structure):
+async def test_model_archive_compressed(async_client, test_session, test_directory, make_files_structure,
+                                        compressed_singlefile_factory):
     """A compressed singlefile on disk (without readability files) can be modeled as an Archive;
     the title and URL come from the compressed file itself.
 
     async_client is required because get_or_create_domain_collection activates a Sanic switch."""
     path, = make_files_structure(['archive/2000-01-01-00-00-00_compressed.html'])
-    path.write_bytes(make_fake_compressed_singlefile(url='https://example.com/article', title='compressed title'))
+    path.write_bytes(compressed_singlefile_factory(url='https://example.com/article', title='compressed title'))
 
     file_group = FileGroup.from_paths(test_session, path)
     test_session.flush()

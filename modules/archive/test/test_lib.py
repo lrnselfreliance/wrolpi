@@ -1161,7 +1161,7 @@ async def test_archive_download_uses_domain_collection_directory(async_client, t
     # Mock request_archive to return fake archive data
     singlefile, readability, screenshot = make_fake_archive_result()
 
-    async def mock_request_archive(url):
+    async def mock_request_archive(url, compress=False):
         return singlefile, readability, screenshot
 
     # Patch in both lib and archive module (imported at module level)
@@ -1223,7 +1223,7 @@ async def test_archive_download_explicit_destination_overrides_domain_collection
     # Mock request_archive to return fake archive data
     singlefile, readability, screenshot = make_fake_archive_result()
 
-    async def mock_request_archive(url):
+    async def mock_request_archive(url, compress=False):
         return singlefile, readability, screenshot
 
     # Patch in both lib and archive module (imported at module level)

@@ -504,6 +504,22 @@ function AdvancedVideoSettings({form, isVideoLevel = false, isConfigLoaded = tru
     </Accordion>
 }
 
+export function CompressSinglefileToggle({form}) {
+    return <>
+        <InfoHeader
+            headerSize='h4'
+            headerContent='Compress'
+            popupContent='Create a compressed, self-extracting (SingleFileZ) archive.  The HTML file is smaller, but not
+             human-readable.  Readability files are never compressed.'
+        />
+        <ToggleForm
+            form={form}
+            name='compress_singlefile'
+            path='settings.compress_singlefile'
+        />
+    </>
+}
+
 function AdvancedDownloadSettings({form}) {
     const [active, setActive] = React.useState(false);
 
@@ -1096,6 +1112,9 @@ export function ArchiveDownloadForm({
                                     }) {
     const [showMessage, setShowMessage] = React.useState(false);
 
+    // Remember the user's compression choice between downloads.
+    const [defaultCompressSinglefile, setDefaultCompressSinglefile] = useLocalStorage('compress_singlefile', false);
+
     const submitter = propSubmitter || (async (formData) => {
         const downloadData = {
             downloader: formData.downloader,
@@ -1112,6 +1131,7 @@ export function ArchiveDownloadForm({
         tag_names: [],
         settings: {
             skip_already_downloaded: false,
+            compress_singlefile: defaultCompressSinglefile,
         },
     };
 
@@ -1129,6 +1149,14 @@ export function ArchiveDownloadForm({
         clearOnSuccess: !propOnSuccess,
         onSuccess,
     });
+
+    // Persist the user's compression choice in local storage.
+    React.useEffect(() => {
+        const {compress_singlefile} = form.formData.settings;
+        if (compress_singlefile !== undefined && compress_singlefile !== defaultCompressSinglefile) {
+            setDefaultCompressSinglefile(compress_singlefile);
+        }
+    }, [form.formData, defaultCompressSinglefile]);
 
     const localOnCancel = (e) => {
         if (e) e.preventDefault();
@@ -1158,6 +1186,11 @@ export function ArchiveDownloadForm({
             </Grid.Row>
             <Grid.Row>
                 <Grid.Column>
+                    <CompressSinglefileToggle form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
                     <AdvancedDownloadSettings form={form}/>
                 </Grid.Column>
             </Grid.Row>
@@ -1179,6 +1212,8 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
     const [userChangedResolutions, setUserChangedResolutions] = React.useState(false);
 
     const [defaultVideoFormat, setDefaultVideoFormat] = useLocalStorage('video_format', defaultVideoFormatOption);
+    // Remember the user's compression choice between downloads.
+    const [defaultCompressSinglefile, setDefaultCompressSinglefile] = useLocalStorage('compress_singlefile', false);
 
     submitter = submitter || (async (formData) => {
         const downloadData = {
@@ -1202,6 +1237,7 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         frequency: weeklyOption.value,
         sub_downloader: null,
         settings: {
+            compress_singlefile: defaultCompressSinglefile,
             excluded_urls: null,
             title_exclude: null,
             title_include: null,
@@ -1272,6 +1308,14 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
         }
     }, [form.formData]);
 
+    // Persist the user's compression choice in local storage.
+    React.useEffect(() => {
+        const {compress_singlefile} = form.formData.settings;
+        if (compress_singlefile !== undefined && compress_singlefile !== defaultCompressSinglefile) {
+            setDefaultCompressSinglefile(compress_singlefile);
+        }
+    }, [form.formData, defaultCompressSinglefile]);
+
     // Default to "new" download buttons.
     actions = actions || DownloadFormButtons;
     const actionsElm = actions({onDelete, onCancel, form});
@@ -1333,11 +1377,18 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
             </Grid.Row>
         </>;
     } else if (form.formData.sub_downloader === Downloaders.Archive) {
-        downloaderRows = <Grid.Row>
-            <Grid.Column>
-                <ExcludedUrls form={form}/>
-            </Grid.Column>
-        </Grid.Row>;
+        downloaderRows = <>
+            <Grid.Row>
+                <Grid.Column>
+                    <ExcludedUrls form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+            <Grid.Row>
+                <Grid.Column>
+                    <CompressSinglefileToggle form={form}/>
+                </Grid.Column>
+            </Grid.Row>
+        </>;
     }
 
     return <Form>

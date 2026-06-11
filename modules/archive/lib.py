@@ -1,11 +1,13 @@
 import base64
 import gzip
+import io
 import json
 import os
 import pathlib
 import re
 import shlex
 import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from json import JSONDecodeError
@@ -630,11 +632,12 @@ def get_new_archive_files(url: str, title: Optional[str], destination: pathlib.P
 ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
 
 
-async def request_archive(url: str, singlefile: str = None) -> Tuple[str, Optional[dict], Optional[str]]:
+async def request_archive(url: str, singlefile: str = None, compress: bool = False) \
+        -> Tuple[str | bytes, Optional[dict], Optional[str]]:
     """Send a request to the archive service to archive the URL."""
     logger.info(f'Sending archive request to archive service: {url}')
 
-    data = dict(url=url, singlefile=singlefile)
+    data = dict(url=url, singlefile=singlefile, compress=compress)
     try:
         async with aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT) as response:
             status = response.status
@@ -662,7 +665,9 @@ async def request_archive(url: str, singlefile: str = None) -> Tuple[str, Option
     # Decode and decompress.
     singlefile = base64.b64decode(singlefile)
     singlefile = gzip.decompress(singlefile)
-    singlefile = singlefile.decode()
+    # A compressed (SingleFileZ) singlefile is binary and must stay bytes; only decode regular singlefiles.
+    if not is_compressed_singlefile(singlefile):
+        singlefile = singlefile.decode()
 
     if not screenshot:
         logger.info(f'Failed to get screenshot for {url=}')
@@ -717,20 +722,23 @@ class WrittenArchiveFiles:
     paths: List[pathlib.Path]
 
 
-def write_archive_files(url: str, singlefile: str, readability: Optional[dict],
+def write_archive_files(url: str, singlefile: str | bytes, readability: Optional[dict],
                         screenshot: Optional[bytes],
                         destination: Optional[pathlib.Path] = None) -> WrittenArchiveFiles:
     """Pure I/O: write the singlefile/readability/screenshot/json files to disk.
 
     Returns the URL and the list of paths to register, leaving DB work to register_archive.
     """
+    compressed = isinstance(singlefile, bytes) and is_compressed_singlefile(singlefile)
+
     readability = readability.copy() if readability else readability
     # First try to get the title from Readability.
     title = readability.get('title') if readability else None
 
     if not title and singlefile:
-        # Try to get the title ourselves from the HTML.
-        title = get_title_from_html(singlefile, url=url)
+        # Try to get the title ourselves from the HTML.  A compressed singlefile contains the
+        # uncompressed page as index.html.
+        title = get_title_from_html(get_compressed_singlefile_index(singlefile) if compressed else singlefile, url=url)
         if readability:
             # Readability could not find title, lets use ours.
             readability['title'] = title
@@ -751,8 +759,12 @@ def write_archive_files(url: str, singlefile: str, readability: Optional[dict],
         archive_files.readability_txt = archive_files.readability = None
 
     # Store the single-file HTML in its own file.
-    singlefile = format_html_string(singlefile)
-    archive_files.singlefile.write_text(singlefile)
+    if compressed:
+        # A compressed (SingleFileZ) singlefile is a binary ZIP; prettifying would corrupt it.
+        archive_files.singlefile.write_bytes(singlefile)
+    else:
+        singlefile = format_html_string(singlefile)
+        archive_files.singlefile.write_text(singlefile)
 
     if screenshot:
         archive_files.screenshot.write_bytes(screenshot)
@@ -992,10 +1004,41 @@ def link_domain_and_downloads(session: Session):
 
 SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')
 
+COMPRESSED_SINGLEFILE_INDEX = 'index.html'
+
+
+def is_compressed_singlefile(singlefile: bytes) -> bool:
+    """A compressed (SingleFileZ) singlefile is a self-extracting HTML file which is also a valid ZIP
+    containing the uncompressed page as index.html."""
+    buf = io.BytesIO(singlefile)
+    if not zipfile.is_zipfile(buf):
+        return False
+    try:
+        with zipfile.ZipFile(buf) as zip_:
+            return COMPRESSED_SINGLEFILE_INDEX in zip_.namelist()
+    except zipfile.BadZipFile:
+        return False
+
+
+def get_compressed_singlefile_index(singlefile: bytes) -> bytes:
+    """Extract the uncompressed page (index.html) from a compressed (SingleFileZ) singlefile."""
+    with zipfile.ZipFile(io.BytesIO(singlefile)) as zip_:
+        return zip_.read(COMPRESSED_SINGLEFILE_INDEX)
+
+
+def read_singlefile_html(path: pathlib.Path) -> bytes:
+    """Read the page HTML of the singlefile at `path`; extract the uncompressed page when the
+    singlefile is compressed (SingleFileZ)."""
+    contents = path.read_bytes()
+    if is_compressed_singlefile(contents):
+        return get_compressed_singlefile_index(contents)
+    return contents
+
 
 def get_url_from_singlefile(html: bytes | str) -> str:
     """Extract URL from SingleFile contents."""
-    html = html.decode() if isinstance(html, bytes) else html
+    # Ignore decode errors; a compressed singlefile has a plain-text prelude but a binary ZIP tail.
+    html = html.decode(errors='ignore') if isinstance(html, bytes) else html
     if SINGLEFILE_HEADER not in html:
         raise RuntimeError(f'Not a singlefile!')
 
@@ -1185,9 +1228,10 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
     if ARCHIVE_MATCHER.match(path.name):
         # A file name matching exactly the Archive format from WROLPi should always be an Archive.
         return True
-    with path.open('rt') as fh:
+    with path.open('rb') as fh:
         # Lastly, try to read the header of this HTML file.  Read a large part of the head because URLs can be long.
-        header = fh.read(1000)
+        # Read bytes because a compressed (SingleFileZ) singlefile has a binary ZIP tail.
+        header = fh.read(1000).decode(errors='ignore')
         if SINGLEFILE_HEADER in header:
             return True
     return False
@@ -1463,24 +1507,30 @@ async def extract_singlefile_artifacts(singlefile: bytes) -> SinglefileArtifacts
     url = get_url_from_singlefile(singlefile)
     singlefile = singlefile.encode() if isinstance(singlefile, str) else singlefile
 
+    # A compressed (SingleFileZ) singlefile contains the uncompressed page as index.html; use that
+    # for readability and screenshot, but keep the compressed bytes as the singlefile.
+    compressed = is_compressed_singlefile(singlefile)
+    extractable = get_compressed_singlefile_index(singlefile) if compressed else singlefile
+
     if DOCKERIZED:
         # Perform the archive in the Archive docker container.  (Typically in the development environment).
         encoded = base64.b64encode(singlefile).decode()
         logger.debug(f'extract_singlefile_artifacts sending to archive service: {url}')
-        singlefile, readability, screenshot = await request_archive(url, singlefile=encoded)
+        singlefile, readability, screenshot = await request_archive(url, singlefile=encoded, compress=compressed)
+        singlefile = singlefile.encode() if isinstance(singlefile, str) else singlefile
     else:
         # JSON from readability-extractor
         readability = dict()
         try:
             logger.debug(f'extract_singlefile_artifacts extracting readability: {url}')
-            readability = await html_to_readability(singlefile, url)
+            readability = await html_to_readability(extractable, url)
         except RuntimeError as e:
             logger.error(f'Failed to extract readability from: {url}', exc_info=e)
 
         screenshot = None
         try:
             logger.debug(f'extract_singlefile_artifacts creating screenshot: {url}')
-            screenshot = html_screenshot(singlefile)
+            screenshot = html_screenshot(extractable)
         except Exception as e:
             logger.error(f'Failed to extract screenshot from: {url}', exc_info=e)
 
@@ -1620,6 +1670,8 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
     else:
         logger.debug(f'Generating screenshot locally for Archive {archive_id}')
         singlefile_contents = singlefile_path.read_bytes()
+        if is_compressed_singlefile(singlefile_contents):
+            singlefile_contents = get_compressed_singlefile_index(singlefile_contents)
         screenshot_bytes = html_screenshot(singlefile_contents)
 
     if not screenshot_bytes:

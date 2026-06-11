@@ -1,6 +1,8 @@
 import datetime
+import io
 import json
 import pathlib
+import zipfile
 from typing import List
 from uuid import uuid4
 
@@ -99,5 +101,30 @@ def archive_factory(test_session, archive_directory, make_files_structure, image
             archive.add_tag(test_session, tag_name)
 
         return archive
+
+    return _
+
+
+@pytest.fixture
+def compressed_singlefile_factory():
+    """Mimic the file created by `single-file --compress-content`: an HTML prelude containing the
+    SingleFile comment header, followed by a ZIP containing the uncompressed page as index.html."""
+
+    def _(url: str = 'https://example.com', title: str = 'compressed title') -> bytes:
+        prelude = '<!DOCTYPE html> <html data-sfz><!--\n' \
+                  ' Page saved with SingleFile \n' \
+                  f' url: {url} \n' \
+                  ' saved date: Thu Jun 11 2026 22:49:39 GMT+0000 (Coordinated Universal Time)\n' \
+                  '--><meta charset=windows-1252><title></title>'
+        index_html = '<html><!--\n Page saved with SingleFile \n' \
+                     f' url: {url} \n' \
+                     f'-->\n<head><title>{title}</title></head><body>test compressed singlefile</body></html>'
+        buf = io.BytesIO()
+        buf.write(prelude.encode())
+        # Deflate like the real single-file CLI; the page must not be readable as plain text.
+        with zipfile.ZipFile(buf, 'a', compression=zipfile.ZIP_DEFLATED) as zip_:
+            zip_.writestr('index.html', index_html)
+            zip_.writestr('manifest.json', '{}')
+        return buf.getvalue()
 
     return _

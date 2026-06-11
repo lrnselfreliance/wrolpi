@@ -2230,6 +2230,9 @@ class RSSDownloader(Downloader):
         for key in CHANNEL_INHERITABLE_SETTINGS:
             if key in settings:
                 next_download_settings[key] = settings[key]
+        # Pass compression on to child archive downloads.
+        if 'compress_singlefile' in settings:
+            next_download_settings['compress_singlefile'] = settings['compress_singlefile']
         # Use download.destination column (settings['destination'] is legacy)
         if download.destination:
             next_download_settings['destination'] = str(download.destination)

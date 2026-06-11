@@ -303,8 +303,9 @@ class Archive(Base, ModelHelper):
             # This data has already been read.
             return
 
-        with path.open('rt') as fh:
-            head = fh.read(1000)
+        with path.open('rb') as fh:
+            # Read bytes because a compressed (SingleFileZ) singlefile has a binary ZIP tail.
+            head = fh.read(1000).decode(errors='ignore')
             if 'Page saved with SingleFile' not in head:
                 logger.error(f'Could not find SingleFile header in {self}')
                 return
@@ -342,14 +343,16 @@ class Archive(Base, ModelHelper):
 
     def apply_singlefile_title(self):
         """Get the title from the Singlefile, if it's missing."""
+        # Local import to avoid circular import within archive module
+        from modules.archive import lib
         if self.singlefile_path and not self.file_group.title:
-            self.file_group.title = get_title_from_html(self.singlefile_path.read_text())
+            self.file_group.title = get_title_from_html(lib.read_singlefile_html(self.singlefile_path))
 
     def apply_metadata(self):
         """Read and apply <meta> (and more) data from the Singlefile HTML."""
         # Local import to avoid circular import within archive module
         from modules.archive import lib
-        contents = self.singlefile_path.read_bytes()
+        contents = lib.read_singlefile_html(self.singlefile_path)
 
         metadata = lib.parse_article_html_metadata(contents)
         if metadata.author:

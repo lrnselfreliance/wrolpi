@@ -80,8 +80,9 @@ class ArchiveDownloader(Downloader, ABC):
                                download: Download = None) -> ExecutedArchive:
         """Run the archive container or local singlefile + readability/screenshot extraction,
         then write the artifacts to disk.  No DB."""
+        compress = bool(prepared.settings.get('compress_singlefile'))
         if DOCKERIZED or PYTEST:
-            singlefile, readability, screenshot = await request_archive(prepared.url)
+            singlefile, readability, screenshot = await request_archive(prepared.url, compress=compress)
             artifacts = SinglefileArtifacts(url=prepared.url, singlefile=singlefile,
                                             readability=readability, screenshot=screenshot)
         else:
@@ -143,6 +144,8 @@ class ArchiveDownloader(Downloader, ABC):
                '--user-agent', user_agent,
                '--dump-content',
                '--load-deferred-images-dispatch-scroll-event',
+               # Create a compressed (SingleFileZ) self-extracting HTML file.
+               *(('--compress-content',) if prepared.settings.get('compress_singlefile') else ()),
                prepared.url,
                )
         cwd = pathlib.Path('/home/wrolpi')
@@ -153,7 +156,8 @@ class ArchiveDownloader(Downloader, ABC):
                                            cmd, cwd, ctx=ctx)
 
         stderr = result.stderr.decode()
-        log_output = stderr or result.stdout.decode() or 'No stderr or stdout!'
+        # stdout may be a binary ZIP when --compress-content is used.
+        log_output = stderr or result.stdout.decode(errors='replace') or 'No stderr or stdout!'
 
         if result.return_code != 0:
             e = ChildProcessError(log_output[:1000])
@@ -244,7 +248,7 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
         if readability_json_path:
             title = get_title(readability_json_path)
         if not title:
-            title = get_title_from_html(singlefile_path.read_text())
+            title = get_title_from_html(lib.read_singlefile_html(singlefile_path))
 
         contents = None
         if readability_txt_path:

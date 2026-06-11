@@ -5,6 +5,7 @@ This file is a simple Python/Sanic wrapper around the single-file CLI command.
 import asyncio
 import base64
 import gzip
+import io
 import json
 import logging
 import os.path
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import zipfile
 from json import JSONDecodeError
 
 from sanic import Sanic, response
@@ -83,15 +85,17 @@ async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: 
         raise TimeoutError(f"Command '{cmd}' timed out after {timeout} seconds")
 
 
-async def call_single_file(url) -> bytes:
+async def call_single_file(url, compress: bool = False) -> bytes:
     """
     Call the CLI command for SingleFile.
 
     See https://github.com/gildas-lormeau/SingleFile
     """
     logger.info(f'archiving {url}')
+    # --compress-content creates a compressed (SingleFileZ) self-extracting HTML file.
     cmd = f'{SINGLEFILE_PATH}' \
           r' --dump-content ' \
+          f'{" --compress-content " if compress else ""}' \
           f' "{url}"'
     logger.debug(f'archive cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
@@ -152,6 +156,27 @@ async def take_screenshot(url: str) -> bytes:
         return png
 
 
+def extract_compressed_singlefile(singlefile: bytes, tmp_dir: str) -> str:
+    """A compressed (SingleFileZ) singlefile is also a valid ZIP containing the uncompressed page as
+    index.html (plus its resources).  Extract it so readability/screenshot can use the real HTML.
+
+    Returns the path to the extracted index.html, or an empty string if the singlefile is not compressed.
+    """
+    buf = io.BytesIO(singlefile)
+    if not zipfile.is_zipfile(buf):
+        return ''
+    try:
+        with zipfile.ZipFile(buf) as zip_:
+            if 'index.html' not in zip_.namelist():
+                return ''
+            extracted = pathlib.Path(tmp_dir) / 'extracted'
+            extracted.mkdir(exist_ok=True)
+            zip_.extractall(extracted)
+            return str(extracted / 'index.html')
+    except zipfile.BadZipFile:
+        return ''
+
+
 def prepare_bytes(b: bytes) -> str:
     """
     Compress and encode bytes for smaller response.
@@ -181,16 +206,19 @@ async def post_screenshot(request: Request):
 
         # Write singlefile to temp file and screenshot it
         # Use html suffix so chrome screenshot recognizes it as an HTML file
-        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
-            fh.write(singlefile)
-            fh.flush()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            singlefile_path = pathlib.Path(tmp_dir) / 'singlefile.html'
+            singlefile_path.write_bytes(singlefile)
+
+            # A compressed (SingleFileZ) singlefile must be extracted before it can be screenshot.
+            extractable = extract_compressed_singlefile(singlefile, tmp_dir) or str(singlefile_path)
 
             screenshot = None
             try:
                 # Screenshot the local singlefile
-                screenshot = await take_screenshot(f'file://{fh.name}')
+                screenshot = await take_screenshot(f'file://{extractable}')
             except Exception as e:
-                logger.error(f'Failed to take screenshot of {fh.name}', exc_info=e)
+                logger.error(f'Failed to take screenshot of {extractable}', exc_info=e)
 
             # Fall back to URL if local screenshot failed
             if not screenshot:
@@ -225,17 +253,23 @@ async def post_archive(request: Request):
         # May have been passed the singlefile contents, do the extractions and return.
         singlefile = request.json.get('singlefile')
         singlefile = base64.b64decode(singlefile) if singlefile else None
+        compress = bool(request.json.get('compress'))
 
         # Use provided singlefile, or fetch and create from the internet.
-        singlefile = singlefile or await call_single_file(url)
+        singlefile = singlefile or await call_single_file(url, compress=compress)
 
         # Use html suffix so chrome screenshot recognizes it as an HTML file.
-        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
-            fh.write(singlefile)
-            fh.flush()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            singlefile_path = pathlib.Path(tmp_dir) / 'singlefile.html'
+            singlefile_path.write_bytes(singlefile)
+
+            # A compressed (SingleFileZ) singlefile contains the uncompressed page; readability and
+            # screenshot must use the extracted index.html.
+            extractable = extract_compressed_singlefile(singlefile, tmp_dir) or str(singlefile_path)
+
             readability = None
             try:
-                readability = await extract_readability(fh.name, url)
+                readability = await extract_readability(extractable, url)
             except Exception as e:
                 # Readability had error, but its is not required.
                 logger.error(f'Failed to get readability', exc_info=e)
@@ -243,9 +277,9 @@ async def post_archive(request: Request):
             screenshot = None
             try:
                 # Screenshot the local singlefile, if that fails try the URL.
-                screenshot = await take_screenshot(f'file://{fh.name}')
+                screenshot = await take_screenshot(f'file://{extractable}')
             except Exception as e:
-                logger.error(f'Failed to take screenshot of {fh.name}', exc_info=e)
+                logger.error(f'Failed to take screenshot of {extractable}', exc_info=e)
 
             if not screenshot:
                 logger.warning(f'Failed to screenshot local singlefile attempting to screenshot: {url}')

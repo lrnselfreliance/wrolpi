@@ -384,6 +384,9 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'model/3mf'
         if suffix.endswith('.mp4'):
             return 'video/mp4'
+        if suffix.endswith('.html') or suffix.endswith('.htm'):
+            # Compressed (SingleFileZ) singlefiles are HTML with a binary ZIP tail.
+            return 'text/html'
     if suffix.endswith('.hgt'):
         return 'application/octet-stream'
     if mimetype == 'text/plain':
@@ -414,6 +417,9 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     if mimetype == 'application/x-subrip':
         # Fallback to old mimetype.
         return 'text/srt'
+    if mimetype == 'application/zip' and (suffix == '.html' or suffix == '.htm'):
+        # Compressed (SingleFileZ) singlefiles are HTML with a binary ZIP tail.
+        return 'text/html'
     if mimetype == 'application/zip' and suffix == '.docx':
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     if mimetype == 'application/zip' and suffix == '.cbz':

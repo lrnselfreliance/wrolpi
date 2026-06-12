@@ -99,27 +99,35 @@ async def test_execute_cancels_via_ctx(test_session, test_directory, monkeypatch
     assert 'cancel' in (result.error or '').lower()
 
 
-def make_process_runner_recorder(singlefile: bytes):
+def make_process_runner_recorder(singlefile: bytes, compressed: bytes = None):
     """Stub Downloader.process_runner: record the call, write the singlefile to the output file
-    (the last argument of the command, like single-file does), return a successful CommandResult."""
+    (the last argument of the command, like single-file does), return a successful CommandResult.
+
+    Capture runs (no --compress-content) write `singlefile`; conversion runs write `compressed`
+    (or nothing, when compressed is None, to simulate a failed conversion)."""
     from wrolpi.cmd import CommandResult
     calls = []
 
     async def process_runner(download, cmd, cwd, **kwargs):
         calls.append(dict(cmd=cmd, cwd=cwd, **kwargs))
-        pathlib.Path(cmd[-1]).write_bytes(singlefile)
+        if '--compress-content' not in cmd:
+            pathlib.Path(cmd[-1]).write_bytes(singlefile)
+        elif compressed is not None:
+            pathlib.Path(cmd[-1]).write_bytes(compressed)
         return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
 
     return process_runner, calls
 
 
 @pytest.mark.asyncio
-async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch):
+async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch, compressed_singlefile_factory):
     """single-file is run under Deno (it is designed for it; under node it cannot reach the
-    browser CDP on IPv6-enabled hosts and never exits)."""
+    browser CDP on IPv6-enabled hosts and never exits).  The page is captured uncompressed,
+    then converted to a compressed (SingleFileZ) file with a second local single-file run."""
     import modules.archive
     singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
-    process_runner, calls = make_process_runner_recorder(singlefile)
+    compressed = compressed_singlefile_factory()
+    process_runner, calls = make_process_runner_recorder(singlefile, compressed)
     monkeypatch.setattr(modules.archive, 'DENO_BIN', '/usr/local/bin/deno')
     monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT',
                         '/usr/local/lib/node_modules/single-file-cli/single-file')
@@ -128,30 +136,63 @@ async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch
 
     prepared = PreparedArchive(url='https://example.com', destination=None,
                                settings={'compress_singlefile': True})
-    result = await archive_downloader.do_singlefile(prepared, make_test_ctx())
+    result, page_html = await archive_downloader.do_singlefile(prepared, make_test_ctx())
 
-    assert result == singlefile
-    call, = calls
-    cmd = call['cmd']
+    # The compressed file is stored; the uncompressed page is used for readability/screenshot.
+    assert result == compressed
+    assert page_html == singlefile
+
+    capture, convert = calls
+    cmd = capture['cmd']
     assert cmd[2:9] == ('/usr/local/bin/deno', 'run', '--node-modules-dir=manual',
                         '--allow-read', '--allow-write', '--allow-net', '--allow-env')
     assert '/usr/local/lib/node_modules/single-file-cli/single-file' in cmd
-    assert '--compress-content' in cmd
+    # The capture is always uncompressed.
+    assert '--compress-content' not in cmd
     # The singlefile is written to a file; Deno >= 2.3 truncates large --dump-content output.
     assert '--dump-content' not in cmd
     assert cmd[-2] == 'https://example.com'
-    assert cmd[-1].endswith('singlefile.html')
+    assert cmd[-1].endswith('page.html')
     # The browser single-file leaves behind is reaped with the process group.
-    assert call['start_new_session'] is True
+    assert capture['start_new_session'] is True
     # The browser runs via the stderr-discarding wrapper (Deno >= 2.3 kills it otherwise).
     wrapper = cmd[cmd.index('--browser-executable-path') + 1]
     assert wrapper.endswith('scripts/singlefile_browser_wrapper.sh')
-    assert call['env']['WROLPI_BROWSER'] == '/usr/bin/chromium'
+    assert capture['env']['WROLPI_BROWSER'] == '/usr/bin/chromium'
 
-    # Without the compress setting, --compress-content is omitted.
+    # The conversion is a local (file://) operation; the page is not fetched again.
+    cmd = convert['cmd']
+    assert '--compress-content' in cmd
+    assert cmd[-2].startswith('file://') and cmd[-2].endswith('page.html')
+    assert cmd[-1].endswith('compressed.html')
+
+    # Without the compress setting there is one run, and the page is stored as-is.
+    calls.clear()
     prepared = PreparedArchive(url='https://example.com', destination=None, settings={})
-    await archive_downloader.do_singlefile(prepared, make_test_ctx())
-    assert '--compress-content' not in calls[1]['cmd']
+    result, page_html = await archive_downloader.do_singlefile(prepared, make_test_ctx())
+    assert result == page_html == singlefile
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_do_singlefile_compress_failure_falls_back(test_session, test_directory, monkeypatch,
+                                                         compressed_singlefile_factory):
+    """When the compression run fails, the uncompressed singlefile is stored instead."""
+    import modules.archive
+    singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
+    process_runner, calls = make_process_runner_recorder(singlefile, compressed=None)  # Conversion writes nothing.
+    monkeypatch.setattr(modules.archive, 'DENO_BIN', '/usr/local/bin/deno')
+    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT',
+                        '/usr/local/lib/node_modules/single-file-cli/single-file')
+    monkeypatch.setattr(modules.archive, 'CHROMIUM', '/usr/bin/chromium')
+    monkeypatch.setattr(archive_downloader, 'process_runner', process_runner)
+
+    prepared = PreparedArchive(url='https://example.com', destination=None,
+                               settings={'compress_singlefile': True})
+    result, page_html = await archive_downloader.do_singlefile(prepared, make_test_ctx())
+
+    assert len(calls) == 2  # The conversion was attempted.
+    assert result == page_html == singlefile
 
 
 @pytest.mark.asyncio

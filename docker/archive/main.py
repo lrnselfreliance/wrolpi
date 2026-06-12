@@ -128,36 +128,56 @@ async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: 
                 pass  # Nothing left behind; the common case.
 
 
-async def call_single_file(url, compress: bool = False) -> bytes:
+async def run_single_file(input_url: str, output_path: pathlib.Path, compress: bool):
+    """Run single-file, return (return_code, output_bytes, stderr).
+
+    single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content output
+    at exit, which corrupted compressed (ZIP) singlefiles."""
+    cmd = f'WROLPI_BROWSER={BROWSER_EXEC}' \
+          f' {DENO_PATH} run --node-modules-dir=manual' \
+          ' --allow-read --allow-write --allow-net --allow-env --allow-run' \
+          f' {SINGLEFILE_PATH}' \
+          f' --browser-executable-path {BROWSER_WRAPPER}' \
+          f'{" --compress-content " if compress else ""}' \
+          f' "{input_url}"' \
+          f' "{output_path}"'
+    logger.debug(f'archive cmd: {cmd}')
+    stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
+    output = output_path.read_bytes() if output_path.is_file() else b''
+    return return_code, output, stderr
+
+
+async def call_single_file(url, compress: bool = False) -> (bytes, bytes):
     """
-    Call the CLI command for SingleFile.
+    Call the CLI command for SingleFile.  Returns (singlefile, page_html): the singlefile to
+    store, and the uncompressed page for readability/screenshot.
+
+    The page is always captured uncompressed; when compress is set, a second single-file run
+    converts the captured file into a compressed (SingleFileZ) self-extracting file (a local
+    file:// operation, the page is not fetched again).  If the conversion fails, the
+    uncompressed singlefile is returned instead.
 
     See https://github.com/gildas-lormeau/SingleFile
     """
     logger.info(f'archiving {url}')
-    # single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content
-    # output at exit, which corrupted compressed (ZIP) singlefiles.
-    # --compress-content creates a compressed (SingleFileZ) self-extracting HTML file.
     with tempfile.TemporaryDirectory(prefix='singlefile-') as tmp_dir:
-        output_path = pathlib.Path(tmp_dir) / 'singlefile.html'
-        cmd = f'WROLPI_BROWSER={BROWSER_EXEC}' \
-              f' {DENO_PATH} run --node-modules-dir=manual' \
-              ' --allow-read --allow-write --allow-net --allow-env --allow-run' \
-              f' {SINGLEFILE_PATH}' \
-              f' --browser-executable-path {BROWSER_WRAPPER}' \
-              f'{" --compress-content " if compress else ""}' \
-              f' "{url}"' \
-              f' "{output_path}"'
-        logger.debug(f'archive cmd: {cmd}')
-        stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
-        singlefile = output_path.read_bytes() if output_path.is_file() else b''
-    if return_code != 0 or not singlefile:
-        if stderr:
-            for line in stderr.splitlines():
-                logger.error(line.decode())
-        raise RuntimeError(f'Failed to single-file {url} got the following error: {stderr}')
+        page_path = pathlib.Path(tmp_dir) / 'page.html'
+        return_code, page_html, stderr = await run_single_file(url, page_path, compress=False)
+        if return_code != 0 or not page_html:
+            raise RuntimeError(f'Failed to single-file {url} got the following error: {stderr}')
+
+        singlefile = page_html
+        if compress:
+            compressed_path = pathlib.Path(tmp_dir) / 'compressed.html'
+            return_code, compressed, stderr = await run_single_file(
+                f'file://{page_path}', compressed_path, compress=True)
+            if return_code == 0 and zipfile.is_zipfile(io.BytesIO(compressed)):
+                singlefile = compressed
+            else:
+                logger.error(f'Failed to compress singlefile ({return_code=}), storing it uncompressed: {url}')
+
     logger.debug(f'done archiving for {url}')
-    return singlefile
+    return singlefile, page_html
 
 
 async def extract_readability(path: str, url: str) -> dict:
@@ -307,17 +327,23 @@ async def post_archive(request: Request):
         singlefile = base64.b64decode(singlefile) if singlefile else None
         compress = bool(request.json.get('compress'))
 
-        # Use provided singlefile, or fetch and create from the internet.
-        singlefile = singlefile or await call_single_file(url, compress=compress)
+        if singlefile:
+            # A provided singlefile may be compressed (SingleFileZ); readability and screenshot
+            # must use the extracted index.html.
+            page_html = None
+        else:
+            # Fetch and create from the internet; readability/screenshot use the uncompressed page.
+            singlefile, page_html = await call_single_file(url, compress=compress)
 
         # Use html suffix so chrome screenshot recognizes it as an HTML file.
         with tempfile.TemporaryDirectory() as tmp_dir:
-            singlefile_path = pathlib.Path(tmp_dir) / 'singlefile.html'
-            singlefile_path.write_bytes(singlefile)
-
-            # A compressed (SingleFileZ) singlefile contains the uncompressed page; readability and
-            # screenshot must use the extracted index.html.
-            extractable = extract_compressed_singlefile(singlefile, tmp_dir) or str(singlefile_path)
+            page_path = pathlib.Path(tmp_dir) / 'page.html'
+            if page_html:
+                page_path.write_bytes(page_html)
+                extractable = str(page_path)
+            else:
+                page_path.write_bytes(singlefile)
+                extractable = extract_compressed_singlefile(singlefile, tmp_dir) or str(page_path)
 
             readability = None
             try:

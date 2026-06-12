@@ -91,8 +91,11 @@ class ArchiveDownloader(Downloader, ABC):
             artifacts = SinglefileArtifacts(url=prepared.url, singlefile=singlefile,
                                             readability=readability, screenshot=screenshot)
         else:
-            singlefile_bytes = await self.do_singlefile(prepared, ctx, download=download)
-            artifacts = await extract_singlefile_artifacts(singlefile_bytes)
+            singlefile_bytes, page_html = await self.do_singlefile(prepared, ctx, download=download)
+            # Readability/screenshot/title come from the uncompressed page; only the stored
+            # singlefile may be compressed.
+            artifacts = await extract_singlefile_artifacts(page_html)
+            artifacts.singlefile = singlefile_bytes
 
         written = write_archive_files(artifacts.url, artifacts.singlefile, artifacts.readability,
                                       artifacts.screenshot, destination=prepared.destination)
@@ -118,8 +121,15 @@ class ArchiveDownloader(Downloader, ABC):
         return DownloadResult(success=True, location=archive.location)
 
     async def do_singlefile(self, prepared: PreparedArchive, ctx: DownloadContext,
-                            download: Download = None) -> bytes:
+                            download: Download = None) -> Tuple[bytes, bytes]:
         """Create a Singlefile from the archive's URL.
+
+        Returns (singlefile, page_html): the singlefile to store, and the uncompressed page used
+        for readability/screenshot/title.  The page is always captured uncompressed; when
+        compress_singlefile is set, a second single-file run converts the captured file into a
+        compressed (SingleFileZ) self-extracting file (single-file preserves the original URL
+        header when re-saving its own pages).  If the conversion fails, the uncompressed
+        singlefile is stored instead.
 
         download is the original Download row when called via the manager dispatch; tests
         may omit it and a stub is built so process_runner has a url for log messages.
@@ -162,10 +172,11 @@ class ArchiveDownloader(Downloader, ABC):
             # single-file cannot reach the browser CDP and fails with "fetch failed".
             env = {**os.environ, 'NODE_OPTIONS': '--enable-network-family-autoselection'}
 
-        # single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content
-        # output at exit, which corrupted compressed (ZIP) singlefiles.
-        with tempfile.TemporaryDirectory(prefix='wrolpi-singlefile-') as tmp_dir:
-            output_path = pathlib.Path(tmp_dir) / 'singlefile.html'
+        cwd = pathlib.Path('/home/wrolpi')
+        cwd = cwd if cwd.is_dir() else None
+        download = download or Download(url=prepared.url)
+
+        async def run_single_file(input_url: str, output_path: pathlib.Path, compress: bool):
             cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
                    *runtime,
                    '--browser-executable-path', str(browser),
@@ -173,36 +184,51 @@ class ArchiveDownloader(Downloader, ABC):
                    '--user-agent', user_agent,
                    '--load-deferred-images-dispatch-scroll-event',
                    # Create a compressed (SingleFileZ) self-extracting HTML file.
-                   *(('--compress-content',) if prepared.settings.get('compress_singlefile') else ()),
-                   prepared.url,
+                   *(('--compress-content',) if compress else ()),
+                   input_url,
                    str(output_path),
                    )
-            cwd = pathlib.Path('/home/wrolpi')
-            cwd = cwd if cwd.is_dir() else None
             # cancel_wrapper reads cancellation from ctx; the Download is forwarded so
             # the real download id is used for unkill cleanup and log attribution.
             # start_new_session reaps the browser single-file leaves behind (it does not close it).
-            result = await self.process_runner(download or Download(url=prepared.url),
-                                               cmd, cwd, env=env, start_new_session=True, ctx=ctx)
-
+            result = await self.process_runner(download, cmd, cwd, env=env, start_new_session=True, ctx=ctx)
             stderr = result.stderr.decode()
             log_output = stderr or result.stdout.decode(errors='replace') or 'No stderr or stdout!'
+            output = output_path.read_bytes() if output_path.is_file() else b''
+            return result.return_code, output, log_output
 
-            if result.return_code != 0:
+        # single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content
+        # output at exit, which corrupted compressed (ZIP) singlefiles.
+        with tempfile.TemporaryDirectory(prefix='wrolpi-singlefile-') as tmp_dir:
+            page_path = pathlib.Path(tmp_dir) / 'page.html'
+            return_code, page_html, log_output = await run_single_file(prepared.url, page_path, compress=False)
+
+            if return_code != 0:
                 e = ChildProcessError(log_output[:1000])
-                raise RuntimeError(f'singlefile exited with {result.return_code}') from e
+                raise RuntimeError(f'singlefile exited with {return_code}') from e
 
-            singlefile = output_path.read_bytes() if output_path.is_file() else b''
+            if not page_html:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'Singlefile created was empty: {prepared.url}') from e
 
-        if not singlefile:
-            e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'Singlefile created was empty: {prepared.url}') from e
+            if SINGLEFILE_HEADER.encode() not in page_html:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'Singlefile created was invalid: {prepared.url}') from e
 
-        if SINGLEFILE_HEADER.encode() not in singlefile:
-            e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'Singlefile created was invalid: {prepared.url}') from e
+            singlefile = page_html
+            if prepared.settings.get('compress_singlefile'):
+                # Convert the captured page into a compressed (SingleFileZ) self-extracting file.
+                # This is a local (file://) operation; the page is not fetched again.
+                compressed_path = pathlib.Path(tmp_dir) / 'compressed.html'
+                return_code, compressed, log_output = await run_single_file(
+                    f'file://{page_path}', compressed_path, compress=True)
+                if return_code == 0 and lib.is_compressed_singlefile(compressed):
+                    singlefile = compressed
+                else:
+                    logger.error(f'Failed to compress singlefile ({return_code=}), '
+                                 f'storing it uncompressed: {prepared.url}\n{log_output[:1000]}')
 
-        return singlefile
+        return singlefile, page_html
 
 
 archive_downloader = ArchiveDownloader()

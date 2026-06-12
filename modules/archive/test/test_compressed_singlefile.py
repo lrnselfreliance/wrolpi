@@ -129,14 +129,18 @@ def test_inline_compressed_singlefile_resources(compressed_singlefile_factory):
 
     content = '<html><body>' \
               '<img src="images/0.png" srcset="images/0.png 1x">' \
+              '<img src="./images/0.png">' \
+              '<img src="../images/0.png">' \
               '<img src="https://example.com/images/0.png">' \
               '<img src="https://other.com/remote.png">' \
               '<img src="data:image/png;base64,QUJD">' \
               '<img src="images/does-not-exist.png">' \
               '<p>article text</p></body></html>'
     inlined = inline_compressed_singlefile_resources(content, compressed, 'https://example.com/page')
-    assert inlined.count(expected_data_uri) == 2  # The relative and the absolutized form.
+    assert inlined.count(expected_data_uri) == 3  # The relative, ./-relative, and absolutized forms.
     assert 'srcset' not in inlined
+    # A path outside the ZIP directory must not match a ZIP entry.
+    assert '../images/0.png' in inlined
     assert 'https://other.com/remote.png' in inlined
     assert 'data:image/png;base64,QUJD' in inlined
     assert 'images/does-not-exist.png' in inlined

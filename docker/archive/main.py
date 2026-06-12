@@ -126,6 +126,9 @@ async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: 
                 logger.info(f'Killed lingering process group {proc.pid}')
             except ProcessLookupError:
                 pass  # Nothing left behind; the common case.
+            except PermissionError as e:
+                # Do not let the kill mask the real failure (e.g. a TimeoutError in flight).
+                logger.error(f'Failed to kill process group {proc.pid}', exc_info=e)
 
 
 async def run_single_file(input_url: str, output_path: pathlib.Path, compress: bool):

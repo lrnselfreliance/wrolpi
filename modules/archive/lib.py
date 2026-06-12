@@ -1065,7 +1065,7 @@ def inline_compressed_singlefile_resources(html: str, singlefile: bytes, url: st
         changed = False
         for img in soup.find_all('img'):
             src = img.get('src') or ''
-            name = src.lstrip('./')
+            name = src.removeprefix('./')
             if src.startswith(url_base):
                 name = unquote(src[len(url_base):])
             if not name or name not in names:

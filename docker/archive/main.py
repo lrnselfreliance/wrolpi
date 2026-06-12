@@ -135,24 +135,29 @@ async def call_single_file(url, compress: bool = False) -> bytes:
     See https://github.com/gildas-lormeau/SingleFile
     """
     logger.info(f'archiving {url}')
+    # single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content
+    # output at exit, which corrupted compressed (ZIP) singlefiles.
     # --compress-content creates a compressed (SingleFileZ) self-extracting HTML file.
-    cmd = f'WROLPI_BROWSER={BROWSER_EXEC}' \
-          f' {DENO_PATH} run --node-modules-dir=manual' \
-          ' --allow-read --allow-write --allow-net --allow-env --allow-run' \
-          f' {SINGLEFILE_PATH}' \
-          f' --browser-executable-path {BROWSER_WRAPPER}' \
-          r' --dump-content ' \
-          f'{" --compress-content " if compress else ""}' \
-          f' "{url}"'
-    logger.debug(f'archive cmd: {cmd}')
-    stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
-    if return_code != 0 or not stdout:
+    with tempfile.TemporaryDirectory(prefix='singlefile-') as tmp_dir:
+        output_path = pathlib.Path(tmp_dir) / 'singlefile.html'
+        cmd = f'WROLPI_BROWSER={BROWSER_EXEC}' \
+              f' {DENO_PATH} run --node-modules-dir=manual' \
+              ' --allow-read --allow-write --allow-net --allow-env --allow-run' \
+              f' {SINGLEFILE_PATH}' \
+              f' --browser-executable-path {BROWSER_WRAPPER}' \
+              f'{" --compress-content " if compress else ""}' \
+              f' "{url}"' \
+              f' "{output_path}"'
+        logger.debug(f'archive cmd: {cmd}')
+        stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True, timeout=3 * 60)
+        singlefile = output_path.read_bytes() if output_path.is_file() else b''
+    if return_code != 0 or not singlefile:
         if stderr:
             for line in stderr.splitlines():
                 logger.error(line.decode())
         raise RuntimeError(f'Failed to single-file {url} got the following error: {stderr}')
     logger.debug(f'done archiving for {url}')
-    return stdout
+    return singlefile
 
 
 async def extract_readability(path: str, url: str) -> dict:

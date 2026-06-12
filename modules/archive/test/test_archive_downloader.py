@@ -5,6 +5,7 @@ isolation.  None of them use async_client or test_download_manager — that's th
 whole point of the refactor.
 """
 import asyncio
+import pathlib
 
 import pytest
 
@@ -98,14 +99,16 @@ async def test_execute_cancels_via_ctx(test_session, test_directory, monkeypatch
     assert 'cancel' in (result.error or '').lower()
 
 
-def make_process_runner_recorder(stdout: bytes):
-    """Stub Downloader.process_runner: record the call, return a successful CommandResult."""
+def make_process_runner_recorder(singlefile: bytes):
+    """Stub Downloader.process_runner: record the call, write the singlefile to the output file
+    (the last argument of the command, like single-file does), return a successful CommandResult."""
     from wrolpi.cmd import CommandResult
     calls = []
 
     async def process_runner(download, cmd, cwd, **kwargs):
         calls.append(dict(cmd=cmd, cwd=cwd, **kwargs))
-        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=1)
+        pathlib.Path(cmd[-1]).write_bytes(singlefile)
+        return CommandResult(return_code=0, cancelled=False, stdout=b'', stderr=b'', elapsed=1)
 
     return process_runner, calls
 
@@ -134,7 +137,10 @@ async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch
                         '--allow-read', '--allow-write', '--allow-net', '--allow-env')
     assert '/usr/local/lib/node_modules/single-file-cli/single-file' in cmd
     assert '--compress-content' in cmd
-    assert cmd[-1] == 'https://example.com'
+    # The singlefile is written to a file; Deno >= 2.3 truncates large --dump-content output.
+    assert '--dump-content' not in cmd
+    assert cmd[-2] == 'https://example.com'
+    assert cmd[-1].endswith('singlefile.html')
     # The browser single-file leaves behind is reaped with the process group.
     assert call['start_new_session'] is True
     # The browser runs via the stderr-discarding wrapper (Deno >= 2.3 kills it otherwise).
@@ -173,6 +179,21 @@ async def test_do_singlefile_node_fallback(test_session, test_directory, monkeyp
 def test_archive_downloader_timeout():
     """A page that has not finished archiving after ten minutes is hung."""
     assert archive_downloader.timeout == 10 * 60
+
+
+def test_write_archive_files_broken_compressed_not_prettified(test_session, test_directory):
+    """A singlefile marked compressed (data-sfz) whose ZIP is unreadable (e.g. truncated) is
+    stored verbatim; prettifying would destroy whatever remains."""
+    broken = b'<!DOCTYPE html> <html data-sfz><!--\n Page saved with SingleFile \n' \
+             b' url: https://example.com \n--><body hidden></body></html>' \
+             b'PK\x03\x04truncated zip data without a central directory'
+    destination = test_directory / 'archive/example.com'
+    destination.mkdir(parents=True)
+
+    written = write_archive_files('https://example.com', broken, None, None, destination=destination)
+
+    singlefile_path = next(i for i in written.paths if i.suffix == '.html' and '.readability' not in i.name)
+    assert singlefile_path.read_bytes() == broken
 
 
 @pytest.mark.asyncio

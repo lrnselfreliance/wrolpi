@@ -762,6 +762,11 @@ def write_archive_files(url: str, singlefile: str | bytes, readability: Optional
     if compressed:
         # A compressed (SingleFileZ) singlefile is a binary ZIP; prettifying would corrupt it.
         archive_files.singlefile.write_bytes(singlefile)
+    elif isinstance(singlefile, bytes) and b'<html data-sfz' in singlefile[:200]:
+        # Marked as compressed but the ZIP is unreadable (e.g. truncated); prettifying would
+        # destroy whatever remains, so store it verbatim.
+        logger.warning(f'Singlefile of {url} is marked compressed but is not a valid ZIP!')
+        archive_files.singlefile.write_bytes(singlefile)
     else:
         singlefile = format_html_string(singlefile)
         archive_files.singlefile.write_text(singlefile)

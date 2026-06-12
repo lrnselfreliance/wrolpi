@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import pathlib
+import tempfile
 from abc import ABC
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Iterable
@@ -161,42 +162,47 @@ class ArchiveDownloader(Downloader, ABC):
             # single-file cannot reach the browser CDP and fails with "fetch failed".
             env = {**os.environ, 'NODE_OPTIONS': '--enable-network-family-autoselection'}
 
-        cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
-               *runtime,
-               '--browser-executable-path', str(browser),
-               '--browser-args', browser_args,
-               '--user-agent', user_agent,
-               '--dump-content',
-               '--load-deferred-images-dispatch-scroll-event',
-               # Create a compressed (SingleFileZ) self-extracting HTML file.
-               *(('--compress-content',) if prepared.settings.get('compress_singlefile') else ()),
-               prepared.url,
-               )
-        cwd = pathlib.Path('/home/wrolpi')
-        cwd = cwd if cwd.is_dir() else None
-        # cancel_wrapper reads cancellation from ctx; the Download is forwarded so
-        # the real download id is used for unkill cleanup and log attribution.
-        # start_new_session reaps the browser single-file leaves behind (it does not close it).
-        result = await self.process_runner(download or Download(url=prepared.url),
-                                           cmd, cwd, env=env, start_new_session=True, ctx=ctx)
+        # single-file writes the result to a file; Deno >= 2.3 truncates large --dump-content
+        # output at exit, which corrupted compressed (ZIP) singlefiles.
+        with tempfile.TemporaryDirectory(prefix='wrolpi-singlefile-') as tmp_dir:
+            output_path = pathlib.Path(tmp_dir) / 'singlefile.html'
+            cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
+                   *runtime,
+                   '--browser-executable-path', str(browser),
+                   '--browser-args', browser_args,
+                   '--user-agent', user_agent,
+                   '--load-deferred-images-dispatch-scroll-event',
+                   # Create a compressed (SingleFileZ) self-extracting HTML file.
+                   *(('--compress-content',) if prepared.settings.get('compress_singlefile') else ()),
+                   prepared.url,
+                   str(output_path),
+                   )
+            cwd = pathlib.Path('/home/wrolpi')
+            cwd = cwd if cwd.is_dir() else None
+            # cancel_wrapper reads cancellation from ctx; the Download is forwarded so
+            # the real download id is used for unkill cleanup and log attribution.
+            # start_new_session reaps the browser single-file leaves behind (it does not close it).
+            result = await self.process_runner(download or Download(url=prepared.url),
+                                               cmd, cwd, env=env, start_new_session=True, ctx=ctx)
 
-        stderr = result.stderr.decode()
-        # stdout may be a binary ZIP when --compress-content is used.
-        log_output = stderr or result.stdout.decode(errors='replace') or 'No stderr or stdout!'
+            stderr = result.stderr.decode()
+            log_output = stderr or result.stdout.decode(errors='replace') or 'No stderr or stdout!'
 
-        if result.return_code != 0:
-            e = ChildProcessError(log_output[:1000])
-            raise RuntimeError(f'singlefile exited with {result.return_code}') from e
+            if result.return_code != 0:
+                e = ChildProcessError(log_output[:1000])
+                raise RuntimeError(f'singlefile exited with {result.return_code}') from e
 
-        if not result.stdout:
+            singlefile = output_path.read_bytes() if output_path.is_file() else b''
+
+        if not singlefile:
             e = ChildProcessError(log_output[:1000])
             raise RuntimeError(f'Singlefile created was empty: {prepared.url}') from e
 
-        if SINGLEFILE_HEADER.encode() not in result.stdout:
+        if SINGLEFILE_HEADER.encode() not in singlefile:
             e = ChildProcessError(log_output[:1000])
             raise RuntimeError(f'Singlefile created was invalid: {prepared.url}') from e
 
-        return result.stdout
+        return singlefile
 
 
 archive_downloader = ArchiveDownloader()

@@ -4,6 +4,7 @@ A compressed singlefile is a self-extracting HTML file which is also a valid ZIP
 uncompressed page as index.html.  Only the singlefile .html is compressed; readability files are
 always written uncompressed.
 """
+import base64
 import pathlib
 import zipfile
 
@@ -93,6 +94,42 @@ def test_write_archive_files_compressed(test_directory, test_session, image_byte
     assert 'readability content' in readability_path.read_text()
     readability_txt_path = next(i for i in written.paths if i.name.endswith('.readability.txt'))
     assert 'readability text' in readability_txt_path.read_text()
+
+
+def test_readability_images_inlined(test_directory, test_session, compressed_singlefile_factory):
+    """Readability extracted from a compressed singlefile references images by relative ZIP paths;
+    they are inlined as data URIs so the readability file is self-contained."""
+    from modules.archive.lib import inline_compressed_singlefile_resources
+
+    compressed = compressed_singlefile_factory()
+    expected_data_uri = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG fake image bytes').decode()
+
+    # Relative and absolutized ZIP paths are inlined; data/external URLs and unknown paths are
+    # left alone.  readability-extractor absolutizes relative srcs against the page URL.
+    content = '<html><body>' \
+              '<img src="images/0.png" srcset="images/0.png 1x">' \
+              '<img src="https://example.com/images/0.png">' \
+              '<img src="https://other.com/remote.png">' \
+              '<img src="data:image/png;base64,QUJD">' \
+              '<img src="images/does-not-exist.png">' \
+              '<p>article text</p></body></html>'
+    inlined = inline_compressed_singlefile_resources(content, compressed, 'https://example.com/page')
+    assert inlined.count(expected_data_uri) == 2  # The relative and the absolutized form.
+    assert 'srcset' not in inlined
+    assert 'https://other.com/remote.png' in inlined
+    assert 'data:image/png;base64,QUJD' in inlined
+    assert 'images/does-not-exist.png' in inlined
+
+    # write_archive_files inlines the readability content of compressed singlefiles.
+    readability = dict(content=content, textContent='article text', title='a title')
+    destination = test_directory / 'archive/example.com'
+    destination.mkdir(parents=True)
+    written = write_archive_files('https://example.com', compressed, readability, None, destination=destination)
+
+    readability_path = next(i for i in written.paths if i.name.endswith('.readability.html'))
+    text = readability_path.read_text()
+    assert expected_data_uri in text
+    assert 'src="images/0.png"' not in text
 
 
 def test_write_archive_files_compressed_title_fallback(test_directory, test_session, compressed_singlefile_factory):

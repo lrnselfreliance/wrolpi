@@ -118,12 +118,15 @@ def compressed_singlefile_factory():
                   '--><meta charset=windows-1252><title></title>'
         index_html = '<html><!--\n Page saved with SingleFile \n' \
                      f' url: {url} \n' \
-                     f'-->\n<head><title>{title}</title></head><body>test compressed singlefile</body></html>'
+                     f'-->\n<head><title>{title}</title></head>' \
+                     '<body>test compressed singlefile<img src="images/0.png" srcset="images/0.png 1x"></body>' \
+                     '</html>'
         buf = io.BytesIO()
         buf.write(prelude.encode())
         # Deflate like the real single-file CLI; the page must not be readable as plain text.
         with zipfile.ZipFile(buf, 'a', compression=zipfile.ZIP_DEFLATED) as zip_:
             zip_.writestr('index.html', index_html)
+            zip_.writestr('images/0.png', b'\x89PNG fake image bytes')
             zip_.writestr('manifest.json', '{}')
         return buf.getvalue()
 

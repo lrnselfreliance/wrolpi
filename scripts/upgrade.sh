@@ -44,7 +44,7 @@ npm install || npm install || npm install || npm install # try install multiple 
 
 # Install/upgrade Deno runtime.
 upgrade_deno() {
-    DENO_VERSION="v2.2.4"
+    DENO_VERSION="v2.8.3"
     ARCH=$(uname -m)
     if [ "$ARCH" = "aarch64" ]; then
         DENO_ARCH="aarch64-unknown-linux-gnu"

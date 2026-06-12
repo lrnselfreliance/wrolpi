@@ -300,6 +300,7 @@ __all__ = [
     'get_title_from_html',
     'get_warn_once',
     'get_wrolpi_config',
+    'html_file_screenshot',
     'html_screenshot',
     'insert_parameter',
     'iterify',
@@ -2542,8 +2543,10 @@ def format_html_file(file: pathlib.Path):
     replace_file(file, pretty)
 
 
-def html_screenshot(html: bytes | str) -> bytes:
-    """Return a PNG screenshot of the provided HTML."""
+def html_file_screenshot(path: pathlib.Path | str) -> bytes:
+    """Return a PNG screenshot of the HTML file at `path`.
+
+    Relative resources (images, fonts) next to the file are rendered too."""
     from wrolpi import cmd  # Avoid circular import.
 
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
@@ -2556,15 +2559,19 @@ def html_screenshot(html: bytes | str) -> bytes:
     # linux/aarch64 (Raspberry Pi).
     service = webdriver.ChromeService(executable_path=str(cmd.CHROMEDRIVER_BIN)) if cmd.CHROMEDRIVER_BIN else None
 
+    with webdriver.Chrome(options=options, service=service) as driver:
+        driver.get(f'file://{path}')
+        driver.set_window_size(1280, 720)
+        screenshot = driver.get_screenshot_as_png()
+        return screenshot
+
+
+def html_screenshot(html: bytes | str) -> bytes:
+    """Return a PNG screenshot of the provided HTML."""
     with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
         fh.write(html.encode() if isinstance(html, str) else html)
         fh.flush()
-
-        with webdriver.Chrome(options=options, service=service) as driver:
-            driver.get(f'file://{fh.name}')
-            driver.set_window_size(1280, 720)
-            screenshot = driver.get_screenshot_as_png()
-            return screenshot
+        return html_file_screenshot(fh.name)
 
 
 def chain(iterable: Union[List, Tuple], length: int) -> List:

@@ -24,7 +24,7 @@ from wrolpi.cmd import READABILITY_BIN, run_command
 from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
     escape_file_name, aiohttp_post, format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, \
-    get_wrolpi_config, html_screenshot, ConfigFile, trim_file_name
+    get_wrolpi_config, html_screenshot, html_file_screenshot, ConfigFile, trim_file_name
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -748,7 +748,12 @@ def write_archive_files(url: str, singlefile: str | bytes, readability: Optional
     if readability:
         # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
         with archive_files.readability.open('wt') as fp:
-            content = format_html_string(readability.pop('content'))
+            content = readability.pop('content')
+            if compressed:
+                # Readability extracted from the ZIP's index.html references images by relative
+                # ZIP paths; inline them so the readability file is self-contained.
+                content = inline_compressed_singlefile_resources(content, singlefile, url)
+            content = format_html_string(content)
             fp.write(content)
         with archive_files.readability_txt.open('wt') as fp:
             readability_txt = readability.pop('textContent')
@@ -761,6 +766,11 @@ def write_archive_files(url: str, singlefile: str | bytes, readability: Optional
     # Store the single-file HTML in its own file.
     if compressed:
         # A compressed (SingleFileZ) singlefile is a binary ZIP; prettifying would corrupt it.
+        archive_files.singlefile.write_bytes(singlefile)
+    elif isinstance(singlefile, bytes) and b'<html data-sfz' in singlefile[:200]:
+        # Marked as compressed but the ZIP is unreadable (e.g. truncated); prettifying would
+        # destroy whatever remains, so store it verbatim.
+        logger.warning(f'Singlefile of {url} is marked compressed but is not a valid ZIP!')
         archive_files.singlefile.write_bytes(singlefile)
     else:
         singlefile = format_html_string(singlefile)
@@ -1033,6 +1043,40 @@ def read_singlefile_html(path: pathlib.Path) -> bytes:
     if is_compressed_singlefile(contents):
         return get_compressed_singlefile_index(contents)
     return contents
+
+
+def inline_compressed_singlefile_resources(html: str, singlefile: bytes, url: str) -> str:
+    """Inline the images of a compressed (SingleFileZ) singlefile into the provided HTML.
+
+    The index.html inside a compressed singlefile references its resources by relative ZIP paths
+    (e.g. images/0.jpg); HTML extracted from it (readability) dangles those references — either
+    still relative, or absolutized against the page URL by readability-extractor
+    (https://example.com/images/0.jpg).  Replace them with data URIs read from the ZIP, like an
+    uncompressed singlefile would contain."""
+    import mimetypes
+    from urllib.parse import urljoin, unquote
+
+    # readability-extractor resolves relative srcs against the page URL.
+    url_base = urljoin(url, '.')
+
+    soup = get_html_soup(html)
+    with zipfile.ZipFile(io.BytesIO(singlefile)) as zip_:
+        names = set(zip_.namelist())
+        changed = False
+        for img in soup.find_all('img'):
+            src = img.get('src') or ''
+            name = src.removeprefix('./')
+            if src.startswith(url_base):
+                name = unquote(src[len(url_base):])
+            if not name or name not in names:
+                continue
+            mimetype = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+            img['src'] = f'data:{mimetype};base64,{base64.b64encode(zip_.read(name)).decode()}'
+            # The ZIP-path srcset entries are dangling too; the inlined src replaces them.
+            if img.get('srcset'):
+                del img['srcset']
+            changed = True
+    return str(soup) if changed else html
 
 
 def get_url_from_singlefile(html: bytes | str) -> str:
@@ -1530,7 +1574,14 @@ async def extract_singlefile_artifacts(singlefile: bytes) -> SinglefileArtifacts
         screenshot = None
         try:
             logger.debug(f'extract_singlefile_artifacts creating screenshot: {url}')
-            screenshot = html_screenshot(extractable)
+            if compressed:
+                # Extract the whole ZIP so the page's relative resources (images, fonts) render.
+                with tempfile.TemporaryDirectory(prefix='wrolpi-singlefile-screenshot-') as tmp_dir:
+                    with zipfile.ZipFile(io.BytesIO(singlefile)) as zip_:
+                        zip_.extractall(tmp_dir)
+                    screenshot = html_file_screenshot(pathlib.Path(tmp_dir) / COMPRESSED_SINGLEFILE_INDEX)
+            else:
+                screenshot = html_screenshot(extractable)
         except Exception as e:
             logger.error(f'Failed to extract screenshot from: {url}', exc_info=e)
 
@@ -1671,8 +1722,13 @@ async def generate_archive_screenshot(archive_id: int) -> pathlib.Path:
         logger.debug(f'Generating screenshot locally for Archive {archive_id}')
         singlefile_contents = singlefile_path.read_bytes()
         if is_compressed_singlefile(singlefile_contents):
-            singlefile_contents = get_compressed_singlefile_index(singlefile_contents)
-        screenshot_bytes = html_screenshot(singlefile_contents)
+            # Extract the whole ZIP so the page's relative resources (images, fonts) render.
+            with tempfile.TemporaryDirectory(prefix='wrolpi-singlefile-screenshot-') as tmp_dir:
+                with zipfile.ZipFile(io.BytesIO(singlefile_contents)) as zip_:
+                    zip_.extractall(tmp_dir)
+                screenshot_bytes = html_file_screenshot(pathlib.Path(tmp_dir) / COMPRESSED_SINGLEFILE_INDEX)
+        else:
+            screenshot_bytes = html_screenshot(singlefile_contents)
 
     if not screenshot_bytes:
         raise RuntimeError(f'Failed to generate screenshot for Archive {archive_id}')

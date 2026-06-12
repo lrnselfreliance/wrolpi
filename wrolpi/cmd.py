@@ -5,6 +5,7 @@ import os
 import pathlib
 import shlex
 import shutil
+import signal
 import tempfile
 from asyncio import CancelledError
 from pathlib import Path
@@ -75,6 +76,28 @@ SINGLE_FILE_BIN = which('single-file',
                         '/usr/bin/single-file',  # rpi os
                         '/usr/local/bin/single-file',  # debian
                         )
+DENO_BIN = which('deno', '/usr/local/bin/deno')
+
+
+def _find_single_file_deno_script() -> Optional[Path]:
+    """Find the Deno entry script of the single-file-cli package.
+
+    npm's `single-file` bin is a symlink to the package's single-file-node.js; the Deno script
+    (`single-file`, shebang `deno run`) lives next to it.  single-file-cli is designed for Deno —
+    under node 18 it cannot reach the browser CDP on IPv6-enabled hosts and never exits."""
+    if not SINGLE_FILE_BIN:
+        return None
+    script = SINGLE_FILE_BIN.resolve().parent / 'single-file'
+    try:
+        with script.open('rb') as fh:
+            if b'deno run' in fh.readline():
+                return script
+    except OSError:
+        pass
+    return None
+
+
+SINGLE_FILE_DENO_SCRIPT = _find_single_file_deno_script()
 CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
@@ -160,7 +183,8 @@ TESTING_RUN_COMMAND_RESULT = None
 
 async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | str = None,
                       timeout: int = 600, log_command: bool = True,
-                      stdout_callback: callable = None, env: dict = None) -> CommandResult:
+                      stdout_callback: callable = None, env: dict = None,
+                      start_new_session: bool = False) -> CommandResult:
     """Run a shell command, return the results (stdout/stderr/return code).
 
     When stdout_callback is provided, stdout is piped and each line is passed to the callback
@@ -169,6 +193,9 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
     :param log_command: Enable debug logging.
     :param stdout_callback: Called with each decoded stdout line (str). May be None.
     :param env: Environment variables for the subprocess. If None, inherits the current environment.
+    :param start_new_session: Run the command in its own session/process group; when it finishes
+        (or is killed by timeout/cancel), the whole group is killed.  Use for commands that may
+        leave children behind (e.g. single-file's browser).
     """
     if not isinstance(cmd, (list, tuple)):
         raise RuntimeError('Command must be a list or tuple')
@@ -192,6 +219,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
         stdout_file = None
         reader_task = None
         stdout_buf = None
+        pid = None
 
         if streaming:
             stdout_arg = asyncio.subprocess.PIPE
@@ -208,6 +236,7 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
                 stderr=stderr_fh,
                 cwd=cwd,
                 env=env,
+                start_new_session=start_new_session,
             )
             pid = proc.pid
 
@@ -297,5 +326,15 @@ async def run_command(cmd: tuple[str | pathlib.Path, ...], cwd: pathlib.Path | s
                 pid=pid,
             )
         finally:
+            if start_new_session and pid:
+                # The command was its own session/group leader; kill anything it left behind
+                # (e.g. the browser single-file spawns but fails to close).
+                try:
+                    os.killpg(pid, signal.SIGKILL)
+                    logger.info(f'run_command: killed lingering process group {pid}')
+                except ProcessLookupError:
+                    pass  # Nothing left behind; the common case.
+                except PermissionError as e:
+                    logger.error(f'run_command: failed to kill process group {pid}', exc_info=e)
             if stdout_fh:
                 stdout_fh.close()

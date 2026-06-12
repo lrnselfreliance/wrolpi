@@ -16,8 +16,16 @@ RUN npm install -g single-file-cli@2.0.73 readability-extractor@0.0.6
 # on IPv6-enabled hosts and never exits).  Match the version pinned in scripts/upgrade.sh.
 RUN DENO_VERSION="v2.8.3" \
     && ARCH=$(uname -m) \
-    && if [ "$ARCH" = "aarch64" ]; then DENO_ARCH="aarch64-unknown-linux-gnu"; else DENO_ARCH="x86_64-unknown-linux-gnu"; fi \
+    && if [ "$ARCH" = "aarch64" ]; then \
+         DENO_ARCH="aarch64-unknown-linux-gnu"; \
+         DENO_SHA256="d4589cc1ffcbf1995c92a0127d932aaf832ac70cfdcc6d5b7bf38043cf303575"; \
+       else \
+         DENO_ARCH="x86_64-unknown-linux-gnu"; \
+         DENO_SHA256="30455b845ffa6082209c3590269c910ad3b7efdf28c9879afd4006c47ae54197"; \
+       fi \
     && curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip \
+    # Assert the hash to avoid malicious or invalid files.
+    && echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c - \
     && unzip -o /tmp/deno.zip -d /usr/local/bin/ \
     && chmod +x /usr/local/bin/deno \
     && rm /tmp/deno.zip \

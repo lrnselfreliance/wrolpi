@@ -196,6 +196,23 @@ async def test_model_archive_compressed(async_client, test_session, test_directo
     assert archive.collection.name == 'example.com'
 
 
+def test_html_indexer_compressed(make_files_structure, compressed_singlefile_factory):
+    """The generic HTML indexer is binary-safe: it indexes the page inside a compressed
+    singlefile instead of crashing on the binary ZIP tail.
+
+    The archive modeler claims WROLPi's own singlefiles; this indexer handles foreign HTML
+    files, e.g. a SingleFileZ file saved by the browser extension and dropped into the media
+    directory."""
+    from wrolpi.files.indexers import HTMLIndexer
+
+    path, = make_files_structure(['foreign.html'])
+    path.write_bytes(compressed_singlefile_factory(title='foreign singlefilez'))
+
+    title, _, _, words = HTMLIndexer.create_index(path)
+    assert title == 'foreign singlefilez'
+    assert 'test compressed singlefile' in words
+
+
 def test_compress_singlefile_setting_flow(test_session):
     """compress_singlefile survives DownloadRequest settings validation, and the RSSDownloader
     passes it on to the child archive downloads."""

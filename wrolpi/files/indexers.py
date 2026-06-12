@@ -121,11 +121,13 @@ class HTMLIndexer(Indexer, ABC):
 
     @classmethod
     def create_index(cls, path: pathlib.Path):
-        from modules.archive.lib import parse_article_html_metadata
+        from modules.archive.lib import parse_article_html_metadata, read_singlefile_html
 
         a = cls.get_title(path)
 
-        contents = path.read_text()
+        # Read bytes; a compressed (SingleFileZ) singlefile has a binary ZIP tail, and its real
+        # page (index.html) is inside the ZIP.  Other HTML files are read unchanged.
+        contents = read_singlefile_html(path)
         metadata = parse_article_html_metadata(contents)
         text = extract_html_text(contents)
         words = split_lines_by_length(text)

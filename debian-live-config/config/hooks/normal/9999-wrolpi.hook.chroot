@@ -67,8 +67,8 @@ BROWSERSLIST_IGNORE_OLD_DATA=true npm run build
 npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
 
 # Install Deno runtime.  Hash pinned to detect tampering of the upstream release artifact.
-DENO_VERSION="v2.2.4"
-DENO_SHA256="9a260a624cab6e61f7603957f94f638d68739d8c6ac8c38bc337521266603a7c"
+DENO_VERSION="v2.8.3"
+DENO_SHA256="30455b845ffa6082209c3590269c910ad3b7efdf28c9879afd4006c47ae54197"
 curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip
 echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c -
 unzip /tmp/deno.zip -d /usr/local/bin/

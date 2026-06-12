@@ -8,8 +8,10 @@ import gzip
 import io
 import json
 import logging
+import os
 import os.path
 import pathlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -28,13 +30,43 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file-cli/single-file')
-if not SINGLEFILE_PATH.is_file():
-    SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file/cli/single-file')
-if not SINGLEFILE_PATH.is_file():
-    SINGLEFILE_PATH = pathlib.Path('/usr/src/.nvm/versions/node/v18.19.0/bin/single-file')
-if not SINGLEFILE_PATH.is_file():
-    raise FileNotFoundError("Can't find single-file executable!")
+def find_singlefile_deno_script() -> pathlib.Path:
+    """Find the Deno entry script of the single-file-cli package.
+
+    single-file-cli is designed for Deno; the npm bin (single-file-node.js) runs under node which
+    cannot reach the browser CDP on IPv6-enabled hosts and never exits after a successful save."""
+    candidates = (
+        '/usr/src/app/node_modules/single-file-cli/single-file',
+        '/usr/local/lib/node_modules/single-file-cli/single-file',
+        '/usr/lib/node_modules/single-file-cli/single-file',
+        # Resolve the bin symlink back to the package directory.
+        '/usr/src/.nvm/versions/node/v18.19.0/bin/single-file',
+        '/usr/local/bin/single-file',
+    )
+    for candidate in candidates:
+        path = pathlib.Path(candidate)
+        if path.is_file():
+            script = path.resolve().parent / 'single-file'
+            try:
+                with script.open('rb') as fh:
+                    if b'deno run' in fh.readline():
+                        return script
+            except OSError:
+                pass
+    raise FileNotFoundError("Can't find single-file Deno script!")
+
+
+SINGLEFILE_PATH = find_singlefile_deno_script()
+
+DENO_PATH = pathlib.Path('/usr/local/bin/deno')
+if not DENO_PATH.is_file():
+    raise FileNotFoundError("Can't find deno executable!")
+
+# single-file pipes the browser's stderr but never reads it; under Deno >= 2.3 that kills the
+# browser during startup.  The wrapper discards the browser's stderr.
+BROWSER_WRAPPER = pathlib.Path('/app/singlefile_browser_wrapper.sh')
+if not BROWSER_WRAPPER.is_file():
+    raise FileNotFoundError("Can't find singlefile_browser_wrapper.sh!")
 
 BROWSER_EXEC = pathlib.Path('/usr/bin/google-chrome')
 if not BROWSER_EXEC.is_file():
@@ -72,7 +104,10 @@ async def index(_):
 async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: float = None):
     proc = None
     try:
-        proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
+        # start_new_session so the whole process group can be killed; single-file does not close
+        # the browser it spawns.
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd,
+                                                     start_new_session=True)
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if always_log_stderr is True or proc.returncode != 0:
             # Always log when requested, or when the call failed.
@@ -83,6 +118,14 @@ async def check_output(cmd, always_log_stderr: bool = False, cwd=None, timeout: 
         proc.kill()
         await proc.wait()  # Wait for the process to fully terminate
         raise TimeoutError(f"Command '{cmd}' timed out after {timeout} seconds")
+    finally:
+        if proc is not None:
+            # Kill anything the command left behind (e.g. the browser single-file spawns).
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+                logger.info(f'Killed lingering process group {proc.pid}')
+            except ProcessLookupError:
+                pass  # Nothing left behind; the common case.
 
 
 async def call_single_file(url, compress: bool = False) -> bytes:
@@ -93,7 +136,11 @@ async def call_single_file(url, compress: bool = False) -> bytes:
     """
     logger.info(f'archiving {url}')
     # --compress-content creates a compressed (SingleFileZ) self-extracting HTML file.
-    cmd = f'{SINGLEFILE_PATH}' \
+    cmd = f'WROLPI_BROWSER={BROWSER_EXEC}' \
+          f' {DENO_PATH} run --node-modules-dir=manual' \
+          ' --allow-read --allow-write --allow-net --allow-env --allow-run' \
+          f' {SINGLEFILE_PATH}' \
+          f' --browser-executable-path {BROWSER_WRAPPER}' \
           r' --dump-content ' \
           f'{" --compress-content " if compress else ""}' \
           f' "{url}"'

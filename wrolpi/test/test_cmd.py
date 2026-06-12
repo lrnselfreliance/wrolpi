@@ -53,6 +53,33 @@ async def test_run_command_timeout(test_directory):
     assert result.elapsed >= 2
 
 
+async def test_run_command_start_new_session_reaps_children(test_directory):
+    """Children left behind by the command are killed with its process group.
+
+    single-file does not close the browser it spawns; the process group kill reaps it."""
+    script = test_directory / 'leaky.sh'
+    # The grandchild sleeps long after the script exits.
+    script.write_text('#!/bin/sh\nsleep 60 &\necho $! > leaked.pid\n')
+
+    result = await cmd.run_command(('sh', 'leaky.sh'), cwd=test_directory, timeout=10, start_new_session=True)
+
+    assert result.return_code == 0
+    leaked_pid = int((test_directory / 'leaked.pid').read_text().strip())
+    # The kill is delivered asynchronously; the killed process may linger as a zombie briefly.
+    for _ in range(20):
+        if not cmd.pid_is_running(leaked_pid):
+            break
+        await asyncio.sleep(0.1)
+    assert not cmd.pid_is_running(leaked_pid), 'The leaked child should have been killed with the process group'
+
+    # Without start_new_session the child survives (and must be cleaned up by the test).
+    result = await cmd.run_command(('sh', 'leaky.sh'), cwd=test_directory, timeout=10)
+    assert result.return_code == 0
+    leaked_pid = int((test_directory / 'leaked.pid').read_text().strip())
+    assert cmd.pid_is_running(leaked_pid)
+    os.kill(leaked_pid, 9)
+
+
 async def test_run_command_cancel(test_directory):
     """Run a command, cancel it and test that it was cancelled."""
     task = asyncio.create_task(cmd.run_command(('sleep', '10')))

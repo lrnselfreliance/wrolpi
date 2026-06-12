@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import pathlib
 from abc import ABC
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from typing import Callable, List, Optional, Tuple, Iterable
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX
+from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger, get_title_from_html, TRACE_LEVEL
@@ -16,7 +17,7 @@ from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT
+from wrolpi.vars import PYTEST, DOCKERIZED, DOWNLOAD_USER_AGENT, PROJECT_DIR
 from . import lib
 from .api import archive_bp  # noqa
 from .errors import InvalidArchive
@@ -52,6 +53,9 @@ class ExecutedArchive:
 class ArchiveDownloader(Downloader, ABC):
     name = 'archive'
     pretty_name = 'Archive'
+    # A page that has not finished archiving after this long is hung; the config-level
+    # download_timeout still takes precedence when set.
+    timeout = 10 * 60
 
     def __repr__(self):
         return f'<ArchiveDownloader>'
@@ -137,8 +141,28 @@ class ArchiveDownloader(Downloader, ABC):
         browser_args = config.browser_args or '["--no-sandbox"]'
         user_agent = config.user_agent or DOWNLOAD_USER_AGENT
 
+        env = None
+        browser_wrapper = PROJECT_DIR / 'scripts/singlefile_browser_wrapper.sh'
+        if DENO_BIN and SINGLE_FILE_DENO_SCRIPT and browser_wrapper.is_file():
+            # single-file-cli is designed for Deno.  Under node 18 (Debian 12/RPi OS) it cannot
+            # reach the browser CDP on IPv6-enabled hosts ("localhost" resolves to ::1 first with
+            # no IPv4 fallback) and it never exits after a successful save.
+            runtime = (str(DENO_BIN), 'run', '--node-modules-dir=manual',
+                       '--allow-read', '--allow-write', '--allow-net', '--allow-env', '--allow-run',
+                       str(SINGLE_FILE_DENO_SCRIPT))
+            # single-file pipes the browser's stderr but never reads it; under Deno >= 2.3 that
+            # kills the browser during startup.  The wrapper discards the browser's stderr.
+            env = {**os.environ, 'WROLPI_BROWSER': str(browser)}
+            browser = browser_wrapper
+        else:
+            logger.warning('deno not found, running single-file under node.  Upgrade this WROLPi to install deno.')
+            runtime = (str(SINGLE_FILE_BIN),)
+            # node 18 has no IPv4 fallback when "localhost" resolves to ::1 first; without this
+            # single-file cannot reach the browser CDP and fails with "fetch failed".
+            env = {**os.environ, 'NODE_OPTIONS': '--enable-network-family-autoselection'}
+
         cmd = ('/usr/bin/nice', '-n15',  # Nice above map importing, but very low priority.
-               str(SINGLE_FILE_BIN),
+               *runtime,
                '--browser-executable-path', str(browser),
                '--browser-args', browser_args,
                '--user-agent', user_agent,
@@ -152,8 +176,9 @@ class ArchiveDownloader(Downloader, ABC):
         cwd = cwd if cwd.is_dir() else None
         # cancel_wrapper reads cancellation from ctx; the Download is forwarded so
         # the real download id is used for unkill cleanup and log attribution.
+        # start_new_session reaps the browser single-file leaves behind (it does not close it).
         result = await self.process_runner(download or Download(url=prepared.url),
-                                           cmd, cwd, ctx=ctx)
+                                           cmd, cwd, env=env, start_new_session=True, ctx=ctx)
 
         stderr = result.stderr.decode()
         # stdout may be a binary ZIP when --compress-content is used.

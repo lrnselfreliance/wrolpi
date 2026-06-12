@@ -98,6 +98,83 @@ async def test_execute_cancels_via_ctx(test_session, test_directory, monkeypatch
     assert 'cancel' in (result.error or '').lower()
 
 
+def make_process_runner_recorder(stdout: bytes):
+    """Stub Downloader.process_runner: record the call, return a successful CommandResult."""
+    from wrolpi.cmd import CommandResult
+    calls = []
+
+    async def process_runner(download, cmd, cwd, **kwargs):
+        calls.append(dict(cmd=cmd, cwd=cwd, **kwargs))
+        return CommandResult(return_code=0, cancelled=False, stdout=stdout, stderr=b'', elapsed=1)
+
+    return process_runner, calls
+
+
+@pytest.mark.asyncio
+async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch):
+    """single-file is run under Deno (it is designed for it; under node it cannot reach the
+    browser CDP on IPv6-enabled hosts and never exits)."""
+    import modules.archive
+    singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
+    process_runner, calls = make_process_runner_recorder(singlefile)
+    monkeypatch.setattr(modules.archive, 'DENO_BIN', '/usr/local/bin/deno')
+    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT',
+                        '/usr/local/lib/node_modules/single-file-cli/single-file')
+    monkeypatch.setattr(modules.archive, 'CHROMIUM', '/usr/bin/chromium')
+    monkeypatch.setattr(archive_downloader, 'process_runner', process_runner)
+
+    prepared = PreparedArchive(url='https://example.com', destination=None,
+                               settings={'compress_singlefile': True})
+    result = await archive_downloader.do_singlefile(prepared, make_test_ctx())
+
+    assert result == singlefile
+    call, = calls
+    cmd = call['cmd']
+    assert cmd[2:9] == ('/usr/local/bin/deno', 'run', '--node-modules-dir=manual',
+                        '--allow-read', '--allow-write', '--allow-net', '--allow-env')
+    assert '/usr/local/lib/node_modules/single-file-cli/single-file' in cmd
+    assert '--compress-content' in cmd
+    assert cmd[-1] == 'https://example.com'
+    # The browser single-file leaves behind is reaped with the process group.
+    assert call['start_new_session'] is True
+    # The browser runs via the stderr-discarding wrapper (Deno >= 2.3 kills it otherwise).
+    wrapper = cmd[cmd.index('--browser-executable-path') + 1]
+    assert wrapper.endswith('scripts/singlefile_browser_wrapper.sh')
+    assert call['env']['WROLPI_BROWSER'] == '/usr/bin/chromium'
+
+    # Without the compress setting, --compress-content is omitted.
+    prepared = PreparedArchive(url='https://example.com', destination=None, settings={})
+    await archive_downloader.do_singlefile(prepared, make_test_ctx())
+    assert '--compress-content' not in calls[1]['cmd']
+
+
+@pytest.mark.asyncio
+async def test_do_singlefile_node_fallback(test_session, test_directory, monkeypatch):
+    """Without Deno, single-file runs under node with the IPv4-fallback fix."""
+    import modules.archive
+    singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
+    process_runner, calls = make_process_runner_recorder(singlefile)
+    monkeypatch.setattr(modules.archive, 'DENO_BIN', None)
+    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT', None)
+    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_BIN', '/usr/local/bin/single-file')
+    monkeypatch.setattr(modules.archive, 'CHROMIUM', '/usr/bin/chromium')
+    monkeypatch.setattr(archive_downloader, 'process_runner', process_runner)
+
+    prepared = PreparedArchive(url='https://example.com', destination=None, settings={})
+    await archive_downloader.do_singlefile(prepared, make_test_ctx())
+
+    call, = calls
+    assert call['cmd'][2] == '/usr/local/bin/single-file'
+    # node 18 has no IPv4 fallback when "localhost" resolves to ::1 first.
+    assert call['env']['NODE_OPTIONS'] == '--enable-network-family-autoselection'
+    assert call['start_new_session'] is True
+
+
+def test_archive_downloader_timeout():
+    """A page that has not finished archiving after ten minutes is hung."""
+    assert archive_downloader.timeout == 10 * 60
+
+
 @pytest.mark.asyncio
 async def test_finalize_adds_tags(async_client, test_session, test_directory, tag_factory):
     """finalize_download applies download.tag_names to the registered Archive.

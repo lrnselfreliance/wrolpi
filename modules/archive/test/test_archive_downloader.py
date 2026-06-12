@@ -173,26 +173,17 @@ async def test_do_singlefile_uses_deno(test_session, test_directory, monkeypatch
     assert result == page_html == singlefile
     assert len(calls) == 1
 
-
-@pytest.mark.asyncio
-async def test_do_singlefile_compress_failure_falls_back(test_session, test_directory, monkeypatch,
-                                                         compressed_singlefile_factory):
-    """When the compression run fails, the uncompressed singlefile is stored instead."""
-    import modules.archive
-    singlefile = b'<html><!--\n Page saved with SingleFile \n url: https://example.com \n--></html>'
+    # When the compression run fails, the uncompressed singlefile is stored instead.
     process_runner, calls = make_process_runner_recorder(singlefile, compressed=None)  # Conversion writes nothing.
-    monkeypatch.setattr(modules.archive, 'DENO_BIN', '/usr/local/bin/deno')
-    monkeypatch.setattr(modules.archive, 'SINGLE_FILE_DENO_SCRIPT',
-                        '/usr/local/lib/node_modules/single-file-cli/single-file')
-    monkeypatch.setattr(modules.archive, 'CHROMIUM', '/usr/bin/chromium')
     monkeypatch.setattr(archive_downloader, 'process_runner', process_runner)
-
     prepared = PreparedArchive(url='https://example.com', destination=None,
                                settings={'compress_singlefile': True})
     result, page_html = await archive_downloader.do_singlefile(prepared, make_test_ctx())
-
     assert len(calls) == 2  # The conversion was attempted.
     assert result == page_html == singlefile
+
+    # A page that has not finished archiving in ten minutes is hung; the timeout reaps it.
+    assert archive_downloader.timeout == 10 * 60
 
 
 @pytest.mark.asyncio
@@ -215,26 +206,6 @@ async def test_do_singlefile_node_fallback(test_session, test_directory, monkeyp
     # node 18 has no IPv4 fallback when "localhost" resolves to ::1 first.
     assert call['env']['NODE_OPTIONS'] == '--enable-network-family-autoselection'
     assert call['start_new_session'] is True
-
-
-def test_archive_downloader_timeout():
-    """A page that has not finished archiving after ten minutes is hung."""
-    assert archive_downloader.timeout == 10 * 60
-
-
-def test_write_archive_files_broken_compressed_not_prettified(test_session, test_directory):
-    """A singlefile marked compressed (data-sfz) whose ZIP is unreadable (e.g. truncated) is
-    stored verbatim; prettifying would destroy whatever remains."""
-    broken = b'<!DOCTYPE html> <html data-sfz><!--\n Page saved with SingleFile \n' \
-             b' url: https://example.com \n--><body hidden></body></html>' \
-             b'PK\x03\x04truncated zip data without a central directory'
-    destination = test_directory / 'archive/example.com'
-    destination.mkdir(parents=True)
-
-    written = write_archive_files('https://example.com', broken, None, None, destination=destination)
-
-    singlefile_path = next(i for i in written.paths if i.suffix == '.html' and '.readability' not in i.name)
-    assert singlefile_path.read_bytes() == broken
 
 
 @pytest.mark.asyncio

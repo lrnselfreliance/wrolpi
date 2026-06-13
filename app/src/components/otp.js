@@ -37,6 +37,13 @@ export class InvalidCiphertext extends Error {
     }
 }
 
+export class InvalidMessage extends Error {
+    constructor(message = 'Message has invalid characters') {
+        super(message);
+        this.name = 'InvalidMessage';
+    }
+}
+
 // Split an iterable into chunks of the defined size.
 function chunks(it, size) {
     const result = [];
@@ -143,7 +150,7 @@ export function decryptOTP(otp, ciphertext, chars = OTP_CHARS) {
 // Calculate a position-weighted checksum character for a message: sum(position * value) mod N, where position is
 // 1-indexed and value is the character's index in the set.  Position weighting catches transposition errors.
 export function calculateChecksum(message, chars = OTP_CHARS) {
-    message = validateMessage(message, InvalidPlaintext, chars);
+    message = validateMessage(message, InvalidMessage, chars);
     let total = 0;
     for (let i = 0; i < message.length; i++) {
         total += (i + 1) * chars.indexOf(message[i]);
@@ -153,17 +160,29 @@ export function calculateChecksum(message, chars = OTP_CHARS) {
 
 // Append a checksum character to a message.
 export function appendChecksum(message, chars = OTP_CHARS) {
-    message = validateMessage(message, InvalidPlaintext, chars);
+    message = validateMessage(message, InvalidMessage, chars);
     return message + calculateChecksum(message, chars);
 }
 
 // Verify a message whose last character is a checksum.  Returns true when the checksum matches.
 export function verifyChecksum(messageWithChecksum, chars = OTP_CHARS) {
-    messageWithChecksum = validateMessage(messageWithChecksum, InvalidPlaintext, chars);
+    messageWithChecksum = validateMessage(messageWithChecksum, InvalidMessage, chars);
     if (messageWithChecksum.length < 2) {
         return false;
     }
     return calculateChecksum(messageWithChecksum.slice(0, -1), chars) === messageWithChecksum.slice(-1);
+}
+
+// Interpret a received message that may carry a trailing checksum character.  The last character is removed ONLY when
+// it verifies as the checksum of the preceding characters; otherwise the message is returned unchanged.  This avoids
+// silently truncating a legitimate character from a message that does not actually carry a checksum.
+// Returns {body, valid}: `body` is the message to decrypt, `valid` is whether a checksum was present and matched.
+export function stripChecksum(received, chars = OTP_CHARS) {
+    const cleaned = validateMessage(received, InvalidMessage, chars);
+    if (cleaned.length >= 2 && calculateChecksum(cleaned.slice(0, -1), chars) === cleaned.slice(-1)) {
+        return {body: cleaned.slice(0, -1), valid: true};
+    }
+    return {body: cleaned, valid: false};
 }
 
 function getCrypto() {

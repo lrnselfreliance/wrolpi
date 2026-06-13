@@ -6,7 +6,13 @@ import {
     encryptOTP,
     formatMessage,
     generateHtml,
+    generateMessage,
+    InvalidCiphertext,
+    InvalidOTP,
+    InvalidPlaintext,
+    OTP_CHARS,
     OTP_CHARS_ALPHA,
+    stripChecksum,
     validateCharset,
     verifyChecksum
 } from './otp';
@@ -188,6 +194,99 @@ describe('checksum', () => {
         expect(appendChecksum(ciphertext)).toEqual('3CUOLY');
         // A transposition in the ciphertext yields a different checksum.
         expect(calculateChecksum('3UCOL')).not.toEqual(calculateChecksum('3CUOL'));
+    });
+});
+
+describe('validation errors', () => {
+    test('an invalid OTP character throws InvalidOTP', () => {
+        expect(() => encryptOTP('A!', 'AB')).toThrow(InvalidOTP);
+        expect(() => decryptOTP('A!', 'AB')).toThrow(InvalidOTP);
+    });
+
+    test('an invalid plaintext character throws InvalidPlaintext', () => {
+        expect(() => encryptOTP('ABC', 'A!')).toThrow(InvalidPlaintext);
+    });
+
+    test('an invalid ciphertext character throws InvalidCiphertext', () => {
+        expect(() => decryptOTP('ABC', 'A!')).toThrow(InvalidCiphertext);
+    });
+
+    test('plaintext longer than the OTP throws', () => {
+        expect(() => encryptOTP('AB', 'ABC')).toThrow('Plaintext is longer than OTP');
+    });
+
+    test('ciphertext longer than the OTP throws', () => {
+        expect(() => decryptOTP('AB', 'ABC')).toThrow('Ciphertext is longer than OTP');
+    });
+});
+
+describe('encrypt/decrypt roundtrip', () => {
+    // A small deterministic PRNG keeps the fuzz reproducible (no reliance on Math.random/crypto).
+    let seed = 123456789;
+    const rand = () => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+    };
+    const pick = (chars, n) => {
+        let out = '';
+        for (let i = 0; i < n; i++) out += chars[Math.floor(rand() * chars.length)];
+        return out;
+    };
+
+    test.each([
+        OTP_CHARS_ALPHA,
+        OTP_CHARS,
+        '0123456789',
+        'abcdef0123', // mixed-case-safe custom set (lowercase => case-sensitive, no uppercasing)
+    ])('recovers the plaintext over %j', (chars) => {
+        for (let n = 0; n < 50; n++) {
+            const len = 1 + Math.floor(rand() * 20);
+            const plaintext = pick(chars, len);
+            const otp = pick(chars, len + Math.floor(rand() * 10)); // OTP at least as long as the message
+            const {ciphertext} = encryptOTP(otp, plaintext, chars);
+            expect(decryptOTP(otp, ciphertext, chars).plaintext).toEqual(formatMessage(plaintext));
+        }
+    });
+});
+
+describe('stripChecksum', () => {
+    test('removes a valid trailing checksum', () => {
+        // calculateChecksum('HELLO') === 'S'
+        expect(stripChecksum('HELLOS')).toEqual({body: 'HELLO', valid: true});
+    });
+
+    test('does NOT truncate a message that has no valid checksum', () => {
+        // Regression: with the checksum option on, the UI used to blindly drop the last character.  'HELLO' has no
+        // checksum (its checksum would be 'S'), so it must be returned intact rather than decoded as 'HELL'.
+        expect(stripChecksum('HELLO')).toEqual({body: 'HELLO', valid: false});
+    });
+
+    test('leaves a corrupted checksummed message intact and flags it invalid', () => {
+        expect(stripChecksum('HELLOX')).toEqual({body: 'HELLOX', valid: false});
+    });
+
+    test('mirrors the decrypt UI flow end-to-end', () => {
+        const otp = 'W8JD7';
+        const raw = encryptOTP(otp, 'HELLO').ciphertext; // '3CUOL'
+        const transmitted = formatMessage(appendChecksum(raw)); // '3CUOL Y'
+        const {body, valid} = stripChecksum(transmitted);
+        expect(valid).toBe(true);
+        expect(decryptOTP(otp, body).plaintext).toEqual('HELLO');
+    });
+});
+
+describe('generateMessage', () => {
+    test('produces 320 characters from the default set', () => {
+        const message = generateMessage().replace(/\s/g, '');
+        expect(message).toHaveLength(320);
+        expect([...message].every(c => OTP_CHARS.includes(c))).toBe(true);
+    });
+
+    test('only uses the given character set', () => {
+        const chars = 'AB';
+        const message = generateMessage(chars).replace(/\s/g, '');
+        expect(message).toHaveLength(320);
+        expect([...message].every(c => chars.includes(c))).toBe(true);
     });
 });
 

@@ -21,8 +21,8 @@ import {
     generateHtml,
     OTP_CHARS,
     OTP_CHARS_ALPHA,
-    validateCharset,
-    verifyChecksum
+    stripChecksum,
+    validateCharset
 } from "./otp";
 import {
     ErrorMessage,
@@ -117,9 +117,11 @@ function Decrypt({chars, checksum}) {
         try {
             let input = ciphertext;
             if (checksum) {
-                checksumValid = verifyChecksum(ciphertext, chars);
-                // Drop the checksum character before decrypting.
-                input = ciphertext.replace(/\s/g, '').slice(0, -1);
+                // Only remove the trailing character when it actually verifies as a checksum, so a message without
+                // one is never silently truncated.
+                const {body, valid} = stripChecksum(ciphertext, chars);
+                checksumValid = valid;
+                input = body;
             }
             plaintext = decryptOTP(otp, input, chars).plaintext;
         } catch (e) {

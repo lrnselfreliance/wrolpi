@@ -247,8 +247,10 @@ textarea.otp {
     color: #DDDDDD !important;
 }
 
-.ui.inverted.accordion .title,
-.ui.inverted.accordion .content {
+/* Direct children only, so nested components that use the `content`/`title` class names (e.g. a Message's
+   Message.Content) are not given the accordion's dark background. */
+.ui.inverted.accordion > .title,
+.ui.inverted.accordion > .content {
     background-color: #171616 !important;
 }
 

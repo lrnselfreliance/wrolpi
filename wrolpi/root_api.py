@@ -17,7 +17,6 @@ from modules.archive.api import archive_bp
 from modules.docs.api import docs_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
-from modules.otp.api import otp_bp
 from modules.videos.api import videos_bp
 from modules.zim.api import zim_bp
 from wrolpi import flags, schema, dates
@@ -55,7 +54,6 @@ api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
-api_app.blueprint(otp_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
 

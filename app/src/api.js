@@ -7,7 +7,6 @@ import {
     COLLECTIONS_API,
     DEFAULT_LIMIT,
     Downloaders,
-    OTP_API,
     VIDEOS_API,
     ZIM_API
 } from "./components/Vars";
@@ -584,39 +583,6 @@ export async function refreshChannel(channelId) {
     }
     return response;
 }
-
-export async function encryptOTP(otp, plaintext) {
-    let body = {otp, plaintext};
-    const response = await apiPost(`${OTP_API}/encrypt_otp`, body);
-    if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to encrypt OTP.  See server logs.');
-        toast({
-            type: 'error',
-            title: 'Failed to encrypt OTP',
-            description: message,
-            time: 5000,
-        })
-    }
-}
-
-export async function decryptOTP(otp, ciphertext) {
-    let body = {otp, ciphertext};
-    const response = await apiPost(`${OTP_API}/decrypt_otp`, body);
-    if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to decrypt OTP.  See server logs.');
-        toast({
-            type: 'error',
-            title: 'Failed to decrypt OTP',
-            description: message,
-            time: 5000,
-        })
-    }
-}
-
 export async function getCategories() {
     const response = await apiGet(`${API_URI}/inventory/categories`);
     if (response.ok) {

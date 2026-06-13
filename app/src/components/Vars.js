@@ -2,7 +2,6 @@ export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.en
 export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const COLLECTIONS_API = `${API_URI}/collections`;
-export const OTP_API = `${API_URI}/otp`;
 export const ZIM_API = `${API_URI}/zim`;
 export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;

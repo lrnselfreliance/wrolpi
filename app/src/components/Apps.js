@@ -1,4 +1,4 @@
-import React, {useContext} from 'react';
+import React, {useContext, useState} from 'react';
 import {
     Divider,
     Input,
@@ -10,9 +10,8 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router";
-import {decryptOTP, encryptOTP} from "../api";
+import {decryptOTP, encryptOTP, generateHtml} from "./otp";
 import {
-    APIButton,
     ErrorMessage,
     humanFileSize,
     humanNumber,
@@ -26,120 +25,116 @@ import {Button, Header, Loader, Segment, Statistic, Table, TextArea} from "./The
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
-class Encrypt extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            otp: '', plaintext: '', ciphertext: '',
+function Encrypt() {
+    // Encrypt happens live as the user types or pastes.  Nothing leaves the browser.
+    const [otp, setOtp] = useState('');
+    const [plaintext, setPlaintext] = useState('');
+
+    const handleInputChange = (event, {name, value}) => {
+        if (name === 'otp') {
+            setOtp(value);
+        } else {
+            setPlaintext(value);
+        }
+    };
+
+    let ciphertext = '';
+    let error = '';
+    if (otp && plaintext) {
+        try {
+            ciphertext = encryptOTP(otp, plaintext).ciphertext;
+        } catch (e) {
+            error = e.message;
         }
     }
 
-    handleSubmit = async () => {
-        let {otp, plaintext, ciphertext} = await encryptOTP(this.state.otp, this.state.plaintext);
-        this.setState({otp, plaintext, ciphertext});
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value});
-    }
-
-    render() {
-        const disabled = !(this.state.otp && this.state.plaintext);
-
-        return <>
-            <Header as='h2'>Encrypt</Header>
-            <SegmentGroup>
-                <Segment>
-                    <h3>Key</h3>
-                    <TextArea
-                        name='otp'
-                        className='otp'
-                        value={this.state.otp}
-                        onChange={this.handleInputChange}
-                        placeholder='The random letters from your One-Time Pad'
-                    />
-                </Segment>
-                <Segment>
-                    <h3>Plaintext</h3>
-                    <TextArea
-                        name='plaintext'
-                        className='otp'
-                        value={this.state.plaintext}
-                        onChange={this.handleInputChange}
-                        placeholder='The message you want to send'
-                    />
-                </Segment>
-                <Segment>
-                    <h3>Ciphertext</h3>
-                    <pre>{this.state.ciphertext || 'Enter your message above'}</pre>
-                </Segment>
-            </SegmentGroup>
-            <br/>
-            <APIButton
-                disabled={disabled}
-                onClick={this.handleSubmit}
-            >Encrypt</APIButton>
-        </>
-    }
+    return <>
+        <Header as='h2'>Encrypt</Header>
+        <SegmentGroup>
+            <Segment>
+                <h3>Key</h3>
+                <TextArea
+                    name='otp'
+                    className='otp'
+                    value={otp}
+                    onChange={handleInputChange}
+                    placeholder='The random letters from your One-Time Pad'
+                />
+            </Segment>
+            <Segment>
+                <h3>Plaintext</h3>
+                <TextArea
+                    name='plaintext'
+                    className='otp'
+                    value={plaintext}
+                    onChange={handleInputChange}
+                    placeholder='The message you want to send'
+                />
+            </Segment>
+            <Segment>
+                <h3>Ciphertext</h3>
+                {error
+                    ? <ErrorMessage>{error}</ErrorMessage>
+                    : <pre>{ciphertext || 'Enter your message above'}</pre>}
+            </Segment>
+        </SegmentGroup>
+    </>
 }
 
-class Decrypt extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            otp: '', plaintext: '', ciphertext: ''
+function Decrypt() {
+    // Decrypt happens live as the user types or pastes.  Nothing leaves the browser.
+    const [otp, setOtp] = useState('');
+    const [ciphertext, setCiphertext] = useState('');
+
+    const handleInputChange = (event, {name, value}) => {
+        if (name === 'otp') {
+            setOtp(value);
+        } else {
+            setCiphertext(value);
+        }
+    };
+
+    let plaintext = '';
+    let error = '';
+    if (otp && ciphertext) {
+        try {
+            plaintext = decryptOTP(otp, ciphertext).plaintext;
+        } catch (e) {
+            error = e.message;
         }
     }
 
-    handleSubmit = async () => {
-        let {otp, plaintext, ciphertext} = await decryptOTP(this.state.otp, this.state.ciphertext);
-        this.setState({otp, plaintext, ciphertext});
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value});
-    }
-
-    render() {
-        const disabled = !(this.state.otp && this.state.ciphertext);
-
-        return <>
-            <Header as='h2'>Decrypt</Header>
-            <SegmentGroup>
-                <Segment>
-                    <h3>Key</h3>
-                    <TextArea
-                        name='otp'
-                        className='otp'
-                        value={this.state.otp}
-                        onChange={this.handleInputChange}
-                        placeholder='The random letters from your One-Time Pad'
-                    />
-                </Segment>
-                <Segment>
-                    <h3>Ciphertext</h3>
-                    <TextArea
-                        name='ciphertext'
-                        className='otp'
-                        value={this.state.ciphertext}
-                        onChange={this.handleInputChange}
-                        placeholder='The message you received'
-                    />
-                </Segment>
-                <Segment>
-                    <h3>Plaintext</h3>
-                    <pre>{this.state.plaintext || 'Enter the encrypted message above'}</pre>
-                </Segment>
-            </SegmentGroup>
-
-            <br/>
-
-            <APIButton
-                disabled={disabled}
-                onClick={this.handleSubmit}
-            >Decrypt</APIButton>
-        </>
-    }
+    return <>
+        <Header as='h2'>Decrypt</Header>
+        <SegmentGroup>
+            <Segment>
+                <h3>Key</h3>
+                <TextArea
+                    name='otp'
+                    className='otp'
+                    value={otp}
+                    onChange={handleInputChange}
+                    placeholder='The random letters from your One-Time Pad'
+                />
+            </Segment>
+            <Segment>
+                <h3>Ciphertext</h3>
+                <TextArea
+                    name='ciphertext'
+                    className='otp'
+                    value={ciphertext}
+                    onChange={handleInputChange}
+                    placeholder='The message you received'
+                />
+            </Segment>
+            <Segment>
+                <h3>Plaintext</h3>
+                {error
+                    ? <ErrorMessage>{error}</ErrorMessage>
+                    : <pre>{plaintext || 'Enter the encrypted message above'}</pre>}
+            </Segment>
+        </SegmentGroup>
+    </>
 }
 
 function OTP() {
@@ -147,15 +142,22 @@ function OTP() {
 
     const {t} = useContext(ThemeContext);
 
-    let newPadURL = `https://${window.location.host}/api/otp/html`;
     let cheatSheetURL = `${process.env.PUBLIC_URL}/one-time-pad-cheat-sheet.pdf`;
+
+    // Generate a new One-Time Pad entirely in the browser and open it in a new tab so it can be printed.  The pad is
+    // never sent to or stored on the server.
+    const handleGenerateNewPad = () => {
+        const blob = new Blob([generateHtml()], {type: 'text/html'});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    };
 
     return <>
         <Header as='h1'>One-Time Pad</Header>
         <Header as='h4'>One-Time Pads can be used to encrypt your communications. This can be done by hand
             (yes, really) or in this app.</Header>
         <p {...t}>These messages are never stored and cannot be retrieved.</p>
-        <Button color='violet' href={newPadURL}>Generate New Pad</Button>
+        <Button color='violet' onClick={handleGenerateNewPad}>Generate New Pad</Button>
         <Button secondary href={cheatSheetURL}>Cheat Sheet PDF</Button>
 
         <Divider/>

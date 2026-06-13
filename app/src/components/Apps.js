@@ -150,6 +150,8 @@ function OTP() {
         const blob = new Blob([generateHtml()], {type: 'text/html'});
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
+        // Release the blob handle once the new tab has had time to load it.
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
     };
 
     return <>

@@ -2,6 +2,7 @@ import React, {useContext, useState} from 'react';
 import {
     Checkbox,
     Divider,
+    Icon,
     Input,
     Label,
     Radio,
@@ -31,8 +32,7 @@ import {
     PageContainer,
     SimpleAccordion,
     toLocaleString,
-    useTitle,
-    WarningMessage
+    useTitle
 } from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Form, Header, Loader, Segment, Statistic, Table, TextArea} from "./Theme";
@@ -112,14 +112,12 @@ function Decrypt({chars, checksum}) {
 
     let plaintext = '';
     let error = '';
-    let warning = '';
+    let checksumValid = null; // null = not applicable (checksum off or nothing to check)
     if (otp && ciphertext && chars) {
         try {
             let input = ciphertext;
             if (checksum) {
-                if (!verifyChecksum(ciphertext, chars)) {
-                    warning = 'Checksum mismatch — possible transcription error.';
-                }
+                checksumValid = verifyChecksum(ciphertext, chars);
                 // Drop the checksum character before decrypting.
                 input = ciphertext.replace(/\s/g, '').slice(0, -1);
             }
@@ -154,7 +152,10 @@ function Decrypt({chars, checksum}) {
             </Segment>
             <Segment>
                 <h3>Plaintext</h3>
-                {warning && <WarningMessage>{warning}</WarningMessage>}
+                {checksumValid !== null && <p>
+                    <Icon name={checksumValid ? 'check' : 'times'} color={checksumValid ? 'green' : 'red'}/>
+                    {checksumValid ? 'Checksum is valid' : 'Checksum is invalid'}
+                </p>}
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
                     : <pre>{plaintext || (chars ? 'Enter the encrypted message above' : 'Set valid characters in Advanced options')}</pre>}

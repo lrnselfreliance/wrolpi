@@ -140,6 +140,32 @@ export function decryptOTP(otp, ciphertext, chars = OTP_CHARS) {
     };
 }
 
+// Calculate a position-weighted checksum character for a message: sum(position * value) mod N, where position is
+// 1-indexed and value is the character's index in the set.  Position weighting catches transposition errors.
+export function calculateChecksum(message, chars = OTP_CHARS) {
+    message = validateMessage(message, InvalidPlaintext, chars);
+    let total = 0;
+    for (let i = 0; i < message.length; i++) {
+        total += (i + 1) * chars.indexOf(message[i]);
+    }
+    return chars[total % chars.length];
+}
+
+// Append a checksum character to a message.
+export function appendChecksum(message, chars = OTP_CHARS) {
+    message = validateMessage(message, InvalidPlaintext, chars);
+    return message + calculateChecksum(message, chars);
+}
+
+// Verify a message whose last character is a checksum.  Returns true when the checksum matches.
+export function verifyChecksum(messageWithChecksum, chars = OTP_CHARS) {
+    messageWithChecksum = validateMessage(messageWithChecksum, InvalidPlaintext, chars);
+    if (messageWithChecksum.length < 2) {
+        return false;
+    }
+    return calculateChecksum(messageWithChecksum.slice(0, -1), chars) === messageWithChecksum.slice(-1);
+}
+
 function getCrypto() {
     const cryptoObj = typeof window !== 'undefined' && window.crypto;
     if (!cryptoObj || !cryptoObj.getRandomValues) {

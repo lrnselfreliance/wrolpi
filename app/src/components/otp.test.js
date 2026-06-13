@@ -1,5 +1,15 @@
 import {webcrypto} from 'crypto';
-import {decryptOTP, encryptOTP, formatMessage, generateHtml, OTP_CHARS_ALPHA, validateCharset} from './otp';
+import {
+    appendChecksum,
+    calculateChecksum,
+    decryptOTP,
+    encryptOTP,
+    formatMessage,
+    generateHtml,
+    OTP_CHARS_ALPHA,
+    validateCharset,
+    verifyChecksum
+} from './otp';
 
 // jsdom does not always provide window.crypto; real browsers always do.  Polyfill it for the generation tests.
 if (!window.crypto || !window.crypto.getRandomValues) {
@@ -141,6 +151,43 @@ describe('validateCharset', () => {
         ['A'.repeat(257), 'Too many characters (max 256)'],
     ])('validates %j', (chars, expected) => {
         expect(validateCharset(chars)).toEqual(expected);
+    });
+});
+
+describe('checksum', () => {
+    // Vectors adapted from the original backend plan (otp-checksum.md), default 36-char set.
+    test.each([
+        ['', 'A'],
+        ['A', 'A'],
+        ['B', 'B'],
+        ['HELLO', 'S'], // 7+8+33+44+70 = 162 mod 36 = 18 = 'S'
+        ['HLELO', 'L'], // transposition produces a different checksum (162→155, 155 mod 36 = 11 = 'L')
+    ])('calculateChecksum(%j) = %j', (message, expected) => {
+        expect(calculateChecksum(message)).toEqual(expected);
+    });
+
+    test.each([
+        ['HELLOS', true],
+        ['HELLOX', false], // wrong checksum
+        ['HLELOS', false], // transposed message, original checksum
+    ])('verifyChecksum(%j) = %j', (messageWithChecksum, expected) => {
+        expect(verifyChecksum(messageWithChecksum)).toEqual(expected);
+    });
+
+    test('appendChecksum adds the checksum character', () => {
+        expect(appendChecksum('HELLO')).toEqual('HELLOS');
+    });
+
+    test('checksum follows the character set', () => {
+        // With A–Z (mod 26): 162 mod 26 = 6 = 'G', not 'S'.
+        expect(calculateChecksum('HELLO', OTP_CHARS_ALPHA)).toEqual('G');
+    });
+
+    test('checksum protects an encrypted message end-to-end', () => {
+        const {ciphertext} = encryptOTP('W8JD7', 'HELLO'); // '3CUOL'
+        expect(appendChecksum(ciphertext)).toEqual('3CUOLY');
+        // A transposition in the ciphertext yields a different checksum.
+        expect(calculateChecksum('3UCOL')).not.toEqual(calculateChecksum('3CUOL'));
     });
 });
 

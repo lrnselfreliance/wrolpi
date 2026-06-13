@@ -1,5 +1,6 @@
 import React, {useContext, useState} from 'react';
 import {
+    Checkbox,
     Divider,
     Input,
     Label,
@@ -11,7 +12,17 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router";
-import {decryptOTP, encryptOTP, generateHtml, OTP_CHARS, OTP_CHARS_ALPHA, validateCharset} from "./otp";
+import {
+    appendChecksum,
+    decryptOTP,
+    encryptOTP,
+    formatMessage,
+    generateHtml,
+    OTP_CHARS,
+    OTP_CHARS_ALPHA,
+    validateCharset,
+    verifyChecksum
+} from "./otp";
 import {
     ErrorMessage,
     humanFileSize,
@@ -20,14 +31,15 @@ import {
     PageContainer,
     SimpleAccordion,
     toLocaleString,
-    useTitle
+    useTitle,
+    WarningMessage
 } from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Form, Header, Loader, Segment, Statistic, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
-function Encrypt({chars}) {
+function Encrypt({chars, checksum}) {
     // Encrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [plaintext, setPlaintext] = useState('');
@@ -44,7 +56,9 @@ function Encrypt({chars}) {
     let error = '';
     if (otp && plaintext && chars) {
         try {
-            ciphertext = encryptOTP(otp, plaintext, chars).ciphertext;
+            const raw = encryptOTP(otp, plaintext, chars).ciphertext;
+            // When enabled, append a checksum character then re-group the whole message+checksum.
+            ciphertext = checksum ? formatMessage(appendChecksum(raw, chars)) : raw;
         } catch (e) {
             error = e.message;
         }
@@ -83,7 +97,7 @@ function Encrypt({chars}) {
     </>
 }
 
-function Decrypt({chars}) {
+function Decrypt({chars, checksum}) {
     // Decrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [ciphertext, setCiphertext] = useState('');
@@ -98,9 +112,18 @@ function Decrypt({chars}) {
 
     let plaintext = '';
     let error = '';
+    let warning = '';
     if (otp && ciphertext && chars) {
         try {
-            plaintext = decryptOTP(otp, ciphertext, chars).plaintext;
+            let input = ciphertext;
+            if (checksum) {
+                if (!verifyChecksum(ciphertext, chars)) {
+                    warning = 'Checksum mismatch — possible transcription error.';
+                }
+                // Drop the checksum character before decrypting.
+                input = ciphertext.replace(/\s/g, '').slice(0, -1);
+            }
+            plaintext = decryptOTP(otp, input, chars).plaintext;
         } catch (e) {
             error = e.message;
         }
@@ -131,6 +154,7 @@ function Decrypt({chars}) {
             </Segment>
             <Segment>
                 <h3>Plaintext</h3>
+                {warning && <WarningMessage>{warning}</WarningMessage>}
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
                     : <pre>{plaintext || (chars ? 'Enter the encrypted message above' : 'Set valid characters in Advanced options')}</pre>}
@@ -153,6 +177,9 @@ function OTP() {
             : OTP_CHARS;
     // A null charset means the custom set is not yet usable; encrypt/decrypt/generate are gated on this.
     const activeChars = charsetError ? null : chars;
+
+    // Optional error-detection checksum appended to the ciphertext.
+    const [checksum, setChecksum] = useState(false);
 
     let cheatSheetURL = `${process.env.PUBLIC_URL}/one-time-pad-cheat-sheet.pdf`;
 
@@ -199,13 +226,20 @@ function OTP() {
                 />
                 {charsetError && <ErrorMessage>{charsetError}</ErrorMessage>}
             </>}
+
+            <Header as='h4'>Error detection</Header>
+            <Checkbox
+                label='Append error-detection checksum'
+                checked={checksum}
+                onChange={() => setChecksum(!checksum)}
+            />
         </SimpleAccordion>
 
         <Divider/>
-        <Encrypt chars={activeChars}/>
+        <Encrypt chars={activeChars} checksum={checksum}/>
 
         <Divider/>
-        <Decrypt chars={activeChars}/>
+        <Decrypt chars={activeChars} checksum={checksum}/>
     </>
 }
 

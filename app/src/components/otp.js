@@ -1,15 +1,20 @@
 // One-Time Pad encryption/decryption.  This is performed entirely in the browser; messages are never sent to the
 // server.  This is a JavaScript port of the original Python implementation (modules/otp/lib.py).
 
-// These are the only characters we support.
+// The default character set: letters and digits.
 export const OTP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+// A letters-only character set, easiest to work by hand.
+export const OTP_CHARS_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 // The number of characters in each group, separated by spaces.
 export const GROUP_SIZE = 5;
 // The groups in each row of a message, separated by newlines.  This is small to allow for mobile phones.
 export const GROUP_COUNT = 5;
 
-const CHARS_LEN = OTP_CHARS.length;
 const WHITESPACE = /\s/g;
+
+// A character set whose characters are all uppercase can have its input auto-uppercased for convenience.  A custom
+// set containing lowercase is treated case-sensitively (the input is used verbatim).
+const shouldUppercase = (chars) => chars === chars.toUpperCase();
 
 export class InvalidOTP extends Error {
     constructor(message = 'OTP has invalid characters') {
@@ -50,12 +55,14 @@ export function formatMessage(message, groupCount = GROUP_COUNT) {
     return rows.map(row => row.join(' ')).join('\n');
 }
 
-function validateMessage(message, ErrorClass) {
-    message = message.toUpperCase();
+function validateMessage(message, ErrorClass, chars) {
+    if (shouldUppercase(chars)) {
+        message = message.toUpperCase();
+    }
     message = message.replace(WHITESPACE, '');
 
     for (const char of message) {
-        if (!OTP_CHARS.includes(char)) {
+        if (!chars.includes(char)) {
             throw new ErrorClass();
         }
     }
@@ -63,21 +70,38 @@ function validateMessage(message, ErrorClass) {
     return message;
 }
 
-function encryptChar(plaintext, otp) {
-    const calculated = (OTP_CHARS.indexOf(plaintext) + OTP_CHARS.indexOf(otp)) % CHARS_LEN;
-    return OTP_CHARS[calculated];
+function encryptChar(plaintext, otp, chars) {
+    const calculated = (chars.indexOf(plaintext) + chars.indexOf(otp)) % chars.length;
+    return chars[calculated];
 }
 
-function decryptChar(ciphertext, otp) {
-    // JavaScript's % can return negative values; add CHARS_LEN before the modulo to keep it positive.
-    const calculated = (OTP_CHARS.indexOf(ciphertext) - OTP_CHARS.indexOf(otp) + CHARS_LEN) % CHARS_LEN;
-    return OTP_CHARS[calculated];
+function decryptChar(ciphertext, otp, chars) {
+    // JavaScript's % can return negative values; add chars.length before the modulo to keep it positive.
+    const calculated = (chars.indexOf(ciphertext) - chars.indexOf(otp) + chars.length) % chars.length;
+    return chars[calculated];
 }
 
-// Encrypt a plaintext message using an OTP.
-export function encryptOTP(otp, plaintext) {
-    otp = validateMessage(otp, InvalidOTP);
-    plaintext = validateMessage(plaintext, InvalidPlaintext);
+// Validate a character set.  Returns an error message string, or null when the set is usable.
+export function validateCharset(chars) {
+    if (!chars || chars.length < 2) {
+        return 'Enter at least 2 characters';
+    }
+    if (chars.length > 256) {
+        return 'Too many characters (max 256)';
+    }
+    if (/\s/.test(chars)) {
+        return 'Characters cannot contain spaces';
+    }
+    if (new Set(chars).size !== chars.length) {
+        return 'Characters must be unique';
+    }
+    return null;
+}
+
+// Encrypt a plaintext message using an OTP and the given character set.
+export function encryptOTP(otp, plaintext, chars = OTP_CHARS) {
+    otp = validateMessage(otp, InvalidOTP, chars);
+    plaintext = validateMessage(plaintext, InvalidPlaintext, chars);
 
     if (plaintext.length > otp.length) {
         throw new InvalidPlaintext('Plaintext is longer than OTP');
@@ -85,7 +109,7 @@ export function encryptOTP(otp, plaintext) {
 
     let ciphertext = '';
     for (let i = 0; i < plaintext.length; i++) {
-        ciphertext += encryptChar(plaintext[i], otp[i]);
+        ciphertext += encryptChar(plaintext[i], otp[i], chars);
     }
 
     return {
@@ -95,10 +119,10 @@ export function encryptOTP(otp, plaintext) {
     };
 }
 
-// Decrypt an encrypted message that was encrypted with an OTP.
-export function decryptOTP(otp, ciphertext) {
-    otp = validateMessage(otp, InvalidOTP);
-    ciphertext = validateMessage(ciphertext, InvalidCiphertext);
+// Decrypt an encrypted message that was encrypted with an OTP and the given character set.
+export function decryptOTP(otp, ciphertext, chars = OTP_CHARS) {
+    otp = validateMessage(otp, InvalidOTP, chars);
+    ciphertext = validateMessage(ciphertext, InvalidCiphertext, chars);
 
     if (ciphertext.length > otp.length) {
         throw new InvalidCiphertext('Ciphertext is longer than OTP');
@@ -106,7 +130,7 @@ export function decryptOTP(otp, ciphertext) {
 
     let plaintext = '';
     for (let i = 0; i < ciphertext.length; i++) {
-        plaintext += decryptChar(ciphertext[i], otp[i]);
+        plaintext += decryptChar(ciphertext[i], otp[i], chars);
     }
 
     return {
@@ -125,24 +149,24 @@ function getCrypto() {
 }
 
 // Choose a single OTP character using a cryptographically secure RNG.  Rejection sampling is used to avoid modulo bias.
-function generateChar() {
+function generateChar(chars) {
     const cryptoObj = getCrypto();
-    const max = 256 - (256 % CHARS_LEN);
+    const max = 256 - (256 % chars.length);
     const buffer = new Uint8Array(1);
     let value;
     do {
         cryptoObj.getRandomValues(buffer);
         value = buffer[0];
     } while (value >= max);
-    return OTP_CHARS[value % CHARS_LEN];
+    return chars[value % chars.length];
 }
 
 // Create an OTP message.  Format it for ease of use.
-export function generateMessage() {
+export function generateMessage(chars = OTP_CHARS) {
     let message = '';
     // Use 16 groups per line because this page will be printed.
     for (let i = 0; i < 320; i++) {
-        message += generateChar();
+        message += generateChar(chars);
     }
     return formatMessage(message, 16);
 }
@@ -155,6 +179,8 @@ const PAGE_HTML = `
 a { text-decoration: none; }
 </style>
 <body>
+<pre>Characters: {chars}</pre>
+
 {messages}
 
 
@@ -170,10 +196,11 @@ To learn how to use this page, please visit: <a href="https://lrnsr.co/H7Za">htt
 `;
 
 // Create an HTML One-Time Pad page.  This page will have instructions on how to use the OTP.
-export function generateHtml() {
+export function generateHtml(chars = OTP_CHARS) {
     const messages = [];
     for (let i = 1; i <= 8; i++) {
-        messages.push(`<pre>MESSAGE ${i}</pre><pre>${generateMessage()}</pre>`);
+        messages.push(`<pre>MESSAGE ${i}</pre><pre>${generateMessage(chars)}</pre>`);
     }
-    return PAGE_HTML.replace('{messages}', messages.join('\n\n'));
+    // Use function replacers so a '$' in a custom character set is not treated as a replacement pattern.
+    return PAGE_HTML.replace('{messages}', () => messages.join('\n\n')).replace('{chars}', () => chars);
 }

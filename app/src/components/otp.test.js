@@ -1,5 +1,5 @@
 import {webcrypto} from 'crypto';
-import {decryptOTP, encryptOTP, formatMessage, generateHtml} from './otp';
+import {decryptOTP, encryptOTP, formatMessage, generateHtml, OTP_CHARS_ALPHA, validateCharset} from './otp';
 
 // jsdom does not always provide window.crypto; real browsers always do.  Polyfill it for the generation tests.
 if (!window.crypto || !window.crypto.getRandomValues) {
@@ -95,8 +95,61 @@ describe('formatMessage', () => {
     });
 });
 
+describe('custom character sets', () => {
+    test('A–Z only encrypts with the classic Vigenère vector', () => {
+        // With 0–9 absent (mod 26), HELLO + XMCKL = EQNVZ — different from the 36-char result.
+        const result = encryptOTP('XMCKL', 'HELLO', OTP_CHARS_ALPHA);
+        expect(result.ciphertext).toEqual('EQNVZ');
+        expect(decryptOTP('XMCKL', 'EQNVZ', OTP_CHARS_ALPHA).plaintext).toEqual('HELLO');
+    });
+
+    test('a digit is rejected when the set is A–Z only', () => {
+        expect(() => encryptOTP('ABCDE', 'HELL0', OTP_CHARS_ALPHA)).toThrow('Plaintext has invalid characters');
+    });
+
+    test('round-trips through a custom numeric set', () => {
+        const chars = '0123456789';
+        const {ciphertext} = encryptOTP('48271', '13579', chars);
+        expect(decryptOTP('48271', ciphertext, chars).plaintext).toEqual('13579');
+    });
+
+    test('an out-of-set character throws', () => {
+        expect(() => encryptOTP('01234', 'ABCDE', '0123456789')).toThrow('Plaintext has invalid characters');
+    });
+
+    test('an all-uppercase custom set auto-uppercases input', () => {
+        // The set is all uppercase, so lowercase input is folded to uppercase (like the built-in sets).
+        const chars = 'ABCDEF';
+        expect(encryptOTP('aabbcc', 'abcdef', chars)).toEqual(encryptOTP('AABBCC', 'ABCDEF', chars));
+    });
+
+    test('a custom set with lowercase is case-sensitive', () => {
+        // The set contains lowercase, so input is used verbatim; uppercase input is not in the set.
+        expect(encryptOTP('abcde', 'abcde', 'abcde').ciphertext).toBeTruthy();
+        expect(() => encryptOTP('abcde', 'ABCDE', 'abcde')).toThrow('Plaintext has invalid characters');
+    });
+});
+
+describe('validateCharset', () => {
+    test.each([
+        ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', null],
+        ['0123456789', null],
+        ['', 'Enter at least 2 characters'],
+        ['A', 'Enter at least 2 characters'],
+        ['AABC', 'Characters must be unique'],
+        ['AB CD', 'Characters cannot contain spaces'],
+        ['A'.repeat(257), 'Too many characters (max 256)'],
+    ])('validates %j', (chars, expected) => {
+        expect(validateCharset(chars)).toEqual(expected);
+    });
+});
+
 describe('generateHtml', () => {
     test('generates a OTP HTML page', () => {
         expect(generateHtml()).toBeTruthy();
+    });
+
+    test('labels the page with the character set it used', () => {
+        expect(generateHtml(OTP_CHARS_ALPHA)).toContain('Characters: ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     });
 });

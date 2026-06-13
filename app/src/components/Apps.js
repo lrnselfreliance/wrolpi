@@ -3,6 +3,7 @@ import {
     Divider,
     Input,
     Label,
+    Radio,
     SegmentGroup,
     StatisticLabel,
     StatisticValue,
@@ -10,22 +11,23 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router";
-import {decryptOTP, encryptOTP, generateHtml} from "./otp";
+import {decryptOTP, encryptOTP, generateHtml, OTP_CHARS, OTP_CHARS_ALPHA, validateCharset} from "./otp";
 import {
     ErrorMessage,
     humanFileSize,
     humanNumber,
     mimetypeColor,
     PageContainer,
+    SimpleAccordion,
     toLocaleString,
     useTitle
 } from "./Common";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Header, Loader, Segment, Statistic, Table, TextArea} from "./Theme";
+import {Button, Form, Header, Loader, Segment, Statistic, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
 import {CalculatorsPage} from "./Calculators";
 
-function Encrypt() {
+function Encrypt({chars}) {
     // Encrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [plaintext, setPlaintext] = useState('');
@@ -40,9 +42,9 @@ function Encrypt() {
 
     let ciphertext = '';
     let error = '';
-    if (otp && plaintext) {
+    if (otp && plaintext && chars) {
         try {
-            ciphertext = encryptOTP(otp, plaintext).ciphertext;
+            ciphertext = encryptOTP(otp, plaintext, chars).ciphertext;
         } catch (e) {
             error = e.message;
         }
@@ -75,13 +77,13 @@ function Encrypt() {
                 <h3>Ciphertext</h3>
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
-                    : <pre>{ciphertext || 'Enter your message above'}</pre>}
+                    : <pre>{ciphertext || (chars ? 'Enter your message above' : 'Set valid characters in Advanced options')}</pre>}
             </Segment>
         </SegmentGroup>
     </>
 }
 
-function Decrypt() {
+function Decrypt({chars}) {
     // Decrypt happens live as the user types or pastes.  Nothing leaves the browser.
     const [otp, setOtp] = useState('');
     const [ciphertext, setCiphertext] = useState('');
@@ -96,9 +98,9 @@ function Decrypt() {
 
     let plaintext = '';
     let error = '';
-    if (otp && ciphertext) {
+    if (otp && ciphertext && chars) {
         try {
-            plaintext = decryptOTP(otp, ciphertext).plaintext;
+            plaintext = decryptOTP(otp, ciphertext, chars).plaintext;
         } catch (e) {
             error = e.message;
         }
@@ -131,7 +133,7 @@ function Decrypt() {
                 <h3>Plaintext</h3>
                 {error
                     ? <ErrorMessage>{error}</ErrorMessage>
-                    : <pre>{plaintext || 'Enter the encrypted message above'}</pre>}
+                    : <pre>{plaintext || (chars ? 'Enter the encrypted message above' : 'Set valid characters in Advanced options')}</pre>}
             </Segment>
         </SegmentGroup>
     </>
@@ -142,12 +144,22 @@ function OTP() {
 
     const {t} = useContext(ThemeContext);
 
+    // The character set is a property of the pad: encrypt, decrypt, and generation all use the same alphabet.
+    const [charsetKind, setCharsetKind] = useState('alphanumeric'); // 'alpha' | 'alphanumeric' | 'custom'
+    const [customChars, setCustomChars] = useState('');
+    const charsetError = charsetKind === 'custom' ? validateCharset(customChars) : null;
+    const chars = charsetKind === 'alpha' ? OTP_CHARS_ALPHA
+        : charsetKind === 'custom' ? customChars
+            : OTP_CHARS;
+    // A null charset means the custom set is not yet usable; encrypt/decrypt/generate are gated on this.
+    const activeChars = charsetError ? null : chars;
+
     let cheatSheetURL = `${process.env.PUBLIC_URL}/one-time-pad-cheat-sheet.pdf`;
 
     // Generate a new One-Time Pad entirely in the browser and open it in a new tab so it can be printed.  The pad is
     // never sent to or stored on the server.
     const handleGenerateNewPad = () => {
-        const blob = new Blob([generateHtml()], {type: 'text/html'});
+        const blob = new Blob([generateHtml(activeChars)], {type: 'text/html'});
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
         // Release the blob handle once the new tab has had time to load it.
@@ -159,14 +171,41 @@ function OTP() {
         <Header as='h4'>One-Time Pads can be used to encrypt your communications. This can be done by hand
             (yes, really) or in this app.</Header>
         <p {...t}>These messages are never stored and cannot be retrieved.</p>
-        <Button color='violet' onClick={handleGenerateNewPad}>Generate New Pad</Button>
+        <Button color='violet' disabled={!activeChars} onClick={handleGenerateNewPad}>Generate New Pad</Button>
         <Button secondary href={cheatSheetURL}>Cheat Sheet PDF</Button>
 
-        <Divider/>
-        <Encrypt/>
+        <SimpleAccordion title='Advanced'>
+            <Header as='h4'>Pad characters</Header>
+            <Form>
+                <Form.Field>
+                    <Radio label='A–Z' name='charset' value='alpha'
+                           checked={charsetKind === 'alpha'} onChange={() => setCharsetKind('alpha')}/>
+                </Form.Field>
+                <Form.Field>
+                    <Radio label='A–Z and 0–9' name='charset' value='alphanumeric'
+                           checked={charsetKind === 'alphanumeric'} onChange={() => setCharsetKind('alphanumeric')}/>
+                </Form.Field>
+                <Form.Field>
+                    <Radio label='Custom' name='charset' value='custom'
+                           checked={charsetKind === 'custom'} onChange={() => setCharsetKind('custom')}/>
+                </Form.Field>
+            </Form>
+            {charsetKind === 'custom' && <>
+                <Input
+                    fluid
+                    value={customChars}
+                    placeholder='e.g. ABCDEF0123'
+                    onChange={(e, {value}) => setCustomChars(value)}
+                />
+                {charsetError && <ErrorMessage>{charsetError}</ErrorMessage>}
+            </>}
+        </SimpleAccordion>
 
         <Divider/>
-        <Decrypt/>
+        <Encrypt chars={activeChars}/>
+
+        <Divider/>
+        <Decrypt chars={activeChars}/>
     </>
 }
 

@@ -16,7 +16,12 @@ import {
     getDomain,
     getDownloads,
     getFiles,
-    getInventory,
+    getInventories,
+    createInventory,
+    saveInventory,
+    deleteInventory,
+    getCatalog,
+    saveCatalog,
     getOutdatedZims,
     getSettings,
     getStatistics,
@@ -1471,32 +1476,106 @@ export const useArchiveStatistics = () => {
     return {statistics, fetchStatistics}
 }
 
-export const useInventory = (inventoryId) => {
-    const [byCategory, setByCategory] = useState();
-    const [bySubcategory, setBySubcategory] = useState();
-    const [byName, setByName] = useState();
+export const useInventories = () => {
+    // Single in-memory store: every inventory (full) is loaded once.  The list, the selected inventory's items,
+    // the summary, location suggestions, and the ration calculator all derive from this — no per-action GETs.
+    // Mutations persist the whole changed inventory (optimistically) instead of calling granular endpoints.
+    const [inventories, setInventories] = useState(null);
+    const ref = useRef([]);
+    useEffect(() => {
+        ref.current = inventories || [];
+    }, [inventories]);
 
-    const fetchInventory = async () => {
-        if (!inventoryId) {
-            return
+    const fetchInventories = async () => {
+        const result = await getInventories();
+        if (Array.isArray(result)) {
+            setInventories(result);
         }
-
-        try {
-            const inventory = await getInventory(inventoryId);
-            setByCategory(enumerate(inventory['by_category']));
-            setBySubcategory(enumerate(inventory['by_subcategory']));
-            setByName(enumerate(inventory['by_name']));
-        } catch (e) {
-            console.error(e);
-        }
-    }
+    };
 
     useEffect(() => {
-        fetchInventory();
-    }, [inventoryId]);
+        fetchInventories();
+    }, []);
 
-    return {byCategory, bySubcategory, byName, fetchInventory}
+    // Persist a patch ({name?, fields?, items?}) to one inventory: update locally first for snappy UI, then save.
+    // On conflict/error the saved value is null, so we re-fetch to reconcile with the server.
+    const persistInventory = async (slug, patch) => {
+        const current = ref.current.find(i => i.slug === slug);
+        const version = current ? current.version : undefined;
+        setInventories(prev => (prev || []).map(i => i.slug === slug ? {...i, ...patch} : i));
+        const saved = await saveInventory(slug, {...patch, version});
+        if (saved) {
+            setInventories(prev => (prev || []).map(i => i.slug === slug ? saved : i));
+        } else {
+            await fetchInventories();
+        }
+        return saved;
+    };
+
+    const addInventory = async (name, type) => {
+        const inventory = await createInventory({name, type});
+        if (inventory) {
+            setInventories(prev => [...(prev || []), inventory]);
+        }
+        return inventory;
+    };
+
+    const removeInventory = async (slug) => {
+        const response = await deleteInventory(slug);
+        if (response.ok) {
+            setInventories(prev => (prev || []).filter(i => i.slug !== slug));
+        }
+        return response;
+    };
+
+    return {inventories, fetchInventories, persistInventory, addInventory, removeInventory}
 }
+
+// The shared food catalog: load once, persist the whole list on change (optimistic).
+export const useCatalog = () => {
+    const [catalog, setCatalog] = useState(null);
+
+    const fetchCatalog = async () => {
+        const result = await getCatalog();
+        if (Array.isArray(result)) {
+            setCatalog(result);
+        }
+    };
+
+    useEffect(() => {
+        fetchCatalog();
+    }, []);
+
+    const persistCatalog = async (items) => {
+        setCatalog(items);
+        const saved = await saveCatalog(items);
+        if (Array.isArray(saved)) {
+            setCatalog(saved);
+        } else {
+            await fetchCatalog();
+        }
+        return saved;
+    };
+
+    return {catalog, fetchCatalog, persistCatalog};
+};
+
+// Pool location suggestions from every inventory's `location`-type fields (shared across inventories).
+export const collectLocations = (inventories) => {
+    const locations = new Set();
+    (inventories || []).forEach(inv => {
+        const keys = (inv.fields || []).filter(f => f.type === 'location').map(f => f.key);
+        if (keys.length === 0) {
+            return;
+        }
+        (inv.items || []).forEach(item => keys.forEach(k => {
+            if (item[k]) {
+                locations.add(item[k]);
+            }
+        }));
+    });
+    return Array.from(locations).sort();
+};
 
 export const useStatistics = () => {
     const [statistics, setStatistics] = useState();

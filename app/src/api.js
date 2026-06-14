@@ -583,140 +583,71 @@ export async function refreshChannel(channelId) {
     }
     return response;
 }
-export async function getCategories() {
-    const response = await apiGet(`${API_URI}/inventory/categories`);
-    if (response.ok) {
-        return (await response.json())['categories'];
-    } else {
-        const message = await getErrorMessage(response, 'Could not get categories');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
-    }
-}
-
-export async function getBrands() {
-    const response = await apiGet(`${API_URI}/inventory/brands`);
-    if (response.ok) {
-        return (await response.json())['brands'];
-    } else {
-        const message = await getErrorMessage(response, 'Could not get brands');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
-    }
-}
+// Inventory is config-only on the backend (no DB).  The frontend loads every inventory once (full), derives
+// list/items/summary/locations client-side, and persists whole inventories on change — so there are only four
+// inventory calls.
 
 export async function getInventories() {
+    // Returns every inventory in full (fields + items).
     const response = await apiGet(`${API_URI}/inventory`);
     if (response.ok) {
         return (await response.json())['inventories'];
-    } else {
-        const message = await getErrorMessage(response, 'Could not get inventories');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
     }
+    const message = await getErrorMessage(response, 'Could not get inventories');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
 }
 
-export async function getInventory(inventoryId) {
-    const response = await apiGet(`${API_URI}/inventory/${inventoryId}`);
+export async function createInventory({name, type}) {
+    const response = await apiPost(`${API_URI}/inventory`, {name, type});
     if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Could not get inventory');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
+        return (await response.json())['inventory'];
     }
+    const message = await getErrorMessage(response, 'Failed to create inventory');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
 }
 
-export async function saveInventory(inventory) {
-    const response = await apiPost(`${API_URI}/inventory`, inventory);
-    if (!response.ok) {
-        const message = await getErrorMessage(response, 'Failed to save inventory');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
+export async function saveInventory(slug, data) {
+    // Whole-inventory save (data = {name?, fields?, items?, version?}).  Returns the saved inventory, or null on
+    // error/conflict so the caller can reconcile.
+    const response = await apiPut(`${API_URI}/inventory/${slug}`, data);
+    if (response.ok) {
+        return (await response.json())['inventory'];
     }
-    return response
+    const message = await getErrorMessage(response, 'Failed to save inventory');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
 }
 
-export async function updateInventory(inventoryId, inventory) {
-    delete inventory['id'];
-    const response = await apiPut(`${API_URI}/inventory/${inventoryId}`, inventory);
-    if (!response.ok) {
-        const message = await getErrorMessage(response, 'Failed to update inventory');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
-    }
-    return response
-}
-
-export async function deleteInventory(inventoryId) {
-    const response = await apiDelete(`${API_URI}/inventory/${inventoryId}`);
+export async function deleteInventory(slug) {
+    const response = await apiDelete(`${API_URI}/inventory/${slug}`);
     if (!response.ok) {
         const message = await getErrorMessage(response, 'Failed to delete inventory');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
+        toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
     }
-    return response
+    return response;
 }
 
-export async function getItems(inventoryId) {
-    const response = await apiGet(`${API_URI}/inventory/${inventoryId}/item`);
+export async function getCatalog() {
+    // The shared food catalog (known items with total calories per package).
+    const response = await apiGet(`${API_URI}/inventory/catalog`);
     if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to get items');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
+        return (await response.json())['catalog'];
     }
-    return response
+    const message = await getErrorMessage(response, 'Could not get the food catalog');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
 }
 
-export async function saveItem(inventoryId, item) {
-    const response = await apiPost(`${API_URI}/inventory/${inventoryId}/item`, item);
+export async function saveCatalog(items) {
+    const response = await apiPut(`${API_URI}/inventory/catalog`, {items});
     if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to save item');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
+        return (await response.json())['catalog'];
     }
-    return response
-}
-
-export async function updateItem(itemId, item) {
-    item = emptyToNull(item);
-    const response = await apiPut(`${API_URI}/inventory/item/${itemId}`, item);
-    if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to update item');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
-    }
-    return response
-}
-
-export async function deleteItems(itemIds) {
-    let i = itemIds.join(',');
-    const response = await apiDelete(`${API_URI}/inventory/item/${i}`);
-    if (response.ok) {
-        return await response.json();
-    } else {
-        const message = await getErrorMessage(response, 'Failed to delete items');
-        toast({
-            type: 'error', title: 'Unexpected server response', description: message, time: 5000,
-        });
-    }
-    return response
+    const message = await getErrorMessage(response, 'Failed to save the food catalog');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
 }
 
 

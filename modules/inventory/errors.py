@@ -3,13 +3,19 @@ from http import HTTPStatus
 from wrolpi.errors import APIError
 
 
-class NoInventories(APIError):
-    code = 'NO_INVENTORIES'
-    summary = 'No Inventories'
+class UnknownInventory(APIError):
+    code = 'UNKNOWN_INVENTORY'
+    summary = 'No inventory with that slug exists'
+    status_code = HTTPStatus.NOT_FOUND
+
+
+class InvalidFieldSchema(APIError):
+    code = 'INVALID_FIELD_SCHEMA'
+    summary = 'The inventory field schema is invalid'
     status_code = HTTPStatus.BAD_REQUEST
 
 
-class InventoriesVersionMismatch(APIError):
-    code = 'INVENTORIES_VERSION_MISMATCH'
-    summary = 'Inventories version in the DB does not match the inventories config'
-    status_code = HTTPStatus.BAD_REQUEST
+class InventoryConflict(APIError):
+    code = 'INVENTORY_CONFLICT'
+    summary = 'The inventory was modified since it was loaded'
+    status_code = HTTPStatus.CONFLICT

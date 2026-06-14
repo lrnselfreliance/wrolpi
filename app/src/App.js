@@ -7,7 +7,7 @@ import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {MoreRoute} from "./components/Apps";
-import {InventoryRoute} from "./components/Inventory";
+import {InventoryRoute} from "./components/inventory/InventoryRoute";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";

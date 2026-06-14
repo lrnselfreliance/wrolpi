@@ -23,6 +23,9 @@ import {
     ListItem as SListItem,
     Loader as SLoader,
     Menu as SMenu,
+    MenuItem as SMenuItem,
+    MenuHeader as SMenuHeader,
+    MenuMenu as SMenuMenu,
     Modal as SModal,
     ModalActions as SModalActions,
     ModalContent as SModalContent,
@@ -66,6 +69,8 @@ import {
     ListDescriptionProps,
     LoaderProps,
     MenuProps,
+    MenuItemProps,
+    MenuMenuProps,
     ModalProps,
     ModalActionsProps,
     ModalContentProps,
@@ -312,10 +317,28 @@ export function Loader(props: LoaderProps) {
     return <SLoader {...i} {...props}/>
 }
 
-export function Menu(props: MenuProps) {
+// Menu is a compound component (Menu.Item / Menu.Header / Menu.Menu) so callers get the same API as Semantic's
+// Menu while inheriting the theme.  The parent menu is `inverted` in dark mode so item text stays readable.
+const MenuBase: React.FC<MenuProps> = (props) => {
     const {i} = useContext(ThemeContext);
-    return <SMenu {...i} {...props}/>
+    return <SMenu {...i} {...props}/>;
+};
+
+const MenuItem: React.FC<MenuItemProps> = (props) => <SMenuItem {...props}/>;
+const MenuHeader: React.FC<MenuItemProps> = (props) => <SMenuHeader {...props}/>;
+const MenuMenu: React.FC<MenuMenuProps> = (props) => <SMenuMenu {...props}/>;
+
+interface MenuComponent extends React.FC<MenuProps> {
+    Item: React.FC<MenuItemProps>;
+    Header: React.FC<MenuItemProps>;
+    Menu: React.FC<MenuMenuProps>;
 }
+
+export const Menu: MenuComponent = Object.assign(MenuBase, {
+    Item: MenuItem,
+    Header: MenuHeader,
+    Menu: MenuMenu,
+});
 
 export function Placeholder(props: PlaceholderProps) {
     const {i} = useContext(ThemeContext);

@@ -5,129 +5,68 @@ from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.inventory import common, inventory, schema
+from modules.inventory import schema
+from modules.inventory.common import get_inventory_configs
+from modules.inventory.catalog import get_catalog_config, save_catalog_items
+from modules.inventory.errors import UnknownInventory
 from wrolpi.api_utils import json_response
-from wrolpi.common import run_after, recursive_map
-from wrolpi.errors import ValidationError
 
 NAME = 'inventory'
 
 inventory_bp = Blueprint('Inventory', '/api/inventory')
 
-
-@inventory_bp.get('/categories')
-def get_categories(_: Request):
-    categories = inventory.get_categories()
-    return json_response(dict(categories=categories))
-
-
-@inventory_bp.get('/brands')
-def get_brands(_: Request):
-    brands = inventory.get_brands()
-    return json_response(dict(brands=brands))
+# Inventory is config-only.  The frontend loads every inventory once (GET /), derives everything (selected items,
+# summary, location suggestions, ration data) client-side, and persists whole inventories (PUT /<slug>).  There are
+# deliberately no granular item/field/suggestion endpoints.
 
 
 @inventory_bp.get('/')
-def get_inventories(request: Request):
-    inventories = inventory.get_inventories(request.ctx.session)
+@openapi.description('Get every inventory in full (fields and items).')
+def get_inventories(_: Request):
+    inventories = get_inventory_configs().all_inventories()
     return json_response(dict(inventories=inventories))
-
-
-@inventory_bp.get('/<inventory_id:int>')
-def get_inventory(_: Request, inventory_id: int):
-    by_category = common.get_inventory_by_category(inventory_id)
-    by_subcategory = common.get_inventory_by_subcategory(inventory_id)
-    by_name = common.get_inventory_by_name(inventory_id)
-    return json_response(dict(by_category=by_category, by_subcategory=by_subcategory, by_name=by_name))
 
 
 @inventory_bp.post('/')
 @openapi.definition(
-    summary='Save a new inventory',
+    summary='Create a new inventory',
     body=schema.InventoryPostRequest,
 )
 @validate(schema.InventoryPostRequest)
-@run_after(common.save_inventories_config)
 def post_inventory(_: Request, body: schema.InventoryPostRequest):
-    data = remove_whitespace(body.__dict__)
-
-    inventory.save_inventory(data)
-    return response.empty(HTTPStatus.CREATED)
+    inventory = get_inventory_configs().create_inventory(body.name, body.type or 'food')
+    return json_response(dict(inventory=inventory), HTTPStatus.CREATED)
 
 
-@inventory_bp.put('/<inventory_id:int>')
-@openapi.definition(
-    summary='Update an inventory',
-    body=schema.InventoryPutRequest,
-)
-@validate(schema.InventoryPutRequest)
-@run_after(common.save_inventories_config)
-def put_inventory(_: Request, inventory_id: int, body: schema.InventoryPutRequest):
-    data = remove_whitespace(body.__dict__)
-
-    inventory.update_inventory(inventory_id, data)
-    return response.empty()
+# Shared food catalog (static routes, declared before the dynamic /<slug> routes).
+@inventory_bp.get('/catalog')
+@openapi.description('Get the shared food catalog entries.')
+def get_catalog(_: Request):
+    return json_response(dict(catalog=get_catalog_config().items))
 
 
-@inventory_bp.delete('/<inventory_id:int>')
+@inventory_bp.put('/catalog')
+@openapi.description('Replace the shared food catalog (whole-list save).')
+def put_catalog(request: Request):
+    items = (request.json or {}).get('items', [])
+    return json_response(dict(catalog=save_catalog_items(items)))
+
+
+@inventory_bp.put('/<slug:str>')
+@openapi.description('Replace an inventory (name / fields / items) in one request.')
+def put_inventory(request: Request, slug: str):
+    if get_inventory_configs().get_inventory(slug) is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    body = request.json or {}
+    expected_version = body.get('version')
+    inventory = get_inventory_configs().save_inventory(slug, body, expected_version=expected_version)
+    return json_response(dict(inventory=inventory))
+
+
+@inventory_bp.delete('/<slug:str>')
 @openapi.description('Delete an inventory.')
-@run_after(common.save_inventories_config)
-def inventory_delete(_: Request, inventory_id: int):
-    inventory.delete_inventory(inventory_id)
+def inventory_delete(_: Request, slug: str):
+    if get_inventory_configs().get_inventory(slug) is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    get_inventory_configs().delete_inventory(slug)
     return response.empty()
-
-
-@inventory_bp.get('/<inventory_id:int>/item')
-@openapi.description('Get all items from an inventory.')
-def items_get(_: Request, inventory_id: int):
-    items = inventory.get_items(inventory_id)
-    return json_response({'items': items})
-
-
-@inventory_bp.post('/<inventory_id:int>/item')
-@openapi.definition(
-    summary="Save an item into it's inventory.",
-    body=schema.ItemPostRequest,
-)
-@validate(schema.ItemPostRequest)
-@run_after(common.save_inventories_config)
-def post_item(_: Request, inventory_id: int, body: schema.ItemPostRequest):
-    data = remove_whitespace(body.__dict__)
-
-    inventory.save_item(inventory_id, data)
-    return response.empty()
-
-
-@inventory_bp.put('/item/<item_id:int>')
-@openapi.definition(
-    summary='Update an item.',
-    body=schema.ItemPutRequest,
-)
-@validate(schema.ItemPutRequest)
-@run_after(common.save_inventories_config)
-def put_item(_: Request, item_id: int, body: schema.ItemPutRequest):
-    data = remove_whitespace(body.__dict__)
-
-    inventory.update_item(item_id, data)
-    return response.empty()
-
-
-@inventory_bp.delete('/item/<item_ids:[0-9,]+>', name='item_delete_many')
-@inventory_bp.delete('/item/<item_ids:int>', name='item_delete_one')
-@openapi.description('Delete items from an inventory.')
-@run_after(common.save_inventories_config)
-def item_delete(_: Request, item_ids: str):
-    try:
-        if isinstance(item_ids, int):
-            item_ids = [item_ids, ]
-        else:
-            item_ids = [int(i) for i in item_ids.split(',')]
-    except ValueError:
-        raise ValidationError('Could not parse item_ids')
-
-    inventory.delete_items(item_ids)
-    return response.empty()
-
-
-def remove_whitespace(obj):
-    return recursive_map(obj, lambda i: i.strip() if hasattr(i, 'strip') else i)

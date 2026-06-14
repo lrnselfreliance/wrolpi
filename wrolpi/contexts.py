@@ -26,6 +26,7 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.wrolpi_config = manager.dict()
     app.shared_ctx.tags_config = manager.dict()
     app.shared_ctx.inventories_config = manager.dict()
+    app.shared_ctx.catalog_config = manager.dict()
     app.shared_ctx.channels_config = manager.dict()
     app.shared_ctx.download_manager_config = manager.dict()
     app.shared_ctx.videos_downloader_config = manager.dict()
@@ -98,6 +99,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.wrolpi_config.clear()
     app.shared_ctx.tags_config.clear()
     app.shared_ctx.inventories_config.clear()
+    app.shared_ctx.catalog_config.clear()
     app.shared_ctx.channels_config.clear()
     app.shared_ctx.download_manager_config.clear()
     app.shared_ctx.videos_downloader_config.clear()
@@ -208,7 +210,7 @@ def reset_shared_contexts(app: Sanic):
 
 def initialize_configs_contexts(app: Sanic):
     """Assign multiprocessing Dicts to their respective FileConfigs in this process."""
-    from modules.inventory.common import INVENTORIES_CONFIG
+    from modules.inventory.common import get_inventory_configs
     from modules.videos.lib import CHANNELS_CONFIG
     from modules.videos.lib import VIDEOS_DOWNLOADER_CONFIG
     from wrolpi.common import WROLPI_CONFIG
@@ -216,9 +218,16 @@ def initialize_configs_contexts(app: Sanic):
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
 
     try:  # noqa
-        INVENTORIES_CONFIG.initialize(app.shared_ctx.inventories_config)
+        # Inventory is config-only (no DB); the shared dict is keyed by inventory slug.
+        get_inventory_configs().initialize(app.shared_ctx.inventories_config)
     except Exception as e:
         logger.error(f'Failed to initialize in-memory inventories config: {e}')
+
+    try:
+        from modules.inventory.catalog import get_catalog_config
+        get_catalog_config().initialize(app.shared_ctx.catalog_config)
+    except Exception as e:
+        logger.error(f'Failed to initialize in-memory food catalog config: {e}')
 
     try:
         CHANNELS_CONFIG.initialize(app.shared_ctx.channels_config)

@@ -1,0 +1,89 @@
+# Default shared food catalog (shipped with WROLPi).
+#
+# Transcribed from a "One-Year Emergency Food Supply for One Adult" list.
+# `calories` is the TOTAL calories for one package of the given `item_size` (the basis the Summary ration estimate
+# uses: total = calories x count).  A blank `calories` means the source list gave no calorie figure (mostly spices
+# and condiments that contribute ~0 calories) — fill these in as desired; they are editable in the app.
+#
+# This is the seed for config/inventory/catalog.yaml (merge-keep-edits on update).
+version: 0
+items:
+  # --- Grains ---
+  - {id: 1,  name: Long Grain White Rice,      category: grains, subcategory: rice,       item_size: '5',     item_size_unit: lb, calories: '8040'}
+  - {id: 2,  name: Whole Wheat Berries,        category: grains, subcategory: wheat,      item_size: '5',     item_size_unit: lb, calories: '7500'}
+  - {id: 3,  name: Corn Meal,                  category: grains, subcategory: corn meal,  item_size: '5',     item_size_unit: lb, calories: '8040'}
+  - {id: 4,  name: Quick Oats,                 category: grains, subcategory: oats,       item_size: '42',    item_size_unit: oz, calories: '4500'}
+  - {id: 5,  name: Quick Grits,                category: grains, subcategory: grits,      item_size: '5',     item_size_unit: lb, calories: '7930'}
+  - {id: 6,  name: Spaghetti Noodles,          category: grains, subcategory: pasta,      item_size: '16',    item_size_unit: oz, calories: '1680'}
+  - {id: 7,  name: Pancake & Waffle Mix,       category: grains, subcategory: baking mix, item_size: '32',    item_size_unit: oz, calories: '3200'}
+  - {id: 8,  name: Brownie or Cake Mix,        category: grains, subcategory: baking mix, item_size: '20',    item_size_unit: oz, calories: '2200'}
+
+  # --- Dairy ---
+  - {id: 9,  name: Nonfat Dry Milk,            category: dairy,  subcategory: dry milk,        item_size: '64', item_size_unit: oz, calories: '6400'}
+  - {id: 10, name: Evaporated Milk,            category: dairy,  subcategory: evaporated milk, item_size: '12', item_size_unit: oz, calories: '480'}
+  - {id: 11, name: Velveeta Cheese,            category: dairy,  subcategory: cheese,          item_size: '32', item_size_unit: oz, calories: '2560'}
+
+  # --- Fats ---
+  - {id: 12, name: Butter,                     category: fats,   subcategory: butter,        item_size: '1',    item_size_unit: lb, calories: '3200'}
+  - {id: 13, name: Extra-Virgin Olive Oil,     category: fats,   subcategory: oil,           item_size: '50.7', item_size_unit: oz, calories: '12000'}
+  - {id: 14, name: Shortening,                 category: fats,   subcategory: shortening,    item_size: '3',    item_size_unit: lb, calories: '12000'}
+  - {id: 15, name: Peanut Butter,              category: fats,   subcategory: peanut butter, item_size: '18',   item_size_unit: oz, calories: '3040'}
+
+  # --- Sugars ---
+  - {id: 16, name: White Granulated Sugar,     category: sugars, subcategory: white sugar,    item_size: '5',    item_size_unit: lb, calories: '8500'}
+  - {id: 17, name: Brown Sugar,                category: sugars, subcategory: brown sugar,    item_size: '1',    item_size_unit: lb, calories: '1700'}
+  - {id: 18, name: Confectioners Sugar,        category: sugars, subcategory: powdered sugar, item_size: '1',    item_size_unit: lb, calories: '1800'}
+  - {id: 19, name: Light Corn Syrup,           category: sugars, subcategory: corn syrup,     item_size: '16',   item_size_unit: oz, calories: '1920'}
+  - {id: 20, name: Maple Syrup,                category: sugars, subcategory: syrup,          item_size: '12.5', item_size_unit: oz, calories: '1200'}
+  - {id: 21, name: Clover Honey,               category: sugars, subcategory: honey,          item_size: '16',   item_size_unit: oz, calories: '1280'}
+  - {id: 22, name: Cocoa Syrup,                category: sugars, subcategory: syrup,          item_size: '16',   item_size_unit: oz, calories: '1200'}
+  - {id: 23, name: Jelly or Preserves,         category: sugars, subcategory: jelly,          item_size: '16',   item_size_unit: oz, calories: '1300'}
+
+  # --- Meats ---
+  - {id: 24, name: Tuna in Oil,                category: meats,  subcategory: canned, item_size: '5',  item_size_unit: oz, calories: '187'}
+  - {id: 25, name: Canned Ham,                 category: meats,  subcategory: canned, item_size: '16', item_size_unit: oz, calories: '800'}
+  - {id: 26, name: Spam,                       category: meats,  subcategory: canned, item_size: '12', item_size_unit: oz, calories: '1020'}
+  - {id: 27, name: Vienna Sausage,             category: meats,  subcategory: canned, item_size: '5',  item_size_unit: oz, calories: '375'}
+  - {id: 28, name: Roast Beef,                 category: meats,  subcategory: canned, item_size: '12', item_size_unit: oz, calories: '375'}
+
+  # --- Meals (prepared / canned) ---
+  - {id: 29, name: Cream of Chicken Soup,      category: meals,  subcategory: canned, item_size: '10.75', item_size_unit: oz, calories: '300'}
+  - {id: 30, name: Canned Macaroni and Cheese, category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '480'}
+  - {id: 31, name: Canned Pasta,               category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '500'}
+  - {id: 32, name: Chunky Soup,                category: meals,  subcategory: canned, item_size: '18.8',  item_size_unit: oz, calories: '500'}
+  - {id: 33, name: Roast Beef Hash,            category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '780'}
+  - {id: 34, name: Beef Stew,                  category: meals,  subcategory: canned, item_size: '24',    item_size_unit: oz, calories: '630'}
+  - {id: 35, name: Chili with Beans,           category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '700'}
+
+  # --- Legumes ---
+  - {id: 36, name: Canned Beans,               category: legumes, subcategory: canned, item_size: '15', item_size_unit: oz, calories: '370'}
+
+  # --- Vegetables ---
+  - {id: 37, name: Tomato Paste,               category: vegetables, subcategory: canned,   item_size: '6',    item_size_unit: oz, calories: '125'}
+  - {id: 38, name: Spaghetti Sauce,            category: vegetables, subcategory: sauce,    item_size: '26.5', item_size_unit: oz, calories: '420'}
+  - {id: 39, name: Sliced Mushrooms,           category: vegetables, subcategory: canned,   item_size: '4',    item_size_unit: oz, calories: '40'}
+  - {id: 40, name: Mixed Vegetables,           category: vegetables, subcategory: canned,   item_size: '15',   item_size_unit: oz, calories: '140'}
+  - {id: 41, name: Instant Potatoes,           category: vegetables, subcategory: potatoes, item_size: '32',   item_size_unit: oz, calories: '3440'}
+
+  # --- Fruits ---
+  - {id: 42, name: Fruit Cocktail,             category: fruits, subcategory: canned, item_size: '15', item_size_unit: oz, calories: '315'}
+
+  # --- Cooking ingredients (calories blank where the source list gave none) ---
+  - {id: 43, name: Cocoa Powder,               category: cooking ingredients, subcategory: cocoa,     item_size: '8',     item_size_unit: oz, calories: '900'}
+  - {id: 44, name: Corn Starch,                category: cooking ingredients, subcategory: thickener, item_size: '16',    item_size_unit: oz, calories: '1680'}
+  - {id: 45, name: Baking Soda,                category: cooking ingredients, subcategory: leavening, item_size: '16',    item_size_unit: oz, calories: '0'}
+  - {id: 46, name: Pure Salt,                  category: cooking ingredients, subcategory: salt,      item_size: '4',     item_size_unit: lb, calories: '0'}
+  - {id: 47, name: Cream of Tartar,            category: cooking ingredients, subcategory: leavening, item_size: '2.62',  item_size_unit: oz, calories: ''}
+  - {id: 48, name: Active Dry Yeast,           category: cooking ingredients, subcategory: leavening, item_size: '0.3125', item_size_unit: oz, calories: ''}
+  - {id: 49, name: Vanilla Extract,            category: cooking ingredients, subcategory: flavoring, item_size: '2',     item_size_unit: oz, calories: ''}
+  - {id: 50, name: Ground Black Pepper,        category: cooking ingredients, subcategory: spice,     item_size: '2.6',   item_size_unit: oz, calories: ''}
+  - {id: 51, name: Seasoned Meat Tenderizer,   category: cooking ingredients, subcategory: spice,     item_size: '5.5',   item_size_unit: oz, calories: ''}
+  - {id: 52, name: Onion Powder,               category: cooking ingredients, subcategory: spice,     item_size: '3.12',  item_size_unit: oz, calories: ''}
+  - {id: 53, name: Oregano,                    category: cooking ingredients, subcategory: spice,     item_size: '0.9',   item_size_unit: oz, calories: ''}
+  - {id: 54, name: Garlic Powder,              category: cooking ingredients, subcategory: spice,     item_size: '2.5',   item_size_unit: oz, calories: ''}
+  - {id: 55, name: Cinnamon,                   category: cooking ingredients, subcategory: spice,     item_size: '2.37',  item_size_unit: oz, calories: ''}
+  - {id: 56, name: Cayenne Red Pepper,         category: cooking ingredients, subcategory: spice,     item_size: '1.75',  item_size_unit: oz, calories: ''}
+  - {id: 57, name: Lemon Juice,                category: cooking ingredients, subcategory: acid,      item_size: '15',    item_size_unit: oz, calories: ''}
+  - {id: 58, name: Apple Cider Vinegar,        category: cooking ingredients, subcategory: vinegar,   item_size: '1',     item_size_unit: gallon, calories: ''}
+  - {id: 59, name: Beef Bouillon Cubes,        category: cooking ingredients, subcategory: bouillon,  item_size: '',      item_size_unit: '', calories: ''}
+  - {id: 60, name: Chicken Bouillon Cubes,     category: cooking ingredients, subcategory: bouillon,  item_size: '',      item_size_unit: '', calories: ''}

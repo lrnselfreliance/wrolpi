@@ -1,284 +1,206 @@
-import pathlib
-from dataclasses import field, dataclass
-from decimal import Decimal
-from functools import partial
+"""Config-only inventory backend.
+
+Each inventory is a single YAML file at ``config/inventory/<slug>.yaml`` and is the source-of-truth (no database).
+All files are loaded into one shared, cross-worker dict keyed by slug.  Unit math/aggregation happens in the
+frontend (mathjs), so this module treats item field values as opaque strings/numbers.
+"""
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional
 
-from pint import Quantity
-
-from wrolpi.common import logger, Base, ConfigFile
-from wrolpi.db import get_db_session
-from wrolpi.events import Events
-from .errors import NoInventories
-from .inventory import get_items, get_inventories, get_unit_registry
-from .models import Inventory, Item
+from wrolpi.common import logger, MultiFileConfig
+from wrolpi.errors import ValidationError
+from .defaults import (DEFAULT_INVENTORIES, FIELD_TYPES, default_fields, slugify)
 
 MY_DIR: Path = Path(__file__).parent
 
 logger = logger.getChild(__name__)
 
 
-def sum_by_key(items: List[Base], key: callable):
-    """
-    Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
-    for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
-    """
-    unit_registry = get_unit_registry()
-
-    summed = dict()
-    for item in items:
-        k = key(item)
-        item_size, count, unit = item.item_size, item.count, unit_registry(item.unit)
-        key_dim = (k, unit.dimensionality)
-
-        total_size = item_size * count * unit
-
-        try:
-            summed[key_dim] += total_size
-        except KeyError:
-            summed[key_dim] = total_size
-
-    summed = {k: compact_unit(v) for k, v in summed.items()}
-    return summed
-
-
-def get_inventory_by_keys(keys: Tuple, inventory_id: int):
-    items = get_items(inventory_id)
-
-    summed = sum_by_key(items, lambda i: tuple(getattr(i, k) or '' for k in keys))
-
-    inventory = []
-    for key, quantity in sorted(summed.items(), key=lambda i: i[0][0]):
-        quantity = cleanup_quantity(quantity)
-        total_size, units = quantity.to_tuple()
-        unit = units[0][0]
-
-        d = dict(total_size=total_size, unit=unit)
-        d.update(dict(zip(keys, key[0])))
-        inventory.append(d)
-
-    return inventory
-
-
-get_inventory_by_category = partial(get_inventory_by_keys, ('category',))
-get_inventory_by_subcategory = partial(get_inventory_by_keys, ('category', 'subcategory'))
-get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name'))
-INVENTORY_UNITS: dict = None
-UNIT_PRECISION = 5
-
-
-def initialize_inventory_units() -> dict:
-    global INVENTORY_UNITS
-    if INVENTORY_UNITS:
-        return INVENTORY_UNITS
-
-    unit_registry = get_unit_registry()
-    INVENTORY_UNITS = {
-        ('ounce', 1): (16, unit_registry.pound),
-        ('pound', 1): (2000, unit_registry.ton),
-    }
-
-
-def compact_unit(quantity: Quantity) -> Quantity:
-    """
-    Convert a Quantity to it's more readable format.  Such as 2000 pounds to 1 ton.
-    """
-    initialize_inventory_units()
-
-    number, (units,) = quantity.to_tuple()
-    next_unit = INVENTORY_UNITS.get(units)
-    if not next_unit:
-        # No units after this one, return as is.
-        return round(quantity, UNIT_PRECISION)
-
-    max_quantity, next_unit = next_unit
-    if number >= max_quantity:
-        # Number is too high for this unit, move to the next unit.
-        return compact_unit(quantity.to(next_unit))
-
-    # No units were necessary, return as is.
-    quantity = round(quantity, UNIT_PRECISION)
-    return quantity
-
-
-def quantity_to_tuple(quantity: Quantity) -> Tuple[Decimal, Quantity]:
-    unit_registry = get_unit_registry()
-    decimal, (units,) = quantity.to_tuple()
-    unit, _ = units
-    quantity, unit = round(decimal, UNIT_PRECISION), unit_registry(unit)
-    return quantity, unit
-
-
-def cleanup_quantity(quantity: Quantity) -> Quantity:
-    """Remove trailing zeros from a Quantity."""
-    num, unit = quantity_to_tuple(quantity)
-    num = round(num, UNIT_PRECISION)
-    num = str(num).rstrip('0').rstrip('.')
-    return Decimal(num) * unit
-
-
 @dataclass
-class InventoriesConfigValidator:
+class InventoryConfigValidator:
     version: int = None
-    inventories: list[str] = field(default_factory=list)
+    slug: str = None
+    name: str = None
+    type: str = None
+    created_at: str = None
+    viewed_at: str = None
+    fields: list = field(default_factory=list)
+    items: list = field(default_factory=list)
 
 
-class InventoriesConfig(ConfigFile):
-    file_name = 'inventories.yaml'
-    default_config = dict(
-        inventories=[],
-        version=0,
-    )
-    validator = InventoriesConfigValidator
+def _validate_fields(fields_: list):
+    """Validate a field schema list.  Raises ValidationError on bad input."""
+    if not isinstance(fields_, list):
+        raise ValidationError('fields must be a list')
+    seen = set()
+    for f in fields_:
+        if not isinstance(f, dict) or not f.get('key') or not f.get('type'):
+            raise ValidationError(f'Invalid field definition: {f}')
+        if f['type'] not in FIELD_TYPES:
+            raise ValidationError(f'Unknown field type: {f["type"]}')
+        if f['key'] in seen:
+            raise ValidationError(f'Duplicate field key: {f["key"]}')
+        seen.add(f['key'])
 
-    @property
-    def inventories(self) -> dict:
-        return self._config['inventories']
 
-    @inventories.setter
-    def inventories(self, value: dict):
-        self.update({'inventories': value})
+def _allowed_item_keys(fields_: list) -> set:
+    """Keys an item may contain, derived from the field schema (quantity fields add a companion `<key>_unit`)."""
+    keys = set()
+    for f in fields_:
+        keys.add(f['key'])
+        if f.get('type') == 'quantity':
+            keys.add(f'{f["key"]}_unit')
+    return keys
 
-    def dump_config(self, file: pathlib.Path = None, send_events=False, overwrite=False):
-        inventories = []
-        with get_db_session() as session:
-            for inventory in get_inventories(session):
-                inventories.append(inventory.dict())
 
-        if not inventories:
-            raise NoInventories('No Inventories are in the database!')
+def _normalize_items(items: list, fields_: list) -> list:
+    """Filter each item to the schema's allowed keys and assign stable ids (fresh id for any missing/duplicate)."""
+    if not isinstance(items, list):
+        raise ValidationError('items must be a list')
+    allowed = _allowed_item_keys(fields_)
+    counter = max((i.get('id') for i in items if isinstance(i.get('id'), int)), default=0)
+    used = set()
+    normalized = []
+    for raw in items:
+        clean = {k: v for k, v in raw.items() if k in allowed}
+        item_id = raw.get('id')
+        if not isinstance(item_id, int) or item_id in used:
+            counter += 1
+            item_id = counter
+        used.add(item_id)
+        clean['id'] = item_id
+        normalized.append(clean)
+    return normalized
 
-        self._config['inventories'] = inventories
-        super().dump_config(file, send_events, overwrite)
 
-    def import_config(self, file: pathlib.Path = None, send_events=False):
-        file = file or self.get_file()
+# Slugs reserved in the config/inventory/ directory that are NOT inventories.  The shared food catalog lives at
+# config/inventory/catalog.yaml, so it must be excluded from inventory discovery (and from new-inventory slugs).
+RESERVED_SLUGS = {'catalog'}
 
-        # If config file doesn't exist, mark import as successful (nothing to import)
-        if not file.is_file():
-            logger.info('No inventories config file, skipping import')
-            self.successful_import = True
+
+class InventoriesConfig(MultiFileConfig):
+    subdirectory = 'inventory'
+    name = 'inventory'
+    validator = InventoryConfigValidator
+    default_entity = dict(version=0, slug=None, name=None, type='food', created_at=None, viewed_at=None,
+                          fields=[], items=[])
+
+    def discover(self) -> List[str]:
+        # Exclude reserved files (e.g. catalog.yaml) that share the directory but are not inventories.
+        return [slug for slug in super().discover() if slug not in RESERVED_SLUGS]
+
+    def all_inventories(self) -> List[dict]:
+        """Return every inventory in full (fields + items), sorted by name.
+
+        The frontend loads this once and derives everything (selected items, summary, locations, ration data)
+        client-side, then persists whole inventories via `save_inventory` — so there are no granular item/field
+        endpoints.
+        """
+        return sorted(self.all(), key=lambda i: (i.get('name') or '').lower())
+
+    def get_inventory(self, slug: str) -> Optional[dict]:
+        return self.get(slug)
+
+    def create_inventory(self, name: str, inventory_type: str) -> dict:
+        from wrolpi.dates import now
+        name = (name or '').strip()
+        if not name:
+            raise ValidationError('Inventory name is required')
+        slug = slugify(name)
+        # Slug is a stable identifier; dedupe it so two same-named inventories don't collide on disk, and never
+        # let a user-created inventory claim a reserved slug (e.g. naming an inventory "Catalog").
+        taken = lambda s: s in self._configs or s in RESERVED_SLUGS
+        if taken(slug):
+            suffix = 2
+            while taken(f'{slug}-{suffix}'):
+                suffix += 1
+            slug = f'{slug}-{suffix}'
+        created = now().isoformat()
+        self.create(slug, dict(
+            slug=slug,
+            name=name,
+            type=inventory_type,
+            created_at=created,
+            viewed_at=created,
+            fields=default_fields(inventory_type),
+            items=[],
+        ))
+        return self.get(slug)
+
+    def delete_inventory(self, slug: str):
+        if slug not in self._configs:
+            raise ValidationError(f'No inventory: {slug}')
+        self.delete(slug)
+
+    def save_inventory(self, slug: str, data: dict, expected_version: int = None) -> dict:
+        """Replace an inventory's editable parts (name / fields / items) in one write.
+
+        `slug` is a stable id and is never changed by a save (only the display `name` changes).  Item ids are
+        normalized server-side (any item missing/duplicating an id gets a fresh one).  When `expected_version` is
+        given and does not match the stored version, an `InventoryConflict` is raised so a stale client (e.g. a
+        second browser tab) cannot silently clobber a newer save.
+        """
+        from wrolpi.dates import now
+        from .errors import InventoryConflict
+
+        if slug not in self._configs:
+            raise ValidationError(f'No inventory: {slug}')
+
+        # Hold the save lock for the whole read-check-mutate-persist cycle so two concurrent saves of the same
+        # inventory can't both pass the version check and clobber each other (lost write).
+        with self.save_lock():
+            current = dict(self._configs[slug])
+            stored_version = current.get('version')
+            if expected_version is not None and stored_version is not None and stored_version != expected_version:
+                raise InventoryConflict(
+                    f'Inventory {slug} changed since it was loaded (stored {stored_version} != {expected_version})')
+
+            if 'name' in data:
+                name = (data['name'] or '').strip()
+                if not name:
+                    raise ValidationError('Inventory name is required')
+                current['name'] = name
+            if data.get('type'):
+                current['type'] = data['type']
+            if 'fields' in data:
+                fields_ = data['fields']
+                _validate_fields(fields_)
+                for index, f in enumerate(fields_):
+                    f['order'] = index
+                current['fields'] = fields_
+            if 'items' in data:
+                current['items'] = _normalize_items(data['items'], current.get('fields') or [])
+
+            current['viewed_at'] = now().isoformat()
+            self._configs[slug] = current
+            # Persist synchronously (lock already held) so the version bump is immediate and returned to the client.
+            self._persist_slug(slug)
+        return self.get(slug)
+
+    def seed_defaults(self):
+        """Create the default example inventories if the directory is empty."""
+        if self._configs:
             return
-
-        super().import_config(file)
-
-        inventories_data = self.inventories
-        # Empty inventories list = never delete DB records
-        if not inventories_data:
-            logger.info(f'No inventories in config, preserving existing DB inventories')
-            self.successful_import = True
-            return
-
-        try:
-            with get_db_session(commit=True) as session:
-                db_inventories = session.query(Inventory).all()
-                db_inventories_by_name = {i.name: i for i in db_inventories}
-                config_inventories = [i['name'] for i in inventories_data]
-                for inventory_dict in inventories_data:
-                    if inventory_dict['name'] not in db_inventories_by_name:
-                        inventory = Inventory(
-                            name=inventory_dict['name'],
-                            created_at=inventory_dict['created_at'],
-                            deleted_at=inventory_dict['deleted_at'],
-                        )
-                        session.add(inventory)
-                        # Get the Inventory from the DB so we can use its ID.
-                        inventory.flush()
-                        db_inventories_by_name[inventory.name] = inventory
-
-                # Delete any inventories no longer in the config.
-                for name, inventory in db_inventories_by_name.items():
-                    if name not in config_inventories:
-                        session.delete(inventory)
-
-                for inventory_dict in inventories_data:
-                    # Items are complex and do not have useful primary keys.  Delete all items, create new items.
-                    session.query(Item).filter(Item.inventory_id == inventory_dict['id']).delete()
-                    inventory = db_inventories_by_name[inventory_dict['name']]
-                    for item in inventory_dict['items']:
-                        del item['inventory_id']
-                        del item['id']
-                        item = Item(inventory=inventory, inventory_id=inventory.id, **item)
-                        session.add(item)
-                        item.flush()
-
-            self.successful_import = True
-        except Exception as e:
-            self.successful_import = False
-            message = f'Failed to import {self.file_name}'
-            logger.error(message, exc_info=e)
-            if send_events:
-                Events.send_config_import_failed(message)
-            raise
-
-    def preview_backup_import(self, backup_date: str, mode: str) -> dict:
-        backup_file = self._get_backup_file(backup_date)
-        backup_data = self.read_config_file(backup_file)
-        current_data = self.read_config_file() if self.get_file().is_file() else dict(inventories=[], version=0)
-
-        backup_inventories = backup_data.get('inventories', [])
-        current_inventories = current_data.get('inventories', [])
-
-        current_names = {inv.get('name') for inv in current_inventories if inv.get('name')}
-        backup_names = {inv.get('name') for inv in backup_inventories if inv.get('name')}
-
-        add = []
-        remove = []
-        unchanged = 0
-
-        for inv in backup_inventories:
-            name = inv.get('name')
-            if name and name not in current_names:
-                add.append(dict(type='inventory', name=name))
-            elif name:
-                unchanged += 1
-        if mode == 'overwrite':
-            for name in sorted(current_names - backup_names):
-                remove.append(dict(type='inventory', name=name))
-
-        return dict(mode=mode, add=add, remove=remove, unchanged=unchanged)
-
-    def import_backup(self, backup_date: str, mode: str, send_events: bool = False):
-        self._preserve_current_config()
-        import shutil
-        backup_file = self._get_backup_file(backup_date)
-        config_file = self.get_file()
-
-        if mode == 'overwrite':
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(backup_file, config_file)
-        elif mode == 'merge':
-            backup_data = self.read_config_file(backup_file)
-            current_data = self.read_config_file() if config_file.is_file() else dict(inventories=[], version=0)
-
-            current_names = {inv.get('name') for inv in current_data.get('inventories', []) if inv.get('name')}
-            merged_inventories = list(current_data.get('inventories', []))
-            for inv in backup_data.get('inventories', []):
-                if inv.get('name') and inv['name'] not in current_names:
-                    merged_inventories.append(inv)
-
-            merged_data = dict(
-                inventories=merged_inventories,
-                version=current_data.get('version', 0) + 1,
-            )
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            self.write_config_data(merged_data, config_file)
-
-        self.import_config(send_events=send_events)
+        for default in DEFAULT_INVENTORIES:
+            try:
+                self.create_inventory(default['name'], default['type'])
+            except Exception as e:
+                logger.warning(f'Failed to seed default inventory {default}: {e}')
 
 
 INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig()
-TEST_INVENTORIES_CONFIG: InventoriesConfig = None
+TEST_INVENTORIES_CONFIG: Optional[InventoriesConfig] = None
 
 
-def get_inventories_config():
-    global TEST_INVENTORIES_CONFIG
-    if isinstance(TEST_INVENTORIES_CONFIG, ConfigFile):
+def get_inventory_configs() -> InventoriesConfig:
+    if isinstance(TEST_INVENTORIES_CONFIG, InventoriesConfig):
         return TEST_INVENTORIES_CONFIG
-
-    global INVENTORIES_CONFIG
     return INVENTORIES_CONFIG
+
+
+# Backwards-compatible alias used by some call sites.
+get_inventories_config = get_inventory_configs
 
 
 def set_test_inventories_config(enabled: bool):
@@ -289,10 +211,20 @@ def set_test_inventories_config(enabled: bool):
         TEST_INVENTORIES_CONFIG = None
 
 
-def save_inventories_config():
-    """Write all inventories and their respective items to a WROLPi Config file."""
-    get_inventories_config().background_dump.activate_switch()
-
-
 def import_inventories_config():
-    get_inventories_config().import_config()
+    """Migrate any legacy inventories.yaml, load per-inventory files, seed defaults, and load the food catalog."""
+    from .migrate import migrate_legacy_inventory
+    config = get_inventory_configs()
+    try:
+        migrate_legacy_inventory(config)
+    except Exception as e:
+        logger.error('Failed to migrate legacy inventories', exc_info=e)
+    config.import_all()
+    config.seed_defaults()
+
+    # Load the shared food catalog and merge in any new shipped defaults.
+    try:
+        from .catalog import import_catalog_config
+        import_catalog_config()
+    except Exception as e:
+        logger.error('Failed to import food catalog', exc_info=e)

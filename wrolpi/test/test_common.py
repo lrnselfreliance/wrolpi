@@ -1125,14 +1125,13 @@ async def test_cached_multiprocessing_result(async_client):
 @pytest.mark.asyncio
 async def test_initialize_config_files(async_client, test_session, test_directory, test_wrolpi_config,
                                        test_channels_config, test_tags_config, test_videos_downloader_config,
-                                       test_download_manager_config, simple_channel, test_inventory, tag_factory,
+                                       test_download_manager_config, simple_channel, tag_factory,
                                        test_download_manager, test_downloader):
     """Config files should only be created if they are missing, and they will not overwrite existing entries in the DB."""
     from modules.videos.lib import get_videos_downloader_config, get_channels_config
     from modules.archive.lib import get_archive_downloader_config
     from wrolpi.tags import get_tags_config
     from wrolpi.downloader import get_download_manager_config
-    from modules.inventory.common import get_inventories_config
 
     # Create some DB entries so the configs will not be imported.
     tag1, tag2 = await tag_factory(), await tag_factory()
@@ -1182,9 +1181,7 @@ async def test_initialize_config_files(async_client, test_session, test_director
         'Download Manager config should have been created.'
     assert get_download_manager_config().is_valid()
 
-    test_session.delete(test_inventory)
-    assert common.create_empty_config_files() == ['inventories.yaml'], 'Inventory config should have been created.'
-    assert get_inventories_config().is_valid()
+    # NOTE: Inventory is config-only (no DB) and is no longer created by create_empty_config_files().
 
 
 def test_get_paths_in_parent_directory(test_directory, make_files_structure):

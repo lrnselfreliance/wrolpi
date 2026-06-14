@@ -456,7 +456,7 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
-DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml', 'inventories.yaml',
+DB_CONFIG_FILE_NAMES = {'tags.yaml', 'channels.yaml', 'domains.yaml', 'download_manager.yaml',
                         'playlists.yaml'}
 
 
@@ -622,7 +622,8 @@ class ConfigFile:
         from wrolpi.events import Events
 
         file = file or self.get_file()
-        if self.file_name not in file.name:
+        # Compare basenames so a nested file_name (e.g. 'inventory/catalog.yaml') is accepted.
+        if pathlib.Path(self.file_name).name != file.name:
             raise RuntimeError(f'Refusing to save config to file which does not match {self.__class__.__name__}')
 
         rel_path = get_relative_to_media_directory(file)
@@ -646,9 +647,9 @@ class ConfigFile:
         # Only one process can write to a config.
         with api_app.shared_ctx.config_save_lock:
             try:
-                # Config directory may not exist.
+                # Config directory may not exist (parents=True for nested file_names like inventory/catalog.yaml).
                 if not file.parent.is_dir():
-                    file.parent.mkdir()
+                    file.parent.mkdir(parents=True, exist_ok=True)
 
                 # Backup the existing config file.
                 if file.is_file():
@@ -676,22 +677,7 @@ class ConfigFile:
                 raise e
 
     def write_config_data(self, config: dict, config_file: pathlib.Path):
-        from decimal import Decimal
-
-        class _ConfigDumper(yaml.CSafeDumper):
-            """CSafeDumper that converts Decimal to str.  All other Python objects are rejected."""
-            pass
-
-        _ConfigDumper.add_representer(Decimal, lambda dumper, data: dumper.represent_str(str(data)))
-
-        with config_file.open('wt') as fh:
-            try:
-                yaml.dump(config, fh, Dumper=_ConfigDumper, width=self.width, sort_keys=True)
-            except yaml.representer.RepresenterError as e:
-                raise ValueError(f'Config contains a Python object that cannot be serialized: {e}') from e
-            # Wait for data to be written before releasing lock.
-            fh.flush()
-            os.fsync(fh.fileno())
+        write_config_data(config, config_file, width=self.width)
 
     def get_file(self) -> Path:
         if not self.file_name:
@@ -792,6 +778,254 @@ class ConfigFile:
         return self._config['version']
 
 
+def write_config_data(config: dict, config_file: pathlib.Path, width: int = 90):
+    """Write a config dict to a YAML file.  Decimals are converted to str; all other Python objects are rejected.
+
+    Shared by `ConfigFile` and `MultiFileConfig` so both serialize configs identically (Decimal-safe, fsync'd)."""
+
+    class _ConfigDumper(yaml.CSafeDumper):
+        """CSafeDumper that converts Decimal to str.  All other Python objects are rejected."""
+        pass
+
+    _ConfigDumper.add_representer(Decimal, lambda dumper, data: dumper.represent_str(str(data)))
+
+    with config_file.open('wt') as fh:
+        try:
+            yaml.dump(config, fh, Dumper=_ConfigDumper, width=width, sort_keys=True)
+        except yaml.representer.RepresenterError as e:
+            raise ValueError(f'Config contains a Python object that cannot be serialized: {e}') from e
+        # Wait for data to be written before releasing lock.
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def read_config_data(file: pathlib.Path) -> dict:
+    """Read a YAML config file into a dict.  Mirrors `ConfigFile.read_config_file`, but is standalone so
+    `MultiFileConfig` can use it without a `ConfigFile` instance."""
+    with file.open('rt') as fh:
+        try:
+            config_data = yaml.load(fh, Loader=yaml.CSafeLoader)
+        except yaml.constructor.ConstructorError:
+            logger_.warning(f'Config file contains Python objects, using slow loader: {file}')
+            fh.seek(0)
+            config_data = yaml.load(fh, Loader=yaml.Loader)
+    if not isinstance(config_data, dict):
+        raise InvalidConfig(f'Config file is invalid: {file}')
+    return config_data
+
+
+class MultiFileConfig:
+    """Manages a *directory* of YAML config files, one file per entity (e.g. ``config/inventory/<slug>.yaml``).
+
+    Unlike `ConfigFile` (one file, mirrored to the database), a `MultiFileConfig` is the source-of-truth itself:
+    the YAML files are loaded into a single shared multiprocessing dict (keyed by slug) and served from memory.
+    There is no database.
+
+    Design notes / why this is NOT a `ConfigFile` subclass:
+      * `ConfigFile` assumes a single, statically-named file and registers per-`file_name` switch handlers at import.
+        A directory has a dynamic number of files whose names are not known at import time.
+      * `register_switch_handler` raises on duplicate names and `SWITCH_HANDLERS` is per-process, so dynamic
+        per-slug switch handlers cannot be created safely.  Instead this class registers ONE directory-level
+        ``background_save_<name>`` switch that dumps every entity to disk (cheap — entities are small, human-paced).
+      * In-memory state lives in one shared `manager.dict()` keyed by slug, so it is shared across Sanic workers
+        natively (top-level key reassignment propagates through the proxy).
+
+    Subclasses define: ``subdirectory`` (e.g. 'inventory'), ``name`` (switch/registry name), ``validator``
+    (a dataclass) and ``default_entity`` (default dict for a new entity, must include ``version``).
+    """
+    subdirectory: str = None
+    name: str = None
+    validator: dataclass = None
+    default_entity: dict = None
+    glob_pattern: str = '*.yaml'
+    width: int = 90
+
+    def __init__(self):
+        # slug -> entity dict (the in-memory store; replaced by a shared dict in `initialize`).
+        self._configs: dict = dict()
+
+        from wrolpi.switches import register_switch_handler
+
+        @register_switch_handler(f'background_save_{self.name}')
+        def background_save(**context):
+            self.dump_all()
+
+        self.background_save = background_save
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} dir={self.get_directory()} count={len(self._configs)}>'
+
+    def get_directory(self) -> Path:
+        if not self.subdirectory:
+            raise NotImplementedError(f'You must define a subdirectory for this {self.__class__.__name__} config.')
+        if PYTEST:
+            return get_media_directory() / 'config' / self.subdirectory
+        return CONFIG_DIR / self.subdirectory
+
+    def get_file(self, slug: str) -> Path:
+        return self.get_directory() / f'{slug}.yaml'
+
+    def discover(self) -> List[str]:
+        """Return the slugs of all entity files in the directory."""
+        directory = self.get_directory()
+        if not directory.is_dir():
+            return []
+        return sorted(f.stem for f in directory.glob(self.glob_pattern) if f.is_file())
+
+    def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
+        """Assign the shared in-memory store, then import every entity file from disk."""
+        self._configs = multiprocessing_dict if multiprocessing_dict is not None else dict()
+        self._configs.clear()
+        self.import_all()
+        return self
+
+    def is_valid(self, data: dict) -> bool:
+        if not self.validator:
+            raise NotImplementedError(f'Cannot validate {self.name} without validator!')
+        allowed_fields = {i.name for i in fields(self.validator)}
+        try:
+            self.validator(**{k: v for k, v in data.items() if k in allowed_fields})
+            return True
+        except Exception as e:
+            logger_.debug(f'Failed to validate {self.name} config', exc_info=e)
+            return False
+
+    def import_all(self, send_events: bool = False):
+        """Read every entity file in the directory into the in-memory store."""
+        for slug in self.discover():
+            file = self.get_file(slug)
+            try:
+                data = read_config_data(file)
+                if not self.is_valid(data):
+                    logger_.error(f'Refusing to import invalid {self.name} config: {file}')
+                    continue
+                self._configs[slug] = data
+            except Exception as e:
+                logger_.error(f'Failed to import {self.name} config: {file}', exc_info=e)
+        self.successful_import = True
+
+    @property
+    def successful_import(self) -> bool:
+        from wrolpi.api_utils import api_app
+        try:
+            return bool(api_app.shared_ctx.configs_imported.get(self.name))
+        except AttributeError:
+            # Shared context may not be attached (e.g. pure-unit tests); the flag is only informational here.
+            return False
+
+    @successful_import.setter
+    def successful_import(self, value: bool):
+        from wrolpi.api_utils import api_app
+        try:
+            api_app.shared_ctx.configs_imported[self.name] = value
+        except AttributeError:
+            pass
+
+    def get(self, slug: str) -> Optional[dict]:
+        """Return a deepcopy of one entity's config, or None."""
+        data = self._configs.get(slug)
+        return deepcopy(data) if data is not None else None
+
+    def all(self) -> List[dict]:
+        return [deepcopy(v) for v in self._configs.values()]
+
+    @property
+    def slugs(self) -> List[str]:
+        return list(self._configs.keys())
+
+    def save_lock(self):
+        """The cross-process save lock when the app context is attached; a no-op lock otherwise (pure-unit tests).
+
+        Hold this around a whole read-check-mutate-persist cycle (not just the file write) to avoid lost writes
+        under concurrent saves.  It is NOT reentrant — call `_persist_slug` (not `_save_slug`) while holding it."""
+        from wrolpi.api_utils import api_app
+        return getattr(api_app.shared_ctx, 'config_save_lock', None) or contextlib.nullcontext()
+
+    def _persist_slug(self, slug: str):
+        """Write one entity's in-memory config to its YAML file (version bump + daily backup).
+
+        The caller MUST already hold `save_lock()`."""
+        file = self.get_file(slug)
+        if PYTEST and not is_tempfile(file):
+            raise ValueError(f'Refusing to save config file while testing: {file}')
+        data = dict(self._configs[slug])
+        # Backup the existing file before overwriting.
+        if file.is_file():
+            backup_file = self._get_backup_filename(slug)
+            backup_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(file, backup_file)
+        data['version'] = (data.get('version') or 0) + 1
+        file.parent.mkdir(parents=True, exist_ok=True)
+        write_config_data(data, file, width=self.width)
+        # Persist the bumped version back to the shared store.
+        self._configs[slug] = data
+
+    def _save_slug(self, slug: str):
+        """Acquire the save lock and write one entity to its file."""
+        with self.save_lock():
+            self._persist_slug(slug)
+
+    def _get_backup_filename(self, slug: str) -> Path:
+        date_str = now().strftime('%Y%m%d')
+        return get_media_directory() / 'config' / 'backup' / self.subdirectory / f'{slug}-{date_str}.yaml'
+
+    def dump_all(self):
+        """Write every in-memory entity to disk."""
+        for slug in list(self._configs.keys()):
+            try:
+                self._save_slug(slug)
+            except Exception as e:
+                logger_.error(f'Failed to save {self.name} config: {slug}', exc_info=e)
+
+    def save_later(self, slug: str = None):
+        """Schedule a background save of all entities (coalesces rapid edits)."""
+        self.background_save.activate_switch()
+
+    def create(self, slug: str, data: dict):
+        """Add a new entity and persist it immediately."""
+        if slug in self._configs:
+            raise ValueError(f'{self.name} already exists: {slug}')
+        entity = deepcopy(self.default_entity)
+        entity.update(data)
+        entity['version'] = 0
+        if not self.is_valid(entity):
+            raise ValidationError(f'Invalid {self.name} config: {entity}')
+        self._configs[slug] = entity
+        self._save_slug(slug)
+
+    def replace(self, slug: str, data: dict):
+        """Replace an entity's config wholesale and persist it (background)."""
+        if slug not in self._configs:
+            raise ValueError(f'No {self.name} exists: {slug}')
+        entity = dict(self._configs[slug])
+        entity.update(data)
+        if not self.is_valid(entity):
+            raise ValidationError(f'Invalid {self.name} config: {entity}')
+        self._configs[slug] = entity
+        self.save_later(slug)
+
+    def rename(self, old_slug: str, new_slug: str):
+        """Rename an entity: write the new file, then remove the old one."""
+        if old_slug not in self._configs:
+            raise ValueError(f'No {self.name} exists: {old_slug}')
+        if new_slug in self._configs:
+            raise ValueError(f'{self.name} already exists: {new_slug}')
+        entity = dict(self._configs[old_slug])
+        entity['slug'] = new_slug
+        self._configs[new_slug] = entity
+        self._save_slug(new_slug)
+        self.delete(old_slug)
+
+    def delete(self, slug: str):
+        """Remove an entity from memory and delete its file."""
+        self._configs.pop(slug, None)
+        file = self.get_file(slug)
+        if file.is_file():
+            if PYTEST and not is_tempfile(file):
+                raise ValueError(f'Refusing to delete config file while testing: {file}')
+            file.unlink()
+
+
 @dataclass
 class WROLPiConfigValidator:
     archive_destination: str = None
@@ -838,9 +1072,12 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if channels_config := get_channels_config():
         all_configs[channels_config.file_name] = channels_config
 
-    from modules.inventory.common import get_inventories_config
-    if inventories_config := get_inventories_config():
-        all_configs[inventories_config.file_name] = inventories_config
+    # NOTE: Inventory is no longer a single ConfigFile; it is a config-only MultiFileConfig (config/inventory/*.yaml)
+    # that is the source-of-truth itself (no DB sync), so it is not registered here.  The shared food catalog,
+    # however, is a single ConfigFile and is registered.
+    from modules.inventory.catalog import get_catalog_config
+    if catalog_config := get_catalog_config():
+        all_configs[catalog_config.file_name] = catalog_config
 
     from modules.videos.lib import get_videos_downloader_config
     if videos_downloader_config := get_videos_downloader_config():
@@ -890,7 +1127,6 @@ async def import_all_db_configs() -> dict[str, bool]:
     from modules.videos.lib import import_channels_config
     from modules.archive.lib import import_domains_config
     from modules.inventory.common import import_inventories_config
-    from modules.inventory import init_inventory
 
     results = {}
 
@@ -930,10 +1166,9 @@ async def import_all_db_configs() -> dict[str, bool]:
         logger.warning(f'Failed to import domains config: {e}')
         results['domains'] = False
 
-    # Inventories
+    # Inventories (config-only, no DB).  Migrates any legacy inventories.yaml, then loads per-inventory files.
     try:
         import_inventories_config()
-        init_inventory()
         results['inventories'] = True
         logger.debug('inventories config imported')
     except Exception as e:
@@ -2684,7 +2919,6 @@ def cached_multiprocessing_result(func: callable):
 
 def create_empty_config_files() -> list[str]:
     """Creates config files only if they do not exist and will not conflict with the DB."""
-    from modules.inventory.common import get_inventories_config
     from modules.videos.lib import get_channels_config, get_videos_downloader_config
     from wrolpi.downloader import get_download_manager_config
     from wrolpi.tags import get_tags_config
@@ -2727,12 +2961,8 @@ def create_empty_config_files() -> list[str]:
             get_archive_downloader_config().save(overwrite=True)
             created.append(get_archive_downloader_config().get_file().name)
 
-        if not get_inventories_config().get_file().is_file():
-            from modules.inventory.models import Inventory
-            if session.query(Inventory).count() == 0:
-                # No Inventories will be deleted, create the empty Inventory config file.
-                get_inventories_config().save(overwrite=True)
-                created.append(get_inventories_config().get_file().name)
+    # NOTE: Inventory is config-only (no DB) and manages its own per-inventory files under config/inventory/;
+    # it is seeded by migrate_legacy_inventory()/import on startup, not here.
 
     return created
 

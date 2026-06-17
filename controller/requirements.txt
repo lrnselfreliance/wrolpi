@@ -20,7 +20,7 @@ pyyaml>=6.0.3
 
 # Docker management (optional, for Docker mode)
 docker>=7.1.0
-aiohttp==3.14.0
+aiohttp==3.14.1
 
 # Testing
 pytest>=9.0.3

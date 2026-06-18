@@ -98,17 +98,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, onChang
         setSort(null);
     }, [slug, fields]);
 
-    // Expired = any date-type field strictly before the start of today.
-    const dateFields = useMemo(() => fields.filter(f => f.type === 'date'), [fields]);
-    const todayStart = useMemo(() => {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return d.getTime();
-    }, []);
-    const isExpired = (item) => dateFields.some(f => {
-        const t = Date.parse(item[f.key]);
-        return !isNaN(t) && t < todayStart;
-    });
+    // Expired = any date-type field strictly before the start of today (shared with the mobile view).
+    const isExpired = (item) => isItemExpired(item, fields);
 
     const toggleSort = (key) => setSort(prev =>
         prev && prev.key === key
@@ -273,7 +264,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, onChang
     </>;
 }
 
-function formatValue(item, field) {
+// Format an item's value for a field for display (shared with the read-only mobile view).
+export function formatValue(item, field) {
     const value = item[field.key];
     if (value === '' || value == null) {
         return '';
@@ -283,4 +275,17 @@ function formatValue(item, field) {
         return `${value} ${unit}`.trim();
     }
     return String(value);
+}
+
+// True when any `date`-type field is before the start of today (item is expired).
+export function isItemExpired(item, fields) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return (fields || []).some(f => {
+        if (f.type !== 'date') {
+            return false;
+        }
+        const t = Date.parse(item[f.key]);
+        return !isNaN(t) && t < start.getTime();
+    });
 }

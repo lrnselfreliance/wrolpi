@@ -57,34 +57,36 @@ DEFAULT_FOOD_CATEGORIES = [
 _FOOD_CATEGORY_OPTIONS = sorted({category for _, category in DEFAULT_FOOD_CATEGORIES})
 
 DEFAULT_FIELD_SETS = {
+    # `mobile=True` marks the columns shown in the condensed, read-only portrait-mobile view; the user can change
+    # which fields are mobile in the field-schema editor.
     'food': [
         _field('brand', 'Brand', 'text', 0),
-        _field('name', 'Name', 'text', 1, required=True),
+        _field('name', 'Name', 'text', 1, required=True, mobile=True),
         _field('category', 'Category', 'select', 2, options=_FOOD_CATEGORY_OPTIONS),
-        _field('subcategory', 'Subcategory', 'text', 3),
-        _field('item_size', 'Size', 'quantity', 4, unit='lb'),
-        _field('count', 'Count', 'number', 5),
+        _field('subcategory', 'Subcategory', 'text', 3, mobile=True),
+        _field('item_size', 'Size', 'quantity', 4, unit='lb', mobile=True),
+        _field('count', 'Count', 'number', 5, mobile=True),
         _field('calories', 'kcal per unit', 'calories', 6),
         _field('expiration_date', 'Expires', 'date', 7),
     ],
     'fuel': [
-        _field('name', 'Name', 'text', 0, required=True),
+        _field('name', 'Name', 'text', 0, required=True, mobile=True),
         _field('fuel_type', 'Fuel Type', 'select', 1,
-               options=['gasoline', 'diesel', 'propane', 'kerosene', 'oil']),
+               options=['gasoline', 'diesel', 'propane', 'kerosene', 'oil'], mobile=True),
         _field('container', 'Container', 'text', 2),
-        _field('item_size', 'Size', 'quantity', 3, unit='gallon'),
-        _field('count', 'Count', 'number', 4),
+        _field('item_size', 'Size', 'quantity', 3, unit='gallon', mobile=True),
+        _field('count', 'Count', 'number', 4, mobile=True),
         _field('purchase_date', 'Purchased', 'date', 5),
         _field('location', 'Location', 'location', 6),
     ],
     'tool': [
-        _field('name', 'Name', 'text', 0, required=True),
+        _field('name', 'Name', 'text', 0, required=True, mobile=True),
         _field('brand', 'Brand', 'text', 1),
         _field('category', 'Category', 'select', 2,
-               options=['hand', 'power', 'garden', 'automotive', 'measuring', 'safety']),
-        _field('count', 'Count', 'number', 3),
+               options=['hand', 'power', 'garden', 'automotive', 'measuring', 'safety'], mobile=True),
+        _field('count', 'Count', 'number', 3, mobile=True),
         _field('condition', 'Condition', 'select', 4, options=['new', 'good', 'worn', 'broken']),
-        _field('location', 'Location', 'location', 5),
+        _field('location', 'Location', 'location', 5, mobile=True),
         _field('notes', 'Notes', 'text', 6),
     ],
 }

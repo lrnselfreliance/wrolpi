@@ -4,9 +4,11 @@ import {Button, Confirm, Header, Icon, Loader, Menu, Modal, Segment} from "../Th
 import {PageContainer, useTitle} from "../Common";
 import {collectLocations, useCatalog, useInventories} from "../../hooks/customHooks";
 import {InventoryTable} from "./InventoryTable";
+import {InventoryItemsMobile} from "./InventoryItemsMobile";
 import {InventorySummary} from "./InventorySummary";
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
+import {Media} from "../../contexts/contexts";
 
 const INVENTORY_TYPES = [
     {key: 'food', value: 'food', text: 'Food Storage'},
@@ -140,8 +142,17 @@ export function InventoryRoute() {
             </Menu>
 
             {tab === 'items'
-                ? <InventoryTable slug={slug} fields={fields} items={items} locations={locations} catalog={catalog}
-                                  onChange={newItems => persistInventory(slug, {items: newItems})}/>
+                ? <>
+                    {/* Portrait mobile: condensed, read-only.  Rotate to landscape (tablet+) for the full editor. */}
+                    <Media at='mobile'>
+                        <InventoryItemsMobile fields={fields} items={items}/>
+                    </Media>
+                    <Media greaterThanOrEqual='tablet'>
+                        <InventoryTable slug={slug} fields={fields} items={items} locations={locations}
+                                        catalog={catalog}
+                                        onChange={newItems => persistInventory(slug, {items: newItems})}/>
+                    </Media>
+                </>
                 : <InventorySummary fields={fields} items={items}/>}
 
             <FieldSchemaEditor fields={fields} open={editFieldsOpen}

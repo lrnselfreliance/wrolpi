@@ -1,5 +1,7 @@
 import React, {useState} from "react";
-import {Input, Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
+import {
+    Checkbox, Input, Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow
+} from "semantic-ui-react";
 import {Button, Icon, Modal, Table} from "../Theme";
 import {ALL_UNITS} from "./units";
 
@@ -61,9 +63,13 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                 <TableHeader>
                     <TableRow>
                         <TableHeaderCell width={2}>Order</TableHeaderCell>
-                        <TableHeaderCell width={4}>Label</TableHeaderCell>
-                        <TableHeaderCell width={4}>Type</TableHeaderCell>
+                        <TableHeaderCell width={3}>Label</TableHeaderCell>
+                        <TableHeaderCell width={3}>Type</TableHeaderCell>
                         <TableHeaderCell width={5}>Unit / Options</TableHeaderCell>
+                        <TableHeaderCell width={2} textAlign='center'
+                                         title='Show this field in the read-only portrait-mobile view'>
+                            Mobile
+                        </TableHeaderCell>
                         <TableHeaderCell width={1}/>
                     </TableRow>
                 </TableHeader>
@@ -95,6 +101,10 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                                        onChange={e => update(index, {
                                            options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
                                        })}/>}
+                        </TableCell>
+                        <TableCell collapsing textAlign='center'>
+                            <Checkbox toggle checked={!!f.mobile} aria-label={`Show ${f.label || f.key} on mobile`}
+                                      onChange={(e, data) => update(index, {mobile: data.checked})}/>
                         </TableCell>
                         <TableCell collapsing>
                             <Button color='red' icon size='mini' onClick={() => remove(index)}

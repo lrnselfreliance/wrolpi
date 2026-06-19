@@ -1,5 +1,5 @@
 import React from "react";
-import {fireEvent, render, screen} from "@testing-library/react";
+import {fireEvent, render, screen, within} from "@testing-library/react";
 import {filterItems, InventoryTable} from "./InventoryTable";
 
 const FIELDS = [
@@ -75,6 +75,64 @@ describe('InventoryTable keyboard entry', () => {
         fireEvent.click(screen.getByText('5'));   // the Count cell
         const countInput = screen.getAllByLabelText('Count').find(i => i.value === '5');
         expect(document.activeElement).toBe(countInput);
+    });
+});
+
+describe('InventoryTable count by weight', () => {
+    const FIELDS = [
+        {key: 'name', label: 'Name', type: 'text', order: 0},
+        {key: 'unit_weight', label: 'Unit Weight', type: 'quantity', unit: 'g', order: 1},
+        {key: 'total_weight', label: 'Total Weight', type: 'quantity', unit: 'g', order: 2},
+        {key: 'count', label: 'Count', type: 'number', order: 3,
+            compute: {kind: 'count_by_weight', total: 'total_weight', unit: 'unit_weight'}},
+    ];
+
+    test('entering the two weights in the draft row auto-fills the count', () => {
+        const onChange = jest.fn();
+        render(<InventoryTable slug='s' fields={FIELDS} items={[]} locations={[]} onChange={onChange}/>);
+
+        fireEvent.change(screen.getByLabelText('Unit Weight'), {target: {value: '5'}});
+        fireEvent.change(screen.getByLabelText('Total Weight'), {target: {value: '1000'}});
+
+        // The draft Count input is now pre-filled with 200 (1000 / 5).
+        expect(screen.getByLabelText('Count').value).toBe('200');
+    });
+
+    test('editing an existing item recomputes its count from the weights', () => {
+        const onChange = jest.fn();
+        const items = [{id: 1, name: 'Screws', unit_weight: '5', unit_weight_unit: 'g',
+            total_weight: '1000', total_weight_unit: 'g', count: '200'}];
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} onChange={onChange}/>);
+
+        fireEvent.click(screen.getByText('Screws'));   // enter edit mode
+        const totalInput = screen.getAllByLabelText('Total Weight').find(i => i.value === '1000');
+        fireEvent.change(totalInput, {target: {value: '2000'}});
+
+        // The edited row's Count is recomputed to 400 (2000 / 5).
+        expect(screen.getAllByLabelText('Count').some(i => i.value === '400')).toBe(true);
+    });
+
+    test('clearing a weight in an existing row blanks the count (no stale value)', () => {
+        const items = [{id: 1, name: 'Screws', unit_weight: '5', unit_weight_unit: 'g',
+            total_weight: '1000', total_weight_unit: 'g', count: '200'}];
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} onChange={jest.fn()}/>);
+
+        fireEvent.click(screen.getByText('Screws'));   // enter edit mode
+        const row = screen.getByDisplayValue('Screws').closest('tr');
+        // Clearing the total weight (as a real keyboard delete does) fires onChange with '' and blanks the count.
+        fireEvent.change(within(row).getByLabelText('Total Weight'), {target: {value: ''}});
+        expect(within(row).getByLabelText('Count').value).toBe('');
+    });
+
+    test('reducing a weight below one item shows 0, not the stale count', () => {
+        const items = [{id: 1, name: 'Screws', unit_weight: '5', unit_weight_unit: 'g',
+            total_weight: '1000', total_weight_unit: 'g', count: '200'}];
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} onChange={jest.fn()}/>);
+
+        fireEvent.click(screen.getByText('Screws'));
+        const row = screen.getByDisplayValue('Screws').closest('tr');
+        fireEvent.change(within(row).getByLabelText('Total Weight'), {target: {value: '1'}});
+        expect(within(row).getByLabelText('Count').value).toBe('0');
     });
 });
 

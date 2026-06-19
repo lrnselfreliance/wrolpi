@@ -2,6 +2,7 @@ import React, {useMemo, useRef, useState} from "react";
 import {Checkbox, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {Button, Icon, Table} from "../Theme";
 import {FieldCell} from "./FieldCell";
+import {applyComputedCounts, computedCountConfigs} from "./computeFields";
 
 const LOCATION_LIST_ID = 'inventory-location-suggestions';
 const CATALOG_LIST_ID = 'inventory-catalog-names';
@@ -80,6 +81,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
         });
         return keys;
     }, [fields]);
+    // "Count by weight" configs: a Count field auto-filled from a Total Weight ÷ Unit Weight.
+    const countConfigs = useMemo(() => computedCountConfigs(fields), [fields]);
 
     const listIdFor = (field) => {
         if (field.type === 'location') {
@@ -147,6 +150,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                 });
             }
         }
+        // Auto-fill any "count by weight" field when a weight (or its unit) changed.
+        applyComputedCounts(next, countConfigs, key);
         return next;
     });
 
@@ -165,7 +170,11 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
         setFocusCell({id: item.id, key});   // the FieldCell for this key auto-focuses and selects its contents
     };
     const setEditValue = (id, key, value) =>
-        setEdits(prev => ({...prev, [id]: {...prev[id], [key]: value}}));
+        setEdits(prev => {
+            const updated = {...prev[id], [key]: value};
+            applyComputedCounts(updated, countConfigs, key);
+            return {...prev, [id]: updated};
+        });
 
     const saveEdit = (id) => {
         onChange(items.map(i => i.id === id ? edits[id] : i));

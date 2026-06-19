@@ -54,6 +54,35 @@ export function convert(value, fromUnit, toUnitName) {
     }
 }
 
+/**
+ * Estimate how many items a lot contains from a total weight and a single item's weight:
+ * count = round(total / unit), converting `total` into the unit-weight's unit first (so e.g. a 2 kg total and a
+ * 5 g unit weight give 400).  The result is rounded to a whole number — you can't have 403.7 nails.  A total below
+ * one item (or zero) gives 0, not null, so a corrected-down weight doesn't leave a stale count behind.
+ * Returns null when a weight is blank, the unit weight is non-positive, or the units are incompatible.
+ */
+export function countByWeight(total, totalUnit, unitWeight, unitWeightUnit) {
+    const each = Number(unitWeight);
+    if (!(each > 0) || total === '' || total === null || total === undefined) {
+        return null;
+    }
+    let totalInEachUnit;
+    if (totalUnit && unitWeightUnit && totalUnit !== unitWeightUnit) {
+        totalInEachUnit = convert(total, totalUnit, unitWeightUnit);   // null if incompatible
+    } else if ((totalUnit || '') === (unitWeightUnit || '')) {
+        // Same unit (or both unitless) — divide the raw magnitudes.
+        const t = Number(total);
+        totalInEachUnit = Number.isFinite(t) ? t : null;
+    } else {
+        // One side has a unit and the other doesn't — can't safely divide, so refuse to guess.
+        return null;
+    }
+    if (totalInEachUnit === null || !Number.isFinite(totalInEachUnit) || totalInEachUnit < 0) {
+        return null;
+    }
+    return Math.round(totalInEachUnit / each);   // 0 for a sub-unit (or zero) total
+}
+
 function compact(unitValue) {
     // unitValue is a mathjs Unit.  On a compatible ladder, pick the largest unit where the value is still >= 1.
     for (const ladder of COMPACTION_LADDERS) {

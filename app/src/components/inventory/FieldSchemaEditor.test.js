@@ -20,6 +20,24 @@ describe('FieldSchemaEditor select options', () => {
         expect(optionsInput.value).toBe('screws,nails');
     });
 
+    test('"Count by Weight" adds the linked weight + computed-count fields and they persist on save', async () => {
+        const onSave = jest.fn();
+        render(<FieldSchemaEditor fields={[{key: 'name', label: 'Name', type: 'text'}]}
+                                  open={true} onClose={jest.fn()} onSave={onSave}/>);
+
+        fireEvent.click(screen.getByText('Count by Weight'));
+        // The note appears on the computed Count row.
+        expect(screen.getByText(/Total Weight ÷ Unit Weight/)).toBeTruthy();
+
+        fireEvent.click(screen.getByText('Save Fields'));
+        const saved = onSave.mock.calls[0][0];
+        const byKey = Object.fromEntries(saved.map(f => [f.key, f]));
+        expect(byKey.unit_weight).toMatchObject({type: 'quantity', unit: 'g'});
+        expect(byKey.total_weight).toMatchObject({type: 'quantity', unit: 'g'});
+        // The compute metadata survives save() so the table can auto-fill the count.
+        expect(byKey.count.compute).toEqual({kind: 'count_by_weight', total: 'total_weight', unit: 'unit_weight'});
+    });
+
     test('options are trimmed and emptied-out on save', async () => {
         const onSave = jest.fn();
         render(<FieldSchemaEditor fields={FIELDS} open={true} onClose={jest.fn()} onSave={onSave}/>);

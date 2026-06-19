@@ -4,6 +4,7 @@ import {
 } from "semantic-ui-react";
 import {Button, Icon, Modal, Table} from "../Theme";
 import {ALL_UNITS} from "./units";
+import {addCountByWeightFields, isCountByWeight} from "./computeFields";
 
 const FIELD_TYPE_OPTIONS = ['text', 'number', 'quantity', 'date', 'select', 'location', 'calories']
     .map(t => ({key: t, value: t, text: t}));
@@ -39,6 +40,8 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
         return next;
     });
     const add = () => setDraft(prev => [...prev, {key: '', label: '', type: 'text'}]);
+    // Add the "count by weight" fields (Unit Weight, Total Weight, computed Count); links an existing Count field.
+    const addCountByWeight = () => setDraft(prev => addCountByWeightFields(prev));
 
     const save = async () => {
         // Fill any missing keys from labels and normalize order.
@@ -108,6 +111,10 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                                 <Input fluid placeholder='comma,separated,options'
                                        value={(f.options || []).join(',')}
                                        onChange={e => update(index, {options: e.target.value.split(',')})}/>}
+                            {isCountByWeight(f) &&
+                                <span style={{opacity: 0.7, fontSize: '0.9em'}}>
+                                    <Icon name='calculator'/> Auto-counted: Total Weight ÷ Unit Weight
+                                </span>}
                         </TableCell>
                         <TableCell collapsing textAlign='center'>
                             <Checkbox toggle checked={!!f.mobile} aria-label={`Show ${f.label || f.key} on mobile`}
@@ -121,6 +128,9 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                 </TableBody>
             </Table>
             <Button onClick={add}><Icon name='plus'/>Add Field</Button>
+            <Button onClick={addCountByWeight} title='Add Unit Weight, Total Weight, and an auto-counted Count'>
+                <Icon name='balance scale'/>Count by Weight
+            </Button>
         </Modal.Content>
         <Modal.Actions>
             <Button onClick={onClose}>Cancel</Button>

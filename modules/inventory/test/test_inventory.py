@@ -81,6 +81,26 @@ def test_save_inventory_fields(food_inventory_factory, test_inventory_configs):
     assert [f['order'] for f in saved['fields']] == [0, 1]
 
 
+def test_save_inventory_fields_preserve_compute_metadata(food_inventory_factory, test_inventory_configs):
+    """A field's extra `compute` metadata (e.g. count-by-weight) must round-trip through save and re-import."""
+    config = test_inventory_configs
+    slug = food_inventory_factory()
+    compute = {'kind': 'count_by_weight', 'total': 'total_weight', 'unit': 'unit_weight'}
+    saved = config.save_inventory(slug, dict(fields=[
+        dict(key='name', label='Name', type='text'),
+        dict(key='unit_weight', label='Unit Weight', type='quantity', unit='g'),
+        dict(key='total_weight', label='Total Weight', type='quantity', unit='g'),
+        dict(key='count', label='Count', type='number', compute=compute),
+    ]))
+    assert next(f for f in saved['fields'] if f['key'] == 'count')['compute'] == compute
+
+    # A fresh config instance re-reads from disk; the metadata persists.
+    fresh = inventory_common.InventoriesConfig()
+    fresh.initialize()
+    restored = fresh.get_inventory(slug)
+    assert next(f for f in restored['fields'] if f['key'] == 'count')['compute'] == compute
+
+
 def test_save_inventory_rename_keeps_slug(food_inventory_factory, test_inventory_configs):
     config = test_inventory_configs
     slug = food_inventory_factory(name='Food Storage')

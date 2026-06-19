@@ -6,3 +6,9 @@ from typing import Optional
 class InventoryPostRequest:
     name: str
     type: Optional[str] = 'food'
+
+
+@dataclass
+class InventoryRestoreRequest:
+    backup_date: str
+    mode: str

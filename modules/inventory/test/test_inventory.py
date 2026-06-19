@@ -173,6 +173,78 @@ def test_seed_defaults_idempotent(test_inventory_configs):
     assert len(config.all_inventories()) == 1
 
 
+def _write_backup(config, slug, date, items, name='Food Storage'):
+    """Write a dated backup file for an inventory (as the daily save would)."""
+    from wrolpi.common import write_config_data
+    backup = config._get_backup_file(slug, date)
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    write_config_data(dict(version=9, slug=slug, name=name, type='food',
+                           fields=default_fields('food'), items=items), backup)
+    return backup
+
+
+def test_restore_overwrite_replaces_inventory(food_inventory_factory, test_inventory_configs):
+    config = test_inventory_configs
+    slug = food_inventory_factory(items=[dict(id=1, name='Rice', count='4'), dict(id=2, name='Beans', count='2')])
+    _write_backup(config, slug, '20260101', name='Old Name',
+                  items=[dict(id=1, name='Rice', count='99'), dict(id=3, name='Oats', count='5')])
+
+    preview = config.preview_restore(slug, '20260101', 'overwrite')
+    assert {i['id'] for i in preview['add']} == {3}      # Oats only in the backup
+    assert {i['id'] for i in preview['remove']} == {2}   # Beans only in the current inventory
+    assert preview['unchanged'] == 1                     # Rice (id 1) is in both
+
+    restored = config.apply_restore(slug, '20260101', 'overwrite')
+    assert restored['name'] == 'Old Name'
+    assert {i['name'] for i in restored['items']} == {'Rice', 'Oats'}
+    # Overwrite takes the backup's value for the shared item.
+    assert next(i for i in restored['items'] if i['name'] == 'Rice')['count'] == '99'
+
+
+def test_restore_merge_unions_items_by_id(food_inventory_factory, test_inventory_configs):
+    config = test_inventory_configs
+    slug = food_inventory_factory(items=[dict(id=1, name='Rice', count='4')])
+    _write_backup(config, slug, '20260101',
+                  items=[dict(id=1, name='Rice', count='99'), dict(id=2, name='Beans', count='2')])
+
+    preview = config.preview_restore(slug, '20260101', 'merge')
+    assert {i['id'] for i in preview['add']} == {2}      # only Beans is new; id 1 already present
+    assert preview['remove'] == []
+
+    restored = config.apply_restore(slug, '20260101', 'merge')
+    assert {i['name'] for i in restored['items']} == {'Rice', 'Beans'}
+    # Merge keeps the existing item untouched (does NOT take the backup's count=99 for id 1).
+    assert next(i for i in restored['items'] if i['name'] == 'Rice')['count'] == '4'
+
+
+def test_restore_rejects_bad_mode_and_missing_backup(food_inventory_factory, test_inventory_configs):
+    from wrolpi.errors import ValidationError
+    config = test_inventory_configs
+    slug = food_inventory_factory()
+    with pytest.raises(ValidationError):
+        config.preview_restore(slug, '20260101', 'bogus')
+    with pytest.raises(ValidationError):
+        config.preview_restore(slug, '20260101', 'overwrite')  # no such backup file
+    # A non-YYYYMMDD backup_date must be rejected (path-traversal guard), not used to build a path.
+    with pytest.raises(ValidationError):
+        config.preview_restore(slug, '../../../../etc/passwd', 'overwrite')
+
+
+def test_restore_overwrite_rejects_corrupt_fields(food_inventory_factory, test_inventory_configs):
+    """A backup with a malformed field (no 'key') is rejected with a 400, not a 500 inside the save lock."""
+    from wrolpi.common import write_config_data
+    from wrolpi.errors import ValidationError
+    config = test_inventory_configs
+    slug = food_inventory_factory(items=[dict(id=1, name='Rice', count='4')])
+    backup = config._get_backup_file(slug, '20260101')
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    write_config_data(dict(version=9, slug=slug, name='Food Storage', type='food',
+                           fields=[dict(label='Broken', type='text')],  # missing 'key'
+                           items=[]), backup)
+    with pytest.raises(ValidationError):
+        config.apply_restore(slug, '20260101', 'overwrite')
+
+
 def test_config_round_trip(food_inventory_factory, test_inventory_configs):
     """Saving to per-inventory YAML and re-importing preserves fields and items."""
     config = test_inventory_configs

@@ -38,6 +38,14 @@ def post_inventory(_: Request, body: schema.InventoryPostRequest):
     return json_response(dict(inventory=inventory), HTTPStatus.CREATED)
 
 
+@inventory_bp.post('/reimport')
+@openapi.description('Re-read every inventory config file from disk (picks up hand-edits and copied-in files).')
+def post_inventory_reimport(_: Request):
+    inventories = get_inventory_configs().reimport()
+    inventories = sorted(inventories, key=lambda i: (i.get('name') or '').lower())
+    return json_response(dict(inventories=inventories))
+
+
 # Shared food catalog (static routes, declared before the dynamic /<slug> routes).
 @inventory_bp.get('/catalog')
 @openapi.description('Get the shared food catalog entries.')
@@ -70,3 +78,40 @@ def inventory_delete(_: Request, slug: str):
         raise UnknownInventory(f'No inventory: {slug}')
     get_inventory_configs().delete_inventory(slug)
     return response.empty()
+
+
+@inventory_bp.get('/<slug:str>/backups')
+@openapi.description('List the dated backups available for an inventory, newest first.')
+def get_inventory_backups(_: Request, slug: str):
+    config = get_inventory_configs()
+    if config.get_inventory(slug) is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    return json_response(dict(dates=config.get_backup_dates(slug)))
+
+
+@inventory_bp.post('/<slug:str>/restore/preview')
+@openapi.definition(
+    summary='Preview restoring an inventory from a backup',
+    body=schema.InventoryRestoreRequest,
+)
+@validate(schema.InventoryRestoreRequest)
+def post_inventory_restore_preview(_: Request, slug: str, body: schema.InventoryRestoreRequest):
+    config = get_inventory_configs()
+    if config.get_inventory(slug) is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    preview = config.preview_restore(slug, body.backup_date, body.mode)
+    return json_response(dict(preview=preview))
+
+
+@inventory_bp.post('/<slug:str>/restore')
+@openapi.definition(
+    summary='Restore an inventory from a backup (merge or overwrite)',
+    body=schema.InventoryRestoreRequest,
+)
+@validate(schema.InventoryRestoreRequest)
+def post_inventory_restore(_: Request, slug: str, body: schema.InventoryRestoreRequest):
+    config = get_inventory_configs()
+    if config.get_inventory(slug) is None:
+        raise UnknownInventory(f'No inventory: {slug}')
+    inventory = config.apply_restore(slug, body.backup_date, body.mode)
+    return json_response(dict(inventory=inventory))

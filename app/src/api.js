@@ -629,6 +629,47 @@ export async function deleteInventory(slug) {
     return response;
 }
 
+export async function reimportInventories() {
+    // Re-read every inventory config file from disk (picks up hand-edits and copied-in files).
+    const response = await apiPost(`${API_URI}/inventory/reimport`);
+    if (response.ok) {
+        return (await response.json())['inventories'];
+    }
+    const message = await getErrorMessage(response, 'Failed to re-import inventories');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
+}
+
+export async function getInventoryBackups(slug) {
+    const response = await apiGet(`${API_URI}/inventory/${slug}/backups`);
+    if (response.ok) {
+        return (await response.json())['dates'];
+    }
+    return [];
+}
+
+export async function postInventoryRestorePreview(slug, backupDate, mode) {
+    const body = {backup_date: backupDate, mode};
+    const response = await apiPost(`${API_URI}/inventory/${slug}/restore/preview`, body);
+    if (response.ok) {
+        return (await response.json())['preview'];
+    }
+    const message = await getErrorMessage(response, 'Failed to preview the backup');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
+}
+
+export async function postInventoryRestore(slug, backupDate, mode) {
+    const body = {backup_date: backupDate, mode};
+    const response = await apiPost(`${API_URI}/inventory/${slug}/restore`, body);
+    if (response.ok) {
+        return (await response.json())['inventory'];
+    }
+    const message = await getErrorMessage(response, 'Failed to restore the backup');
+    toast({type: 'error', title: 'Unexpected server response', description: message, time: 5000});
+    return null;
+}
+
 export async function getCatalog() {
     // The shared food catalog (known items with total calories per package).
     const response = await apiGet(`${API_URI}/inventory/catalog`);

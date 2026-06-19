@@ -80,3 +80,52 @@ async def test_put_version_conflict_api(food_inventory_factory, async_client):
 async def test_missing_inventory_404(test_inventory_configs, async_client):
     request, response = await async_client.put('/api/inventory/does-not-exist', content=json.dumps(dict(name='x')))
     assert response.status_code == HTTPStatus.NOT_FOUND, response.status_code
+
+
+@pytest.mark.asyncio
+async def test_backups_and_restore_api(food_inventory_factory, test_inventory_configs, async_client):
+    """List backups, preview, and apply a merge restore via the API."""
+    from modules.inventory.defaults import default_fields
+    from wrolpi.common import write_config_data
+    config = test_inventory_configs
+    slug = food_inventory_factory(items=[{'id': 1, 'name': 'Rice', 'count': '4'}])
+    backup = config._get_backup_file(slug, '20260101')
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    write_config_data(dict(version=9, slug=slug, name='Food Storage', type='food', fields=default_fields('food'),
+                           items=[{'id': 1, 'name': 'Rice', 'count': '4'}, {'id': 2, 'name': 'Beans', 'count': '2'}]),
+                      backup)
+
+    request, response = await async_client.get(f'/api/inventory/{slug}/backups')
+    assert response.status_code == HTTPStatus.OK
+    # Saving the seed items also wrote today's backup, so just assert our dated backup is listed.
+    assert '20260101' in response.json['dates']
+
+    request, response = await async_client.post(f'/api/inventory/{slug}/restore/preview',
+                                                content=json.dumps(dict(backup_date='20260101', mode='merge')))
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert {i['id'] for i in response.json['preview']['add']} == {2}
+
+    request, response = await async_client.post(f'/api/inventory/{slug}/restore',
+                                                content=json.dumps(dict(backup_date='20260101', mode='merge')))
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert {i['name'] for i in response.json['inventory']['items']} == {'Rice', 'Beans'}
+
+    # A bad mode is rejected.
+    request, response = await async_client.post(f'/api/inventory/{slug}/restore',
+                                                content=json.dumps(dict(backup_date='20260101', mode='bogus')))
+    assert response.status_code == HTTPStatus.BAD_REQUEST, response.status_code
+
+
+@pytest.mark.asyncio
+async def test_reimport_api(food_inventory_factory, test_inventory_configs, async_client):
+    """POST /reimport picks up an inventory file copied onto disk by hand."""
+    from modules.inventory.defaults import default_fields
+    from wrolpi.common import write_config_data
+    config = test_inventory_configs
+    food_inventory_factory(name='Food Storage')
+    write_config_data(dict(version=1, slug='tools-box', name='Tools Box', type='tool',
+                           fields=default_fields('tool'), items=[]), config.get_file('tools-box'))
+
+    request, response = await async_client.post('/api/inventory/reimport')
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert {i['slug'] for i in response.json['inventories']} == {'food-storage', 'tools-box'}

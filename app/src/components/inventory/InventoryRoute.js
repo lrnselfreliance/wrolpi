@@ -12,6 +12,7 @@ import {RationEstimatePanel} from "../calculators/RationCalculator";
 import {defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey} from "./summarize";
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
+import {InventoryImportModal} from "./InventoryImportModal";
 import {Media, ThemeContext} from "../../contexts/contexts";
 
 const INVENTORY_TYPES = [
@@ -56,7 +57,7 @@ function NewInventoryModal({open, onClose, onCreate}) {
 
 export function InventoryRoute() {
     useTitle('Inventory');
-    const {inventories, persistInventory, addInventory, removeInventory} = useInventories();
+    const {inventories, fetchInventories, persistInventory, addInventory, removeInventory} = useInventories();
     const {catalog, persistCatalog} = useCatalog();
     const [slug, setSlug] = useState(null);
 
@@ -64,6 +65,7 @@ export function InventoryRoute() {
     const [newOpen, setNewOpen] = useState(false);
     const [catalogOpen, setCatalogOpen] = useState(false);
     const [editFieldsOpen, setEditFieldsOpen] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
     const [renaming, setRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -164,6 +166,9 @@ export function InventoryRoute() {
                     <Button icon onClick={() => setEditFieldsOpen(true)} aria-label='Customize fields'>
                         <Icon name='columns'/> Fields
                     </Button>
+                    <Button icon onClick={() => setImportOpen(true)} aria-label='Import or restore inventory'>
+                        <Icon name='history'/> Restore
+                    </Button>
                     <Button color='red' icon onClick={() => setConfirmDelete(true)} aria-label='Delete inventory'>
                         <Icon name='trash'/>
                     </Button>
@@ -213,6 +218,9 @@ export function InventoryRoute() {
             <FieldSchemaEditor fields={fields} open={editFieldsOpen}
                                onClose={() => setEditFieldsOpen(false)}
                                onSave={newFields => persistInventory(slug, {fields: newFields})}/>
+
+            <InventoryImportModal open={importOpen} onClose={() => setImportOpen(false)}
+                                  slug={slug} name={current.name} onChanged={fetchInventories}/>
         </> : <p {...t}>Create an inventory to get started.</p>}
 
         <NewInventoryModal open={newOpen} onClose={() => setNewOpen(false)} onCreate={onCreate}/>

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from wrolpi.common import logger, MultiFileConfig
+from wrolpi.common import logger, MultiFileConfig, read_config_data
 from wrolpi.errors import ValidationError
 from .defaults import (DEFAULT_INVENTORIES, FIELD_TYPES, default_fields, slugify)
 
@@ -175,6 +175,86 @@ class InventoriesConfig(MultiFileConfig):
             current['viewed_at'] = now().isoformat()
             self._configs[slug] = current
             # Persist synchronously (lock already held) so the version bump is immediate and returned to the client.
+            self._persist_slug(slug)
+        return self.get(slug)
+
+    def _load_backup(self, slug: str, backup_date: str) -> dict:
+        """Read and validate a dated backup file for an inventory."""
+        file = self._get_backup_file(slug, backup_date)
+        if not file.is_file():
+            raise ValidationError(f'No backup for {slug} on {backup_date}')
+        data = read_config_data(file)
+        if not self.is_valid(data):
+            raise ValidationError(f'Backup is not a valid inventory config: {file}')
+        return data
+
+    def preview_restore(self, slug: str, backup_date: str, mode: str) -> dict:
+        """Describe what restoring a backup would change, without applying it.
+
+        `overwrite` replaces the whole inventory (items present only in the backup are added, items present only in
+        the current inventory are removed, and the field schema may change).  `merge` only adds backup items whose
+        id isn't already present (current fields and items are kept).
+        """
+        if mode not in ('merge', 'overwrite'):
+            raise ValidationError('mode must be "merge" or "overwrite"')
+        if slug not in self._configs:
+            raise ValidationError(f'No inventory: {slug}')
+        backup = self._load_backup(slug, backup_date)
+        current = self.get(slug)
+        current_items = current.get('items') or []
+        backup_items = backup.get('items') or []
+        current_ids = {i.get('id') for i in current_items}
+        backup_ids = {i.get('id') for i in backup_items}
+
+        add = [i for i in backup_items if i.get('id') not in current_ids]
+        if mode == 'overwrite':
+            remove = [i for i in current_items if i.get('id') not in backup_ids]
+            unchanged = sum(1 for i in current_items if i.get('id') in backup_ids)
+            fields_change = (current.get('fields') or []) != (backup.get('fields') or [])
+        else:
+            remove = []
+            unchanged = len(current_items)
+            fields_change = False
+        return dict(
+            mode=mode,
+            add=add,
+            remove=remove,
+            unchanged=unchanged,
+            fields_change=fields_change,
+            current_count=len(current_items),
+            backup_count=len(backup_items),
+            backup_name=backup.get('name'),
+        )
+
+    def apply_restore(self, slug: str, backup_date: str, mode: str) -> dict:
+        """Restore an inventory from a dated backup (see `preview_restore` for `merge`/`overwrite` semantics).
+
+        The pre-restore state is backed up by `_persist_slug`, so a restore can itself be undone."""
+        from wrolpi.dates import now
+        if mode not in ('merge', 'overwrite'):
+            raise ValidationError('mode must be "merge" or "overwrite"')
+        if slug not in self._configs:
+            raise ValidationError(f'No inventory: {slug}')
+        backup = self._load_backup(slug, backup_date)
+
+        with self.save_lock():
+            current = dict(self._configs[slug])
+            if mode == 'overwrite':
+                # Replace the editable parts with the backup; `slug`/`version` stay (version bumps on persist).
+                current['name'] = backup.get('name') or current.get('name')
+                current['type'] = backup.get('type') or current.get('type')
+                current['fields'] = backup.get('fields') or []
+                # Validate the field dicts (a corrupt backup field without a 'key' would otherwise raise a 500
+                # inside _normalize_items); raises a 400 ValidationError instead.
+                _validate_fields(current['fields'])
+                current['items'] = _normalize_items(backup.get('items') or [], current['fields'])
+            else:
+                current_items = current.get('items') or []
+                current_ids = {i.get('id') for i in current_items}
+                add = [i for i in (backup.get('items') or []) if i.get('id') not in current_ids]
+                current['items'] = _normalize_items(current_items + add, current.get('fields') or [])
+            current['viewed_at'] = now().isoformat()
+            self._configs[slug] = current
             self._persist_slug(slug)
         return self.get(slug)
 

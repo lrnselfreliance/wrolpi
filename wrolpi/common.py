@@ -969,6 +969,44 @@ class MultiFileConfig:
         date_str = now().strftime('%Y%m%d')
         return get_media_directory() / 'config' / 'backup' / self.subdirectory / f'{slug}-{date_str}.yaml'
 
+    def _backup_directory(self) -> Path:
+        return get_media_directory() / 'config' / 'backup' / self.subdirectory
+
+    def get_backup_dates(self, slug: str) -> list:
+        """Scan the entity's backup directory for `<slug>-YYYYMMDD.yaml` files, return the dates newest-first."""
+        backup_dir = self._backup_directory()
+        if not backup_dir.is_dir():
+            return []
+        dates = []
+        for f in backup_dir.iterdir():
+            # The length+digit check rejects a different slug that merely shares this slug's prefix
+            # (e.g. slug 'food' must not match 'food-storage-20260101.yaml').
+            if f.is_file() and f.suffix == '.yaml' and f.name.startswith(f'{slug}-'):
+                date_str = f.name[len(slug) + 1:-len('.yaml')]
+                if len(date_str) == 8 and date_str.isdigit():
+                    dates.append(date_str)
+        dates.sort(reverse=True)
+        return dates
+
+    def _get_backup_file(self, slug: str, backup_date: str) -> Path:
+        # `backup_date` is request-controlled; constrain it to YYYYMMDD so it cannot traverse out of the backup
+        # directory (e.g. '../../etc/something').  `slug` is already constrained to a known, in-memory entity.
+        if not re.fullmatch(r'\d{8}', backup_date or ''):
+            raise ValidationError('backup_date must be YYYYMMDD')
+        return self._backup_directory() / f'{slug}-{backup_date}.yaml'
+
+    def reimport(self) -> List[dict]:
+        """Re-read every entity file from disk into memory so hand-edits and copied-in files are picked up.
+
+        The in-memory store is made to match the directory: entities whose file was deleted on disk are dropped,
+        edited files are reloaded, and newly-added files are discovered.  Returns the resulting entities."""
+        discovered = set(self.discover())
+        for slug in list(self._configs.keys()):
+            if slug not in discovered:
+                self._configs.pop(slug, None)
+        self.import_all()
+        return self.all()
+
     def dump_all(self):
         """Write every in-memory entity to disk."""
         for slug in list(self._configs.keys()):

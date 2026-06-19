@@ -44,12 +44,19 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
         // Fill any missing keys from labels and normalize order.
         const cleaned = draft
             .filter(f => f.label || f.key)
-            .map((f, index) => ({
-                ...f,
-                key: f.key || slugifyKey(f.label),
-                label: f.label || f.key,
-                order: index,
-            }));
+            .map((f, index) => {
+                const field = {
+                    ...f,
+                    key: f.key || slugifyKey(f.label),
+                    label: f.label || f.key,
+                    order: index,
+                };
+                // Clean select options here (not on every keystroke) so commas survive while typing.
+                if (f.type === 'select') {
+                    field.options = (f.options || []).map(s => s.trim()).filter(Boolean);
+                }
+                return field;
+            });
         await onSave(cleaned);
         onClose();
     };
@@ -96,11 +103,11 @@ export function FieldSchemaEditor({fields, open, onClose, onSave}) {
                                         placeholder='Default unit'
                                         onChange={(e, data) => update(index, {unit: data.value})}/>}
                             {f.type === 'select' &&
+                                /* Keep the raw split (no trim/filter) so typing a comma to start the next option
+                                   isn't swallowed mid-edit; options are trimmed/cleaned on save(). */
                                 <Input fluid placeholder='comma,separated,options'
                                        value={(f.options || []).join(',')}
-                                       onChange={e => update(index, {
-                                           options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                                       })}/>}
+                                       onChange={e => update(index, {options: e.target.value.split(',')})}/>}
                         </TableCell>
                         <TableCell collapsing textAlign='center'>
                             <Checkbox toggle checked={!!f.mobile} aria-label={`Show ${f.label || f.key} on mobile`}

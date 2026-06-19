@@ -48,7 +48,7 @@ function compareByField(a, b, field) {
  * inventory (the page holds every inventory and saves the changed one).  A persistent "new item" row sits at the
  * bottom: Tab moves between fields and Enter submits the item then refocuses the first field.
  */
-export function InventoryTable({slug, fields, items, locations, catalog, onChange}) {
+export function InventoryTable({slug, fields, items, locations, catalog, search, onChange}) {
     const [draft, setDraft] = useState(() => emptyItem(fields));
     const [edits, setEdits] = useState({});       // itemId -> edited copy
     const [selected, setSelected] = useState(new Set());
@@ -119,6 +119,9 @@ export function InventoryTable({slug, fields, items, locations, catalog, onChang
         const sorted = [...list].sort((a, b) => compareByField(a, b, field));
         return sort.dir === 'desc' ? sorted.reverse() : sorted;
     }, [items, fields, sort]);
+
+    // The search filters which rows are shown; mutations below still operate on the full `items` prop.
+    const visibleItems = useMemo(() => filterItems(displayItems, fields, search), [displayItems, fields, search]);
 
     const focusFirst = () => {
         const node = firstInputRef.current;
@@ -213,7 +216,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, onChang
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {displayItems.map(item => {
+                {visibleItems.map(item => {
                     const editing = edits[item.id];
                     const expired = isExpired(item);
                     return <TableRow key={item.id} negative={expired}>
@@ -239,6 +242,12 @@ export function InventoryTable({slug, fields, items, locations, catalog, onChang
                         </TableCell>)}
                     </TableRow>;
                 })}
+                {search && visibleItems.length === 0 && (items || []).length > 0 &&
+                    <TableRow>
+                        <TableCell colSpan={sortedFields.length + 1} style={{opacity: 0.7}}>
+                            No items match "{search}".
+                        </TableCell>
+                    </TableRow>}
             </TableBody>
             <TableFooter>
                 {/* The persistent new-item entry row. */}
@@ -287,5 +296,23 @@ export function isItemExpired(item, fields) {
         }
         const t = Date.parse(item[f.key]);
         return !isNaN(t) && t < start.getTime();
+    });
+}
+
+/**
+ * Filter items by a free-text search across every column's displayed value (using the same formatting as the
+ * table, so quantities match as "30 lb", dates as "2030-01-01", etc.).  Case-insensitive; whitespace-separated
+ * terms are AND-ed.  A blank search returns all items.  Shared by the Items table, Summary, and export views.
+ */
+export function filterItems(items, fields, search) {
+    const query = (search || '').trim().toLowerCase();
+    if (!query) {
+        return items || [];
+    }
+    const terms = query.split(/\s+/);
+    const cols = [...(fields || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    return (items || []).filter(item => {
+        const haystack = cols.map(f => formatValue(item, f)).join(' ').toLowerCase();
+        return terms.every(term => haystack.includes(term));
     });
 }

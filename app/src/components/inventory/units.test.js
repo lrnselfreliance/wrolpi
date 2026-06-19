@@ -1,4 +1,31 @@
-import {convert, countByWeight, formatTotals, sumQuantities} from "./units";
+import {convert, countByWeight, evaluateExpression, formatTotals, sumQuantities} from "./units";
+
+describe('evaluateExpression', () => {
+    test('evaluates arithmetic to a numeric string', () => {
+        expect(evaluateExpression('400 - 20')).toBe('380');
+        expect(evaluateExpression('400-20')).toBe('380');
+        expect(evaluateExpression('(400 - 20) * 2')).toBe('760');
+        expect(evaluateExpression('10/4')).toBe('2.5');
+    });
+
+    test('rounds off floating-point noise', () => {
+        expect(evaluateExpression('0.1 + 0.2')).toBe('0.3');
+    });
+
+    test('leaves a plain number or bare negative unchanged', () => {
+        expect(evaluateExpression('380')).toBe('380');
+        expect(evaluateExpression('-20')).toBe('-20');
+        expect(evaluateExpression('')).toBe('');
+        expect(evaluateExpression('  ')).toBe('  ');
+    });
+
+    test('refuses anything with letters (no functions/constants) or unparseable input', () => {
+        expect(evaluateExpression('2 kg')).toBe('2 kg');       // unit text left for the unit field
+        expect(evaluateExpression('sqrt(9)')).toBe('sqrt(9)');
+        expect(evaluateExpression('400 -')).toBe('400 -');     // incomplete expression
+        expect(evaluateExpression('1/0')).toBe('1/0');         // Infinity is not finite -> unchanged
+    });
+});
 
 describe('countByWeight', () => {
     test('divides total by unit weight and rounds to a whole number', () => {

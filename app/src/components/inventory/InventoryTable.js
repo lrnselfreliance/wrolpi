@@ -3,10 +3,10 @@ import {Checkbox, TableBody, TableCell, TableFooter, TableHeader, TableHeaderCel
 import {Button, Icon, Table} from "../Theme";
 import {FieldCell} from "./FieldCell";
 import {applyComputedCounts, computedCountConfigs} from "./computeFields";
+import {NUMERIC_TYPES} from "./units";
 
 const LOCATION_LIST_ID = 'inventory-location-suggestions';
 const CATALOG_LIST_ID = 'inventory-catalog-names';
-const NUMERIC_TYPES = ['number', 'quantity', 'calories'];
 // Fields copied from a catalog entry onto the new-item row when its name matches a catalog entry.
 const CATALOG_KEYS = ['name', 'category', 'subcategory', 'item_size', 'item_size_unit', 'calories'];
 

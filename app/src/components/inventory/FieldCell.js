@@ -1,6 +1,6 @@
 import React from "react";
 import {Input, Select} from "semantic-ui-react";
-import {ALL_UNITS, UNIT_GROUPS} from "./units";
+import {ALL_UNITS, evaluateExpression, NUMERIC_TYPES, UNIT_GROUPS} from "./units";
 
 // Renders the correct editor for a single field/value, wiring up keyboard navigation.  The `inputRef` is attached
 // to the primary <input> so the parent table can focus the first cell of a new row.
@@ -45,12 +45,39 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
         }
     }, [autoFocus]);
 
+    const numeric = NUMERIC_TYPES.includes(field.type);
+
+    // Evaluate an arithmetic expression in this field and swap in the result (no-op for a plain number).  Routed
+    // through onChange so dependent logic (e.g. count-by-weight) recomputes from the resolved value.
+    const resolveExpression = () => {
+        const evaluated = evaluateExpression(value);
+        // Compare against the raw value: evaluateExpression returns its input unchanged when there's no expression,
+        // so a null/undefined backing value (an unfilled item field) compares equal and never spuriously fires.
+        if (evaluated !== value) {
+            onChange(evaluated);
+            return true;
+        }
+        return false;
+    };
+
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && onEnter) {
+        if (e.key !== 'Enter') {
+            return;
+        }
+        // In a numeric field, the first Enter resolves a pending expression ("400 - 20" -> "380"); a second Enter
+        // (now a plain number) submits the row as usual.
+        if (numeric && resolveExpression()) {
+            e.preventDefault();
+            return;
+        }
+        if (onEnter) {
             e.preventDefault();
             onEnter();
         }
     };
+
+    // Numeric fields accept arithmetic, so they are text inputs that evaluate on blur (Tab/click-away) and Enter.
+    const onBlur = numeric ? resolveExpression : undefined;
 
     const common = {
         value: value ?? '',
@@ -81,20 +108,23 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
     }
 
     if (field.type === 'number' || field.type === 'calories') {
-        // `calories` is a number (kcal per unit) that the Summary's ration estimate detects by type.
-        return <Input {...common} type='number' fluid ref={setRef}/>;
+        // `calories` is a number (kcal per unit) that the Summary's ration estimate detects by type.  Text (not
+        // number) input so arithmetic expressions can be typed; evaluated on blur/Enter.
+        return <Input {...common} type='text' inputMode='decimal' fluid ref={setRef} onBlur={onBlur}/>;
     }
 
     if (field.type === 'quantity') {
         const unitOptions = ALL_UNITS.map(u => ({key: u, value: u, text: u}));
         return <Input
-            type='number'
+            type='text'
+            inputMode='decimal'
             fluid
             ref={setRef}
             name={field.key}
             value={value ?? ''}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onBlur={onBlur}
             aria-label={field.label}
             label={<Select
                 compact

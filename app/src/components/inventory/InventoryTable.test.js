@@ -124,6 +124,48 @@ describe('InventoryTable count by weight', () => {
         expect(within(row).getByLabelText('Count').value).toBe('');
     });
 
+    test('a math expression in a weight evaluates on blur and recomputes the count', () => {
+        render(<InventoryTable slug='s' fields={FIELDS} items={[]} locations={[]} onChange={jest.fn()}/>);
+        fireEvent.change(screen.getByLabelText('Unit Weight'), {target: {value: '5'}});
+        const total = screen.getByLabelText('Total Weight');
+        fireEvent.change(total, {target: {value: '400 - 20'}});   // weigh a 400 g box, subtract the 20 g box
+        fireEvent.blur(total);
+        expect(screen.getByLabelText('Total Weight').value).toBe('380');
+        expect(screen.getByLabelText('Count').value).toBe('76');   // 380 / 5
+    });
+
+    test('Enter resolves a weight expression before the row can be submitted', () => {
+        const onChange = jest.fn();
+        render(<InventoryTable slug='s' fields={FIELDS} items={[]} locations={[]} onChange={onChange}/>);
+        fireEvent.change(screen.getByLabelText('Unit Weight'), {target: {value: '5'}});
+        const total = screen.getByLabelText('Total Weight');
+        fireEvent.change(total, {target: {value: '400 - 20'}});
+
+        // First Enter resolves the expression; the row is NOT submitted yet.
+        fireEvent.keyDown(total, {key: 'Enter'});
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByLabelText('Total Weight').value).toBe('380');
+
+        // Second Enter (now a plain number) submits the resolved row with the recomputed count.
+        fireEvent.keyDown(screen.getByLabelText('Total Weight'), {key: 'Enter'});
+        const item = onChange.mock.calls[0][0][0];
+        expect(item.total_weight).toBe('380');
+        expect(item.count).toBe('76');
+    });
+
+    test('Enter submits an existing row from an unfilled numeric cell (null backing value)', () => {
+        const onChange = jest.fn();
+        // count is absent (undefined) — an item field that was never filled in.
+        const items = [{id: 1, name: 'Salt'}];
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} onChange={onChange}/>);
+
+        fireEvent.click(screen.getByText('Salt'));   // enter edit mode
+        const row = screen.getByDisplayValue('Salt').closest('tr');
+        // A null/undefined value must not be mistaken for an unresolved expression; Enter submits immediately.
+        fireEvent.keyDown(within(row).getByLabelText('Count'), {key: 'Enter'});
+        expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
     test('reducing a weight below one item shows 0, not the stale count', () => {
         const items = [{id: 1, name: 'Screws', unit_weight: '5', unit_weight_unit: 'g',
             total_weight: '1000', total_weight_unit: 'g', count: '200'}];

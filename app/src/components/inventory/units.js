@@ -15,6 +15,10 @@ export const UNIT_GROUPS = [
 
 export const ALL_UNITS = UNIT_GROUPS.flatMap(g => g.units);
 
+// Field types whose value is a number the user may type as an arithmetic expression (e.g. "400 - 20").  Shared
+// so the table editor and cell editor can't drift apart when a new numeric type is added.
+export const NUMERIC_TYPES = ['number', 'quantity', 'calories'];
+
 // Compaction ladders (ascending): a summed quantity is displayed in the largest unit on a compatible ladder where
 // the magnitude is still >= 1 (mirrors the old backend `compact_unit`, e.g. 2000 lb -> 1 ton, 16 oz + 1 lb -> 2 lb).
 const COMPACTION_LADDERS = [
@@ -39,6 +43,34 @@ function toUnit(value, unit) {
     } catch {
         return null;
     }
+}
+
+/**
+ * Evaluate a simple arithmetic expression typed into a numeric field to its numeric string, so a user can do math
+ * inline — e.g. "400 - 20" -> "380" (weigh a 400 g box of nails, subtract the 20 g box).  Only bare arithmetic is
+ * allowed (digits, `. + - * / ( )` and spaces); anything containing a letter is rejected, so there are no function
+ * calls or constants to evaluate.  A plain number, a bare negative, or anything unparseable is returned unchanged.
+ * Float noise is rounded off (0.1 + 0.2 -> 0.3).
+ */
+export function evaluateExpression(value) {
+    if (typeof value !== 'string') {
+        return value;
+    }
+    const expr = value.trim();
+    // Must look like arithmetic AND contain an operator beyond an optional leading sign (so "380" and "-20" are
+    // left alone rather than needlessly rewritten).
+    if (expr === '' || !/^[\d\s.+\-*/()]+$/.test(expr) || !/[+\-*/]/.test(expr.replace(/^[+-]/, ''))) {
+        return value;
+    }
+    try {
+        const result = math.evaluate(expr);
+        if (typeof result === 'number' && Number.isFinite(result)) {
+            return String(Math.round(result * 1e6) / 1e6);
+        }
+    } catch {
+        // Not a valid expression (e.g. "400-") — leave it as typed.
+    }
+    return value;
 }
 
 // Convert a {value, unit} to another unit.  Returns a number, or null when incompatible/unparseable.

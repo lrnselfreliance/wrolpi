@@ -13,7 +13,38 @@ import {ALL_UNITS, UNIT_GROUPS} from "./units";
 //   onUnitChange(unit)   - quantity unit changed
 //   onEnter()            - Enter pressed (submit row)
 //   inputRef             - ref attached to the primary input
-export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEnter, inputRef, listId}) {
+//   autoFocus            - on mount, focus the input and select its contents (for rapid inline edits)
+export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEnter, inputRef, listId, autoFocus}) {
+    // Merge the parent's `inputRef` (used to focus the draft row's first field) with a local ref we use to
+    // focus + select this cell's contents when the user clicks it to edit.
+    const localRef = React.useRef(null);
+    const setRef = React.useCallback((node) => {
+        localRef.current = node;
+        if (typeof inputRef === 'function') {
+            inputRef(node);
+        } else if (inputRef) {
+            inputRef.current = node;
+        }
+    }, [inputRef]);
+
+    React.useEffect(() => {
+        if (!autoFocus) {
+            return;
+        }
+        const node = localRef.current;
+        // Semantic's Input exposes the DOM <input> via `inputRef`; selecting its contents lets the user type over
+        // the value immediately.  Other editors (e.g. Select) just take focus.
+        const dom = node && node.inputRef && node.inputRef.current;
+        if (dom) {
+            dom.focus();
+            if (dom.select) {
+                dom.select();
+            }
+        } else if (node && node.focus) {
+            node.focus();
+        }
+    }, [autoFocus]);
+
     const handleKeyDown = (e) => {
         if (e.key === 'Enter' && onEnter) {
             e.preventDefault();
@@ -34,6 +65,7 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
         // Allow clearing.
         return <Select
             fluid search clearable selection
+            ref={setRef}
             name={field.key}
             options={options}
             placeholder={field.label}
@@ -45,12 +77,12 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
     }
 
     if (field.type === 'date') {
-        return <Input {...common} type='date' fluid ref={inputRef}/>;
+        return <Input {...common} type='date' fluid ref={setRef}/>;
     }
 
     if (field.type === 'number' || field.type === 'calories') {
         // `calories` is a number (kcal per unit) that the Summary's ration estimate detects by type.
-        return <Input {...common} type='number' fluid ref={inputRef}/>;
+        return <Input {...common} type='number' fluid ref={setRef}/>;
     }
 
     if (field.type === 'quantity') {
@@ -58,7 +90,7 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
         return <Input
             type='number'
             fluid
-            ref={inputRef}
+            ref={setRef}
             name={field.key}
             value={value ?? ''}
             onChange={(e) => onChange(e.target.value)}
@@ -79,11 +111,11 @@ export function FieldCell({field, value, unitValue, onChange, onUnitChange, onEn
     if (field.type === 'location') {
         // Native datalist autocomplete fed by all inventories' locations (basement, attic, ...).  Using a datalist
         // (rather than a Dropdown) keeps it a real text input, so the Tab/Enter row-entry flow still works.
-        return <Input {...common} fluid ref={inputRef} list={listId}/>;
+        return <Input {...common} fluid ref={setRef} list={listId}/>;
     }
 
     // text / fallback (supports a datalist via listId, e.g. catalog name suggestions on the Name field).
-    return <Input {...common} fluid ref={inputRef} list={listId}/>;
+    return <Input {...common} fluid ref={setRef} list={listId}/>;
 }
 
 // The list of selectable unit groups, re-exported for the field editor.

@@ -53,6 +53,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
     const [edits, setEdits] = useState({});       // itemId -> edited copy
     const [selected, setSelected] = useState(new Set());
     const [sort, setSort] = useState(null);       // {key, dir: 'asc'|'desc'} or null for entry order
+    const [focusCell, setFocusCell] = useState(null);  // {id, key}: the cell to focus + select on entering edit
     const firstInputRef = useRef(null);
 
     const hasLocationField = fields.some(f => f.type === 'location');
@@ -96,6 +97,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
         setEdits({});
         setSelected(new Set());
         setSort(null);
+        setFocusCell(null);
     }, [slug, fields]);
 
     // Expired = any date-type field strictly before the start of today (shared with the mobile view).
@@ -158,7 +160,10 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
         focusFirst();
     };
 
-    const startEdit = (item) => setEdits(prev => ({...prev, [item.id]: {...item}}));
+    const startEdit = (item, key) => {
+        setEdits(prev => ({...prev, [item.id]: {...item}}));
+        setFocusCell({id: item.id, key});   // the FieldCell for this key auto-focuses and selects its contents
+    };
     const setEditValue = (id, key, value) =>
         setEdits(prev => ({...prev, [id]: {...prev[id], [key]: value}}));
 
@@ -235,8 +240,9 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                                     onUnitChange={v => setEditValue(item.id, `${f.key}_unit`, v)}
                                     onEnter={() => saveEdit(item.id)}
                                     listId={listIdFor(f)}
+                                    autoFocus={focusCell && focusCell.id === item.id && focusCell.key === f.key}
                                 />
-                                : <span onClick={() => startEdit(item)} style={{cursor: 'pointer'}}>
+                                : <span onClick={() => startEdit(item, f.key)} style={{cursor: 'pointer'}}>
                                     {formatValue(item, f)}
                                 </span>}
                         </TableCell>)}

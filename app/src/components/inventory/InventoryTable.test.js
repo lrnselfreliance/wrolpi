@@ -55,6 +55,27 @@ describe('InventoryTable keyboard entry', () => {
         const editInputs = screen.getAllByLabelText('Name').map(i => i.value);
         expect(editInputs).toContain('Salt');
     });
+
+    test('clicking a cell focuses its input with the contents selected', () => {
+        const items = [{id: 1, name: 'Salt', count: '5'}];
+        render(<InventoryTable slug='food-storage' fields={FIELDS} items={items} locations={[]} onChange={jest.fn()}/>);
+
+        fireEvent.click(screen.getByText('Salt'));
+        const input = screen.getAllByLabelText('Name').find(i => i.value === 'Salt');
+        // The clicked cell's input is focused and its whole value is selected, ready to be typed over.
+        expect(document.activeElement).toBe(input);
+        expect(input.selectionStart).toBe(0);
+        expect(input.selectionEnd).toBe('Salt'.length);
+    });
+
+    test('clicking a different field focuses that field, not the first one', () => {
+        const items = [{id: 1, name: 'Salt', count: '5'}];
+        render(<InventoryTable slug='food-storage' fields={FIELDS} items={items} locations={[]} onChange={jest.fn()}/>);
+
+        fireEvent.click(screen.getByText('5'));   // the Count cell
+        const countInput = screen.getAllByLabelText('Count').find(i => i.value === '5');
+        expect(document.activeElement).toBe(countInput);
+    });
 });
 
 describe('InventoryTable sorting', () => {

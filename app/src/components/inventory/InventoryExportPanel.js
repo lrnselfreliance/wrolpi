@@ -3,6 +3,7 @@ import {Select} from "semantic-ui-react";
 import {Button, Header, Icon, Segment} from "../Theme";
 import {downloadCSV, inventoryExportFilename, toCSV} from "./inventoryExport";
 import {groupFieldsOf, summableFieldsOf} from "./summarize";
+import {ThemeContext} from "../../contexts/contexts";
 
 const fieldOptions = (fs) => fs.map(f => ({key: f.key, value: f.key, text: f.label}));
 
@@ -15,6 +16,7 @@ export function InventoryExportPanel({name, fields, items, groupKey, sumKey, onG
     const count = (items || []).length;
     const groupFields = groupFieldsOf(fields);
     const summableFields = summableFieldsOf(fields);
+    const {t} = React.useContext(ThemeContext);
 
     const exportCSV = () =>
         downloadCSV(inventoryExportFilename(name, 'csv'), toCSV(fields, items));
@@ -22,7 +24,7 @@ export function InventoryExportPanel({name, fields, items, groupKey, sumKey, onG
     return <>
         <Segment>
             <Header as='h3'><Icon name='file alternate outline'/> CSV</Header>
-            <p>
+            <p {...t}>
                 A comma-separated spreadsheet of all {count} item{count === 1 ? '' : 's'} and every field, openable
                 in Excel, Numbers, or Google Sheets.  Generated entirely on this device.
             </p>
@@ -33,7 +35,7 @@ export function InventoryExportPanel({name, fields, items, groupKey, sumKey, onG
 
         <Segment>
             <Header as='h3'><Icon name='file pdf outline'/> PDF</Header>
-            <p>
+            <p {...t}>
                 A printable table of the whole inventory, followed by a summary grouped by the field you choose.
                 This opens your browser's print dialog — choose "Save as PDF" as the destination to get a PDF file,
                 or print it on paper.

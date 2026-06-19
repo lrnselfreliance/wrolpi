@@ -12,7 +12,7 @@ import {RationEstimatePanel} from "../calculators/RationCalculator";
 import {defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey} from "./summarize";
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
-import {Media} from "../../contexts/contexts";
+import {Media, ThemeContext} from "../../contexts/contexts";
 
 const INVENTORY_TYPES = [
     {key: 'food', value: 'food', text: 'Food Storage'},
@@ -23,6 +23,7 @@ const INVENTORY_TYPES = [
 function NewInventoryModal({open, onClose, onCreate}) {
     const [name, setName] = useState('');
     const [type, setType] = useState('food');
+    const {t} = React.useContext(ThemeContext);
 
     const create = async () => {
         const inventory = await onCreate(name, type);
@@ -41,7 +42,7 @@ function NewInventoryModal({open, onClose, onCreate}) {
             <div>
                 Type:{' '}
                 <Select options={INVENTORY_TYPES} value={type} onChange={(e, data) => setType(data.value)}/>
-                <p style={{fontSize: '0.85em', opacity: 0.7, marginTop: '0.5em'}}>
+                <p {...t} style={{...t.style, fontSize: '0.85em', opacity: 0.7, marginTop: '0.5em'}}>
                     The type seeds a starting set of fields — you can customize them afterward.
                 </p>
             </div>
@@ -72,6 +73,8 @@ export function InventoryRoute() {
     const [exportSumKey, setExportSumKey] = useState(null);
     // Free-text filter applied to the active inventory's items across every column.
     const [search, setSearch] = useState('');
+
+    const {t} = React.useContext(ThemeContext);
 
     // Default to the first inventory once loaded.
     React.useEffect(() => {
@@ -210,7 +213,7 @@ export function InventoryRoute() {
             <FieldSchemaEditor fields={fields} open={editFieldsOpen}
                                onClose={() => setEditFieldsOpen(false)}
                                onSave={newFields => persistInventory(slug, {fields: newFields})}/>
-        </> : <p>Create an inventory to get started.</p>}
+        </> : <p {...t}>Create an inventory to get started.</p>}
 
         <NewInventoryModal open={newOpen} onClose={() => setNewOpen(false)} onCreate={onCreate}/>
 

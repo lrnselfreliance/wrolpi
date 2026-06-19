@@ -2,6 +2,7 @@ import React from "react";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {Icon, Table} from "../Theme";
 import {formatValue, isItemExpired} from "./InventoryTable";
+import {ThemeContext} from "../../contexts/contexts";
 
 // Fallback columns for inventories whose schema predates the per-field `mobile` flag: these preferred keys in
 // order, else the first few fields.
@@ -30,13 +31,14 @@ export function mobileColumns(fields) {
  */
 export function InventoryItemsMobile({fields, items}) {
     const columns = mobileColumns(fields);
+    const {t} = React.useContext(ThemeContext);
 
     return <>
-        <p style={{opacity: 0.7, fontSize: '0.85em', marginBottom: '0.5em'}}>
+        <p {...t} style={{...t.style, opacity: 0.7, fontSize: '0.85em', marginBottom: '0.5em'}}>
             Read-only — rotate to landscape to edit.
         </p>
         {(items || []).length === 0
-            ? <p>No items yet.</p>
+            ? <p {...t}>No items yet.</p>
             : <Table celled unstackable>
                 <TableHeader>
                     <TableRow>

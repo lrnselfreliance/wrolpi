@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {Input, Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {Button, Header, Icon, Modal, Table} from "../Theme";
 import {ALL_UNITS} from "./units";
+import {ThemeContext} from "../../contexts/contexts";
 
 const UNIT_OPTIONS = [{key: '', value: '', text: '—'}, ...ALL_UNITS.map(u => ({key: u, value: u, text: u}))];
 
@@ -24,6 +25,7 @@ function blankEntry() {
  */
 export function CatalogEditor({catalog, open, onClose, onSave}) {
     const [draft, setDraft] = useState([]);
+    const {t} = React.useContext(ThemeContext);
 
     React.useEffect(() => {
         if (open) {
@@ -46,7 +48,7 @@ export function CatalogEditor({catalog, open, onClose, onSave}) {
     return <Modal open={open} onClose={onClose} closeIcon size='fullscreen'>
         <Modal.Header>Food Catalog</Modal.Header>
         <Modal.Content scrolling>
-            <p style={{opacity: 0.8}}>
+            <p {...t} style={{...t.style, opacity: 0.8}}>
                 Known items used to autocomplete and pre-fill the entry form. <strong>kcal</strong> is the total
                 calories for one package of the given size.
             </p>

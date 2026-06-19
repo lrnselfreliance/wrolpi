@@ -1,9 +1,12 @@
 import React from "react";
-import {GridColumn, Input, Label, TableBody, TableCell, TableRow} from "semantic-ui-react";
+import {GridColumn, Input, Label, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Form, Header, Table} from "../Theme";
+import {Button, Form, Header, Icon, Table} from "../Theme";
 import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 import {formatDuration} from "./WaterCalculator";
+import {findNameKey, planSupplyPurchase} from "../inventory/summarize";
+import {downloadCSV, inventoryExportFilename, shoppingListCSV} from "../inventory/inventoryExport";
+import {ThemeContext} from "../../contexts/contexts";
 // Field-role detection lives in inventory/summarize.js (single source of truth); re-exported here for back-compat.
 export {findCaloriesKey, findCountKey} from "../inventory/summarize";
 
@@ -109,7 +112,7 @@ function fmt(value, unit) {
  * inventory Summary (when the inventory has a `calories` field).  Household/preset selections are persisted under
  * shared localStorage keys, so adjusting them in one place carries to the other.
  */
-export function RationEstimatePanel({items, caloriesKey, countKey}) {
+export function RationEstimatePanel({name, items, fields, caloriesKey, countKey}) {
     const [preset, setPreset] = useLocalStorage('ration_preset', DEFAULT_PRESET);
     const [counts, setCounts] = useLocalStorage('ration_counts', {men: '1', women: '1', children: ''});
     const [rates, setRates] = React.useState({...RATION_PRESETS[DEFAULT_PRESET].rates});
@@ -178,7 +181,166 @@ export function RationEstimatePanel({items, caloriesKey, countKey}) {
                 </TableRow>
             </TableBody>
         </Table>
+
+        <SupplyPlan name={name} items={items} fields={fields} caloriesKey={caloriesKey} countKey={countKey}
+                    currentDays={days} total={total} daily={daily}/>
     </Form>;
+}
+
+// Print only the supply-plan shopping list (not the whole-inventory print block): toggle a body class that the
+// `@media print` rules use to pick which printable block is visible, then open the print dialog.
+function printShoppingList() {
+    document.body.classList.add('printing-shopping');
+    let timer;
+    const cleanup = () => {
+        clearTimeout(timer);   // ensure the backstop can't fire later and clear the class during a new print
+        window.removeEventListener('afterprint', cleanup);
+        document.body.classList.remove('printing-shopping');
+    };
+    window.addEventListener('afterprint', cleanup, {once: true});
+    window.print();
+    // Backstop in case afterprint never fires (cancelled above once afterprint runs), so a later whole-inventory
+    // print isn't stuck in shopping mode.
+    timer = setTimeout(cleanup, 1000);
+}
+
+// Length of a "month" used for the supply plan, matching formatDuration()'s 30-day months so the slider label and
+// the duration text agree.
+const PLAN_MONTH_DAYS = 30;
+
+const PLAN_INFO = 'Drag the slider to a target duration longer than your current estimate to see what to buy. '
+    + 'Your whole inventory is scaled up proportionally — every item grows by the same factor so the mix stays '
+    + 'balanced — and any split package is rounded up to a whole one. The projection assumes you keep the same '
+    + 'variety of food and the same household/activity settings above.';
+
+/**
+ * Extrapolation: a slider to pick a target duration longer than the current ration estimate, and a shopping list of
+ * the additional packages to buy to reach it (the inventory scaled up proportionally — see planSupplyPurchase).
+ */
+function SupplyPlan({name, items, fields, caloriesKey, countKey, currentDays, total, daily}) {
+    const {t} = React.useContext(ThemeContext);
+    const nameKey = findNameKey(fields);
+
+    const currentMonths = (currentDays || 0) / PLAN_MONTH_DAYS;
+    const minMonths = Math.max(1, Math.ceil(currentMonths));
+    const maxMonths = minMonths + 24;
+    const [targetMonths, setTargetMonths] = React.useState(minMonths);
+    // Keep the target within range as the estimate shifts (editing the household above moves the current duration).
+    React.useEffect(() => {
+        setTargetMonths(m => Math.min(Math.max(m, minMonths), maxMonths));
+    }, [minMonths, maxMonths]);
+    // Default to largest purchase first; clicking a header re-sorts.
+    const [sort, setSort] = React.useState({key: 'additional', dir: 'desc'});
+    const toggleSort = (key) => setSort(prev =>
+        prev.key === key
+            ? {key, dir: prev.dir === 'asc' ? 'desc' : 'asc'}
+            : {key, dir: key === 'name' ? 'asc' : 'desc'});
+
+    if (!(currentDays > 0)) {
+        return null;   // No usable estimate yet (no calories or no household) — nothing to extrapolate from.
+    }
+
+    const targetDays = targetMonths * PLAN_MONTH_DAYS;
+    const scale = targetDays / currentDays;
+    const {rows, addedCalories} = planSupplyPurchase(items, {countKey, nameKey, caloriesKey, scale});
+    const projectedDays = daily > 0 ? (total + addedCalories) / daily : null;
+    const totalToBuy = rows.reduce((sum, r) => sum + r.additional, 0);
+
+    const sortedRows = [...rows].sort((a, b) => {
+        const r = sort.key === 'name' ? a.name.localeCompare(b.name) : a[sort.key] - b[sort.key];
+        return sort.dir === 'desc' ? -r : r;
+    });
+    const sortDir = (key) => sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined;
+    const headerCell = (key, label) =>
+        <TableHeaderCell sorted={sortDir(key)} onClick={() => toggleSort(key)} style={{cursor: 'pointer'}}>
+            {label}
+        </TableHeaderCell>;
+
+    return <div style={{marginTop: '2em'}}>
+        <Header as='h3'>Plan More Supply <InfoPopup content={PLAN_INFO}/></Header>
+        {!countKey
+            ? <p {...t}>Add a <strong>Count</strong> field to this inventory to plan purchases.</p>
+            : <>
+                <div style={{padding: '0 0.5em'}}>
+                    <input type='range' min={minMonths} max={maxMonths} step={1} value={targetMonths}
+                           aria-label='Target duration (months)' style={{width: '100%'}}
+                           onChange={e => setTargetMonths(Number(e.target.value))}/>
+                    <Header as='h2' textAlign='center' style={{marginTop: '0.25em'}}>
+                        Target: {formatDuration(targetDays)}
+                    </Header>
+                    <p {...t} style={{...t.style, textAlign: 'center', opacity: 0.8}}>
+                        Currently {formatDuration(currentDays)}
+                    </p>
+                </div>
+
+                {rows.length === 0
+                    ? <p {...t}>Drag the slider above your current estimate to see a shopping list.</p>
+                    : <>
+                        <Table celled unstackable sortable>
+                            <TableHeader>
+                                <TableRow>
+                                    {headerCell('name', 'Item')}
+                                    {headerCell('current', 'Have')}
+                                    {headerCell('additional', 'Buy')}
+                                    {headerCell('target', 'New Total')}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {sortedRows.map((r, i) => <TableRow key={`${r.name}-${i}`}>
+                                    <TableCell>{r.name}</TableCell>
+                                    <TableCell>{r.current}</TableCell>
+                                    <TableCell><strong>+{r.additional}</strong></TableCell>
+                                    <TableCell>{r.target}</TableCell>
+                                </TableRow>)}
+                            </TableBody>
+                        </Table>
+                        <p {...t}>
+                            Buy <strong>{totalToBuy.toLocaleString()}</strong> additional package{totalToBuy === 1 ? '' : 's'}
+                            {' '}across <strong>{rows.length}</strong> item{rows.length === 1 ? '' : 's'}
+                            {projectedDays ? <> to reach about <strong>{formatDuration(projectedDays)}</strong> of food.</> : '.'}
+                        </p>
+
+                        <Button primary
+                                onClick={() => downloadCSV(
+                                    inventoryExportFilename(`${name || 'inventory'} shopping list`, 'csv'),
+                                    shoppingListCSV(sortedRows))}>
+                            <Icon name='download'/> Download CSV
+                        </Button>
+                        <Button onClick={printShoppingList}>
+                            <Icon name='print'/> Print / Save as PDF
+                        </Button>
+
+                        {/* Hidden printable block — `printShoppingList` makes this the only thing printed. */}
+                        <ShoppingListPrint name={name} rows={sortedRows}
+                                           targetText={formatDuration(targetDays)}
+                                           currentText={formatDuration(currentDays)}/>
+                    </>}
+            </>}
+    </div>;
+}
+
+// Printable rendering of just the shopping list (no inventory or summary), shown only when printing via the
+// `body.printing-shopping` toggle.  Reuses the `.inventory-print` styling for headings and the table.
+function ShoppingListPrint({name, rows, targetText, currentText}) {
+    return <div className='inventory-print shopping-print'>
+        <h1>{name || 'Inventory'} — Shopping List</h1>
+        <p className='inventory-print-meta'>
+            Target {targetText} (currently {currentText}) · {rows.length} item{rows.length === 1 ? '' : 's'} to buy
+        </p>
+        <table>
+            <thead>
+                <tr><th>Item</th><th>Have</th><th>Buy</th><th>New Total</th></tr>
+            </thead>
+            <tbody>
+                {rows.map((r, i) => <tr key={`${r.name}-${i}`}>
+                    <td>{r.name}</td>
+                    <td>{r.current}</td>
+                    <td>+{r.additional}</td>
+                    <td>{r.target}</td>
+                </tr>)}
+            </tbody>
+        </table>
+    </div>;
 }
 
 // NOTE: the inventory-based "how long does my food last" estimate now lives only inside the inventory Summary

@@ -23,6 +23,21 @@ export function toCSV(fields, items) {
     return [header, ...rows].map(row => row.join(',')).join('\r\n');
 }
 
+// Column layout for an exported supply-plan shopping list, mirroring the on-screen table.  No `type` is set, so
+// the shared CSV writer formats every value as plain text/number.
+const SHOPPING_LIST_FIELDS = [
+    {key: 'name', label: 'Item'},
+    {key: 'current', label: 'Have'},
+    {key: 'additional', label: 'Buy'},
+    {key: 'target', label: 'New Total'},
+];
+
+// Build a CSV of a supply-plan shopping list (rows from planSupplyPurchase: {name, current, additional, target}),
+// reusing the inventory CSV writer so quoting/escaping stays identical.
+export function shoppingListCSV(rows) {
+    return toCSV(SHOPPING_LIST_FIELDS, rows || []);
+}
+
 // Filesystem-safe export filename derived from the inventory name (e.g. "Food Storage" -> "food-storage.csv").
 export function inventoryExportFilename(name, ext) {
     const base = (name || 'inventory').trim().toLowerCase()

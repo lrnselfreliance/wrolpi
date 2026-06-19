@@ -30,10 +30,10 @@ def test_seed_catalog_defaults_and_tombstone(test_catalog_config):
     assert len(config.items) == seeded
 
     # A user-deleted default is NOT re-added on the next seed (tombstoned via merged_default_ids).
-    remaining = [i for i in config.items if i['name'] != 'Spam']
+    remaining = [i for i in config.items if i['name'] != 'Canned Lunch Meat']
     catalog_module.save_catalog_items(remaining)
     catalog_module.seed_catalog_defaults(config)
-    assert not any(i['name'] == 'Spam' for i in config.items)
+    assert not any(i['name'] == 'Canned Lunch Meat' for i in config.items)
 
 
 def test_catalog_file_is_not_loaded_as_an_inventory(test_inventory_configs, test_catalog_config):

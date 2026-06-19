@@ -8,7 +8,8 @@ import {InventoryItemsMobile} from "./InventoryItemsMobile";
 import {InventorySummary} from "./InventorySummary";
 import {InventoryExportPanel} from "./InventoryExportPanel";
 import {InventoryPrint} from "./InventoryPrint";
-import {defaultGroupKey, defaultSumKey} from "./summarize";
+import {RationEstimatePanel} from "../calculators/RationCalculator";
+import {defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey} from "./summarize";
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
 import {Media} from "../../contexts/contexts";
@@ -82,6 +83,9 @@ export function InventoryRoute() {
     const current = inventories?.find(i => i.slug === slug);
     const fields = useMemo(() => (current ? current.fields : []), [current]);
     const items = useMemo(() => (current ? current.items : []), [current]);
+    // The Ration tab (estimate + supply plan) only applies to inventories with a calories field.
+    const caloriesKey = useMemo(() => findCaloriesKey(fields), [fields]);
+    const countKey = useMemo(() => findCountKey(fields), [fields]);
 
     // Re-seed the export grouping when the selected inventory (or its schema) changes.
     React.useEffect(() => {
@@ -90,9 +94,16 @@ export function InventoryRoute() {
     }, [fields]);
     // Clear the search when switching inventories.
     React.useEffect(() => setSearch(''), [slug]);
+    // The Ration tab disappears for inventories without a calories field; fall back to Items if it was active.
+    React.useEffect(() => {
+        if (tab === 'ration' && !caloriesKey) {
+            setTab('items');
+        }
+    }, [tab, caloriesKey]);
 
-    // The search narrows the whole inventory view (Items display, Summary, Export); edits/adds in InventoryTable
-    // still operate on the full `items`, so filtering never drops data.
+    // The search lives in (and only narrows) the Items tab.  It feeds the read-only mobile list here; the desktop
+    // table filters its own display from the full `items` it receives.  Summary/Ration/Export always use the full
+    // inventory, so the filter never silently hides data on those tabs.
     const filteredItems = useMemo(() => filterItems(items, fields, search), [items, fields, search]);
 
     // Location suggestions are pooled across every inventory.
@@ -155,20 +166,22 @@ export function InventoryRoute() {
                     </Button>
                 </>}
             </div>
-            {current &&
-                <Input fluid icon='search' iconPosition='left' placeholder='Search items…' value={search}
-                       aria-label='Search items' clearable style={{marginTop: '0.75em'}}
-                       onChange={(e, data) => setSearch(data.value)}/>}
         </Segment>
 
         {current ? <>
             <Menu pointing secondary>
                 <Menu.Item name='Items' active={tab === 'items'} onClick={() => setTab('items')}/>
                 <Menu.Item name='Summary' active={tab === 'summary'} onClick={() => setTab('summary')}/>
+                {caloriesKey &&
+                    <Menu.Item name='Ration' active={tab === 'ration'} onClick={() => setTab('ration')}/>}
                 <Menu.Item name='Export' active={tab === 'export'} onClick={() => setTab('export')}/>
             </Menu>
 
             {tab === 'items' && <>
+                {/* The search filter lives here so it clearly applies to the Items tab only, not Summary/Ration/Export. */}
+                <Input fluid icon='search' iconPosition='left' placeholder='Search items…' value={search}
+                       aria-label='Search items' clearable style={{marginBottom: '0.75em'}}
+                       onChange={(e, data) => setSearch(data.value)}/>
                 {/* Portrait mobile: condensed, read-only.  Rotate to landscape (tablet+) for the full editor. */}
                 <Media at='mobile'>
                     <InventoryItemsMobile fields={fields} items={filteredItems}/>
@@ -181,14 +194,17 @@ export function InventoryRoute() {
                                     onChange={newItems => persistInventory(slug, {items: newItems})}/>
                 </Media>
             </>}
-            {tab === 'summary' && <InventorySummary fields={fields} items={filteredItems}/>}
+            {tab === 'summary' && <InventorySummary fields={fields} items={items}/>}
+            {tab === 'ration' && caloriesKey &&
+                <RationEstimatePanel name={current.name} fields={fields} items={items}
+                                     caloriesKey={caloriesKey} countKey={countKey}/>}
             {tab === 'export' &&
-                <InventoryExportPanel name={current.name} fields={fields} items={filteredItems}
+                <InventoryExportPanel name={current.name} fields={fields} items={items}
                                       groupKey={exportGroupKey} sumKey={exportSumKey}
                                       onGroupKey={setExportGroupKey} onSumKey={setExportSumKey}/>}
 
             {/* Always mounted (hidden on screen) so the browser print dialog has the full table + summary to render. */}
-            <InventoryPrint name={current.name} fields={fields} items={filteredItems}
+            <InventoryPrint name={current.name} fields={fields} items={items}
                             groupKey={exportGroupKey} sumKey={exportSumKey}/>
 
             <FieldSchemaEditor fields={fields} open={editFieldsOpen}

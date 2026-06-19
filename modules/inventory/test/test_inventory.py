@@ -1,7 +1,8 @@
 import pytest
 
 from modules.inventory import common as inventory_common
-from modules.inventory.defaults import slugify, default_fields
+from modules.inventory.defaults import (slugify, default_fields, recommended_food_storage_items,
+                                         RECOMMENDED_ONE_YEAR_FOOD_COUNTS)
 from modules.inventory.errors import InventoryConflict
 
 
@@ -112,6 +113,44 @@ def test_delete_inventory(food_inventory_factory, test_inventory_configs):
     config.delete_inventory(slug)
     assert not config.get_file(slug).is_file()
     assert config.all_inventories() == []
+
+
+def test_recommended_food_storage_items():
+    """The example supply joins the shipped food catalog (per-package nutrition) with the recommended counts."""
+    items = recommended_food_storage_items()
+    # One item per recommended count, all resolved against the catalog.
+    assert len(items) == len(RECOMMENDED_ONE_YEAR_FOOD_COUNTS)
+    # Kept generic: no brand names.
+    assert all(not item.get('brand') for item in items)
+    # Counts are positive strings; the per-package calorie basis comes from the catalog.
+    assert all(item['count'] and int(item['count']) > 0 for item in items)
+    rice = next(i for i in items if i['name'] == 'Long Grain White Rice')
+    assert rice['count'] == '14'
+    assert rice['calories'] == '8040'
+    assert rice['item_size'] == '5' and rice['item_size_unit'] == 'lb'
+    # Total stored calories approximate one adult-year at ~3,000 kcal/day.
+    total = sum(int(i['calories']) * int(i['count']) for i in items if i.get('calories'))
+    assert 1_000_000 < total < 1_300_000
+
+
+def test_seed_defaults_populates_food_storage(test_inventory_configs):
+    config = test_inventory_configs
+    config.seed_defaults()
+    inventories = config.all_inventories()
+    assert len(inventories) == 1
+    inv = inventories[0]
+    assert inv['name'] == 'Food Storage'
+    assert inv['type'] == 'food'
+    # Seeded with the full recommended one-adult/one-year supply, with server-assigned ids.
+    assert len(inv['items']) == len(RECOMMENDED_ONE_YEAR_FOOD_COUNTS)
+    assert all(isinstance(i['id'], int) for i in inv['items'])
+
+
+def test_seed_defaults_idempotent(test_inventory_configs):
+    config = test_inventory_configs
+    config.seed_defaults()
+    config.seed_defaults()
+    assert len(config.all_inventories()) == 1
 
 
 def test_config_round_trip(food_inventory_factory, test_inventory_configs):

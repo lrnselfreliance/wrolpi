@@ -543,4 +543,29 @@ tr.drag-deselecting td {
     .inventory-print tr {
         page-break-inside: avoid;
     }
+
+    /* The supply-plan shopping list reuses the .inventory-print element styling (h1/table/etc.) but is a separate
+       printable block.  By default (e.g. the Export tab's whole-inventory PDF) it is hidden; it becomes the ONLY
+       printed block when the supply plan toggles `body.printing-shopping` just before window.print(). */
+    .shopping-print,
+    .shopping-print * {
+        visibility: hidden;
+    }
+    .shopping-print {
+        display: none;
+    }
+    body.printing-shopping .inventory-print:not(.shopping-print),
+    body.printing-shopping .inventory-print:not(.shopping-print) * {
+        visibility: hidden;
+    }
+    body.printing-shopping .inventory-print:not(.shopping-print) {
+        display: none;
+    }
+    body.printing-shopping .shopping-print,
+    body.printing-shopping .shopping-print * {
+        visibility: visible;
+    }
+    body.printing-shopping .shopping-print {
+        display: block;
+    }
 }

@@ -1,7 +1,6 @@
 import React, {useMemo, useState} from "react";
 import {Select, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import {Header, Segment, Table} from "../Theme";
-import {RationEstimatePanel} from "../calculators/RationCalculator";
+import {Header, Table} from "../Theme";
 import {
     defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey, groupFieldsOf, sortSummaryRows,
     summableFieldsOf, summarizeInventory,
@@ -9,8 +8,8 @@ import {
 import {ThemeContext} from "../../contexts/contexts";
 
 // Aggregate the inventory client-side: group items by a chosen text/select field and sum a chosen quantity, number,
-// or calories field.  When the inventory has a `calories` field, a ration estimate is shown below the summary table.
-// The grouping math lives in summarize.js (shared with the PDF export).
+// or calories field.  The grouping math lives in summarize.js (shared with the PDF export).  The ration estimate
+// lives in its own "Ration" tab (see RationEstimatePanel).
 export function InventorySummary({fields, items}) {
     const groupFields = groupFieldsOf(fields);
     const summableFields = summableFieldsOf(fields);
@@ -81,11 +80,5 @@ export function InventorySummary({fields, items}) {
                 </TableRow>)}
             </TableBody>
         </Table>
-
-        {caloriesKey &&
-            <Segment style={{marginTop: '2em'}}>
-                <Header as='h3'>Ration Estimate</Header>
-                <RationEstimatePanel items={items} caloriesKey={caloriesKey} countKey={countKey}/>
-            </Segment>}
     </>;
 }

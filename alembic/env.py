@@ -72,11 +72,11 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        if not os.environ.get('DOCKER', '').lower().startswith('t'):
-            # Set role when not in a docker container
-            connection.execute("SET ROLE 'wrolpi'")
-        context.configure(
+        with connectable.connect() as connection:
+            role = os.environ.get('WROLPI_DB_ROLE')
+            if role:
+                connection.execute(f"SET ROLE '{role}'")
+            context.configure(
             connection=connection, target_metadata=target_metadata
         )
 

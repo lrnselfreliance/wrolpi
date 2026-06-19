@@ -479,3 +479,68 @@ tr.drag-deselecting td {
     color: rgba(0, 0, 0, 0.87) !important;
 }
 
+
+/* Inventory "PDF" export: the printable table is hidden on screen and becomes the only
+   visible content when printing, so a user can use the browser dialog to Save as PDF. */
+.inventory-print {
+    display: none;
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .inventory-print,
+    .inventory-print * {
+        visibility: visible;
+    }
+
+    .inventory-print {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        color: #000;
+    }
+
+    .inventory-print h1 {
+        font-size: 18pt;
+        margin: 0 0 0.25em;
+    }
+
+    .inventory-print h2 {
+        font-size: 13pt;
+        margin: 1.25em 0 0.5em;
+    }
+
+    .inventory-print-meta {
+        font-size: 9pt;
+        color: #444;
+        margin: 0 0 0.75em;
+    }
+
+    .inventory-print table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10pt;
+    }
+
+    .inventory-print th,
+    .inventory-print td {
+        border: 1px solid #999;
+        padding: 4px 6px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    /* Repeat the header row at the top of each printed page. */
+    .inventory-print thead {
+        display: table-header-group;
+    }
+
+    .inventory-print tr {
+        page-break-inside: avoid;
+    }
+}

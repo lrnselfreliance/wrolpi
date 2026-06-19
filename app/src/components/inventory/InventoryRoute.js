@@ -1,11 +1,14 @@
-import React, {useState} from "react";
+import React, {useMemo, useState} from "react";
 import {Dropdown, Input, Select} from "semantic-ui-react";
 import {Button, Confirm, Header, Icon, Loader, Menu, Modal, Segment} from "../Theme";
 import {PageContainer, useTitle} from "../Common";
 import {collectLocations, useCatalog, useInventories} from "../../hooks/customHooks";
-import {InventoryTable} from "./InventoryTable";
+import {filterItems, InventoryTable} from "./InventoryTable";
 import {InventoryItemsMobile} from "./InventoryItemsMobile";
 import {InventorySummary} from "./InventorySummary";
+import {InventoryExportPanel} from "./InventoryExportPanel";
+import {InventoryPrint} from "./InventoryPrint";
+import {defaultGroupKey, defaultSumKey} from "./summarize";
 import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
 import {Media} from "../../contexts/contexts";
@@ -62,6 +65,12 @@ export function InventoryRoute() {
     const [renaming, setRenaming] = useState(false);
     const [renameValue, setRenameValue] = useState('');
     const [confirmDelete, setConfirmDelete] = useState(false);
+    // Grouping for the PDF export's summary table (chosen in the Export tab, rendered by the always-mounted print
+    // view).  null until seeded from the current inventory's schema.
+    const [exportGroupKey, setExportGroupKey] = useState(null);
+    const [exportSumKey, setExportSumKey] = useState(null);
+    // Free-text filter applied to the active inventory's items across every column.
+    const [search, setSearch] = useState('');
 
     // Default to the first inventory once loaded.
     React.useEffect(() => {
@@ -71,8 +80,21 @@ export function InventoryRoute() {
     }, [inventories, slug]);
 
     const current = inventories?.find(i => i.slug === slug);
-    const fields = current ? current.fields : [];
-    const items = current ? current.items : [];
+    const fields = useMemo(() => (current ? current.fields : []), [current]);
+    const items = useMemo(() => (current ? current.items : []), [current]);
+
+    // Re-seed the export grouping when the selected inventory (or its schema) changes.
+    React.useEffect(() => {
+        setExportGroupKey(defaultGroupKey(fields));
+        setExportSumKey(defaultSumKey(fields));
+    }, [fields]);
+    // Clear the search when switching inventories.
+    React.useEffect(() => setSearch(''), [slug]);
+
+    // The search narrows the whole inventory view (Items display, Summary, Export); edits/adds in InventoryTable
+    // still operate on the full `items`, so filtering never drops data.
+    const filteredItems = useMemo(() => filterItems(items, fields, search), [items, fields, search]);
+
     // Location suggestions are pooled across every inventory.
     const locations = collectLocations(inventories);
 
@@ -133,27 +155,41 @@ export function InventoryRoute() {
                     </Button>
                 </>}
             </div>
+            {current &&
+                <Input fluid icon='search' iconPosition='left' placeholder='Search items…' value={search}
+                       aria-label='Search items' clearable style={{marginTop: '0.75em'}}
+                       onChange={(e, data) => setSearch(data.value)}/>}
         </Segment>
 
         {current ? <>
             <Menu pointing secondary>
                 <Menu.Item name='Items' active={tab === 'items'} onClick={() => setTab('items')}/>
                 <Menu.Item name='Summary' active={tab === 'summary'} onClick={() => setTab('summary')}/>
+                <Menu.Item name='Export' active={tab === 'export'} onClick={() => setTab('export')}/>
             </Menu>
 
-            {tab === 'items'
-                ? <>
-                    {/* Portrait mobile: condensed, read-only.  Rotate to landscape (tablet+) for the full editor. */}
-                    <Media at='mobile'>
-                        <InventoryItemsMobile fields={fields} items={items}/>
-                    </Media>
-                    <Media greaterThanOrEqual='tablet'>
-                        <InventoryTable slug={slug} fields={fields} items={items} locations={locations}
-                                        catalog={catalog}
-                                        onChange={newItems => persistInventory(slug, {items: newItems})}/>
-                    </Media>
-                </>
-                : <InventorySummary fields={fields} items={items}/>}
+            {tab === 'items' && <>
+                {/* Portrait mobile: condensed, read-only.  Rotate to landscape (tablet+) for the full editor. */}
+                <Media at='mobile'>
+                    <InventoryItemsMobile fields={fields} items={filteredItems}/>
+                </Media>
+                <Media greaterThanOrEqual='tablet'>
+                    {/* The table gets the FULL items (so edits/adds don't drop filtered-out rows) plus the search,
+                        which it applies to its displayed rows only. */}
+                    <InventoryTable slug={slug} fields={fields} items={items} locations={locations}
+                                    catalog={catalog} search={search}
+                                    onChange={newItems => persistInventory(slug, {items: newItems})}/>
+                </Media>
+            </>}
+            {tab === 'summary' && <InventorySummary fields={fields} items={filteredItems}/>}
+            {tab === 'export' &&
+                <InventoryExportPanel name={current.name} fields={fields} items={filteredItems}
+                                      groupKey={exportGroupKey} sumKey={exportSumKey}
+                                      onGroupKey={setExportGroupKey} onSumKey={setExportSumKey}/>}
+
+            {/* Always mounted (hidden on screen) so the browser print dialog has the full table + summary to render. */}
+            <InventoryPrint name={current.name} fields={fields} items={filteredItems}
+                            groupKey={exportGroupKey} sumKey={exportSumKey}/>
 
             <FieldSchemaEditor fields={fields} open={editFieldsOpen}
                                onClose={() => setEditFieldsOpen(false)}

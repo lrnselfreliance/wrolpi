@@ -4,6 +4,8 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Form, Header, Table} from "../Theme";
 import {InfoPopup, roundDigits, useLocalStorage} from "../Common";
 import {formatDuration} from "./WaterCalculator";
+// Field-role detection lives in inventory/summarize.js (single source of truth); re-exported here for back-compat.
+export {findCaloriesKey, findCountKey} from "../inventory/summarize";
 
 // Pure calculation functions for the Ration (food storage) estimate.
 //
@@ -44,27 +46,6 @@ export function daysOfFood(total, dailyDemand) {
         return null;
     }
     return total / dailyDemand;
-}
-
-// The calories field is detected by its dedicated `calories` type (falling back to a field literally keyed
-// "calories" for inventories created before the type existed).
-export function findCaloriesKey(fields) {
-    const byType = (fields || []).find(f => f.type === 'calories');
-    if (byType) {
-        return byType.key;
-    }
-    const legacy = (fields || []).find(f => f.key === 'calories' && f.type === 'number');
-    return legacy ? legacy.key : null;
-}
-
-// The count multiplier: prefer a number field keyed "count", else the first number field, else none (treat as 1).
-export function findCountKey(fields) {
-    const count = (fields || []).find(f => f.type === 'number' && f.key === 'count');
-    if (count) {
-        return count.key;
-    }
-    const firstNumber = (fields || []).find(f => f.type === 'number');
-    return firstNumber ? firstNumber.key : null;
 }
 
 // Per-person daily calorie needs, by activity level.  Adult figures are representative working-age values

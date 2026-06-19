@@ -1,6 +1,6 @@
 import React from "react";
 import {fireEvent, render, screen} from "@testing-library/react";
-import {InventoryTable} from "./InventoryTable";
+import {filterItems, InventoryTable} from "./InventoryTable";
 
 const FIELDS = [
     {key: 'name', label: 'Name', type: 'text', order: 0},
@@ -139,5 +139,93 @@ describe('InventoryTable expired highlighting', () => {
         expect(rowOf('Fresh').className).not.toContain('negative');
         // One expired row -> one warning icon.
         expect(container.querySelectorAll('i.warning.sign.icon').length).toBe(1);
+    });
+});
+
+describe('filterItems', () => {
+    const FIELDS = [
+        {key: 'name', label: 'Name', type: 'text', order: 0},
+        {key: 'category', label: 'Category', type: 'select', order: 1},
+        {key: 'item_size', label: 'Size', type: 'quantity', unit: 'lb', order: 2},
+        {key: 'count', label: 'Count', type: 'number', order: 3},
+        {key: 'expiration_date', label: 'Expires', type: 'date', order: 4},
+    ];
+    const ITEMS = [
+        {id: 1, name: 'White Rice', category: 'grains', item_size: '30', item_size_unit: 'lb', count: '3',
+            expiration_date: '2030-01-01'},
+        {id: 2, name: 'Pinto Beans', category: 'legumes', item_size: '25', item_size_unit: 'lb', count: '2',
+            expiration_date: '2033-01-01'},
+        {id: 3, name: 'Canned Chicken', category: 'meats', item_size: '12.5', item_size_unit: 'oz', count: '12',
+            expiration_date: '2030-06-01'},
+    ];
+    const names = (rows) => rows.map(r => r.name);
+
+    test('blank or whitespace search returns all items', () => {
+        expect(filterItems(ITEMS, FIELDS, '')).toHaveLength(3);
+        expect(filterItems(ITEMS, FIELDS, '   ')).toHaveLength(3);
+    });
+
+    test('matches a text column, case-insensitively', () => {
+        expect(names(filterItems(ITEMS, FIELDS, 'rice'))).toEqual(['White Rice']);
+        expect(names(filterItems(ITEMS, FIELDS, 'RICE'))).toEqual(['White Rice']);
+    });
+
+    test('matches a select column (category)', () => {
+        expect(names(filterItems(ITEMS, FIELDS, 'legumes'))).toEqual(['Pinto Beans']);
+    });
+
+    test('matches a date column', () => {
+        expect(names(filterItems(ITEMS, FIELDS, '2030'))).toEqual(['White Rice', 'Canned Chicken']);
+    });
+
+    test('matches a quantity column by its formatted value', () => {
+        expect(names(filterItems(ITEMS, FIELDS, '25 lb'))).toEqual(['Pinto Beans']);
+    });
+
+    test('whitespace-separated terms are AND-ed', () => {
+        expect(names(filterItems(ITEMS, FIELDS, 'canned chicken'))).toEqual(['Canned Chicken']);
+        expect(filterItems(ITEMS, FIELDS, 'rice beans')).toEqual([]);
+    });
+
+    test('a non-matching search returns nothing', () => {
+        expect(filterItems(ITEMS, FIELDS, 'xyzzy')).toEqual([]);
+    });
+});
+
+describe('InventoryTable search', () => {
+    const FIELDS = [
+        {key: 'name', label: 'Name', type: 'text', order: 0},
+        {key: 'count', label: 'Count', type: 'number', order: 1},
+    ];
+    const items = [
+        {id: 1, name: 'White Rice', count: '3'},
+        {id: 2, name: 'Pinto Beans', count: '2'},
+    ];
+
+    test('only matching rows are rendered, and the entry row remains', () => {
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} search='rice'
+                               onChange={jest.fn()}/>);
+        expect(screen.getByText('White Rice')).toBeTruthy();
+        expect(screen.queryByText('Pinto Beans')).toBeNull();
+        // The persistent draft entry row is still present.
+        expect(screen.getAllByLabelText('Name').length).toBeGreaterThan(0);
+    });
+
+    test('adding from the entry row while filtered preserves the hidden items', () => {
+        const onChange = jest.fn();
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} search='rice'
+                               onChange={onChange}/>);
+        const draftName = screen.getAllByLabelText('Name').slice(-1)[0];
+        fireEvent.change(draftName, {target: {value: 'Oats'}});
+        fireEvent.keyDown(draftName, {key: 'Enter'});
+        // onChange gets the FULL inventory (both originals + new), not just the filtered view.
+        const newItems = onChange.mock.calls[0][0];
+        expect(newItems.map(i => i.name)).toEqual(['White Rice', 'Pinto Beans', 'Oats']);
+    });
+
+    test('a non-matching search shows a no-match message', () => {
+        render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} search='xyzzy'
+                               onChange={jest.fn()}/>);
+        expect(screen.getByText(/no items match/i)).toBeTruthy();
     });
 });

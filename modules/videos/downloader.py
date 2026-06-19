@@ -1187,7 +1187,7 @@ class VideoDownloader(Downloader, ABC):
 
         with get_db_session() as session:
             # Find the existing video, replace its info json.
-            video = Video.get_by_url(url, session)
+            video = Video.get_by_url(session, url)
 
             location = video.location
 
@@ -1202,7 +1202,7 @@ class VideoDownloader(Downloader, ABC):
 
         with get_db_session(commit=True) as session:
             # Find the existing video, replace its info json.
-            video = Video.get_by_url(url, session)
+            video = Video.get_by_url(session, url)
             video.replace_info_json(info_json)
 
             if parent_download_url := settings.get('parent_download_url'):

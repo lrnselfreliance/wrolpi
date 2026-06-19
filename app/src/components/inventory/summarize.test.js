@@ -1,6 +1,6 @@
 import {
-    defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey, groupFieldsOf, sortSummaryRows,
-    summableFieldsOf, summarizeInventory,
+    defaultGroupKey, defaultSumKey, findCaloriesKey, findCountKey, findNameKey, groupFieldsOf, planSupplyPurchase,
+    sortSummaryRows, summableFieldsOf, summarizeInventory,
 } from "./summarize";
 
 const FIELDS = [
@@ -44,6 +44,59 @@ describe('field-role helpers', () => {
     test('findCaloriesKey / findCountKey detect by type/key', () => {
         expect(findCaloriesKey(FIELDS)).toBe('calories');
         expect(findCountKey(FIELDS)).toBe('count');
+    });
+
+    test('findNameKey prefers a "name" field, else the first text field', () => {
+        expect(findNameKey(FIELDS)).toBe('name');
+        expect(findNameKey([{key: 'label', type: 'text'}, {key: 'note', type: 'text'}])).toBe('label');
+        expect(findNameKey([{key: 'qty', type: 'number'}])).toBe(null);
+    });
+});
+
+describe('planSupplyPurchase', () => {
+    const opts = (scale) => ({countKey: 'count', nameKey: 'name', caloriesKey: 'calories', scale});
+
+    test('the canonical example: 100 cans lasting 2 months, extend to 3 → buy 50 more', () => {
+        const items = [{name: 'Beans', count: '100', calories: '370'}];
+        const {rows} = planSupplyPurchase(items, opts(3 / 2));
+        expect(rows).toEqual([{name: 'Beans', current: 100, target: 150, additional: 50}]);
+    });
+
+    test('rounds a split package UP to a whole one', () => {
+        // One 50 lb bucket extrapolating to ~1.6 buckets → recommend buying 1 (not 0).
+        const items = [{name: 'Wheat', count: '1', calories: '7500'}];
+        expect(planSupplyPurchase(items, opts(1.6)).rows).toEqual(
+            [{name: 'Wheat', current: 1, target: 2, additional: 1}]);
+        // Even a small fraction rounds up.
+        expect(planSupplyPurchase(items, opts(1.05)).rows[0].additional).toBe(1);
+    });
+
+    test('scales every item proportionally (balanced restock) and reports added calories', () => {
+        const items = [
+            {name: 'Rice', count: '14', calories: '8040'},
+            {name: 'Beans', count: '96', calories: '370'},
+            {name: 'Salt', count: '6', calories: '0'},   // zero-calorie items still scale
+        ];
+        const {rows, addedCalories} = planSupplyPurchase(items, opts(1.25));
+        const byName = Object.fromEntries(rows.map(r => [r.name, r]));
+        expect(byName.Rice.additional).toBe(4);    // ceil(14×1.25)=18
+        expect(byName.Beans.additional).toBe(24);  // ceil(96×1.25)=120
+        expect(byName.Salt.additional).toBe(2);    // ceil(6×1.25)=8, still listed
+        // Added calories ignore the zero-calorie salt: 8040×4 + 370×24.
+        expect(addedCalories).toBe(8040 * 4 + 370 * 24);
+        // Sorted by largest purchase first.
+        expect(rows.map(r => r.name)).toEqual(['Beans', 'Rice', 'Salt']);
+    });
+
+    test('a scale of 1 or less yields no purchases', () => {
+        const items = [{name: 'Rice', count: '14', calories: '8040'}];
+        expect(planSupplyPurchase(items, opts(1)).rows).toEqual([]);
+        expect(planSupplyPurchase(items, opts(0.5)).rows).toEqual([]);
+    });
+
+    test('items with no positive count are skipped (no basis to scale)', () => {
+        const items = [{name: 'Mystery', count: '', calories: '500'}, {name: 'Rice', count: '0', calories: '8040'}];
+        expect(planSupplyPurchase(items, opts(2)).rows).toEqual([]);
     });
 });
 

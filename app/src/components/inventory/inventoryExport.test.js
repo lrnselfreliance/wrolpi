@@ -1,4 +1,4 @@
-import {inventoryExportFilename, toCSV} from "./inventoryExport";
+import {inventoryExportFilename, shoppingListCSV, toCSV} from "./inventoryExport";
 
 const FIELDS = [
     {key: 'name', label: 'Name', type: 'text', order: 0},
@@ -45,6 +45,26 @@ describe('toCSV', () => {
 
     test('no items yields just the header row', () => {
         expect(toCSV(FIELDS, [])).toBe('Name,Size,Count');
+    });
+});
+
+describe('shoppingListCSV', () => {
+    test('emits the Item/Have/Buy/New Total columns for each plan row', () => {
+        const rows = [
+            {name: 'Canned Beans', current: 96, additional: 29, target: 125},
+            {name: 'Mixed Vegetables', current: 180, additional: 55, target: 235},
+        ];
+        expect(shoppingListCSV(rows)).toBe(
+            'Item,Have,Buy,New Total\r\n' +
+            'Canned Beans,96,29,125\r\n' +
+            'Mixed Vegetables,180,55,235'
+        );
+    });
+
+    test('quotes a name containing a comma, and handles no rows', () => {
+        expect(shoppingListCSV([{name: 'Beans, dried', current: 1, additional: 1, target: 2}]).split('\r\n')[1])
+            .toBe('"Beans, dried",1,1,2');
+        expect(shoppingListCSV([])).toBe('Item,Have,Buy,New Total');
     });
 });
 

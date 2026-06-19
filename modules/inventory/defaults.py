@@ -96,9 +96,63 @@ DEFAULT_TYPE = 'food'
 
 INVENTORY_TYPES = tuple(DEFAULT_FIELD_SETS.keys())
 
-# A brand-new install seeds one example inventory of each kind so the feature is discoverable.
+# Recommended package counts for a one-adult, one-year (~3,000 kcal/day) food supply, keyed by the shipped
+# food-catalog id (see catalog_defaults.yaml).  Transcribed from the same "One-Year Emergency Food Supply for One
+# Adult" source list.  `seed_defaults()` joins these counts with the catalog's per-package data to populate the
+# example "Food Storage" inventory on a fresh install (e.g. id 1 = white rice: 70 lb stored as 14 x 5 lb bags).
+RECOMMENDED_ONE_YEAR_FOOD_COUNTS = {
+    # Grains
+    1: 14, 2: 14, 3: 6, 4: 4, 5: 4, 6: 36, 7: 4, 8: 12,
+    # Dairy
+    9: 12, 10: 24, 11: 3,
+    # Fats
+    12: 12, 13: 5, 14: 2, 15: 12,
+    # Sugars
+    16: 5, 17: 12, 18: 12, 19: 6, 20: 6, 21: 9, 22: 8, 23: 12,
+    # Meats
+    24: 48, 25: 12, 26: 24, 27: 24, 28: 24,
+    # Meals (prepared / canned)
+    29: 12, 30: 24, 31: 24, 32: 24, 33: 24, 34: 18, 35: 24,
+    # Legumes
+    36: 96,
+    # Vegetables
+    37: 24, 38: 36, 39: 12, 40: 180, 41: 12,
+    # Fruits
+    42: 48,
+    # Cooking ingredients
+    43: 12, 44: 12, 45: 24, 46: 6, 47: 12, 48: 24, 49: 6, 50: 12, 51: 12, 52: 12,
+    53: 2, 54: 2, 55: 2, 56: 1, 57: 2, 58: 1, 59: 48, 60: 48,
+}
+
+# Per-package fields copied from a food-catalog entry onto a seeded inventory item (its `count` is added from
+# RECOMMENDED_ONE_YEAR_FOOD_COUNTS).
+_RECOMMENDED_ITEM_KEYS = ('name', 'category', 'subcategory', 'item_size', 'item_size_unit', 'calories')
+
+
+def recommended_food_storage_items() -> list:
+    """Build the example one-adult/one-year Food Storage items.
+
+    Joins the shipped food catalog (per-package nutrition in ``catalog_defaults.yaml``) with
+    ``RECOMMENDED_ONE_YEAR_FOOD_COUNTS`` (how many packages to store), so the per-package nutritional data keeps a
+    single source of truth and this layer only adds quantities.  Items are kept generic (no brand).
+    """
+    from .catalog import load_catalog_defaults
+    by_id = {e.get('id'): e for e in load_catalog_defaults()}
+    items = []
+    for catalog_id, count in RECOMMENDED_ONE_YEAR_FOOD_COUNTS.items():
+        entry = by_id.get(catalog_id)
+        if not entry:
+            continue
+        item = {key: entry.get(key, '') for key in _RECOMMENDED_ITEM_KEYS}
+        item['count'] = str(count)
+        items.append(item)
+    return items
+
+
+# A brand-new install seeds one example inventory of each kind so the feature is discoverable.  The food example
+# is populated with the recommended one-adult/one-year supply; `items_factory` is called lazily at seed time.
 DEFAULT_INVENTORIES = [
-    dict(name='Food Storage', type='food'),
+    dict(name='Food Storage', type='food', items_factory=recommended_food_storage_items),
 ]
 
 

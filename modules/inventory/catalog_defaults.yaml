@@ -21,12 +21,12 @@ items:
   # --- Dairy ---
   - {id: 9,  name: Nonfat Dry Milk,            category: dairy,  subcategory: dry milk,        item_size: '64', item_size_unit: oz, calories: '6400'}
   - {id: 10, name: Evaporated Milk,            category: dairy,  subcategory: evaporated milk, item_size: '12', item_size_unit: oz, calories: '480'}
-  - {id: 11, name: Velveeta Cheese,            category: dairy,  subcategory: cheese,          item_size: '32', item_size_unit: oz, calories: '2560'}
+  - {id: 11, name: Processed Cheese,           category: dairy,  subcategory: cheese,          item_size: '32', item_size_unit: oz, calories: '2560'}
 
   # --- Fats ---
   - {id: 12, name: Butter,                     category: fats,   subcategory: butter,        item_size: '1',    item_size_unit: lb, calories: '3200'}
   - {id: 13, name: Extra-Virgin Olive Oil,     category: fats,   subcategory: oil,           item_size: '50.7', item_size_unit: oz, calories: '12000'}
-  - {id: 14, name: Shortening,                 category: fats,   subcategory: shortening,    item_size: '3',    item_size_unit: lb, calories: '12000'}
+  - {id: 14, name: Shortening,                 category: fats,   subcategory: shortening,    item_size: '3',    item_size_unit: lb, calories: '12430'}
   - {id: 15, name: Peanut Butter,              category: fats,   subcategory: peanut butter, item_size: '18',   item_size_unit: oz, calories: '3040'}
 
   # --- Sugars ---
@@ -35,14 +35,14 @@ items:
   - {id: 18, name: Confectioners Sugar,        category: sugars, subcategory: powdered sugar, item_size: '1',    item_size_unit: lb, calories: '1800'}
   - {id: 19, name: Light Corn Syrup,           category: sugars, subcategory: corn syrup,     item_size: '16',   item_size_unit: oz, calories: '1920'}
   - {id: 20, name: Maple Syrup,                category: sugars, subcategory: syrup,          item_size: '12.5', item_size_unit: oz, calories: '1200'}
-  - {id: 21, name: Clover Honey,               category: sugars, subcategory: honey,          item_size: '16',   item_size_unit: oz, calories: '1280'}
+  - {id: 21, name: Honey,                      category: sugars, subcategory: honey,          item_size: '16',   item_size_unit: oz, calories: '1280'}
   - {id: 22, name: Cocoa Syrup,                category: sugars, subcategory: syrup,          item_size: '16',   item_size_unit: oz, calories: '1200'}
   - {id: 23, name: Jelly or Preserves,         category: sugars, subcategory: jelly,          item_size: '16',   item_size_unit: oz, calories: '1300'}
 
   # --- Meats ---
   - {id: 24, name: Tuna in Oil,                category: meats,  subcategory: canned, item_size: '5',  item_size_unit: oz, calories: '187'}
   - {id: 25, name: Canned Ham,                 category: meats,  subcategory: canned, item_size: '16', item_size_unit: oz, calories: '800'}
-  - {id: 26, name: Spam,                       category: meats,  subcategory: canned, item_size: '12', item_size_unit: oz, calories: '1020'}
+  - {id: 26, name: Canned Lunch Meat,          category: meats,  subcategory: canned, item_size: '12', item_size_unit: oz, calories: '1020'}
   - {id: 27, name: Vienna Sausage,             category: meats,  subcategory: canned, item_size: '5',  item_size_unit: oz, calories: '375'}
   - {id: 28, name: Roast Beef,                 category: meats,  subcategory: canned, item_size: '12', item_size_unit: oz, calories: '375'}
 
@@ -50,7 +50,7 @@ items:
   - {id: 29, name: Cream of Chicken Soup,      category: meals,  subcategory: canned, item_size: '10.75', item_size_unit: oz, calories: '300'}
   - {id: 30, name: Canned Macaroni and Cheese, category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '480'}
   - {id: 31, name: Canned Pasta,               category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '500'}
-  - {id: 32, name: Chunky Soup,                category: meals,  subcategory: canned, item_size: '18.8',  item_size_unit: oz, calories: '500'}
+  - {id: 32, name: Chunky Soup,                category: meals,  subcategory: canned, item_size: '18.8',  item_size_unit: oz, calories: '360'}
   - {id: 33, name: Roast Beef Hash,            category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '780'}
   - {id: 34, name: Beef Stew,                  category: meals,  subcategory: canned, item_size: '24',    item_size_unit: oz, calories: '630'}
   - {id: 35, name: Chili with Beans,           category: meals,  subcategory: canned, item_size: '15',    item_size_unit: oz, calories: '700'}

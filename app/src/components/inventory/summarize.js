@@ -52,6 +52,54 @@ export function findCountKey(fields) {
     return firstNumber ? firstNumber.key : null;
 }
 
+// The field whose value names each item (for the shopping-list label): prefer a field keyed "name", else the first
+// text field, else none.
+export function findNameKey(fields) {
+    const named = (fields || []).find(f => f.key === 'name');
+    if (named) {
+        return named.key;
+    }
+    const firstText = (fields || []).find(f => f.type === 'text');
+    return firstText ? firstText.key : null;
+}
+
+/**
+ * Build a proportional "buy more" shopping list to grow the whole inventory by `scale` (the target duration divided
+ * by the current duration).  Every item is scaled by the same factor so the mix stays balanced — matching the
+ * user's mental model ("100 cans lasting 2 months, extend to 3 → buy 50 more").
+ *
+ * Each item's target count = ceil(currentCount × scale) — any fractional package is rounded UP to a whole one (a
+ * bucket of wheat that extrapolates to 1.6 buckets means buying 1 more, not 0).  `additional` is the positive
+ * shortfall (items already at or above target are omitted).  Items with no positive count have no basis to scale
+ * from and are skipped.  Returns `{rows, addedCalories}` where rows = [{name, current, target, additional}] sorted
+ * by largest purchase first, and addedCalories is the calories the purchases would add (to project the new duration).
+ */
+export function planSupplyPurchase(items, {countKey, nameKey, caloriesKey, scale}) {
+    const rows = [];
+    let addedCalories = 0;
+    if (scale > 1) {
+        (items || []).forEach(item => {
+            const current = countKey ? Number(item[countKey]) : NaN;
+            if (!(current > 0)) {
+                return;
+            }
+            const target = Math.ceil(current * scale);
+            const additional = target - current;
+            if (additional <= 0) {
+                return;
+            }
+            const name = (nameKey && item[nameKey]) || '(unnamed)';
+            rows.push({name, current, target, additional});
+            const calories = caloriesKey ? Number(item[caloriesKey]) : 0;
+            if (calories > 0) {
+                addedCalories += calories * additional;
+            }
+        });
+    }
+    rows.sort((a, b) => b.additional - a.additional || a.name.localeCompare(b.name));
+    return {rows, addedCalories};
+}
+
 // Parse an item's field value into a finite number, or null when blank/non-numeric.
 function numericValue(item, key) {
     const raw = item[key];

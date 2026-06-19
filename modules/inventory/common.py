@@ -184,7 +184,12 @@ class InventoriesConfig(MultiFileConfig):
             return
         for default in DEFAULT_INVENTORIES:
             try:
-                self.create_inventory(default['name'], default['type'])
+                inventory = self.create_inventory(default['name'], default['type'])
+                # Optionally populate the example with seed items (e.g. the recommended one-year food supply).
+                items_factory = default.get('items_factory')
+                items = items_factory() if items_factory else None
+                if items:
+                    self.save_inventory(inventory['slug'], dict(items=items))
             except Exception as e:
                 logger.warning(f'Failed to seed default inventory {default}: {e}')
 

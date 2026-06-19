@@ -539,6 +539,29 @@ async def test_video_download(test_session, test_directory, mock_video_extract_i
 
 
 @pytest.mark.asyncio
+async def test_download_info_json_finds_existing_video(test_session, test_directory, video_factory):
+    """`download_info_json` looks up the existing Video by its URL.
+
+    Regression: `Video.get_by_url` was called with its arguments swapped — `(url, session)` instead of
+    `(session, url)` — which raised `AttributeError: 'str' object has no attribute 'query'`."""
+    source_id = 'video-source-id'
+    url = 'https://example.com/the-video'
+    video = video_factory(with_info_json={'id': source_id}, source_id=source_id)
+    video.file_group.url = url
+    test_session.commit()
+
+    download = Download(url=url, info_json={'id': source_id}, settings={})
+
+    # The info_json download itself fails here, but the buggy existing-video lookup runs first.
+    with mock.patch('modules.videos.downloader.download_video_info_json') as mock_download:
+        mock_download.side_effect = Exception('no network')
+        result = await VideoDownloader.download_info_json(download, video.video_path)
+
+    assert result.success is False, 'Download should fail gracefully once the info json download fails'
+    mock_download.assert_called_once_with(url)
+
+
+@pytest.mark.asyncio
 async def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
                                mock_video_extract_info, image_file, await_switches):
     """VideoDownloader returns a DownloadResult when complete."""

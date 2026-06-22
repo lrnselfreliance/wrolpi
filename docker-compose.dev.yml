@@ -1,0 +1,22 @@
+# Local development override for the React app.
+#
+# The base docker-compose.yml serves the production build (so the PWA service worker ships).  This override runs
+# the Create React App dev server instead, restoring hot reload.  The dev server does not emit a service worker —
+# that is expected; offline/PWA support is a production concern and is verified against a production build.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# (Production / end users just run `docker compose up`, which serves the built PWA.)
+services:
+  app:
+    command: 'npm run start'
+    stdin_open: true
+    volumes:
+      - './app/public:/app/public'
+      - './app/src:/app/src'
+      - './app/package.json:/app/package.json'
+      - '.env:/app/.env'
+    environment:
+      # Force React to use the Caddy port for its dev-server websocket.
+      - WDS_SOCKET_PORT=0

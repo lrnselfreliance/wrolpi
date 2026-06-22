@@ -13,10 +13,24 @@ docker volume create --name=openstreetmap-data
 docker volume create --name=openstreetmap-rendered-tiles
 docker-compose up -d db
 docker-compose run --rm api db upgrade
-docker-compose up
+# Development (React dev server, hot reload):
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 Browse to https://localhost:8443
+
+### Production vs. development
+
+The base `docker-compose.yml` serves the **production** React build, which is what ships the installable PWA
+and its offline service worker — this is what end users run:
+
+```bash
+docker compose up          # serves the built PWA (no hot reload; rebuild the app image to update)
+```
+
+For day-to-day frontend work, layer on `docker-compose.dev.yml` (as in the Quick Start above) to run the CRA
+dev server with hot reload instead. The dev server does not emit a service worker, which is expected — verify
+PWA/offline behavior against the production build.
 
 ## Services
 

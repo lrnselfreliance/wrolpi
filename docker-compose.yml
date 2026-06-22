@@ -92,20 +92,13 @@ services:
     build:
       context: .
       dockerfile: docker/app/Dockerfile
-    volumes:
-      - './app/public:/app/public'
-      - './app/src:/app/src'
-      - './app/package.json:/app/package.json'
-      - '.env:/app/.env'
-    command: 'npm run start'
-    stdin_open: true
+    # The image builds the production bundle and serves it (see docker/app/Dockerfile), so the PWA service worker
+    # ships.  Rebuild the image (`docker compose build app`) to pick up code changes.  For local development with
+    # hot reload, layer on docker-compose.dev.yml (runs the CRA dev server instead).
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
       interval: 1m
     user: '${UID-1000}:${GID-1000}'
-    environment:
-      # Force React to use Caddy port to connect to it's websocket.
-      - WDS_SOCKET_PORT=0
 
   web: # Caddy reverse proxy - handles HTTPS for all services.
     depends_on:

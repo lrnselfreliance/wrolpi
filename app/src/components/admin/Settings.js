@@ -26,7 +26,7 @@ import {
 } from "../Common";
 import QRCode from "react-qr-code";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../../toast";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ConfigsTable} from "./Configs";
 import {semanticUIColorMap} from "../Vars";

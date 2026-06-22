@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../../toast";
 import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {Button, Divider, Header, Icon, Loader, Modal, Table} from "../Theme";
 import {

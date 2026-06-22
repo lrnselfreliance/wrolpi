@@ -12,6 +12,7 @@ import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {FileWorkerStatusProvider} from "./contexts/FileWorkerStatusContext";
+import {PwaProvider} from "./contexts/PwaContext";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./components/Channels";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
@@ -113,14 +114,16 @@ export default function App() {
     useEventsInterval();
 
     return <StatusProvider>
-        <FileWorkerStatusProvider>
-            {/* Context and style to handle switching between mobile/computer. */}
-            <style>{mediaStyles}</style>
-            {/* Toasts can be on any page. */}
-            <SemanticToastContainer position='top-right'/>
-            <MediaContextProvider>
-                <RouterProvider router={router}/>
-            </MediaContextProvider>
-        </FileWorkerStatusProvider>
+        <PwaProvider>
+            <FileWorkerStatusProvider>
+                {/* Context and style to handle switching between mobile/computer. */}
+                <style>{mediaStyles}</style>
+                {/* Toasts can be on any page. */}
+                <SemanticToastContainer position='top-right'/>
+                <MediaContextProvider>
+                    <RouterProvider router={router}/>
+                </MediaContextProvider>
+            </FileWorkerStatusProvider>
+        </PwaProvider>
     </StatusProvider>
 }

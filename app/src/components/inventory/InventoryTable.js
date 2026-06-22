@@ -4,6 +4,7 @@ import {Button, Icon, Table} from "../Theme";
 import {FieldCell} from "./FieldCell";
 import {applyComputedCounts, computedCountConfigs} from "./computeFields";
 import {NUMERIC_TYPES} from "./units";
+import {usePwa} from "../../contexts/PwaContext";
 
 const LOCATION_LIST_ID = 'inventory-location-suggestions';
 const CATALOG_LIST_ID = 'inventory-catalog-names';
@@ -50,6 +51,8 @@ function compareByField(a, b, field) {
  * bottom: Tab moves between fields and Enter submits the item then refocuses the first field.
  */
 export function InventoryTable({slug, fields, items, locations, catalog, search, onChange}) {
+    // Offline (PWA cache) is read-only: writes can't reach the config-only backend, so editing affordances are hidden.
+    const {offline: readOnly} = usePwa();
     const [draft, setDraft] = useState(() => emptyItem(fields));
     const [edits, setEdits] = useState({});       // itemId -> edited copy
     const [selected, setSelected] = useState(new Set());
@@ -212,7 +215,7 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
             <datalist id={CATALOG_LIST_ID}>
                 {catalog.map(e => <option key={e.id ?? e.name} value={e.name}/>)}
             </datalist>}
-        {selected.size > 0 &&
+        {!readOnly && selected.size > 0 &&
             <Button color='red' onClick={removeSelected} style={{marginBottom: '0.5em'}}>
                 Delete {selected.size} selected
             </Button>}
@@ -235,7 +238,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                     const expired = isExpired(item);
                     return <TableRow key={item.id} negative={expired}>
                         <TableCell collapsing>
-                            <Checkbox checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)}/>
+                            {!readOnly &&
+                                <Checkbox checked={selected.has(item.id)} onChange={() => toggleSelected(item.id)}/>}
                             {expired && <Icon name='warning sign' color='red' title='Expired'
                                               style={{marginLeft: '0.4em'}}/>}
                         </TableCell>
@@ -251,7 +255,8 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                                     listId={listIdFor(f)}
                                     autoFocus={focusCell && focusCell.id === item.id && focusCell.key === f.key}
                                 />
-                                : <span onClick={() => startEdit(item, f.key)} style={{cursor: 'pointer'}}>
+                                : <span onClick={readOnly ? undefined : () => startEdit(item, f.key)}
+                                        style={{cursor: readOnly ? 'default' : 'pointer'}}>
                                     {formatValue(item, f)}
                                 </span>}
                         </TableCell>)}
@@ -264,26 +269,27 @@ export function InventoryTable({slug, fields, items, locations, catalog, search,
                         </TableCell>
                     </TableRow>}
             </TableBody>
-            <TableFooter>
-                {/* The persistent new-item entry row. */}
-                <TableRow>
-                    <TableCell collapsing>
-                        <Button primary size='mini' onClick={submitDraft} aria-label='Add item'>+</Button>
-                    </TableCell>
-                    {sortedFields.map((f, index) => <TableCell key={f.key}>
-                        <FieldCell
-                            field={f}
-                            value={draft[f.key]}
-                            unitValue={draft[`${f.key}_unit`]}
-                            onChange={v => setDraftValue(f.key, v)}
-                            onUnitChange={v => setDraftValue(`${f.key}_unit`, v)}
-                            onEnter={submitDraft}
-                            inputRef={index === 0 ? firstInputRef : undefined}
-                            listId={listIdFor(f)}
-                        />
-                    </TableCell>)}
-                </TableRow>
-            </TableFooter>
+            {!readOnly &&
+                <TableFooter>
+                    {/* The persistent new-item entry row. */}
+                    <TableRow>
+                        <TableCell collapsing>
+                            <Button primary size='mini' onClick={submitDraft} aria-label='Add item'>+</Button>
+                        </TableCell>
+                        {sortedFields.map((f, index) => <TableCell key={f.key}>
+                            <FieldCell
+                                field={f}
+                                value={draft[f.key]}
+                                unitValue={draft[`${f.key}_unit`]}
+                                onChange={v => setDraftValue(f.key, v)}
+                                onUnitChange={v => setDraftValue(`${f.key}_unit`, v)}
+                                onEnter={submitDraft}
+                                inputRef={index === 0 ? firstInputRef : undefined}
+                                listId={listIdFor(f)}
+                            />
+                        </TableCell>)}
+                    </TableRow>
+                </TableFooter>}
         </Table>
     </>;
 }

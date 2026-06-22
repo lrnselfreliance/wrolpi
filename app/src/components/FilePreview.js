@@ -8,7 +8,7 @@ import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal} from "./Theme";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 import {useOneQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 import {AddToPlaylistButton} from "./AddToPlaylist";

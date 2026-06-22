@@ -1,6 +1,7 @@
 import React from "react";
 import {fireEvent, render, screen, within} from "@testing-library/react";
 import {filterItems, InventoryTable} from "./InventoryTable";
+import {PwaContext} from "../../contexts/PwaContext";
 
 const FIELDS = [
     {key: 'name', label: 'Name', type: 'text', order: 0},
@@ -348,5 +349,38 @@ describe('InventoryTable search', () => {
         render(<InventoryTable slug='s' fields={FIELDS} items={items} locations={[]} search='xyzzy'
                                onChange={jest.fn()}/>);
         expect(screen.getByText(/no items match/i)).toBeTruthy();
+    });
+});
+
+describe('InventoryTable offline (read-only)', () => {
+    // The PWA serves cached inventory reads offline, but writes can't reach the config-only backend, so the table
+    // becomes read-only: item values are visible for reference but every editing affordance is gone.
+    const items = [{id: 1, name: 'Wood Screw #8', count: '200'}];
+
+    const renderOffline = (extra = {}) =>
+        render(
+            <PwaContext.Provider value={{offline: true, isStandalone: false}}>
+                <InventoryTable slug='fasteners' fields={FIELDS} items={items} locations={[]}
+                                onChange={jest.fn()} {...extra}/>
+            </PwaContext.Provider>
+        );
+
+    test('item values are shown but there is no new-item row or editable input', () => {
+        renderOffline();
+        // The fastener is visible for reference at the store.
+        expect(screen.getByText('Wood Screw #8')).toBeInTheDocument();
+        // No persistent new-item entry row.
+        expect(screen.queryByLabelText('Add item')).not.toBeInTheDocument();
+        // No editable inputs at all (draft row gone, cells render as static text).
+        expect(screen.queryAllByLabelText('Name')).toHaveLength(0);
+    });
+
+    test('clicking a cell does not enter edit mode and never persists', () => {
+        const onChange = jest.fn();
+        renderOffline({onChange});
+        fireEvent.click(screen.getByText('200'));
+        // Cell stays static — no input appears and nothing is saved.
+        expect(screen.queryAllByLabelText('Count')).toHaveLength(0);
+        expect(onChange).not.toHaveBeenCalled();
     });
 });

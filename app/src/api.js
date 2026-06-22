@@ -1,5 +1,5 @@
 import {emptyToNull} from "./components/Common";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "./toast";
 import _ from "lodash";
 import {
     API_URI,
@@ -72,6 +72,16 @@ async function apiCall(url, method, body, ms = 60_000) {
         if (e instanceof ApiDownError) {
             // Throw ApiDownError immediately without logging.
             throw e;
+        }
+        // A truly offline PWA (or an unreachable API) does not return HTTP 502; instead `fetch` rejects with a
+        // TypeError ("Failed to fetch"/"Load failed"), or our timeoutPromise rejects, or the browser reports it is
+        // offline.  Map all of these to ApiDownError so useStatus lights the apiDown indicator (Nav.js) instead of
+        // surfacing a raw network error.
+        const isNetworkFailure = e instanceof TypeError
+            || (e instanceof Error && e.message === 'promise timeout')
+            || navigator.onLine === false;
+        if (isNetworkFailure) {
+            throw apiDownError;
         }
         // Ignore SyntaxError because they happen when the API is down.
         if (!(e instanceof SyntaxError)) {

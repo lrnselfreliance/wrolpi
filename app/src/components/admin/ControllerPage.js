@@ -24,7 +24,7 @@ import {
     stopService,
     unmountDisk,
 } from "../../api/controller";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../../toast";
 import {RestartButton, ShutdownButton} from "./Settings";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {CONTROLLER_URI} from "../Vars";

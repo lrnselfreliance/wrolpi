@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import {Input, Message} from "semantic-ui-react";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 
 import {Button, Form, List, Loader, Modal} from "./Theme";
 import {addPlaylistItem, createPlaylist, fetchPlaylists} from "../api";

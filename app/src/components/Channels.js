@@ -22,7 +22,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";
 import {Button, Form, Header, Loader, Modal, Segment, Statistic} from "./Theme";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 import {RecurringDownloadsTable} from "./admin/Downloads";
 import {InputForm, ToggleForm} from "../hooks/useForm";
 import {ChannelDownloadForm, DestinationForm, DownloadTagsSelector} from "./Download";

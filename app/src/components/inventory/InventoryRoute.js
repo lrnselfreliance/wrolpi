@@ -1,5 +1,5 @@
 import React, {useMemo, useState} from "react";
-import {Dropdown, Input, Select} from "semantic-ui-react";
+import {Dropdown, Input, Message, Select} from "semantic-ui-react";
 import {Button, Confirm, Header, Icon, Loader, Menu, Modal, Segment} from "../Theme";
 import {PageContainer, useTitle} from "../Common";
 import {collectLocations, useCatalog, useInventories} from "../../hooks/customHooks";
@@ -14,6 +14,7 @@ import {FieldSchemaEditor} from "./FieldSchemaEditor";
 import {CatalogEditor} from "./CatalogEditor";
 import {InventoryImportModal} from "./InventoryImportModal";
 import {Media, ThemeContext} from "../../contexts/contexts";
+import {usePwa} from "../../contexts/PwaContext";
 
 const INVENTORY_TYPES = [
     {key: 'food', value: 'food', text: 'Food Storage'},
@@ -60,6 +61,10 @@ export function InventoryRoute() {
     const {inventories, fetchInventories, persistInventory, addInventory, removeInventory} = useInventories();
     const {catalog, persistCatalog} = useCatalog();
     const [slug, setSlug] = useState(null);
+
+    // When offline, inventory reads come from the service-worker cache, but writes can't reach the config-only
+    // backend, so the editing UI is disabled and a read-only banner is shown.
+    const {offline} = usePwa();
 
     const [tab, setTab] = useState('items');
     const [newOpen, setNewOpen] = useState(false);
@@ -142,6 +147,15 @@ export function InventoryRoute() {
     return <PageContainer>
         <Header as='h1'>Inventory</Header>
 
+        {offline &&
+            <Message icon warning>
+                <Icon name='wifi'/>
+                <Message.Content>
+                    <Message.Header>Offline — read only</Message.Header>
+                    You're viewing the last synced copy of your inventory. Changes can't be saved until you reconnect.
+                </Message.Content>
+            </Message>}
+
         <Segment>
             <div style={{display: 'flex', gap: '0.5em', alignItems: 'center', flexWrap: 'wrap'}}>
                 <Dropdown
@@ -152,24 +166,24 @@ export function InventoryRoute() {
                     onChange={(e, data) => setSlug(data.value)}
                     style={{minWidth: '14em'}}
                 />
-                <Button primary icon onClick={() => setNewOpen(true)} aria-label='New inventory'>
+                <Button primary icon disabled={offline} onClick={() => setNewOpen(true)} aria-label='New inventory'>
                     <Icon name='plus'/>
                 </Button>
-                <Button icon onClick={() => setCatalogOpen(true)} aria-label='Food catalog'>
+                <Button icon disabled={offline} onClick={() => setCatalogOpen(true)} aria-label='Food catalog'>
                     <Icon name='book'/> Catalog
                 </Button>
                 {current && <>
-                    <Button icon onClick={() => {
+                    <Button icon disabled={offline} onClick={() => {
                         setRenameValue(current.name);
                         setRenaming(true);
                     }} aria-label='Rename inventory'><Icon name='edit'/></Button>
-                    <Button icon onClick={() => setEditFieldsOpen(true)} aria-label='Customize fields'>
+                    <Button icon disabled={offline} onClick={() => setEditFieldsOpen(true)} aria-label='Customize fields'>
                         <Icon name='columns'/> Fields
                     </Button>
-                    <Button icon onClick={() => setImportOpen(true)} aria-label='Import or restore inventory'>
+                    <Button icon disabled={offline} onClick={() => setImportOpen(true)} aria-label='Import or restore inventory'>
                         <Icon name='history'/> Restore
                     </Button>
-                    <Button color='red' icon onClick={() => setConfirmDelete(true)} aria-label='Delete inventory'>
+                    <Button color='red' icon disabled={offline} onClick={() => setConfirmDelete(true)} aria-label='Delete inventory'>
                         <Icon name='trash'/>
                     </Button>
                 </>}

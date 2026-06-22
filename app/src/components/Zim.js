@@ -63,7 +63,7 @@ import {TagsQuerySelector} from "./Files";
 import {ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router";
 import {SortableTable} from "./SortableTable";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 import _ from "lodash";
 import {ZIM_VIEWER_URI} from "./Vars";
 

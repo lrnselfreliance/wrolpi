@@ -86,7 +86,7 @@ import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, St
 import {BulkTagModal} from "./BulkTagModal";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {AddToPlaylistButton} from "./AddToPlaylist";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 import {API_ARCHIVE_UPLOAD_URI, Downloaders} from "./Vars";
 import {CollectionTable} from "./collections/CollectionTable";
 import {CollectionEditForm} from "./collections/CollectionEditForm";

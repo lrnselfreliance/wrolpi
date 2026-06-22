@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router";
 import {Grid, Image, Input, Message} from "semantic-ui-react";
-import {toast} from "react-semantic-toasts-2";
+import {toast} from "../toast";
 
 import {Button, Form, Header, Icon, Loader, Modal, Segment, Table} from "./Theme";
 import {

@@ -54,6 +54,21 @@ registerRoute(
     })
 );
 
+// Proactively cache the inventory (and food catalog) the moment the worker activates, while the device is still
+// online.  Relying on the page's first fetch is unreliable - especially on a fresh iOS "Add to Home Screen"
+// install, where the just-installed worker is often not yet controlling the page when React fetches the
+// inventory, so the NetworkFirst route never stores it and the offline page spins forever.  Caching at activate
+// (with cache:'reload' to bypass the HTTP cache) guarantees an offline copy after the first online launch.
+self.addEventListener('activate', (event) => {
+    event.waitUntil((async () => {
+        const cache = await caches.open('wrolpi-inventory');
+        await Promise.allSettled([
+            cache.add(new Request('/api/inventory', {cache: 'reload'})),
+            cache.add(new Request('/api/inventory/catalog', {cache: 'reload'})),
+        ]);
+    })());
+});
+
 // Allow the page to tell a waiting SW to activate immediately (used by the update flow).
 self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SKIP_WAITING') {

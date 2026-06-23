@@ -15,6 +15,9 @@ import {registerRoute} from 'workbox-routing';
 import {NetworkFirst, NetworkOnly} from 'workbox-strategies';
 import {CacheableResponsePlugin} from 'workbox-cacheable-response';
 
+// Activate a new worker immediately so fixes/updates reach installed PWAs (incl. iOS home-screen apps) without a
+// reinstall, then take control of open clients.
+self.skipWaiting();
 clientsClaim();
 
 // Precache the shell/JS/CSS emitted by the webpack build.  This is what lets the Calculators work offline.
@@ -50,6 +53,10 @@ registerRoute(
     ),
     new NetworkFirst({
         cacheName: 'wrolpi-inventory',
+        // iOS does not fail offline fetches fast - they hang.  Without a timeout, NetworkFirst would wait forever
+        // on the (hung) network attempt and never fall back to the cache, leaving the page spinning offline.  Give
+        // the network a few seconds, then serve the cached copy.
+        networkTimeoutSeconds: 3,
         plugins: [new CacheableResponsePlugin({statuses: [200]})],
     })
 );

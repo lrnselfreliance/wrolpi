@@ -709,7 +709,7 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
     return str;
 }
 
-export function TabLinks({links}) {
+export function TabLinks({links, right}) {
     return <Menu tabular>
         {links.map((link) => <NavLink
             to={link.to}
@@ -723,6 +723,10 @@ export function TabLinks({links}) {
         >
             {link.text}
         </NavLink>)}
+        {right &&
+            <Menu.Menu position='right'>
+                <Menu.Item style={{padding: '0.5em'}}>{right}</Menu.Item>
+            </Menu.Menu>}
     </Menu>
 }
 

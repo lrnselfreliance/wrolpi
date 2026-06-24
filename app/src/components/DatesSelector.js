@@ -9,7 +9,7 @@ export const dateRangeIsEmpty = (dateRange) => {
     return dateRange[0] === null && dateRange[1] === null;
 }
 
-function MonthsForm({monthsSelected, setMonthsSelected}) {
+export function MonthsForm({monthsSelected, setMonthsSelected}) {
     monthsSelected = monthsSelected.map(i => parseInt(i));
 
     const handleWinter = (e) => {
@@ -83,7 +83,7 @@ function MonthsForm({monthsSelected, setMonthsSelected}) {
     </Form>
 }
 
-function DateRangeForm({dateRange, setDateRange}) {
+export function DateRangeForm({dateRange, setDateRange}) {
     const currentYear = (new Date()).getFullYear();
     const [error, setError] = React.useState('');
 

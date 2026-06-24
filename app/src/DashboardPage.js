@@ -33,8 +33,7 @@ import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {OutdatedZimsMessage} from "./components/Zim";
 import {useSearchFilter, useSearchRecentFiles, useWROLMode} from "./hooks/customHooks";
 import {ExtensionInstallSuggestion} from "./components/admin/ExtensionInstallSuggestion";
-import {FileCards, FileSearchFilterButton} from "./components/Files";
-import {DateSelectorButton} from "./components/DatesSelector";
+import {fileMimetypeFilterOptions, FileCards, SearchFilterButton} from "./components/Files";
 import {useCalculators} from "./components/Calculators";
 import {classifyAndEvaluate} from "./components/calculators/mathConfig";
 
@@ -394,7 +393,7 @@ export function DashboardPage() {
         loading,
         setSearchStr: setSuggestionSearchStr,
         setSearchTags,
-        months, dateRange, setDates, clearDate,
+        clearDate,
     } = useSearchSuggestions(searchStr, activeTags, anyTag);
 
     React.useEffect(() => {
@@ -444,7 +443,7 @@ export function DashboardPage() {
     }
 
     const getSearchResultsInput = (props) => {
-        return <SearchResultsInput clearable
+        return <SearchResultsInput clearable={!isEmpty}
                                    searchStr={localSearchStr}
                                    onChange={setLocalSearchStr}
                                    onSubmit={setSearchStr}
@@ -461,58 +460,23 @@ export function DashboardPage() {
         />;
     };
 
+    // The search input grows to fill the row; the Filter button sits immediately after it.  Flexbox adapts
+    // to the client width, so only the control size changes between mobile and larger screens.
+    const searchRow = (big) => {
+        const inputProps = {style: {flexGrow: 1, minWidth: 0, marginBottom: 0}};
+        if (big) {
+            inputProps.size = 'big';
+        }
+        return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '2em'}}>
+            {getSearchResultsInput(inputProps)}
+            <SearchFilterButton fileFilterOptions={fileMimetypeFilterOptions} showDates={true}
+                                size={big ? 'big' : undefined}/>
+        </div>;
+    };
+
     return <PageContainer>
-        <Media at='mobile'>
-            <Grid>
-                <Grid.Row columns={2}>
-                    <Grid.Column width={12}>
-                        {getSearchResultsInput()}
-                    </Grid.Column>
-                    <Grid.Column width={1} textAlign='right' style={{padding: 0}}>
-                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
-                                            onClear={clearDate} onDatesChange={setDates}
-                        />
-                    </Grid.Column>
-                    <Grid.Column width={1} textAlign='right'>
-                        <FileSearchFilterButton/>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media between={['tablet', 'computer']}>
-            <Grid>
-                <Grid.Row columns={2}>
-                    <Grid.Column textAlign='right' width={2}>
-                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
-                                            onClear={clearDate} onDatesChange={setDates}
-                                            buttonProps={{size: 'big'}}/>
-                    </Grid.Column>
-                    <Grid.Column textAlign='right' width={2}>
-                        <FileSearchFilterButton size='big'/>
-                    </Grid.Column>
-                    <Grid.Column mobile={12}>
-                        {getSearchResultsInput({size: 'big'})}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media greaterThanOrEqual='computer'>
-            <Grid>
-                <Grid.Row columns={2}>
-                    <Grid.Column textAlign='right' width={1}>
-                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
-                                            onClear={clearDate} onDatesChange={setDates}
-                                            buttonProps={{size: 'big'}}/>
-                    </Grid.Column>
-                    <Grid.Column textAlign='right' width={1}>
-                        <FileSearchFilterButton size='big'/>
-                    </Grid.Column>
-                    <Grid.Column mobile={14}>
-                        {getSearchResultsInput({size: 'big'})}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
+        <Media at='mobile'>{searchRow(false)}</Media>
+        <Media greaterThanOrEqual='tablet'>{searchRow(true)}</Media>
         {!searchStr && <FlagsMessages/>}
         {!searchStr && <ExtensionInstallSuggestion/>}
         {body}

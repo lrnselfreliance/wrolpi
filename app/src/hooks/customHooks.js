@@ -1200,8 +1200,9 @@ export const useSearchDirectories = (value) => {
     }, [directoryName]);
 
     useEffect(() => {
-        // Directory value was changed above.
-        setDirectoryName(value);
+        // Directory value was changed above.  Coerce null/undefined (an unset form field) to an
+        // empty string so the controlled input stays controlled and never builds a null result.
+        setDirectoryName(value ?? '');
     }, [value]);
 
     return {

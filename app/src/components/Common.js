@@ -1473,7 +1473,9 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
             const newDirectory = isDir ? {} : {
                 newDirectory: {
                     name: 'New Directory',
-                    results: [{title: directoryName}],
+                    // title must not be null; an unset form field passes a null value and
+                    // Semantic UI's Search crashes reading null.length.
+                    results: [{title: directoryName || ''}],
                 }
             };
             const newResults = {
@@ -1537,7 +1539,7 @@ export function DirectorySearch({onSelect, value, disabled, required, ...props})
                    onResultSelect={handleResultSelect}
                    onBlur={handleBlur}
                    loading={loading}
-                   value={directoryName}
+                   value={directoryName || ''}
                    results={results}
                    disabled={disabled}
                    {...props}

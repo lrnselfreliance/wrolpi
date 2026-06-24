@@ -99,6 +99,29 @@ describe('DirectorySearch', () => {
             expect(input).toBeDisabled();
         });
 
+        it('renders the dropdown without crashing when directoryName is null', async () => {
+            // An unset form field (e.g. the new Channel page) passes a null value.  With
+            // isDir=false a "New Directory" result is built from directoryName; if that title is
+            // null, Semantic UI's Search crashes reading null.length when the menu opens.
+            setMockHookState({
+                directories: [],
+                channelDirectories: [],
+                domainDirectories: [],
+                isDir: false,
+                directoryName: null,
+            });
+
+            render(<DirectorySearch onSelect={mockOnSelect} value={null}/>);
+
+            const input = screen.getByPlaceholderText(/search directory names/i);
+            // Opening the menu (as Tab/focus does in the browser) must not throw.
+            await userEvent.click(input);
+
+            await waitFor(() => {
+                expect(screen.getByText(/New Directory/i)).toBeInTheDocument();
+            });
+        });
+
         it('displays with required indicator', () => {
             const {container} = render(
                 <DirectorySearch onSelect={mockOnSelect} value="" required/>

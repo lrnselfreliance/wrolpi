@@ -6,9 +6,9 @@ import {
     CardMeta,
     Checkbox,
     Container,
-    Dropdown,
     Form,
     Image,
+    Label,
     PlaceholderLine,
     Step,
     TableCell,
@@ -29,12 +29,14 @@ import {
     PageContainer,
     Paginator,
     PreviewLink,
+    SearchInput,
     TagIcon,
     textEllipsis,
     useTitle
 } from "./Common";
 import {
     usePages,
+    useSearchDate,
     useSearchFiles,
     useSearchFilter,
     useSearchOrder,
@@ -47,10 +49,12 @@ import {Link, Route, Routes, useSearchParams} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {QueryContext, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,
+    Divider,
+    Header,
     Icon,
     Modal,
     Placeholder,
@@ -58,6 +62,7 @@ import {
     Progress,
     Segment
 } from "./Theme";
+import {DateRangeForm, dateRangeIsEmpty, MonthsForm} from "./DatesSelector";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import {FileBrowser} from "./FileBrowser";
@@ -349,20 +354,6 @@ export function SearchViewButton({headlines}) {
     return <Button icon='browser' onClick={() => setView('list')}/>;
 }
 
-export function SearchLimitDropdown({limits = []}) {
-    const {limit, setLimit} = usePages();
-    const limitOptions = limits.map(i => {
-        return {key: i, value: i, text: i.toString()}
-    });
-
-    return <Dropdown fluid selection
-                     placeholder='Limit'
-                     options={limitOptions}
-                     value={limit || limitOptions[0]['value']}
-                     onChange={(e, {value}) => setLimit(value)}
-    />
-}
-
 export function FilesView(
     {
         files,
@@ -373,8 +364,6 @@ export function FilesView(
         onSelect,
         setPage,
         headlines = false,
-        limitOptions = [12, 24, 48, 96],
-        showAnyTag = false,
     },
 ) {
     const {view} = useSearchView();
@@ -403,15 +392,11 @@ export function FilesView(
     }
 
     const viewButton = <SearchViewButton headlines={headlines}/>
-    const limitDropdown = <SearchLimitDropdown limits={limitOptions}/>;
-    const tagQuerySelector = <TagsQuerySelector showAny={showAnyTag}/>;
 
     return {
         body,
         paginator,
         viewButton,
-        limitDropdown,
-        tagQuerySelector,
     }
 }
 
@@ -502,33 +487,357 @@ export function TagsQuerySelector({onChange, showAny = true}) {
     />
 }
 
-export function FileSearchFilterButton({size = 'medium'}) {
-    // see `filterToMimetypes`
-    const filterOptions = [
-        {key: 'video', text: 'Video', value: 'video'},
-        {key: 'archive', text: 'Archive', value: 'archive'},
-        {key: 'pdf', text: 'PDF', value: 'pdf'},
-        {key: 'ebook', text: 'eBook', value: 'ebook'},
-        {key: 'doc', text: 'Document', value: 'doc'},
-        {key: 'audio', text: 'Audio', value: 'audio'},
-        {key: 'image', text: 'Image', value: 'image'},
-        {key: 'zip', text: 'ZIP', value: 'zip'},
-        {key: 'model', text: '3D Model', value: 'model'},
-        {key: 'software', text: 'Software', value: 'software'},
-    ];
+// see `filterToMimetypes`
+export const fileMimetypeFilterOptions = [
+    {key: 'video', text: 'Video', value: 'video'},
+    {key: 'archive', text: 'Archive', value: 'archive'},
+    {key: 'pdf', text: 'PDF', value: 'pdf'},
+    {key: 'ebook', text: 'eBook', value: 'ebook'},
+    {key: 'doc', text: 'Document', value: 'doc'},
+    {key: 'audio', text: 'Audio', value: 'audio'},
+    {key: 'image', text: 'Image', value: 'image'},
+    {key: 'zip', text: 'ZIP', value: 'zip'},
+    {key: 'model', text: '3D Model', value: 'model'},
+    {key: 'software', text: 'Software', value: 'software'},
+];
 
-    return <SearchFilter filters={filterOptions} size={size}/>
+export const docMimetypeFilterOptions = [
+    {key: 'pdf', text: 'PDF', value: 'pdf'},
+    {key: 'epub', text: 'EPUB', value: 'epub'},
+    {key: 'comic', text: 'Comic', value: 'comic'},
+    {key: 'mobi', text: 'MOBI', value: 'mobi'},
+];
+
+export function FileSearchFilterButton({size = 'medium'}) {
+    return <SearchFilter filters={fileMimetypeFilterOptions} size={size}/>
 }
 
 export function DocSearchFilterButton({size = 'medium'}) {
-    const filterOptions = [
-        {key: 'pdf', text: 'PDF', value: 'pdf'},
-        {key: 'epub', text: 'EPUB', value: 'epub'},
-        {key: 'comic', text: 'Comic', value: 'comic'},
-        {key: 'mobi', text: 'MOBI', value: 'mobi'},
-    ];
+    return <SearchFilter filters={docMimetypeFilterOptions} size={size}/>
+}
 
-    return <SearchFilter filters={filterOptions} size={size}/>
+// The app-wide default page size (matches usePages' fallback); used to reset Results Per Page on Clear All.
+const DEFAULT_SEARCH_LIMIT = 24;
+
+// A single section within the comprehensive SearchFilterModal.  Vertical spacing between sections is
+// provided by the surrounding Grid rows.
+function SearchFilterSection({header, children}) {
+    return <>
+        <Header as='h4' style={{marginBottom: '0.6em'}}>{header}</Header>
+        {children}
+    </>
+}
+
+// A comprehensive modal which combines every search option (sort, tags, file-type filter, dates, limit)
+// into a single dialog.  Which sections appear is controlled by the props, so each page can show only what
+// is relevant.  All state is URL-query driven (same hooks the individual controls use), so no extra wiring
+// is required on the page.
+export function SearchFilterModal(
+    {
+        open,
+        onClose,
+        sorts = null,
+        fileFilterOptions = null,
+        showDates = false,
+        showTags = true,
+        showLimit = true,
+        limitOptions = [12, 24, 48, 96],
+    },
+) {
+    // Committed (URL) state — read only; drafts below hold the user's in-progress edits.
+    const {filter} = useSearchFilter();
+    const {sort} = useSearchOrder();
+    const {dateRange, months} = useSearchDate();
+    const {activeTags, anyTag} = useSearch();
+    const {limit} = usePages(DEFAULT_SEARCH_LIMIT);
+    const {updateQuery} = useContext(QueryContext);
+
+    const emptyRange = [null, null];
+    const seededRange = dateRange && (dateRange[0] || dateRange[1]) ? dateRange : emptyRange;
+    const seededMonths = (months || []).map(i => parseInt(i));
+
+    // Every selection is drafted locally and only applied to the URL (which performs the search) when the
+    // modal is closed — via Done, the close icon, or clicking away.
+    const [draftSort, setDraftSort] = useState(null);
+    const [draftFilter, setDraftFilter] = useState(null);
+    const [draftTags, setDraftTags] = useState([]);
+    const [draftAnyTag, setDraftAnyTag] = useState(false);
+    const [draftLimit, setDraftLimit] = useState(null);
+    const [draftMonths, setDraftMonths] = useState([]);
+    const [draftRange, setDraftRange] = useState(emptyRange);
+
+    // Seed the drafts from the URL each time the modal is opened.
+    React.useEffect(() => {
+        if (open) {
+            setDraftSort(sort || null);
+            setDraftFilter(filter || null);
+            setDraftTags(activeTags || []);
+            setDraftAnyTag(anyTag || false);
+            setDraftLimit(limit);
+            setDraftMonths(seededMonths);
+            setDraftRange(seededRange);
+        }
+    }, [open]);
+
+    const handleClose = () => {
+        // Apply every changed draft in a SINGLE updateQuery — sequential setters would each merge against
+        // the same stale searchParams and clobber one another.  Only reset pagination if something changed.
+        const params = {};
+        if (sorts && (draftSort || null) !== (sort || null)) {
+            params.order = draftSort;
+        }
+        if (fileFilterOptions && (draftFilter || null) !== (filter || null)) {
+            params.filter = draftFilter;
+        }
+        if (showTags && (draftAnyTag !== anyTag || JSON.stringify(draftTags) !== JSON.stringify(activeTags))) {
+            if (draftAnyTag) {
+                params.tag = [];
+                params.anyTag = 'true';
+            } else {
+                params.tag = draftTags;
+                params.anyTag = null;
+            }
+        }
+        if (showLimit && draftLimit !== limit) {
+            params.l = draftLimit;
+        }
+        if (showDates && (JSON.stringify(draftMonths) !== JSON.stringify(seededMonths)
+            || JSON.stringify(draftRange) !== JSON.stringify(seededRange))) {
+            let newFromDate = null;
+            let newToDate = null;
+            if (draftRange[0] <= draftRange[1]) {
+                newFromDate = draftRange[0];
+                newToDate = draftRange[1];
+            }
+            params.fromDate = newFromDate;
+            params.toDate = newToDate;
+            params.month = draftMonths;
+        }
+        if (Object.keys(params).length > 0) {
+            params.o = 0;
+            updateQuery(params);
+        }
+        if (onClose) {
+            onClose();
+        }
+    }
+
+    const handleClearAll = () => {
+        // Reset the form only; nothing is applied until the modal is closed.
+        setDraftSort(null);
+        setDraftFilter(null);
+        setDraftTags([]);
+        setDraftAnyTag(false);
+        setDraftLimit(DEFAULT_SEARCH_LIMIT);
+        setDraftMonths([]);
+        setDraftRange(emptyRange);
+    }
+
+    // Sort section (operates on the draft).
+    const sortKey = draftSort ? draftSort.replace(/^-/, '') : (sorts ? sorts[0]['value'] : null);
+    const desc = draftSort ? draftSort.startsWith('-') : true;
+    const sortButtons = sorts && sorts.map(o =>
+        <Button key={o['value']}
+                color={o['value'] === sortKey ? 'violet' : undefined}
+                onClick={() => setDraftSort(desc ? `-${o['value']}` : o['value'])}
+                style={{margin: '0.2em'}}
+        >{o['text']}</Button>
+    );
+    const directionToggle = <Button icon labelPosition='left'
+                                    onClick={() => {
+                                        const base = sortKey || sorts[0]['value'];
+                                        setDraftSort(desc ? base : `-${base}`);
+                                    }}>
+        <Icon name={desc ? 'sort amount down' : 'sort amount up'}/>
+        {desc ? 'Descending' : 'Ascending'}
+    </Button>;
+
+    // File-type filter section (single-select radios; clicking the active one clears it).  Laid out in
+    // columns so more options fit on each line.
+    const filterFields = fileFilterOptions && fileFilterOptions.map(i =>
+        <Grid.Column mobile={8} tablet={5} computer={4} key={i['value']}>
+            <Form.Field>
+                <Checkbox radio
+                          label={i['text']}
+                          name='searchFilterRadioGroup'
+                          checked={draftFilter === i['value']}
+                          value={i['value']}
+                          onChange={() => setDraftFilter(draftFilter === i['value'] ? null : i['value'])}
+                />
+            </Form.Field>
+        </Grid.Column>
+    );
+
+    // Results-per-page as buttons (matches the Sort By buttons and avoids a dropdown menu being clipped by
+    // the scrolling modal content).
+    const limitButtons = limitOptions.map(i =>
+        <Button key={i}
+                color={(draftLimit || limitOptions[0]) === i ? 'violet' : undefined}
+                onClick={() => setDraftLimit(i)}
+                style={{margin: '0.2em'}}
+        >{i}</Button>
+    );
+
+    return <Modal open={open} onClose={handleClose} closeIcon size='small'>
+        <Modal.Header>Search Filters</Modal.Header>
+        <Modal.Content scrolling>
+            <Grid>
+                {sorts &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='Sort By'>
+                                <div style={{marginBottom: '1em'}}>{directionToggle}</div>
+                                <div>{sortButtons}</div>
+                            </SearchFilterSection>
+                        </Grid.Column>
+                    </Grid.Row>}
+
+                {fileFilterOptions &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='File Type'>
+                                <Form><Grid>{filterFields}</Grid></Form>
+                            </SearchFilterSection>
+                        </Grid.Column>
+                    </Grid.Row>}
+
+                {(showTags || showLimit) &&
+                    <Grid.Row columns={2}>
+                        {showTags &&
+                            <Grid.Column>
+                                <SearchFilterSection header='Tags'>
+                                    <TagsSelector hideGroup hideEdit showAny
+                                                  active={draftAnyTag || (draftTags && draftTags.length > 0)}
+                                                  selectedTagNames={draftTags}
+                                                  anyTag={draftAnyTag}
+                                                  filterByOverlap={true}
+                                                  onChange={(tagNames, newAnyTag) => {
+                                                      if (newAnyTag) {
+                                                          setDraftAnyTag(true);
+                                                          setDraftTags([]);
+                                                      } else {
+                                                          setDraftAnyTag(false);
+                                                          setDraftTags(tagNames);
+                                                      }
+                                                  }}
+                                                  style={{marginLeft: '0.3em', marginTop: '0.3em'}}
+                                    />
+                                </SearchFilterSection>
+                            </Grid.Column>}
+                        {showLimit &&
+                            <Grid.Column>
+                                <SearchFilterSection header='Results Per Page'>
+                                    <div>{limitButtons}</div>
+                                </SearchFilterSection>
+                            </Grid.Column>}
+                    </Grid.Row>}
+
+                {showDates &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='Published Date'>
+                                <MonthsForm monthsSelected={draftMonths} setMonthsSelected={setDraftMonths}/>
+                                <Divider/>
+                                <DateRangeForm dateRange={draftRange} setDateRange={setDraftRange}/>
+                            </SearchFilterSection>
+                        </Grid.Column>
+                    </Grid.Row>}
+            </Grid>
+        </Modal.Content>
+        <Modal.Actions>
+            <Button secondary floated='left' onClick={handleClearAll}>Clear All</Button>
+            <Button primary onClick={handleClose}>Done</Button>
+        </Modal.Actions>
+    </Modal>
+}
+
+// The trigger button which opens the comprehensive SearchFilterModal.  Turns violet and displays a count
+// badge when any of its filters are active.
+export function SearchFilterButton(
+    {
+        sorts = null,
+        fileFilterOptions = null,
+        showDates = false,
+        showTags = true,
+        showLimit = true,
+        limitOptions = [12, 24, 48, 96],
+        size = 'medium',
+        content = 'Filter',
+    },
+) {
+    const [open, setOpen] = useState(false);
+    const {filter} = useSearchFilter();
+    const {sort} = useSearchOrder();
+    const {dateRange, months} = useSearchDate();
+    const {activeTags, anyTag} = useSearch();
+
+    let count = 0;
+    if (fileFilterOptions && filter) {
+        count += 1;
+    }
+    if (sorts && sort) {
+        count += 1;
+    }
+    if (showTags && ((activeTags && activeTags.length > 0) || anyTag)) {
+        count += 1;
+    }
+    if (showDates && ((months && months.length > 0) || !dateRangeIsEmpty(dateRange))) {
+        count += 1;
+    }
+    const active = count > 0;
+
+    return <>
+        <Button color={active ? 'violet' : 'grey'} size={size} onClick={() => setOpen(true)}>
+            <Icon name='filter'/>
+            {content}
+            {count > 0 &&
+                <Label circular size='tiny' style={{marginLeft: '0.7em'}}>{count}</Label>}
+        </Button>
+        <SearchFilterModal
+            open={open}
+            onClose={() => setOpen(false)}
+            sorts={sorts}
+            fileFilterOptions={fileFilterOptions}
+            showDates={showDates}
+            showTags={showTags}
+            showLimit={showLimit}
+            limitOptions={limitOptions}
+        />
+    </>
+}
+
+// The single-line search control row shared by the Videos/Archives/Docs result pages:
+//   [ view toggle ] [ search input (grows) ] [ Filter button ]
+// The text input is managed locally and only submits its value on enter/clear.  Filter options are
+// forwarded to the SearchFilterButton so each page shows only the sections relevant to it.
+export function SearchControlBar(
+    {
+        searchStr,
+        setSearchStr,
+        placeholder = 'Search...',
+        inputRef,
+        viewButton,
+        sorts = null,
+        fileFilterOptions = null,
+        showDates = false,
+    },
+) {
+    const [localSearchStr, setLocalSearchStr] = useState(searchStr || '');
+
+    const searchInput = <SearchInput
+        searchStr={localSearchStr}
+        onChange={setLocalSearchStr}
+        onClear={() => setLocalSearchStr(null)}
+        onSubmit={setSearchStr}
+        placeholder={placeholder}
+        inputRef={inputRef}
+    />;
+
+    return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '1em'}}>
+        {viewButton}
+        <div style={{flexGrow: 1, minWidth: 0}}>{searchInput}</div>
+        <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}/>
+    </div>
 }
 
 export function FilesSearchView({
@@ -539,7 +848,7 @@ export function FilesSearchView({
 
     const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
 
-    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton} = FilesView(
         {
             files: searchFiles,
             activePage: pages.activePage,
@@ -549,31 +858,11 @@ export function FilesSearchView({
             onSelect: null,
             setPage: pages.setPage,
             headlines: true,
-            showAnyTag: true,
         },
     );
 
     return <>
-        <Media at='mobile'>
-            <Grid>
-                <Grid.Row>
-                    {showView &&
-                        <Grid.Column width={2}>{viewButton}</Grid.Column>}
-                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Grid>
-                <Grid.Row>
-                    {showView &&
-                        <Grid.Column width={1}>{viewButton}</Grid.Column>}
-                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
+        {showView && <div style={{marginBottom: '1em'}}>{viewButton}</div>}
         {body}
         {paginator}
     </>

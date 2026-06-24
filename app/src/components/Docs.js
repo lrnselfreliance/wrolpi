@@ -14,7 +14,6 @@ import {
     PageContainer,
     PreviewPath,
     SearchInput,
-    SortButton,
     TabLinks,
     toLocaleString,
     useTitle
@@ -22,7 +21,7 @@ import {
 import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
-import {DocSearchFilterButton, FilesView} from "./Files";
+import {docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
@@ -116,7 +115,7 @@ function DocsPage() {
         docOrders = [{value: 'rank', text: 'Rank'}, ...docOrders];
     }
 
-    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton} = FilesView(
         {
             files: docs,
             activePage: activePage,
@@ -128,45 +127,18 @@ function DocsPage() {
         },
     );
 
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
-    const searchInput = <SearchInput
-        onChange={setLocalSearchStr}
-        onClear={() => setLocalSearchStr(null)}
-        searchStr={localSearchStr}
-        onSubmit={setSearchStr}
-        placeholder='Search Documents...'
-        inputRef={searchInputRef}
-    />;
-
     return <>
         {author && <Header as='h1'>Author: {author}</Header>}
         {subject && <Header as='h1'>Subject: {subject}</Header>}
-        <Media at='mobile'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={2}>{viewButton}</Grid.Column>
-                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={2}><DocSearchFilterButton/></Grid.Column>
-                    <Grid.Column width={6}><SortButton sorts={docOrders}/></Grid.Column>
-                </Grid.Row>
-                <Grid.Row width={16}>
-                    <Grid.Column>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={1}>{viewButton}</Grid.Column>
-                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={1}><DocSearchFilterButton/></Grid.Column>
-                    <Grid.Column width={3}><SortButton sorts={docOrders}/></Grid.Column>
-                    <Grid.Column width={8}>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
+        <SearchControlBar
+            searchStr={searchStr}
+            setSearchStr={setSearchStr}
+            placeholder='Search Documents...'
+            inputRef={searchInputRef}
+            viewButton={viewButton}
+            sorts={docOrders}
+            fileFilterOptions={docMimetypeFilterOptions}
+        />
         {body}
         {paginator}
         <TaggedDeleteConfirmModal

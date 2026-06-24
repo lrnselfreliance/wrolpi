@@ -38,7 +38,6 @@ import {
     PreviewPath,
     resolveDataPath,
     SearchInput,
-    SortButton,
     TabLinks,
     textEllipsis,
     useTitle
@@ -78,10 +77,10 @@ import {
     useSearchDomain,
     useSearchOrder
 } from "../hooks/customHooks";
-import {FileCards, FileRowTagIcon, FilesView} from "./Files";
+import {FileCards, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {ThemeContext} from "../contexts/contexts";
 import {Button, Card, darkTheme, Header, Loader, Placeholder, Popup, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
 import {taggedImageLabel, TagsSelector} from "../Tags";
@@ -1216,7 +1215,7 @@ function ArchivesPage() {
         />
     </div>;
 
-    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton} = FilesView(
         {
             files: archives,
             activePage: activePage,
@@ -1229,16 +1228,6 @@ function ArchivesPage() {
         },
     );
 
-
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
-    const searchInput = <SearchInput
-        onChange={setLocalSearchStr}
-        onClear={() => setLocalSearchStr(null)}
-        searchStr={localSearchStr}
-        onSubmit={setSearchStr}
-        placeholder='Search Archives...'
-        inputRef={searchInputRef}
-    />;
 
     // Domain header with edit link when filtering by domain
     let header;
@@ -1263,30 +1252,14 @@ function ArchivesPage() {
 
     return <>
         {header}
-        <Media at='mobile'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={2}>{viewButton}</Grid.Column>
-                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={8}><SortButton sorts={archiveOrders}/></Grid.Column>
-                </Grid.Row>
-                <Grid.Row width={16}>
-                    <Grid.Column>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={1}>{viewButton}</Grid.Column>
-                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={3}><SortButton sorts={archiveOrders}/></Grid.Column>
-                    <Grid.Column width={9}>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
+        <SearchControlBar
+            searchStr={searchStr}
+            setSearchStr={setSearchStr}
+            placeholder='Search Archives...'
+            inputRef={searchInputRef}
+            viewButton={viewButton}
+            sorts={archiveOrders}
+        />
         {body}
         {paginator}
         <TaggedDeleteConfirmModal

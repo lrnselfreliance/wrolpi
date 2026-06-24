@@ -19,9 +19,7 @@ import {
     PageContainer,
     PreviewLink,
     scrollToTop,
-    SearchInput,
     secondsToFullDuration,
-    SortButton,
     TabLinks,
     textEllipsis,
     useTitle,
@@ -47,7 +45,7 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
-import {FileRowTagIcon, FilesView} from "./Files";
+import {FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
@@ -65,7 +63,7 @@ import {
     updateVideoDownloaderConfig,
     uploadCookies,
 } from "../api";
-import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
+import {QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 import {defaultFileOrder, defaultSearchOrder} from "./Vars";
 import {InputForm, ToggleForm, useForm} from "../hooks/useForm";
@@ -219,7 +217,7 @@ export function VideosPage() {
         />
     </div>;
 
-    const {body, paginator, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+    const {body, paginator, viewButton} = FilesView(
         {
             files: videos,
             activePage: activePage,
@@ -233,42 +231,16 @@ export function VideosPage() {
         },
     );
 
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
-    const searchInput = <SearchInput
-        searchStr={localSearchStr}
-        onChange={setLocalSearchStr}
-        onClear={() => setLocalSearchStr(null)}
-        onSubmit={setSearchStr}
-        placeholder='Search Videos...'
-        inputRef={searchInputRef}
-    />;
-
     return <>
         {header}
-        <Media at='mobile'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={2}>{viewButton}</Grid.Column>
-                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={8}><SortButton sorts={videoOrders}/></Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column width={16}>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
-        <Media greaterThanOrEqual='tablet'>
-            <Grid>
-                <Grid.Row>
-                    <Grid.Column width={1}>{viewButton}</Grid.Column>
-                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
-                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={4}><SortButton sorts={videoOrders}/></Grid.Column>
-                    <Grid.Column width={8}>{searchInput}</Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Media>
+        <SearchControlBar
+            searchStr={searchStr}
+            setSearchStr={setSearchStr}
+            placeholder='Search Videos...'
+            inputRef={searchInputRef}
+            viewButton={viewButton}
+            sorts={videoOrders}
+        />
         {body}
         {paginator}
         <TaggedDeleteConfirmModal

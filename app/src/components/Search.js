@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import {Link, Route, Routes, useLocation, useNavigate} from "react-router";
-import {FilesSearchView} from "./Files";
+import {FilesSearchView, SearchViewButton} from "./Files";
 import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
@@ -485,10 +485,13 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
         {text: othersTabName, to: `/search/other${search}`, key: 'othersSearch'},
     ];
 
+    // The view toggle only applies to the Files tab; show it in the tab row's right slot there.
+    const isFilesTab = !/\/(zim|map|other)$/.test(location.pathname);
+
     return <React.Fragment>
-        <TabLinks links={links}/>
+        <TabLinks links={links} right={isFilesTab ? <SearchViewButton headlines/> : null}/>
         <Routes>
-            <Route path='/*' element={<FilesSearchView/>}/>
+            <Route path='/*' element={<FilesSearchView showView={false}/>}/>
             <Route path='/zim' exact element={<ZimSearchView suggestions={suggestions} loading={loading}/>}/>
             <Route path='/map' exact element={<MapSearchView/>}/>
             <Route path='/other' exact element={<OtherSearchView loading={loading}/>}/>

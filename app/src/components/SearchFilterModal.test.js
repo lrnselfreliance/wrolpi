@@ -98,6 +98,16 @@ describe('SearchFilterButton', () => {
         expect(spy.mock.calls[0][0]).toMatchObject({order: '-size'});
     });
 
+    it('Clear All resets results-per-page to the default on close', () => {
+        const spy = jest.fn();
+        renderButton({sorts: videoOrders}, {l: '96'}, spy);
+        fireEvent.click(screen.getByText('Filter'));
+        fireEvent.click(screen.getByText('Clear All'));
+        fireEvent.click(screen.getByText('Done'));
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({l: 24});
+    });
+
     it('does not update the query when closed without changes', () => {
         const spy = jest.fn();
         renderButton({sorts: videoOrders}, {}, spy);

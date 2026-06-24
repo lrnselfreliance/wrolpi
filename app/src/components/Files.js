@@ -516,6 +516,9 @@ export function DocSearchFilterButton({size = 'medium'}) {
     return <SearchFilter filters={docMimetypeFilterOptions} size={size}/>
 }
 
+// The app-wide default page size (matches usePages' fallback); used to reset Results Per Page on Clear All.
+const DEFAULT_SEARCH_LIMIT = 24;
+
 // A single section within the comprehensive SearchFilterModal.  Vertical spacing between sections is
 // provided by the surrounding Grid rows.
 function SearchFilterSection({header, children}) {
@@ -546,7 +549,7 @@ export function SearchFilterModal(
     const {sort} = useSearchOrder();
     const {dateRange, months} = useSearchDate();
     const {activeTags, anyTag} = useSearch();
-    const {limit} = usePages();
+    const {limit} = usePages(DEFAULT_SEARCH_LIMIT);
     const {updateQuery} = useContext(QueryContext);
 
     const emptyRange = [null, null];
@@ -625,12 +628,13 @@ export function SearchFilterModal(
         setDraftFilter(null);
         setDraftTags([]);
         setDraftAnyTag(false);
+        setDraftLimit(DEFAULT_SEARCH_LIMIT);
         setDraftMonths([]);
         setDraftRange(emptyRange);
     }
 
     // Sort section (operates on the draft).
-    const sortKey = draftSort ? draftSort.replaceAll(/^-/g, '') : (sorts ? sorts[0]['value'] : null);
+    const sortKey = draftSort ? draftSort.replace(/^-/, '') : (sorts ? sorts[0]['value'] : null);
     const desc = draftSort ? draftSort.startsWith('-') : true;
     const sortButtons = sorts && sorts.map(o =>
         <Button key={o['value']}

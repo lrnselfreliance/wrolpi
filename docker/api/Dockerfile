@@ -13,13 +13,21 @@ RUN git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /
     && tippecanoe-decode --help 2>&1 | head -1
 RUN ffmpeg -version
 
-# Install Deno runtime for yt-dlp
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "aarch64" ]; then DENO_ARCH="aarch64-unknown-linux-gnu"; \
-    elif [ "$ARCH" = "x86_64" ]; then DENO_ARCH="x86_64-unknown-linux-gnu"; \
-    else echo "Unsupported architecture: $ARCH" && exit 1; fi && \
-    curl -fsSL "https://github.com/denoland/deno/releases/download/v2.2.4/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip \
-    && unzip /tmp/deno.zip -d /usr/local/bin/ \
+# Install Deno runtime for yt-dlp.  yt-dlp's EJS challenge solver requires Deno >=2.3.0; pin
+# v2.8.3 to match scripts/upgrade.sh and docker/archive/Dockerfile.
+RUN DENO_VERSION="v2.8.3" \
+    && ARCH=$(uname -m) \
+    && if [ "$ARCH" = "aarch64" ]; then \
+         DENO_ARCH="aarch64-unknown-linux-gnu"; \
+         DENO_SHA256="d4589cc1ffcbf1995c92a0127d932aaf832ac70cfdcc6d5b7bf38043cf303575"; \
+       elif [ "$ARCH" = "x86_64" ]; then \
+         DENO_ARCH="x86_64-unknown-linux-gnu"; \
+         DENO_SHA256="30455b845ffa6082209c3590269c910ad3b7efdf28c9879afd4006c47ae54197"; \
+       else echo "Unsupported architecture: $ARCH" && exit 1; fi \
+    && curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip \
+    # Assert the hash to avoid malicious or invalid files.
+    && echo "${DENO_SHA256}  /tmp/deno.zip" | sha256sum -c - \
+    && unzip -o /tmp/deno.zip -d /usr/local/bin/ \
     && chmod +x /usr/local/bin/deno \
     && rm /tmp/deno.zip \
     && deno --version

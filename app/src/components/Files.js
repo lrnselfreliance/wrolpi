@@ -49,7 +49,7 @@ import {Link, Route, Routes, useSearchParams} from "react-router";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
+import {QueryContext, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,

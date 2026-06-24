@@ -195,21 +195,30 @@ export function NavBar() {
     if (driveTemperature && driveTemperature >= driveHighTemperature) {
         const color = driveTemperature >= driveCriticalTemperature ? highWarningColor : lowWarningColor;
         const icon = <Icon data-testid='driveTemperatureIcon' name='hdd' size='large' color={color}/>
-        const link = <Link to='/admin/status'>{icon}</Link>;
+        const link = <Link to='/admin/controller'>{icon}</Link>;
         driveTemperatureIcon = <Popup content={`${hotDrive}: ${driveTemperature.toFixed()}°C`} trigger={link}/>;
     }
 
-    // A drive's SMART self-assessment is failing — imminent drive failure.
-    // Always displayed (like power); too important to hide behind a transient
-    // warning in the priority chain.
-    const {failingDevices, failing: driveFailing} = useDriveHealth();
+    // A drive's SMART health is degraded.  FAIL is an imminent failure (back
+    // up now); WARN means unreadable/pending sectors are accumulating.  Always
+    // displayed (like power); too important to hide behind a transient warning
+    // in the priority chain.  Links to the Controller page, which shows the
+    // SMART detail (the Status page does not).
+    const {failingDevices, failing: driveFailing, warningDevices, warning: driveWarning} = useDriveHealth();
     let driveHealthIcon;
     if (driveFailing) {
         const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large' color={highWarningColor}/>;
-        const link = <Link to='/admin/status'>{icon}</Link>;
+        const link = <Link to='/admin/controller'>{icon}</Link>;
         const message = failingDevices.length === 1
             ? `Drive ${failingDevices[0]} is failing its SMART health check! Back up your data.`
             : `Drives failing SMART health check: ${failingDevices.join(', ')}. Back up your data.`;
+        driveHealthIcon = <Popup content={message} trigger={link}/>;
+    } else if (driveWarning) {
+        const icon = <Icon data-testid='driveHealthIcon' name='warning sign' size='large' color={lowWarningColor}/>;
+        const link = <Link to='/admin/controller'>{icon}</Link>;
+        const message = warningDevices.length === 1
+            ? `Drive ${warningDevices[0]} has unreadable or pending sectors — check its SMART health.`
+            : `Drives with unreadable or pending sectors: ${warningDevices.join(', ')}. Check their SMART health.`;
         driveHealthIcon = <Popup content={message} trigger={link}/>;
     }
 

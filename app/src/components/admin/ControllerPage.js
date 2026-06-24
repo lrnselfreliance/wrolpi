@@ -559,7 +559,7 @@ const formatPowerOnHours = (hours) => {
 function SmartDetailsModal({drive, open, onClose}) {
     if (!drive) return null;
 
-    const healthColor = getHealthColor(drive.assessment);
+    const healthColor = getHealthColor(drive.health || drive.assessment);
 
     return (
         <Modal open={open} onClose={onClose} size='small'>
@@ -614,6 +614,14 @@ function SmartDetailsModal({drive, open, onClose}) {
                             <Table.Cell style={{color: drive.pending_sectors > 0 ? 'orange' : 'inherit'}}>
                                 {drive.pending_sectors !== null && drive.pending_sectors !== undefined
                                     ? drive.pending_sectors
+                                    : '-'}
+                            </Table.Cell>
+                        </Table.Row>
+                        <Table.Row>
+                            <Table.Cell>Uncorrectable Sectors</Table.Cell>
+                            <Table.Cell style={{color: drive.offline_uncorrectable > 0 ? 'orange' : 'inherit'}}>
+                                {drive.offline_uncorrectable !== null && drive.offline_uncorrectable !== undefined
+                                    ? drive.offline_uncorrectable
                                     : '-'}
                             </Table.Cell>
                         </Table.Row>
@@ -1065,9 +1073,9 @@ function DiskSection() {
                                 <Table.Cell>
                                     <Icon
                                         name='circle'
-                                        color={getHealthColor(drive.assessment)}
+                                        color={getHealthColor(drive.health || drive.assessment)}
                                     />
-                                    {drive.assessment || 'Unknown'}
+                                    {drive.health || drive.assessment || 'Unknown'}
                                 </Table.Cell>
                                 <Table.Cell>
                                     {drive.temperature !== null && drive.temperature !== undefined

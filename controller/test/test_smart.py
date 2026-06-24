@@ -4,6 +4,8 @@ Unit tests for controller.lib.smart module.
 
 from unittest import mock
 
+import pytest
+
 from controller.lib.smart import (
     is_smart_available,
     get_all_smart_status,
@@ -11,10 +13,20 @@ from controller.lib.smart import (
     _get_device_smart,
     _get_temperature,
     _get_attribute,
+    _parse_raw_int,
+    _derive_health,
     _drive_is_asleep,
     HDD_HIGH_TEMPERATURE,
     HDD_CRITICAL_TEMPERATURE,
 )
+
+
+def _attr(name, raw):
+    a = mock.Mock()
+    a.name = name
+    a.raw = raw
+    a.when_failed = ''
+    return a
 
 
 class TestIsSmartAvailable:
@@ -90,7 +102,30 @@ class TestGetDeviceSmart:
         assert result["serial"] == "S1234"
         assert result["capacity"] == "500 GB"
         assert result["assessment"] == "PASS"
+        assert result["health"] == "PASS"
         assert result["smart_enabled"] is True
+
+    def test_warns_on_pending_sectors_despite_pass(self):
+        """A drive self-assessing PASS with pending sectors must surface a
+        WARN health while leaving the raw assessment untouched."""
+        mock_device = mock.Mock()
+        mock_device.name = "sdc"
+        mock_device.model = "WDC WD140EDGZ"
+        mock_device.serial = "9LJ0BM0G"
+        mock_device.capacity = "14.0 TB"
+        mock_device.assessment = "PASS"
+        mock_device.smart_enabled = True
+        mock_device.attributes = [
+            _attr("Current_Pending_Sector", "80"),
+            _attr("Offline_Uncorrectable", "51"),
+            _attr("Reallocated_Sector_Ct", "1"),
+        ]
+
+        result = _get_device_smart(mock_device)
+        assert result["assessment"] == "PASS"
+        assert result["health"] == "WARN"
+        assert result["pending_sectors"] == 80
+        assert result["offline_uncorrectable"] == 51
 
 
 class TestGetTemperature:
@@ -207,6 +242,48 @@ class TestGetAttribute:
 
         result = _get_attribute(mock_device, "Power_On_Hours")
         assert result is None
+
+    def test_parses_seagate_power_on_hours_format(self):
+        """Seagate reports Power_On_Hours as 'NNNNNh+00m+00.000s'; the leading
+        integer must be extracted rather than discarded to None."""
+        mock_device = mock.Mock()
+        mock_device.attributes = [_attr("Power_On_Hours", "50287h+00m+00.000s")]
+
+        result = _get_attribute(mock_device, "Power_On_Hours")
+        assert result == 50287
+
+
+class TestParseRawInt:
+    """Tests for _parse_raw_int — vendor-specific raw value parsing."""
+
+    @pytest.mark.parametrize("raw, expected", [
+        ("80", 80),                       # plain string integer
+        (22225, 22225),                   # already an int
+        ("50287h+00m+00.000s", 50287),    # Seagate Power_On_Hours
+        ("56 (Min/Max 17/66)", 56),       # WD temperature decoration
+        ("53 (0 17 0 0 0)", 53),          # Seagate temperature tuple
+        (None, None),                     # missing value
+        ("invalid", None),                # no leading integer
+    ])
+    def test_parse_raw_int(self, raw, expected):
+        assert _parse_raw_int(raw) == expected
+
+
+class TestDeriveHealth:
+    """Tests for _derive_health — the verdict shown in the navbar/UIs."""
+
+    @pytest.mark.parametrize("assessment, pending, uncorrectable, expected", [
+        ("PASS", 0, 0, "PASS"),       # clean drive stays PASS
+        ("FAIL", 0, 0, "FAIL"),       # self-assessed failure stays FAIL
+        ("PASS", 80, 0, "WARN"),      # pending sectors downgrade PASS -> WARN
+        ("PASS", 0, 51, "WARN"),      # uncorrectable sectors downgrade -> WARN
+        ("PASS", 0, 0, "PASS"),       # reallocated is not a trigger (clean here)
+        ("FAIL", 80, 51, "FAIL"),     # FAIL takes priority over sector WARN
+        (None, None, None, None),     # unsupported drive passes through unknown
+        (None, 5, 0, "WARN"),         # unknown assessment + pending -> WARN
+    ])
+    def test_derive_health(self, assessment, pending, uncorrectable, expected):
+        assert _derive_health(assessment, pending, uncorrectable) == expected
 
 
 class TestDriveIsAsleep:

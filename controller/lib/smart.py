@@ -2,6 +2,7 @@
 SMART disk health monitoring for WROLPi Controller.
 """
 
+import re
 import subprocess
 from typing import Optional
 
@@ -57,19 +58,45 @@ def get_all_smart_status() -> list[dict]:
 
 def _get_device_smart(device) -> dict:
     """Extract SMART data from a pySMART device."""
+    pending = _get_attribute(device, "Current_Pending_Sector")
+    reallocated = _get_attribute(device, "Reallocated_Sector_Ct")
+    uncorrectable = _get_attribute(device, "Offline_Uncorrectable")
     return {
         "device": device.name,
         "path": f"/dev/{device.name}",
         "model": device.model,
         "serial": device.serial,
         "capacity": device.capacity,
-        "assessment": device.assessment,  # PASS, FAIL, WARN
+        "assessment": device.assessment,  # PASS, FAIL, WARN (pySMART's view)
+        "health": _derive_health(device.assessment, pending, uncorrectable),
         "temperature": _get_temperature(device),
         "power_on_hours": _get_attribute(device, "Power_On_Hours"),
-        "reallocated_sectors": _get_attribute(device, "Reallocated_Sector_Ct"),
-        "pending_sectors": _get_attribute(device, "Current_Pending_Sector"),
+        "reallocated_sectors": reallocated,
+        "pending_sectors": pending,
+        "offline_uncorrectable": uncorrectable,
         "smart_enabled": device.smart_enabled,
     }
+
+
+def _derive_health(assessment, pending_sectors, offline_uncorrectable) -> Optional[str]:
+    """Derive the overall health verdict shown in the navbar and UIs.
+
+    pySMART's ``assessment`` only reflects the drive's own pass/fail
+    self-assessment, which is driven by attributes flagged FAILING_NOW.  A
+    drive can be quietly losing data to unreadable sectors while still
+    self-assessing PASS, so we downgrade to WARN when sectors are pending
+    reallocation or already uncorrectable.
+
+    ``Reallocated_Sector_Ct`` is intentionally NOT a trigger: a small,
+    stable reallocated count is common and benign, and warning on it would
+    cry wolf.  ``assessment`` of None (unsupported drive) passes through
+    unchanged.
+    """
+    if (assessment or "").upper() == "FAIL":
+        return "FAIL"
+    if (pending_sectors or 0) > 0 or (offline_uncorrectable or 0) > 0:
+        return "WARN"
+    return assessment
 
 
 def _get_temperature(device) -> Optional[int]:
@@ -90,17 +117,32 @@ def _get_temperature(device) -> Optional[int]:
 
 
 def _get_attribute(device, name: str) -> Optional[int]:
-    """Get a specific SMART attribute value."""
+    """Get a specific SMART attribute value as an integer."""
     if not hasattr(device, 'attributes') or device.attributes is None:
         return None
 
     for attr in device.attributes:
         if attr and attr.name == name:
-            try:
-                return int(attr.raw)
-            except (ValueError, TypeError):
-                return None
+            return _parse_raw_int(attr.raw)
     return None
+
+
+def _parse_raw_int(raw) -> Optional[int]:
+    """Parse the integer value out of a SMART attribute's raw field.
+
+    smartctl/pySMART decorate some raw values in vendor-specific ways that
+    plain int() cannot handle: Seagate reports Power_On_Hours as
+    ``'50287h+00m+00.000s'`` and Temperature_Celsius as ``'53 (0 17 0 0 0)'``.
+    Extract the leading integer so these are not silently discarded.
+    """
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        pass
+    if raw is None:
+        return None
+    match = re.match(r'\s*(-?\d+)', str(raw))
+    return int(match.group(1)) if match else None
 
 
 def _scan_devices() -> list[tuple[str, Optional[str]]]:

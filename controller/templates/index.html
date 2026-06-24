@@ -1785,8 +1785,8 @@
             let html = '<div class="health-grid">';
 
             for (const drive of drives) {
-                const assessmentClass = getHealthClass(drive.assessment);
-                const assessmentText = drive.assessment || 'Unknown';
+                const assessmentClass = getHealthClass(drive.health || drive.assessment);
+                const assessmentText = drive.health || drive.assessment || 'Unknown';
                 const tempText = drive.temperature !== null ? `${drive.temperature}°C` : '--';
 
                 html += `
@@ -1833,7 +1833,7 @@
 
         title.textContent = `${drive.device} - Health Details`;
 
-        const assessmentClass = getHealthClass(drive.assessment);
+        const assessmentClass = getHealthClass(drive.health || drive.assessment);
         const formatHours = (hours) => {
             if (hours === null || hours === undefined) return '--';
             const days = Math.floor(hours / 24);
@@ -1876,6 +1876,10 @@
                 <tr>
                     <td style="color: #888;">Pending Sectors</td>
                     <td class="${drive.pending_sectors > 0 ? 'health-warn' : ''}">${drive.pending_sectors !== null ? drive.pending_sectors : '--'}</td>
+                </tr>
+                <tr>
+                    <td style="color: #888;">Uncorrectable Sectors</td>
+                    <td class="${drive.offline_uncorrectable > 0 ? 'health-warn' : ''}">${drive.offline_uncorrectable !== null && drive.offline_uncorrectable !== undefined ? drive.offline_uncorrectable : '--'}</td>
                 </tr>
                 <tr>
                     <td style="color: #888;">SMART Enabled</td>

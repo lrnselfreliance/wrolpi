@@ -223,6 +223,43 @@ describe('useDriveHealth', () => {
         expect(result.current.failing).toBe(false);
         expect(result.current.failingDevices).toEqual([]);
     });
+
+    test('surfaces WARN drives separately from FAIL', () => {
+        const status = {
+            smart_stats: {
+                drives: [
+                    {device: 'sda', health: 'PASS', assessment: 'PASS'},
+                    {device: 'sdb', health: 'WARN', assessment: 'PASS'},
+                    {device: 'sdc', health: 'FAIL', assessment: 'FAIL'},
+                ],
+            },
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failingDevices).toEqual(['sdc']);
+        expect(result.current.warning).toBe(true);
+        expect(result.current.warningDevices).toEqual(['sdb']);
+    });
+
+    test('prefers derived health over raw assessment', () => {
+        // A drive self-assessing PASS but with pending sectors is WARN.
+        const status = {
+            smart_stats: {drives: [{device: 'sda', health: 'WARN', assessment: 'PASS'}]},
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failing).toBe(false);
+        expect(result.current.warningDevices).toEqual(['sda']);
+    });
+
+    test('falls back to assessment when health is absent', () => {
+        const status = {
+            smart_stats: {drives: [{device: 'sda', assessment: 'FAIL'}]},
+        };
+        const {result} = renderHook(() => useDriveHealth(),
+            {wrapper: makeStatusWrapper(status)});
+        expect(result.current.failingDevices).toEqual(['sda']);
+    });
 });
 
 describe('Paginator rendering', () => {

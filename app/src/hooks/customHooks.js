@@ -1363,16 +1363,20 @@ export const useDriveTemperature = () => {
     }
 }
 
-// Reports drives whose SMART self-assessment is failing, so the navbar can
-// warn of an imminent drive failure.  pySMART reports 'PASS', 'FAIL', or null
-// (unknown); only 'FAIL' is a problem.
+// Reports drives whose SMART health is degraded, so the navbar can warn of an
+// imminent or developing drive failure.  The backend's derived `health` is
+// 'PASS', 'WARN', 'FAIL', or null (unknown): FAIL is an imminent failure
+// (back up now), WARN means unreadable/pending sectors are accumulating.
 export const useDriveHealth = () => {
     const {status} = React.useContext(StatusContext);
     const drives = Array.isArray(status?.smart_stats?.drives) ? status.smart_stats.drives : [];
-    const failingDevices = drives
-        .filter((d) => d.assessment === 'FAIL')
-        .map((d) => d.device);
-    return {failingDevices, failing: failingDevices.length > 0};
+    const verdict = (d) => (d.health || d.assessment);
+    const failingDevices = drives.filter((d) => verdict(d) === 'FAIL').map((d) => d.device);
+    const warningDevices = drives.filter((d) => verdict(d) === 'WARN').map((d) => d.device);
+    return {
+        failingDevices, failing: failingDevices.length > 0,
+        warningDevices, warning: warningDevices.length > 0,
+    };
 }
 
 export const useLoad = () => {

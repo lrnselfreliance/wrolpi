@@ -15,10 +15,32 @@ from controller.lib.smart import (
     _get_attribute,
     _parse_raw_int,
     _derive_health,
+    _read_scsi_limited,
+    _limited_device_smart,
     _drive_is_asleep,
     HDD_HIGH_TEMPERATURE,
     HDD_CRITICAL_TEMPERATURE,
 )
+
+# Real smartctl output from a Seagate Expansion USB enclosure that rejects
+# ATA pass-through.  The health (`-d scsi -H`) and identity (`-d scsi -i`)
+# reads MUST be separate calls: combining `-i` makes smartctl suppress the
+# health line.
+SCSI_HEALTH_OUTPUT = """\
+=== START OF READ SMART DATA SECTION ===
+SMART Health Status: OK
+"""
+
+SCSI_IDENTITY_OUTPUT = """\
+=== START OF INFORMATION SECTION ===
+Vendor:               Seagate
+Product:              Expansion HDD
+Revision:             1802
+User Capacity:        26,000,658,267,648 bytes [26.0 TB]
+Serial number:        00000000NT17S4W2
+Device type:          disk
+SMART support is:     Unavailable - device lacks SMART capability.
+"""
 
 
 def _attr(name, raw):
@@ -73,12 +95,43 @@ class TestGetAllSmartStatus:
         mock_device_list = mock.Mock()
         mock_device_list.devices = [mock_device]
 
-        with mock.patch("controller.lib.smart.is_smart_available", return_value=True):
-            with mock.patch("controller.lib.smart.DeviceList", return_value=mock_device_list):
-                result = get_all_smart_status()
-                assert len(result) == 1
-                assert result[0]["device"] == "sda"
-                assert result[0]["model"] == "Samsung SSD"
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart.DeviceList", return_value=mock_device_list), \
+                mock.patch("controller.lib.smart._scan_devices", return_value=[]):
+            result = get_all_smart_status()
+            assert len(result) == 1
+            assert result[0]["device"] == "sda"
+            assert result[0]["model"] == "Samsung SSD"
+
+    def test_supplements_with_scsi_health_for_bridge_drive(self):
+        """A scan-visible drive that pySMART/DeviceList cannot read (USB
+        enclosure) is added via the coarse SCSI health fallback."""
+        ata = mock.Mock()
+        ata.name = "sdc"
+        ata.model = "WDC"
+        ata.serial = "S2"
+        ata.capacity = "14.0 TB"
+        ata.assessment = "PASS"
+        ata.smart_enabled = True
+        ata.attributes = []
+
+        device_list = mock.Mock()
+        device_list.devices = [ata]
+        limited = {"device": "sda", "path": "/dev/sda", "health": "PASS",
+                   "smart_limited": True}
+
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart.DeviceList", return_value=device_list), \
+                mock.patch("controller.lib.smart._scan_devices",
+                           return_value=[("/dev/sdc", "sat"), ("/dev/sda", "sat")]), \
+                mock.patch("controller.lib.smart._limited_device_smart",
+                           return_value=limited) as limited_fn:
+            result = get_all_smart_status()
+
+        # sdc came from DeviceList (covered); only sda hits the fallback.
+        limited_fn.assert_called_once_with("/dev/sda")
+        devices = {d["device"] for d in result}
+        assert devices == {"sdc", "sda"}
 
 
 class TestGetDeviceSmart:
@@ -376,3 +429,69 @@ class TestBuildSmartStats:
 
         Dev.assert_not_called()
         assert stats["drives"] == []
+
+
+class TestReadScsiLimited:
+    """Tests for _read_scsi_limited — coarse health for USB-bridge drives.
+
+    Health and identity are two separate smartctl calls (combining `-H -i`
+    suppresses the health line on these bridges), so subprocess.run is mocked
+    with a side_effect sequence: first the `-H` read, then the `-i` read.
+    """
+
+    def test_parses_ok_health_and_identity(self):
+        runs = [mock.Mock(stdout=SCSI_HEALTH_OUTPUT),
+                mock.Mock(stdout=SCSI_IDENTITY_OUTPUT)]
+        with mock.patch("controller.lib.smart.subprocess.run", side_effect=runs):
+            health, model, serial, capacity = _read_scsi_limited("/dev/sda")
+        assert health == "PASS"
+        assert model == "Seagate Expansion HDD"
+        assert serial == "00000000NT17S4W2"
+        assert capacity == "26.0 TB"
+
+    def test_parses_failed_health(self):
+        runs = [mock.Mock(stdout="SMART Health Status: FAILED\n"),
+                mock.Mock(stdout=SCSI_IDENTITY_OUTPUT)]
+        with mock.patch("controller.lib.smart.subprocess.run", side_effect=runs):
+            health, _model, _serial, _capacity = _read_scsi_limited("/dev/sda")
+        assert health == "FAIL"
+
+    def test_no_health_line_skips_identity_and_returns_none(self):
+        """No health line → don't bother reading identity; report nothing."""
+        run = mock.Mock(stdout="Vendor:               WD\nProduct:   Thing\n")
+        with mock.patch("controller.lib.smart.subprocess.run",
+                        return_value=run) as run_fn:
+            result = _read_scsi_limited("/dev/sda")
+        assert result == (None, None, None, None)
+        # Only the health read happened; identity was skipped.
+        run_fn.assert_called_once()
+
+    def test_smartctl_error_returns_all_none(self):
+        with mock.patch("controller.lib.smart.subprocess.run",
+                        side_effect=OSError("boom")):
+            assert _read_scsi_limited("/dev/sda") == (None, None, None, None)
+
+
+class TestLimitedDeviceSmart:
+    """Tests for _limited_device_smart — the limited payload shape."""
+
+    def test_builds_limited_payload(self):
+        with mock.patch("controller.lib.smart._read_scsi_limited",
+                        return_value=("PASS", "Seagate Expansion HDD",
+                                      "NT17S4W2", "26.0 TB")):
+            payload = _limited_device_smart("/dev/sda")
+        assert payload["device"] == "sda"
+        assert payload["path"] == "/dev/sda"
+        assert payload["health"] == "PASS"
+        assert payload["model"] == "Seagate Expansion HDD"
+        assert payload["smart_limited"] is True
+        # Attributes are unreachable through the bridge.
+        assert payload["assessment"] is None
+        assert payload["temperature"] is None
+        assert payload["pending_sectors"] is None
+
+    def test_returns_none_when_health_unavailable(self):
+        """No SCSI health → nothing useful to show, omit the drive."""
+        with mock.patch("controller.lib.smart._read_scsi_limited",
+                        return_value=(None, None, None, None)):
+            assert _limited_device_smart("/dev/sda") is None

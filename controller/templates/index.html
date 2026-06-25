@@ -1786,7 +1786,8 @@
 
             for (const drive of drives) {
                 const assessmentClass = getHealthClass(drive.health || drive.assessment);
-                const assessmentText = drive.health || drive.assessment || 'Unknown';
+                const assessmentText = (drive.health || drive.assessment || 'Unknown')
+                    + (drive.smart_limited ? ' (limited)' : '');
                 const tempText = drive.temperature !== null ? `${drive.temperature}°C` : '--';
 
                 html += `
@@ -1859,7 +1860,7 @@
                 </tr>
                 <tr>
                     <td style="color: #888;">Assessment</td>
-                    <td class="${assessmentClass}">${drive.assessment || 'Unknown'}</td>
+                    <td class="${assessmentClass}">${drive.assessment || drive.health || 'Unknown'}${drive.smart_limited ? ' (limited — USB enclosure reports health only)' : ''}</td>
                 </tr>
                 <tr>
                     <td style="color: #888;">Temperature</td>

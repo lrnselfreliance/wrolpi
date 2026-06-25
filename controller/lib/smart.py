@@ -45,11 +45,22 @@ def get_all_smart_status() -> list[dict]:
         return []
 
     try:
-        devices = DeviceList()
         results = []
-
-        for device in devices.devices:
+        covered = set()
+        for device in DeviceList().devices:
             results.append(_get_device_smart(device))
+            covered.add(f"/dev/{device.name}")
+
+        # Drives behind USB enclosures that reject ATA pass-through (e.g.
+        # Seagate Expansion, WD easystore) are invisible to pySMART/DeviceList.
+        # smartctl --scan still lists them; add a coarse SCSI health entry so
+        # the drive is at least represented instead of silently unmonitored.
+        for path, _interface in _scan_devices():
+            if path in covered:
+                continue
+            limited = _limited_device_smart(path)
+            if limited is not None:
+                results.append(limited)
 
         return results
     except Exception:
@@ -178,6 +189,112 @@ def _scan_devices() -> list[tuple[str, Optional[str]]]:
                 interface = parts[idx + 1]
         devices.append((path, interface))
     return devices
+
+
+def _read_scsi_limited(path: str) -> tuple:
+    """Read the coarse SCSI health (and identity) for a USB-bridge drive.
+
+    USB enclosures that reject ATA pass-through expose no SMART attributes,
+    but many still answer the SCSI health query.  Both the health check and
+    INQUIRY are non-media SCSI commands, so they do not spin up a parked
+    drive.
+
+    The health and identity reads MUST be issued as separate smartctl calls:
+    when ``-i`` reports "SMART support is: Unavailable" (which these bridges
+    do), combining it with ``-H`` makes smartctl suppress the health line,
+    even though the standalone ``-d scsi -H`` query answers fine.
+
+    Returns ``(health, model, serial, capacity)`` where health is 'PASS',
+    'FAIL', or None.  This is the only signal available for such drives; it
+    carries no attributes or temperature, and some bridges report 'OK'
+    statically, so it is a weak signal — callers mark it ``smart_limited``.
+    """
+    health = _scsi_health(path)
+    if health is None:
+        # No health signal means nothing useful; skip the identity read too.
+        return (None, None, None, None)
+    model, serial, capacity = _scsi_identity(path)
+    return (health, model, serial, capacity)
+
+
+def _scsi_health(path: str) -> Optional[str]:
+    """Return 'PASS'/'FAIL'/None from ``smartctl -d scsi -H`` (alone)."""
+    try:
+        result = subprocess.run(
+            ["smartctl", "-d", "scsi", "-H", path],
+            capture_output=True, text=True, timeout=SMARTCTL_STANDBY_TIMEOUT,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    for line in result.stdout.splitlines():
+        key, sep, val = line.partition(":")
+        if sep and key.strip().lower() == "smart health status":
+            val = val.strip()
+            if not val:
+                return None
+            return "PASS" if val.upper() == "OK" else "FAIL"
+    return None
+
+
+def _scsi_identity(path: str) -> tuple:
+    """Return ``(model, serial, capacity)`` from ``smartctl -d scsi -i``."""
+    try:
+        result = subprocess.run(
+            ["smartctl", "-d", "scsi", "-i", path],
+            capture_output=True, text=True, timeout=SMARTCTL_STANDBY_TIMEOUT,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return (None, None, None)
+    vendor = product = serial = capacity = None
+    for line in result.stdout.splitlines():
+        key, sep, val = line.partition(":")
+        if not sep:
+            continue
+        key = key.strip().lower()
+        val = val.strip()
+        if key == "vendor":
+            vendor = val
+        elif key == "product":
+            product = val
+        elif key == "serial number":
+            serial = val
+        elif key == "user capacity":
+            # e.g. "26,000,658,267,648 bytes [26.0 TB]" -> "26.0 TB"
+            bracket = re.search(r'\[([^\]]+)\]', val)
+            capacity = bracket.group(1) if bracket else (val or None)
+    model = " ".join(p for p in (vendor, product) if p) or None
+    return (model, serial, capacity)
+
+
+def _limited_device_smart(path: str) -> Optional[dict]:
+    """Build a coarse SMART payload for a drive pySMART cannot read.
+
+    Used for USB-bridge drives without ATA pass-through.  Only the SCSI
+    health is available; attributes, temperature and power-on hours are
+    unknown.  The payload is shaped like ``_get_device_smart`` so the UIs can
+    render it uniformly, but is marked ``smart_limited`` so a green PASS is
+    not mistaken for full monitoring.  Returns None when even the SCSI health
+    is unavailable (nothing useful to show).
+    """
+    health, model, serial, capacity = _read_scsi_limited(path)
+    if health is None:
+        return None
+    return {
+        "device": path.rsplit("/", 1)[-1],
+        "path": path,
+        "model": model,
+        "serial": serial,
+        "capacity": capacity,
+        "assessment": None,  # the drive's own ATA self-assessment is unreachable
+        "health": health,
+        "temperature": None,
+        "power_on_hours": None,
+        "reallocated_sectors": None,
+        "pending_sectors": None,
+        "offline_uncorrectable": None,
+        "smart_enabled": False,
+        "smart_limited": True,
+    }
 
 
 def _drive_is_asleep(path: str) -> bool:

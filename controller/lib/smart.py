@@ -50,21 +50,25 @@ def get_all_smart_status() -> list[dict]:
         for device in DeviceList().devices:
             results.append(_get_device_smart(device))
             covered.add(f"/dev/{device.name}")
+    except Exception:
+        return []
 
-        # Drives behind USB enclosures that reject ATA pass-through (e.g.
-        # Seagate Expansion, WD easystore) are invisible to pySMART/DeviceList.
-        # smartctl --scan still lists them; add a coarse SCSI health entry so
-        # the drive is at least represented instead of silently unmonitored.
+    # Drives behind USB enclosures that reject ATA pass-through (e.g. Seagate
+    # Expansion, WD easystore) are invisible to pySMART/DeviceList.  smartctl
+    # --scan still lists them; add a coarse SCSI health entry so the drive is
+    # at least represented instead of silently unmonitored.  Isolated from the
+    # pySMART read above: a failure here must not discard those results.
+    try:
         for path, _interface in _scan_devices():
             if path in covered:
                 continue
             limited = _limited_device_smart(path)
             if limited is not None:
                 results.append(limited)
-
-        return results
     except Exception:
-        return []
+        pass
+
+    return results
 
 
 def _get_device_smart(device) -> dict:
@@ -229,10 +233,15 @@ def _scsi_health(path: str) -> Optional[str]:
     for line in result.stdout.splitlines():
         key, sep, val = line.partition(":")
         if sep and key.strip().lower() == "smart health status":
-            val = val.strip()
-            if not val:
-                return None
-            return "PASS" if val.upper() == "OK" else "FAIL"
+            val = val.strip().upper()
+            # Standard SCSI health is "OK" or "FAILED!".  Some bridges emit
+            # non-standard strings (e.g. "UNKNOWN", "N/A"); treat anything we
+            # do not recognise as unreadable (None) rather than a false FAIL.
+            if val == "OK":
+                return "PASS"
+            if val.startswith("FAIL"):
+                return "FAIL"
+            return None
     return None
 
 

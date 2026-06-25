@@ -133,6 +133,29 @@ class TestGetAllSmartStatus:
         devices = {d["device"] for d in result}
         assert devices == {"sdc", "sda"}
 
+    def test_supplement_failure_preserves_pysmart_results(self):
+        """An error in the SCSI supplement must not discard the drives already
+        collected from pySMART."""
+        ata = mock.Mock()
+        ata.name = "sdb"
+        ata.model = "Seagate"
+        ata.serial = "S1"
+        ata.capacity = "8.0 TB"
+        ata.assessment = "PASS"
+        ata.smart_enabled = True
+        ata.attributes = []
+
+        device_list = mock.Mock()
+        device_list.devices = [ata]
+
+        with mock.patch("controller.lib.smart.is_smart_available", return_value=True), \
+                mock.patch("controller.lib.smart.DeviceList", return_value=device_list), \
+                mock.patch("controller.lib.smart._scan_devices",
+                           side_effect=RuntimeError("scan blew up")):
+            result = get_all_smart_status()
+
+        assert [d["device"] for d in result] == ["sdb"]
+
 
 class TestGetDeviceSmart:
     """Tests for _get_device_smart function."""
@@ -464,6 +487,17 @@ class TestReadScsiLimited:
             result = _read_scsi_limited("/dev/sda")
         assert result == (None, None, None, None)
         # Only the health read happened; identity was skipped.
+        run_fn.assert_called_once()
+
+    def test_unrecognised_status_is_treated_as_unreadable(self):
+        """A non-standard bridge status (e.g. UNKNOWN) must NOT show as a red
+        FAIL; treat it as unreadable so the drive is omitted, not falsely
+        failed."""
+        run = mock.Mock(stdout="SMART Health Status: UNKNOWN\n")
+        with mock.patch("controller.lib.smart.subprocess.run",
+                        return_value=run) as run_fn:
+            result = _read_scsi_limited("/dev/sda")
+        assert result == (None, None, None, None)
         run_fn.assert_called_once()
 
     def test_smartctl_error_returns_all_none(self):

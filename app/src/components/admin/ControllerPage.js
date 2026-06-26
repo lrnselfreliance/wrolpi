@@ -586,7 +586,10 @@ function SmartDetailsModal({drive, open, onClose}) {
                             <Table.Cell>Assessment</Table.Cell>
                             <Table.Cell>
                                 <Icon name='circle' color={healthColor}/>
-                                {drive.assessment || 'Unknown'}
+                                {drive.assessment || drive.health || 'Unknown'}
+                                {drive.smart_limited
+                                    ? ' (limited — USB enclosure reports health only, no attributes)'
+                                    : ''}
                             </Table.Cell>
                         </Table.Row>
                         <Table.Row>
@@ -1076,6 +1079,7 @@ function DiskSection() {
                                         color={getHealthColor(drive.health || drive.assessment)}
                                     />
                                     {drive.health || drive.assessment || 'Unknown'}
+                                    {drive.smart_limited ? ' (limited)' : ''}
                                 </Table.Cell>
                                 <Table.Cell>
                                     {drive.temperature !== null && drive.temperature !== undefined

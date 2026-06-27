@@ -711,18 +711,6 @@ export function SearchFilterModal(
                         </Grid.Column>
                     </Grid.Row>}
 
-                {showCensored &&
-                    <Grid.Row>
-                        <Grid.Column>
-                            <SearchFilterSection header='Availability'>
-                                <Toggle label='Only censored (no longer available to download)'
-                                        checked={draftCensored}
-                                        onChange={setDraftCensored}
-                                />
-                            </SearchFilterSection>
-                        </Grid.Column>
-                    </Grid.Row>}
-
                 {(showTags || showLimit) &&
                     <Grid.Row columns={2}>
                         {showTags &&
@@ -752,6 +740,18 @@ export function SearchFilterModal(
                                     <div>{limitButtons}</div>
                                 </SearchFilterSection>
                             </Grid.Column>}
+                    </Grid.Row>}
+
+                {showCensored &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='Availability'>
+                                <Toggle label='Only censored (no longer available to download)'
+                                        checked={draftCensored}
+                                        onChange={setDraftCensored}
+                                />
+                            </SearchFilterSection>
+                        </Grid.Column>
                     </Grid.Row>}
 
                 {showDates &&

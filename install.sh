@@ -56,7 +56,9 @@ set -e
 apt install -y git
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
-(cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+# Use `checkout -B <branch> origin/<branch>` so the ref can never be mistaken for a path. A tracked `release/`
+# directory otherwise collides with the `release` branch name, making a bare `git checkout release` ambiguous.
+(cd /opt/wrolpi && git fetch && git checkout -B "${BRANCH}" "origin/${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
 if [ ${rpi} == true ]; then
   /opt/wrolpi/scripts/install_raspberrypios.sh 2>&1 | tee /opt/wrolpi/install.log

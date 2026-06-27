@@ -240,6 +240,7 @@ export function VideosPage() {
             inputRef={searchInputRef}
             viewButton={viewButton}
             sorts={videoOrders}
+            showCensored={true}
         />
         {body}
         {paginator}

@@ -335,6 +335,7 @@ def assert_video_search(async_client):
             limit: int = None,
             order_by: str = None,
             channel_id: int = None,
+            censored: bool = None,
     ):
         content = dict()
         if search_str is not None:
@@ -349,6 +350,8 @@ def assert_video_search(async_client):
             content['order_by'] = order_by
         if channel_id is not None:
             content['channel_id'] = channel_id
+        if censored is not None:
+            content['censored'] = censored
 
         request, response = await async_client.post('/api/videos/search', content=json.dumps(content))
 

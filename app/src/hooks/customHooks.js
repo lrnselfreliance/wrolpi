@@ -616,6 +616,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const {view} = useSearchView();
     const headline = view === 'headline';
     const anyTag = searchParams.get('anyTag') === 'true';
+    const censored = searchParams.get('censored') === 'true';
 
     const [videos, setVideos] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -626,7 +627,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         setLoading(true);
         setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline, anyTag);
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline, censored);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -639,7 +640,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
 
     useEffect(() => {
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline]);
+    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline, censored]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -1622,6 +1623,14 @@ export const useSearchView = () => {
 export const useSearchOrder = () => {
     const [sort, setSort] = useOneQuery('order');
     return {sort, setSort}
+}
+
+export const useSearchCensored = () => {
+    // Filters Videos to only those which are no longer available for download (?censored=true).
+    const [value, setValue] = useOneQuery('censored');
+    const censored = value === 'true';
+    const setCensored = (newValue) => setValue(newValue ? 'true' : undefined);
+    return {censored, setCensored}
 }
 
 export const useSearchDate = () => {

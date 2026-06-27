@@ -177,6 +177,7 @@ class VideoSearchRequest:
     channel_id: Optional[int] = None
     tag_names: List[str] = field(default_factory=list)
     headline: bool = False
+    censored: bool = False
 
 
 @dataclass

@@ -92,10 +92,14 @@ def search_videos(
         order: str = None,
         tag_names: List[str] = None,
         headline: bool = False,
+        censored: bool = False,
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Search videos and audio-only files.
     wheres = ["(fg.mimetype LIKE 'video/%%' OR fg.mimetype LIKE 'audio/%%')"]
+    if censored:
+        # Only return videos which are no longer available for download.
+        wheres.append('fg.censored = TRUE')
     joins = list()
     join_video = False
 

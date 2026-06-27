@@ -265,6 +265,27 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
 
 
 @pytest.mark.asyncio
+async def test_search_videos_censored(test_session, video_factory, assert_video_search):
+    """The censored filter returns only Videos which are no longer available for download."""
+    vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
+    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2')
+    vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
+
+    # vid2 is no longer available.
+    vid2.file_group.censored = True
+    test_session.commit()
+
+    # Without the filter, all Videos are returned.
+    await assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id],
+                              order_by='published_datetime')
+    await assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id],
+                              order_by='published_datetime', censored=False)
+
+    # With the filter, only the censored Video is returned.
+    await assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='published_datetime', censored=True)
+
+
+@pytest.mark.asyncio
 async def test_search_audio_only(test_session, audio_factory, assert_video_search):
     """Audio-only files should be searchable alongside videos."""
     audio1 = audio_factory(title='podcast episode one', upload_date='2025-01-01', with_info_json=True)

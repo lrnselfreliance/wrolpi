@@ -31,6 +31,7 @@ import {
     PreviewLink,
     SearchInput,
     TagIcon,
+    Toggle,
     textEllipsis,
     useTitle
 } from "./Common";
@@ -38,6 +39,7 @@ import {
     usePages,
     useSearchDate,
     useSearchFiles,
+    useSearchCensored,
     useSearchFilter,
     useSearchOrder,
     useSearchView,
@@ -541,6 +543,7 @@ export function SearchFilterModal(
         showDates = false,
         showTags = true,
         showLimit = true,
+        showCensored = false,
         limitOptions = [12, 24, 48, 96],
     },
 ) {
@@ -549,6 +552,7 @@ export function SearchFilterModal(
     const {sort} = useSearchOrder();
     const {dateRange, months} = useSearchDate();
     const {activeTags, anyTag} = useSearch();
+    const {censored} = useSearchCensored();
     const {limit} = usePages(DEFAULT_SEARCH_LIMIT);
     const {updateQuery} = useContext(QueryContext);
 
@@ -565,6 +569,7 @@ export function SearchFilterModal(
     const [draftLimit, setDraftLimit] = useState(null);
     const [draftMonths, setDraftMonths] = useState([]);
     const [draftRange, setDraftRange] = useState(emptyRange);
+    const [draftCensored, setDraftCensored] = useState(false);
 
     // Seed the drafts from the URL each time the modal is opened.
     React.useEffect(() => {
@@ -576,6 +581,7 @@ export function SearchFilterModal(
             setDraftLimit(limit);
             setDraftMonths(seededMonths);
             setDraftRange(seededRange);
+            setDraftCensored(censored || false);
         }
     }, [open]);
 
@@ -613,6 +619,9 @@ export function SearchFilterModal(
             params.toDate = newToDate;
             params.month = draftMonths;
         }
+        if (showCensored && draftCensored !== censored) {
+            params.censored = draftCensored ? 'true' : null;
+        }
         if (Object.keys(params).length > 0) {
             params.o = 0;
             updateQuery(params);
@@ -631,6 +640,7 @@ export function SearchFilterModal(
         setDraftLimit(DEFAULT_SEARCH_LIMIT);
         setDraftMonths([]);
         setDraftRange(emptyRange);
+        setDraftCensored(false);
     }
 
     // Sort section (operates on the draft).
@@ -732,6 +742,18 @@ export function SearchFilterModal(
                             </Grid.Column>}
                     </Grid.Row>}
 
+                {showCensored &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='Availability'>
+                                <Toggle label='Only censored (no longer available to download)'
+                                        checked={draftCensored}
+                                        onChange={setDraftCensored}
+                                />
+                            </SearchFilterSection>
+                        </Grid.Column>
+                    </Grid.Row>}
+
                 {showDates &&
                     <Grid.Row>
                         <Grid.Column>
@@ -760,6 +782,7 @@ export function SearchFilterButton(
         showDates = false,
         showTags = true,
         showLimit = true,
+        showCensored = false,
         limitOptions = [12, 24, 48, 96],
         size = 'medium',
         content = 'Filter',
@@ -770,6 +793,7 @@ export function SearchFilterButton(
     const {sort} = useSearchOrder();
     const {dateRange, months} = useSearchDate();
     const {activeTags, anyTag} = useSearch();
+    const {censored} = useSearchCensored();
 
     let count = 0;
     if (fileFilterOptions && filter) {
@@ -782,6 +806,9 @@ export function SearchFilterButton(
         count += 1;
     }
     if (showDates && ((months && months.length > 0) || !dateRangeIsEmpty(dateRange))) {
+        count += 1;
+    }
+    if (showCensored && censored) {
         count += 1;
     }
     const active = count > 0;
@@ -801,6 +828,7 @@ export function SearchFilterButton(
             showDates={showDates}
             showTags={showTags}
             showLimit={showLimit}
+            showCensored={showCensored}
             limitOptions={limitOptions}
         />
     </>
@@ -820,6 +848,7 @@ export function SearchControlBar(
         sorts = null,
         fileFilterOptions = null,
         showDates = false,
+        showCensored = false,
     },
 ) {
     const [localSearchStr, setLocalSearchStr] = useState(searchStr || '');
@@ -836,7 +865,8 @@ export function SearchControlBar(
     return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '1em'}}>
         {viewButton}
         <div style={{flexGrow: 1, minWidth: 0}}>{searchInput}</div>
-        <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}/>
+        <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}
+                            showCensored={showCensored}/>
     </div>
 }
 

@@ -187,7 +187,7 @@ export async function tagChannelInfo(channelId, tagName) {
     });
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline, censored) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -204,6 +204,9 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     }
     if (headline) {
         body['headline'] = true;
+    }
+    if (censored) {
+        body['censored'] = true;
     }
 
     console.debug('searching videos', body);

@@ -116,6 +116,36 @@ describe('SearchFilterButton', () => {
         expect(spy).not.toHaveBeenCalled();
     });
 
+    it('counts the censored filter and applies it on close when showCensored is set', () => {
+        const spy = jest.fn();
+        renderButton({sorts: videoOrders, showCensored: true}, {}, spy);
+
+        // No censored badge initially.
+        expect(screen.queryByText('1')).toBeNull();
+
+        fireEvent.click(screen.getByText('Filter'));
+        // The Availability section/toggle is shown.
+        expect(screen.getByText('Availability')).toBeInTheDocument();
+        fireEvent.mouseUp(screen.getByTestId('toggle'));
+        // Draft only — nothing applied yet.
+        expect(spy).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByText('Done'));
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({censored: 'true'});
+    });
+
+    it('does not show the Availability section unless showCensored is set', () => {
+        renderButton({sorts: videoOrders});
+        fireEvent.click(screen.getByText('Filter'));
+        expect(screen.queryByText('Availability')).toBeNull();
+    });
+
+    it('shows a count badge when the censored filter is active in the URL', () => {
+        renderButton({sorts: videoOrders, showCensored: true}, {censored: 'true'});
+        expect(screen.getByText('1')).toBeInTheDocument();
+    });
+
     it('shows the File Type section when fileFilterOptions are provided', () => {
         renderButton({
             sorts: videoOrders,

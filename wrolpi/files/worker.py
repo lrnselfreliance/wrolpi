@@ -1001,16 +1001,23 @@ class FileWorker:
         """Synchronously refresh specific files. Use sparingly - prefer queue_refresh."""
         if not paths:
             return
-        result = await self._refresh_files_directly(paths)
-        self._cleanup_modified_models(result.modified)
-        await self._upsert_file_groups(result.new + result.modified)
-        await self._delete_file_groups(result.deleted)
-        if post_processing and (result.new or result.modified or result.deleted):
-            # Skip global modelers/indexers when the caller opts out (e.g. `lib.delete` from the
-            # upload path defers that to the post-upload `upsert_file`) or when nothing changed.
-            # Without this guard a synchronous caller would block on the entire backlog of
-            # unindexed files and could exceed Sanic's RESPONSE_TIMEOUT.
-            await self._apply_post_processing(is_global_refresh=False)
+        # `_upsert_file_groups`/`_delete_file_groups`/`_apply_post_processing` all advance the
+        # shared status (upserting/deleting/modeling/indexing/cleanup).  Unlike the queued
+        # handlers this path has no `process_queue` wrapper to reset it, so reset here or the UI
+        # is stranded at the last phase (e.g. 'cleanup' after deleting files).
+        try:
+            result = await self._refresh_files_directly(paths)
+            self._cleanup_modified_models(result.modified)
+            await self._upsert_file_groups(result.new + result.modified)
+            await self._delete_file_groups(result.deleted)
+            if post_processing and (result.new or result.modified or result.deleted):
+                # Skip global modelers/indexers when the caller opts out (e.g. `lib.delete` from the
+                # upload path defers that to the post-upload `upsert_file`) or when nothing changed.
+                # Without this guard a synchronous caller would block on the entire backlog of
+                # unindexed files and could exceed Sanic's RESPONSE_TIMEOUT.
+                await self._apply_post_processing(is_global_refresh=False)
+        finally:
+            self.reset_status()
 
     def transfer_queue(self):
         """Transfer items from the public queue to the private queue."""
@@ -1044,6 +1051,18 @@ class FileWorker:
                     await self.handle_reorganize(task)
                 case FileTaskType.batch_reorganize:
                     await self.handle_batch_reorganize(task)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            # `handle_count`/`handle_refresh` reset their own status on success (or intentionally
+            # leave it set when chaining to a follow-up task), but they have no try/except, so an
+            # error mid-phase would otherwise strand the status (e.g. 'counting'/'cleanup') and the
+            # UI would show that phase forever.  Record a terminal 'error' status so the worker is
+            # not stranded, then re-raise so callers and the perpetual worker loop still see the
+            # failure.  (handle_move/handle_reorganize handle their own errors and do not reach here.)
+            logger.error(f'FileWorker task {task.task_type} failed', exc_info=e)
+            self.update_status(status='error', error=str(e))
+            raise
         finally:
             # Clear flag if both queues are now empty
             if self.private_queue.qsize() == 0 and self.public_queue.qsize() == 0:

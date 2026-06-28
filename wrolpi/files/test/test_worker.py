@@ -572,6 +572,87 @@ async def test_file_worker_count_only_resets_status(async_client, test_session, 
 
 
 @pytest.mark.asyncio
+async def test_refresh_sync_resets_status(async_client, test_session, test_directory, make_files_structure):
+    """refresh_sync must reset status to idle when it finishes.
+
+    Regression: deleting files in the UI calls `lib.delete` -> `file_worker.refresh_sync()`.
+    When that refresh actually changes the DB it runs `_apply_post_processing`, whose final
+    phase sets status='cleanup'.  `refresh_sync` never calls `reset_status()`, so the worker is
+    stranded showing 'cleanup' forever (observed on 10.0.0.8 after deleting STL files).
+    """
+    paths = make_files_structure(['docs/file1.txt'])
+    file_path = paths[0]
+
+    # Index the file so the DB knows about it.  A queued refresh resets to idle on its own.
+    task = FileTask(FileTaskType.refresh, [test_directory], count=1)
+    file_worker.private_queue.put_nowait(task)
+    await file_worker.process_queue()
+    assert file_worker.status['status'] == 'idle'
+
+    # Delete the file on disk, then synchronously refresh so post-processing runs.
+    file_path.unlink()
+    await file_worker.refresh_sync([file_path])
+
+    # Without the fix the status is stranded at 'cleanup'.
+    assert file_worker.status['status'] == 'idle'
+
+
+@pytest.mark.asyncio
+async def test_process_queue_resets_status_on_handler_error(async_client, test_session, test_directory,
+                                                            make_files_structure):
+    """A handler raising mid-phase must not strand the worker status at that phase.
+
+    Regression: `process_queue` had no `except` clause, so an exception raised inside a handler
+    (here, during the modeling phase) left the status frozen at whatever phase was running and the
+    UI showed that phase indefinitely.  `process_queue` now records a terminal 'error' status (so
+    the worker is not stranded) and re-raises so callers still see the failure.
+    """
+    make_files_structure(['docs/file1.txt'])
+    task = FileTask(FileTaskType.refresh, [test_directory], count=1)
+    file_worker.private_queue.put_nowait(task)
+
+    # Fail during the modeling phase of post-processing.
+    with mock.patch('wrolpi.files.worker.apply_modelers', side_effect=RuntimeError('boom')):
+        with pytest.raises(RuntimeError):
+            await file_worker.process_queue()
+
+    # Status is a terminal 'error', not stranded at 'modeling'.
+    assert file_worker.status['status'] == 'error'
+
+
+@pytest.mark.asyncio
+async def test_process_queue_resets_status_on_count_error(async_client, test_session, test_directory,
+                                                          make_files_structure):
+    """A failure during the counting phase must not strand the worker status at 'counting'.
+
+    Regression: `handle_count` (like `handle_refresh`) has no try/except, so an error while
+    counting left the status frozen at 'counting'.  The shared `process_queue` recovery records a
+    terminal 'error' status for every handler, not just move/reorganize.
+    """
+    make_files_structure(['docs/file1.txt'])
+    task = FileTask(FileTaskType.count, [test_directory], next_task_type=FileTaskType.refresh)
+    file_worker.private_queue.put_nowait(task)
+
+    # Fail during the counting phase.
+    with mock.patch('wrolpi.files.worker.count_files_with_progress', side_effect=RuntimeError('boom')):
+        with pytest.raises(RuntimeError):
+            await file_worker.process_queue()
+
+    # Status is a terminal 'error', not stranded at 'counting'.
+    assert file_worker.status['status'] == 'error'
+
+
+@pytest.mark.asyncio
+async def test_wait_for_job_times_out(async_client, test_session):
+    """wait_for_job raises TimeoutError when a job never completes (previously untested path)."""
+    job_id = 'refresh-never-completes'
+    file_worker._set_job_status(job_id, 'pending')
+
+    with pytest.raises(TimeoutError):
+        await file_worker.wait_for_job(job_id, timeout=0.1)
+
+
+@pytest.mark.asyncio
 async def test_file_worker_refresh_inserts_new_files(async_client, test_session, test_directory, make_files_structure,
                                                      video_file_factory):
     """FileWorker inserts new FileGroups during refresh."""
@@ -1065,6 +1146,8 @@ async def test_file_worker_refuses_refresh_when_only_ignored_files_exist(
         await file_worker.process_queue()
 
     assert 'empty' in str(exc_info.value).lower() or 'ignored' in str(exc_info.value).lower()
+    # The guard records a terminal 'error' status rather than stranding the worker mid-phase.
+    assert file_worker.status['status'] == 'error'
 
 
 @pytest.mark.asyncio

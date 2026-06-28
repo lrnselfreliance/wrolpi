@@ -1068,6 +1068,8 @@ class MultiFileConfig:
 class WROLPiConfigValidator:
     archive_destination: str = None
     check_for_upgrades: bool = None
+    download_daily_limit_global: int = None
+    download_daily_limit_per_domain: int = None
     download_on_startup: bool = None
     download_timeout: int = None
     download_wait: int = None
@@ -1251,6 +1253,8 @@ class WROLPiConfig(ConfigFile):
     file_name = 'wrolpi.yaml'
     default_config = dict(
         archive_destination='archive/%(domain_tag)s/%(domain)s',
+        download_daily_limit_global=None,
+        download_daily_limit_per_domain=None,
         download_on_startup=True,
         download_timeout=0,
         download_wait=20,
@@ -1370,6 +1374,24 @@ class WROLPiConfig(ConfigFile):
     @download_wait.setter
     def download_wait(self, value: int):
         self.update({'download_wait': value})
+
+    @property
+    def download_daily_limit_per_domain(self) -> Optional[int]:
+        """Maximum non-recurring downloads allowed per domain per day.  ``None``/``0`` means unlimited."""
+        return self._config.get('download_daily_limit_per_domain')
+
+    @download_daily_limit_per_domain.setter
+    def download_daily_limit_per_domain(self, value: Optional[int]):
+        self.update({'download_daily_limit_per_domain': value})
+
+    @property
+    def download_daily_limit_global(self) -> Optional[int]:
+        """Maximum non-recurring downloads allowed across all domains per day.  ``None``/``0`` means unlimited."""
+        return self._config.get('download_daily_limit_global')
+
+    @download_daily_limit_global.setter
+    def download_daily_limit_global(self, value: Optional[int]):
+        self.update({'download_daily_limit_global': value})
 
     @staticmethod
     def _normalize_time_value(value) -> str:
@@ -1822,6 +1844,32 @@ def extract_domain(url: str) -> str:
     if domain.startswith('www.'):
         # Remove leading www.
         domain = domain[4:]
+    return domain
+
+
+# Common subdomains stripped when grouping downloads by domain (e.g. for daily download limits).
+COMMON_DOWNLOAD_SUBDOMAINS = ('m.', 'mobile.')
+
+
+def normalize_domain(url: str) -> str:
+    """Return the canonical domain used to group downloads (e.g. for daily download limits).
+
+    Strips the port, a leading ``www.`` (via :func:`extract_domain`), and other common subdomains
+    (``m.``, ``mobile.``) so that, for example, ``m.example.com`` and ``www.example.com`` share one bucket.
+
+    Downloaders may apply type-specific URL normalization before calling this (see
+    ``Downloader.normalize_domain``).
+
+    >>> normalize_domain('https://m.example.com/foo')
+    'example.com'
+    >>> normalize_domain('https://www.example.com:443/foo')
+    'example.com'
+    """
+    domain = extract_domain(url)
+    for subdomain in COMMON_DOWNLOAD_SUBDOMAINS:
+        if domain.startswith(subdomain):
+            domain = domain[len(subdomain):]
+            break
     return domain
 
 

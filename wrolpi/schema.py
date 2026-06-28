@@ -16,6 +16,8 @@ class SettingsObject:
 class SettingsResponse:
     download_manager_disabled: bool
     download_manager_stopped: bool
+    download_daily_limit_global: Optional[int]
+    download_daily_limit_per_domain: Optional[int]
     download_on_startup: bool
     download_timeout: int
     download_wait: int
@@ -63,6 +65,8 @@ class SemanticUIColors(enum.StrEnum):
 @dataclass
 class SettingsRequest:
     archive_destination: Optional[str] = None
+    download_daily_limit_global: Optional[int] = None
+    download_daily_limit_per_domain: Optional[int] = None
     download_on_startup: Optional[bool] = None
     download_timeout: Optional[int] = None
     download_wait: Optional[int] = None

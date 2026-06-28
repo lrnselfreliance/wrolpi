@@ -33,7 +33,7 @@ from wrolpi.api_utils import api_app, perpetual_signal
 from wrolpi.cmd import which, run_command, CommandResult
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, \
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
-    get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL
+    get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
@@ -241,6 +241,7 @@ class Download(ModelHelper, Base):  # noqa
     __tablename__ = 'download'  # noqa
     __table_args__ = (
         Index('idx_download_collection_id', 'collection_id'),
+        Index('idx_download_last_download_attempt', 'last_download_attempt'),
     )
     id = Column(Integer, primary_key=True)
     url = Column(String, nullable=False, unique=True)
@@ -252,6 +253,7 @@ class Download(ModelHelper, Base):  # noqa
     error = Column(Text)  # traceback from an error during downloading.
     frequency = Column(Integer)  # seconds between re-downloading.
     info_json = Column(JSONB)  # information retrieved WHILE downloading (from yt-dlp)
+    last_download_attempt = Column(TZDateTime)  # last time this Download was dispatched (success or failure)
     last_successful_download = Column(TZDateTime)
     location = Column(Text)  # Relative App URL where the downloaded item can be viewed.
     next_download = Column(TZDateTime)
@@ -280,6 +282,7 @@ class Download(ModelHelper, Base):  # noqa
             frequency=self.frequency,
             destination=self.destination,
             id=self.id,
+            last_download_attempt=self.last_download_attempt,
             last_successful_download=self.last_successful_download,
             location=self.location,
             next_download=self.next_download,
@@ -439,6 +442,14 @@ class Downloader:
 
     def __repr__(self):
         return f'<Downloader name={self.name}>'
+
+    def normalize_domain(self, url: str) -> str:
+        """Return the canonical domain used to group this Download for daily download limits.
+
+        The base implementation strips common subdomains (www, m, mobile) and the port.  Subclasses
+        may override to apply download-type-specific URL normalization before extracting the domain
+        (e.g. VideoDownloader collapses youtu.be and /shorts/ links to youtube.com)."""
+        return normalize_domain(url)
 
     def prepare_download(self, session: Session, download: Download) -> Any:
         """DB-bound prep. Caller (DownloadManager) opens and commits the session.
@@ -720,14 +731,57 @@ class DownloadManager:
         self.disabled.clear()
 
     @staticmethod
-    def _get_local_time():
-        """Return the current local time, using configured timezone or system default."""
-        from wrolpi.common import get_wrolpi_config
+    def _get_local_now():
+        """Return the current local datetime, using configured timezone or system default."""
         config = get_wrolpi_config()
         if config.timezone:
-            tz = ZoneInfo(config.timezone)
-            return now().astimezone(tz).time()
-        return now().astimezone().time()
+            return now().astimezone(ZoneInfo(config.timezone))
+        return now().astimezone()
+
+    @staticmethod
+    def _get_local_time():
+        """Return the current local time, using configured timezone or system default."""
+        return DownloadManager._get_local_now().time()
+
+    @classmethod
+    def _get_local_day_start(cls):
+        """Return the most recent local midnight as a timezone-aware datetime.
+
+        Used as the lower bound when counting downloads attempted "today" for daily limits.  Comparing
+        against the (UTC-aware) ``last_download_attempt`` column works because both are timezone-aware."""
+        return cls._get_local_now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def _normalize_download_domain(self, download: 'Download') -> str:
+        """Return the normalized domain used to group a Download for daily limits.
+
+        Delegates to the Download's downloader so type-specific URL normalization applies; falls back to
+        the generic normalizer when no downloader is registered for the Download."""
+        downloader = None
+        if download.downloader:
+            try:
+                downloader = self.find_downloader_by_name(download.downloader)
+            except InvalidDownload:
+                downloader = None
+        if downloader:
+            return downloader.normalize_domain(download.url)
+        return normalize_domain(download.url)
+
+    def daily_download_counts(self, session: Session) -> Tuple[int, Dict[str, int]]:
+        """Count non-recurring downloads attempted since local midnight.
+
+        Recurring downloads (those with a ``frequency``, e.g. Channel/RSS catalog updates) never count
+        against the limits.  Returns ``(global_count, {domain: count})`` where domains are normalized."""
+        day_start = self._get_local_day_start()
+        attempted = session.query(Download).filter(
+            Download.frequency.is_(None),
+            Download.last_download_attempt.isnot(None),
+            Download.last_download_attempt >= day_start,
+        ).all()
+        domain_counts: Dict[str, int] = {}
+        for download in attempted:
+            domain = self._normalize_download_domain(download)
+            domain_counts[domain] = domain_counts.get(domain, 0) + 1
+        return len(attempted), domain_counts
 
     def is_within_download_window(self) -> bool:
         """Returns True if current time is within the configured download window, or no window is configured."""
@@ -1019,11 +1073,33 @@ class DownloadManager:
                 Download.id))
             count = 0
             download_wait = get_wrolpi_config().download_wait
+            # Daily download limits.  A value of None/0 means unlimited.  Recurring downloads (Channel/RSS
+            # catalog updates) are never gated and never counted; only their non-recurring children and
+            # one-off downloads count.
+            limit_per_domain = get_wrolpi_config().download_daily_limit_per_domain or 0
+            limit_global = get_wrolpi_config().download_daily_limit_global or 0
+            global_count, domain_counts = 0, {}
+            if limit_per_domain or limit_global:
+                global_count, domain_counts = self.daily_download_counts(session)
             rate_limited_domains = {}  # Track domains we've already checked for rate limiting
+            limits_enabled = bool(limit_per_domain or limit_global)
             for download in new_downloads:
                 domain = download.domain
+                is_recurring = download.frequency is not None
+                # Non-recurring downloads with limits enabled are grouped by their normalized domain.
+                limit_domain = self._normalize_download_domain(download) \
+                    if (limits_enabled and not is_recurring) else None
                 if domain not in self.processing_domains and len(
                         self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
+                    # Daily download limits (recurring downloads bypass the gate entirely).
+                    if limit_domain is not None:
+                        if limit_global and global_count >= limit_global:
+                            # Global daily limit reached; skip all remaining counted downloads this cycle.
+                            continue
+                        if limit_per_domain and domain_counts.get(limit_domain, 0) >= limit_per_domain:
+                            # This domain hit its daily limit; other domains may still have room.
+                            continue
+
                     # Per-domain rate limiting.
                     if download_wait and download_wait > 0:
                         try:
@@ -1036,6 +1112,13 @@ class DownloadManager:
                                     continue  # Skip this domain, try next
                         except (AttributeError, RuntimeError):
                             pass  # shared_ctx not initialized
+
+                    # Record the attempt time now (in this committed session) so the next dispatch cycle
+                    # counts it even before the download's signal handler marks it started.
+                    download.last_download_attempt = now()
+                    if limit_domain is not None:
+                        global_count += 1
+                        domain_counts[limit_domain] = domain_counts.get(limit_domain, 0) + 1
 
                     self._add_processing_domain(domain)
                     context = dict(download_id=download.id, download_url=download.url)

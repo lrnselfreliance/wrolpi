@@ -315,6 +315,8 @@ export async function getSettings() {
             archive_destination: content.archive_destination,
             download_manager_disabled: content.download_manager_disabled,
             download_manager_stopped: content.download_manager_stopped,
+            download_daily_limit_global: content.download_daily_limit_global,
+            download_daily_limit_per_domain: content.download_daily_limit_per_domain,
             download_on_startup: content.download_on_startup,
             download_timeout: content.download_timeout,
             download_wait: content.download_wait,

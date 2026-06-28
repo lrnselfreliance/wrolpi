@@ -914,6 +914,20 @@ def test_download_settings_coerces_numeric_strings():
     assert 'max_pages' not in req.settings
 
 
+@pytest.mark.parametrize('order', ['newest', 'oldest', None])
+def test_download_settings_accepts_valid_download_order(order):
+    from wrolpi.schema import DownloadSettings
+    DownloadSettings(download_order=order)
+
+
+def test_download_settings_rejects_deprecated_views_order():
+    """'views' download order was deprecated; YouTube no longer provides view counts in listings."""
+    from wrolpi.schema import DownloadSettings
+    from wrolpi.errors import ValidationError
+    with pytest.raises(ValidationError):
+        DownloadSettings(download_order='views')
+
+
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):

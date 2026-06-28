@@ -367,6 +367,11 @@ export function SettingsPage() {
         setPendingSave(true);
         newSettings.download_timeout = parseInt(newSettings.download_timeout);
         newSettings.download_wait = parseInt(newSettings.download_wait);
+        // Empty daily-limit fields become null (no change / unlimited); a number is sent as-is.
+        newSettings.download_daily_limit_per_domain = newSettings.download_daily_limit_per_domain === ''
+            ? null : parseInt(newSettings.download_daily_limit_per_domain);
+        newSettings.download_daily_limit_global = newSettings.download_daily_limit_global === ''
+            ? null : parseInt(newSettings.download_daily_limit_global);
         newSettings.log_level = toApiLogLevel(newSettings.log_level);
         try {
             await saveSettings(newSettings);
@@ -456,6 +461,8 @@ export function SettingsPage() {
             require_media_mounted: settings.require_media_mounted,
             download_timeout: settings.download_timeout,
             download_wait: settings.download_wait,
+            download_daily_limit_per_domain: settings.download_daily_limit_per_domain ?? '',
+            download_daily_limit_global: settings.download_daily_limit_global ?? '',
             download_window_start: settings.download_window_start || '',
             download_window_end: settings.download_window_end || '',
             timezone: settings.timezone || '',
@@ -723,6 +730,34 @@ export function SettingsPage() {
                         value={state.download_timeout}
                         disabled={disabled || state.download_timeout === null}
                         onChange={(e, i) => handleTimeoutChange(e, 'download_timeout', i.value)}
+                    />
+                </Form.Group>
+
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Daily Download Limit (per domain)</b>
+                            <InfoPopup
+                                content='Maximum number of downloads from any single domain per day. Recurring
+                                    Channel/RSS catalog updates do not count; only the videos/archives they create
+                                    and one-off downloads count. Leave empty or set to 0 for no limit.'/>
+                        </>}
+                        value={state.download_daily_limit_per_domain}
+                        disabled={disabled}
+                        onChange={(e, i) => handleTimeoutChange(e, 'download_daily_limit_per_domain', i.value)}
+                    />
+                </Form.Group>
+                <Form.Group inline>
+                    <Form.Input
+                        label={<>
+                            <b>Daily Download Limit (total)</b>
+                            <InfoPopup
+                                content='Maximum number of downloads across all domains per day. Recurring
+                                    Channel/RSS catalog updates do not count. Leave empty or set to 0 for no limit.'/>
+                        </>}
+                        value={state.download_daily_limit_global}
+                        disabled={disabled}
+                        onChange={(e, i) => handleTimeoutChange(e, 'download_daily_limit_global', i.value)}
                     />
                 </Form.Group>
 

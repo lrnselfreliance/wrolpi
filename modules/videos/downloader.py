@@ -23,7 +23,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
-    trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post
+    trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post, normalize_domain
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult, \
@@ -529,6 +529,10 @@ class ChannelDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<ChannelDownloader>'
 
+    def normalize_domain(self, url: str) -> str:
+        # Collapse youtu.be / youtube.com/shorts / tracking params to the canonical youtube.com domain.
+        return normalize_domain(normalize_video_url(url))
+
     @staticmethod
     def is_a_playlist(info: dict):
         # A playlist may have an id different from its channel.
@@ -792,6 +796,10 @@ class VideoDownloader(Downloader, ABC):
 
     def __repr__(self):
         return f'<VideoDownloader>'
+
+    def normalize_domain(self, url: str) -> str:
+        # Collapse youtu.be / youtube.com/shorts / tracking params to the canonical youtube.com domain.
+        return normalize_domain(normalize_video_url(url))
 
     def already_downloaded(self, session: Session, *urls: str) -> List:
         # We only consider a video record with a video file as "downloaded".

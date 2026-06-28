@@ -367,11 +367,13 @@ export function SettingsPage() {
         setPendingSave(true);
         newSettings.download_timeout = parseInt(newSettings.download_timeout);
         newSettings.download_wait = parseInt(newSettings.download_wait);
-        // Empty daily-limit fields become null (no change / unlimited); a number is sent as-is.
+        // Empty daily-limit fields become 0 (unlimited); a number is sent as-is.  Sending 0 rather than
+        // null matters because the settings API drops null fields, which would leave a previously-saved
+        // limit active when the user clears the field.
         newSettings.download_daily_limit_per_domain = newSettings.download_daily_limit_per_domain === ''
-            ? null : parseInt(newSettings.download_daily_limit_per_domain);
+            ? 0 : parseInt(newSettings.download_daily_limit_per_domain);
         newSettings.download_daily_limit_global = newSettings.download_daily_limit_global === ''
-            ? null : parseInt(newSettings.download_daily_limit_global);
+            ? 0 : parseInt(newSettings.download_daily_limit_global);
         newSettings.log_level = toApiLogLevel(newSettings.log_level);
         try {
             await saveSettings(newSettings);

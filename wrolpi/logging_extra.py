@@ -8,6 +8,6 @@ class EmptyMessageFilter(logging.Filter):
         message = record.msg
         if not message:
             return False
-        if not message.strip():
+        if isinstance(message, str) and not message.strip():
             return False
         return True

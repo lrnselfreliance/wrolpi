@@ -1076,6 +1076,15 @@ class DownloadManager:
             # Daily download limits.  A value of None/0 means unlimited.  Recurring downloads (Channel/RSS
             # catalog updates) are never gated and never counted; only their non-recurring children and
             # one-off downloads count.
+            #
+            # This is a best-effort soft cap, not a hard quota.  The count is read from the DB and the slot is
+            # claimed (last_download_attempt set) inside this dispatch transaction.  The steady-state dispatcher
+            # (perpetual_download_worker) is single-process and self-serializing, so it never races itself; but
+            # create_downloads fires a background dispatch_downloads() to "start ASAP", which can overlap this
+            # cycle in another worker and read the same pre-commit count.  At a limit boundary that can leak a
+            # small, bounded overshoot (paced at one download per domain per cycle); it self-corrects the next
+            # cycle once last_download_attempt is committed and visible.  Enforcing a strict cap would require
+            # coordinating the count in shared_ctx with cross-process locking, which is not warranted here.
             limit_per_domain = get_wrolpi_config().download_daily_limit_per_domain or 0
             limit_global = get_wrolpi_config().download_daily_limit_global or 0
             global_count, domain_counts = 0, {}

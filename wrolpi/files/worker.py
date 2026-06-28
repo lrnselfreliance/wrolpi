@@ -1004,7 +1004,9 @@ class FileWorker:
         # `_upsert_file_groups`/`_delete_file_groups`/`_apply_post_processing` all advance the
         # shared status (upserting/deleting/modeling/indexing/cleanup).  Unlike the queued
         # handlers this path has no `process_queue` wrapper to reset it, so reset here or the UI
-        # is stranded at the last phase (e.g. 'cleanup' after deleting files).
+        # is stranded at the last phase (e.g. 'cleanup' after deleting files).  Mirror
+        # `process_queue`: reset to idle only on success, leave a terminal 'error' status on
+        # failure (and re-raise so the synchronous caller still sees it).
         try:
             result = await self._refresh_files_directly(paths)
             self._cleanup_modified_models(result.modified)
@@ -1016,7 +1018,13 @@ class FileWorker:
                 # Without this guard a synchronous caller would block on the entire backlog of
                 # unindexed files and could exceed Sanic's RESPONSE_TIMEOUT.
                 await self._apply_post_processing(is_global_refresh=False)
-        finally:
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f'refresh_sync failed for {len(paths)} paths', exc_info=e)
+            self.update_status(status='error', error=str(e))
+            raise
+        else:
             self.reset_status()
 
     def transfer_queue(self):

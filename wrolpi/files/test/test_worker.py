@@ -598,6 +598,27 @@ async def test_refresh_sync_resets_status(async_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
+async def test_refresh_sync_records_error_status_on_failure(async_client, test_session, test_directory,
+                                                            make_files_structure):
+    """A failed synchronous refresh must report a terminal 'error' status, not look idle.
+
+    `refresh_sync` resets to idle on success, but if it raises after a phase status was set the
+    status endpoint must surface the failure (status='error') rather than reporting a clean 'idle'
+    that hides the failed operation.  The exception is still re-raised to the synchronous caller.
+    """
+    # A new file on disk makes the refresh "changed", so post-processing actually runs.
+    paths = make_files_structure(['docs/file1.txt'])
+
+    # Fail during the modeling phase of post-processing.
+    with mock.patch('wrolpi.files.worker.apply_modelers', side_effect=RuntimeError('boom')):
+        with pytest.raises(RuntimeError):
+            await file_worker.refresh_sync(paths)
+
+    assert file_worker.status['status'] == 'error'
+    assert 'boom' in (file_worker.status['error'] or '')
+
+
+@pytest.mark.asyncio
 async def test_process_queue_resets_status_on_handler_error(async_client, test_session, test_directory,
                                                             make_files_structure):
     """A handler raising mid-phase must not strand the worker status at that phase.

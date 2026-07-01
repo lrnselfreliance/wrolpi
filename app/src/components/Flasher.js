@@ -6,7 +6,7 @@ import _ from "lodash";
 import {encodeMediaPath, humanFileSize, PageContainer, useTitle} from "./Common";
 import {Button, Divider, Form, Header, Icon, List, Loader, Modal, Progress, Segment, Table, TextArea} from "./Theme";
 import {ThemeContext} from "../contexts/contexts";
-import {filesSearch, flasherSearch} from "../api";
+import {deleteFlasherConfig, filesSearch, flasherSearch, getFlasherConfigs, saveFlasherConfig} from "../api";
 
 // The suffix used to find flashable ESP32 firmware in the media directory.
 const FIRMWARE_SUFFIX = '.bin';
@@ -167,6 +167,11 @@ export function FlasherPage() {
     const [logOpen, setLogOpen] = useState(false);
     const [flashOpen, setFlashOpen] = useState(false);
 
+    // Saved firmware configurations (flasher.yaml).
+    const [savedConfigs, setSavedConfigs] = useState([]);
+    const [saveModalOpen, setSaveModalOpen] = useState(false);
+    const [saveName, setSaveName] = useState('');
+
     const transportRef = useRef(null);
     const esploaderRef = useRef(null);
     const logRef = useRef('');
@@ -263,6 +268,50 @@ export function FlasherPage() {
         deviceChipRef.current = chip;
         setDeviceChip(chip);
         fetchMediaFirmware(mediaFilter, chip);
+    };
+
+    // Saved firmware configurations.
+    const fetchSavedConfigs = React.useCallback(async () => {
+        setSavedConfigs(await getFlasherConfigs());
+    }, []);
+
+    useEffect(() => {
+        fetchSavedConfigs();
+    }, [fetchSavedConfigs]);
+
+    // Media firmware entries that can be persisted (local computer files have no stable path, so are excluded).
+    const saveableFiles = files.filter(item => item.mediaPath);
+
+    const handleSaveConfig = async () => {
+        const name = saveName.trim();
+        if (!name) {
+            return;
+        }
+        const payload = saveableFiles.map(item => ({
+            path: item.mediaPath, address: item.address, name: item.name, size: item.size,
+        }));
+        if (await saveFlasherConfig(name, payload, eraseAll)) {
+            setSaveModalOpen(false);
+            setSaveName('');
+            await fetchSavedConfigs();
+        }
+    };
+
+    // Load a saved configuration into the firmware list, replacing the current selection.
+    const handleLoadConfig = (configuration) => {
+        setFiles((configuration.files || []).map(f => ({
+            mediaPath: f.path,
+            address: f.address || '',
+            name: f.name || (f.path || '').split('/').pop(),
+            size: f.size,
+        })));
+        setEraseAll(!!configuration.erase_all);
+    };
+
+    const handleDeleteConfig = async (name) => {
+        if (await deleteFlasherConfig(name)) {
+            await fetchSavedConfigs();
+        }
     };
 
     const handleAddressChange = (index, value) => {
@@ -558,7 +607,61 @@ export function FlasherPage() {
                     </Table.Body>
                 </Table>
             </>}
+
+            <Divider/>
+            <Header as='h4'>Saved Firmwares</Header>
+            <p {...t} style={{opacity: 0.8}}>
+                Configure the firmware files and offsets above, then save them as a named set to re-flash later
+                (e.g. a Meshtastic T-Deck: firmware at <code>0x0</code>, littlefs at <code>0xc90000</code>).
+            </p>
+            {savedConfigs.length > 0
+                ? <List divided relaxed selection>
+                    {savedConfigs.map(configuration => <List.Item key={configuration.name}>
+                        <List.Content floated='right'>
+                            <Button icon='trash' size='mini' color='red' disabled={busy}
+                                    onClick={() => handleDeleteConfig(configuration.name)}/>
+                        </List.Content>
+                        <List.Icon name='save' verticalAlign='middle'/>
+                        <List.Content onClick={busy ? undefined : () => handleLoadConfig(configuration)}
+                                      style={busy ? {} : {cursor: 'pointer'}}>
+                            <List.Header>{configuration.name}</List.Header>
+                            <List.Description {...t}>
+                                {(configuration.files || []).length} file(s)
+                                {configuration.erase_all ? ' — erases flash' : ''}
+                            </List.Description>
+                        </List.Content>
+                    </List.Item>)}
+                </List>
+                : <p {...t} style={{opacity: 0.7}}>No saved configurations yet.</p>}
+            <Button icon labelPosition='left' disabled={busy || saveableFiles.length === 0}
+                    onClick={() => setSaveModalOpen(true)} style={{marginTop: '0.5em'}}>
+                <Icon name='save'/>
+                Save current firmware
+            </Button>
         </Segment>
+
+        <Modal open={saveModalOpen} onClose={() => setSaveModalOpen(false)} size='tiny'>
+            <Modal.Header>Save firmware configuration</Modal.Header>
+            <Modal.Content>
+                <Form onSubmit={handleSaveConfig}>
+                    <Form.Input
+                        autoFocus
+                        label='Name'
+                        placeholder='e.g. T-Deck Meshtastic UI'
+                        value={saveName}
+                        onChange={(e, {value}) => setSaveName(value)}
+                    />
+                    <p {...t} style={{opacity: 0.8}}>
+                        Saving {saveableFiles.length} firmware file(s) from your WROLPi. An existing configuration
+                        with the same name will be replaced.
+                    </p>
+                </Form>
+            </Modal.Content>
+            <Modal.Actions>
+                <SButton onClick={() => setSaveModalOpen(false)}>Cancel</SButton>
+                <Button primary disabled={!saveName.trim()} onClick={handleSaveConfig}>Save</Button>
+            </Modal.Actions>
+        </Modal>
 
         <Segment>
             <Header as='h3'>2. Connect</Header>

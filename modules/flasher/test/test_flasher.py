@@ -103,3 +103,54 @@ async def test_flasher_search_api(async_client, test_session, make_esp_image, re
     got = [fg['primary_path'] for fg in response.json['file_groups']]
     assert got == ['software/marauder/s3.bin']
     assert response.json['file_groups'][0]['esp_chip'] == 'ESP32-S3'
+
+
+@pytest.mark.asyncio
+async def test_flasher_saved_configs_api(async_client, test_session, test_directory):
+    """Saved firmware configurations can be created, listed, replaced, deleted, and are persisted to YAML."""
+    # Initially empty.
+    request, response = await async_client.get('/api/flasher/configs')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['configurations'] == []
+
+    # Save a multi-part configuration (like a Meshtastic T-Deck).
+    body = dict(name='T-Deck MUI', erase_all=True, files=[
+        dict(path='software/firmware-t-deck-tft.bin', address='0x0', name='firmware-t-deck-tft.bin', size=100),
+        dict(path='software/littlefs-t-deck-tft.bin', address='0xc90000', name='littlefs-t-deck-tft.bin', size=200),
+    ])
+    request, response = await async_client.post('/api/flasher/configs', json=body)
+    assert response.status_code == HTTPStatus.CREATED
+
+    # It is listed with its files and offsets.
+    request, response = await async_client.get('/api/flasher/configs')
+    configs = response.json['configurations']
+    assert len(configs) == 1
+    assert configs[0]['name'] == 'T-Deck MUI'
+    assert configs[0]['erase_all'] is True
+    assert [f['address'] for f in configs[0]['files']] == ['0x0', '0xc90000']
+
+    # It is persisted to flasher.yaml.
+    assert (test_directory / 'config/flasher.yaml').is_file()
+
+    # Saving the same name replaces it (still one configuration).
+    body2 = dict(name='T-Deck MUI', files=[dict(path='software/other.bin', address='0x0')])
+    request, response = await async_client.post('/api/flasher/configs', json=body2)
+    assert response.status_code == HTTPStatus.CREATED
+    request, response = await async_client.get('/api/flasher/configs')
+    configs = response.json['configurations']
+    assert len(configs) == 1
+    assert [f['path'] for f in configs[0]['files']] == ['software/other.bin']
+
+    # An empty name is rejected.
+    request, response = await async_client.post('/api/flasher/configs', json=dict(name='  ', files=[]))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # Delete it (name is URL-encoded).
+    request, response = await async_client.delete('/api/flasher/configs/T-Deck%20MUI')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await async_client.get('/api/flasher/configs')
+    assert response.json['configurations'] == []
+
+    # Deleting a missing configuration 404s.
+    request, response = await async_client.delete('/api/flasher/configs/nope')
+    assert response.status_code == HTTPStatus.NOT_FOUND

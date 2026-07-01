@@ -1278,6 +1278,36 @@ export async function flasherSearch(chip, path) {
     return [null, null];
 }
 
+export async function getFlasherConfigs() {
+    // Return the user's saved firmware flashing configurations.
+    const response = await apiGet(`${API_URI}/flasher/configs`);
+    if (response.ok) {
+        const data = await response.json();
+        return data['configurations'] || [];
+    }
+    return [];
+}
+
+export async function saveFlasherConfig(name, files, eraseAll) {
+    const response = await apiPost(`${API_URI}/flasher/configs`, {name, files, erase_all: eraseAll});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Cannot save configuration.  See server logs.');
+        toast({type: 'error', title: 'Unable to save configuration', description: message, time: 5000});
+        return false;
+    }
+    return true;
+}
+
+export async function deleteFlasherConfig(name) {
+    const response = await apiDelete(`${API_URI}/flasher/configs/${encodeURIComponent(name)}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Cannot delete configuration.  See server logs.');
+        toast({type: 'error', title: 'Unable to delete configuration', description: message, time: 5000});
+        return false;
+    }
+    return true;
+}
+
 export async function refreshFiles(paths) {
     let response;
     if (Array.isArray(paths) && paths.length > 0) {

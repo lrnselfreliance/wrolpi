@@ -24,9 +24,12 @@ jest.mock('esptool-js', () => ({
 jest.mock('../api', () => ({
     filesSearch: jest.fn().mockResolvedValue([[], 0]),
     flasherSearch: jest.fn().mockResolvedValue([[], 0]),
+    getFlasherConfigs: jest.fn().mockResolvedValue([]),
+    saveFlasherConfig: jest.fn().mockResolvedValue(true),
+    deleteFlasherConfig: jest.fn().mockResolvedValue(true),
 }));
 
-import {filesSearch, flasherSearch} from '../api';
+import {filesSearch, flasherSearch, getFlasherConfigs} from '../api';
 import {
     chipFamily,
     estimateFlashSeconds,
@@ -159,6 +162,8 @@ describe('FlasherPage', () => {
         filesSearch.mockResolvedValue([[], 0]);
         flasherSearch.mockClear();
         flasherSearch.mockResolvedValue([[], 0]);
+        getFlasherConfigs.mockClear();
+        getFlasherConfigs.mockResolvedValue([]);
     });
 
     afterEach(() => {
@@ -207,6 +212,17 @@ describe('FlasherPage', () => {
         Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
         render(<FlasherPage/>);
         expect(screen.getAllByText('Filter files by detecting device').length).toBeGreaterThan(0);
+    });
+
+    it('lists saved firmware configurations fetched on load', async () => {
+        Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
+        getFlasherConfigs.mockResolvedValue([
+            {name: 'T-Deck MUI', erase_all: true, files: [{path: 'a.bin', address: '0x0'}]},
+        ]);
+        render(<FlasherPage/>);
+        await waitFor(() => expect(getFlasherConfigs).toHaveBeenCalled());
+        expect((await screen.findAllByText('Saved Firmwares')).length).toBeGreaterThan(0);
+        expect((await screen.findAllByText('T-Deck MUI')).length).toBeGreaterThan(0);
     });
 
     it('reminds the user about boot/download mode when connecting fails', async () => {

@@ -482,10 +482,6 @@ class FileGroup(ModelHelper, Base):
 
     def do_index(self):
         """Gather any missing information about this file group.  Index the contents of this file using an Indexer."""
-        from wrolpi.files.lib import split_path_stem_and_suffix
-        # Record the primary file's suffix for indexed suffix-filtering.  Done independent of the content
-        # indexer below so it is set even if reading the file's contents fails.
-        self.suffix = (split_path_stem_and_suffix(self.primary_path)[1] or '').lower() or None
         try:
             # Get the indexer on a separate line for debugging.
             indexer = self.indexer

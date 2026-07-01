@@ -290,6 +290,7 @@ async def test_files_search_by_suffix(test_session, async_client, make_files_str
     """Files can be filtered by their primary file's suffix (used by the firmware flasher to find .bin files)."""
     files = [
         'software/MALVEKE.ino.bin',
+        'software/bffb/esp32_marauder.ino.bootloader.bin',
         'software/firmware-heltec.uf2',
         'software/firmware-r1-neo.uf2',
         'notes.txt',
@@ -301,19 +302,31 @@ async def test_files_search_by_suffix(test_session, async_client, make_files_str
     request, response = await async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    async def search_suffix(suffix):
-        request, response = await async_client.post('/api/files/search', json=dict(suffix=suffix))
+    async def search(**kwargs):
+        request, response = await async_client.post('/api/files/search', json=kwargs)
         assert response.status_code == HTTPStatus.OK
         return sorted(fg['primary_path'] for fg in response.json['file_groups'])
 
     # Exact suffix match, normalized whether or not a leading dot is given, and case-insensitive.
-    assert await search_suffix('.bin') == ['software/MALVEKE.ino.bin']
-    assert await search_suffix('bin') == ['software/MALVEKE.ino.bin']
-    assert await search_suffix('.BIN') == ['software/MALVEKE.ino.bin']
-    assert await search_suffix('.uf2') == ['software/firmware-heltec.uf2', 'software/firmware-r1-neo.uf2']
-    assert await search_suffix('.txt') == ['notes.txt']
+    assert await search(suffix='.bin') == ['software/MALVEKE.ino.bin',
+                                           'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='bin') == ['software/MALVEKE.ino.bin',
+                                          'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='.BIN') == ['software/MALVEKE.ino.bin',
+                                           'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='.uf2') == ['software/firmware-heltec.uf2', 'software/firmware-r1-neo.uf2']
+    assert await search(suffix='.txt') == ['notes.txt']
     # A suffix that matches nothing returns no results.
-    assert await search_suffix('.gguf') == []
+    assert await search(suffix='.gguf') == []
+
+    # The `path` filter matches anywhere in the primary_path (case-insensitive), so a directory name works.
+    assert await search(path='bffb') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(path='BFFB') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(path='software/') == ['software/MALVEKE.ino.bin',
+                                              'software/bffb/esp32_marauder.ino.bootloader.bin',
+                                              'software/firmware-heltec.uf2', 'software/firmware-r1-neo.uf2']
+    # `suffix` and `path` combine (the firmware picker sends both).
+    assert await search(suffix='.bin', path='bffb') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
 
 
 @pytest.mark.asyncio

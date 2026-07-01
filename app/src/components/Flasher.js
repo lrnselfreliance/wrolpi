@@ -137,12 +137,13 @@ export function FlasherPage() {
         ]);
     };
 
-    // Fetch .bin firmware from the media directory, optionally filtered by the user's search text.
-    const fetchMediaFirmware = React.useCallback(async (searchStr) => {
+    // Fetch .bin firmware from the media directory, optionally filtered by a case-insensitive match against the
+    // full file path (so a filter of "bffb" lists the firmware inside that directory).
+    const fetchMediaFirmware = React.useCallback(async (pathFilter) => {
         setMediaLoading(true);
         try {
-            const [fileGroups] = await filesSearch(0, 50, searchStr || null, null, null, null,
-                false, null, null, null, false, null, FIRMWARE_SUFFIX);
+            const [fileGroups] = await filesSearch(0, 50, null, null, null, null,
+                false, null, null, null, false, null, FIRMWARE_SUFFIX, pathFilter || null);
             setMediaResults(fileGroups || []);
         } finally {
             setMediaLoading(false);
@@ -334,7 +335,7 @@ export function FlasherPage() {
                 <Form.Input
                     fluid
                     icon='search'
-                    placeholder='Filter firmware by name...'
+                    placeholder='Filter firmware by path (e.g. a folder name)...'
                     value={mediaFilter}
                     disabled={busy}
                     onChange={(e, {value}) => handleMediaFilterChange(value)}

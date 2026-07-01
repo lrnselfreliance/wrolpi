@@ -101,10 +101,12 @@ describe('FlasherPage', () => {
             {primary_path: 'software/MALVEKE.ino.bin', name: 'MALVEKE.ino.bin', size: 1024},
         ], 1]);
         render(<FlasherPage/>);
-        // Media firmware is fetched on mount filtered to the .bin suffix (last positional arg).
+        // Media firmware is fetched on mount filtered to the .bin suffix (the `suffix` positional arg).
         await waitFor(() => expect(filesSearch).toHaveBeenCalled());
-        const lastArg = filesSearch.mock.calls[0][filesSearch.mock.calls[0].length - 1];
-        expect(lastArg).toBe('.bin');
+        const call = filesSearch.mock.calls[0];
+        // filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear,
+        //             anyTag, order, suffix, path)
+        expect(call[12]).toBe('.bin');
         // The result is listed for the user to add.
         expect((await screen.findAllByText('MALVEKE.ino.bin')).length).toBeGreaterThan(0);
     });

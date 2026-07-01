@@ -43,6 +43,7 @@ class FilesSearchRequest:
     order: Optional[str] = None
     url: Optional[str] = None  # Filter by URL (partial match)
     suffix: Optional[str] = None  # Filter by primary file suffix (e.g. ".bin"), case-insensitive exact match
+    path: Optional[str] = None  # Filter by primary_path (case-insensitive partial match)
 
     def __post_init__(self):
         if self.any_tag and self.tag_names:

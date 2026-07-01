@@ -145,6 +145,11 @@ export function FlasherPage() {
             const [fileGroups] = await filesSearch(0, 50, null, null, null, null,
                 false, null, null, null, false, null, FIRMWARE_SUFFIX, pathFilter || null);
             setMediaResults(fileGroups || []);
+        } catch (e) {
+            // Surface connectivity errors instead of showing the empty "no firmware found" state, which would
+            // be indistinguishable from genuinely having no firmware.
+            setError(e && e.message ? e.message : String(e));
+            setMediaResults([]);
         } finally {
             setMediaLoading(false);
         }
@@ -157,6 +162,8 @@ export function FlasherPage() {
 
     // Debounce filter changes so we don't fire a request on every keystroke.
     const debouncedFetch = useRef(_.debounce((value) => fetchMediaFirmware(value), 400)).current;
+    // Cancel any pending debounced fetch on unmount so it can't setState on a gone component.
+    useEffect(() => () => debouncedFetch.cancel(), [debouncedFetch]);
     const handleMediaFilterChange = (value) => {
         setMediaFilter(value);
         debouncedFetch(value);
@@ -176,9 +183,11 @@ export function FlasherPage() {
         try {
             const port = await navigator.serial.requestPort();
             const transport = new Transport(port, true);
+            // Store the transport before main() so a failure below still reaches disconnect() and releases the
+            // serial port (otherwise the port stays locked until the page is refreshed).
+            transportRef.current = transport;
             const esploader = new ESPLoader({transport, baudrate, terminal});
             const chipDescription = await esploader.main();
-            transportRef.current = transport;
             esploaderRef.current = esploader;
             setChip(chipDescription);
             setConnected(true);

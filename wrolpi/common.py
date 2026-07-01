@@ -1141,6 +1141,10 @@ def get_all_configs() -> Dict[str, ConfigFile]:
     if map_pins_config := get_map_pins_config():
         all_configs[map_pins_config.file_name] = map_pins_config
 
+    from modules.flasher.config import get_flasher_config
+    if flasher_config := get_flasher_config():
+        all_configs[flasher_config.file_name] = flasher_config
+
     from wrolpi.collections.config import get_playlists_config
     if playlists_config := get_playlists_config():
         all_configs[playlists_config.file_name] = playlists_config
@@ -1237,6 +1241,16 @@ async def import_all_db_configs() -> dict[str, bool]:
     except Exception as e:
         logger.warning(f'Failed to import map pins config: {e}')
         results['map_pins'] = False
+
+    # Flasher saved firmware configurations (YAML-only, no DB)
+    try:
+        from modules.flasher.config import get_flasher_config
+        get_flasher_config().import_config()
+        results['flasher'] = True
+        logger.debug('flasher config imported')
+    except Exception as e:
+        logger.warning(f'Failed to import flasher config: {e}')
+        results['flasher'] = False
 
     return results
 

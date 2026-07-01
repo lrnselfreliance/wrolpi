@@ -15,6 +15,7 @@ from vininfo.details._base import VinDetails
 
 from modules.archive.api import archive_bp
 from modules.docs.api import docs_bp
+from modules.flasher.api import flasher_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
 from modules.videos.api import videos_bp
@@ -52,6 +53,7 @@ api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
 api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
+api_app.blueprint(flasher_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
 api_app.blueprint(videos_bp)

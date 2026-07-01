@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@acalcutt/maplibre-contour-pmtiles": "^0.1.2",
-    "@artsy/fresnel": "^6.1.0",
+    "@artsy/fresnel": "^8.5.0",
     "@cypress/react18": "^2.0.1",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",

@@ -1026,7 +1026,7 @@ async def search_directories_by_name(session: Session, name: str, excluded: List
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
-                 url: str = None) -> \
+                 url: str = None, suffix: str = None) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -1046,6 +1046,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param months: A list of integers representing the index of the month of the year, starting at 1.
     @param order: Used to change results from most relevant to recently viewed.
     @param url: Filter by URL using case-insensitive partial match (ILIKE).
+    @param suffix: Only return files whose primary file has this suffix (e.g. ".bin"), case-insensitive.
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -1071,6 +1072,12 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     if url:
         params['url_filter'] = f'%{url}%'
         wheres.append('fg.url ILIKE %(url_filter)s')
+
+    if suffix:
+        # Suffix is stored lowercased with a leading dot; normalize the caller's value to match the index.
+        normalized = suffix if suffix.startswith('.') else f'.{suffix}'
+        params['suffix'] = normalized.lower()
+        wheres.append('fg.suffix = %(suffix)s')
 
     if search_str and headline:
         headline = ''',

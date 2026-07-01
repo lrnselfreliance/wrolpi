@@ -104,6 +104,7 @@ class FileGroup(ModelHelper, Base):
     published_datetime = Column(TZDateTime)  # the date the creator published this file
     published_modified_datetime = Column(TZDateTime)  # the date the publisher modified this file
     size = Column(BigInteger, default=lambda: 0)
+    suffix = Column(String, index=True)  # lowercased suffix of the primary_path (e.g. ".bin"), for indexed filtering
     title = Column(String)  # user-displayable title
     url = Column(String)  # the location where this file can be downloaded.
     viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
@@ -481,6 +482,10 @@ class FileGroup(ModelHelper, Base):
 
     def do_index(self):
         """Gather any missing information about this file group.  Index the contents of this file using an Indexer."""
+        from wrolpi.files.lib import split_path_stem_and_suffix
+        # Record the primary file's suffix for indexed suffix-filtering.  Done independent of the content
+        # indexer below so it is set even if reading the file's contents fails.
+        self.suffix = (split_path_stem_and_suffix(self.primary_path)[1] or '').lower() or None
         try:
             # Get the indexer on a separate line for debugging.
             indexer = self.indexer
@@ -498,7 +503,8 @@ class FileGroup(ModelHelper, Base):
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
-        from wrolpi.files.lib import get_primary_file, get_mimetype, sanitize_filename_surrogates
+        from wrolpi.files.lib import get_primary_file, get_mimetype, sanitize_filename_surrogates, \
+            split_path_stem_and_suffix
 
         # Sanitize any paths with invalid UTF-8 characters (renames files on disk if needed)
         paths = tuple(sanitize_filename_surrogates(p) for p in paths)
@@ -533,6 +539,8 @@ class FileGroup(ModelHelper, Base):
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
+        # Store the lowercased suffix so searches can filter by file type using the indexed column.
+        file_group.suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
         logger.trace(f'FileGroup.from_paths: {file_group}')
 
         return file_group

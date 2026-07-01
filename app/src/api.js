@@ -1212,8 +1212,11 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
+    if (suffix) {
+        body['suffix'] = suffix;
+    }
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
     }

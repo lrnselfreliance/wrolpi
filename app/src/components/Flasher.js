@@ -1,15 +1,20 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import {Route, Routes} from "react-router";
-import {Checkbox, Message, Select} from "semantic-ui-react";
+import {Checkbox, Label, Message, Select, Button as SButton, Icon as SIcon} from "semantic-ui-react";
 import {ESPLoader, Transport} from "esptool-js";
 import _ from "lodash";
 import {encodeMediaPath, humanFileSize, PageContainer, useTitle} from "./Common";
-import {Button, Form, Header, Icon, List, Loader, Progress, Segment, Table, TextArea} from "./Theme";
+import {Button, Divider, Form, Header, Icon, List, Loader, Modal, Progress, Segment, Table, TextArea} from "./Theme";
 import {ThemeContext} from "../contexts/contexts";
-import {filesSearch} from "../api";
+import {filesSearch, flasherSearch} from "../api";
 
 // The suffix used to find flashable ESP32 firmware in the media directory.
 const FIRMWARE_SUFFIX = '.bin';
+
+// esptool-js reports a chip description like "ESP32-S2 (revision v0.0)"; take the family before " (".
+export function chipFamily(description) {
+    return (description || '').split(' (')[0].trim() || null;
+}
 
 // Flashing happens entirely in the browser using the Web Serial API; nothing is uploaded to WROLPi.  esptool-js is
 // bundled into the frontend build, so this works fully offline once the page has loaded.
@@ -82,6 +87,9 @@ export function FlasherPage() {
     const [mediaFilter, setMediaFilter] = useState('');
     const [mediaResults, setMediaResults] = useState([]);
     const [mediaLoading, setMediaLoading] = useState(false);
+    // When set (e.g. "ESP32-S2"), the picker only shows firmware for that chip (detected from the device).
+    const [deviceChip, setDeviceChip] = useState(null);
+    const deviceChipRef = useRef(null);  // Mirror for the debounced fetch closure.
 
     const [connected, setConnected] = useState(false);
     const [connecting, setConnecting] = useState(false);
@@ -89,7 +97,10 @@ export function FlasherPage() {
     const [chip, setChip] = useState('');
     const [progress, setProgress] = useState(null); // {fileIndex, percent}
     const [error, setError] = useState('');
+    // Set when a connection attempt fails, so we can remind the user to put the board into download/boot mode.
+    const [bootHint, setBootHint] = useState(false);
     const [log, setLog] = useState('');
+    const [logOpen, setLogOpen] = useState(false);
 
     const transportRef = useRef(null);
     const esploaderRef = useRef(null);
@@ -143,18 +154,25 @@ export function FlasherPage() {
         ]);
     };
 
-    // Fetch .bin firmware from the media directory, optionally filtered by a case-insensitive match against the
-    // full file path (so a filter of "bffb" lists the firmware inside that directory).
-    const fetchMediaFirmware = React.useCallback(async (pathFilter) => {
+    // Fetch firmware for the picker.  `pathFilter` is a case-insensitive match against the full file path (so
+    // "bffb" lists the firmware inside that directory).  When `chip` is set, only ESP images for that chip are
+    // returned (server inspects each file's header); otherwise all .bin files are listed.
+    const fetchMediaFirmware = React.useCallback(async (pathFilter, chip) => {
         setMediaLoading(true);
         try {
-            const [fileGroups] = await filesSearch(0, 50, null, null, null, null,
-                false, null, null, null, false, null, FIRMWARE_SUFFIX, pathFilter || null);
+            let fileGroups;
+            if (chip) {
+                [fileGroups] = await flasherSearch(chip, pathFilter || null);
+            } else {
+                [fileGroups] = await filesSearch(0, 50, null, null, null, null,
+                    false, null, null, null, false, null, FIRMWARE_SUFFIX, pathFilter || null);
+            }
             setMediaResults(fileGroups || []);
         } catch (e) {
             // Surface connectivity errors instead of showing the empty "no firmware found" state, which would
             // be indistinguishable from genuinely having no firmware.
             setError(e && e.message ? e.message : String(e));
+            setBootHint(false);
             setMediaResults([]);
         } finally {
             setMediaLoading(false);
@@ -163,16 +181,23 @@ export function FlasherPage() {
 
     // Auto-fetch on page load.
     useEffect(() => {
-        fetchMediaFirmware('');
+        fetchMediaFirmware('', null);
     }, [fetchMediaFirmware]);
 
-    // Debounce filter changes so we don't fire a request on every keystroke.
-    const debouncedFetch = useRef(_.debounce((value) => fetchMediaFirmware(value), 400)).current;
+    // Debounce filter changes so we don't fire a request on every keystroke.  Reads the device chip from a ref
+    // so the (once-created) debounced function always uses the current filter.
+    const debouncedFetch = useRef(_.debounce((value) => fetchMediaFirmware(value, deviceChipRef.current), 400)).current;
     // Cancel any pending debounced fetch on unmount so it can't setState on a gone component.
     useEffect(() => () => debouncedFetch.cancel(), [debouncedFetch]);
     const handleMediaFilterChange = (value) => {
         setMediaFilter(value);
         debouncedFetch(value);
+    };
+
+    const applyDeviceChip = (chip) => {
+        deviceChipRef.current = chip;
+        setDeviceChip(chip);
+        fetchMediaFirmware(mediaFilter, chip);
     };
 
     const handleAddressChange = (index, value) => {
@@ -183,28 +208,60 @@ export function FlasherPage() {
         setFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    // Open the serial port and detect the chip.  Returns the chip description string (e.g. "ESP32-S2 (...)").
+    const connectAndDetect = async () => {
+        const port = await navigator.serial.requestPort();
+        const transport = new Transport(port, true);
+        // Store the transport before main() so a failure below still reaches disconnect() and releases the
+        // serial port (otherwise the port stays locked until the page is refreshed).
+        transportRef.current = transport;
+        const esploader = new ESPLoader({transport, baudrate, terminal});
+        const chipDescription = await esploader.main();
+        esploaderRef.current = esploader;
+        setChip(chipDescription);
+        setConnected(true);
+        return chipDescription;
+    };
+
+    const handleConnectError = async (e) => {
+        // A user cancelling the browser's device picker throws; treat that quietly.
+        if (e && e.name === 'NotFoundError') {
+            appendLog('No device selected.\n');
+        } else {
+            setError(e && e.message ? e.message : String(e));
+            // A connect/sync failure is usually the board not being in download mode; remind the user.
+            setBootHint(true);
+        }
+        await disconnect();
+    };
+
     const handleConnect = async () => {
         setError('');
+        setBootHint(false);
         setConnecting(true);
         try {
-            const port = await navigator.serial.requestPort();
-            const transport = new Transport(port, true);
-            // Store the transport before main() so a failure below still reaches disconnect() and releases the
-            // serial port (otherwise the port stays locked until the page is refreshed).
-            transportRef.current = transport;
-            const esploader = new ESPLoader({transport, baudrate, terminal});
-            const chipDescription = await esploader.main();
-            esploaderRef.current = esploader;
-            setChip(chipDescription);
-            setConnected(true);
+            await connectAndDetect();
         } catch (e) {
-            // A user cancelling the browser's device picker throws; treat that quietly.
-            if (e && e.name === 'NotFoundError') {
-                appendLog('No device selected.\n');
-            } else {
-                setError(e && e.message ? e.message : String(e));
-            }
+            await handleConnectError(e);
+        } finally {
+            setConnecting(false);
+        }
+    };
+
+    // Layman flow: (re)detect the connected device and filter the firmware list to its chip.  Always releases any
+    // existing connection and prompts for the port again, so swapping to a different ESP device is detected fresh.
+    const handleFilterByDevice = async () => {
+        setError('');
+        setBootHint(false);
+        setConnecting(true);
+        try {
             await disconnect();
+            const family = chipFamily(await connectAndDetect());
+            if (family) {
+                applyDeviceChip(family);
+            }
+        } catch (e) {
+            await handleConnectError(e);
         } finally {
             setConnecting(false);
         }
@@ -230,6 +287,7 @@ export function FlasherPage() {
             return;
         }
         setError('');
+        setBootHint(false);
         setFlashing(true);
         setProgress({fileIndex: 0, percent: 0});
         try {
@@ -256,6 +314,7 @@ export function FlasherPage() {
             await esploaderRef.current.after('hard_reset');
         } catch (e) {
             setError(e && e.message ? e.message : String(e));
+            setBootHint(false);
         } finally {
             setFlashing(false);
         }
@@ -265,7 +324,7 @@ export function FlasherPage() {
         return <PageContainer>
             <Header as='h1'>Flasher</Header>
             <Message icon warning>
-                <Icon name='warning sign'/>
+                <SIcon name='warning sign'/>
                 <Message.Content>
                     <Message.Header>Web Serial is not available</Message.Header>
                     <p>Flashing requires the Web Serial API, which is only available in Chromium-based browsers
@@ -290,9 +349,17 @@ export function FlasherPage() {
             the device over USB.
         </p>
 
-        {error && <Message error onDismiss={() => setError('')}>
-            <Message.Header>Error</Message.Header>
+        {error && <Message error onDismiss={() => {
+            setError('');
+            setBootHint(false);
+        }}>
+            <Message.Header>{bootHint ? 'Could not connect to the device' : 'Error'}</Message.Header>
             <p>{error}</p>
+            {bootHint && <p>
+                Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
+                {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
+                BOOT and try again. Also check the USB cable is a data cable and no other tab has the port open.
+            </p>}
         </Message>}
 
         <Segment>
@@ -348,8 +415,33 @@ export function FlasherPage() {
                 app <code>0x10000</code>).
             </p>
 
-            <Header as='h4' dividing>Or choose firmware from your WROLPi</Header>
-            <Form>
+            <Divider/>
+            <Header as='h4'>Or choose firmware from your WROLPi</Header>
+            <p {...t} style={{opacity: 0.8}}>
+                Not sure which file you need? Plug in your device and let WROLPi show only the firmware that
+                matches it.
+            </p>
+            {/* Always available so a user who swaps to a different ESP device can re-detect it. */}
+            <Button
+                icon labelPosition='left'
+                loading={connecting}
+                disabled={busy}
+                onClick={handleFilterByDevice}
+            >
+                <Icon name='usb'/>
+                {deviceChip ? 'Detect a different device' : 'Filter files by detecting device'}
+            </Button>
+            {deviceChip &&
+                <Message info>
+                    {/* Plain (non-inverted) icon: Message backgrounds are light, so a themed white icon vanishes. */}
+                    <SIcon name='microchip'/>
+                    Showing firmware for <b>{deviceChip}</b>.
+                    <SButton size='tiny' compact onClick={() => applyDeviceChip(null)}
+                             disabled={busy} style={{marginLeft: '1em'}}>
+                        Show all firmware
+                    </SButton>
+                </Message>}
+            <Form style={{marginTop: '1em'}}>
                 <Form.Input
                     fluid
                     icon='search'
@@ -364,8 +456,9 @@ export function FlasherPage() {
                     ? <Loader active inline='centered'/>
                     : (mediaResults.length === 0
                         ? <p {...t} style={{opacity: 0.7}}>
-                            No <code>.bin</code> firmware found in your media directory
-                            {mediaFilter ? ' matching that filter.' : '. Add .bin files to the media directory to see them here.'}
+                            No <code>.bin</code> firmware found
+                            {deviceChip ? ` for ${deviceChip}` : ' in your media directory'}
+                            {mediaFilter ? ' matching that filter.' : '.'}
                         </p>
                         : <List divided relaxed selection>
                             {mediaResults.map(result => <List.Item
@@ -375,9 +468,17 @@ export function FlasherPage() {
                             >
                                 <List.Icon name='plus' verticalAlign='middle'/>
                                 <List.Content>
-                                    <List.Header>{result.name || result.primary_path}</List.Header>
+                                    <List.Header>
+                                        {result.name || result.primary_path}
+                                        {result.esp_kind &&
+                                            <Label size='tiny' color={result.esp_kind === 'factory' ? 'green' : 'grey'}
+                                                   style={{marginLeft: '0.5em'}}>
+                                                {result.esp_kind}
+                                            </Label>}
+                                    </List.Header>
                                     <List.Description {...t}>
                                         {result.primary_path} &mdash; {humanFileSize(result.size)}
+                                        {result.esp_chip && ` — ${result.esp_chip}`}
                                     </List.Description>
                                 </List.Content>
                             </List.Item>)}
@@ -397,16 +498,18 @@ export function FlasherPage() {
                         onChange={(e, {value}) => setBaudrate(value)}
                     />
                 </Form.Field>
+                {connected &&
+                    <Message positive>
+                        <SIcon name='usb'/> Connected to <b>{chip}</b>
+                    </Message>}
                 {connected
-                    ? <>
-                        <Message positive>
-                            <Icon name='usb'/> Connected to <b>{chip}</b>
-                        </Message>
-                        <Button color='grey' disabled={busy} onClick={disconnect}>Disconnect</Button>
-                    </>
+                    ? <Button color='grey' disabled={busy} onClick={disconnect}>Disconnect</Button>
                     : <Button primary loading={connecting} disabled={busy} onClick={handleConnect}>
                         Connect Device
                     </Button>}
+                <Button icon labelPosition='left' disabled={!log} onClick={() => setLogOpen(true)}>
+                    <Icon name='terminal'/> Logs
+                </Button>
             </Form>
         </Segment>
 
@@ -442,14 +545,19 @@ export function FlasherPage() {
             </div>}
         </Segment>
 
-        {log && <Segment>
-            <Header as='h3'>Log</Header>
-            <TextArea
-                readOnly
-                value={log}
-                style={{fontFamily: 'monospace', width: '100%', minHeight: '12em', whiteSpace: 'pre'}}
-            />
-        </Segment>}
+        <Modal open={logOpen} onClose={() => setLogOpen(false)} size='fullscreen'>
+            <Modal.Header>Flasher Log</Modal.Header>
+            <Modal.Content scrolling>
+                <TextArea
+                    readOnly
+                    value={log || 'No activity yet.'}
+                    style={{fontFamily: 'monospace', width: '100%', minHeight: '70vh', whiteSpace: 'pre'}}
+                />
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setLogOpen(false)}>Close</Button>
+            </Modal.Actions>
+        </Modal>
     </PageContainer>;
 }
 

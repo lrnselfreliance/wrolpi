@@ -1263,6 +1263,21 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
 }
 
+export async function flasherSearch(chip, path) {
+    // Search .bin firmware, filtered to ESP images for the given chip (from connecting to the device).
+    const body = {};
+    if (chip) body['chip'] = chip;
+    if (path) body['path'] = path;
+    const response = await apiPost(`${API_URI}/flasher/search`, body);
+    if (response.ok) {
+        const data = await response.json();
+        return [data['file_groups'], data['totals']['file_groups']];
+    }
+    const message = await getErrorMessage(response, 'Cannot search firmware.  See server logs.');
+    toast({type: 'error', title: 'Unable to search firmware', description: message, time: 5000});
+    return [null, null];
+}
+
 export async function refreshFiles(paths) {
     let response;
     if (Array.isArray(paths) && paths.length > 0) {

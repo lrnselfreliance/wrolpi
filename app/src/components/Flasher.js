@@ -49,17 +49,23 @@ async function readEntryBytes(item) {
     return new Uint8Array(buffer);
 }
 
-// Parse a user-entered flash offset like "0x10000", "0x0", or "65536".
+// A flash offset must be a 0x-prefixed hex string, e.g. "0x0" or "0x10000".
+const HEX_OFFSET_RE = /^0x[0-9a-f]+$/i;
+
+export function isValidHexOffset(value) {
+    return HEX_OFFSET_RE.test((value || '').trim());
+}
+
+// Parse a validated hex flash offset like "0x10000" or "0x0" into a number.
 export function parseAddress(value) {
     const trimmed = (value || '').trim();
     if (trimmed === '') {
         throw new Error('Flash offset is required');
     }
-    const address = /^0x/i.test(trimmed) ? parseInt(trimmed, 16) : parseInt(trimmed, 10);
-    if (!Number.isInteger(address) || address < 0) {
-        throw new Error(`Invalid flash offset: ${value}`);
+    if (!isValidHexOffset(trimmed)) {
+        throw new Error(`Invalid flash offset (expected a hex value like 0x10000): ${value}`);
     }
-    return address;
+    return parseInt(trimmed, 16);
 }
 
 export function FlasherPage() {
@@ -272,6 +278,8 @@ export function FlasherPage() {
     }
 
     const busy = connecting || flashing;
+    // Every firmware file must have a valid hex offset before flashing is allowed.
+    const offsetsValid = files.length > 0 && files.every(item => isValidHexOffset(item.address));
 
     return <PageContainer>
         <Header as='h1'>Flasher</Header>
@@ -310,6 +318,7 @@ export function FlasherPage() {
                                 placeholder='0x10000'
                                 value={item.address}
                                 disabled={busy}
+                                error={!isValidHexOffset(item.address)}
                                 onChange={(e, {value}) => handleAddressChange(index, value)}
                             />
                         </Table.Cell>
@@ -415,11 +424,16 @@ export function FlasherPage() {
                 <Button
                     color='red'
                     loading={flashing}
-                    disabled={!connected || flashing || files.length === 0}
+                    disabled={!connected || flashing || files.length === 0 || !offsetsValid}
                     onClick={handleFlash}
                 >
                     <Icon name='lightning'/> Flash Device
                 </Button>
+                {files.length > 0 && !offsetsValid &&
+                    <p {...t} style={{marginTop: '0.5em', opacity: 0.8}}>
+                        Every firmware file needs a valid hex flash offset (e.g. <code>0x0</code> or{' '}
+                        <code>0x10000</code>).
+                    </p>}
             </Form>
             {progress !== null && <div style={{marginTop: '1em'}}>
                 <Progress percent={progress.percent} progress indicating={flashing} autoSuccess>

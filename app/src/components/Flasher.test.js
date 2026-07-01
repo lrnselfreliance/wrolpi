@@ -13,19 +13,33 @@ jest.mock('../api', () => ({
 }));
 
 import {filesSearch} from '../api';
-import {FlasherPage, parseAddress, webSerialSupported} from './Flasher';
+import {FlasherPage, isValidHexOffset, parseAddress, webSerialSupported} from './Flasher';
+
+describe('isValidHexOffset', () => {
+    it('accepts 0x-prefixed hex strings', () => {
+        expect(isValidHexOffset('0x0')).toBe(true);
+        expect(isValidHexOffset('0x10000')).toBe(true);
+        expect(isValidHexOffset('0XABCDEF')).toBe(true);
+        expect(isValidHexOffset('  0x8000  ')).toBe(true);
+    });
+
+    it('rejects non-hex, un-prefixed, and empty values', () => {
+        expect(isValidHexOffset('')).toBe(false);
+        expect(isValidHexOffset('   ')).toBe(false);
+        expect(isValidHexOffset('10000')).toBe(false); // missing 0x prefix
+        expect(isValidHexOffset('0x')).toBe(false); // no digits
+        expect(isValidHexOffset('0xZZ')).toBe(false); // not hex
+        expect(isValidHexOffset('nope')).toBe(false);
+        expect(isValidHexOffset('0x1000 extra')).toBe(false);
+    });
+});
 
 describe('parseAddress', () => {
-    it('parses hex offsets', () => {
+    it('parses valid hex offsets', () => {
         expect(parseAddress('0x0')).toBe(0);
         expect(parseAddress('0x1000')).toBe(0x1000);
         expect(parseAddress('0X10000')).toBe(0x10000);
         expect(parseAddress('  0x8000  ')).toBe(0x8000);
-    });
-
-    it('parses decimal offsets', () => {
-        expect(parseAddress('0')).toBe(0);
-        expect(parseAddress('65536')).toBe(65536);
     });
 
     it('rejects empty offsets', () => {
@@ -33,9 +47,10 @@ describe('parseAddress', () => {
         expect(() => parseAddress('   ')).toThrow(/required/);
     });
 
-    it('rejects invalid offsets', () => {
+    it('rejects non-hex offsets', () => {
         expect(() => parseAddress('nope')).toThrow(/Invalid/);
         expect(() => parseAddress('0xZZ')).toThrow(/Invalid/);
+        expect(() => parseAddress('65536')).toThrow(/Invalid/); // decimal is no longer accepted
     });
 });
 

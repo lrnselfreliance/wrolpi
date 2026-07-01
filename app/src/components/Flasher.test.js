@@ -27,7 +27,54 @@ jest.mock('../api', () => ({
 }));
 
 import {filesSearch, flasherSearch} from '../api';
-import {chipFamily, FlasherPage, isValidHexOffset, parseAddress, webSerialSupported} from './Flasher';
+import {
+    chipFamily,
+    estimateFlashSeconds,
+    FlasherPage,
+    humanDuration,
+    isValidHexOffset,
+    parseAddress,
+    webSerialSupported,
+    withTimeout,
+} from './Flasher';
+
+describe('withTimeout', () => {
+    it('resolves when the promise settles before the timeout', async () => {
+        await expect(withTimeout(Promise.resolve('ok'), 50, 'too slow')).resolves.toBe('ok');
+    });
+
+    it('rejects with the message when the promise stalls (e.g. a hung connect)', async () => {
+        await expect(withTimeout(new Promise(() => {}), 10, 'too slow')).rejects.toThrow('too slow');
+    });
+});
+
+describe('estimateFlashSeconds', () => {
+    it('estimates from total bytes and baud rate (8N1: baud/10 bytes/sec)', () => {
+        // 115200 baud -> 11520 bytes/sec.  115200 bytes -> ~10s.
+        expect(estimateFlashSeconds(115200, 115200)).toBeCloseTo(10, 5);
+        // Faster baud -> proportionally less time.
+        expect(estimateFlashSeconds(115200, 921600)).toBeCloseTo(1.25, 5);
+    });
+
+    it('returns 0 for missing size or baud', () => {
+        expect(estimateFlashSeconds(0, 115200)).toBe(0);
+        expect(estimateFlashSeconds(1000, 0)).toBe(0);
+    });
+});
+
+describe('humanDuration', () => {
+    it('formats seconds and minutes', () => {
+        expect(humanDuration(45)).toBe('45s');
+        expect(humanDuration(60)).toBe('1m 0s');
+        expect(humanDuration(125)).toBe('2m 5s');
+    });
+
+    it('returns null for non-positive or invalid input', () => {
+        expect(humanDuration(0)).toBeNull();
+        expect(humanDuration(-5)).toBeNull();
+        expect(humanDuration(Infinity)).toBeNull();
+    });
+});
 
 describe('chipFamily', () => {
     it('extracts the chip family from an esptool-js description', () => {

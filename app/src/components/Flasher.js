@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useRef, useState} from 'react';
+import React, {useContext, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Route, Routes} from "react-router";
 import {Checkbox, Label, Message, Select, Button as SButton, Icon as SIcon} from "semantic-ui-react";
 import {ESPLoader, Transport} from "esptool-js";
@@ -73,6 +73,70 @@ export function parseAddress(value) {
     return parseInt(trimmed, 16);
 }
 
+// Rough estimate of how long flashing will take, in seconds.  Serial is 8N1 (10 bits per byte), so the link
+// carries ~baud/10 bytes/sec; esptool-js compresses the image (~0.6x), which roughly offsets SLIP framing and
+// flash-write overhead, making raw bytes / (baud/10) a reasonable ballpark.
+export function estimateFlashSeconds(totalBytes, baudrate) {
+    if (!totalBytes || !baudrate) {
+        return 0;
+    }
+    return totalBytes / (baudrate / 10);
+}
+
+// Format a duration in seconds as e.g. "45s" or "2m 5s".
+export function humanDuration(seconds) {
+    if (!seconds || !isFinite(seconds) || seconds <= 0) {
+        return null;
+    }
+    const total = Math.round(seconds);
+    const minutes = Math.floor(total / 60);
+    const secs = total % 60;
+    return minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+}
+
+// Reject if `promise` doesn't settle within `ms`.  esptool-js's connect can hang indefinitely when a board is
+// not in download mode; this guarantees the caller always gets a result so the UI can recover.
+export function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+    // Swallow a late rejection from the raced promise so it doesn't surface as an unhandled rejection.
+    promise.catch(() => {
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// How long to wait for a device to connect before giving up (esptool-js retries can otherwise stall the UI).
+const CONNECT_TIMEOUT_MS = 30_000;
+
+// A read-only log TextArea that auto-scrolls to the newest output — but only when the user is already at the
+// bottom, so scrolling up to read earlier lines isn't yanked back down.  Starts at the bottom on mount (e.g. when
+// a modal opens).
+function AutoScrollLog({value, ...props}) {
+    const containerRef = useRef(null);
+    const atBottomRef = useRef(true);
+
+    const getTextArea = () => containerRef.current && containerRef.current.querySelector('textarea');
+
+    const handleScroll = (e) => {
+        const el = e.target;
+        // Treat "within a few px of the bottom" as at-bottom so it re-sticks when the user scrolls back down.
+        atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+    };
+
+    useLayoutEffect(() => {
+        const el = getTextArea();
+        if (el && atBottomRef.current) {
+            el.scrollTop = el.scrollHeight;
+        }
+    }, [value]);
+
+    return <div ref={containerRef}>
+        <TextArea readOnly value={value} onScroll={handleScroll} {...props}/>
+    </div>;
+}
+
 export function FlasherPage() {
     useTitle('Flasher');
     const {t} = useContext(ThemeContext);
@@ -101,6 +165,7 @@ export function FlasherPage() {
     const [bootHint, setBootHint] = useState(false);
     const [log, setLog] = useState('');
     const [logOpen, setLogOpen] = useState(false);
+    const [flashOpen, setFlashOpen] = useState(false);
 
     const transportRef = useRef(null);
     const esploaderRef = useRef(null);
@@ -216,7 +281,9 @@ export function FlasherPage() {
         // serial port (otherwise the port stays locked until the page is refreshed).
         transportRef.current = transport;
         const esploader = new ESPLoader({transport, baudrate, terminal});
-        const chipDescription = await esploader.main();
+        // esptool-js can hang forever if the board is not in download mode; bound it so the UI always recovers.
+        const chipDescription = await withTimeout(esploader.main(), CONNECT_TIMEOUT_MS,
+            'Timed out waiting for the device to respond.');
         esploaderRef.current = esploader;
         setChip(chipDescription);
         setConnected(true);
@@ -228,9 +295,12 @@ export function FlasherPage() {
         if (e && e.name === 'NotFoundError') {
             appendLog('No device selected.\n');
         } else {
-            setError(e && e.message ? e.message : String(e));
+            const detail = e && e.message ? e.message : String(e);
+            setError(detail);
             // A connect/sync failure is usually the board not being in download mode; remind the user.
             setBootHint(true);
+            // Also record it in the log, which otherwise freezes at "Connecting..." with no indication of failure.
+            appendLog(`\nConnection failed: ${detail}\n`);
         }
         await disconnect();
     };
@@ -288,6 +358,7 @@ export function FlasherPage() {
         }
         setError('');
         setBootHint(false);
+        setFlashOpen(true);
         setFlashing(true);
         setProgress({fileIndex: 0, percent: 0});
         try {
@@ -340,6 +411,10 @@ export function FlasherPage() {
     // Every firmware file must have a valid hex offset before flashing is allowed.
     const offsetsValid = files.length > 0 && files.every(item => isValidHexOffset(item.address));
 
+    // Estimated flash time from the total firmware size and the selected baud rate.
+    const totalFlashBytes = files.reduce((sum, item) => sum + (item.size || 0), 0);
+    const flashEtaText = humanDuration(estimateFlashSeconds(totalFlashBytes, baudrate));
+
     return <PageContainer>
         <Header as='h1'>Flasher</Header>
         <p {...t}>
@@ -349,54 +424,15 @@ export function FlasherPage() {
             the device over USB.
         </p>
 
-        {error && <Message error onDismiss={() => {
-            setError('');
-            setBootHint(false);
-        }}>
-            <Message.Header>{bootHint ? 'Could not connect to the device' : 'Error'}</Message.Header>
+        {/* Connection errors render inside the Connect segment (below), where the user just clicked.  Other
+            errors show here at the top. */}
+        {error && !bootHint && <Message error onDismiss={() => setError('')}>
+            <Message.Header>Error</Message.Header>
             <p>{error}</p>
-            {bootHint && <p>
-                Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
-                {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
-                BOOT and try again. Also check the USB cable is a data cable and no other tab has the port open.
-            </p>}
         </Message>}
 
         <Segment>
             <Header as='h3'>1. Firmware files</Header>
-            {files.length > 0 && <Table compact unstackable>
-                <Table.Header>
-                    <Table.Row>
-                        <Table.HeaderCell>File</Table.HeaderCell>
-                        <Table.HeaderCell width={4}>Flash offset</Table.HeaderCell>
-                        <Table.HeaderCell width={1}/>
-                    </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                    {files.map((item, index) => <Table.Row key={`${item.name}-${index}`}>
-                        <Table.Cell>
-                            <Icon name={item.mediaPath ? 'database' : 'file'}/>
-                            {item.name} <span style={{opacity: 0.6}}>({humanFileSize(item.size)})</span>
-                        </Table.Cell>
-                        <Table.Cell>
-                            <Form.Input
-                                fluid
-                                size='small'
-                                placeholder='0x10000'
-                                value={item.address}
-                                disabled={busy}
-                                error={!isValidHexOffset(item.address)}
-                                onChange={(e, {value}) => handleAddressChange(index, value)}
-                            />
-                        </Table.Cell>
-                        <Table.Cell textAlign='center'>
-                            <Button icon='trash' size='mini' color='red' disabled={busy}
-                                    onClick={() => handleRemoveFile(index)}/>
-                        </Table.Cell>
-                    </Table.Row>)}
-                </Table.Body>
-            </Table>}
-
             <Button as='label' htmlFor='flasher-file-input' primary disabled={busy} icon labelPosition='left'>
                 <Icon name='file'/>
                 Add file from computer
@@ -484,6 +520,44 @@ export function FlasherPage() {
                             </List.Item>)}
                         </List>)}
             </div>
+
+            {/* Selected files are shown below the picker so adding one doesn't shove the list down the page. */}
+            {files.length > 0 && <>
+                <Divider/>
+                <Header as='h4'>Selected firmware</Header>
+                <Table compact unstackable>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>File</Table.HeaderCell>
+                            <Table.HeaderCell width={4}>Flash offset</Table.HeaderCell>
+                            <Table.HeaderCell width={1}/>
+                        </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                        {files.map((item, index) => <Table.Row key={`${item.name}-${index}`}>
+                            <Table.Cell>
+                                <Icon name={item.mediaPath ? 'database' : 'file'}/>
+                                {item.name} <span style={{opacity: 0.6}}>({humanFileSize(item.size)})</span>
+                            </Table.Cell>
+                            <Table.Cell>
+                                <Form.Input
+                                    fluid
+                                    size='small'
+                                    placeholder='0x10000'
+                                    value={item.address}
+                                    disabled={busy}
+                                    error={!isValidHexOffset(item.address)}
+                                    onChange={(e, {value}) => handleAddressChange(index, value)}
+                                />
+                            </Table.Cell>
+                            <Table.Cell textAlign='center'>
+                                <Button icon='trash' size='mini' color='red' disabled={busy}
+                                        onClick={() => handleRemoveFile(index)}/>
+                            </Table.Cell>
+                        </Table.Row>)}
+                    </Table.Body>
+                </Table>
+            </>}
         </Segment>
 
         <Segment>
@@ -511,6 +585,21 @@ export function FlasherPage() {
                     <Icon name='terminal'/> Logs
                 </Button>
             </Form>
+            {/* Rendered outside <Form> so Semantic's ".ui.form .error.message { display:none }" rule doesn't
+                hide it, and here (not at the top) so it is visible right where the user clicked Connect. */}
+            {error && bootHint && <Message error onDismiss={() => {
+                setError('');
+                setBootHint(false);
+            }} style={{marginTop: '1em'}}>
+                <Message.Header>Could not connect to the device</Message.Header>
+                <p>{error}</p>
+                <p>
+                    Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
+                    {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
+                    BOOT and try again. Also check the USB cable is a data cable and no other tab has the port
+                    open.
+                </p>
+            </Message>}
         </Segment>
 
         <Segment>
@@ -532,24 +621,49 @@ export function FlasherPage() {
                 >
                     <Icon name='lightning'/> Flash Device
                 </Button>
+                {offsetsValid && flashEtaText &&
+                    <span {...t} style={{marginLeft: '1em', opacity: 0.8}}>
+                        Estimated time: ~{flashEtaText} at {baudrate.toLocaleString()} baud
+                    </span>}
                 {files.length > 0 && !offsetsValid &&
                     <p {...t} style={{marginTop: '0.5em', opacity: 0.8}}>
                         Every firmware file needs a valid hex flash offset (e.g. <code>0x0</code> or{' '}
                         <code>0x10000</code>).
                     </p>}
             </Form>
-            {progress !== null && <div style={{marginTop: '1em'}}>
-                <Progress percent={progress.percent} progress indicating={flashing} autoSuccess>
-                    {flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}` : 'Done'}
-                </Progress>
-            </div>}
         </Segment>
+
+        <Modal
+            open={flashOpen}
+            onClose={() => !flashing && setFlashOpen(false)}
+            closeOnDimmerClick={!flashing}
+            size='fullscreen'
+        >
+            <Modal.Header>{flashing ? 'Flashing device…' : 'Flash complete'}</Modal.Header>
+            <Modal.Content scrolling>
+                {progress !== null &&
+                    <Progress percent={progress.percent} progress indicating={flashing} autoSuccess>
+                        {flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}` : 'Done'}
+                    </Progress>}
+                {flashing && flashEtaText &&
+                    <p {...t} style={{opacity: 0.8}}>
+                        Estimated total time: ~{flashEtaText} at {baudrate.toLocaleString()} baud. Keep this tab
+                        open and do not unplug the device.
+                    </p>}
+                <AutoScrollLog
+                    value={log || 'Starting…'}
+                    style={{fontFamily: 'monospace', width: '100%', minHeight: '60vh', whiteSpace: 'pre'}}
+                />
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => setFlashOpen(false)} disabled={flashing}>Close</Button>
+            </Modal.Actions>
+        </Modal>
 
         <Modal open={logOpen} onClose={() => setLogOpen(false)} size='fullscreen'>
             <Modal.Header>Flasher Log</Modal.Header>
             <Modal.Content scrolling>
-                <TextArea
-                    readOnly
+                <AutoScrollLog
                     value={log || 'No activity yet.'}
                     style={{fontFamily: 'monospace', width: '100%', minHeight: '70vh', whiteSpace: 'pre'}}
                 />

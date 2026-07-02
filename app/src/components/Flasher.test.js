@@ -27,14 +27,13 @@ jest.mock('esptool-js', () => ({
 
 // Flasher fetches media firmware on mount; mock the API so tests don't hit the network.
 jest.mock('../api', () => ({
-    filesSearch: jest.fn().mockResolvedValue([[], 0]),
     flasherSearch: jest.fn().mockResolvedValue([[], 0]),
     getFlasherConfigs: jest.fn().mockResolvedValue([]),
     saveFlasherConfig: jest.fn().mockResolvedValue(true),
     deleteFlasherConfig: jest.fn().mockResolvedValue(true),
 }));
 
-import {filesSearch, flasherSearch, getFlasherConfigs} from '../api';
+import {flasherSearch, getFlasherConfigs} from '../api';
 import {
     chipColor,
     chipTextColor,
@@ -167,6 +166,9 @@ describe('chipIdName', () => {
         expect(chipIdName(0)).toBe('ESP32');
         expect(chipIdName(2)).toBe('ESP32-S2');
         expect(chipIdName(9)).toBe('ESP32-S3');
+        // Must match the backend ESP_CHIP_IDS map: 17 -> C5, 18 -> P4 (not the reverse).
+        expect(chipIdName(17)).toBe('ESP32-C5');
+        expect(chipIdName(18)).toBe('ESP32-P4');
     });
 
     it('falls back to a readable string for unknown ids', () => {
@@ -245,8 +247,6 @@ describe('FlasherPage', () => {
     const original = Object.getOwnPropertyDescriptor(global.navigator, 'serial');
 
     beforeEach(() => {
-        filesSearch.mockClear();
-        filesSearch.mockResolvedValue([[], 0]);
         flasherSearch.mockClear();
         flasherSearch.mockResolvedValue([[], 0]);
         getFlasherConfigs.mockClear();

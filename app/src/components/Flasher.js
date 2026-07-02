@@ -182,6 +182,8 @@ export function FlasherPage() {
     const [log, setLog] = useState('');
     const [logOpen, setLogOpen] = useState(false);
     const [flashOpen, setFlashOpen] = useState(false);
+    // A flash failure, shown inside the flash modal (the top-of-page error banner is hidden behind the modal).
+    const [flashError, setFlashError] = useState('');
 
     // Which firmware-source tab is active (controlled so a file drop can switch to "Add from computer").
     const [activeTab, setActiveTab] = useState(0);
@@ -454,6 +456,7 @@ export function FlasherPage() {
         }
         setError('');
         setBootHint(false);
+        setFlashError('');
         setFlashOpen(true);
         setFlashing(true);
         setProgress({fileIndex: 0, percent: 0});
@@ -472,16 +475,21 @@ export function FlasherPage() {
                 flashMode: 'keep',
                 flashFreq: 'keep',
                 eraseAll,
+                // esptool-js 0.6.0 only implements compressed writes (compress:false throws
+                // "Yet to handle Non Compressed writes"), so this must stay true.
                 compress: true,
                 reportProgress: (fileIndex, written, total) => {
                     setProgress({fileIndex, percent: total ? Math.round((written / total) * 100) : 0});
                 },
             });
-            appendLog('\nFlash complete! Resetting device...\n');
             await esploaderRef.current.after('hard_reset');
+            appendLog('\nFlash complete! Unplug the device and power it back on to run the new firmware.\n');
         } catch (e) {
-            setError(e && e.message ? e.message : String(e));
-            setBootHint(false);
+            const detail = e && e.message ? e.message : String(e);
+            // Show the failure inside the flash modal (the page-level error banner is hidden behind it) and in
+            // the log, so a failed flash can't be mistaken for a frozen one.
+            setFlashError(detail);
+            appendLog(`\nFlash failed: ${detail}\n`);
         } finally {
             setFlashing(false);
         }
@@ -641,11 +649,6 @@ export function FlasherPage() {
                         </List.Item>)}
                     </List>
                     : <p {...t} style={{opacity: 0.7}}>No saved configurations yet.</p>}
-                <Button icon labelPosition='left' disabled={busy || saveableFiles.length === 0}
-                        onClick={() => setSaveModalOpen(true)} style={{marginTop: '0.5em'}}>
-                    <Icon name='save'/>
-                    Save current firmware
-                </Button>
             </Tab.Pane>,
     };
     // Tab order: saved sets first, then the media picker, then a local file.
@@ -717,6 +720,13 @@ export function FlasherPage() {
                         </Table.Row>)}
                     </Table.Body>
                 </Table>
+                {/* Save lives here (not in the Saved Firmwares tab) so the current selection can be saved from
+                    any source tab. */}
+                <Button icon labelPosition='left' disabled={busy || saveableFiles.length === 0}
+                        onClick={() => setSaveModalOpen(true)}>
+                    <Icon name='save'/>
+                    Save current firmware
+                </Button>
             </>}
         </Segment>
 
@@ -822,17 +832,36 @@ export function FlasherPage() {
             closeOnDimmerClick={!flashing}
             size='fullscreen'
         >
-            <Modal.Header>{flashing ? 'Flashing device…' : 'Flash complete'}</Modal.Header>
+            <Modal.Header>{flashing ? 'Flashing device…' : (flashError ? 'Flash failed' : 'Flash complete')}</Modal.Header>
             <Modal.Content scrolling>
                 {progress !== null &&
-                    <Progress percent={progress.percent} progress indicating={flashing} autoSuccess>
-                        {flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}` : 'Done'}
+                    <Progress percent={progress.percent} progress indicating={flashing}
+                              error={!!flashError} autoSuccess={!flashError}>
+                        {flashing ? `Writing file ${progress.fileIndex + 1} of ${files.length}`
+                            : (flashError ? 'Failed' : 'Done')}
                     </Progress>}
                 {flashing && flashEtaText &&
                     <p {...t} style={{opacity: 0.8}}>
                         Estimated total time: ~{flashEtaText} at {baudrate.toLocaleString()} baud. Keep this tab
                         open and do not unplug the device.
                     </p>}
+                {/* Surface a failure right here — otherwise a failed flash looks identical to a frozen one. */}
+                {flashError &&
+                    <Message error>
+                        <SIcon name='warning circle'/>
+                        <Message.Content>
+                            <Message.Header>Flashing failed</Message.Header>
+                            <p>{flashError}</p>
+                        </Message.Content>
+                    </Message>}
+                {!flashing && !flashError && progress !== null &&
+                    <Message success>
+                        <SIcon name='check circle'/>
+                        <Message.Content>
+                            <Message.Header>Flashing complete</Message.Header>
+                            <p>Unplug the device and power it back on to run the new firmware.</p>
+                        </Message.Content>
+                    </Message>}
                 <AutoScrollLog
                     value={log || 'Starting…'}
                     style={{fontFamily: 'monospace', width: '100%', minHeight: '60vh', whiteSpace: 'pre'}}

@@ -35,7 +35,7 @@ export function chipFamily(description) {
 // ESP image chip_id -> family name (matches esptool-js IMAGE_CHIP_ID values).
 const ESP_CHIP_ID_NAMES = {
     0: 'ESP32', 2: 'ESP32-S2', 5: 'ESP32-C3', 9: 'ESP32-S3',
-    12: 'ESP32-C2', 13: 'ESP32-C6', 16: 'ESP32-H2', 18: 'ESP32-C5',
+    12: 'ESP32-C2', 13: 'ESP32-C6', 16: 'ESP32-H2', 17: 'ESP32-C5', 18: 'ESP32-P4',
 };
 
 // Known ESP chip names, sorted so each maps to a stable color — colors survive reboots/refreshes and only shift

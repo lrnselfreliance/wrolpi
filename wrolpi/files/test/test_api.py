@@ -118,6 +118,36 @@ async def test_list_files_api(test_session, async_client, make_files_structure, 
 
 
 @pytest.mark.asyncio
+async def test_list_files_api_hides_ds_store(test_session, async_client, make_files_structure, test_directory):
+    """macOS metadata files (.DS_Store / ._.DS_Store) are never shown in the FileBrowser."""
+    make_files_structure([
+        '.DS_Store',  # Top-level metadata file should be hidden.
+        '._.DS_Store',  # Top-level AppleDouble metadata file should be hidden.
+        'archives/foo.txt',
+        'archives/.DS_Store',  # Nested metadata file should be hidden.
+        'archives/._.DS_Store',  # Nested AppleDouble metadata file should be hidden.
+    ])
+
+    async def get_files(directories):
+        request, response = await async_client.post('/api/files', content=json.dumps({'directories': directories}))
+        assert response.status_code == HTTPStatus.OK
+        return response.json['files']
+
+    # Top-level listing hides the metadata files.
+    top_level = await get_files([])
+    assert '.DS_Store' not in top_level
+    assert '._.DS_Store' not in top_level
+    assert 'archives/' in top_level
+
+    # Nested listing hides the metadata files, but still shows real files.
+    nested = await get_files(['archives'])
+    children = nested['archives/']['children']
+    assert '.DS_Store' not in children
+    assert '._.DS_Store' not in children
+    assert 'foo.txt' in children
+
+
+@pytest.mark.asyncio
 async def test_delete_file(test_session, async_client, make_files_structure, test_directory):
     files = ['bar.txt', 'baz/', 'foo']
     make_files_structure(files)

@@ -175,6 +175,9 @@ def _get_recursive_directory_dict(session: Session, directory: pathlib.Path, dir
     if directory in directories:
         children = dict()
         for path in directory.iterdir():
+            if not path.is_dir() and path.name in HIDDEN_FILES:
+                # Never show ignored files.
+                continue
             if path.is_dir() and path in directories:
                 children[f'{path.name}/'] = _get_recursive_directory_dict(session, path, directories)
             elif path.is_dir():
@@ -186,6 +189,8 @@ def _get_recursive_directory_dict(session: Session, directory: pathlib.Path, dir
 
 
 HIDDEN_DIRECTORIES = ('lost+found',)
+# macOS metadata files which should never be shown in the FileBrowser.
+HIDDEN_FILES = ('.DS_Store', '._.DS_Store')
 
 
 def list_directories_contents(session: Session, directories_: List[str]) -> Dict:
@@ -207,6 +212,9 @@ def list_directories_contents(session: Session, directories_: List[str]) -> Dict
     for path in media_directory.iterdir():
         if path.is_dir() and path.name in HIDDEN_DIRECTORIES:
             # Never show ignored directories.
+            continue
+        if not path.is_dir() and path.name in HIDDEN_FILES:
+            # Never show ignored files.
             continue
         if path.is_dir():
             paths[f'{path.name}/'] = _get_recursive_directory_dict(session, path, directories)

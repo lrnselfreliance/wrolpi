@@ -22,7 +22,7 @@ import {
     TextArea
 } from "./Theme";
 import {ThemeContext} from "../contexts/contexts";
-import {deleteFlasherConfig, filesSearch, flasherSearch, getFlasherConfigs, saveFlasherConfig} from "../api";
+import {deleteFlasherConfig, flasherSearch, getFlasherConfigs, saveFlasherConfig} from "../api";
 
 // The suffix used to find flashable ESP32 firmware in the media directory.
 const FIRMWARE_SUFFIX = '.bin';
@@ -30,6 +30,85 @@ const FIRMWARE_SUFFIX = '.bin';
 // esptool-js reports a chip description like "ESP32-S2 (revision v0.0)"; take the family before " (".
 export function chipFamily(description) {
     return (description || '').split(' (')[0].trim() || null;
+}
+
+// ESP image chip_id -> family name (matches esptool-js IMAGE_CHIP_ID values).
+const ESP_CHIP_ID_NAMES = {
+    0: 'ESP32', 2: 'ESP32-S2', 5: 'ESP32-C3', 9: 'ESP32-S3',
+    12: 'ESP32-C2', 13: 'ESP32-C6', 16: 'ESP32-H2', 18: 'ESP32-C5',
+};
+
+// Known ESP chip names, sorted so each maps to a stable color — colors survive reboots/refreshes and only shift
+// if a new name is added here.  A chip not in this list still gets a deterministic color via hashing below.
+const KNOWN_ESP_CHIPS = [
+    'ESP32', 'ESP32-S2', 'ESP32-S3', 'ESP32-C2', 'ESP32-C3',
+    'ESP32-C5', 'ESP32-C6', 'ESP32-C61', 'ESP32-H2', 'ESP32-P4',
+].sort();
+
+// Paul Tol's "bright" qualitative palette (colorblind-safe) plus black, then four more distinct colors for
+// headroom.  A label's *width* (chip-name length) is itself a discriminator, so two chips only need distinct
+// colors when they render at the same width.  The first eight cover today's largest same-width group (the eight
+// 8-character ESP32-* names); the extras let a same-width group grow past eight before colors would repeat.
+// (Truly colorblind-distinct qualitative colors top out around ten, so beyond that distinctness is best-effort.)
+const CHIP_COLORS = [
+    '#4477aa', '#ee6677', '#228833', '#ccbb44', '#66ccee', '#aa3377', '#bbbbbb', '#000000',
+    '#ee7733', '#332288', '#999933', '#882255',
+];
+
+// Assign each known chip a color *index within its own name-length group*.  Same-width chips therefore always get
+// different (colorblind-distinguishable) colors, while chips of different widths may share one — the width tells
+// them apart.  Built once from the sorted known list.
+const CHIP_COLOR_INDEX = (() => {
+    const perLength = {};
+    const index = {};
+    for (const name of KNOWN_ESP_CHIPS) {
+        const slot = perLength[name.length] || 0;
+        index[name] = slot;
+        perLength[name.length] = slot + 1;
+    }
+    return index;
+})();
+
+// Deterministic background color for a chip label (see CHIP_COLORS/CHIP_COLOR_INDEX).  Unknown chips hash to a
+// stable slot so they still get a consistent color.
+export function chipColor(name) {
+    if (!name) {
+        return CHIP_COLORS[CHIP_COLORS.length - 1];
+    }
+    if (name in CHIP_COLOR_INDEX) {
+        return CHIP_COLORS[CHIP_COLOR_INDEX[name] % CHIP_COLORS.length];
+    }
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    }
+    return CHIP_COLORS[hash % CHIP_COLORS.length];
+}
+
+// Black or white text for readability on a given hex background (YIQ brightness).
+export function chipTextColor(hex) {
+    const c = (hex || '').replace('#', '');
+    if (c.length < 6) {
+        return '#fff';
+    }
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 140 ? '#000' : '#fff';
+}
+
+export function chipIdName(chipId) {
+    return ESP_CHIP_ID_NAMES[chipId] || `chip id ${chipId}`;
+}
+
+// Read the chip_id from an ESP application/bootloader image header: magic byte 0xE9 at offset 0, chip_id as a
+// uint16 LE at offset 0x0C.  Returns null for non-ESP-image files (partition tables start 0xAA, boot_app0 and
+// littlefs are raw, etc.) — those carry no chip_id and must never be flagged as a mismatch.
+export function espImageChipId(header) {
+    if (!header || header.length < 14 || header[0] !== 0xE9) {
+        return null;
+    }
+    return header[12] | (header[13] << 8);
 }
 
 // Flashing happens entirely in the browser using the Web Serial API; nothing is uploaded to WROLPi.  esptool-js is
@@ -68,6 +147,19 @@ async function readEntryBytes(item) {
     }
     const buffer = await resp.arrayBuffer();
     return new Uint8Array(buffer);
+}
+
+// Read just the leading bytes of a firmware entry (enough for the ESP image header) without downloading the
+// whole file.  Local files are sliced; media files use an HTTP Range request (the media server supports Range).
+async function readEntryHeader(item) {
+    if (item.file) {
+        return new Uint8Array(await item.file.slice(0, 24).arrayBuffer());
+    }
+    const resp = await fetch(`/media/${encodeMediaPath(item.mediaPath)}`, {headers: {Range: 'bytes=0-23'}});
+    if (!resp.ok) {
+        return null;
+    }
+    return new Uint8Array(await resp.arrayBuffer()).slice(0, 24);
 }
 
 // A flash offset must be a 0x-prefixed hex string, e.g. "0x0" or "0x10000".
@@ -175,6 +267,11 @@ export function FlasherPage() {
     const [connecting, setConnecting] = useState(false);
     const [flashing, setFlashing] = useState(false);
     const [chip, setChip] = useState('');
+    // The connected device's ESP image chip_id (0=ESP32, 2=S2, 9=S3, …); used to catch wrong-chip firmware.
+    const [deviceChipId, setDeviceChipId] = useState(null);
+    // Per-selected-file chip_id read from each ESP image header, aligned to `files` (null = not an ESP image or
+    // unreadable).  Compared against deviceChipId to warn on the offending table row.
+    const [fileChipIds, setFileChipIds] = useState([]);
     const [progress, setProgress] = useState(null); // {fileIndex, percent}
     const [error, setError] = useState('');
     // Set when a connection attempt fails, so we can remind the user to put the board into download/boot mode.
@@ -274,18 +371,13 @@ export function FlasherPage() {
     };
 
     // Fetch firmware for the picker.  `pathFilter` is a case-insensitive match against the full file path (so
-    // "bffb" lists the firmware inside that directory).  When `chip` is set, only ESP images for that chip are
-    // returned (server inspects each file's header); otherwise all .bin files are listed.
+    // "bffb" lists the firmware inside that directory).  The server inspects each .bin's header and returns its
+    // chip/kind; when `chip` is set, only ESP images for that chip are returned (otherwise every .bin is listed,
+    // including non-ESP parts like partition tables and littlefs).
     const fetchMediaFirmware = React.useCallback(async (pathFilter, chip) => {
         setMediaLoading(true);
         try {
-            let fileGroups;
-            if (chip) {
-                [fileGroups] = await flasherSearch(chip, pathFilter || null);
-            } else {
-                [fileGroups] = await filesSearch(0, 50, null, null, null, null,
-                    false, null, null, null, false, null, FIRMWARE_SUFFIX, pathFilter || null);
-            }
+            const [fileGroups] = await flasherSearch(chip || null, pathFilter || null);
             setMediaResults(fileGroups || []);
         } catch (e) {
             // Surface connectivity errors instead of showing the empty "no firmware found" state, which would
@@ -327,6 +419,37 @@ export function FlasherPage() {
     useEffect(() => {
         fetchSavedConfigs();
     }, [fetchSavedConfigs]);
+
+    // Once connected, read each selected firmware's image chip_id so a wrong-chip file — e.g. an ESP32-S2
+    // bootloader in an ESP32 set — can be flagged on its table row.  Non-ESP-image files (partition tables,
+    // boot_app0, littlefs) carry no chip_id and read as null (never flagged).  Only the small header of each file
+    // is read (Range request for media files).  Keyed on file identity so editing an offset doesn't re-fetch.
+    const fileIdentityKey = files
+        .map(item => item.mediaPath || (item.file ? `${item.file.name}:${item.file.size}` : item.name))
+        .join('|');
+    useEffect(() => {
+        if (!connected || files.length === 0) {
+            setFileChipIds([]);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            const ids = await Promise.all(files.map(async (item) => {
+                try {
+                    return espImageChipId(await readEntryHeader(item));
+                } catch (e) {
+                    return null;  // Unreadable header: just don't flag this file.
+                }
+            }));
+            if (!cancelled) {
+                setFileChipIds(ids);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [connected, fileIdentityKey]);
 
     // Media firmware entries that can be persisted (local computer files have no stable path, so are excluded).
     const saveableFiles = files.filter(item => item.mediaPath);
@@ -384,6 +507,9 @@ export function FlasherPage() {
             'Timed out waiting for the device to respond.');
         esploaderRef.current = esploader;
         setChip(chipDescription);
+        // Capture the device's image chip_id so selected firmware can be checked against it (ESP8266 has none).
+        const detected = esploader.chip;
+        setDeviceChipId(detected && typeof detected.IMAGE_CHIP_ID === 'number' ? detected.IMAGE_CHIP_ID : null);
         setConnected(true);
         return chipDescription;
     };
@@ -424,7 +550,11 @@ export function FlasherPage() {
         setConnecting(true);
         try {
             await disconnect();
-            const family = chipFamily(await connectAndDetect());
+            await connectAndDetect();
+            // Filter by esptool's canonical chip name (e.g. "ESP32", not the "ESP32-D0WD-V3" variant from the
+            // description) so it matches the backend's chip_id-derived names — otherwise the search finds nothing.
+            const detected = esploaderRef.current && esploaderRef.current.chip;
+            const family = detected && detected.CHIP_NAME ? detected.CHIP_NAME : null;
             if (family) {
                 applyDeviceChip(family);
             }
@@ -447,8 +577,24 @@ export function FlasherPage() {
         esploaderRef.current = null;
         setConnected(false);
         setChip('');
+        setDeviceChipId(null);
+        setFileChipIds([]);
         setProgress(null);
     };
+
+    // Changing the selected firmware set invalidates the chip check performed at connect time.  Drop the
+    // connection so the user must reconnect and be re-checked — otherwise loading a different (wrong-chip) saved
+    // config while connected would appear valid against the previously-detected device.
+    const prevFileKeyRef = useRef(fileIdentityKey);
+    useEffect(() => {
+        if (prevFileKeyRef.current !== fileIdentityKey) {
+            prevFileKeyRef.current = fileIdentityKey;
+            if (connected) {
+                disconnect();
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fileIdentityKey, connected]);
 
     const handleFlash = async () => {
         if (!esploaderRef.current || files.length === 0) {
@@ -587,7 +733,7 @@ export function FlasherPage() {
                         onChange={(e, {value}) => handleMediaFilterChange(value)}
                     />
                 </Form>
-                <div style={{marginTop: '1em'}}>
+                <div style={{marginTop: '1em', overflowX: 'auto'}}>
                     {mediaLoading
                         ? <Loader active inline='centered'/>
                         : (mediaResults.length === 0
@@ -596,30 +742,50 @@ export function FlasherPage() {
                                 {deviceChip ? ` for ${deviceChip}` : ' in your media directory'}
                                 {mediaFilter ? ' matching that filter.' : '.'}
                             </p>
-                            : <List divided relaxed selection>
-                                {mediaResults.map(result => <List.Item
-                                    key={result.primary_path}
-                                    onClick={busy ? undefined : () => handleAddMediaFile(result)}
-                                    style={busy ? {opacity: 0.5} : {cursor: 'pointer'}}
-                                >
-                                    <List.Icon name='plus' verticalAlign='middle'/>
-                                    <List.Content>
-                                        <List.Header>
-                                            {result.name || result.primary_path}
-                                            {result.esp_kind &&
-                                                <Label size='tiny'
-                                                       color={result.esp_kind === 'factory' ? 'green' : 'grey'}
-                                                       style={{marginLeft: '0.5em'}}>
-                                                    {result.esp_kind}
-                                                </Label>}
-                                        </List.Header>
-                                        <List.Description {...t}>
-                                            {result.primary_path} &mdash; {humanFileSize(result.size)}
-                                            {result.esp_chip && ` — ${result.esp_chip}`}
-                                        </List.Description>
-                                    </List.Content>
-                                </List.Item>)}
-                            </List>)}
+                            : <Table compact selectable unstackable>
+                                <Table.Header>
+                                    <Table.Row>
+                                        <Table.HeaderCell>File</Table.HeaderCell>
+                                        <Table.HeaderCell>Path</Table.HeaderCell>
+                                        <Table.HeaderCell>Size</Table.HeaderCell>
+                                        <Table.HeaderCell>Chip</Table.HeaderCell>
+                                        <Table.HeaderCell>Kind</Table.HeaderCell>
+                                        <Table.HeaderCell width={1}/>
+                                    </Table.Row>
+                                </Table.Header>
+                                <Table.Body>
+                                    {mediaResults.map(result => {
+                                        const name = result.name || (result.primary_path || '').split('/').pop();
+                                        // esp_kind is 'not_esp_image' for parts with no chip (partitions, littlefs).
+                                        const kind = result.esp_kind && result.esp_kind !== 'not_esp_image'
+                                            ? result.esp_kind : null;
+                                        return <Table.Row key={result.primary_path}>
+                                            <Table.Cell>{name}</Table.Cell>
+                                            <Table.Cell {...t} style={{opacity: 0.7, wordBreak: 'break-all'}}>
+                                                {result.primary_path}
+                                            </Table.Cell>
+                                            <Table.Cell>{humanFileSize(result.size)}</Table.Cell>
+                                            <Table.Cell>
+                                                {result.esp_chip
+                                                    ? <Label size='tiny' style={{
+                                                        backgroundColor: chipColor(result.esp_chip),
+                                                        color: chipTextColor(chipColor(result.esp_chip)),
+                                                        borderColor: 'transparent',
+                                                    }}>{result.esp_chip}</Label>
+                                                    : <span style={{opacity: 0.5}}>—</span>}
+                                            </Table.Cell>
+                                            <Table.Cell>
+                                                {kind || <span style={{opacity: 0.5}}>—</span>}
+                                            </Table.Cell>
+                                            <Table.Cell textAlign='center'>
+                                                <Button icon='plus' size='mini' primary disabled={busy}
+                                                        title='Add to selected firmware'
+                                                        onClick={() => handleAddMediaFile(result)}/>
+                                            </Table.Cell>
+                                        </Table.Row>;
+                                    })}
+                                </Table.Body>
+                            </Table>)}
                 </div>
             </Tab.Pane>,
     };
@@ -697,10 +863,20 @@ export function FlasherPage() {
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {files.map((item, index) => <Table.Row key={`${item.name}-${index}`}>
+                        {files.map((item, index) => {
+                            // Flag (but never block) a file whose image targets a different chip than the device.
+                            const fileChipId = fileChipIds[index];
+                            const chipMismatch = deviceChipId !== null && fileChipId != null
+                                && fileChipId !== deviceChipId;
+                            return <Table.Row key={`${item.name}-${index}`} warning={chipMismatch}>
                             <Table.Cell>
                                 <Icon name={item.mediaPath ? 'database' : 'file'}/>
                                 {item.name} <span style={{opacity: 0.6}}>({humanFileSize(item.size)})</span>
+                                {chipMismatch &&
+                                    <Label color='red' size='tiny' style={{marginLeft: '0.5em'}}>
+                                        <SIcon name='warning sign'/>
+                                        Built for {chipIdName(fileChipId)}, not {chipIdName(deviceChipId)}
+                                    </Label>}
                             </Table.Cell>
                             <Table.Cell>
                                 <Form.Input
@@ -717,7 +893,8 @@ export function FlasherPage() {
                                 <Button icon='trash' size='mini' color='red' disabled={busy}
                                         onClick={() => handleRemoveFile(index)}/>
                             </Table.Cell>
-                        </Table.Row>)}
+                        </Table.Row>;
+                        })}
                     </Table.Body>
                 </Table>
                 {/* Save lives here (not in the Saved Firmwares tab) so the current selection can be saved from

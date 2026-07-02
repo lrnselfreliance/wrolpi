@@ -34,6 +34,7 @@ jest.mock('../hooks/customHooks', () => ({
     useWROLMode: jest.fn(() => false),
     useStatusFlag: jest.fn(() => false),
     useUploadFile: () => mockUseUploadFile,
+    useElementWidth: jest.fn(() => [() => {}, 0]),
 }));
 
 // Mock react-dropzone
@@ -45,7 +46,7 @@ jest.mock('react-dropzone', () => ({
 }));
 
 // Import mocked hooks for manipulation
-import {useBrowseFiles, useWROLMode} from '../hooks/customHooks';
+import {useBrowseFiles, useElementWidth, useWROLMode} from '../hooks/customHooks';
 
 // Create wrapper with all required contexts
 const AllContextsWrapper = ({children}) => {
@@ -91,6 +92,8 @@ describe('FileBrowser', () => {
             fetchFiles: jest.fn(),
         });
         useWROLMode.mockReturnValue(false);
+        // [callbackRef, width]; width 0 keeps footer buttons icon-only in tests.
+        useElementWidth.mockReturnValue([() => {}, 0]);
     });
 
     describe('Directory Selection', () => {

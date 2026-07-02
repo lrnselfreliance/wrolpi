@@ -667,6 +667,22 @@ export function FlasherPage() {
     // The nested tab menu isn't inverted automatically; give it the inverted style in dark mode so it matches.
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
+    // A connect failure needs a download-mode reminder shown right where the user acted — both in the Connect
+    // segment and next to the "Filter files by detecting device" button so it isn't missed off-screen.
+    const connectErrorMessage = () => (error && bootHint) &&
+        <Message error onDismiss={() => {
+            setError('');
+            setBootHint(false);
+        }} style={{marginTop: '1em'}}>
+            <Message.Header>Could not connect to the device</Message.Header>
+            <p>{error}</p>
+            <p>
+                Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
+                {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
+                BOOT and try again. Also check the USB cable is a data cable and no other tab has the port open.
+            </p>
+        </Message>;
+
     // The firmware source is chosen via three tabs (see the ordered array below).
     const computerPane = {
             menuItem: 'Add from computer',
@@ -712,6 +728,8 @@ export function FlasherPage() {
                     <Icon name='usb'/>
                     {deviceChip ? 'Detect a different device' : 'Filter files by detecting device'}
                 </Button>
+                {/* Show a connect failure here too, so the user doesn't have to scroll to the Connect segment. */}
+                {connectErrorMessage()}
                 {deviceChip &&
                     <Message info>
                         {/* Plain (non-inverted) icon: Message backgrounds are light, so a themed white icon
@@ -957,19 +975,7 @@ export function FlasherPage() {
             </Form>
             {/* Rendered outside <Form> so Semantic's ".ui.form .error.message { display:none }" rule doesn't
                 hide it, and here (not at the top) so it is visible right where the user clicked Connect. */}
-            {error && bootHint && <Message error onDismiss={() => {
-                setError('');
-                setBootHint(false);
-            }} style={{marginTop: '1em'}}>
-                <Message.Header>Could not connect to the device</Message.Header>
-                <p>{error}</p>
-                <p>
-                    Many ESP boards must be put into <b>download mode</b> manually before flashing. Hold the
-                    {' '}<b>BOOT</b> (or <b>IO0</b>) button, briefly press <b>RESET</b> (<b>EN</b>), then release
-                    BOOT and try again. Also check the USB cable is a data cable and no other tab has the port
-                    open.
-                </p>
-            </Message>}
+            {connectErrorMessage()}
         </Segment>
 
         <Segment>

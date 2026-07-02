@@ -70,12 +70,16 @@ async def test_search_esp_firmware_filters_by_chip(async_client, test_session, m
     assert total == 1
     assert names(s2) == ['s2-app.bin']
 
-    # No chip: all ESP images, excluding the non-ESP .bin.
-    all_esp, total = search_esp_firmware()
-    assert total == 4
-    assert 'littlefs.bin' not in names(all_esp)
+    # No chip: every .bin, including non-ESP parts (partition tables, littlefs, boot_app0) annotated with a null
+    # chip so a full flash set can still be assembled from the picker.
+    all_bin, total = search_esp_firmware()
+    assert total == 5
+    assert 'littlefs.bin' in names(all_bin)
+    littlefs = next(r for r in all_bin if pathlib.Path(r['primary_path']).name == 'littlefs.bin')
+    assert littlefs['esp_chip'] is None
+    assert littlefs['esp_kind'] == 'not_esp_image'
 
-    # A chip with no matching firmware returns nothing.
+    # Filtering to a specific chip still returns only that chip's ESP images (non-ESP parts are shown unfiltered).
     _, total = search_esp_firmware(chip='ESP32-H2')
     assert total == 0
 

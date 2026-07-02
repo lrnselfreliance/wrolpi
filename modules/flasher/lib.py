@@ -102,9 +102,13 @@ def _resolve_media_path(primary_path) -> pathlib.Path:
 
 def search_esp_firmware(chip: Optional[str] = None, path: Optional[str] = None,
                         limit: int = 1000) -> Tuple[List[dict], int]:
-    """Search for ``.bin`` firmware and return only ESP images, annotated with their detected chip/kind.
+    """Search for ``.bin`` firmware, annotated with each file's detected chip/kind.
 
-    @param chip: If provided, only return images built for this chip (e.g. "ESP32-S2").
+    Without a ``chip`` filter every ``.bin`` is returned — including non-ESP parts (partition tables, boot_app0,
+    filesystem images) annotated with a null chip — so a full flash set can be assembled.  With a ``chip`` filter
+    only ESP images built for that chip are returned.
+
+    @param chip: If provided, only return ESP images built for this chip (e.g. "ESP32-S2").
     @param path: Case-insensitive partial match against the file path (same as file search).
     @param limit: Maximum number of candidate .bin files to inspect.
     """
@@ -115,11 +119,13 @@ def search_esp_firmware(chip: Optional[str] = None, path: Optional[str] = None,
     results = []
     for file_group in file_groups:
         info = read_esp_image_info(_resolve_media_path(file_group['primary_path']))
-        if not info['is_esp_image']:
-            # Skip non-ESP .bin files (filesystem images, game installers, STM32 firmware, etc.).
-            continue
-        if chip and info['chip'] != chip:
-            continue
+        if chip:
+            # Filtering to a specific chip: only its ESP images.  Non-ESP .bin files (filesystem images, game
+            # installers, STM32 firmware, etc.) have no chip and are excluded from a chip-filtered search.
+            if not info['is_esp_image'] or info['chip'] != chip:
+                continue
+        # Unfiltered: return every .bin, annotating non-ESP parts (partition tables, boot_app0, littlefs) with a
+        # null chip so they remain available to assemble into a flash set.
         results.append({
             **file_group,
             'esp_chip': info['chip'],

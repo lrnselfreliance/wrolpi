@@ -3,12 +3,17 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 
 // esptool-js ships untranspiled ESM which Jest will not transform; mock it so importing Flasher.js is safe.
 // Real classes (not jest.fn mock impls) so `new ESPLoader()` reliably yields an instance with main()/after().
-// The ESPLoader mock reports an ESP32-S2 so the connect/detect flow can be exercised.
+// The `mock`-prefixed holders let individual tests model different chips (esptool-js sets esploader.chip with a
+// canonical CHIP_NAME plus IMAGE_CHIP_ID during main()); defaults describe an ESP32-S2.
+let mockChipName = 'ESP32-S2';
+let mockChipId = 2;
+let mockDescription = 'ESP32-S2 (revision v0.0)';
 jest.mock('esptool-js', () => ({
     __esModule: true,
     ESPLoader: class {
         async main() {
-            return 'ESP32-S2 (revision v0.0)';
+            this.chip = {CHIP_NAME: mockChipName, IMAGE_CHIP_ID: mockChipId};
+            return mockDescription;
         }
 
         async after() {
@@ -31,7 +36,11 @@ jest.mock('../api', () => ({
 
 import {filesSearch, flasherSearch, getFlasherConfigs} from '../api';
 import {
+    chipColor,
+    chipTextColor,
     chipFamily,
+    chipIdName,
+    espImageChipId,
     estimateFlashSeconds,
     FlasherPage,
     humanDuration,
@@ -90,6 +99,78 @@ describe('chipFamily', () => {
         expect(chipFamily('')).toBeNull();
         expect(chipFamily(null)).toBeNull();
         expect(chipFamily(undefined)).toBeNull();
+    });
+});
+
+describe('espImageChipId', () => {
+    // ESP image header: magic 0xE9 at byte 0, chip_id as uint16 LE at offset 0x0C.
+    const header = (magic, chipId) => {
+        const h = new Uint8Array(24);
+        h[0] = magic;
+        h[12] = chipId & 0xFF;
+        h[13] = (chipId >> 8) & 0xFF;
+        return h;
+    };
+
+    it('reads the chip_id from an ESP image header', () => {
+        expect(espImageChipId(header(0xE9, 0))).toBe(0);   // ESP32
+        expect(espImageChipId(header(0xE9, 2))).toBe(2);   // ESP32-S2
+        expect(espImageChipId(header(0xE9, 9))).toBe(9);   // ESP32-S3
+    });
+
+    it('returns null for non-ESP-image files (no chip_id to compare)', () => {
+        expect(espImageChipId(header(0xAA, 0))).toBeNull(); // partition table magic
+        expect(espImageChipId(new Uint8Array([0x00, 0x01]))).toBeNull(); // too short / raw (boot_app0)
+        expect(espImageChipId(null)).toBeNull();
+    });
+});
+
+describe('chipColor', () => {
+    it('is deterministic — the same chip always gets the same color', () => {
+        expect(chipColor('ESP32')).toBe(chipColor('ESP32'));
+        expect(chipColor('ESP32-S3')).toBe(chipColor('ESP32-S3'));
+    });
+
+    it('gives every same-width chip a distinct color (the colorblind aid)', () => {
+        // All the 8-character ESP32-* names render at the same width, so they must never share a color.
+        const sameWidth = ['ESP32-S2', 'ESP32-S3', 'ESP32-C2', 'ESP32-C3',
+            'ESP32-C5', 'ESP32-C6', 'ESP32-H2', 'ESP32-P4'];
+        const colors = sameWidth.map(chipColor);
+        expect(new Set(colors).size).toBe(sameWidth.length);
+    });
+
+    it('may reuse a color across different widths (width itself disambiguates)', () => {
+        // ESP32 (5 chars) and a same-index 8-char chip can share a color — different widths tell them apart.
+        expect(chipColor('ESP32')).toBe(chipColor('ESP32-C2'));
+    });
+
+    it('returns a valid palette color for known, unknown, and empty names', () => {
+        const hex = /^#[0-9a-f]{6}$/i;
+        expect(chipColor('ESP32')).toMatch(hex);
+        expect(chipColor('ESP32-FUTURE')).toMatch(hex); // unknown -> stable hash
+        expect(chipColor('ESP32-FUTURE')).toBe(chipColor('ESP32-FUTURE'));
+        expect(chipColor(null)).toMatch(hex);
+    });
+});
+
+describe('chipTextColor', () => {
+    it('uses white text on dark backgrounds and black on light ones', () => {
+        expect(chipTextColor('#000000')).toBe('#fff'); // black bg
+        expect(chipTextColor('#4477aa')).toBe('#fff'); // Tol blue (dark)
+        expect(chipTextColor('#ccbb44')).toBe('#000'); // Tol yellow (light)
+        expect(chipTextColor('#bbbbbb')).toBe('#000'); // grey (light)
+    });
+});
+
+describe('chipIdName', () => {
+    it('maps known chip ids to family names', () => {
+        expect(chipIdName(0)).toBe('ESP32');
+        expect(chipIdName(2)).toBe('ESP32-S2');
+        expect(chipIdName(9)).toBe('ESP32-S3');
+    });
+
+    it('falls back to a readable string for unknown ids', () => {
+        expect(chipIdName(99)).toBe('chip id 99');
     });
 });
 
@@ -170,6 +251,10 @@ describe('FlasherPage', () => {
         flasherSearch.mockResolvedValue([[], 0]);
         getFlasherConfigs.mockClear();
         getFlasherConfigs.mockResolvedValue([]);
+        // Default the mocked chip back to ESP32-S2 for each test.
+        mockChipName = 'ESP32-S2';
+        mockChipId = 2;
+        mockDescription = 'ESP32-S2 (revision v0.0)';
     });
 
     afterEach(() => {
@@ -200,21 +285,21 @@ describe('FlasherPage', () => {
         expect(screen.getAllByText('Flash Device')[0].closest('button')).toBeDisabled();
     });
 
-    it('fetches media firmware by suffix on load and lists results', async () => {
+    it('fetches media firmware on load and lists it with chip/kind in a table', async () => {
         Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
-        filesSearch.mockResolvedValue([[
-            {primary_path: 'software/MALVEKE.ino.bin', name: 'MALVEKE.ino.bin', size: 1024},
+        flasherSearch.mockResolvedValue([[
+            {primary_path: 'software/MALVEKE.ino.bin', name: 'MALVEKE.ino.bin', size: 1024,
+                esp_chip: 'ESP32', esp_kind: 'app'},
         ], 1]);
         render(<FlasherPage/>);
-        // Media firmware is fetched on mount filtered to the .bin suffix (the `suffix` positional arg).
-        await waitFor(() => expect(filesSearch).toHaveBeenCalled());
-        const call = filesSearch.mock.calls[0];
-        // filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear,
-        //             anyTag, order, suffix, path)
-        expect(call[12]).toBe('.bin');
+        // Media firmware is fetched on mount via the flasher search (no chip filter, no path).
+        await waitFor(() => expect(flasherSearch).toHaveBeenCalledWith(null, null));
         // The result is listed for the user to add, under the "Choose from your WROLPi" tab.
         switchTab('Choose from your WROLPi');
         expect((await screen.findAllByText('MALVEKE.ino.bin')).length).toBeGreaterThan(0);
+        // The table surfaces the detected chip and kind.
+        expect(screen.getAllByText('ESP32').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('app').length).toBeGreaterThan(0);
     });
 
     it('offers the detect-device filter button', () => {
@@ -276,6 +361,24 @@ describe('FlasherPage', () => {
         expect((await screen.findAllByText('s2.bin')).length).toBeGreaterThan(0);
     });
 
+    it('filters by the canonical chip name, not the variant from the chip description', async () => {
+        // An ESP32-classic reports description "ESP32-D0WD-V3 (revision 3)" but CHIP_NAME "ESP32".  The backend
+        // stores firmware chips as the canonical name ("ESP32"), so the search must use CHIP_NAME — searching the
+        // variant "ESP32-D0WD-V3" would match nothing even when valid firmware exists.
+        mockChipName = 'ESP32';
+        mockChipId = 0;
+        mockDescription = 'ESP32-D0WD-V3 (revision 3)';
+        Object.defineProperty(global.navigator, 'serial',
+            {value: {requestPort: jest.fn().mockResolvedValue({})}, configurable: true});
+
+        render(<FlasherPage/>);
+        switchTab('Choose from your WROLPi');
+        fireEvent.click(screen.getAllByText('Filter files by detecting device')[0].closest('button'));
+
+        // (flasherSearch also runs on mount with no chip; wait for the detect-driven call specifically.)
+        await waitFor(() => expect(flasherSearch).toHaveBeenCalledWith('ESP32', null));
+    });
+
     it('adds dropped .bin files and switches to the Add-from-computer tab', async () => {
         Object.defineProperty(global.navigator, 'serial', {value: {}, configurable: true});
         render(<FlasherPage/>);
@@ -295,5 +398,23 @@ describe('FlasherPage', () => {
         expect(screen.queryByText('notes.txt')).not.toBeInTheDocument();
         // The drop switches to the "Add from computer" tab, revealing its dropzone.
         expect(screen.getAllByText(/Click here/).length).toBeGreaterThan(0);
+    });
+
+    it('disconnects when the selected firmware set changes, forcing a fresh chip check', async () => {
+        Object.defineProperty(global.navigator, 'serial',
+            {value: {requestPort: jest.fn().mockResolvedValue({})}, configurable: true});
+        render(<FlasherPage/>);
+
+        // Connect to the device.
+        fireEvent.click(screen.getAllByText('Connect Device')[0].closest('button'));
+        await waitFor(() => expect(screen.getAllByText('Disconnect').length).toBeGreaterThan(0));
+
+        // Changing the firmware selection (drop a new file) must drop the connection so it is re-checked.
+        const bin = new File([new Uint8Array([0xe9, 0, 0])], 'swapped.bin');
+        fireEvent.drop(screen.getAllByText('1. Firmware files')[0],
+            {dataTransfer: {files: [bin], types: ['Files']}});
+
+        await waitFor(() => expect(screen.getAllByText('Connect Device').length).toBeGreaterThan(0));
+        expect(screen.queryByText('Disconnect')).not.toBeInTheDocument();
     });
 });

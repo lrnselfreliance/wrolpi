@@ -261,6 +261,33 @@ async def test_refresh_files(async_client, test_session, make_files_structure, a
 
 
 @pytest.mark.asyncio
+async def test_refresh_populates_suffix(async_client, test_session, make_files_structure, refresh_files):
+    """A refresh populates `file_group.suffix` for every file it discovers.
+
+    Regression: suffix is path-derived metadata (like mimetype) and must be set when the FileGroup is
+    upserted during discovery, not deferred to content-indexing.  Deferring it meant a file that got marked
+    indexed through a path that skipped that step ended up indexed with a NULL suffix and was invisible to
+    suffix search (the firmware flasher's media picker)."""
+    make_files_structure([
+        'software/firmware.bin',
+        'software/bffb/esp32_marauder.ino.bootloader.bin',
+        'notes.txt',
+    ])
+
+    await refresh_files()
+
+    file_groups = test_session.query(FileGroup).all()
+    # Suffix is set for every file the moment it is discovered, and every row is indexed.
+    assert all(fg.indexed for fg in file_groups)
+    suffixes = {fg.primary_path.name: fg.suffix for fg in file_groups}
+    assert suffixes == {
+        'firmware.bin': '.bin',
+        'esp32_marauder.ino.bootloader.bin': '.bin',
+        'notes.txt': '.txt',
+    }
+
+
+@pytest.mark.asyncio
 async def test_file_group_location(async_client, test_session, make_files_structure, refresh_files):
     """FileGroup can return the URL necessary to preview the FileGroup."""
     make_files_structure({

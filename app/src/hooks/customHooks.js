@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useRef, useState} from "react";
+import React, {useCallback, useContext, useEffect, useRef, useState} from "react";
 import {
     ApiDownError,
     createChannel,
@@ -81,6 +81,28 @@ export const useIsTouchDevice = () => {
     }, []);
 
     return isTouchDevice;
+};
+
+export const useElementWidth = () => {
+    // Tracks the rendered width (in pixels) of an element. Returns a callback ref to attach to the element
+    // and its current width. Uses a callback ref (not a plain ref) so it re-attaches if the element mounts
+    // later (e.g. after data loads), and a ResizeObserver so the width updates as the container/viewport changes.
+    const [width, setWidth] = useState(0);
+    const observer = useRef(null);
+
+    const ref = useCallback((node) => {
+        if (observer.current) {
+            observer.current.disconnect();
+            observer.current = null;
+        }
+        if (node && typeof ResizeObserver === 'function') {
+            setWidth(node.offsetWidth);
+            observer.current = new ResizeObserver(() => setWidth(node.offsetWidth));
+            observer.current.observe(node);
+        }
+    }, []);
+
+    return [ref, width];
 };
 
 export const usePlatformModifier = () => {

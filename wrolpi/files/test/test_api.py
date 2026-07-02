@@ -118,6 +118,36 @@ async def test_list_files_api(test_session, async_client, make_files_structure, 
 
 
 @pytest.mark.asyncio
+async def test_list_files_api_hides_ds_store(test_session, async_client, make_files_structure, test_directory):
+    """macOS metadata files (.DS_Store / ._.DS_Store) are never shown in the FileBrowser."""
+    make_files_structure([
+        '.DS_Store',  # Top-level metadata file should be hidden.
+        '._.DS_Store',  # Top-level AppleDouble metadata file should be hidden.
+        'archives/foo.txt',
+        'archives/.DS_Store',  # Nested metadata file should be hidden.
+        'archives/._.DS_Store',  # Nested AppleDouble metadata file should be hidden.
+    ])
+
+    async def get_files(directories):
+        request, response = await async_client.post('/api/files', content=json.dumps({'directories': directories}))
+        assert response.status_code == HTTPStatus.OK
+        return response.json['files']
+
+    # Top-level listing hides the metadata files.
+    top_level = await get_files([])
+    assert '.DS_Store' not in top_level
+    assert '._.DS_Store' not in top_level
+    assert 'archives/' in top_level
+
+    # Nested listing hides the metadata files, but still shows real files.
+    nested = await get_files(['archives'])
+    children = nested['archives/']['children']
+    assert '.DS_Store' not in children
+    assert '._.DS_Store' not in children
+    assert 'foo.txt' in children
+
+
+@pytest.mark.asyncio
 async def test_delete_file(test_session, async_client, make_files_structure, test_directory):
     files = ['bar.txt', 'baz/', 'foo']
     make_files_structure(files)
@@ -283,6 +313,50 @@ async def test_files_search(test_session, async_client, make_files_structure, as
     await assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
     await assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
     await assert_files_search('nothing', [])
+
+
+@pytest.mark.asyncio
+async def test_files_search_by_suffix(test_session, async_client, make_files_structure):
+    """Files can be filtered by their primary file's suffix (used by the firmware flasher to find .bin files)."""
+    files = [
+        'software/MALVEKE.ino.bin',
+        'software/bffb/esp32_marauder.ino.bootloader.bin',
+        'software/firmware-heltec.uf2',
+        'software/firmware-r1-neo.uf2',
+        'notes.txt',
+    ]
+    created = make_files_structure(files)
+    for path in created:
+        path.write_bytes(b'\x00\x01\x02\x03')
+
+    request, response = await async_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    async def search(**kwargs):
+        request, response = await async_client.post('/api/files/search', json=kwargs)
+        assert response.status_code == HTTPStatus.OK
+        return sorted(fg['primary_path'] for fg in response.json['file_groups'])
+
+    # Exact suffix match, normalized whether or not a leading dot is given, and case-insensitive.
+    assert await search(suffix='.bin') == ['software/MALVEKE.ino.bin',
+                                           'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='bin') == ['software/MALVEKE.ino.bin',
+                                          'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='.BIN') == ['software/MALVEKE.ino.bin',
+                                           'software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(suffix='.uf2') == ['software/firmware-heltec.uf2', 'software/firmware-r1-neo.uf2']
+    assert await search(suffix='.txt') == ['notes.txt']
+    # A suffix that matches nothing returns no results.
+    assert await search(suffix='.gguf') == []
+
+    # The `path` filter matches anywhere in the primary_path (case-insensitive), so a directory name works.
+    assert await search(path='bffb') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(path='BFFB') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
+    assert await search(path='software/') == ['software/MALVEKE.ino.bin',
+                                              'software/bffb/esp32_marauder.ino.bootloader.bin',
+                                              'software/firmware-heltec.uf2', 'software/firmware-r1-neo.uf2']
+    # `suffix` and `path` combine (the firmware picker sends both).
+    assert await search(suffix='.bin', path='bffb') == ['software/bffb/esp32_marauder.ino.bootloader.bin']
 
 
 @pytest.mark.asyncio

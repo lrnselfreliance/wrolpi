@@ -29,9 +29,13 @@ const SUGGESTED_APPS = [
     {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
     {location: '/map', title: 'Map', description: 'View your Map'},
     {location: '/map/manage', title: 'Manage Map', description: 'Manage your Map'},
-    {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
+    {location: '/more/calculators?calc=otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
     {location: '/more/statistics', title: 'Statistics', description: 'View the statistics of your WROLPi'},
-    {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
+    {
+        location: '/more/calculators?calc=vin',
+        title: 'Vin Decoder',
+        description: 'Decode and analyze vehicle VIN numbers'
+    },
     {location: '/videos', title: 'Videos', description: 'View your Videos'},
     {location: '/videos/channel', title: 'Channels', description: 'View the Channels of your Videos'},
     {location: '/zim', title: 'Zim', description: 'View your Zims'},

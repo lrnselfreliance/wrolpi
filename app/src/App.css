@@ -247,11 +247,15 @@ textarea.otp {
     color: #DDDDDD !important;
 }
 
-/* Direct children only, so nested components that use the `content`/`title` class names (e.g. a Message's
-   Message.Content) are not given the accordion's dark background. */
+/* The accordion has no background of its own; it inherits whatever container it sits in (Modal
+   content #171616, Segment #1B1C1D, the page body, etc.).  This matches how the light theme already
+   renders accordions (transparent), and avoids a darker band when the parent isn't #171616.
+   Direct children only, so nested components that use the `content`/`title` class names (e.g. a
+   Message's Message.Content) are not affected. */
+.ui.inverted.accordion,
 .ui.inverted.accordion > .title,
 .ui.inverted.accordion > .content {
-    background-color: #171616 !important;
+    background-color: transparent !important;
 }
 
 /* Mobile-responsive Confirm modal */

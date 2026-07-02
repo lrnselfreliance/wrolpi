@@ -16,6 +16,8 @@ class SettingsObject:
 class SettingsResponse:
     download_manager_disabled: bool
     download_manager_stopped: bool
+    download_daily_limit_global: Optional[int]
+    download_daily_limit_per_domain: Optional[int]
     download_on_startup: bool
     download_timeout: int
     download_wait: int
@@ -63,6 +65,8 @@ class SemanticUIColors(enum.StrEnum):
 @dataclass
 class SettingsRequest:
     archive_destination: Optional[str] = None
+    download_daily_limit_global: Optional[int] = None
+    download_daily_limit_per_domain: Optional[int] = None
     download_on_startup: Optional[bool] = None
     download_timeout: Optional[int] = None
     download_wait: Optional[int] = None
@@ -297,8 +301,9 @@ class DownloadSettings:
         if not self.download_metadata_only:
             del self.download_metadata_only
 
-        if self.download_order not in (None, 'newest', 'oldest', 'views'):
-            raise ValidationError(f'Download order must be one of newest, oldest, views, or null.')
+        # 'views' was deprecated: YouTube no longer provides view counts in channel/playlist listings.
+        if self.download_order not in (None, 'newest', 'oldest'):
+            raise ValidationError(f'Download order must be one of newest, oldest, or null.')
 
         if self.video_format not in (None, 'mp4', 'mkv', 'ogg', 'webm'):
             raise ValidationError(f'Video format must be one of mp4, mkv, ogg, webm, or null.')

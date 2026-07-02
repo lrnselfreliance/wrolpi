@@ -2,7 +2,7 @@ import asyncio
 import json
 import pathlib
 from abc import ABC
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timezone, timedelta
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
@@ -11,8 +11,9 @@ import pytest
 import pytz
 import yaml
 
-from wrolpi.common import get_wrolpi_config
-from wrolpi.dates import Seconds
+from wrolpi.api_utils import api_app
+from wrolpi.common import get_wrolpi_config, normalize_domain
+from wrolpi.dates import Seconds, now
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     get_download_manager_config, RSSDownloader, parse_aria2c_progress, _parse_size, \
@@ -913,6 +914,20 @@ def test_download_settings_coerces_numeric_strings():
     assert 'max_pages' not in req.settings
 
 
+@pytest.mark.parametrize('order', ['newest', 'oldest', None])
+def test_download_settings_accepts_valid_download_order(order):
+    from wrolpi.schema import DownloadSettings
+    DownloadSettings(download_order=order)
+
+
+def test_download_settings_rejects_deprecated_views_order():
+    """'views' download order was deprecated; YouTube no longer provides view counts in listings."""
+    from wrolpi.schema import DownloadSettings
+    from wrolpi.errors import ValidationError
+    with pytest.raises(ValidationError):
+        DownloadSettings(download_order='views')
+
+
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads, tag_factory, await_switches):
@@ -1586,3 +1601,225 @@ def test_require_media_mounted_gate_opt_out(test_download_manager, test_wrolpi_c
     with mock.patch('wrolpi.downloader.PYTEST', False), \
             mock.patch('wrolpi.downloader.wrol_mode_enabled', return_value=False):
         assert test_download_manager.can_download is True
+
+
+# ===================================================================================================
+# Daily download limits (per-domain and global)
+# ===================================================================================================
+
+def test_normalize_domain_helper():
+    """The generic domain normalizer strips port, www, and other common subdomains."""
+    assert normalize_domain('https://www.example.com/foo') == 'example.com'
+    assert normalize_domain('https://m.example.com/foo') == 'example.com'
+    assert normalize_domain('https://mobile.example.com/foo') == 'example.com'
+    assert normalize_domain('https://example.com:443/foo') == 'example.com'
+    assert normalize_domain('https://example.com/foo') == 'example.com'
+
+
+def test_base_downloader_normalize_domain(test_downloader):
+    """The base Downloader.normalize_domain strips common subdomains."""
+    assert test_downloader.normalize_domain('https://m.rumble.com/abc') == 'rumble.com'
+    assert test_downloader.normalize_domain('https://www.rumble.com/abc') == 'rumble.com'
+
+
+def test_video_downloader_normalize_domain():
+    """VideoDownloader/ChannelDownloader collapse youtu.be, shorts, and tracking params to youtube.com."""
+    from modules.videos.downloader import VideoDownloader, ChannelDownloader
+    # Build instances without __init__ to avoid re-registering with the global manager.
+    vd = object.__new__(VideoDownloader)
+    cd = object.__new__(ChannelDownloader)
+    for downloader in (vd, cd):
+        assert downloader.normalize_domain('https://youtu.be/abc12345') == 'youtube.com'
+        assert downloader.normalize_domain('https://www.youtube.com/shorts/abc12345') == 'youtube.com'
+        assert downloader.normalize_domain('https://m.youtube.com/watch?v=abc12345') == 'youtube.com'
+        assert downloader.normalize_domain(
+            'https://www.youtube.com/watch?v=abc12345&list=PL123&si=foo') == 'youtube.com'
+
+
+def _make_processed_download(session, downloader_name, url, *, when=None, frequency=None, status='complete'):
+    """Create a Download that looks like it was already attempted (for daily-limit counting)."""
+    download = Download(url=url, downloader=downloader_name, frequency=frequency, status=status)
+    download.last_download_attempt = when if when is not None else now()
+    session.add(download)
+    session.flush()
+    return download
+
+
+def _dispatched_urls(dispatch_mock) -> set:
+    return {c.kwargs['context']['download_url'] for c in dispatch_mock.call_args_list}
+
+
+@pytest.mark.asyncio
+async def test_daily_download_counts(test_session, test_download_manager, test_downloader):
+    """daily_download_counts tallies non-recurring downloads attempted since local midnight, by domain."""
+    name = test_downloader.name
+    # Counted today: two example.com (one via m. subdomain), one rumble.com.
+    _make_processed_download(test_session, name, 'https://example.com/1')
+    _make_processed_download(test_session, name, 'https://m.example.com/2')
+    _make_processed_download(test_session, name, 'https://rumble.com/3')
+    # Not counted: recurring (has frequency), and one attempted two days ago.
+    _make_processed_download(test_session, name, 'https://example.com/recurring',
+                             frequency=DownloadFrequency.daily)
+    _make_processed_download(test_session, name, 'https://example.com/yesterday',
+                             when=now() - timedelta(days=2))
+    test_session.commit()
+
+    global_count, domain_counts = test_download_manager.daily_download_counts(test_session)
+    assert global_count == 3
+    assert domain_counts == {'example.com': 2, 'rumble.com': 1}
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_per_domain_blocks(test_session, test_download_manager, test_downloader):
+    """A new download is not dispatched once its domain hits the per-domain daily limit."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_per_domain = 3
+    name = test_downloader.name
+    for i in range(3):
+        _make_processed_download(test_session, name, f'https://example.com/done{i}')
+    # A different domain under its own limit must still be allowed.
+    new_blocked = Download(url='https://example.com/new', downloader=name, status='new')
+    new_allowed = Download(url='https://rumble.com/new', downloader=name, status='new')
+    test_session.add_all([new_blocked, new_allowed])
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    dispatched = _dispatched_urls(dispatch)
+    assert 'https://example.com/new' not in dispatched
+    assert 'https://rumble.com/new' in dispatched
+    test_session.refresh(new_blocked)
+    assert new_blocked.last_download_attempt is None
+    assert new_blocked.status == 'new'
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_per_domain_allows_under_limit(test_session, test_download_manager, test_downloader):
+    """A new download is dispatched while its domain is under the per-domain daily limit."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_per_domain = 3
+    name = test_downloader.name
+    for i in range(2):
+        _make_processed_download(test_session, name, f'https://example.com/done{i}')
+    new = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(new)
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    assert 'https://example.com/new' in _dispatched_urls(dispatch)
+    test_session.refresh(new)
+    assert new.last_download_attempt is not None
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_resets_next_day(test_session, test_download_manager, test_downloader):
+    """Downloads attempted on a previous day do not count against today's limit."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_per_domain = 3
+    name = test_downloader.name
+    # Three were processed two days ago; they should not count today.
+    for i in range(3):
+        _make_processed_download(test_session, name, f'https://example.com/old{i}',
+                                 when=now() - timedelta(days=2))
+    new = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(new)
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    assert 'https://example.com/new' in _dispatched_urls(dispatch)
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_counts_failed_attempts(test_session, test_download_manager, test_downloader):
+    """A failed/deferred download attempted today still consumes a daily slot."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_per_domain = 2
+    name = test_downloader.name
+    # One complete, one deferred (failed) today => 2 attempts, domain is at its limit.
+    _make_processed_download(test_session, name, 'https://example.com/ok', status='complete')
+    _make_processed_download(test_session, name, 'https://example.com/failed', status='deferred')
+    new = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(new)
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    assert 'https://example.com/new' not in _dispatched_urls(dispatch)
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_global_blocks(test_session, test_download_manager, test_downloader):
+    """The global daily limit caps downloads across all domains."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_global = 3
+    name = test_downloader.name
+    # 3 processed today across domains (global limit reached).
+    _make_processed_download(test_session, name, 'https://example.com/1')
+    _make_processed_download(test_session, name, 'https://example.com/2')
+    _make_processed_download(test_session, name, 'https://rumble.com/3')
+    # A brand-new domain with no prior downloads is still blocked by the global cap.
+    new = Download(url='https://wikipedia.org/new', downloader=name, status='new')
+    test_session.add(new)
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    assert _dispatched_urls(dispatch) == set()
+    test_session.refresh(new)
+    assert new.last_download_attempt is None
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_global_allows_under_limit(test_session, test_download_manager, test_downloader):
+    """Downloads dispatch while the global daily total is under the limit."""
+    config = get_wrolpi_config()
+    config.download_daily_limit_global = 5
+    name = test_downloader.name
+    for i in range(3):
+        _make_processed_download(test_session, name, f'https://example.com/{i}')
+    new = Download(url='https://wikipedia.org/new', downloader=name, status='new')
+    test_session.add(new)
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    assert 'https://wikipedia.org/new' in _dispatched_urls(dispatch)
+
+
+@pytest.mark.asyncio
+async def test_recurring_downloads_bypass_daily_limits(test_session, test_download_manager, test_downloader):
+    """Recurring (Channel/RSS) downloads are never gated and never consume a daily slot."""
+    config = get_wrolpi_config()
+    # Both limits would otherwise block everything past the first download.
+    config.download_daily_limit_global = 2
+    config.download_daily_limit_per_domain = 2
+    name = test_downloader.name
+    # One non-recurring already processed today (global count = 1).
+    _make_processed_download(test_session, name, 'https://example.com/done')
+    # A recurring download on a different domain, and a new non-recurring download.
+    recurring = Download(url='https://rumble.com/channel', downloader=name, status='new',
+                         frequency=DownloadFrequency.daily)
+    non_recurring = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add_all([recurring, non_recurring])
+    test_session.commit()
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        await test_download_manager.dispatch_downloads()
+
+    dispatched = _dispatched_urls(dispatch)
+    # Recurring is dispatched despite the limits.  The non-recurring is also dispatched, which proves the
+    # recurring download did not consume a global slot (else the global count would have reached 2 first).
+    assert 'https://rumble.com/channel' in dispatched
+    assert 'https://example.com/new' in dispatched
+
+    # Recurring downloads are excluded from the daily count entirely.
+    global_count, domain_counts = test_download_manager.daily_download_counts(test_session)
+    assert 'rumble.com' not in domain_counts

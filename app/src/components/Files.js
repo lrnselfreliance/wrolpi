@@ -1132,10 +1132,12 @@ const useRefresh = () => {
     }
 }
 
-export function FilesRefreshButton({paths}) {
+export function FilesRefreshButton({paths, showLabel}) {
     const {globalRefreshing, loading, wrolModeEnabled, refreshFiles} = useRefresh();
 
     return <Button icon='refresh'
+                   content={showLabel ? 'Refresh' : undefined}
+                   labelPosition={showLabel ? 'left' : undefined}
                    loading={loading || globalRefreshing}
                    onClick={() => refreshFiles(paths)}
                    disabled={wrolModeEnabled || globalRefreshing}/>

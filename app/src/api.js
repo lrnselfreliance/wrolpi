@@ -315,6 +315,8 @@ export async function getSettings() {
             archive_destination: content.archive_destination,
             download_manager_disabled: content.download_manager_disabled,
             download_manager_stopped: content.download_manager_stopped,
+            download_daily_limit_global: content.download_daily_limit_global,
+            download_daily_limit_per_domain: content.download_daily_limit_per_domain,
             download_on_startup: content.download_on_startup,
             download_timeout: content.download_timeout,
             download_wait: content.download_wait,
@@ -1210,8 +1212,14 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix, path) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
+    if (suffix) {
+        body['suffix'] = suffix;
+    }
+    if (path) {
+        body['path'] = path;
+    }
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
     }
@@ -1253,6 +1261,51 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
         });
         return [null, null];
     }
+}
+
+export async function flasherSearch(chip, path) {
+    // Search .bin firmware, filtered to ESP images for the given chip (from connecting to the device).
+    const body = {};
+    if (chip) body['chip'] = chip;
+    if (path) body['path'] = path;
+    const response = await apiPost(`${API_URI}/flasher/search`, body);
+    if (response.ok) {
+        const data = await response.json();
+        return [data['file_groups'], data['totals']['file_groups']];
+    }
+    const message = await getErrorMessage(response, 'Cannot search firmware.  See server logs.');
+    toast({type: 'error', title: 'Unable to search firmware', description: message, time: 5000});
+    return [null, null];
+}
+
+export async function getFlasherConfigs() {
+    // Return the user's saved firmware flashing configurations.
+    const response = await apiGet(`${API_URI}/flasher/configs`);
+    if (response.ok) {
+        const data = await response.json();
+        return data['configurations'] || [];
+    }
+    return [];
+}
+
+export async function saveFlasherConfig(name, files, eraseAll) {
+    const response = await apiPost(`${API_URI}/flasher/configs`, {name, files, erase_all: eraseAll});
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Cannot save configuration.  See server logs.');
+        toast({type: 'error', title: 'Unable to save configuration', description: message, time: 5000});
+        return false;
+    }
+    return true;
+}
+
+export async function deleteFlasherConfig(name) {
+    const response = await apiDelete(`${API_URI}/flasher/configs/${encodeURIComponent(name)}`);
+    if (!response.ok) {
+        const message = await getErrorMessage(response, 'Cannot delete configuration.  See server logs.');
+        toast({type: 'error', title: 'Unable to delete configuration', description: message, time: 5000});
+        return false;
+    }
+    return true;
 }
 
 export async function refreshFiles(paths) {

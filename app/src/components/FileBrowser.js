@@ -27,7 +27,7 @@ import {useDropzone} from "react-dropzone";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
-import {useBrowseFiles, useMediaDirectory, useUploadFile, useWROLMode} from "../hooks/customHooks";
+import {useBrowseFiles, useElementWidth, useMediaDirectory, useUploadFile, useWROLMode} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {DragSelectionContext, DragSelectionProvider, SettingsContext, ThemeContext} from "../contexts/contexts";
@@ -196,6 +196,10 @@ function SkeletonFileRow({depth}) {
     );
 }
 
+// Below this footer width (px) the action buttons are icon-only; at or above it they expand to show labels.
+// The eight labeled buttons need ~1020px to fit on a single row; this leaves a small buffer.
+const FOOTER_LABELS_MIN_WIDTH = 1050;
+
 export function FileBrowser() {
     const [selectedPaths, setSelectedPaths] = React.useState([]);
     const [renameOpen, setRenameOpen] = React.useState(false);
@@ -342,9 +346,15 @@ export function FileBrowser() {
         }
     }
 
+    const [footerRef, footerWidth] = useElementWidth();
+    // Expand icon-only buttons to include labels once the footer is wide enough to fit them.
+    const showLabels = footerWidth >= FOOTER_LABELS_MIN_WIDTH;
+    // Semantic UI renders a labeled icon button when `content` and `labelPosition` are set, else icon-only.
+    const labelProps = (content) => showLabels ? {content, labelPosition: 'left'} : {};
+
     const footerClassName = `sticky-footer ${inverted}`;
-    const footer = <div className={footerClassName}>
-        <FilesRefreshButton paths={selectedPaths}/>
+    const footer = <div className={footerClassName} ref={footerRef}>
+        <FilesRefreshButton paths={selectedPaths} showLabel={showLabels}/>
         <APIButton
             icon='trash'
             color='red'
@@ -353,11 +363,13 @@ export function FileBrowser() {
             onClick={onDelete}
             disabled={selectedPathsCount === 0}
             obeyWROLMode={true}
+            {...labelProps('Delete')}
         />
         <Button icon='text cursor'
                 color='yellow'
                 onClick={() => setRenameOpen(true)}
                 disabled={wrolModeEnabled || selectedPathsCount !== 1}
+                {...labelProps('Rename')}
         />
         {selectedPathsCount === 1 ?
             <RenameModal
@@ -371,6 +383,7 @@ export function FileBrowser() {
                 color='teal'
                 disabled={wrolModeEnabled || selectedPathsCount === 0}
                 onClick={() => setMoveOpen(true)}
+                {...labelProps('Move')}
         />
         {selectedPathsCount > 0 ?
             <MoveModal open={moveOpen}
@@ -382,12 +395,13 @@ export function FileBrowser() {
             color='blue'
             onClick={() => setMakeDirectoryOpen(true)}
             disabled={wrolModeEnabled}
-            style={{paddingLeft: '1em', paddingRight: '0.8em'}}
+            style={{paddingLeft: '1em', paddingRight: showLabels ? '1em' : '0.8em'}}
         >
             <IconGroup>
                 <Icon name='folder'/>
                 <Icon corner name='add'/>
             </IconGroup>
+            {showLabels ? <>&nbsp;New Folder</> : null}
         </Button>
         <MakeDirectoryModal
             open={makeDirectoryOpen}
@@ -400,6 +414,7 @@ export function FileBrowser() {
             color='green'
             disabled={wrolModeEnabled || (selectedPathsCount > 0 && !singleDirectorySelected)}
             onClick={() => setUploadOpen(true)}
+            {...labelProps('Upload')}
         />
         <FileBrowserUploadModal
             open={uploadOpen}
@@ -412,6 +427,7 @@ export function FileBrowser() {
             icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
             disabled={!singleDirectorySelected || wrolModeEnabled}
             onClick={() => setIgnoreDirectoryOpen(true)}
+            {...labelProps(isDirectoryIgnored ? 'Unignore' : 'Ignore')}
         />
         <IgnoreDirectoryModal
             open={ignoreDirectoryOpen}
@@ -425,6 +441,7 @@ export function FileBrowser() {
             icon='tags'
             disabled={selectedPathsCount === 0}
             onClick={() => setBulkTagOpen(true)}
+            {...labelProps('Tag')}
         />
         <BulkTagModal
             open={bulkTagOpen}

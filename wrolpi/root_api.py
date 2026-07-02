@@ -15,6 +15,7 @@ from vininfo.details._base import VinDetails
 
 from modules.archive.api import archive_bp
 from modules.docs.api import docs_bp
+from modules.flasher.api import flasher_bp
 from modules.inventory import inventory_bp
 from modules.map.api import map_bp
 from modules.videos.api import videos_bp
@@ -52,6 +53,7 @@ api_app.blueprint(collection_bp)  # Unified collection endpoints
 api_app.blueprint(config_bp)
 api_app.blueprint(docs_bp)
 api_app.blueprint(files_bp)
+api_app.blueprint(flasher_bp)
 api_app.blueprint(inventory_bp)
 api_app.blueprint(map_bp)
 api_app.blueprint(videos_bp)
@@ -156,6 +158,8 @@ def get_settings(_: Request):
         'archive_destination': wrolpi_config.archive_destination,
         'download_manager_disabled': download_manager.is_disabled,
         'download_manager_stopped': download_manager.is_stopped,
+        'download_daily_limit_global': wrolpi_config.download_daily_limit_global,
+        'download_daily_limit_per_domain': wrolpi_config.download_daily_limit_per_domain,
         'download_on_startup': wrolpi_config.download_on_startup,
         'download_timeout': wrolpi_config.download_timeout,
         'download_wait': wrolpi_config.download_wait,
@@ -265,6 +269,12 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
                 ZoneInfo(body.timezone)
             except (KeyError, Exception):
                 raise InvalidConfig(f'Invalid timezone: {body.timezone}')
+
+    # Daily download limits must be non-negative integers.  0 (or null) means unlimited.
+    for field_name in ('download_daily_limit_global', 'download_daily_limit_per_domain'):
+        value = getattr(body, field_name, None)
+        if value is not None and value < 0:
+            raise InvalidConfig(f'{field_name} must be a non-negative integer')
 
     # Handle download window fields: empty string clears the value.
     for field_name in ('download_window_start', 'download_window_end'):

@@ -56,6 +56,35 @@ async def test_get_settings(test_session, async_client):
 
 
 @pytest.mark.asyncio
+async def test_daily_download_limit_settings(test_session, async_client):
+    """The daily download limits round-trip through the settings API and reject negative values."""
+    # Defaults are unlimited (None).
+    request, response = await async_client.get('/api/settings')
+    assert response.json['download_daily_limit_global'] is None
+    assert response.json['download_daily_limit_per_domain'] is None
+
+    data = {'download_daily_limit_global': 100, 'download_daily_limit_per_domain': 50}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    request, response = await async_client.get('/api/settings')
+    assert response.json['download_daily_limit_global'] == 100
+    assert response.json['download_daily_limit_per_domain'] == 50
+    assert get_wrolpi_config().download_daily_limit_global == 100
+    assert get_wrolpi_config().download_daily_limit_per_domain == 50
+
+    # 0 means unlimited and is accepted.
+    data = {'download_daily_limit_per_domain': 0}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Negative values are rejected.
+    data = {'download_daily_limit_global': -1}
+    request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_log_level(async_client):
     """Log level must be between 0 and 40."""
     data = {'log_level': 0}

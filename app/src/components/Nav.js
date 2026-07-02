@@ -56,9 +56,8 @@ const allLinks = [
     {text: 'Playlists', to: '/playlists', key: 'playlists'},
     {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
-    {to: '/more/otp', text: 'One Time Pad', key: 'otp', end: true},
-    {to: '/more/vin', text: 'VIN Decoder', key: 'vin', end: true},
     {to: '/more/calculators', text: 'Calculators', key: 'calculators', end: true},
+    {text: 'Flasher', to: '/flasher', key: 'flasher'},
     {to: '/more/statistics', text: 'Statistics', key: 'statistics', end: true},
 ];
 

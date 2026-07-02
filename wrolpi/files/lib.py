@@ -700,7 +700,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                 modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
                 size = sum(i.stat().st_size for i in group)
                 files = json.dumps(_paths_to_files_dict(group))
-                values[primary_path] = (modification_datetime, mimetype, size, files)
+                suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
+                values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
                 non_primary_files = {i for i in group if i != primary_path}
             except NoPrimaryFile:
                 # Cannot find primary path, create a `file_group` for each file.
@@ -711,7 +712,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                     modification_datetime = from_timestamp(primary_path.stat().st_mtime)
                     size = primary_path.stat().st_size
                     files = json.dumps(_paths_to_files_dict([primary_path]))
-                    values[primary_path] = (modification_datetime, mimetype, size, files)
+                    suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
+                    values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
 
         values = [(str(primary_path),
                    str(primary_path.parent),  # directory
@@ -721,7 +723,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
             values = mogrify(curs, values)
             stmt = f'''
                 INSERT INTO file_group
-                    (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files)
+                    (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files,
+                     suffix)
                 VALUES {values}
                 ON CONFLICT (primary_path) DO UPDATE
                 SET
@@ -730,6 +733,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                     modification_datetime=EXCLUDED.modification_datetime,
                     mimetype=EXCLUDED.mimetype,
                     size=EXCLUDED.size,
+                    -- Always keep suffix current so suffix search works even for already-indexed files.
+                    suffix=EXCLUDED.suffix,
                     files=(
                         -- Do not overwrite files unless the files have changed and need to be re-indexed.
                         CASE
@@ -1026,7 +1031,7 @@ async def search_directories_by_name(session: Session, name: str, excluded: List
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
-                 url: str = None) -> \
+                 url: str = None, suffix: str = None, path: str = None) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -1046,6 +1051,8 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param months: A list of integers representing the index of the month of the year, starting at 1.
     @param order: Used to change results from most relevant to recently viewed.
     @param url: Filter by URL using case-insensitive partial match (ILIKE).
+    @param suffix: Only return files whose primary file has this suffix (e.g. ".bin"), case-insensitive.
+    @param path: Filter by primary_path using case-insensitive partial match (ILIKE).
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -1071,6 +1078,16 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     if url:
         params['url_filter'] = f'%{url}%'
         wheres.append('fg.url ILIKE %(url_filter)s')
+
+    if suffix:
+        # Suffix is stored lowercased with a leading dot; normalize the caller's value to match the index.
+        normalized = suffix if suffix.startswith('.') else f'.{suffix}'
+        params['suffix'] = normalized.lower()
+        wheres.append('fg.suffix = %(suffix)s')
+
+    if path:
+        params['path_filter'] = f'%{path}%'
+        wheres.append('fg.primary_path ILIKE %(path_filter)s')
 
     if search_str and headline:
         headline = ''',

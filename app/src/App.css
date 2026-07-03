@@ -454,9 +454,32 @@ tr.drag-deselecting td {
     -ms-user-select: none;
 }
 
+/* Filter input and collapse-all button: right-aligned on desktop, full width on mobile (below). */
+.file-browser-filter-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5em;
+}
+
+/* Double the default input width on desktop. */
+.ui.input.file-browser-filter {
+    width: 34em;
+    max-width: 100%;
+}
+
 @media only screen and (max-width: 700px) {
     .hide-on-mobile {
         display: none !important;
+    }
+
+    .file-browser-filter-container {
+        justify-content: flex-start;
+    }
+
+    /* Fill the row, but stay on one line with the collapse-all button. */
+    .ui.input.file-browser-filter {
+        flex: 1 1 auto;
+        width: auto;
     }
 }
 

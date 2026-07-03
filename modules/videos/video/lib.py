@@ -93,6 +93,7 @@ def search_videos(
         tag_names: List[str] = None,
         headline: bool = False,
         censored: bool = False,
+        deep: bool = False,
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Search videos and audio-only files.
@@ -112,8 +113,10 @@ def search_videos(
 
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
-        select_columns = 'fg.id, ts_rank(fg.textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        # `textsearch` includes d_text (captions); `textsearch_abc` is much smaller and faster.
+        ts_col = 'textsearch' if deep else 'textsearch_abc'
+        select_columns = f'fg.id, ts_rank(fg.{ts_col}, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        wheres.append(f'fg.{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
         params['search_str'] = search_str
     else:
         # No search_str provided.  Get id and total only.

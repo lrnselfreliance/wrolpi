@@ -768,7 +768,7 @@ async def post_search_suggestions(request: Request, body: schema.SearchSuggestio
 )
 async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimateRequest):
     """Used by the Global search to suggest FileGroup count to the user."""
-    file_groups = await search_file_suggestion_count(
+    counts = await search_file_suggestion_count(
         body.search_str,
         body.tag_names,
         body.mimetypes,
@@ -779,7 +779,8 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
     )
 
     ret = dict(
-        file_groups=file_groups,
+        file_groups=counts['file_groups'],
+        file_groups_deep=counts['file_groups_deep'],
     )
     return json_response(ret)
 

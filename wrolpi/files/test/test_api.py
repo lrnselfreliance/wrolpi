@@ -316,6 +316,51 @@ async def test_files_search(test_session, async_client, make_files_structure, as
 
 
 @pytest.mark.asyncio
+async def test_files_search_deep(test_session, async_client, make_files_structure):
+    """Search defaults to the fast ABC column (title/author/description); `deep` opts into d_text
+    (captions/file contents)."""
+    guide, lecture = make_files_structure([
+        'gardening guide.txt',
+        'lecture.txt',
+    ])
+    guide.write_text('planting tips')
+    # "gardening" only appears in this file's contents (d_text), not its name.
+    lecture.write_text('a lecture about gardening')
+
+    request, response = await async_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    async def search(**kwargs):
+        request, response = await async_client.post('/api/files/search', json=kwargs)
+        assert response.status_code == HTTPStatus.OK
+        return response.json['file_groups']
+
+    # Default (fast) search only matches the title.
+    results = await search(search_str='gardening')
+    assert [i['primary_path'] for i in results] == ['gardening guide.txt']
+
+    # Deep search also matches file contents; the title match ranks higher (weight A vs D).
+    results = await search(search_str='gardening', deep=True)
+    assert [i['primary_path'] for i in results] == ['gardening guide.txt', 'lecture.txt']
+
+    # Headlines work in both modes.
+    results = await search(search_str='gardening', headline=True)
+    assert [i['primary_path'] for i in results] == ['gardening guide.txt']
+    assert '<b>gardening</b>' in results[0]['title_headline']
+    results = await search(search_str='gardening', deep=True, headline=True)
+    assert [i['primary_path'] for i in results] == ['gardening guide.txt', 'lecture.txt']
+    assert '<b>gardening</b>' in results[1]['d_headline']
+
+    # The estimate endpoint returns both counts: `file_groups` matches the default fast search, and
+    # `file_groups_deep` shows what deep search would find, so the UI can offer deep search.
+    request, response = await async_client.post('/api/search_file_estimates',
+                                                json=dict(search_str='gardening'))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == 1
+    assert response.json['file_groups_deep'] == 2
+
+
+@pytest.mark.asyncio
 async def test_files_search_by_suffix(test_session, async_client, make_files_structure):
     """Files can be filtered by their primary file's suffix (used by the firmware flasher to find .bin files)."""
     files = [
@@ -367,7 +412,8 @@ async def test_files_search_attaches_doc_section_hint(async_client, test_session
     bug where only the docs-specific endpoint (/api/docs/search) attached hints."""
     await refresh_files()
 
-    body = dict(search_str='chapter')
+    # "chapter" only appears in the EPUB body (d_text), so deep search is required to match it.
+    body = dict(search_str='chapter', deep=True)
     request, response = await async_client.post('/api/files/search', json=body)
     assert response.status_code == HTTPStatus.OK
 

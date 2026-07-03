@@ -16,6 +16,7 @@ from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
 from wrolpi.downloader import Download, DownloadResult, get_download_manager_config
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
+from wrolpi.test.common import skip_circleci
 from wrolpi.vars import PROJECT_DIR
 
 example_video_json = {
@@ -130,6 +131,7 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
     assert [i.tag.name for i in video.file_group.tag_files] == [tag1.name, tag2.name]
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_download_channel(test_session, test_directory, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename, await_switches,

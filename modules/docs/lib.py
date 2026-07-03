@@ -347,15 +347,18 @@ def _get_doc(session, file_group_id: int):
 
 
 def _search_docs(search_str=None, author=None, subject=None, language=None, mimetype=None,
-                 limit=20, offset=0, order_by='published_datetime', tag_names=None):
+                 limit=20, offset=0, order_by='published_datetime', tag_names=None, deep=False):
     from .models import Doc
     from wrolpi.files.models import FileGroup
+
+    # `textsearch` includes d_text (document contents); `textsearch_abc` is much smaller and faster.
+    ts_col = FileGroup.textsearch if deep else FileGroup.textsearch_abc
 
     with get_db_session() as session:
         query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
 
         if search_str:
-            query = query.filter(FileGroup.textsearch.op('@@')(func.websearch_to_tsquery(search_str)))
+            query = query.filter(ts_col.op('@@')(func.websearch_to_tsquery(search_str)))
 
         if author:
             query = query.filter(FileGroup.b_text.ilike(f'%{author}%'))
@@ -382,7 +385,7 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         # Ordering.
         if order_by == 'rank' and search_str:
             query = query.order_by(
-                desc(func.ts_rank(FileGroup.textsearch, func.websearch_to_tsquery(search_str))),
+                desc(func.ts_rank(ts_col, func.websearch_to_tsquery(search_str))),
                 desc(FileGroup.id),
             )
         elif order_by == 'published_datetime':

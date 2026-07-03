@@ -13,6 +13,7 @@ class DocSearchRequest:
     order_by: Optional[str] = 'published_datetime'
     limit: int = 20
     offset: int = 0
+    deep: bool = False  # When True, search all text including document contents (d_text)
 
 
 @dataclasses.dataclass

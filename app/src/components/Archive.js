@@ -77,7 +77,7 @@ import {
     useSearchDomain,
     useSearchOrder
 } from "../hooks/customHooks";
-import {FileCards, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
+import {DeepSearchHint, FileCards, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
@@ -1259,8 +1259,10 @@ function ArchivesPage() {
             inputRef={searchInputRef}
             viewButton={viewButton}
             sorts={archiveOrders}
+            showDeep={true}
         />
         {body}
+        <DeepSearchHint searchStr={searchStr} files={archives}/>
         {paginator}
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}

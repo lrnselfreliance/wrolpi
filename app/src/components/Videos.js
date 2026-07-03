@@ -45,7 +45,7 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
-import {FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
+import {DeepSearchHint, FileRowTagIcon, FilesView, SearchControlBar} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Modal, Placeholder, Popup, Segment, Statistic} from "./Theme";
@@ -241,8 +241,10 @@ export function VideosPage() {
             viewButton={viewButton}
             sorts={videoOrders}
             showCensored={true}
+            showDeep={true}
         />
         {body}
+        <DeepSearchHint searchStr={searchStr} files={videos}/>
         {paginator}
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}

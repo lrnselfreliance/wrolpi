@@ -469,7 +469,7 @@ export function DashboardPage() {
         }
         return <div style={{display: 'flex', alignItems: 'center', gap: '0.5em', marginBottom: '2em'}}>
             {getSearchResultsInput(inputProps)}
-            <SearchFilterButton fileFilterOptions={fileMimetypeFilterOptions} showDates={true}
+            <SearchFilterButton fileFilterOptions={fileMimetypeFilterOptions} showDates={true} showDeep={true}
                                 size={big ? 'big' : undefined}/>
         </div>;
     };

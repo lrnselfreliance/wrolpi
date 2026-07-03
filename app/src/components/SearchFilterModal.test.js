@@ -146,6 +146,36 @@ describe('SearchFilterButton', () => {
         expect(screen.getByText('1')).toBeInTheDocument();
     });
 
+    it('counts the deep filter and applies it on close when showDeep is set', () => {
+        const spy = jest.fn();
+        renderButton({sorts: videoOrders, showDeep: true}, {}, spy);
+
+        // No deep badge initially.
+        expect(screen.queryByText('1')).toBeNull();
+
+        fireEvent.click(screen.getByText('Filter'));
+        // The Search Depth section/toggle is shown.
+        expect(screen.getByText('Search Depth')).toBeInTheDocument();
+        fireEvent.mouseUp(screen.getByTestId('toggle'));
+        // Draft only — nothing applied yet.
+        expect(spy).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByText('Done'));
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toMatchObject({deep: 'true'});
+    });
+
+    it('does not show the Search Depth section unless showDeep is set', () => {
+        renderButton({sorts: videoOrders});
+        fireEvent.click(screen.getByText('Filter'));
+        expect(screen.queryByText('Search Depth')).toBeNull();
+    });
+
+    it('shows a count badge when the deep filter is active in the URL', () => {
+        renderButton({sorts: videoOrders, showDeep: true}, {deep: 'true'});
+        expect(screen.getByText('1')).toBeInTheDocument();
+    });
+
     it('shows the File Type section when fileFilterOptions are provided', () => {
         renderButton({
             sorts: videoOrders,

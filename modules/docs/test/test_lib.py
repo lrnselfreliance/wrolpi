@@ -289,7 +289,11 @@ async def test_search_docs_attaches_section_hint_epub(test_session, test_directo
                                         (2, 'Chapter 2', 'unrelated content about pottery'),
                                     ])
 
+    # "mullen" is only in the document body (d_text), so a deep search is required to match it.
     results, total = _search_docs(search_str='mullen', mimetype='application/epub')
+    assert total == 0, 'Document contents are not searched unless deep=True'
+
+    results, total = _search_docs(search_str='mullen', mimetype='application/epub', deep=True)
     assert total == 1
     assert results[0]['id'] == fg.id
     hint = results[0]['section_hint']
@@ -311,7 +315,7 @@ async def test_search_docs_attaches_section_hint_pdf(test_session, test_director
                                         (3, 'Page 3', 'here is where mullen shows up'),
                                     ])
 
-    results, total = _search_docs(search_str='mullen', mimetype='application/pdf')
+    results, total = _search_docs(search_str='mullen', mimetype='application/pdf', deep=True)
     assert total == 1
     assert results[0]['id'] == fg.id
     hint = results[0]['section_hint']

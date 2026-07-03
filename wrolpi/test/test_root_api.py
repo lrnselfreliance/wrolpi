@@ -666,7 +666,8 @@ async def test_search_file_estimates(test_session, async_client, archive_factory
 
         request, response = await async_client.post('/api/search_file_estimates', json=body)
         assert response.status_code == HTTPStatus.OK
-        assert response.json['file_groups'] == expected_file_groups or 0
+        # The deep count includes contents/captions matches; the fast (ABC) count is in `file_groups`.
+        assert response.json['file_groups_deep'] == expected_file_groups or 0
 
     await assert_results(dict(search_str='foo'), 1)
 
@@ -727,7 +728,8 @@ async def test_search_file_estimates_any_tag(test_session, async_client, archive
 
         request, response = await async_client.post('/api/search_file_estimates', json=body)
         assert response.status_code == HTTPStatus.OK
-        assert response.json['file_groups'] == expected_file_groups or 0
+        # The deep count includes contents/captions matches; the fast (ABC) count is in `file_groups`.
+        assert response.json['file_groups_deep'] == expected_file_groups or 0
 
     await assert_results(dict(search_str='bunny'), 2)
     await assert_results(dict(search_str='bunny', any_tag=True), 1)

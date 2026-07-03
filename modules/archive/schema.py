@@ -24,6 +24,7 @@ class ArchiveSearchRequest:
     order_by: Optional[str] = None
     tag_names: List[str] = field(default_factory=list)
     headline: bool = False
+    deep: bool = False  # When True, search all text including page contents (d_text)
 
 
 @dataclass

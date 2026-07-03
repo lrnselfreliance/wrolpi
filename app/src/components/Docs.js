@@ -21,7 +21,7 @@ import {
 import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
-import {docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
+import {DeepSearchHint, docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
 import {useAuthors, useDoc, useOneQuery, useSearchDocs, useSubjects} from "../hooks/customHooks";
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
@@ -138,8 +138,10 @@ function DocsPage() {
             viewButton={viewButton}
             sorts={docOrders}
             fileFilterOptions={docMimetypeFilterOptions}
+            showDeep={true}
         />
         {body}
+        <DeepSearchHint searchStr={searchStr} files={docs}/>
         {paginator}
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}

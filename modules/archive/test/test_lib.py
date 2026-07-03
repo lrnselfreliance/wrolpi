@@ -571,7 +571,8 @@ async def test_refresh_archives(test_session, test_directory, async_client, make
     assert (test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html').is_file()
     assert test_session.query(Archive).count() == 2
 
-    content = json.dumps({'search_str': 'text', 'model': 'archive'})
+    # "text" is only in the readability contents (d_text), so a deep search is required.
+    content = json.dumps({'search_str': 'text', 'model': 'archive', 'deep': True})
     request, response = await async_client.post('/api/files/search', content=content)
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups'], 'No files matched "text"'

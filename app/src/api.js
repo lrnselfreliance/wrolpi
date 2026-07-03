@@ -187,7 +187,7 @@ export async function tagChannelInfo(channelId, tagName) {
     });
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline, censored) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline, censored, deep) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -207,6 +207,9 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     }
     if (censored) {
         body['censored'] = true;
+    }
+    if (deep) {
+        body['deep'] = true;
     }
 
     console.debug('searching videos', body);
@@ -697,7 +700,7 @@ export async function saveCatalog(items) {
 }
 
 
-export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline) {
+export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline, deep) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -716,6 +719,9 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
     }
     if (headline) {
         body['headline'] = true;
+    }
+    if (deep) {
+        body['deep'] = true;
     }
 
     console.debug('searching archives', body);
@@ -1212,7 +1218,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix, path) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear, anyTag, order, suffix, path, deep) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit), any_tag: anyTag};
     if (suffix) {
         body['suffix'] = suffix;
@@ -1243,6 +1249,9 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
     if (order) {
         body['order'] = order;
+    }
+    if (deep) {
+        body['deep'] = true;
     }
     console.info('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);
@@ -1988,6 +1997,7 @@ export async function searchEstimateFiles(search_str, tagNames, mimetypes, month
 
         return {
             fileGroups: content.file_groups,
+            fileGroupsDeep: content.file_groups_deep,
         }
     } else {
         console.error('Failed to get file search estimates!');
@@ -2220,7 +2230,7 @@ export async function getDoc(fileGroupId) {
 }
 
 
-export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype) {
+export async function searchDocs(offset, limit, searchStr, order, tagNames, author, subject, mimetype, deep) {
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
     let body = {offset, limit};
@@ -2241,6 +2251,9 @@ export async function searchDocs(offset, limit, searchStr, order, tagNames, auth
     }
     if (mimetype) {
         body['mimetype'] = mimetype;
+    }
+    if (deep) {
+        body['deep'] = true;
     }
 
     console.debug('searching docs', body);

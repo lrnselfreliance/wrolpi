@@ -195,31 +195,36 @@ async def test_search_videos_file(test_session, test_directory, video_with_searc
         video_with_search_factory(title=title, d_text=caption)
     test_session.commit()
 
+    # Captions are d_text, so a deep search is required to match them.
     # Repeated runs should return the same result
     for _ in range(2):
         # Only videos with a b are returned, ordered by the amount of b's
-        await assert_video_search(search_str='b', assert_ids=[1, 2, 3, 4])
+        await assert_video_search(search_str='b', deep=True, assert_ids=[1, 2, 3, 4])
+
+    # The default (fast) search does not match captions.
+    await assert_video_search(search_str='b', assert_ids=[])
 
     # Only two captions have e
-    await assert_video_search(search_str='e', assert_ids=[4, 1])
+    await assert_video_search(search_str='e', deep=True, assert_ids=[4, 1])
 
     # Only 2 contains 2
-    await assert_video_search(search_str='2', assert_ids=[2, ])
+    await assert_video_search(search_str='2', deep=True, assert_ids=[2, ])
 
     # Only two captions have d
-    await assert_video_search(search_str='d', assert_ids=[1, 2])
+    await assert_video_search(search_str='d', deep=True, assert_ids=[1, 2])
 
-    # 5 can be gotten by it's title
+    # 5 can be gotten by it's title, in either mode.
     await assert_video_search(search_str='5', assert_ids=[5, ])
+    await assert_video_search(search_str='5', deep=True, assert_ids=[5, ])
 
     # only video 1 has e and d
-    await assert_video_search(search_str='e d', assert_ids=[1, ])
+    await assert_video_search(search_str='e d', deep=True, assert_ids=[1, ])
 
     # video 1 and 4 have b and e, but 1 has more
-    await assert_video_search(search_str='b e', assert_ids=[1, 4])
+    await assert_video_search(search_str='b e', deep=True, assert_ids=[1, 4])
 
     # Check totals are correct even with a limit
-    await assert_video_search(search_str='b', limit=2, assert_ids=[1, 2], assert_total=4)
+    await assert_video_search(search_str='b', deep=True, limit=2, assert_ids=[1, 2], assert_total=4)
 
 
 @pytest.mark.asyncio

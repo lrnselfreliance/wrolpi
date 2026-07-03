@@ -1039,7 +1039,7 @@ async def search_directories_by_name(session: Session, name: str, excluded: List
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
                  tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
                  from_year: int = None, to_year: int = None, any_tag: bool = False, order: str = None,
-                 url: str = None, suffix: str = None, path: str = None) -> \
+                 url: str = None, suffix: str = None, path: str = None, deep: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -1061,6 +1061,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param url: Filter by URL using case-insensitive partial match (ILIKE).
     @param suffix: Only return files whose primary file has this suffix (e.g. ".bin"), case-insensitive.
     @param path: Filter by primary_path using case-insensitive partial match (ILIKE).
+    @param deep: Search all text including captions/body (d_text); slower but more thorough.
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -1069,9 +1070,10 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     joins = []
 
     if search_str:
-        # Search by textsearch column.
-        wheres.append('textsearch @@ websearch_to_tsquery(%(search_str)s)')
-        selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
+        # `textsearch` includes d_text (captions/body); `textsearch_abc` is much smaller and faster.
+        ts_col = 'textsearch' if deep else 'textsearch_abc'
+        wheres.append(f'{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
+        selects.append(f'ts_rank({ts_col}, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 
     wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
@@ -1479,9 +1481,13 @@ def mimetypes_to_sql_wheres(wheres: List[str], params: dict, mimetypes: List[str
 
 async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str],
                                        months: List[int] = None, from_year: int = None, to_year: int = None,
-                                       any_tag: bool = False):
+                                       any_tag: bool = False) -> dict:
     """
-    Return FileGroup count of what will be returned if the search is actually performed.
+    Return FileGroup counts of what will be returned if the search is actually performed.
+
+    Returns both the fast (`textsearch_abc`) and deep (`textsearch`) counts so the UI can show the count
+    matching the current search mode, and offer deep search when it has more results.  Both are cheap
+    index-bound COUNTs (no ts_rank).
     """
     wheres = []
     joins = list()
@@ -1490,8 +1496,13 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     having = ''
 
     if search_str:
-        # Search by textsearch, and by matching url.
+        # `textsearch` matches are a superset of `textsearch_abc`, so filter by the deep column and count
+        # the fast subset with FILTER in the same pass.
         wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        selects = ('COUNT(*) FILTER (WHERE fg.textsearch_abc @@ websearch_to_tsquery(%(search_str)s)) AS estimate,'
+                   ' COUNT(*) AS deep_estimate')
+    else:
+        selects = 'COUNT(*) AS estimate, COUNT(*) AS deep_estimate'
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
     wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
@@ -1501,7 +1512,7 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     joins = "\n".join(joins)
     wheres = 'WHERE ' + "\nAND ".join(wheres) if wheres else ''
     stmt = f'''
-        SELECT COUNT(*) OVER() AS estimate
+        SELECT {selects}
         FROM file_group fg
             {joins}
         {wheres}
@@ -1514,8 +1525,8 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
         curs.execute(stmt, params)
         result = curs.fetchone()
         if result:
-            return int(result['estimate'])
-        return 0
+            return dict(file_groups=int(result['estimate']), file_groups_deep=int(result['deep_estimate']))
+        return dict(file_groups=0, file_groups_deep=0)
 
 
 MOVE_CHUNK_SIZE = 100

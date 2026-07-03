@@ -61,7 +61,7 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     offset = body.offset or 0
 
     file_groups, total = lib.search_archives(search_str, domain, limit, offset, body.order_by, body.tag_names,
-                                             body.headline)
+                                             body.headline, body.deep)
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)
 

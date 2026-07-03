@@ -40,6 +40,7 @@ import {
     useSearchDate,
     useSearchFiles,
     useSearchCensored,
+    useSearchDeep,
     useSearchFilter,
     useSearchOrder,
     useSearchView,
@@ -544,6 +545,7 @@ export function SearchFilterModal(
         showTags = true,
         showLimit = true,
         showCensored = false,
+        showDeep = false,
         limitOptions = [12, 24, 48, 96],
     },
 ) {
@@ -553,6 +555,7 @@ export function SearchFilterModal(
     const {dateRange, months} = useSearchDate();
     const {activeTags, anyTag} = useSearch();
     const {censored} = useSearchCensored();
+    const {deep} = useSearchDeep();
     const {limit} = usePages(DEFAULT_SEARCH_LIMIT);
     const {updateQuery} = useContext(QueryContext);
 
@@ -570,6 +573,7 @@ export function SearchFilterModal(
     const [draftMonths, setDraftMonths] = useState([]);
     const [draftRange, setDraftRange] = useState(emptyRange);
     const [draftCensored, setDraftCensored] = useState(false);
+    const [draftDeep, setDraftDeep] = useState(false);
 
     // Seed the drafts from the URL each time the modal is opened.
     React.useEffect(() => {
@@ -582,6 +586,7 @@ export function SearchFilterModal(
             setDraftMonths(seededMonths);
             setDraftRange(seededRange);
             setDraftCensored(censored || false);
+            setDraftDeep(deep || false);
         }
     }, [open]);
 
@@ -622,6 +627,9 @@ export function SearchFilterModal(
         if (showCensored && draftCensored !== censored) {
             params.censored = draftCensored ? 'true' : null;
         }
+        if (showDeep && draftDeep !== deep) {
+            params.deep = draftDeep ? 'true' : null;
+        }
         if (Object.keys(params).length > 0) {
             params.o = 0;
             updateQuery(params);
@@ -641,6 +649,7 @@ export function SearchFilterModal(
         setDraftMonths([]);
         setDraftRange(emptyRange);
         setDraftCensored(false);
+        setDraftDeep(false);
     }
 
     // Sort section (operates on the draft).
@@ -754,6 +763,18 @@ export function SearchFilterModal(
                         </Grid.Column>
                     </Grid.Row>}
 
+                {showDeep &&
+                    <Grid.Row>
+                        <Grid.Column>
+                            <SearchFilterSection header='Search Depth'>
+                                <Toggle label='Deep search (captions, document text; slower)'
+                                        checked={draftDeep}
+                                        onChange={setDraftDeep}
+                                />
+                            </SearchFilterSection>
+                        </Grid.Column>
+                    </Grid.Row>}
+
                 {showDates &&
                     <Grid.Row>
                         <Grid.Column>
@@ -783,6 +804,7 @@ export function SearchFilterButton(
         showTags = true,
         showLimit = true,
         showCensored = false,
+        showDeep = false,
         limitOptions = [12, 24, 48, 96],
         size = 'medium',
         content = 'Filter',
@@ -794,6 +816,7 @@ export function SearchFilterButton(
     const {dateRange, months} = useSearchDate();
     const {activeTags, anyTag} = useSearch();
     const {censored} = useSearchCensored();
+    const {deep} = useSearchDeep();
 
     let count = 0;
     if (fileFilterOptions && filter) {
@@ -809,6 +832,9 @@ export function SearchFilterButton(
         count += 1;
     }
     if (showCensored && censored) {
+        count += 1;
+    }
+    if (showDeep && deep) {
         count += 1;
     }
     const active = count > 0;
@@ -829,6 +855,7 @@ export function SearchFilterButton(
             showTags={showTags}
             showLimit={showLimit}
             showCensored={showCensored}
+            showDeep={showDeep}
             limitOptions={limitOptions}
         />
     </>
@@ -849,6 +876,7 @@ export function SearchControlBar(
         fileFilterOptions = null,
         showDates = false,
         showCensored = false,
+        showDeep = false,
     },
 ) {
     const [localSearchStr, setLocalSearchStr] = useState(searchStr || '');
@@ -866,17 +894,39 @@ export function SearchControlBar(
         {viewButton}
         <div style={{flexGrow: 1, minWidth: 0}}>{searchInput}</div>
         <SearchFilterButton sorts={sorts} fileFilterOptions={fileFilterOptions} showDates={showDates}
-                            showCensored={showCensored}/>
+                            showCensored={showCensored} showDeep={showDeep}/>
     </div>
+}
+
+// Offers deep search when a fast search found nothing.  Used by the module pages (Videos/Archives/Docs),
+// which have no deep estimate; FilesSearchView has a count-aware variant.
+export function DeepSearchHint({searchStr, files}) {
+    const {deep} = useSearchDeep();
+    const {updateQuery} = useContext(QueryContext);
+
+    if (!searchStr || deep || !files || files.length > 0) {
+        return null;
+    }
+
+    return <Segment>
+        Not finding what you need?
+        <Button primary
+                onClick={() => updateQuery({deep: 'true', o: 0})}
+                style={{marginLeft: '1em'}}
+        >Try deep search</Button>
+    </Segment>
 }
 
 export function FilesSearchView({
                                     showView = true,
                                     emptySearch = false,
                                     model,
+                                    deepEstimate = null,
                                 }) {
 
-    const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
+    const {searchFiles, total, searchStr, pages} = useSearchFiles(24, emptySearch, model);
+    const {deep} = useSearchDeep();
+    const {updateQuery} = useContext(QueryContext);
 
     const {body, paginator, viewButton} = FilesView(
         {
@@ -891,9 +941,38 @@ export function FilesSearchView({
         },
     );
 
+    // The default search only matches titles/authors/descriptions; offer deep search when it would find
+    // more.  `deepEstimate` comes from the search estimates; without it, fall back to a generic hint on
+    // zero results.
+    let deepHint = null;
+    if (Boolean(searchStr) && !deep && searchFiles) {
+        const moreCount = deepEstimate !== null && deepEstimate !== undefined && total !== null
+            ? deepEstimate - total : null;
+        // Enable deep search and reset pagination in a single update (like the filter modal does), so the
+        // user starts at page 1 of the deep results.
+        const deepButton = <Button primary
+                                   onClick={() => updateQuery({deep: 'true', o: 0})}
+                                   style={{marginLeft: '1em'}}
+        >Try deep search</Button>;
+        if (searchFiles.length === 0 && (moreCount === null || moreCount > 0)) {
+            deepHint = <Segment>
+                {moreCount > 0
+                    ? `No results in fast search.  ${moreCount} result${moreCount === 1 ? '' : 's'} available in deep search.`
+                    : 'Not finding what you need?'}
+                {deepButton}
+            </Segment>;
+        } else if (searchFiles.length > 0 && moreCount > 0) {
+            deepHint = <Segment>
+                {`${moreCount} more result${moreCount === 1 ? '' : 's'} available in deep search.`}
+                {deepButton}
+            </Segment>;
+        }
+    }
+
     return <>
         {showView && <div style={{marginBottom: '1em'}}>{viewButton}</div>}
         {body}
+        {deepHint}
         {paginator}
     </>
 }

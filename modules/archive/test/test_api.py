@@ -50,36 +50,43 @@ async def test_archives_search(test_session, archive_directory, archive_factory,
     archive_factory('example.org')  # has no contents
     test_session.commit()
 
+    # Contents are d_text, so a deep search is required to match them.
     # 1 and 2 contain "foo".
-    data = {'search_str': 'foo'}
+    data = {'search_str': 'foo', 'deep': True}
     await check_results(async_client, data, [2, 1])
 
+    # The default (fast) search does not match contents.
+    data = {'search_str': 'foo'}
+    await check_results(async_client, data, [])
+
     # 2 and 3 contain "baz".
-    data = {'search_str': 'baz'}
+    data = {'search_str': 'baz', 'deep': True}
     await check_results(async_client, data, [3, 2])
 
     # 1 contains "bar".
-    data = {'search_str': 'bar'}
+    data = {'search_str': 'bar', 'deep': True}
     await check_results(async_client, data, [1, ])
 
     # No archives contain "huzzah"
-    data = {'search_str': 'huzzah'}
+    data = {'search_str': 'huzzah', 'deep': True}
     await check_results(async_client, data, [])
 
     # Only 3 contains "baz" and is in domain "example.org"
-    data = {'search_str': 'baz', 'domain': 'example.org'}
+    data = {'search_str': 'baz', 'domain': 'example.org', 'deep': True}
     await check_results(async_client, data, [3, ])
 
     # 1's title contains "my", this is ignored by Postgres.
-    data = {'search_str': 'my'}
+    data = {'search_str': 'my', 'deep': True}
     await check_results(async_client, data, [])
 
-    # 3's title contains "third".
+    # 3's title contains "third", found by the default (fast) search and the deep search.
     data = {'search_str': 'third'}
+    await check_results(async_client, data, [3, ])
+    data = {'search_str': 'third', 'deep': True}
     await check_results(async_client, data, [3, ])
 
     # All contents contain "qux", but they contain different amounts.  They are ordered by the amount.
-    data = {'search_str': 'qux'}
+    data = {'search_str': 'qux', 'deep': True}
     await check_results(async_client, data, [3, 2, 1])
 
     data = {'search_str': 'qux', 'order_by': 'bad order_by'}
@@ -116,7 +123,8 @@ async def test_archives_search_headline(test_session, archive_directory, archive
     archive_factory('example.org')  # has no contents
     test_session.commit()
 
-    content = dict(search_str='foo')
+    # "foo" is only in the contents (d_text), so a deep search is required to match it.
+    content = dict(search_str='foo', deep=True)
     request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
 
@@ -124,7 +132,7 @@ async def test_archives_search_headline(test_session, archive_directory, archive
     assert response.json['file_groups'][0]['d_headline'] is None
     assert response.json['file_groups'][1]['d_headline'] is None
 
-    content = dict(search_str='foo', headline=True)
+    content = dict(search_str='foo', headline=True, deep=True)
     request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
 

@@ -144,6 +144,37 @@ async def test_channel_statistics_with_tagged_videos(async_client, test_session,
     assert statistics['video_tags'] == 2
 
 
+def test_channel_directory_video_counts(test_session, channel_factory, video_factory):
+    """A Channel can count the video FileGroups in its directory, and which Channel they are assigned to.
+
+    These counts are logged after a Channel refresh to help debug Videos missing from their Channel."""
+    channel1 = channel_factory()
+    channel2 = channel_factory()
+    video_factory(channel_id=channel1.id)
+    video_factory(channel_id=channel1.id)
+    # These Videos' files are in channel1's directory, but they are not assigned to channel1.
+    other_channel_video = video_factory(with_video_file=channel1.directory / 'other channel.mp4')
+    unassigned_video = video_factory(with_video_file=channel1.directory / 'unassigned.mp4')
+    other_channel_video.channel_id = channel2.id
+    unassigned_video.channel_id = None
+    test_session.commit()
+
+    assert channel1.get_directory_video_counts() == dict(
+        video_file_groups=4,
+        assigned_to_channel=2,
+        assigned_to_other_channels=1,
+        unassigned=1,
+    )
+
+    # channel2's directory contains no files.
+    assert channel2.get_directory_video_counts() == dict(
+        video_file_groups=0,
+        assigned_to_channel=0,
+        assigned_to_other_channels=0,
+        unassigned=0,
+    )
+
+
 def test_channel_info_json(test_session, test_directory):
     from wrolpi.collections import Collection
 

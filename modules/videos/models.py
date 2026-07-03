@@ -953,15 +953,17 @@ class Channel(ModelHelper, Base):
         """Get statistics about this channel."""
         with get_db_curs() as curs:
             stmt = '''
-                   SELECT SUM(size)                                                     AS "size",
-                          MAX(size)                                                     AS "largest_video",
-                          COUNT(video.id)                                               AS "video_count",
-                          SUM(fg.length)                                                AS "length",
-                          -- Videos may use multiple tags.
-                          COUNT(video.id) FILTER ( WHERE tf.file_group_id IS NOT NULL ) AS "video_tags"
+                   SELECT SUM(size)        AS "size",
+                          MAX(size)        AS "largest_video",
+                          COUNT(video.id)  AS "video_count",
+                          SUM(fg.length)   AS "length",
+                          -- Count Videos with at least one Tag; a Video may use multiple Tags.
+                          (SELECT COUNT(DISTINCT tf.file_group_id)
+                           FROM tag_file tf
+                                    INNER JOIN video v ON v.file_group_id = tf.file_group_id
+                           WHERE v.channel_id = %(id)s) AS "video_tags"
                    FROM video
                             LEFT JOIN file_group fg on fg.id = video.file_group_id
-                            LEFT JOIN public.tag_file tf on fg.id = tf.file_group_id
                    WHERE channel_id = %(id)s \
                    '''
             curs.execute(stmt, dict(id=self.id))

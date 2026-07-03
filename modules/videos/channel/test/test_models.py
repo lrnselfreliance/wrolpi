@@ -110,6 +110,40 @@ async def test_channel_download_relationships(test_session, download_channel):
     assert test_session.query(Download).count() == 0
 
 
+@pytest.mark.asyncio
+async def test_channel_statistics_with_tagged_videos(async_client, test_session, channel_factory, video_factory,
+                                                     tag_factory):
+    """Tagging a Video must not inflate its Channel's statistics.
+
+    A Video with multiple Tags was counted once per Tag because of the tag_file join."""
+    channel = channel_factory()
+    video1 = video_factory(channel_id=channel.id)
+    video2 = video_factory(channel_id=channel.id)
+    video3 = video_factory(channel_id=channel.id)
+    test_session.commit()
+
+    expected_size = video1.file_group.size + video2.file_group.size + video3.file_group.size
+
+    # Statistics are correct before any Videos are tagged.
+    statistics = channel.get_statistics()
+    assert statistics['video_count'] == 3
+    assert statistics['size'] == expected_size
+    assert statistics['video_tags'] == 0
+
+    # video1 has two Tags, video2 has one Tag, video3 has none.
+    tag1, tag2 = await tag_factory(), await tag_factory()
+    video1.add_tag(test_session, tag1.name)
+    video1.add_tag(test_session, tag2.name)
+    video2.add_tag(test_session, tag1.name)
+    test_session.commit()
+
+    # Tagging Videos must not change the number of Videos in the Channel.
+    statistics = channel.get_statistics()
+    assert statistics['video_count'] == 3
+    assert statistics['size'] == expected_size
+    assert statistics['video_tags'] == 2
+
+
 def test_channel_info_json(test_session, test_directory):
     from wrolpi.collections import Collection
 

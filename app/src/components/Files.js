@@ -898,18 +898,19 @@ export function SearchControlBar(
     </div>
 }
 
-// Offers deep search when a fast search found nothing.  Used by the module pages (Videos/Archives/Docs),
-// which have no deep estimate; FilesSearchView has a count-aware variant.
+// Reminds the user that the fast search only matches titles/authors/descriptions.  Used by the module
+// pages (Videos/Archives/Docs), which have no deep estimate, so it shows whenever a fast search is
+// active; FilesSearchView has a count-aware variant.
 export function DeepSearchHint({searchStr, files}) {
     const {deep} = useSearchDeep();
     const {updateQuery} = useContext(QueryContext);
 
-    if (!searchStr || deep || !files || files.length > 0) {
+    if (!searchStr || deep || !Array.isArray(files)) {
         return null;
     }
 
     return <Segment>
-        Not finding what you need?
+        {files.length === 0 ? 'Not finding what you need?' : 'More results may be available in deep search.'}
         <Button primary
                 onClick={() => updateQuery({deep: 'true', o: 0})}
                 style={{marginLeft: '1em'}}

@@ -1386,7 +1386,13 @@ function HotspotSettingsForm() {
     };
 
     if (loading) {
-        return <Loader active inline size='small'/>;
+        return <Segment>
+            <Header as='h4'>
+                <Icon name='wifi'/>
+                Hotspot Settings
+            </Header>
+            <Loader active inline size='small'/>
+        </Segment>;
     }
 
     // Keep the saved device selectable even if it is not currently present
@@ -1399,50 +1405,56 @@ function HotspotSettingsForm() {
     const escapeWifi = (s) => s.replace(/([\\;,"])/g, '\\$1');
     const qrCodeValue = `WIFI:S:${escapeWifi(form.ssid)};T:WPA;P:${escapeWifi(form.password)};;`;
 
-    return <Form style={{marginLeft: '1em', marginBottom: '1em'}}>
-        <Form.Group widths='equal'>
-            <Form.Input
-                label='Hotspot SSID'
-                value={form.ssid}
-                disabled={dockerized || saving}
-                onChange={(e, {value}) => setForm({...form, ssid: value})}
-            />
-            <Form.Input
-                label='Hotspot Password'
-                value={form.password}
-                disabled={dockerized || saving}
-                onChange={(e, {value}) => setForm({...form, password: value})}
-            />
-            <Form.Dropdown
-                selection
-                label='Hotspot Device'
-                placeholder='No WiFi devices found'
-                options={deviceOptions}
-                value={form.device}
-                disabled={dockerized || saving}
-                onChange={(e, {value}) => setForm({...form, device: value})}
-            />
-        </Form.Group>
-        <Button
-            color='violet'
-            disabled={dockerized}
-            loading={saving}
-            onClick={handleSave}
-        >Save</Button>
-        <Modal closeIcon
-               onClose={() => setQrOpen(false)}
-               onOpen={() => setQrOpen(true)}
-               open={qrOpen}
-               trigger={<Button icon='qrcode' color='violet'/>}
-        >
-            <Modal.Header>Scan this code to join the hotspot</Modal.Header>
-            <Modal.Content>
-                <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
-                    <QRCode value={qrCodeValue} size={300}/>
-                </div>
-            </Modal.Content>
-        </Modal>
-    </Form>;
+    return <Segment>
+        <Header as='h4'>
+            <Icon name='wifi'/>
+            Hotspot Settings
+        </Header>
+        <Form>
+            <Form.Group widths='equal'>
+                <Form.Input
+                    label='Hotspot SSID'
+                    value={form.ssid}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, ssid: value})}
+                />
+                <Form.Input
+                    label='Hotspot Password'
+                    value={form.password}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, password: value})}
+                />
+                <Form.Dropdown
+                    selection
+                    label='Hotspot Device'
+                    placeholder='No WiFi devices found'
+                    options={deviceOptions}
+                    value={form.device}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, device: value})}
+                />
+            </Form.Group>
+            <Button
+                color='violet'
+                disabled={dockerized}
+                loading={saving}
+                onClick={handleSave}
+            >Save</Button>
+            <Modal closeIcon
+                   onClose={() => setQrOpen(false)}
+                   onOpen={() => setQrOpen(true)}
+                   open={qrOpen}
+                   trigger={<Button icon='qrcode' color='violet'/>}
+            >
+                <Modal.Header>Scan this code to join the hotspot</Modal.Header>
+                <Modal.Content>
+                    <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                        <QRCode value={qrCodeValue} size={300}/>
+                    </div>
+                </Modal.Content>
+            </Modal>
+        </Form>
+    </Segment>;
 }
 
 function AdminControlsSection() {
@@ -1456,9 +1468,10 @@ function AdminControlsSection() {
             </Header>
 
             <HotspotToggle/>
-            <HotspotSettingsForm/>
             <BluetoothToggle/>
             <ThrottleToggle/>
+
+            <HotspotSettingsForm/>
 
             {!dockerized && (
                 <div style={{marginTop: '1em'}}>

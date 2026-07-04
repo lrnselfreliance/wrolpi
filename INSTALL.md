@@ -25,7 +25,7 @@ You will need:
 Steps:
 
 1. Download the latest `WROLPi-v*-amd64.iso` from [wrolpi.org](https://wrolpi.org).
-2. Flash the whole drive with the ISO using Etcher, Rufus, Raspberry Pi Imager, or `dd`:
+2. Flash the whole drive with the ISO using Raspberry Pi Imager, Rufus, or `dd`:
    ```
    sudo dd if=WROLPi-v<version>-amd64.iso of=/dev/sdX bs=4M status=progress conv=fsync
    ```

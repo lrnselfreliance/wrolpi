@@ -59,7 +59,7 @@ progress "Preparing WROLPi..."
 # --- Detect deployment mode ---------------------------------------------
 # Three mutually-exclusive shapes:
 #
-#   direct       Live USB flashed with dd/Etcher: the ISO partition is a
+#   direct       Live USB flashed with dd/Raspberry Pi Imager: the ISO partition is a
 #                real partition on a real disk.  Create + manage a
 #                persistence partition on that disk.
 #
@@ -326,7 +326,7 @@ WROLPi can't safely write a persistence partition in that case, so
 everything lives in RAM and will be lost when you reboot or power off.
 
 To get a persistent install, flash the ISO directly to a USB drive
-with dd or Etcher and boot from that drive instead.
+with dd or Raspberry Pi Imager and boot from that drive instead.
 EOF
   else
     cat > "$SUMMARY_FILE" <<EOF

@@ -165,7 +165,7 @@ ERROR: the new ISO is larger than the headroom on this USB.
 
   To upgrade, you'll need to:
     1. Back up /media/wrolpi/ to another drive.
-    2. Re-flash the new ISO from scratch with dd or Etcher.
+    2. Re-flash the new ISO from scratch with dd or Raspberry Pi Imager.
     3. Restore /media/wrolpi/ from the backup.
 
   Future versions flashed from a release ≥ 0.22 reserve 8 GiB of
@@ -225,7 +225,7 @@ WROLPi USB without losing your files:
   1. Back up everything on the drive to another disk.
   2. Flash the whole drive with the ISO (this erases it):
        sudo dd if=<iso> of=<device> bs=4M status=progress conv=fsync
-     (or use Etcher / Rufus / Raspberry Pi Imager)
+     (or use Raspberry Pi Imager / Rufus)
   3. Boot the drive once.  WROLPi creates its persistence partition and
      sets itself up on first boot.
   4. Copy your backed-up data into /media/wrolpi/ on the running system,

@@ -83,11 +83,12 @@ async def hotspot_settings() -> HotspotSettingsResponse:
 @router.post("/api/hotspot/settings", response_model=HotspotSettingsResponse)
 async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSettingsResponse:
     """Update WiFi hotspot settings; they are saved in controller.yaml."""
+    # 500 matches the other subsystem endpoints (hotspot/bluetooth/throttle) in Docker mode.
+    if is_docker_mode():
+        raise HTTPException(status_code=500, detail="Not available in Docker mode")
     result = update_hotspot_settings(device=request.device, ssid=request.ssid, password=request.password)
     if not result.get("success"):
-        error = result.get("error", "Failed")
-        status_code = 500 if "Docker" in error else 400
-        raise HTTPException(status_code=status_code, detail=error)
+        raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
     return HotspotSettingsResponse(device=result["device"], ssid=result["ssid"], password=result["password"])
 
 

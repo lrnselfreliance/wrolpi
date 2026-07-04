@@ -404,6 +404,17 @@ class TestUpdateHotspotSettings:
         assert result["success"] is False
         assert "Docker" in result["error"]
 
+    def test_noop_does_not_save(self, tmp_path, reset_runtime_config):
+        """An empty update succeeds without writing controller.yaml."""
+        missing_path = tmp_path / 'missing' / 'controller.yaml'
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            # save_config() would raise RuntimeError here; success proves it was skipped.
+            with mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", missing_path):
+                result = update_hotspot_settings()
+
+        assert result["success"] is True
+        assert not missing_path.exists()
+
     def test_error_when_drive_not_mounted(self, tmp_path, reset_runtime_config):
         """Saving fails cleanly when the primary drive is not mounted."""
         missing_path = tmp_path / 'missing' / 'controller.yaml'

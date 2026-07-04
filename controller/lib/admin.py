@@ -76,17 +76,22 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
     if password is not None and not 8 <= len(password) <= 63:
         return {"success": False, "error": "Hotspot password must be 8 to 63 characters"}
 
+    changed = False
     if device:
         config_lib.update_config('hotspot.device', device)
+        changed = True
     if ssid:
         config_lib.update_config('hotspot.ssid', ssid)
+        changed = True
     if password:
         config_lib.update_config('hotspot.password', password)
+        changed = True
 
-    try:
-        config_lib.save_config()
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
+    if changed:
+        try:
+            config_lib.save_config()
+        except RuntimeError as e:
+            return {"success": False, "error": str(e)}
 
     logger.info("Hotspot settings updated (device=%s, ssid=%s)", get_hotspot_device(), get_hotspot_ssid())
     return {

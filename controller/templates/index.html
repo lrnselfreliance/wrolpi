@@ -959,6 +959,23 @@
             <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
             <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
         </div>
+        <details style="margin-bottom: 1rem;">
+            <summary style="cursor: pointer;">Hotspot Settings</summary>
+            <div class="modal-form" style="max-width: 24rem; margin-top: 0.5rem;">
+                <label>SSID
+                    <input type="text" id="hotspot-ssid">
+                </label>
+                <label>Password
+                    <input type="text" id="hotspot-password">
+                </label>
+                <label>Device
+                    <select id="hotspot-device"
+                            style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
+                    </select>
+                </label>
+                <button class="btn btn-primary" onclick="saveHotspotSettings()">Save Hotspot Settings</button>
+            </div>
+        </details>
         {% endif %}
         <div class="action-buttons">
             <button class="btn btn-warning" onclick="restartServices()">Restart All Services</button>
@@ -1370,6 +1387,48 @@
             alert(`Hotspot error: ${e.message}`);
         }
         await updateHotspotButton();
+    }
+
+    async function loadHotspotSettings() {
+        const ssidInput = document.getElementById('hotspot-ssid');
+        if (!ssidInput) return;
+        try {
+            const [settings, devices] = await Promise.all([
+                apiCall('api/hotspot/settings'),
+                apiCall('api/hotspot/devices'),
+            ]);
+            ssidInput.value = settings.ssid;
+            document.getElementById('hotspot-password').value = settings.password;
+            const select = document.getElementById('hotspot-device');
+            select.innerHTML = '';
+            // Keep the saved device selectable even if it is not currently present.
+            const names = [...new Set([...(devices.devices || []), settings.device])].filter(Boolean);
+            for (const name of names) {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                option.selected = name === settings.device;
+                select.appendChild(option);
+            }
+        } catch (e) {
+            console.error('Failed to load hotspot settings', e);
+        }
+    }
+
+    async function saveHotspotSettings() {
+        const btn = event.target;
+        btn.disabled = true;
+        try {
+            await apiCall('api/hotspot/settings', 'POST', {
+                ssid: document.getElementById('hotspot-ssid').value,
+                password: document.getElementById('hotspot-password').value,
+                device: document.getElementById('hotspot-device').value,
+            });
+            await updateHotspotButton();
+        } catch (e) {
+            alert(`Failed to save hotspot settings: ${e.message}`);
+        }
+        btn.disabled = false;
     }
 
     // --- Bluetooth ---
@@ -2759,6 +2818,7 @@
         // Fetch hardware button status immediately
         updateHotspotButton();
         updateBluetoothButton();
+        loadHotspotSettings();
 
         // Initial update after a short delay (to not overlap with initial load)
         setTimeout(() => {

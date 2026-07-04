@@ -87,8 +87,11 @@ async def lifespan(app: FastAPI):
             logger.info("Using default configuration (no controller.yaml found)")
 
         # Apply timezone from wrolpi.yaml to the system.
-        from controller.lib.admin import apply_timezone_from_config
+        from controller.lib.admin import apply_timezone_from_config, migrate_hotspot_settings_from_wrolpi_config
         apply_timezone_from_config()
+
+        # Copy legacy hotspot settings from wrolpi.yaml into controller.yaml.
+        migrate_hotspot_settings_from_wrolpi_config()
 
         # Apply Samba config if enabled.
         from controller.lib.samba import apply_samba_from_config
@@ -108,8 +111,9 @@ async def lifespan(app: FastAPI):
             except RuntimeError as e:
                 logger.warning("Failed to create controller.yaml: %s", e)
 
-            from controller.lib.admin import apply_timezone_from_config
+            from controller.lib.admin import apply_timezone_from_config, migrate_hotspot_settings_from_wrolpi_config
             apply_timezone_from_config()
+            migrate_hotspot_settings_from_wrolpi_config()
 
             from controller.lib.samba import apply_samba_from_config
             apply_samba_from_config()

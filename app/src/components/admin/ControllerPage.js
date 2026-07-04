@@ -1395,7 +1395,9 @@ function HotspotSettingsForm() {
         .map(device => ({key: device, value: device, text: device}));
 
     // Special string which allows a mobile device to connect to a specific Wi-Fi.
-    const qrCodeValue = `WIFI:S:${form.ssid};T:WPA;P:${form.password};;`;
+    // The WPA QR format requires backslash-escaping of \ ; , " in the SSID and password.
+    const escapeWifi = (s) => s.replace(/([\\;,"])/g, '\\$1');
+    const qrCodeValue = `WIFI:S:${escapeWifi(form.ssid)};T:WPA;P:${escapeWifi(form.password)};;`;
 
     return <Form style={{marginLeft: '1em', marginBottom: '1em'}}>
         <Form.Group widths='equal'>

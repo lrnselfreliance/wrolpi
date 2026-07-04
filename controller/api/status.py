@@ -12,7 +12,8 @@ wrol_mode) remain in the main WROLPi API at /api/status.
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from controller.lib.admin import get_bluetooth_status, get_hotspot_status, get_throttle_status, BluetoothStatus, HotspotStatus
+from controller.lib.admin import get_bluetooth_status, get_hotspot_ssid, get_hotspot_status, get_throttle_status, \
+    BluetoothStatus, HotspotStatus
 from controller.lib.config import is_docker_mode, is_rpi, is_rpi4, is_rpi5
 from controller.lib.status import (
     get_cpu_status,
@@ -36,16 +37,12 @@ async def get_system_info() -> dict:
     Get static system info that doesn't need frequent updates.
     These are collected on each request as they rarely change.
     """
-    from controller.lib.config import get_config
-
     hotspot_status = get_hotspot_status()
     bluetooth_status = await get_bluetooth_status()
     throttle_status = get_throttle_status()
 
     # Get hotspot SSID from config if hotspot is connected
-    config = get_config()
-    hotspot_config = config.get("hotspot", {})
-    hotspot_ssid = hotspot_config.get("ssid", "WROLPi") if hotspot_status == HotspotStatus.connected else None
+    hotspot_ssid = get_hotspot_ssid() if hotspot_status == HotspotStatus.connected else None
 
     return {
         "dockerized": is_docker_mode(),

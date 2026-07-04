@@ -24,7 +24,6 @@ import {
     useMessageDismissal,
     WROLModeMessage
 } from "../Common";
-import QRCode from "react-qr-code";
 import {useConfigs, useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -296,8 +295,6 @@ function WROLModeSection() {
 export function SettingsPage() {
     const [disabled, setDisabled] = React.useState(false);
     const [editSpecialDirectories, setEditSpecialDirectories] = React.useState(false);
-    const [qrCodeValue, setQrCodeValue] = React.useState('');
-    const [qrOpen, setQrOpen] = React.useState(false);
     const [ready, setReady] = React.useState(false);
     const [pendingSave, setPendingSave] = React.useState(false);
     const {clearAll} = useMessageDismissal();
@@ -446,12 +443,6 @@ export function SettingsPage() {
         setTraceModalOpen(false);
     }
 
-    const handleHotspotChange = async () => {
-        let {hotspot_ssid, hotspot_encryption, hotspot_password} = state;
-        // Special string which allows a mobile device to connect to a specific Wi-Fi.
-        setQrCodeValue(`WIFI:S:${hotspot_ssid};T:${hotspot_encryption};P:${hotspot_password};;`);
-    }
-
     React.useEffect(() => {
         console.debug('settings changed, replacing state...');
         setReady(settings ? true : undefined);
@@ -468,10 +459,6 @@ export function SettingsPage() {
             download_window_start: settings.download_window_start || '',
             download_window_end: settings.download_window_end || '',
             timezone: settings.timezone || '',
-            hotspot_device: settings.hotspot_device,
-            hotspot_on_startup: settings.hotspot_on_startup,
-            hotspot_password: settings.hotspot_password,
-            hotspot_ssid: settings.hotspot_ssid,
             check_for_upgrades: settings.check_for_upgrades,
             ignore_outdated_zims: settings.ignore_outdated_zims,
             log_level: fromApiLogLevel(settings.log_level),
@@ -486,10 +473,6 @@ export function SettingsPage() {
             save_ffprobe_json: settings.save_ffprobe_json,
         });
     }, [JSON.stringify(settings)]);
-
-    React.useEffect(() => {
-        handleHotspotChange();
-    }, [state.hotspot_ssid, state.hotspot_password, state.hotspot_device]);
 
     const handleInputChange = async (e, name, value) => {
         if (e) {
@@ -506,15 +489,6 @@ export function SettingsPage() {
         value = value.replace(/[^\d]/, '');
         setState({...state, [name]: value});
     }
-
-    const handleQrOpen = async (e) => {
-        e.preventDefault();
-        setQrOpen(true);
-    }
-
-    const qrButton = <Button icon color='violet' style={{marginBottom: '1em'}}>
-        <Icon name='qrcode' size='big'/>
-    </Button>;
 
     const timezoneOptions = Intl.supportedValuesOf('timeZone').map(tz => (
         {key: tz, value: tz, text: tz}
@@ -618,54 +592,6 @@ export function SettingsPage() {
                                 />
                             </ButtonGroup>
 
-                        </Grid.Column>
-                        <Grid.Column>
-                            <Segment>
-                                <Header as='h3'>Hotspot Settings</Header>
-
-                                <Form.Input
-                                    label='Hotspot SSID'
-                                    value={state.hotspot_ssid}
-                                    disabled={disabled || state.hotspot_ssid === null}
-                                    onChange={(e, i) => setState({...state, hotspot_ssid: i.value})}
-                                    style={{marginBottom: '0.5em'}}
-                                />
-                                <Form.Input
-                                    label='Hotspot Password'
-                                    disabled={disabled || state.hotspot_password === null}
-                                    value={state.hotspot_password}
-                                    onChange={(e, i) => setState({...state, hotspot_password: i.value})}
-                                    style={{marginBottom: '0.5em'}}
-                                />
-                                <Form.Input
-                                    label='Hotspot Device'
-                                    disabled={disabled || state.hotspot_password === null}
-                                    value={state.hotspot_device}
-                                    onChange={(e, i) => handleInputChange(e, 'hotspot_device', i.value)}
-                                    style={{marginBottom: '0.5em'}}
-                                />
-
-                                <Modal closeIcon
-                                       onClose={() => setQrOpen(false)}
-                                       onOpen={handleQrOpen}
-                                       open={qrOpen}
-                                       trigger={qrButton}
-                                >
-                                    <Modal.Header>
-                                        Scan this code to join the hotspot
-                                    </Modal.Header>
-                                    <Modal.Content>
-                                        <div style={{
-                                            display: 'inline-block',
-                                            backgroundColor: '#ffffff',
-                                            padding: '1em'
-                                        }}>
-                                            <QRCode value={qrCodeValue} size={300}/>
-                                        </div>
-                                    </Modal.Content>
-                                </Modal>
-
-                            </Segment>
                         </Grid.Column>
                     </Grid.Row>
                 </Grid>

@@ -8,6 +8,9 @@ from controller.api.schemas import (
     BluetoothActionResponse,
     BluetoothStatusResponse,
     HotspotActionResponse,
+    HotspotDevicesResponse,
+    HotspotSettingsRequest,
+    HotspotSettingsResponse,
     HotspotStatusResponse,
     RestartServicesResponse,
     SambaShareAddRequest,
@@ -30,13 +33,18 @@ from controller.lib.admin import (
     enable_hotspot,
     enable_throttle,
     get_bluetooth_status_dict,
+    get_hotspot_device,
+    get_hotspot_password,
+    get_hotspot_ssid,
     get_hotspot_status_dict,
     get_throttle_status_dict,
     get_timezone_status_dict,
+    get_wifi_devices,
     reboot_system,
     restart_all_services,
     set_timezone,
     shutdown_system,
+    update_hotspot_settings,
 )
 from controller.lib.config import is_docker_mode
 from controller.lib.samba import (
@@ -54,6 +62,33 @@ router = APIRouter(tags=["admin"])
 async def hotspot_status() -> HotspotStatusResponse:
     """Get WiFi hotspot status."""
     return HotspotStatusResponse(**get_hotspot_status_dict())
+
+
+@router.get("/api/hotspot/devices", response_model=HotspotDevicesResponse)
+async def hotspot_devices() -> HotspotDevicesResponse:
+    """List WiFi devices which could host the hotspot."""
+    return HotspotDevicesResponse(devices=get_wifi_devices())
+
+
+@router.get("/api/hotspot/settings", response_model=HotspotSettingsResponse)
+async def hotspot_settings() -> HotspotSettingsResponse:
+    """Get WiFi hotspot settings."""
+    return HotspotSettingsResponse(
+        device=get_hotspot_device(),
+        ssid=get_hotspot_ssid(),
+        password=get_hotspot_password(),
+    )
+
+
+@router.post("/api/hotspot/settings", response_model=HotspotSettingsResponse)
+async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSettingsResponse:
+    """Update WiFi hotspot settings; they are saved in controller.yaml."""
+    result = update_hotspot_settings(device=request.device, ssid=request.ssid, password=request.password)
+    if not result.get("success"):
+        error = result.get("error", "Failed")
+        status_code = 500 if "Docker" in error else 400
+        raise HTTPException(status_code=status_code, detail=error)
+    return HotspotSettingsResponse(device=result["device"], ssid=result["ssid"], password=result["password"])
 
 
 @router.post("/api/hotspot/enable", response_model=HotspotActionResponse)

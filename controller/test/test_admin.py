@@ -5,7 +5,9 @@ Unit tests for controller.lib.admin module.
 from unittest import mock
 
 import pytest
+import yaml
 
+from controller.lib.config import reload_config_from_drive
 from controller.lib.admin import (
     apply_timezone_from_config,
     disable_bluetooth,
@@ -19,10 +21,16 @@ from controller.lib.admin import (
     get_hotspot_status_dict,
     get_throttle_status,
     get_timezone_status_dict,
+    get_hotspot_device,
+    get_hotspot_password,
+    get_hotspot_ssid,
+    get_wifi_devices,
+    migrate_hotspot_settings_from_wrolpi_config,
     reboot_system,
     restart_all_services,
     set_timezone,
     shutdown_system,
+    update_hotspot_settings,
     BluetoothStatus,
     HotspotStatus,
     GovernorStatus,
@@ -293,6 +301,155 @@ class TestGetHotspotStatusDict:
             result = get_hotspot_status_dict()
             assert result["available"] is True
             assert result["enabled"] is True
+
+
+class TestHotspotSettingsMigration:
+    """Legacy hotspot settings in wrolpi.yaml are copied into controller.yaml on startup."""
+
+    @staticmethod
+    def _write_wrolpi_yaml(test_config_directory, **values):
+        lines = ''.join(f'{key}: {value}\n' for key, value in values.items())
+        (test_config_directory / 'wrolpi.yaml').write_text(lines)
+
+    def test_migrates_wrolpi_yaml_values(self, test_directory, test_config_directory, mock_config_path,
+                                         reset_runtime_config):
+        """wrolpi.yaml hotspot settings should be copied to controller.yaml."""
+        mock_config_path.write_text("{}\n")
+        self._write_wrolpi_yaml(test_config_directory, hotspot_device='wlp2s0', hotspot_ssid='RafaelPi',
+                                hotspot_password='password123')
+
+        with mock.patch("controller.lib.admin.get_media_directory", return_value=test_directory):
+            migrate_hotspot_settings_from_wrolpi_config()
+
+        assert get_hotspot_device() == 'wlp2s0'
+        assert get_hotspot_ssid() == 'RafaelPi'
+        assert get_hotspot_password() == 'password123'
+        # The migrated values are persisted in controller.yaml.
+        saved = yaml.safe_load(mock_config_path.read_text())
+        assert saved['hotspot'] == {'device': 'wlp2s0', 'ssid': 'RafaelPi', 'password': 'password123'}
+
+    def test_does_not_overwrite_explicit_controller_values(self, test_directory, test_config_directory,
+                                                           mock_config_path, reset_runtime_config):
+        """Explicit controller.yaml values win over legacy wrolpi.yaml values."""
+        mock_config_path.write_text("hotspot:\n  device: wlan1\n")
+        reload_config_from_drive()
+        self._write_wrolpi_yaml(test_config_directory, hotspot_device='wlp2s0', hotspot_ssid='RafaelPi')
+
+        with mock.patch("controller.lib.admin.get_media_directory", return_value=test_directory):
+            migrate_hotspot_settings_from_wrolpi_config()
+
+        # The explicit device is kept, but the SSID is still migrated.
+        assert get_hotspot_device() == 'wlan1'
+        assert get_hotspot_ssid() == 'RafaelPi'
+
+    def test_noop_without_wrolpi_yaml(self, test_directory, test_config_directory, mock_config_path,
+                                      reset_runtime_config):
+        """Nothing happens when wrolpi.yaml does not exist."""
+        mock_config_path.write_text("{}\n")
+
+        with mock.patch("controller.lib.admin.get_media_directory", return_value=test_directory):
+            migrate_hotspot_settings_from_wrolpi_config()
+
+        assert get_hotspot_device() == 'wlan0'
+        assert yaml.safe_load(mock_config_path.read_text()) == {}
+
+    def test_noop_when_drive_not_mounted(self, test_directory, test_config_directory, mock_config_path,
+                                         reset_runtime_config):
+        """Nothing happens when controller.yaml does not exist (drive not mounted)."""
+        self._write_wrolpi_yaml(test_config_directory, hotspot_device='wlp2s0')
+
+        with mock.patch("controller.lib.admin.get_media_directory", return_value=test_directory):
+            migrate_hotspot_settings_from_wrolpi_config()
+
+        assert get_hotspot_device() == 'wlan0'
+
+
+class TestUpdateHotspotSettings:
+    """Tests for update_hotspot_settings function."""
+
+    def test_updates_and_saves(self, mock_config_path, reset_runtime_config):
+        """New settings should be applied to the runtime config and saved to controller.yaml."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(device='wlp2s0', ssid='RafaelPi', password='password123')
+
+        assert result["success"] is True
+        assert get_hotspot_device() == 'wlp2s0'
+        saved = yaml.safe_load(mock_config_path.read_text())
+        assert saved['hotspot'] == {'device': 'wlp2s0', 'ssid': 'RafaelPi', 'password': 'password123'}
+
+    def test_partial_update(self, mock_config_path, reset_runtime_config):
+        """Only provided values are changed."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(device='wlp2s0')
+
+        assert result["success"] is True
+        assert result["device"] == 'wlp2s0'
+        assert result["ssid"] == 'WROLPi'
+        assert result["password"] == 'wrolpi hotspot'
+
+    def test_rejects_short_password(self, mock_config_path, reset_runtime_config):
+        """nmcli requires a WPA password of 8 to 63 characters."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(password='short')
+
+        assert result["success"] is False
+        assert "8" in result["error"]
+        assert get_hotspot_password() == 'wrolpi hotspot'
+
+    def test_rejects_in_docker_mode(self, reset_runtime_config):
+        """Hotspot settings cannot be changed in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = update_hotspot_settings(device='wlp2s0')
+
+        assert result["success"] is False
+        assert "Docker" in result["error"]
+
+    def test_error_when_drive_not_mounted(self, tmp_path, reset_runtime_config):
+        """Saving fails cleanly when the primary drive is not mounted."""
+        missing_path = tmp_path / 'missing' / 'controller.yaml'
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.config.CONFIG_PATH_ON_DRIVE", missing_path):
+                result = update_hotspot_settings(device='wlp2s0')
+
+        assert result["success"] is False
+        assert "not mounted" in result["error"]
+
+
+class TestGetWifiDevices:
+    """Tests for get_wifi_devices function."""
+
+    # Real terse nmcli output from an x86 PC: `nmcli -t -f DEVICE,TYPE device`
+    NMCLI_TERSE_DEVICES = (
+        "eno1:ethernet\n"
+        "wlp2s0:wifi\n"
+        "p2p-dev-wlp2s0:wifi-p2p\n"
+        "lo:loopback\n"
+    )
+
+    def test_returns_wifi_devices_only(self):
+        """Should return only wifi-type devices, excluding wifi-p2p and ethernet."""
+        mock_result = mock.Mock(returncode=0, stdout=self.NMCLI_TERSE_DEVICES)
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", return_value=mock_result):
+                assert get_wifi_devices() == ["wlp2s0"]
+
+    def test_returns_empty_in_docker_mode(self):
+        """Should return an empty list in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            assert get_wifi_devices() == []
+
+    def test_returns_empty_when_nmcli_missing(self):
+        """Should return an empty list when nmcli is not installed."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+                assert get_wifi_devices() == []
+
+    def test_returns_empty_when_nmcli_fails(self):
+        """Should return an empty list when nmcli returns an error."""
+        mock_result = mock.Mock(returncode=8, stdout="")
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", return_value=mock_result):
+                assert get_wifi_devices() == []
 
 
 class TestDockerModeErrors:

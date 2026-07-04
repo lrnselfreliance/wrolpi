@@ -1,8 +1,8 @@
 import React from "react";
 import _ from "lodash";
-import {Header as SHeader, Icon, Image,} from "semantic-ui-react";
+import {Button as SButton, Dropdown, Header as SHeader, Icon, Image,} from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
-import {encodeMediaPath, isSupportedArchive} from "./Common";
+import {encodeMediaPath, isSupportedArchive, useLocalStorage} from "./Common";
 import {getFile, tagFileGroup, untagFileGroup} from "../api";
 import {ArchivePreviewContent} from "./ArchivePreview";
 import {CbzViewer} from "./CbzViewer";
@@ -41,6 +41,41 @@ function getDownloadPathURL(previewFile) {
     } else {
         return `/download/${encodeMediaPath(previewFile['path'])}`;
     }
+}
+
+// PrusaSlicer is omitted because it only downloads from domains whitelisted by Prusa
+// (printables.com, thingiverse.com, cults3d.com), so it cannot fetch from a WROLPi.
+// Bambu Studio asks the user to confirm because a WROLPi is not one of its trusted sites.
+export const SLICERS = [
+    {key: 'orcaslicer', text: 'Orca Slicer', scheme: 'orcaslicer'},
+    {key: 'bambustudio', text: 'Bambu Studio', scheme: 'bambustudio'},
+    {key: 'cura', text: 'Cura', scheme: 'cura'},
+];
+
+export function getSlicerURL(previewFile, scheme) {
+    // Slicers register their own URL scheme and download the file themselves, so the
+    // file parameter must be an absolute URL reachable from the user's computer.
+    const absoluteURL = new URL(getMediaPathURL(previewFile), window.location.origin).href;
+    return `${scheme}://open?file=${encodeURIComponent(absoluteURL)}`;
+}
+
+function OpenInSlicerButton({previewFile}) {
+    // Browsers cannot report which slicers are installed, so remember the last one used.
+    const [slicerKey, setSlicerKey] = useLocalStorage('preferredSlicer', SLICERS[0].key);
+    const slicer = SLICERS.find(s => s.key === slicerKey) || SLICERS[0];
+    return <SButton.Group color='violet' size='small'>
+        <Button color='violet' as='a' href={getSlicerURL(previewFile, slicer.scheme)} icon labelPosition='left'>
+            <Icon name='cube'/>Open in {slicer.text}
+        </Button>
+        <Dropdown className='button icon' floating trigger={<></>}>
+            <Dropdown.Menu>
+                {SLICERS.map(s =>
+                    <Dropdown.Item key={s.key} text={`Open in ${s.text}`}
+                                   as='a' href={getSlicerURL(previewFile, s.scheme)}
+                                   onClick={() => setSlicerKey(s.key)}/>)}
+            </Dropdown.Menu>
+        </Dropdown>
+    </SButton.Group>
 }
 
 function getEpubViewerURL(previewFile) {
@@ -457,7 +492,7 @@ export function FilePreviewProvider({children}) {
         await localFetchFile();
     }
 
-    function setModalContent(content, url, downloadURL, path, taggable = true) {
+    function setModalContent(content, url, downloadURL, path, taggable = true, extraButtons = null) {
         // All action buttons share `size='small'` and `icon` for consistent height across viewports.
         // Close is handled by the Modal's `closeIcon` (X in the top-right corner) — no dedicated button.
         const openButton = url
@@ -497,6 +532,7 @@ export function FilePreviewProvider({children}) {
                         {downloadButton}
                         {directoryButton}
                         <ShareButton/>
+                        {extraButtons}
                         {previewFile && previewFile['id'] &&
                             <AddToPlaylistButton fileGroupId={previewFile['id']} content={null} size='small'
                                                  title='Add to Playlist'/>}
@@ -549,16 +585,20 @@ export function FilePreviewProvider({children}) {
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImagePreviewModal(previewFile), url, null, path, taggable);
             } else if (mimetype.startsWith('model/stl')) {
-                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable,
+                    <OpenInSlicerButton previewFile={previewFile}/>);
             } else if (mimetype.startsWith('model/3mf')) {
-                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable,
+                    <OpenInSlicerButton previewFile={previewFile}/>);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
-                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+                setModalContent(<STLPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable,
+                    <OpenInSlicerButton previewFile={previewFile}/>);
             } else if ((mimetype.startsWith('application/octet-stream') || mimetype === 'application/zip')
                 && lowerPath.endsWith('.3mf')) {
-                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable);
+                setModalContent(<ThreeMFPreviewModal previewFile={previewFile}/>, null, downloadURL, path, taggable,
+                    <OpenInSlicerButton previewFile={previewFile}/>);
             } else if (mimetype.includes('cbz') || mimetype.includes('cbr') || mimetype.includes('comicbook+zip') || mimetype.includes('comicbook-rar')
                 || lowerPath.endsWith('.cbz') || lowerPath.endsWith('.cbr') || lowerPath.endsWith('.cbt') || lowerPath.endsWith('.cb7')) {
                 setModalContent(<Modal.Content><CbzViewer path={path}/></Modal.Content>, null, downloadURL, path, taggable);

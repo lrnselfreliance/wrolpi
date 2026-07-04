@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {Link, Route, Routes, useLocation, useNavigate} from "react-router";
 import {FilesSearchView, SearchViewButton} from "./Files";
-import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchFilter} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useSearchChannels, useSearchDate, useSearchDeep, useSearchFilter} from "../hooks/customHooks";
 import {ShortcutHint} from "./ShortcutHint";
 import {ZimSearchView} from "./Zim";
 import {MapSearchView} from "./MapSearchView";
@@ -159,6 +159,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
                 sendGeneralReqeust(async () => await searchSuggestions(searchStr));
                 sendMapRequest(async () => await searchEstimateMap(searchStr));
             }
+            // The files estimate always uses deep search server-side, so users know results are possible.
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange, anyTag));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
             sendOtherRequest(async () => await searchEstimateOthers(tagNames));
@@ -191,7 +192,7 @@ export function useSuggestions(searchStr, tagNames, filter, anyTag) {
     React.useEffect(() => {
         if (!_.isEmpty(filesData)) {
             setSuggestions((prevState) => {
-                return {...prevState, fileGroups: filesData.fileGroups}
+                return {...prevState, fileGroups: filesData.fileGroups, fileGroupsDeep: filesData.fileGroupsDeep}
             });
         }
     }, [setSuggestions, filesData]);
@@ -232,6 +233,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
     const {dateRange, months, setDates, clearDate} = useSearchDate();
     const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter, anyTag);
+    const {deep} = useSearchDeep();
     const {getLocationStr} = React.useContext(QueryContext);
 
     // The results that will be displayed by <Search>.
@@ -251,19 +253,25 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
 
         let results = {};
 
+        // The dropdown always suggests the deep count so users know what is findable.  The search results
+        // page shows the active mode's count, and offers deep search when it found less than promised.
+        const dropdownEstimate = newSuggestions.fileGroupsDeep ?? newSuggestions.fileGroups;
+        // The tab badge shows the count matching the active search mode, so it agrees with the result list.
+        const fileGroupsEstimate = deep ? newSuggestions.fileGroupsDeep : newSuggestions.fileGroups;
+
         // Suggested results are ordered.
-        if (newSuggestions.fileGroups > 0) {
+        if (dropdownEstimate > 0) {
             results.fileGroups = {
                 name: 'Files', results: [
                     {
-                        title: newSuggestions.fileGroups.toString(),
+                        title: dropdownEstimate.toString(),
                         type: 'files',
                         // Add search query onto current location.
                         location: getLocationStr({q: searchStr}, '/search'),
                     }
                 ]
             };
-        } else if (newSuggestions.fileGroups === 0) {
+        } else if (dropdownEstimate === 0) {
             // Tell the user there are no files.
             results.fileGroups = {name: 'Files', results: noResults};
         }
@@ -389,7 +397,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
 
         setSuggestionsResults(results);
         setSuggestionsSums({
-            fileGroups: newSuggestions.fileGroups,
+            fileGroups: fileGroupsEstimate,
+            fileGroupsDeep: newSuggestions.fileGroupsDeep,
             zims: zimSum,
             otherSum: otherSum,
             mapPlaces: newSuggestions.mapPlaces || 0,
@@ -419,7 +428,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
 
             normalizeSuggestionsResults(suggestions);
         }
-    }, [JSON.stringify(suggestions)]);
+    }, [JSON.stringify(suggestions), deep]);
 
     // Clear timer on unmount.
     React.useEffect(() => {
@@ -495,7 +504,8 @@ export function SearchView({suggestions, suggestionsSums, loading}) {
     return <React.Fragment>
         <TabLinks links={links} right={isFilesTab ? <SearchViewButton headlines/> : null}/>
         <Routes>
-            <Route path='/*' element={<FilesSearchView showView={false}/>}/>
+            <Route path='/*' element={<FilesSearchView showView={false}
+                                                       deepEstimate={suggestionsSums?.fileGroupsDeep}/>}/>
             <Route path='/zim' exact element={<ZimSearchView suggestions={suggestions} loading={loading}/>}/>
             <Route path='/map' exact element={<MapSearchView/>}/>
             <Route path='/other' exact element={<OtherSearchView loading={loading}/>}/>

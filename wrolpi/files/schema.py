@@ -44,6 +44,7 @@ class FilesSearchRequest:
     url: Optional[str] = None  # Filter by URL (partial match)
     suffix: Optional[str] = None  # Filter by primary file suffix (e.g. ".bin"), case-insensitive exact match
     path: Optional[str] = None  # Filter by primary_path (case-insensitive partial match)
+    deep: bool = False  # When True, search all text including captions/body (d_text)
 
     def __post_init__(self):
         if self.any_tag and self.tag_names:

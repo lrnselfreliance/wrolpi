@@ -24,6 +24,7 @@ import {
 } from "./Common";
 import React, {useContext, useEffect, useState} from "react";
 import {useDropzone} from "react-dropzone";
+import {useHotkeys} from "react-hotkeys-hook";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
@@ -65,6 +66,32 @@ export function splitPathParentAndName(path) {
     }
     const slashIndex = path.lastIndexOf('/');
     return [path.substring(0, slashIndex), path.substring(slashIndex + 1, path.length)];
+}
+
+export function filterBrowseFiles(browseFiles, filterStr) {
+    // Reduce the file tree to the rows whose name matches `filterStr`, keeping the ancestor
+    // folders of every match.  A folder whose own name matches keeps its entire subtree.
+    if (!filterStr) {
+        return browseFiles;
+    }
+    const needle = filterStr.toLowerCase();
+    const filterList = (files) => {
+        // `files` may be a dict keyed by name (from the API) or an array.
+        const fileList = Array.isArray(files) ? files : Object.values(files);
+        const matches = [];
+        for (const file of fileList) {
+            if (pathName(file.path).toLowerCase().includes(needle)) {
+                matches.push(file);
+            } else if (file.children) {
+                const children = filterList(file.children);
+                if (children.length > 0) {
+                    matches.push({...file, children});
+                }
+            }
+        }
+        return matches;
+    };
+    return filterList(browseFiles);
 }
 
 function Folder({folder, onFolderClick, sortData, onFileClick, disabled, loadingFolders}) {
@@ -219,6 +246,17 @@ export function FileBrowser() {
     const pendingAutoSelectRef = React.useRef(null);
     // Tagged file groups that would be deleted - shown in confirmation modal
     const [taggedFileGroups, setTaggedFileGroups] = React.useState(null);
+    // Reduces the visible rows to those matching, and their parent folders.
+    const [filterStr, setFilterStr] = React.useState('');
+    const filterInputRef = React.useRef();
+
+    // 'f' focuses the filter input, like the search inputs on other pages.
+    useHotkeys('f', (e) => {
+        e.preventDefault();
+        if (filterInputRef.current) {
+            filterInputRef.current.focus();
+        }
+    }, {enableOnFormTags: false});
 
     const {settings, fetchSettings} = React.useContext(SettingsContext);
     const {inverted} = React.useContext(ThemeContext);
@@ -457,6 +495,17 @@ export function FileBrowser() {
         />
     </div>;
 
+    const onCollapseAll = () => {
+        if (!openFolders) return;
+        // Deselect any paths that will no longer be visible (descendants of the open folders).
+        const newSelectedPaths = selectedPaths.filter(p =>
+            !openFolders.some(folder => p.startsWith(folder) && p !== folder));
+        if (newSelectedPaths.length !== selectedPaths.length) {
+            setSelectedPaths(newSelectedPaths);
+        }
+        setOpenFolders(null);
+    }
+
     const onFolderClick = async (folder) => {
         let newFolders;
         if (openFolders.indexOf(folder) >= 0) {
@@ -481,6 +530,11 @@ export function FileBrowser() {
         setOpenFolders(newFolders);
     }
 
+    const filteredFiles = React.useMemo(
+        () => browseFiles ? filterBrowseFiles(browseFiles, filterStr) : browseFiles,
+        [browseFiles, filterStr],
+    );
+
     if (browseFiles === null) {
         return <Placeholder>
             <PlaceholderLine/>
@@ -493,11 +547,40 @@ export function FileBrowser() {
     return <DragSelectionProvider
         selectedPaths={selectedPaths}
         setSelectedPaths={setSelectedPaths}
-        browseFiles={browseFiles}
+        browseFiles={filteredFiles}
         openFolders={openFolders}
     >
+        <div className='file-browser-filter-container'>
+            <Input
+                icon='filter'
+                iconPosition='left'
+                placeholder='Filter files...'
+                value={filterStr}
+                onChange={(e, {value}) => setFilterStr(value)}
+                aria-label='Filter files'
+                className='file-browser-filter'
+                ref={filterInputRef}
+                action={<Button
+                    icon='close'
+                    type='button'
+                    onClick={() => setFilterStr('')}
+                    disabled={!filterStr}
+                    className='search-clear'
+                    aria-label='Clear filter'
+                />}
+            />
+            <Button
+                icon='angle double up'
+                type='button'
+                onClick={onCollapseAll}
+                disabled={!openFolders || openFolders.length === 0}
+                title='Close all folders'
+                aria-label='Close all folders'
+                style={{marginLeft: '0.5em'}}
+            />
+        </div>
         <FileBrowserContent
-            browseFiles={browseFiles}
+            browseFiles={filteredFiles}
             headers={headers}
             onFolderClick={onFolderClick}
             setPreviewFile={setPreviewFile}

@@ -178,6 +178,7 @@ class VideoSearchRequest:
     tag_names: List[str] = field(default_factory=list)
     headline: bool = False
     censored: bool = False
+    deep: bool = False  # When True, search all text including captions (d_text)
 
 
 @dataclass

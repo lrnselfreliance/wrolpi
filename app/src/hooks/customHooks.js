@@ -511,6 +511,7 @@ export const useSearchArchives = (defaultLimit) => {
     const activeTags = searchParams.getAll('tag');
     const {view} = useSearchView();
     const headline = view === 'headline';
+    const {deep} = useSearchDeep();
 
     const [archives, setArchives] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -519,7 +520,8 @@ export const useSearchArchives = (defaultLimit) => {
         setArchives(null);
         setTotalPages(0);
         try {
-            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline);
+            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline,
+                deep);
             setArchives(archives_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -536,7 +538,7 @@ export const useSearchArchives = (defaultLimit) => {
 
     useEffect(() => {
         localSearchArchives();
-    }, [searchStr, limit, domain, order, offset, JSON.stringify(activeTags), headline]);
+    }, [searchStr, limit, domain, order, offset, JSON.stringify(activeTags), headline, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -580,6 +582,7 @@ export const useSearchDocs = (defaultLimit) => {
     const author = searchParams.get('author') || '';
     const subject = searchParams.get('subject') || '';
     const filter = searchParams.get('filter') || '';
+    const {deep} = useSearchDeep();
 
     const [docs, setDocs] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -589,7 +592,8 @@ export const useSearchDocs = (defaultLimit) => {
         setTotalPages(0);
         try {
             const mimetype = docFilterToMimetype(filter);
-            let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject, mimetype);
+            let [docs_, total] = await searchDocs(offset, limit, searchStr, order, activeTags, author, subject,
+                mimetype, deep);
             setDocs(docs_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -600,7 +604,7 @@ export const useSearchDocs = (defaultLimit) => {
 
     useEffect(() => {
         localSearchDocs();
-    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject, filter]);
+    }, [searchStr, limit, order, offset, JSON.stringify(activeTags), author, subject, filter, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -639,6 +643,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const headline = view === 'headline';
     const anyTag = searchParams.get('anyTag') === 'true';
     const censored = searchParams.get('censored') === 'true';
+    const {deep} = useSearchDeep();
 
     const [videos, setVideos] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -649,7 +654,8 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         setLoading(true);
         setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline, censored);
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline,
+                censored, deep);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -662,7 +668,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
 
     useEffect(() => {
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline, censored]);
+    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline, censored, deep]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -912,8 +918,10 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         dateRange,
     } = useSearch(defaultLimit, emptySearch, model);
     const {view} = useSearchView();
+    const {deep} = useSearchDeep();
 
     const [searchFiles, setSearchFiles] = useState(null);
+    const [total, setTotal] = useState(null);
     const [loading, setLoading] = useState(false);
     const headline = view === 'headline';
 
@@ -932,12 +940,14 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         setLoading(true);
         console.log('localSearchFiles', fromDate, toDate, months);
         try {
-            let [file_groups, total] = await filesSearch(
+            let [file_groups, total_] = await filesSearch(
                 pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline,
-                months, fromDate, toDate, anyTag);
+                months, fromDate, toDate, anyTag, null, null, null, deep);
             setSearchFiles(file_groups);
-            pages.setTotal(total);
+            setTotal(total_);
+            pages.setTotal(total_);
         } catch (e) {
+            setTotal(null);
             pages.setTotal(0);
             console.error(e);
             toast({
@@ -974,10 +984,12 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         JSON.stringify(months),
         JSON.stringify(dateRange),
         anyTag,
+        deep,
     ]);
 
     return {
         searchFiles,
+        total,
         searchStr,
         filter,
         setSearchStr,
@@ -1653,6 +1665,14 @@ export const useSearchCensored = () => {
     const censored = value === 'true';
     const setCensored = (newValue) => setValue(newValue ? 'true' : undefined);
     return {censored, setCensored}
+}
+
+export const useSearchDeep = () => {
+    // Search all text including captions/document contents (?deep=true).  Slower, but more thorough.
+    const [value, setValue] = useOneQuery('deep');
+    const deep = value === 'true';
+    const setDeep = (newValue) => setValue(newValue ? 'true' : undefined);
+    return {deep, setDeep}
 }
 
 export const useSearchDate = () => {

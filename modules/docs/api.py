@@ -56,6 +56,7 @@ async def search_docs(_: Request, body: schema.DocSearchRequest):
         offset=offset,
         order_by=body.order_by,
         tag_names=body.tag_names,
+        deep=body.deep,
     )
     ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)

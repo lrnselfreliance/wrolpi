@@ -75,6 +75,18 @@ export async function getHotspotStatus() {
     return controllerFetch('/hotspot/status');
 }
 
+export async function getHotspotDevices() {
+    return controllerFetch('/hotspot/devices');
+}
+
+export async function getHotspotSettings() {
+    return controllerFetch('/hotspot/settings');
+}
+
+export async function updateHotspotSettings(settings) {
+    return controllerFetch('/hotspot/settings', {method: 'POST', body: JSON.stringify(settings)});
+}
+
 export async function enableHotspot() {
     return controllerFetch('/hotspot/enable', {method: 'POST'});
 }

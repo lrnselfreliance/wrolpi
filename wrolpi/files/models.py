@@ -79,6 +79,7 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_published_datetime_idx', 'published_datetime'),
         Index('file_group_published_modified_datetime_idx', 'published_modified_datetime'),
         Index('file_group_size_ix', 'size'),
+        Index('file_group_textsearch_abc_idx', 'textsearch_abc'),
         Index('file_group_textsearch_idx', 'textsearch'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
@@ -125,6 +126,13 @@ class FileGroup(ModelHelper, Base):
             setweight(to_tsvector('english'::regconfig, COALESCE(b_text, '')), 'B'::"char") ||
             setweight(to_tsvector('english'::regconfig, COALESCE(c_text, '')), 'C'::"char") ||
             setweight(to_tsvector('english'::regconfig, COALESCE(d_text, '')), 'D'::"char")
+            ''')))
+    # Excludes d_text (captions/body); much smaller than `textsearch`, used for the default fast search.
+    textsearch_abc = deferred(
+        Column(tsvector, Computed('''
+            setweight(to_tsvector('english'::regconfig, COALESCE(a_text, '')), 'A'::"char") ||
+            setweight(to_tsvector('english'::regconfig, COALESCE(b_text, '')), 'B'::"char") ||
+            setweight(to_tsvector('english'::regconfig, COALESCE(c_text, '')), 'C'::"char")
             ''')))
 
     def __repr__(self):

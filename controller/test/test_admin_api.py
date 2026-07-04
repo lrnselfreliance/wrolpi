@@ -34,6 +34,54 @@ class TestStatusEndpoints:
         assert data["available"] is False
 
 
+class TestHotspotDevicesEndpoint:
+    """GET /api/hotspot/devices lists WiFi interfaces for the Settings dropdown."""
+
+    def test_devices_endpoint_shape(self, test_client):
+        """Should return the WiFi devices found by nmcli."""
+        from unittest import mock
+        with mock.patch("controller.api.admin.get_wifi_devices", return_value=["wlan0", "wlp2s0"]):
+            response = test_client.get("/api/hotspot/devices")
+        assert response.status_code == 200
+        assert response.json() == {"devices": ["wlan0", "wlp2s0"]}
+
+    def test_devices_empty_in_docker(self, test_client_docker_mode):
+        """Should return an empty list in Docker mode."""
+        response = test_client_docker_mode.get("/api/hotspot/devices")
+        assert response.status_code == 200
+        assert response.json() == {"devices": []}
+
+
+class TestHotspotSettingsEndpoint:
+    """GET/POST /api/hotspot/settings manage hotspot settings in controller.yaml."""
+
+    def test_get_settings(self, test_client):
+        """Should return the current hotspot settings."""
+        response = test_client.get("/api/hotspot/settings")
+        assert response.status_code == 200
+        assert response.json() == {"device": "wlan0", "ssid": "WROLPi", "password": "wrolpi hotspot"}
+
+    def test_post_settings(self, test_client, mock_config_path):
+        """Should update settings and persist them to controller.yaml."""
+        response = test_client.post(
+            "/api/hotspot/settings",
+            json={"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123"}
+        assert "wlp2s0" in mock_config_path.read_text()
+
+    def test_post_rejects_short_password(self, test_client, mock_config_path):
+        """Should reject a password shorter than 8 characters."""
+        response = test_client.post("/api/hotspot/settings", json={"password": "short"})
+        assert response.status_code == 400
+
+    def test_post_rejected_in_docker(self, test_client_docker_mode):
+        """Should reject settings changes in Docker mode."""
+        response = test_client_docker_mode.post("/api/hotspot/settings", json={"device": "wlp2s0"})
+        assert response.status_code == 500
+
+
 class TestDockerModeRejectsAdminActions:
     """Admin action endpoints should reject requests when running in Docker."""
 

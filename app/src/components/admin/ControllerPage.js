@@ -11,6 +11,8 @@ import {
     enableService,
     getDisks,
     getFstabEntries,
+    getHotspotDevices,
+    getHotspotSettings,
     getSambaStatus,
     getServiceLogs,
     getServices,
@@ -23,7 +25,9 @@ import {
     startService,
     stopService,
     unmountDisk,
+    updateHotspotSettings,
 } from "../../api/controller";
+import QRCode from "react-qr-code";
 import {toast} from "react-semantic-toasts-2";
 import {RestartButton, ShutdownButton} from "./Settings";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -1345,6 +1349,114 @@ function SambaSection() {
 }
 
 
+function HotspotSettingsForm() {
+    const dockerized = useDockerized();
+    const [devices, setDevices] = React.useState([]);
+    const [form, setForm] = React.useState({device: '', ssid: '', password: ''});
+    const [loading, setLoading] = React.useState(true);
+    const [saving, setSaving] = React.useState(false);
+    const [qrOpen, setQrOpen] = React.useState(false);
+
+    React.useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const [settings, devicesResponse] = await Promise.all([getHotspotSettings(), getHotspotDevices()]);
+                setForm({device: settings.device, ssid: settings.ssid, password: settings.password});
+                setDevices(devicesResponse.devices || []);
+            } catch (e) {
+                console.error('Failed to fetch hotspot settings', e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const settings = await updateHotspotSettings(form);
+            setForm(settings);
+            toast({type: 'success', title: 'Hotspot settings saved', time: 3000});
+        } catch (e) {
+            toast({type: 'error', title: 'Failed to save hotspot settings', description: e.message, time: 5000});
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return <Segment>
+            <Header as='h4'>
+                <Icon name='wifi'/>
+                Hotspot Settings
+            </Header>
+            <Loader active inline size='small'/>
+        </Segment>;
+    }
+
+    // Keep the saved device selectable even if it is not currently present
+    // (e.g. a USB WiFi dongle is unplugged).
+    const deviceOptions = [...new Set([...devices, form.device].filter(Boolean))]
+        .map(device => ({key: device, value: device, text: device}));
+
+    // Special string which allows a mobile device to connect to a specific Wi-Fi.
+    // The WPA QR format requires backslash-escaping of \ ; , " in the SSID and password.
+    const escapeWifi = (s) => s.replace(/([\\;,"])/g, '\\$1');
+    const qrCodeValue = `WIFI:S:${escapeWifi(form.ssid)};T:WPA;P:${escapeWifi(form.password)};;`;
+
+    return <Segment>
+        <Header as='h4'>
+            <Icon name='wifi'/>
+            Hotspot Settings
+        </Header>
+        <Form>
+            <Form.Group widths='equal'>
+                <Form.Input
+                    label='Hotspot SSID'
+                    value={form.ssid}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, ssid: value})}
+                />
+                <Form.Input
+                    label='Hotspot Password'
+                    value={form.password}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, password: value})}
+                />
+                <Form.Dropdown
+                    selection
+                    label='Hotspot Device'
+                    placeholder='No WiFi devices found'
+                    options={deviceOptions}
+                    value={form.device}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, device: value})}
+                />
+            </Form.Group>
+            <Button
+                color='violet'
+                disabled={dockerized}
+                loading={saving}
+                onClick={handleSave}
+            >Save</Button>
+            <Modal closeIcon
+                   onClose={() => setQrOpen(false)}
+                   onOpen={() => setQrOpen(true)}
+                   open={qrOpen}
+                   trigger={<Button icon='qrcode' color='violet'/>}
+            >
+                <Modal.Header>Scan this code to join the hotspot</Modal.Header>
+                <Modal.Content>
+                    <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                        <QRCode value={qrCodeValue} size={300}/>
+                    </div>
+                </Modal.Content>
+            </Modal>
+        </Form>
+    </Segment>;
+}
+
 function AdminControlsSection() {
     const dockerized = useDockerized();
 
@@ -1358,6 +1470,8 @@ function AdminControlsSection() {
             <HotspotToggle/>
             <BluetoothToggle/>
             <ThrottleToggle/>
+
+            <HotspotSettingsForm/>
 
             {!dockerized && (
                 <div style={{marginTop: '1em'}}>

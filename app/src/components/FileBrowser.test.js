@@ -1,6 +1,6 @@
 import React from 'react';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
-import {FileBrowser} from './FileBrowser';
+import {FileBrowser, filterBrowseFiles} from './FileBrowser';
 import {renderWithProviders} from '../test-utils';
 import {SettingsContext} from '../contexts/contexts';
 import {FilePreviewContext} from './FilePreview';
@@ -475,6 +475,293 @@ describe('FileBrowser', () => {
 
             // setOpenFolders should NOT have been called since we only deleted a file
             expect(mockSetOpenFolders).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Filter', () => {
+        // foo/ and bar/ are open, their children are loaded.
+        const nestedBrowseFiles = [
+            {
+                path: 'foo/', is_empty: false, children: [
+                    {path: 'foo/foo1.txt', size: 100},
+                    {path: 'foo/foo2.txt', size: 200},
+                ]
+            },
+            {
+                path: 'bar/', is_empty: false, children: [
+                    {path: 'bar/bar.1.txt', size: 300},
+                ]
+            },
+        ];
+
+        describe('filterBrowseFiles', () => {
+            it('returns files unchanged when filter is empty', () => {
+                expect(filterBrowseFiles(nestedBrowseFiles, '')).toBe(nestedBrowseFiles);
+            });
+
+            it('keeps a matching folder and its entire subtree', () => {
+                const result = filterBrowseFiles(nestedBrowseFiles, 'bar');
+                expect(result).toHaveLength(1);
+                expect(result[0].path).toBe('bar/');
+                expect(result[0].children).toHaveLength(1);
+                expect(result[0].children[0].path).toBe('bar/bar.1.txt');
+            });
+
+            it('keeps the parent folders of a matching file', () => {
+                const result = filterBrowseFiles(nestedBrowseFiles, 'foo1');
+                expect(result).toHaveLength(1);
+                expect(result[0].path).toBe('foo/');
+                expect(result[0].children).toHaveLength(1);
+                expect(result[0].children[0].path).toBe('foo/foo1.txt');
+            });
+
+            it('matches case-insensitively', () => {
+                const result = filterBrowseFiles(nestedBrowseFiles, 'FOO1');
+                expect(result).toHaveLength(1);
+                expect(result[0].children[0].path).toBe('foo/foo1.txt');
+            });
+
+            it('handles the dict format returned by the API', () => {
+                const dictFiles = {
+                    'foo/': {
+                        path: 'foo/', is_empty: false, children: {
+                            'foo1.txt': {path: 'foo/foo1.txt', size: 100},
+                        }
+                    },
+                    'bar.txt': {path: 'bar.txt', size: 300},
+                };
+                const result = filterBrowseFiles(dictFiles, 'bar');
+                expect(result).toHaveLength(1);
+                expect(result[0].path).toBe('bar.txt');
+            });
+
+            it('returns no rows when nothing matches', () => {
+                expect(filterBrowseFiles(nestedBrowseFiles, 'does-not-exist')).toHaveLength(0);
+            });
+        });
+
+        it('reduces the rows to matches and their tree', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // All rows are visible before filtering.
+            expect(screen.getByText('foo1.txt')).toBeInTheDocument();
+            expect(screen.getByText('bar.1.txt')).toBeInTheDocument();
+
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: 'bar'}});
+            });
+
+            // Only bar/ and its child remain.
+            expect(screen.getByText('bar/')).toBeInTheDocument();
+            expect(screen.getByText('bar.1.txt')).toBeInTheDocument();
+            expect(screen.queryByText('foo/')).not.toBeInTheDocument();
+            expect(screen.queryByText('foo1.txt')).not.toBeInTheDocument();
+            expect(screen.queryByText('foo2.txt')).not.toBeInTheDocument();
+        });
+
+        it('restores all rows when the filter is cleared', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: 'bar'}});
+            });
+            expect(screen.queryByText('foo1.txt')).not.toBeInTheDocument();
+
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: ''}});
+            });
+            expect(screen.getByText('foo1.txt')).toBeInTheDocument();
+            expect(screen.getByText('bar.1.txt')).toBeInTheDocument();
+        });
+
+        it('does not filter the contents of an opened folder that matches the filter', async () => {
+            const mockSetOpenFolders = jest.fn();
+
+            // ebooks/ is closed, no children loaded yet.
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'ebooks/', children: null, is_empty: false},
+                    {path: 'other.txt', size: 100},
+                ],
+                openFolders: [],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: jest.fn(),
+            });
+
+            const {rerender} = renderFileBrowser(<FileBrowser/>);
+
+            // Filter for the folder's name.
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: 'ebooks'}});
+            });
+            expect(screen.queryByText('other.txt')).not.toBeInTheDocument();
+
+            // Open the matching folder.
+            await act(async () => {
+                fireEvent.click(screen.getByText('ebooks/'));
+            });
+            expect(mockSetOpenFolders).toHaveBeenCalledWith(['ebooks/']);
+
+            // Simulate the folder's children loading; their names do NOT match the filter.
+            useBrowseFiles.mockReturnValue({
+                browseFiles: [
+                    {path: 'ebooks/', children: [
+                        {path: 'ebooks/novel.epub', size: 100},
+                        {path: 'ebooks/cover.jpg', size: 200},
+                    ], is_empty: false},
+                    {path: 'other.txt', size: 100},
+                ],
+                openFolders: ['ebooks/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: jest.fn(),
+            });
+            await act(async () => {
+                rerender(
+                    <AllContextsWrapper>
+                        <FileBrowser/>
+                    </AllContextsWrapper>
+                );
+            });
+
+            // The matching folder's contents are shown unfiltered.
+            expect(screen.getByText('ebooks/')).toBeInTheDocument();
+            expect(screen.getByText('novel.epub')).toBeInTheDocument();
+            expect(screen.getByText('cover.jpg')).toBeInTheDocument();
+            // Non-matching rows outside the folder stay hidden.
+            expect(screen.queryByText('other.txt')).not.toBeInTheDocument();
+        });
+
+        it('focuses the filter input when f is pressed', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            expect(filterInput).not.toHaveFocus();
+
+            await act(async () => {
+                fireEvent.keyDown(document.body, {key: 'f', code: 'KeyF'});
+            });
+
+            expect(filterInput).toHaveFocus();
+        });
+
+        it('clear button clears the filter and shows all rows again', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            const clearButton = screen.getByLabelText('Clear filter');
+            expect(clearButton).toBeDisabled();
+
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: 'bar'}});
+            });
+            expect(screen.queryByText('foo1.txt')).not.toBeInTheDocument();
+            expect(clearButton).not.toBeDisabled();
+
+            await act(async () => {
+                fireEvent.click(clearButton);
+            });
+
+            expect(filterInput).toHaveValue('');
+            expect(screen.getByText('foo1.txt')).toBeInTheDocument();
+            expect(screen.getByText('foo2.txt')).toBeInTheDocument();
+            expect(screen.getByText('bar.1.txt')).toBeInTheDocument();
+        });
+
+        it('collapse-all button is disabled when no folders are open', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: [],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            expect(screen.getByLabelText('Close all folders')).toBeDisabled();
+        });
+
+        it('collapse-all button closes all folders and deselects their hidden contents', async () => {
+            const mockSetOpenFolders = jest.fn();
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: mockSetOpenFolders,
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            // Select the foo/ folder and a file inside it.
+            const checkboxes = screen.getAllByRole('checkbox');
+            await act(async () => {
+                fireEvent.click(checkboxes[0]); // foo/
+            });
+            await act(async () => {
+                fireEvent.click(checkboxes[1]); // foo/foo1.txt
+            });
+            expect(checkboxes[0]).toBeChecked();
+            expect(checkboxes[1]).toBeChecked();
+
+            const collapseButton = screen.getByLabelText('Close all folders');
+            expect(collapseButton).not.toBeDisabled();
+            await act(async () => {
+                fireEvent.click(collapseButton);
+            });
+
+            // All folders are closed (clears the ?folders= query param).
+            expect(mockSetOpenFolders).toHaveBeenCalledWith(null);
+            // The folder stays selected, but its now-hidden child does not.
+            expect(checkboxes[0]).toBeChecked();
+            expect(checkboxes[1]).not.toBeChecked();
+        });
+
+        it('shows no results when nothing matches', async () => {
+            useBrowseFiles.mockReturnValue({
+                browseFiles: nestedBrowseFiles,
+                openFolders: ['foo/', 'bar/'],
+                setOpenFolders: jest.fn(),
+                fetchFiles: jest.fn(),
+            });
+
+            renderFileBrowser(<FileBrowser/>);
+
+            const filterInput = screen.getByPlaceholderText('Filter files...');
+            await act(async () => {
+                fireEvent.change(filterInput, {target: {value: 'does-not-exist'}});
+            });
+
+            expect(screen.getByText('No results')).toBeInTheDocument();
         });
     });
 

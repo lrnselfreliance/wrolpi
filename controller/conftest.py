@@ -50,6 +50,14 @@ async def _noop_status_worker(app, base_sleep: float = 5.0):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_media_directory(tmp_path_factory, monkeypatch):
+    """Point the media directory at an empty temp dir so tests never read a real
+    /media/wrolpi (e.g. hotspot settings from wrolpi.yaml)."""
+    media_dir = tmp_path_factory.mktemp("media")
+    monkeypatch.setenv("MEDIA_DIRECTORY", str(media_dir))
+
+
+@pytest.fixture(autouse=True)
 def _patch_status_worker():
     """Replace the real status worker with a no-op for every test.
 

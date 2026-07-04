@@ -1400,7 +1400,7 @@ NO_NULL_ORDERS = {
 
 
 def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str],
-                    headline: bool = False) \
+                    headline: bool = False, deep: bool = False) \
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
@@ -1412,9 +1412,11 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     select_columns = ''
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
-        select_columns = 'ts_rank(fg.textsearch, websearch_to_tsquery(%(search_str)s)) AS rank,' \
+        # `textsearch` includes d_text (page contents); `textsearch_abc` is much smaller and faster.
+        ts_col = 'textsearch' if deep else 'textsearch_abc'
+        select_columns = f'ts_rank(fg.{ts_col}, websearch_to_tsquery(%(search_str)s)) AS rank,' \
                          ' COUNT(*) OVER() AS total'
-        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        wheres.append(f'fg.{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
         params['search_str'] = search_str
         group_by = f'{group_by}, rank'
 

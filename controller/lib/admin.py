@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml
 
+from controller.lib import config as config_lib
 from controller.lib.config import is_docker_mode, get_config_value, get_media_directory
 
 logger = logging.getLogger(__name__)
@@ -45,13 +46,146 @@ class GovernorStatus(enum.Enum):
     unknown = enum.auto()
 
 
+def get_hotspot_device() -> str:
+    return get_config_value('hotspot.device', 'wlan0')
+
+
+def get_hotspot_ssid() -> str:
+    return get_config_value('hotspot.ssid', 'WROLPi')
+
+
+def get_hotspot_password() -> str:
+    return get_config_value('hotspot.password', 'wrolpi hotspot')
+
+
+def update_hotspot_settings(device: str = None, ssid: str = None, password: str = None) -> dict:
+    """
+    Update hotspot settings in controller.yaml.  Only provided values are changed.
+
+    Returns:
+        dict with success status and the current settings
+    """
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    if device is not None and not device.strip():
+        return {"success": False, "error": "Hotspot device must not be empty"}
+    if ssid is not None and not ssid.strip():
+        return {"success": False, "error": "Hotspot SSID must not be empty"}
+    # nmcli requires a WPA password of 8 to 63 characters.
+    if password is not None and not 8 <= len(password) <= 63:
+        return {"success": False, "error": "Hotspot password must be 8 to 63 characters"}
+
+    changed = False
+    if device:
+        config_lib.update_config('hotspot.device', device)
+        changed = True
+    if ssid:
+        config_lib.update_config('hotspot.ssid', ssid)
+        changed = True
+    if password:
+        config_lib.update_config('hotspot.password', password)
+        changed = True
+
+    if changed:
+        try:
+            config_lib.save_config()
+        except RuntimeError as e:
+            return {"success": False, "error": str(e)}
+
+    logger.info("Hotspot settings updated (device=%s, ssid=%s)", get_hotspot_device(), get_hotspot_ssid())
+    return {
+        "success": True,
+        "device": get_hotspot_device(),
+        "ssid": get_hotspot_ssid(),
+        "password": get_hotspot_password(),
+    }
+
+
+def migrate_hotspot_settings_from_wrolpi_config():
+    """
+    One-time copy of hotspot settings from wrolpi.yaml into controller.yaml.
+
+    Hotspot settings used to be saved in wrolpi.yaml by the Settings page; the
+    Controller now owns them in controller.yaml.  Copy any values the user set
+    in wrolpi.yaml unless controller.yaml already sets them explicitly.
+    Called on Controller startup after the primary drive is mounted.
+    """
+    if not config_lib.CONFIG_PATH_ON_DRIVE.exists():
+        return
+
+    try:
+        with open(config_lib.CONFIG_PATH_ON_DRIVE) as f:
+            controller_config = yaml.safe_load(f) or {}
+    except (IOError, yaml.YAMLError) as e:
+        logger.warning("Failed to read controller.yaml for hotspot migration: %s", e)
+        return
+
+    wrolpi_config_path = get_media_directory() / 'config' / 'wrolpi.yaml'
+    if not wrolpi_config_path.exists():
+        return
+
+    try:
+        with open(wrolpi_config_path) as f:
+            wrolpi_config = yaml.safe_load(f) or {}
+    except (IOError, yaml.YAMLError) as e:
+        logger.warning("Failed to read wrolpi.yaml for hotspot migration: %s", e)
+        return
+
+    explicit = controller_config.get('hotspot') or {}
+    key_map = {'device': 'hotspot_device', 'ssid': 'hotspot_ssid', 'password': 'hotspot_password'}
+    changed = False
+    for controller_key, wrolpi_key in key_map.items():
+        value = wrolpi_config.get(wrolpi_key)
+        if value and controller_key not in explicit and value != get_config_value(f'hotspot.{controller_key}'):
+            config_lib.update_config(f'hotspot.{controller_key}', value)
+            changed = True
+
+    if changed:
+        try:
+            config_lib.save_config()
+            logger.info("Migrated hotspot settings from wrolpi.yaml to controller.yaml")
+        except RuntimeError as e:
+            logger.warning("Could not save migrated hotspot settings: %s", e)
+
+
+def get_wifi_devices() -> list[str]:
+    """
+    List WiFi device names (e.g. wlan0, wlp2s0) using nmcli.
+
+    Returns an empty list in Docker mode or when nmcli is unavailable.
+    """
+    if is_docker_mode():
+        return []
+
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "DEVICE,TYPE", "device"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+
+        devices = []
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(":")
+            # Exact "wifi" match excludes wifi-p2p devices.
+            if len(parts) >= 2 and parts[1] == "wifi":
+                devices.append(parts[0])
+        return devices
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return []
+
+
 def get_current_ssid(interface: str = None) -> str | None:
     """
     Returns the name of the SSID that is currently connected.
     Returns None if Hotspot is active, or no Wi-Fi network is being used.
     """
     if interface is None:
-        interface = get_config_value('hotspot.device', 'wlan0')
+        interface = get_hotspot_device()
     try:
         result = subprocess.run(
             ['iwgetid', interface, '--raw'],
@@ -81,7 +215,7 @@ def get_hotspot_status() -> HotspotStatus:
     if is_docker_mode():
         return HotspotStatus.unknown
 
-    device = get_config_value('hotspot.device', 'wlan0')
+    device = get_hotspot_device()
 
     # Check if device is connected to a Wi-Fi network (not hotspot)
     if get_current_ssid(device):
@@ -128,7 +262,7 @@ def get_hotspot_status_dict() -> dict:
         ssid: Optional[str] - Hotspot SSID when enabled
         device: Optional[str] - WiFi device name
     """
-    device = get_config_value('hotspot.device', 'wlan0')
+    device = get_hotspot_device()
     status = get_hotspot_status()
 
     # Map enum status to enabled/available flags
@@ -147,7 +281,7 @@ def get_hotspot_status_dict() -> dict:
         "enabled": enabled,
         "available": available,
         "reason": reason,
-        "ssid": get_config_value('hotspot.ssid', 'WROLPi') if enabled else None,
+        "ssid": get_hotspot_ssid() if enabled else None,
         "device": device,
     }
 
@@ -162,9 +296,9 @@ def enable_hotspot() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    device = get_config_value('hotspot.device', 'wlan0')
-    ssid = get_config_value('hotspot.ssid', 'WROLPi')
-    password = get_config_value('hotspot.password', 'wrolpi hotspot')
+    device = get_hotspot_device()
+    ssid = get_hotspot_ssid()
+    password = get_hotspot_password()
 
     try:
         # First ensure radio is on

@@ -953,18 +953,40 @@ class Channel(ModelHelper, Base):
         """Get statistics about this channel."""
         with get_db_curs() as curs:
             stmt = '''
-                   SELECT SUM(size)                                                     AS "size",
-                          MAX(size)                                                     AS "largest_video",
-                          COUNT(video.id)                                               AS "video_count",
-                          SUM(fg.length)                                                AS "length",
-                          -- Videos may use multiple tags.
-                          COUNT(video.id) FILTER ( WHERE tf.file_group_id IS NOT NULL ) AS "video_tags"
+                   SELECT SUM(size)        AS "size",
+                          MAX(size)        AS "largest_video",
+                          COUNT(video.id)  AS "video_count",
+                          SUM(fg.length)   AS "length",
+                          -- Count Videos with at least one Tag; a Video may use multiple Tags.
+                          (SELECT COUNT(DISTINCT tf.file_group_id)
+                           FROM tag_file tf
+                                    INNER JOIN video v ON v.file_group_id = tf.file_group_id
+                           WHERE v.channel_id = %(id)s) AS "video_tags"
                    FROM video
                             LEFT JOIN file_group fg on fg.id = video.file_group_id
-                            LEFT JOIN public.tag_file tf on fg.id = tf.file_group_id
                    WHERE channel_id = %(id)s \
                    '''
             curs.execute(stmt, dict(id=self.id))
+            return dict(curs.fetchone())
+
+    def get_directory_video_counts(self) -> dict:
+        """Count the video/audio FileGroups within my directory, and which Channel they are assigned to.
+
+        Logged after a refresh to help debug Videos missing from their Channel."""
+        with get_db_curs() as curs:
+            stmt = '''
+                   SELECT COUNT(fg.id) AS "video_file_groups",
+                          COUNT(fg.id) FILTER ( WHERE v.channel_id = %(id)s ) AS "assigned_to_channel",
+                          COUNT(fg.id) FILTER ( WHERE v.channel_id IS NOT NULL
+                              AND v.channel_id != %(id)s ) AS "assigned_to_other_channels",
+                          COUNT(fg.id) FILTER ( WHERE v.id IS NULL
+                              OR v.channel_id IS NULL ) AS "unassigned"
+                   FROM file_group fg
+                            LEFT JOIN video v ON v.file_group_id = fg.id
+                   WHERE (fg.directory = %(directory)s OR fg.directory LIKE %(directory)s || '/%%')
+                     AND (fg.mimetype LIKE 'video/%%' OR fg.mimetype LIKE 'audio/%%') \
+                   '''
+            curs.execute(stmt, dict(id=self.id, directory=str(self.directory)))
             return dict(curs.fetchone())
 
     def set_tag(self, tag_id_or_name: int | str | None) -> Tag | None:
@@ -1016,6 +1038,12 @@ class Channel(ModelHelper, Base):
             with get_db_session(commit=True) as session_:
                 channel_ = cls.find_by_id(session_, id_)
                 channel_.refreshed = True
+                counts = channel_.get_directory_video_counts()
+                logger.info(f'Refreshed {channel_}:'
+                            f' {counts["video_file_groups"]} video FileGroups in directory,'
+                            f' {counts["assigned_to_channel"]} assigned to this Channel,'
+                            f' {counts["assigned_to_other_channels"]} assigned to other Channels,'
+                            f' {counts["unassigned"]} unassigned')
 
         background_task(_())
         return job_id

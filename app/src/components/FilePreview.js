@@ -72,7 +72,13 @@ function OpenInSlicerButton({previewFile}) {
                 {SLICERS.map(s =>
                     <Dropdown.Item key={s.key} text={`Open in ${s.text}`}
                                    as='a' href={getSlicerURL(previewFile, s.scheme)}
-                                   onClick={() => setSlicerKey(s.key)}/>)}
+                                   onClick={(e) => {
+                                       // Navigate programmatically so keyboard activation (which may not
+                                       // follow the href) still launches the slicer.
+                                       if (e) e.preventDefault();
+                                       setSlicerKey(s.key);
+                                       window.location.assign(getSlicerURL(previewFile, s.scheme));
+                                   }}/>)}
             </Dropdown.Menu>
         </Dropdown>
     </SButton.Group>

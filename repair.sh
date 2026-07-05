@@ -70,6 +70,17 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
+# Update the Portable bootstrap on boxes installed from the Live USB; it is
+# otherwise frozen at image-build time.
+LIVE_INCLUDES=/opt/wrolpi/debian-live-config/config/includes.chroot
+if [ -f /usr/local/sbin/wrolpi-bootstrap.sh ]; then
+  cp "${LIVE_INCLUDES}/usr/local/sbin/wrolpi-bootstrap.sh" /usr/local/sbin/wrolpi-bootstrap.sh
+  chmod 0755 /usr/local/sbin/wrolpi-bootstrap.sh
+  if [ -f /etc/systemd/system/wrolpi-bootstrap.service ]; then
+    cp "${LIVE_INCLUDES}/etc/systemd/system/wrolpi-bootstrap.service" /etc/systemd/system/wrolpi-bootstrap.service
+  fi
+fi
+
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.timer /etc/systemd/system/

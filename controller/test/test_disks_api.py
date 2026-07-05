@@ -408,6 +408,80 @@ class TestPrimaryMountPersist:
             response = test_client.delete("/api/disks/fstab/media/wrolpi")
         assert response.status_code == 404
 
+    def test_mount_primary_mounts_directly_and_persists_to_etc_fstab(
+            self, test_client, disks_env):
+        """POST /disks/mount for the primary mount bypasses fstab.yaml/the
+        reconciler entirely: mount_drive + /etc/fstab, and any stale
+        fstab.yaml phantom entry is removed."""
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        # Phantom left by an older Controller: reconciler only ever skips it.
+        save(FstabFile(mounts=[
+            FstabEntry("UUID=abc", "/media/wrolpi", "ntfs", "defaults"),
+        ]), disks_env["fstab_path"])
+
+        with mock.patch("controller.api.disks.mount_drive",
+                        return_value={"success": True,
+                                      "mount_point": "/media/wrolpi"}) as m_mount, \
+                mock.patch("controller.api.disks.add_etc_fstab_entry",
+                           return_value={"success": True, "device": "UUID=abc",
+                                         "mount_point": "/media/wrolpi"}) as m_persist:
+            response = test_client.post(
+                "/api/disks/mount",
+                json={"device": "/dev/sdb2",
+                      "mount_point": "/media/wrolpi",
+                      "fstype": "ntfs",
+                      "force_shadowed": True},
+            )
+        assert response.status_code == 200
+        assert response.json()["persisted"] is True
+        m_mount.assert_called_once()
+        m_persist.assert_called_once()
+        # The reconciler's executor was never asked to mount anything.
+        assert disks_env["fake"].mount_calls == []
+        # The phantom fstab.yaml entry was cleaned up.
+        assert fstab_yaml.load(disks_env["fstab_path"]).mount_points() == set()
+
+    def test_mount_primary_failure_returns_500(self, test_client, disks_env):
+        with mock.patch("controller.api.disks.mount_drive",
+                        return_value={"success": False, "error": "unclean NTFS"}):
+            response = test_client.post(
+                "/api/disks/mount",
+                json={"device": "/dev/sdb2",
+                      "mount_point": "/media/wrolpi",
+                      "fstype": "ntfs",
+                      "force_shadowed": True},
+            )
+        assert response.status_code == 500
+        assert "unclean NTFS" in response.json()["detail"]
+
+    def test_list_hides_phantom_primary_yaml_entry(self, test_client, disks_env):
+        """A reserved mount point in fstab.yaml is never applied, so it must
+        not be reported as persistence."""
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[
+            FstabEntry("UUID=abc", "/media/wrolpi", "ntfs", "defaults"),
+            FstabEntry("UUID=def", "/media/wrolpi/usb", "ext4", "defaults"),
+        ]), disks_env["fstab_path"])
+        with mock.patch("controller.api.disks.parse_etc_fstab", return_value=[]):
+            response = test_client.get("/api/disks/fstab")
+        assert response.status_code == 200
+        assert [e["mount_point"] for e in response.json()] == ["/media/wrolpi/usb"]
+
+    def test_delete_primary_cleans_phantom_yaml_entry(self, test_client, disks_env):
+        """DELETE succeeds when only the phantom fstab.yaml entry exists."""
+        from controller.lib.fstab_yaml import FstabEntry, FstabFile, save
+        save(FstabFile(mounts=[
+            FstabEntry("UUID=abc", "/media/wrolpi", "ntfs", "defaults"),
+        ]), disks_env["fstab_path"])
+        with mock.patch(
+            "controller.api.disks.remove_etc_fstab_entry",
+            return_value={"success": False,
+                          "error": "No entry found for /media/wrolpi"},
+        ):
+            response = test_client.delete("/api/disks/fstab/media/wrolpi")
+        assert response.status_code == 200
+        assert fstab_yaml.load(disks_env["fstab_path"]).mount_points() == set()
+
     def test_list_includes_primary_from_etc_fstab(self, test_client, disks_env):
         etc_entries = [
             {"type": "comment", "line": "# /etc/fstab\n"},

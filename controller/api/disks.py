@@ -32,6 +32,7 @@ from controller.lib.disks import (
     get_block_devices,
     get_mounts,
     get_uuid,
+    mount_drive,
     validate_mount_point,
 )
 from controller.lib.fstab_yaml import (
@@ -198,6 +199,34 @@ async def disk_mount(request: MountRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if request.mount_point == str(get_media_directory()):
+        # The primary mount is reserved: the reconciler never applies a
+        # fstab.yaml entry for it.  Mount it directly and persist via the
+        # host's /etc/fstab, as onboarding does.
+        result = mount_drive(request.device, request.mount_point,
+                             fstype=request.fstype,
+                             options=request.options or "defaults")
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to mount {request.mount_point}: {result.get('error')}")
+        persisted = add_etc_fstab_entry(request.device, request.mount_point,
+                                        request.fstype or "auto")
+        if not persisted.get("success"):
+            logger.warning("Mounted %s but could not persist to /etc/fstab: %s",
+                           request.mount_point, persisted.get("error"))
+        # Self-heal: drop any stale fstab.yaml entry for the primary mount
+        # (written by older Controllers); the reconciler only ever skips it.
+        data = load_fstab()
+        if data.remove_by_mount_point(request.mount_point):
+            save_fstab(data)
+        return {
+            "success": True,
+            "device": persisted.get("device") or request.device,
+            "mount_point": request.mount_point,
+            "persisted": persisted.get("success", False),
+        }
+
     device_spec = _to_uuid_spec(request.device)
     entry = FstabEntry(
         device=device_spec,
@@ -311,6 +340,8 @@ async def list_fstab():
             "pass": "2",
         }
         for e in data.mounts
+        # Reserved mount points in fstab.yaml are never applied; hide them.
+        if e.mount_point not in RESERVED_MOUNT_POINTS
     ]
     # The primary mount persists via the host's /etc/fstab (the reconciler
     # refuses to manage it) — include it so UIs can show its Persist state.
@@ -358,6 +389,10 @@ async def add_fstab(request: FstabRequest):
         if not result.get("success"):
             raise HTTPException(status_code=500,
                                 detail=result.get("error") or "Failed to update /etc/fstab")
+        # Self-heal: drop any stale fstab.yaml entry for the primary mount.
+        data = load_fstab()
+        if data.remove_by_mount_point(request.mount_point):
+            save_fstab(data)
         return {"success": True, "device": result.get("device"),
                 "mount_point": request.mount_point}
 
@@ -395,7 +430,12 @@ async def delete_fstab(mount_point: str):
 
     if mount_point == str(get_media_directory()):
         result = remove_etc_fstab_entry(mount_point)
-        if not result.get("success"):
+        # Also drop any stale fstab.yaml entry for the primary mount.
+        data = load_fstab()
+        removed_phantom = data.remove_by_mount_point(mount_point)
+        if removed_phantom:
+            save_fstab(data)
+        if not result.get("success") and not removed_phantom:
             error = result.get("error") or f"No entry found for {mount_point}"
             status = 404 if "No entry found" in error else 500
             raise HTTPException(status_code=status, detail=error)

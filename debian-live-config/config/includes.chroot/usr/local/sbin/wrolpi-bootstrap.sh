@@ -25,9 +25,11 @@
 # 4. Installed.  No live medium present; partition-creation branch is
 #    skipped.  /media/wrolpi is mounted via /etc/fstab on an external
 #    drive, or is a plain directory on the root filesystem if the user
-#    installed without one.  The Postgres bind-mounts happen at every
-#    boot here because /etc/fstab doesn't own them — see Before= in the
-#    .service unit.
+#    installed without one.  Postgres lives at the normal Debian paths on
+#    the root filesystem: the bind-mounts are for live boots only, where
+#    the root filesystem is ephemeral.  An installed system's primary
+#    drive may be NTFS/exFAT, which cannot host a Postgres data
+#    directory at all.
 
 set -euo pipefail
 
@@ -232,27 +234,42 @@ chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || true
 mkdir -p /media/wrolpi/config
 chown wrolpi:wrolpi /media/wrolpi/config
 
-mkdir -p /media/wrolpi/config/postgresql/data \
-         /media/wrolpi/config/postgresql/config
-chown postgres:postgres /media/wrolpi/config/postgresql \
-                        /media/wrolpi/config/postgresql/data \
-                        /media/wrolpi/config/postgresql/config
-chmod 0700 /media/wrolpi/config/postgresql/data
+# --- Postgres bind-mounts (live boots ONLY, idempotent) ------------------
+# On live boots the root filesystem is an ephemeral overlay, so the
+# cluster must live on the persistence partition: /var/lib/postgresql
+# (data) and /etc/postgresql (config) are bind-mounted onto
+# subdirectories of /media/wrolpi and travel with the stick.
+#
+# On INSTALLED systems Postgres stays at the normal Debian paths on the
+# root filesystem.  The primary drive there may be NTFS/exFAT, which
+# cannot host a Postgres data directory (no POSIX ownership/0700), and
+# repair.sh chowns /media/wrolpi/config for the wrolpi user.
 
-# --- Postgres bind-mounts (idempotent) ----------------------------------
-# /var/lib/postgresql holds the cluster data dir; /etc/postgresql holds
-# the per-cluster configuration.  Bind-mounting them onto subdirectories
-# of /media/wrolpi means the entire Postgres state travels with the WROLPi
-# drive.
+if [ "$MODE" != "installed" ]; then
+  mkdir -p /media/wrolpi/config/postgresql/data \
+           /media/wrolpi/config/postgresql/config
+  chown postgres:postgres /media/wrolpi/config/postgresql \
+                          /media/wrolpi/config/postgresql/data \
+                          /media/wrolpi/config/postgresql/config
+  chmod 0700 /media/wrolpi/config/postgresql/data
 
-bind_if_unmounted() {
-  local src=$1 dest=$2
-  mkdir -p "$dest"
-  mountpoint -q "$dest" || mount --bind "$src" "$dest"
-}
+  bind_if_unmounted() {
+    local src=$1 dest=$2
+    mkdir -p "$dest"
+    mountpoint -q "$dest" || mount --bind "$src" "$dest"
+  }
 
-bind_if_unmounted /media/wrolpi/config/postgresql/data   /var/lib/postgresql
-bind_if_unmounted /media/wrolpi/config/postgresql/config /etc/postgresql
+  bind_if_unmounted /media/wrolpi/config/postgresql/data   /var/lib/postgresql
+  bind_if_unmounted /media/wrolpi/config/postgresql/config /etc/postgresql
+else
+  # Installed system that previously ran with the binds (older bootstrap):
+  # if a stale bind is still active from this boot, leave it alone — the
+  # cluster logic below would otherwise misdetect.  It disappears on the
+  # next reboot with this version.
+  if mountpoint -q /var/lib/postgresql; then
+    log "NOTE: /var/lib/postgresql is still bind-mounted (old layout); reboot to move Postgres to the root filesystem."
+  fi
+fi
 
 # --- Postgres cluster ---------------------------------------------------
 # Derive version from the installed Postgres binary so this stays correct

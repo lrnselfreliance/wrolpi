@@ -151,6 +151,12 @@ fi
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."
 # Ensure the config directory is owned by wrolpi so the API can write config files.
 [ -d /media/wrolpi/config ] && chown -R wrolpi:wrolpi /media/wrolpi/config 2>/dev/null || :
+# On bootstrapped systems the Postgres cluster lives under config/postgresql (bind-mounted to
+# /var/lib/postgresql and /etc/postgresql).  It must stay owned by postgres, or new backends
+# die with: FATAL: could not open file "global/pg_filenode.map": Permission denied.
+if [ -d /media/wrolpi/config/postgresql ] && id postgres >/dev/null 2>&1; then
+  chown -R postgres:postgres /media/wrolpi/config/postgresql 2>/dev/null || :
+fi
 
 # Remove immutable flag from blob files before chown (may not exist or may not be set).
 chattr -i /opt/wrolpi-blobs/* 2>/dev/null || :

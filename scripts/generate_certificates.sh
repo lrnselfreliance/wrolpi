@@ -39,6 +39,23 @@ fi
 # --- Leaf certificate (always regenerated) ---
 echo "Generating WROLPi leaf certificate..."
 
+# Only SANs inside the Root CA's name constraints may be included; any other
+# (e.g. a global IPv6 address from the router) fails verification with
+# "permitted subtree violation".  Takes one SAN like "IP:192.168.0.1" or "DNS:wrolpi.local".
+san_permitted() {
+  local san
+  san="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "${san}" in
+    dns:localhost|dns:*.local) return 0 ;;
+    ip:127.*|ip:10.*|ip:192.168.*) return 0 ;;
+    ip:172.1[6-9].*|ip:172.2[0-9].*|ip:172.3[01].*) return 0 ;;
+    ip:::1) return 0 ;;
+    ip:f[cd]*) return 0 ;;    # fc00::/7 unique-local
+    ip:fe[89ab]*) return 0 ;; # fe80::/10 link-local
+    *) return 1 ;;
+  esac
+}
+
 # Build SAN list dynamically.
 SAN="DNS:localhost,DNS:wrolpi.local"
 
@@ -51,12 +68,27 @@ SAN="${SAN},IP:127.0.0.1"
 
 # Add all local IPs.
 for ip in $(hostname -I 2>/dev/null || true); do
-  SAN="${SAN},IP:${ip}"
+  if san_permitted "IP:${ip}"; then
+    SAN="${SAN},IP:${ip}"
+  else
+    echo "Skipping IP:${ip}: not permitted by Root CA name constraints"
+  fi
 done
 
 # Append any extra SANs (e.g. host IP when running in Docker).
 if [[ -n "${EXTRA_SANS:-}" ]]; then
-  SAN="${SAN},${EXTRA_SANS}"
+  for extra in ${EXTRA_SANS//,/ }; do
+    # openssl requires the canonical prefix case (IP:/DNS:).
+    case "$(printf '%s' "${extra%%:*}" | tr '[:lower:]' '[:upper:]')" in
+      IP) extra="IP:${extra#*:}" ;;
+      DNS) extra="DNS:${extra#*:}" ;;
+    esac
+    if san_permitted "${extra}"; then
+      SAN="${SAN},${extra}"
+    else
+      echo "Skipping ${extra}: not permitted by Root CA name constraints"
+    fi
+  done
 fi
 
 echo "SANs: ${SAN}"

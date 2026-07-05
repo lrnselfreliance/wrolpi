@@ -98,8 +98,9 @@ set -x
 set -e
 set -o pipefail
 
-systemctl stop wrolpi-api
-systemctl stop wrolpi-app
+# Units may not be installed yet if a previous install/repair failed; repair.sh installs them later.
+systemctl stop wrolpi-api || :
+systemctl stop wrolpi-app || :
 
 # Fetch the latest commits without modifying the working tree.
 git -C /opt/wrolpi fetch || exit 4

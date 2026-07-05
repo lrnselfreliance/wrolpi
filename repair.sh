@@ -143,10 +143,13 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
-# Configure Postgresql.  Do this after the API is stopped.
-/opt/wrolpi/scripts/initialize_api_db.sh
+# Configure Postgresql.  Do this after the API is stopped.  Never fatal: a
+# repair/upgrade must complete its system-level work even when the database
+# is down (e.g. it is the reboot after this repair that revives Postgres).
+/opt/wrolpi/scripts/initialize_api_db.sh || \
+  echo "WARNING: could not initialize the database; the API will report if it stays down."
 # wrolpi user is superuser so they can import maps.
-sudo -iu postgres psql -c "alter user wrolpi with superuser"
+sudo -iu postgres psql -c "alter user wrolpi with superuser" || :
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi

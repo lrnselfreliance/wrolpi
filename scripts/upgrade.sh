@@ -96,8 +96,11 @@ find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
 
 # Install any new Python requirements.
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
-# Upgrade the WROLPi database.
-(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
+# Upgrade the WROLPi database.  Never fatal: the database may be down and
+# repair.sh (which runs at the end of this upgrade) may be exactly what fixes
+# it; initialize_api_db.sh re-runs this migration there.
+(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade) || \
+  echo "WARNING: db upgrade failed (database down?); it will be retried during repair."
 
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."

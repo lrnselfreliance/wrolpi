@@ -124,6 +124,10 @@ if [[ ! -f ${MAP_OVERVIEW_BLOB} || ! -s ${MAP_OVERVIEW_BLOB} ]]; then
     -o "${MAP_OVERVIEW_BLOB}"
 fi || echo "Map overview download failed, continuing..."
 
+# Finish configuring any package left half-configured by an interrupted apt/dpkg run
+# (e.g. a prior upgrade that died at a conffile prompt).
+DEBIAN_FRONTEND=noninteractive dpkg --force-confdef --force-confold --configure -a || :
+
 # Migrate from nginx to Caddy if necessary.
 if ! command -v caddy &>/dev/null; then
   echo "Installing Caddy (replacing nginx)..."
@@ -134,21 +138,26 @@ if ! command -v caddy &>/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --batch --yes --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
   apt-get update
-  apt-get install -y caddy
+  # Non-interactive: a conffile prompt (e.g. repair.sh already wrote /etc/caddy/Caddyfile)
+  # would otherwise hang or abort under the tty-less wrolpi-upgrade.service.
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold caddy
 fi
 
 # Install Samba if not already installed.
 if ! command -v smbd &>/dev/null; then
   echo "Installing Samba..."
   apt-get update
-  apt-get install -y samba
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold samba
 fi
 
 # Install gnome-disk-utility if not already installed (provides desktop disk management GUI).
 if ! command -v gnome-disks &>/dev/null; then
   echo "Installing gnome-disk-utility..."
   apt-get update
-  apt-get install -y gnome-disk-utility
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold gnome-disk-utility
 fi
 
 # Clean up stale landing page (Controller now serves port 80 directly).

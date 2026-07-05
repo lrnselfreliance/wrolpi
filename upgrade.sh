@@ -119,9 +119,10 @@ fi
 
 # Signature verified, safe to apply.
 # Force the checkout so local working-tree changes (e.g. app/package-lock.json
-# rewritten by npm install during a prior upgrade) cannot abort the switch; the
-# following reset --hard discards them anyway.
-(cd /opt/wrolpi && git checkout -f "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
+# rewritten by npm install during a prior upgrade) cannot abort the switch.
+# Use `checkout -B <branch> origin/<branch>` so the ref can never be mistaken for a path. A tracked `release/`
+# directory otherwise collides with the `release` branch name, making a bare `git checkout release` ambiguous.
+(cd /opt/wrolpi && git checkout -f -B "${BRANCH}" "origin/${BRANCH}") || exit 4
 
 # Verify HEAD again after checkout in case the branch was swapped between fetch and checkout.
 if ! git -C /opt/wrolpi verify-commit HEAD 2>&1; then

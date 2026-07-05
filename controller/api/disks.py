@@ -23,7 +23,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from controller.lib.config import is_docker_mode
+from controller.lib.config import get_media_directory, is_docker_mode
+from controller.lib.fstab import add_fstab_entry as add_etc_fstab_entry
+from controller.lib.fstab import parse_fstab as parse_etc_fstab
+from controller.lib.fstab import remove_fstab_entry as remove_etc_fstab_entry
 from controller.lib.disks import (
     check_shadowed_data,
     get_block_devices,
@@ -297,7 +300,7 @@ async def list_fstab():
     """Return the WROLPi-managed mount table (fstab.yaml)."""
     _check_native_mode()
     data = load_fstab()
-    return [
+    entries = [
         {
             "type": "mount",
             "device": e.device,
@@ -309,6 +312,24 @@ async def list_fstab():
         }
         for e in data.mounts
     ]
+    # The primary mount persists via the host's /etc/fstab (the reconciler
+    # refuses to manage it) — include it so UIs can show its Persist state.
+    media_dir = str(get_media_directory())
+    try:
+        for e in parse_etc_fstab():
+            if e.get("type") == "mount" and e.get("mount_point") == media_dir:
+                entries.append({
+                    "type": "mount",
+                    "device": e["device"],
+                    "mount_point": e["mount_point"],
+                    "fstype": e["fstype"],
+                    "options": e["options"],
+                    "dump": e.get("dump", "0"),
+                    "pass": e.get("pass", "2"),
+                })
+    except OSError:
+        pass
+    return entries
 
 
 @router.post("/fstab")
@@ -329,6 +350,16 @@ async def add_fstab(request: FstabRequest):
         validate_mount_point(request.mount_point)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    if request.mount_point == str(get_media_directory()):
+        # The primary mount persists via the host's /etc/fstab; a fstab.yaml
+        # entry would never be applied (RESERVED_MOUNT_POINTS).
+        result = add_etc_fstab_entry(request.device, request.mount_point, request.fstype)
+        if not result.get("success"):
+            raise HTTPException(status_code=500,
+                                detail=result.get("error") or "Failed to update /etc/fstab")
+        return {"success": True, "device": result.get("device"),
+                "mount_point": request.mount_point}
 
     device_spec = _to_uuid_spec(request.device)
     data = load_fstab()
@@ -361,6 +392,14 @@ async def delete_fstab(mount_point: str):
         validate_mount_point(mount_point)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    if mount_point == str(get_media_directory()):
+        result = remove_etc_fstab_entry(mount_point)
+        if not result.get("success"):
+            error = result.get("error") or f"No entry found for {mount_point}"
+            status = 404 if "No entry found" in error else 500
+            raise HTTPException(status_code=status, detail=error)
+        return {"success": True, "mount_point": mount_point}
 
     data = load_fstab()
     if not data.remove_by_mount_point(mount_point):

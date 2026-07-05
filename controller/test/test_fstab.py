@@ -218,6 +218,30 @@ UUID=5678 /media/64GB exfat defaults,nofail,x-systemd.device-timeout=10s 0 2
                             assert "uid=" not in written_str
                             assert "gid=" not in written_str
 
+    def test_ntfs_fstab_entry_includes_uid_gid(self):
+        """Should add uid/gid options when adding ntfs fstab entry (no POSIX permissions)."""
+        fstab_content = "# empty\n"
+        written_content = []
+
+        def mock_write(content):
+            written_content.append(content)
+
+        mock_file = mock.mock_open(read_data=fstab_content)
+        mock_file().write = mock_write
+
+        with mock.patch("controller.lib.fstab.require_normal_mode"):
+            with mock.patch("controller.lib.fstab.get_uuid", return_value="1234-5678"):
+                with mock.patch("controller.lib.fstab.backup_fstab"):
+                    with mock.patch("controller.lib.fstab.get_wrolpi_uid_gid", return_value=(1001, 1001)):
+                        with mock.patch("builtins.open", mock_file):
+                            with mock.patch("subprocess.run"):
+                                result = add_fstab_entry("/dev/sdb2", "/media/wrolpi", "ntfs")
+                                assert result["success"] is True
+                                written_str = "".join(written_content)
+                                # Should have uid/gid options
+                                assert "uid=1001" in written_str
+                                assert "gid=1001" in written_str
+
     def test_vfat_fstab_entry_includes_uid_gid(self):
         """Should add uid/gid options when adding vfat (FAT32) fstab entry."""
         fstab_content = "# empty\n"

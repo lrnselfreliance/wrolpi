@@ -84,6 +84,15 @@ class TestMounts:
         result = rec.apply()
         assert result.mounted == []
         assert fake.mount_calls == []
+        # Diagnostics explain the "nothing to do" run in the journal.
+        assert result.desired_count == 1
+        assert result.already_mounted == ["/media/wrolpi/usb"]
+
+    def test_empty_fstab_reports_zero_desired(self, tmp_path):
+        rec, fake = make_reconciler(tmp_path, fstab=FstabFile())
+        result = rec.apply()
+        assert result.desired_count == 0
+        assert result.already_mounted == []
 
     def test_mount_failure_is_recorded(self, tmp_path):
         fake = FakeMountExecutor(fail_for_mount=frozenset({"/media/wrolpi/usb"}))

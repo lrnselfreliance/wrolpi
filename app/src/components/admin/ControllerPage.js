@@ -647,8 +647,10 @@ function SmartDetailsModal({drive, open, onClose}) {
 }
 
 
-// Protected mount points that should not be unmounted
-const PROTECTED_MOUNTS = ['/', '/boot', '/boot/firmware', '/media/wrolpi'];
+// The primary mount cannot be unmounted from the UI, but its persistence
+// (an /etc/fstab entry) can be toggled.  Any mount outside /media belongs to
+// the system (/, /boot/efi, /boot/firmware, …) and is entirely untouchable.
+const PRIMARY_MOUNT = '/media/wrolpi';
 
 // Helper to format disk size
 const formatSize = (size) => {
@@ -1003,7 +1005,9 @@ function DiskSection() {
                     <Table.Body>
                         {disks.map((disk) => {
                             const isMounted = disk.mountpoint && disk.mountpoint !== '';
-                            const isProtected = PROTECTED_MOUNTS.includes(disk.mountpoint);
+                            const isPrimary = disk.mountpoint === PRIMARY_MOUNT;
+                            // Mounts outside /media (/, /boot/efi, …) are system mounts.
+                            const isSystemMount = isMounted && !isPrimary && !disk.mountpoint.startsWith('/media/');
                             const persistent = isMounted && isPersistent(disk.mountpoint);
 
                             return (
@@ -1020,7 +1024,7 @@ function DiskSection() {
                                         )}
                                     </Table.Cell>
                                     <Table.Cell>
-                                        {isMounted && !isProtected ? (
+                                        {isMounted && !isSystemMount ? (
                                             <Toggle
                                                 checked={persistent}
                                                 onChange={(checked) => handleTogglePersist(disk, checked)}
@@ -1031,7 +1035,7 @@ function DiskSection() {
                                         )}
                                     </Table.Cell>
                                     <Table.Cell>
-                                        {isMounted && isProtected ? (
+                                        {isMounted && (isSystemMount || isPrimary) ? (
                                             <span style={{color: '#888'}}>System</span>
                                         ) : isMounted ? (
                                             <Button

@@ -268,6 +268,45 @@ class TestMountDrive:
                     assert result["success"] is False
                     assert "mount failed" in result["error"]
 
+    def test_ntfs_mount_runs_ntfsfix_first(self):
+        """NTFS mounts run ntfsfix -d before mount to clear the Windows dirty flag."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)), \
+                mock.patch("pathlib.Path.mkdir"), \
+                mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            result = mount_drive("/dev/sdb2", "/media/test", fstype="ntfs")
+            assert result["success"] is True
+            commands = [c[0][0] for c in mock_run.call_args_list]
+            assert commands[0][:2] == ["ntfsfix", "-d"]
+            assert "/dev/sdb2" in commands[0]
+            assert commands[1][0] == "mount"
+
+    def test_ntfsfix_failure_does_not_block_mount(self):
+        """A failed ntfsfix is logged but the mount is still attempted."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False), \
+                mock.patch("controller.lib.disks.get_wrolpi_uid_gid", return_value=(1001, 1001)), \
+                mock.patch("pathlib.Path.mkdir"), \
+                mock.patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                mock.Mock(returncode=1, stdout="", stderr="ntfsfix failed"),  # ntfsfix
+                mock.Mock(returncode=0, stdout="", stderr=""),  # mount
+            ]
+            result = mount_drive("/dev/sdb2", "/media/test", fstype="ntfs")
+            assert result["success"] is True
+
+    def test_ext4_mount_does_not_run_ntfsfix(self):
+        """Non-NTFS mounts must not invoke ntfsfix."""
+        with mock.patch("controller.lib.disks.is_docker_mode", return_value=False), \
+                mock.patch("pathlib.Path.mkdir"), \
+                mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
+            result = mount_drive("/dev/sda1", "/media/test", fstype="ext4")
+            assert result["success"] is True
+            commands = [c[0][0] for c in mock_run.call_args_list]
+            assert len(commands) == 1
+            assert commands[0][0] == "mount"
+
     @pytest.mark.parametrize("fstype,expect_uid_gid", [
         ("exfat", True),
         ("vfat", True),    # FAT32

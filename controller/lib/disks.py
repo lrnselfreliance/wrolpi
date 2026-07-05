@@ -178,6 +178,22 @@ def mount_drive(
         uid, gid = get_wrolpi_uid_gid()
         options = f"{options},uid={uid},gid={gid}"
 
+    # NTFS volumes are frequently left "dirty" (Windows Fast Startup, or an
+    # unclean unplug), which makes the driver refuse to mount them.  ntfsfix -d
+    # clears the dirty flag and replays the journal; it is a no-op on clean
+    # volumes.  Failure is non-fatal: the mount below reports the real error.
+    if fstype in ("ntfs", "ntfs3"):
+        try:
+            fix = subprocess.run(
+                ["ntfsfix", "-d", device],
+                capture_output=True, text=True, timeout=60,
+            )
+            if fix.returncode != 0:
+                logger.warning("ntfsfix %s failed (mount will still be attempted): %s",
+                               device, (fix.stderr or fix.stdout).strip())
+        except (subprocess.TimeoutExpired, OSError) as e:
+            logger.warning("Could not run ntfsfix on %s: %s", device, e)
+
     # Build mount command
     cmd = ["mount"]
     if fstype:

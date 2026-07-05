@@ -16,7 +16,7 @@ import sys
 from controller.lib.disks import get_wrolpi_uid_gid
 from controller.lib.fstab_migration import migrate_etc_fstab
 from controller.lib.mount_executor import SubprocessMountExecutor
-from controller.lib.reconciler import Reconciler
+from controller.lib.reconciler import DEFAULT_FSTAB_PATH, Reconciler
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +48,19 @@ def main(argv=None) -> int:
     )
     result = reconciler.apply()
 
+    if result.desired_count == 0:
+        logger.info("%s lists no mounts; nothing to reconcile.", DEFAULT_FSTAB_PATH)
     logger.info(
-        "Reconcile complete: %d mounted, %d unmounted, %d mount failures, %d unmount failures",
+        "Reconcile complete: %d desired, %d already mounted, %d skipped, "
+        "%d mounted, %d unmounted, %d mount failures, %d unmount failures",
+        result.desired_count, len(result.already_mounted), len(result.skipped),
         len(result.mounted), len(result.unmounted),
         len(result.mount_failures), len(result.unmount_failures),
     )
+    for mp in result.already_mounted:
+        logger.info("Already mounted: %s", mp)
+    for mp, reason in result.skipped:
+        logger.info("Skipped %s: %s", mp, reason)
     for mp, err in result.mount_failures:
         logger.error("Failed to mount %s: %s", mp, err)
     for mp, err in result.unmount_failures:

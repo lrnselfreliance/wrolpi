@@ -345,6 +345,89 @@ class TestFstabMutateEndpoints:
         assert response.status_code == 404
 
 
+# --- Primary mount persistence (/etc/fstab, not fstab.yaml) ----------------
+
+class TestPrimaryMountPersist:
+    """The primary mount (/media/wrolpi) persists via the host's /etc/fstab,
+    not fstab.yaml: the wrolpi-mounts reconciler refuses to manage it
+    (RESERVED_MOUNT_POINTS), so a fstab.yaml entry would never be applied."""
+
+    @pytest.fixture(autouse=True)
+    def primary_media_dir(self, monkeypatch):
+        """conftest isolates MEDIA_DIRECTORY to a tmp dir; these tests need the
+        real primary mount point so the endpoints route to /etc/fstab."""
+        monkeypatch.setenv("MEDIA_DIRECTORY", "/media/wrolpi")
+
+    def test_post_primary_routes_to_etc_fstab(self, test_client, disks_env):
+        with mock.patch(
+            "controller.api.disks.add_etc_fstab_entry",
+            return_value={"success": True, "device": "UUID=abc-123",
+                          "mount_point": "/media/wrolpi"},
+        ) as add_etc:
+            response = test_client.post(
+                "/api/disks/fstab",
+                json={"device": "/dev/sdb2",
+                      "mount_point": "/media/wrolpi",
+                      "fstype": "ntfs"},
+            )
+        assert response.status_code == 200
+        assert response.json()["device"] == "UUID=abc-123"
+        add_etc.assert_called_once()
+        # fstab.yaml must NOT contain the primary mount.
+        assert fstab_yaml.load(disks_env["fstab_path"]).mount_points() == set()
+
+    def test_post_primary_reports_etc_fstab_failure(self, test_client, disks_env):
+        with mock.patch(
+            "controller.api.disks.add_etc_fstab_entry",
+            return_value={"success": False, "error": "WROL Mode is enabled"},
+        ):
+            response = test_client.post(
+                "/api/disks/fstab",
+                json={"device": "/dev/sdb2",
+                      "mount_point": "/media/wrolpi",
+                      "fstype": "ntfs"},
+            )
+        assert response.status_code == 500
+        assert "WROL Mode" in response.json()["detail"]
+
+    def test_delete_primary_routes_to_etc_fstab(self, test_client, disks_env):
+        with mock.patch(
+            "controller.api.disks.remove_etc_fstab_entry",
+            return_value={"success": True, "mount_point": "/media/wrolpi"},
+        ) as remove_etc:
+            response = test_client.delete("/api/disks/fstab/media/wrolpi")
+        assert response.status_code == 200
+        remove_etc.assert_called_once_with("/media/wrolpi")
+
+    def test_delete_primary_missing_returns_404(self, test_client, disks_env):
+        with mock.patch(
+            "controller.api.disks.remove_etc_fstab_entry",
+            return_value={"success": False,
+                          "error": "No entry found for /media/wrolpi"},
+        ):
+            response = test_client.delete("/api/disks/fstab/media/wrolpi")
+        assert response.status_code == 404
+
+    def test_list_includes_primary_from_etc_fstab(self, test_client, disks_env):
+        etc_entries = [
+            {"type": "comment", "line": "# /etc/fstab\n"},
+            {"type": "mount", "device": "UUID=root", "mount_point": "/",
+             "fstype": "ext4", "options": "defaults", "dump": "0", "pass": "1"},
+            {"type": "mount", "device": "UUID=abc-123",
+             "mount_point": "/media/wrolpi", "fstype": "ntfs",
+             "options": "defaults,nofail", "dump": "0", "pass": "2"},
+        ]
+        with mock.patch("controller.api.disks.parse_etc_fstab",
+                        return_value=etc_entries):
+            response = test_client.get("/api/disks/fstab")
+        assert response.status_code == 200
+        body = response.json()
+        mount_points = [e["mount_point"] for e in body]
+        # The primary appears; unrelated system mounts (e.g. /) do not.
+        assert mount_points == ["/media/wrolpi"]
+        assert body[0]["device"] == "UUID=abc-123"
+
+
 # --- SMART ----------------------------------------------------------------
 
 class TestSmartEndpoints:

@@ -54,6 +54,11 @@ class ReconcileResult:
     mount_failures: list[tuple[str, str]] = field(default_factory=list)
     unmount_failures: list[tuple[str, str]] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
+    # Diagnostics: how many entries fstab.yaml listed, and which of them were
+    # satisfied before this run.  Together with `skipped` these explain a
+    # "nothing to do" reconcile in the journal.
+    desired_count: int = 0
+    already_mounted: list[str] = field(default_factory=list)
 
     @property
     def all_succeeded(self) -> bool:
@@ -87,6 +92,7 @@ class Reconciler:
         desired = load_fstab(self._fstab_path)
         live = self._executor.current_mount_points()
         managed = self._read_managed()
+        result.desired_count = len(desired.mounts)
 
         # 1. Mount each entry in fstab.yaml that isn't already live.
         for entry in desired.mounts:
@@ -98,6 +104,7 @@ class Reconciler:
                 # Already mounted — claim ownership so a later removal can
                 # safely unmount it.
                 managed.add(entry.mount_point)
+                result.already_mounted.append(entry.mount_point)
                 continue
             options = self._inject_uid_gid(entry)
             self._ensure_dir(entry.mount_point)

@@ -1663,8 +1663,11 @@
                         <td>
                 `;
 
-                const protectedMounts = ['/', '/boot', '/boot/firmware', '/media/wrolpi'];
-                const isProtected = protectedMounts.includes(disk.mountpoint);
+                // The primary mount cannot be unmounted, but its persistence
+                // (/etc/fstab entry) can be toggled.  Mounts outside /media
+                // (/, /boot/efi, ...) are system mounts: entirely untouchable.
+                const isPrimary = disk.mountpoint === '/media/wrolpi';
+                const isSystemMount = mounted && !isPrimary && !disk.mountpoint.startsWith('/media/');
 
                 // Check if this disk has a persistent entry (by mount point or UUID)
                 let isPersistent = false;
@@ -1679,7 +1682,7 @@
                 }
 
                 // Persist column - show for mounted drives OR unmounted persistent drives
-                if ((mounted || isPersistent) && !isProtected) {
+                if ((mounted || isPersistent) && !isSystemMount) {
                     const mountPoint = mounted ? disk.mountpoint : persistentEntry.mount_point;
                     html += `
                         <label class="toggle">
@@ -1697,10 +1700,10 @@
                 html += `</td><td>`;
 
                 // Actions column
-                if (mounted && !isProtected) {
-                    html += `<button class="btn btn-danger" onclick="unmountDisk('${disk.mountpoint}')">Unmount</button>`;
-                } else if (mounted && isProtected) {
+                if (mounted && (isSystemMount || isPrimary)) {
                     html += `<span style="color: #888;">System</span>`;
+                } else if (mounted) {
+                    html += `<button class="btn btn-danger" onclick="unmountDisk('${disk.mountpoint}')">Unmount</button>`;
                 } else {
                     const defaultMount = disk.label ? `/media/${disk.label}` : `/media/${disk.name}`;
                     html += `<button class="btn btn-primary" onclick="mountDisk('${disk.path}', '${defaultMount}', '${disk.fstype || ''}')">Mount</button>`;

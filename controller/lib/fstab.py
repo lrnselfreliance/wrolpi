@@ -164,9 +164,10 @@ def add_fstab_entry(
     # This ensures we don't get duplicates when remounting the same device to a different location
     entries = _filter_entry_with_comment(entries, mount_point=mount_point, device=device_spec)
 
-    # For exfat/vfat, add uid/gid options to set ownership to wrolpi user
-    # These filesystems don't support POSIX permissions natively
-    if fstype in ("exfat", "vfat"):
+    # For filesystems without native POSIX permissions, add uid/gid options to
+    # set ownership to the wrolpi user.  Covers the FAT family and both NTFS
+    # drivers (ntfs-3g FUSE and the in-kernel ntfs3), matching mount_drive().
+    if fstype in ("exfat", "vfat", "ntfs", "ntfs3"):
         uid, gid = get_wrolpi_uid_gid()
         options = f"{options},uid={uid},gid={gid}"
 

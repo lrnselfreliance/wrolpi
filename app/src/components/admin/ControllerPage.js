@@ -795,6 +795,7 @@ function MountModal({disk, open, onClose, onMount}) {
                     <Form.Field>
                         <label>Mount Point</label>
                         <Input
+                            autoFocus
                             value={mountPoint}
                             onChange={(e) => setMountPoint(e.target.value)}
                             placeholder="/media/..."

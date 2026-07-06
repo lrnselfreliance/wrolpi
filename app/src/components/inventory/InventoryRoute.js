@@ -38,7 +38,7 @@ function NewInventoryModal({open, onClose, onCreate}) {
     return <Modal open={open} onClose={onClose} closeIcon>
         <Modal.Header>New Inventory</Modal.Header>
         <Modal.Content>
-            <Input fluid label='Name' value={name} onChange={e => setName(e.target.value)}
+            <Input fluid autoFocus label='Name' value={name} onChange={e => setName(e.target.value)}
                    placeholder='Food Storage' style={{marginBottom: '1em'}}/>
             <div>
                 Type:{' '}
@@ -231,7 +231,7 @@ export function InventoryRoute() {
         <Modal open={renaming} onClose={() => setRenaming(false)} closeIcon size='tiny'>
             <Modal.Header>Rename Inventory</Modal.Header>
             <Modal.Content>
-                <Input fluid value={renameValue} onChange={e => setRenameValue(e.target.value)}/>
+                <Input fluid autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}/>
             </Modal.Content>
             <Modal.Actions>
                 <Button onClick={() => setRenaming(false)}>Cancel</Button>

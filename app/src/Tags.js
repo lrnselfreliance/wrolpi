@@ -331,6 +331,7 @@ function EditTagsModal() {
 
                 <Form autoComplete='off'>
                     <Form.Input required
+                               autoFocus
                                label={<b>Tag Name</b>}
                                placeholder='Unique name'
                                value={tagName}

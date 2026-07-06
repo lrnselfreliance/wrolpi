@@ -663,6 +663,7 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
                 <pre>{parent ? parent + '/' : null}{value}</pre>
 
                 <Input fluid
+                       autoFocus
                        label='Name'
                        value={value}
                        onChange={handleInputChange}
@@ -725,7 +726,7 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
         <Modal.Header>Move Files/Directories</Modal.Header>
         <Modal.Content>
             <p>Search for a directory to move your files into:</p>
-            <DirectorySearch onSelect={handleDirectory} disabled={pending}/>
+            <DirectorySearch onSelect={handleDirectory} disabled={pending} input={{autoFocus: true}}/>
 
             <Table>
                 <TableHeader>
@@ -829,6 +830,7 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
             <Form onSubmit={handleSubmit}>
                 <pre>{mediaDirectory}/{parent}{value}</pre>
                 <Input fluid
+                       autoFocus
                        label='Name'
                        value={value}
                        onChange={handleInputChange}

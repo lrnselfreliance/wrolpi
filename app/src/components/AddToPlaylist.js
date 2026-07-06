@@ -84,7 +84,7 @@ export function AddToPlaylistModal({open, onClose, items = [], onComplete}) {
             <Form onSubmit={handleCreateAndAdd} style={{marginTop: '1em'}}>
                 <Form.Field>
                     <label>Or create a new playlist</label>
-                    <Input placeholder='New playlist name...' value={newName}
+                    <Input autoFocus placeholder='New playlist name...' value={newName}
                            onChange={(e, {value}) => setNewName(value)}/>
                 </Form.Field>
             </Form>

@@ -59,6 +59,18 @@ class MountExecutor(Protocol):
 MOUNT_TIMEOUT_SECONDS = 30
 
 
+def _device_path(device: str) -> str:
+    """Translate a UUID=/LABEL= mount spec to a real device node.
+
+    mount(8) resolves these specs itself, but tools like ntfsfix need a
+    path.  udev maintains the by-uuid/by-label symlinks."""
+    if device.startswith("UUID="):
+        return f"/dev/disk/by-uuid/{device[len('UUID='):]}"
+    if device.startswith("LABEL="):
+        return f"/dev/disk/by-label/{device[len('LABEL='):]}"
+    return device
+
+
 class SubprocessMountExecutor:
     """Executes mount/umount via subprocess and parses /proc/mounts."""
 
@@ -72,6 +84,17 @@ class SubprocessMountExecutor:
         fstype: str,
         options: str,
     ) -> MountResult:
+        # NTFS volumes are frequently left "dirty" (Windows Fast Startup, or
+        # an unclean unplug), which makes the driver refuse to mount them.
+        # ntfsfix -d clears the dirty flag and replays the journal; it is a
+        # no-op on clean volumes.  Never fatal: the mount below reports the
+        # real error.  Matches mount_drive() in lib/disks.py.
+        if fstype in ("ntfs", "ntfs3"):
+            fix = self._run(["ntfsfix", "-d", _device_path(device)],
+                            label=f"ntfsfix {device}")
+            if not fix.ok:
+                logger.warning("ntfsfix failed for %s (mount will still be attempted): %s",
+                               device, fix.error)
         cmd = ["mount", "-t", fstype, "-o", options, device, mount_point]
         return self._run(cmd, label=f"mount {device} {mount_point}")
 
@@ -104,6 +127,10 @@ class SubprocessMountExecutor:
                 ok=False,
                 error=f"{label}: timed out after {self._timeout}s",
             )
+        except OSError as e:
+            # e.g. FileNotFoundError for a missing binary — the executor
+            # protocol forbids raising for I/O failures.
+            return MountResult(ok=False, error=f"{label}: {e}")
         if result.returncode != 0:
             return MountResult(
                 ok=False,

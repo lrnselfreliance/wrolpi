@@ -124,6 +124,67 @@ class TestSubprocessMountExecutor:
         assert calls == [["mount", "-t", "ext4", "-o", "defaults",
                           "UUID=1", "/media/x"]]
 
+    def test_ntfs_mount_runs_ntfsfix_first(self, monkeypatch):
+        """NTFS mounts run ntfsfix -d first to clear the Windows dirty flag;
+        UUID= specs are translated to /dev/disk/by-uuid for ntfsfix."""
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return _FakeCompletedProcess(returncode=0)
+
+        monkeypatch.setattr(
+            "controller.lib.mount_executor.subprocess.run", fake_run,
+        )
+        executor = SubprocessMountExecutor()
+        result = executor.mount("UUID=ABC123", "/media/x", "ntfs", "defaults")
+        assert result == MountResult(ok=True)
+        assert calls[0] == ["ntfsfix", "-d", "/dev/disk/by-uuid/ABC123"]
+        assert calls[1][0] == "mount"
+
+    def test_ntfsfix_failure_does_not_block_mount(self, monkeypatch):
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "ntfsfix":
+                return _FakeCompletedProcess(returncode=1, stderr="dirty")
+            return _FakeCompletedProcess(returncode=0)
+
+        monkeypatch.setattr(
+            "controller.lib.mount_executor.subprocess.run", fake_run,
+        )
+        executor = SubprocessMountExecutor()
+        result = executor.mount("/dev/sda1", "/media/x", "ntfs3", "defaults")
+        assert result == MountResult(ok=True)
+
+    def test_ext4_mount_does_not_run_ntfsfix(self, monkeypatch):
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return _FakeCompletedProcess(returncode=0)
+
+        monkeypatch.setattr(
+            "controller.lib.mount_executor.subprocess.run", fake_run,
+        )
+        executor = SubprocessMountExecutor()
+        executor.mount("UUID=1", "/media/x", "ext4", "defaults")
+        assert len(calls) == 1
+        assert calls[0][0] == "mount"
+
+    def test_missing_binary_returns_error_instead_of_raising(self, monkeypatch):
+        """The executor protocol forbids raising for I/O failures; a missing
+        binary (FileNotFoundError) must come back as MountResult(ok=False)."""
+
+        def fake_run(cmd, **kwargs):
+            raise FileNotFoundError(2, "No such file or directory", cmd[0])
+
+        monkeypatch.setattr(
+            "controller.lib.mount_executor.subprocess.run", fake_run,
+        )
+        executor = SubprocessMountExecutor()
+        result = executor.mount("UUID=1", "/media/x", "ext4", "defaults")
+        assert result.ok is False
+        assert "No such file" in result.error
+
     def test_mount_propagates_stderr(self, monkeypatch):
         def fake_run(cmd, **kwargs):
             return _FakeCompletedProcess(returncode=32, stderr="busy")

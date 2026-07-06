@@ -149,11 +149,11 @@ class Reconciler:
         return None
 
     def _inject_uid_gid(self, entry: FstabEntry) -> str:
-        """exfat/vfat have no POSIX permissions; without uid/gid the
+        """exfat/vfat/ntfs have no POSIX permissions; without uid/gid the
         mounted directory belongs to root and the wrolpi user cannot write
-        to it."""
+        to it.  Covers both NTFS drivers, matching mount_drive()."""
         options = entry.options or "defaults"
-        if entry.fstype not in ("exfat", "vfat"):
+        if entry.fstype not in ("exfat", "vfat", "ntfs", "ntfs3"):
             return options
         if "uid=" in options or "gid=" in options:
             return options

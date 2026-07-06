@@ -242,6 +242,17 @@ class TestUidGidInjection:
         assert "uid=2000" in opts
         assert "gid=2000" in opts
 
+    def test_injects_uid_gid_for_ntfs(self, tmp_path):
+        """ntfs/ntfs3 have no POSIX permissions either; secondary NTFS drives
+        must mount owned by the wrolpi user like exfat/vfat do."""
+        fstab = FstabFile(mounts=[_entry(fstype="ntfs")])
+        rec, fake = make_reconciler(tmp_path, fstab=fstab,
+                                    wrolpi_uid=2000, wrolpi_gid=2000)
+        rec.apply()
+        opts = fake.mount_calls[0].options
+        assert "uid=2000" in opts
+        assert "gid=2000" in opts
+
     def test_does_not_double_inject_if_user_already_supplied(self, tmp_path):
         fstab = FstabFile(mounts=[_entry(fstype="vfat",
                                          options="defaults,uid=1234,gid=1234")])

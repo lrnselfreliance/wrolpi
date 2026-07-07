@@ -10,8 +10,8 @@ from controller.lib.systemd import (
     get_managed_services,
     get_service_config,
     get_service_status,
+    discover_wrolpi_services,
     get_all_services_status,
-    discover_running_wrolpi_services,
     get_discovered_service_status,
     _get_systemd_name,
     start_service,
@@ -149,7 +149,7 @@ class TestGetAllServicesStatus:
 
     def test_returns_list(self):
         """Should return a list."""
-        with mock.patch("controller.lib.systemd.discover_running_wrolpi_services", return_value=[]):
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services", return_value=[]):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=0, stdout="active", stderr="")
                 result = get_all_services_status()
@@ -157,7 +157,7 @@ class TestGetAllServicesStatus:
 
     def test_returns_status_for_each_visible_service(self):
         """Should return status for each visible managed service."""
-        with mock.patch("controller.lib.systemd.discover_running_wrolpi_services", return_value=[]):
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services", return_value=[]):
             with mock.patch("subprocess.run") as mock_run:
                 mock_run.return_value = mock.Mock(returncode=0, stdout="active", stderr="")
                 result = get_all_services_status()
@@ -165,21 +165,37 @@ class TestGetAllServicesStatus:
                 # All services should be returned when they're all "running" (active)
                 assert len(result) == len(managed)
 
-    def test_filters_show_only_when_running_services_when_stopped(self):
-        """Should exclude show_only_when_running services when they're not running."""
-        with mock.patch("controller.lib.systemd.discover_running_wrolpi_services", return_value=[]):
-            with mock.patch("subprocess.run") as mock_run:
-                # Simulate all services as "inactive" (stopped)
-                mock_run.return_value = mock.Mock(returncode=0, stdout="inactive", stderr="")
+    def test_includes_stopped_but_installed_services(self):
+        """show_only_when_running services stay visible while stopped as long
+        as the unit is installed: a finished oneshot (wrolpi-upgrade) must
+        keep its logs reachable from the UI."""
+        def side_effect(cmd, **kwargs):
+            out = "loaded" if cmd[:2] == ["systemctl", "show"] else "inactive"
+            return mock.Mock(returncode=0, stdout=out, stderr="")
+
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services", return_value=[]):
+            with mock.patch("subprocess.run", side_effect=side_effect):
+                result = get_all_services_status()
+                assert len(result) == len(get_managed_services())
+                assert "wrolpi-upgrade" in [s["name"] for s in result]
+
+    def test_hides_optional_services_only_when_not_installed(self):
+        """show_only_when_running services are hidden only when the unit does
+        not exist on this box (e.g. wrolpi-api-dev on production)."""
+        def side_effect(cmd, **kwargs):
+            out = "not-found" if cmd[:2] == ["systemctl", "show"] else "inactive"
+            return mock.Mock(returncode=0, stdout=out, stderr="")
+
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services", return_value=[]):
+            with mock.patch("subprocess.run", side_effect=side_effect):
                 result = get_all_services_status()
                 managed = get_managed_services()
-                # Count services without show_only_when_running flag
                 always_visible = [s for s in managed if not s.get("show_only_when_running")]
                 assert len(result) == len(always_visible)
 
     def test_includes_show_only_when_running_services_when_running(self):
         """Should include show_only_when_running services when they're running."""
-        with mock.patch("controller.lib.systemd.discover_running_wrolpi_services", return_value=[]):
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services", return_value=[]):
             with mock.patch("subprocess.run") as mock_run:
                 # Simulate all services as "active" (running)
                 mock_run.return_value = mock.Mock(returncode=0, stdout="active", stderr="")
@@ -190,6 +206,56 @@ class TestGetAllServicesStatus:
                 # Verify wrolpi-upgrade is in the result
                 service_names = [s["name"] for s in result]
                 assert "wrolpi-upgrade" in service_names
+
+    def test_includes_discovered_services_even_when_stopped(self):
+        """Discovered wrolpi-* units (e.g. a finished script service) appear
+        in the list regardless of running state."""
+        def side_effect(cmd, **kwargs):
+            out = "loaded" if cmd[:2] == ["systemctl", "show"] else "inactive"
+            return mock.Mock(returncode=0, stdout=out, stderr="")
+
+        with mock.patch("controller.lib.systemd.discover_wrolpi_services",
+                        return_value=["wrolpi-custom-task"]):
+            with mock.patch("subprocess.run", side_effect=side_effect):
+                result = get_all_services_status()
+                names = [s["name"] for s in result]
+                assert "wrolpi-custom-task" in names
+
+
+class TestDiscoverWrolpiServices:
+    """Discovery unions loaded units (--all, catches transient units) with
+    installed unit files, so exited oneshots and dev services are visible."""
+
+    def _side_effect(self, list_units_out, list_unit_files_out):
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["systemctl", "list-units"]:
+                out = list_units_out
+            elif cmd[:2] == ["systemctl", "list-unit-files"]:
+                out = list_unit_files_out
+            else:
+                out = ""
+            return mock.Mock(returncode=0, stdout=out, stderr="")
+        return side_effect
+
+    def test_unions_loaded_and_installed_units(self):
+        list_units = "wrolpi-transient.service loaded active running Task\n"
+        list_unit_files = ("wrolpi-custom.service static -\n"
+                           "wrolpi-api.service enabled enabled\n")
+        with mock.patch("subprocess.run",
+                        side_effect=self._side_effect(list_units, list_unit_files)):
+            found = discover_wrolpi_services()
+        assert "wrolpi-transient" in found
+        assert "wrolpi-custom" in found
+        # Managed services are excluded from discovery.
+        assert "wrolpi-api" not in found
+
+    def test_deduplicates_units_present_in_both_listings(self):
+        list_units = "wrolpi-custom.service loaded inactive dead Task\n"
+        list_unit_files = "wrolpi-custom.service static -\n"
+        with mock.patch("subprocess.run",
+                        side_effect=self._side_effect(list_units, list_unit_files)):
+            found = discover_wrolpi_services()
+        assert found.count("wrolpi-custom") == 1
 
 
 class TestServiceActions:
@@ -275,7 +341,7 @@ class TestGetServiceLogs:
 
 
 class TestDiscoverRunningWrolpiServices:
-    """Tests for discover_running_wrolpi_services function."""
+    """Tests for discover_wrolpi_services function."""
 
     def test_discovers_unknown_services(self):
         """Should discover wrolpi-* services not in managed config."""
@@ -286,7 +352,7 @@ class TestDiscoverRunningWrolpiServices:
         )
         with mock.patch("subprocess.run") as mock_run:
             mock_run.return_value = mock.Mock(returncode=0, stdout=systemctl_output, stderr="")
-            result = discover_running_wrolpi_services()
+            result = discover_wrolpi_services()
             # wrolpi-api is managed, so only the other two should be discovered
             assert "wrolpi-api" not in result
             assert "wrolpi-fix-media-permissions" in result
@@ -296,13 +362,13 @@ class TestDiscoverRunningWrolpiServices:
         """Should return empty list when systemctl fails."""
         with mock.patch("subprocess.run") as mock_run:
             mock_run.return_value = mock.Mock(returncode=1, stdout="", stderr="error")
-            result = discover_running_wrolpi_services()
+            result = discover_wrolpi_services()
             assert result == []
 
     def test_returns_empty_on_no_systemctl(self):
         """Should return empty list when systemctl is not found."""
         with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
-            result = discover_running_wrolpi_services()
+            result = discover_wrolpi_services()
             assert result == []
 
     def test_returns_empty_when_no_extra_services(self):
@@ -310,7 +376,7 @@ class TestDiscoverRunningWrolpiServices:
         systemctl_output = "wrolpi-api.service loaded active running WROLPi API\n"
         with mock.patch("subprocess.run") as mock_run:
             mock_run.return_value = mock.Mock(returncode=0, stdout=systemctl_output, stderr="")
-            result = discover_running_wrolpi_services()
+            result = discover_wrolpi_services()
             assert result == []
 
 

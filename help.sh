@@ -95,6 +95,37 @@ fi
   echo "OK: Postgres is using file socket" ||
   echo "FAILED: Postgres is not using file socket"
 
+# Cluster-level checks.  The umbrella postgresql.service reports active even
+# when every cluster is down, so inspect the real clusters.
+if command -v pg_lsclusters >/dev/null 2>&1; then
+  pg_lsclusters
+  cluster_line=$(pg_lsclusters -h 2>/dev/null | head -1)
+  if [ -z "${cluster_line}" ]; then
+    echo "FAILED: No Postgres clusters exist (pg_lsclusters printed nothing)"
+  elif [ "$(echo "${cluster_line}" | awk '{print $4}')" = "online" ]; then
+    echo "OK: Postgres cluster is online (port $(echo "${cluster_line}" | awk '{print $3}'))"
+  else
+    echo "FAILED: Postgres cluster is not online: ${cluster_line}"
+  fi
+  cluster_data_dir=$(echo "${cluster_line}" | awk '{print $6}')
+  if [ -n "${cluster_data_dir}" ]; then
+    case "${cluster_data_dir}" in
+      /var/lib/postgresql/*) echo "OK: Postgres data directory is at ${cluster_data_dir}" ;;
+      *) echo "FAILED: Postgres data directory is in an unexpected location: ${cluster_data_dir}" ;;
+    esac
+  fi
+fi
+
+# A mount over /var/lib/postgresql means the Portable bind layout (expected
+# only on live boots).  On an installed system this indicates the cluster is
+# on the media drive — the wrong spot; see mount-issues.md Problem 8.
+if findmnt -n /var/lib/postgresql >/dev/null 2>&1; then
+  echo "Note: /var/lib/postgresql is a mount: $(findmnt -n -o SOURCE,FSTYPE /var/lib/postgresql)"
+  echo "      (Portable/live-boot layout; on an installed system this is WRONG)"
+else
+  echo "OK: /var/lib/postgresql is on the root filesystem (installed layout)"
+fi
+
 if sudo -i -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
   echo "OK: Found wrolpi database"
 

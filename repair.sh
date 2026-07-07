@@ -143,6 +143,17 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
+# Heal Postgres cluster ownership before configuring the database.  A stray
+# recursive chown can leave cluster files unreadable by the server: the
+# postmaster stays up but new backends die with FATAL: could not open file
+# "global/pg_filenode.map": Permission denied.  Same healing as
+# reset_api_db.sh, but without dropping the database.
+if id postgres >/dev/null 2>&1; then
+  [ -d /var/lib/postgresql ] && chown -R postgres:postgres /var/lib/postgresql 2>/dev/null || :
+  [ -d /etc/postgresql ] && chown -R postgres:postgres /etc/postgresql 2>/dev/null || :
+  systemctl restart postgresql 2>/dev/null || :
+fi
+
 # Configure Postgresql.  Do this after the API is stopped.  Never fatal: a
 # repair/upgrade must complete its system-level work even when the database
 # is down (e.g. it is the reboot after this repair that revives Postgres).

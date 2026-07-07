@@ -107,6 +107,16 @@ def get_service_status(name: str) -> dict:
             timeout=5,
         )
         is_enabled = enabled_result.stdout.strip()
+
+        # Loaded state distinguishes a stopped unit from one that does not
+        # exist on this box at all.
+        load_result = subprocess.run(
+            ["systemctl", "show", "-p", "LoadState", "--value", systemd_name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        load_state = load_result.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return {
             "name": name,
@@ -114,6 +124,7 @@ def get_service_status(name: str) -> dict:
             "status": "unknown",
             "active": "unknown",
             "enabled": False,
+            "installed": False,
             "port": service_config.get("port"),
             "viewable": service_config.get("viewable", False),
             "view_path": service_config.get("view_path", ""),
@@ -138,6 +149,7 @@ def get_service_status(name: str) -> dict:
         "name": name,
         "systemd_name": systemd_name,
         "status": status,
+        "installed": load_state not in ("not-found", ""),
         "active": is_active,
         "enabled": is_enabled == "enabled",
         "port": service_config.get("port"),
@@ -148,41 +160,45 @@ def get_service_status(name: str) -> dict:
     }
 
 
-def discover_running_wrolpi_services() -> list[str]:
+def discover_wrolpi_services() -> list[str]:
     """
-    Discover running wrolpi-* systemd services not in the managed services config.
+    Discover wrolpi-* systemd services not in the managed services config.
+
+    Unions loaded units (--all also catches transient units and units that
+    have exited this boot) with installed unit files, so a finished oneshot
+    (e.g. wrolpi-upgrade) or a dev service stays visible in the UI and its
+    logs remain reachable.
 
     Returns:
-        list of systemd unit names (e.g., ["wrolpi-fix-media-permissions.service"])
+        list of service names without the .service suffix
     """
     managed_systemd_names = {
         s.get("systemd_name", s["name"])
         for s in get_managed_services()
     }
 
-    try:
-        result = subprocess.run(
-            ["systemctl", "list-units", "wrolpi-*", "--type=service", "--no-legend", "--no-pager"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return []
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
+    commands = (
+        ["systemctl", "list-units", "wrolpi-*", "--type=service",
+         "--all", "--plain", "--no-legend", "--no-pager"],
+        ["systemctl", "list-unit-files", "wrolpi-*", "--type=service",
+         "--no-legend", "--no-pager"],
+    )
 
-    discovered = []
-    for line in result.stdout.strip().splitlines():
-        parts = line.split()
-        if not parts:
+    discovered: list[str] = []
+    for cmd in commands:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
-        # Unit name is the first column, e.g. "wrolpi-fix-media-permissions.service"
-        unit_name = parts[0]
-        # Strip .service suffix to get the base name
-        service_name = unit_name.removesuffix(".service")
-        if service_name not in managed_systemd_names:
-            discovered.append(service_name)
+        if result.returncode != 0:
+            continue
+        for line in result.stdout.strip().splitlines():
+            unit_name = next((p for p in line.split() if p.endswith(".service")), None)
+            if not unit_name:
+                continue
+            service_name = unit_name.removesuffix(".service")
+            if service_name not in managed_systemd_names and service_name not in discovered:
+                discovered.append(service_name)
 
     return discovered
 
@@ -258,7 +274,10 @@ def get_all_services_status() -> list[dict]:
     Get status of all managed services, plus any running wrolpi-* services
     discovered dynamically.
 
-    Services with show_only_when_running=True are excluded when not running.
+    Services with show_only_when_running=True are hidden only when their
+    unit is not installed on this box (e.g. wrolpi-api-dev on production).
+    Installed-but-stopped services stay visible so a finished oneshot
+    (wrolpi-upgrade) keeps its logs reachable from the UI.
 
     Returns:
         list of service status dicts
@@ -266,16 +285,14 @@ def get_all_services_status() -> list[dict]:
     results = []
     for service in get_managed_services():
         status = get_service_status(service["name"])
-        # Skip services with show_only_when_running if not running
-        if service.get("show_only_when_running") and status.get("status") != "running":
+        if service.get("show_only_when_running") and not status.get("installed"):
             continue
         results.append(status)
 
-    # Discover any running wrolpi-* services not in the managed list.
-    for name in discover_running_wrolpi_services():
-        status = get_discovered_service_status(name)
-        if status.get("status") == "running":
-            results.append(status)
+    # Any other wrolpi-* services (installed or transient), regardless of
+    # running state.
+    for name in discover_wrolpi_services():
+        results.append(get_discovered_service_status(name))
 
     return results
 

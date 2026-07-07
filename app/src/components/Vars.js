@@ -101,7 +101,7 @@ export const validUrlRegex = /^(http|https):\/\/[^ "]+$/;
 export const downloadOrderOptions = [
     {key: 'newest', text: 'Newest', value: 'newest'},
     {key: 'oldest', text: 'Oldest', value: 'oldest'},
-    // 'views'/'Most Views' was removed: YouTube no longer provides view counts in channel/playlist listings.
+    {key: 'views', text: 'Most Views', value: 'views'},
 ];
 
 export const downloadResolutionOptions = [

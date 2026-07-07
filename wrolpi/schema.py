@@ -301,9 +301,8 @@ class DownloadSettings:
         if not self.download_metadata_only:
             del self.download_metadata_only
 
-        # 'views' was deprecated: YouTube no longer provides view counts in channel/playlist listings.
-        if self.download_order not in (None, 'newest', 'oldest'):
-            raise ValidationError(f'Download order must be one of newest, oldest, or null.')
+        if self.download_order not in (None, 'newest', 'oldest', 'views'):
+            raise ValidationError(f'Download order must be one of newest, oldest, views, or null.')
 
         if self.video_format not in (None, 'mp4', 'mkv', 'ogg', 'webm'):
             raise ValidationError(f'Video format must be one of mp4, mkv, ogg, webm, or null.')

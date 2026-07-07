@@ -720,12 +720,15 @@ class ChannelDownloader(Downloader, ABC):
             logger.debug(f'Downloading oldest videos from {download.url}')
             downloads = downloads.reverse()
         elif sort_key == 'views':
-            # YouTube no longer exposes `view_count` in flat channel/playlist listings, so we can no longer
-            # sort by views without fetching every video individually.  This may become possible again if we
-            # integrate the YouTube Data API.
-            raise UnrecoverableDownloadError(
-                'Downloading by "Most Views" is no longer supported because YouTube no longer provides view '
-                'counts in channel/playlist listings.  Please change this download to "Newest" or "Oldest".')
+            # Listing view counts are approximate ("3K" -> 3000); good enough for ordering.
+            logger.debug(f'Downloading most viewed videos from {download.url}')
+            if not any(i.get('view_count') is not None for i in downloads):
+                # Old yt-dlp (< 2026.07) does not extract view_count from YouTube's lockupViewModel
+                # listings.  Fail cleanly rather than downloading in arbitrary order.
+                raise UnrecoverableDownloadError(
+                    'yt-dlp did not report view counts for this channel/playlist.  Update yt-dlp '
+                    '(or change this download to "Newest"/"Oldest").')
+            downloads = sorted(downloads, key=lambda i: i.get('view_count') or 0, reverse=True)
 
         # Limit the videos that will be downloads (this allows the user to download the "top 100" videos of a Channel)
         if video_count_limit := settings.get('video_count_limit'):

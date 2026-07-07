@@ -708,12 +708,34 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
     }
 
 
-def test_get_missing_videos_views_order_deprecated(test_session):
-    """The 'views' download order was deprecated.  YouTube no longer provides `view_count` in flat
-    channel/playlist listings, so a download configured for 'views' raises an unrecoverable error rather
-    than crashing with a KeyError or silently downloading in the wrong order."""
+def test_get_missing_videos_views_order(test_session):
+    """The 'views' download order sorts videos most-viewed-first.  Entries missing a `view_count`
+    (some listings omit it) sort last rather than raising a KeyError."""
     from modules.videos.downloader import channel_downloader
-    # Flat entries no longer contain a `view_count` key (matches current yt-dlp behavior).
+    download = Download(
+        url='https://www.youtube.com/@example/videos',
+        settings={'download_order': 'views'},
+        info_json={'entries': [
+            {'_type': 'url', 'id': 'a', 'title': 'a', 'url': 'https://youtube.com/watch?v=a', 'view_count': 918},
+            {'_type': 'url', 'id': 'b', 'title': 'b', 'url': 'https://youtube.com/watch?v=b'},  # No view_count.
+            {'_type': 'url', 'id': 'c', 'title': 'c', 'url': 'https://youtube.com/watch?v=c', 'view_count': 3000},
+        ]},
+    )
+    test_session.add(download)
+    test_session.commit()
+
+    missing_videos = channel_downloader.get_missing_videos(test_session, download)
+    assert missing_videos == [
+        'https://youtube.com/watch?v=c',
+        'https://youtube.com/watch?v=a',
+        'https://youtube.com/watch?v=b',
+    ]
+
+
+def test_get_missing_videos_views_order_no_view_counts(test_session):
+    """When no entry has a `view_count` (old yt-dlp does not extract it from YouTube's lockupViewModel
+    listings), the 'views' download order fails cleanly rather than downloading in arbitrary order."""
+    from modules.videos.downloader import channel_downloader
     download = Download(
         url='https://www.youtube.com/@example/videos',
         settings={'download_order': 'views'},

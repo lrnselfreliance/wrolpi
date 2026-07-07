@@ -109,6 +109,13 @@ git -C /opt/wrolpi fetch || exit 4
 GNUPGHOME=$(mktemp -d)
 export GNUPGHOME
 gpg --batch --quiet --import /opt/wrolpi/wrolpi/roland@learningselfreliance.com.gpg
+# The throwaway keyring contains only the pinned WROLPi key, so mark it
+# ultimately trusted: possession of the pinned key IS the trust anchor here,
+# and this silences gpg's web-of-trust WARNING noise that makes healthy
+# upgrade logs look scary.  Cosmetic only — verify-commit already ignores
+# ownertrust when judging signature validity.
+gpg --batch --list-keys --with-colons | awk -F: '/^fpr:/ {print $10":6:"; exit}' | \
+  gpg --batch --quiet --import-ownertrust || :
 
 # Verify the fetched commit is signed by the trusted key before checking it out.
 if ! git -C /opt/wrolpi verify-commit origin/"${BRANCH}" 2>&1; then

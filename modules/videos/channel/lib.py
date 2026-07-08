@@ -56,7 +56,9 @@ COD = Union[dict, Channel]
 def get_channel(session: Session, *, channel_id: int = None, source_id: str = None, url: str = None,
                 directory: str = None, name: str = None, return_dict: bool = True) -> COD:
     """
-    Attempt to find a Channel using the provided params.  The params are in order of reliability.
+    Attempt to find a Channel using the provided params.  The params are in order of reliability, except that
+    directory beats source_id/url: a Video's files must live in their Channel's directory, so the directory a file
+    is in reflects the user's intent and beats yt-dlp metadata.
 
     Raises UnknownChannel if no channel is found.
     """
@@ -65,18 +67,6 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
     # Always eagerly load Collection to ensure name/directory/tag_id are available
     if channel_id:
         channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(id=channel_id).one_or_none()
-    if not channel and source_id:
-        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
-            source_id=source_id).one_or_none()
-    if not channel and url:
-        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(url=url).one_or_none()
-    if not channel and url:
-        # Try to extract YouTube channel ID from the URL and match by source_id.
-        from modules.videos.common import get_youtube_channel_id
-        yt_channel_id = get_youtube_channel_id(url)
-        if yt_channel_id:
-            channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
-                source_id=yt_channel_id).one_or_none()
     if not channel and directory:
         directory = Path(directory)
         if not directory.is_absolute():
@@ -93,6 +83,18 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
             if channel:
                 break
             current = current.parent
+    if not channel and source_id:
+        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
+            source_id=source_id).one_or_none()
+    if not channel and url:
+        channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(url=url).one_or_none()
+    if not channel and url:
+        # Try to extract YouTube channel ID from the URL and match by source_id.
+        from modules.videos.common import get_youtube_channel_id
+        yt_channel_id = get_youtube_channel_id(url)
+        if yt_channel_id:
+            channel = session.query(Channel).options(joinedload(Channel.collection)).filter_by(
+                source_id=yt_channel_id).one_or_none()
     if not channel and name:
         channel = session.query(Channel).join(Collection).filter(Collection.name == name).one_or_none()
 

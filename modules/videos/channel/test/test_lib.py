@@ -65,6 +65,43 @@ def test_get_channel(test_session, test_directory, channel_factory):
         assert lib.get_channel(test_session, **p)
 
 
+def test_get_channel_directory_beats_source_id(test_session, test_directory, channel_factory):
+    """A Channel owning the directory wins over a Channel matching source_id/url.
+
+    A Video's files must live in their Channel's directory, so the directory a file is in reflects the user's
+    intent and beats yt-dlp metadata."""
+    source_id_channel = channel_factory(source_id='the source id', url='https://example.com/source-channel')
+    directory_channel = channel_factory(directory=test_directory / 'directory channel')
+
+    # Both source_id and directory match different Channels; the directory's Channel wins.
+    channel = lib.get_channel(
+        test_session,
+        source_id='the source id',
+        url='https://example.com/source-channel',
+        directory=str(test_directory / 'directory channel'),
+        return_dict=False,
+    )
+    assert channel == directory_channel
+
+    # A subdirectory of the Channel's directory also wins.
+    channel = lib.get_channel(
+        test_session,
+        source_id='the source id',
+        directory=str(test_directory / 'directory channel/2024'),
+        return_dict=False,
+    )
+    assert channel == directory_channel
+
+    # source_id still matches when the directory does not belong to any Channel.
+    channel = lib.get_channel(
+        test_session,
+        source_id='the source id',
+        directory=str(test_directory / 'not a channel directory'),
+        return_dict=False,
+    )
+    assert channel == source_id_channel
+
+
 @pytest.mark.asyncio
 async def test_channels_no_url(async_client, test_session, test_directory, test_channels_config):
     """Test that a Channel's URL is coerced to None if it is empty."""

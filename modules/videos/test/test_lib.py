@@ -126,6 +126,33 @@ def test_validate_video(test_session, test_directory, video_factory, image_bytes
     assert {i.suffix for i in vid2.file_group.my_paths()} == {'.jpg', '.png', '.mp4'}
 
 
+def test_validate_video_directory_beats_info_json_channel(test_session, test_directory, channel_factory,
+                                                          video_factory):
+    """A Video in a Channel's directory belongs to that Channel, even when its info json names another
+    existing Channel.
+
+    Replicates a user report: videos placed in Channel B's directory did not appear on Channel B's page
+    because their info json named Channel A (which exists in the library), and the source_id match
+    was preferred over the directory."""
+    channel_a = channel_factory(source_id='channel_a_id', url='https://example.com/channel_a')
+    channel_b = channel_factory(directory=test_directory / 'videos/ChannelB')
+
+    video = video_factory(
+        with_video_file=channel_b.directory / 'The Title.mp4',
+        with_info_json={
+            'channel_id': 'channel_a_id',
+            'channel_url': 'https://example.com/channel_a',
+            'duration': 5,
+            'epoch': 12345678,
+            'title': 'The Title',
+        },
+    )
+    test_session.commit()
+
+    assert video.channel_id == channel_b.id, \
+        f'Video in ChannelB directory should belong to ChannelB, got channel_id={video.channel_id}'
+
+
 @pytest.mark.asyncio
 async def test_get_statistics(test_session, video_factory, channel_factory):
     # Can get statistics in empty DB.

@@ -166,7 +166,7 @@ fi
 # Install dnsmasq-base if not already installed (NetworkManager needs it for the hotspot's
 # DHCP; it is only a Recommends of network-manager, so ISOs built with --apt-recommends
 # false shipped without it).  iw and rfkill are WiFi diagnostic tools.
-if ! command -v dnsmasq &>/dev/null; then
+if ! command -v dnsmasq &>/dev/null || ! command -v iw &>/dev/null || ! command -v rfkill &>/dev/null; then
   echo "Installing dnsmasq-base, iw, rfkill..."
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y \

@@ -303,6 +303,70 @@ if [ -f ${MEDIA_DIRECTORY}/config/ssl/ca.crt ] && [ -f /etc/ssl/wrolpi/cert.crt 
   fi
 fi
 
+if [ -f ${MEDIA_DIRECTORY}/config/ssl/ca.crt ]; then
+  if ! openssl x509 -noout -in ${MEDIA_DIRECTORY}/config/ssl/ca.crt >/dev/null 2>&1; then
+    echo "FAILED: Root CA certificate cannot be parsed (regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  elif ! openssl x509 -checkend 0 -noout -in ${MEDIA_DIRECTORY}/config/ssl/ca.crt >/dev/null 2>&1; then
+    echo "FAILED: Root CA certificate is expired (delete ${MEDIA_DIRECTORY}/config/ssl and regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  else
+    echo "OK: Root CA certificate is valid (expires $(openssl x509 -enddate -noout -in ${MEDIA_DIRECTORY}/config/ssl/ca.crt | cut -d= -f2))"
+  fi
+fi
+
+if [ -f /etc/ssl/wrolpi/cert.crt ]; then
+  if ! openssl x509 -noout -in /etc/ssl/wrolpi/cert.crt >/dev/null 2>&1; then
+    echo "FAILED: TLS certificate cannot be parsed (regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  elif ! openssl x509 -checkend 0 -noout -in /etc/ssl/wrolpi/cert.crt >/dev/null 2>&1; then
+    echo "FAILED: TLS certificate is expired (regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  elif ! openssl x509 -checkend 2592000 -noout -in /etc/ssl/wrolpi/cert.crt >/dev/null 2>&1; then
+    echo "Note: TLS certificate expires within 30 days ($(openssl x509 -enddate -noout -in /etc/ssl/wrolpi/cert.crt | cut -d= -f2))"
+  else
+    echo "OK: TLS certificate is valid (expires $(openssl x509 -enddate -noout -in /etc/ssl/wrolpi/cert.crt | cut -d= -f2))"
+  fi
+
+  if openssl x509 -in /etc/ssl/wrolpi/cert.crt -noout -text 2>/dev/null | grep -A1 'Subject Alternative Name' | grep -q "$(hostname).local"; then
+    echo "OK: TLS certificate covers $(hostname).local"
+  else
+    echo "FAILED: TLS certificate does not cover $(hostname).local (was the hostname changed?  regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  fi
+fi
+
+if [ -f /etc/ssl/wrolpi/cert.crt ] && [ -f /etc/ssl/wrolpi/cert.key ]; then
+  cert_pubkey=$(openssl x509 -in /etc/ssl/wrolpi/cert.crt -noout -pubkey 2>/dev/null)
+  key_pubkey=$(openssl pkey -in /etc/ssl/wrolpi/cert.key -pubout 2>/dev/null)
+  if [ -n "${cert_pubkey}" ] && [ "${cert_pubkey}" = "${key_pubkey}" ]; then
+    echo "OK: TLS certificate matches its private key"
+  else
+    echo "FAILED: TLS certificate does not match its private key (regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
+  fi
+fi
+
+# Compare the certificate Caddy is actually serving to the one on disk.  A mismatch means
+# Caddy was not reloaded after the certificate was regenerated.
+if [ -f /etc/ssl/wrolpi/cert.crt ]; then
+  served_fingerprint=$(echo | timeout 5 openssl s_client -connect 127.0.0.1:443 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null)
+  disk_fingerprint=$(openssl x509 -in /etc/ssl/wrolpi/cert.crt -noout -fingerprint -sha256 2>/dev/null)
+  if [ -z "${served_fingerprint}" ]; then
+    echo "FAILED: Could not fetch the TLS certificate being served on port 443"
+  elif [ "${served_fingerprint}" = "${disk_fingerprint}" ]; then
+    echo "OK: Caddy is serving the TLS certificate on disk"
+  else
+    echo "FAILED: Caddy is serving a different TLS certificate than the one on disk (reload with: systemctl reload caddy)"
+  fi
+fi
+
+if [ -x /opt/wrolpi/scripts/renew_certificates.sh ]; then
+  echo "OK: Certificate renewal script is executable"
+else
+  echo "FAILED: Certificate renewal script is not executable (fix with: chmod +x /opt/wrolpi/scripts/renew_certificates.sh)"
+fi
+
+if systemctl is-enabled wrolpi-cert-renew.timer >/dev/null 2>&1; then
+  echo "OK: Certificate renewal timer is enabled"
+else
+  echo "FAILED: Certificate renewal timer is not enabled (fix with: systemctl enable --now wrolpi-cert-renew.timer)"
+fi
+
 for port in 80 443 8084 8085 8086; do
   if netstat -ant | grep LISTEN | grep -E "(0\.0\.0\.0|:::)${port}\b" >/dev/null; then
     echo "OK: Caddy port ${port} is occupied"

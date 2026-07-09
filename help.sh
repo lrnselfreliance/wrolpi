@@ -371,8 +371,9 @@ else
   echo "FAILED: Certificate renewal timer is not enabled (fix with: systemctl enable --now wrolpi-cert-renew.timer)"
 fi
 
-for port in 80 443 8084 8085 8086; do
-  if netstat -ant | grep LISTEN | grep -E "(0\.0\.0\.0|:::)${port}\b" >/dev/null; then
+# Port 80 belongs to the Controller (checked above); Caddy proxies to it.
+for port in 443 8084 8085 8086; do
+  if netstat -ant | grep LISTEN | grep -E "(0\.0\.0\.0:|:::)${port}\b" >/dev/null; then
     echo "OK: Caddy port ${port} is occupied"
   else
     echo "FAILED: Caddy port ${port} is not occupied"

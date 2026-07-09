@@ -45,6 +45,10 @@ git config --global --add safe.directory /opt/wrolpi
 git reset HEAD --hard
 chown -R wrolpi:wrolpi /opt/wrolpi
 
+# Scripts are run by systemd services (e.g. wrolpi-cert-renew.service) which fail with
+# "Permission denied" if the executable bit was lost.
+chmod +x /opt/wrolpi/*.sh /opt/wrolpi/scripts/*.sh
+
 # Copy configs to system.
 mkdir -p /etc/caddy
 cp /opt/wrolpi/etc/raspberrypios/Caddyfile /etc/caddy/Caddyfile

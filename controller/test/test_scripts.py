@@ -35,6 +35,14 @@ class TestAvailableScripts:
         repair = AVAILABLE_SCRIPTS["repair"]
         assert len(repair["warnings"]) > 0
 
+    def test_help_script_exists(self):
+        """Should have a help (diagnostics) script defined."""
+        assert "help" in AVAILABLE_SCRIPTS
+        help_script = AVAILABLE_SCRIPTS["help"]
+        assert help_script["service_name"] == "wrolpi-help-script.service"
+        # help.sh is read-only, so it needs no warnings.
+        assert help_script["warnings"] == []
+
 
 class TestListAvailableScripts:
     """Tests for list_available_scripts function."""
@@ -112,7 +120,8 @@ class TestGetScriptStatus:
                 with mock.patch("controller.lib.scripts._get_service_timing", return_value=(None, None)):
                     result = get_script_status()
                     assert result["running"] is True
-                    assert result["script_name"] == "repair"
+                    # The first script checked reports as running because every systemctl call is mocked.
+                    assert result["script_name"] == next(iter(AVAILABLE_SCRIPTS))
 
     def test_returns_not_running_when_service_inactive(self):
         """Should return not running when service is inactive."""

@@ -2070,6 +2070,7 @@
 
         const warningsList = document.getElementById('script-warnings-list');
         warningsList.innerHTML = script.warnings.map(w => `<li>${w}</li>`).join('');
+        document.getElementById('script-confirm-warnings').style.display = script.warnings.length ? '' : 'none';
 
         // Generate parameter inputs dynamically
         const paramsContainer = document.getElementById('script-params-container');

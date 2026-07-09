@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 #   - type: "branch" (auto-populates with current git branch) or "text"
 #   - required: Whether the parameter must have a value
 AVAILABLE_SCRIPTS = {
+    "help": {
+        "name": "help",
+        "display_name": "System Diagnostics",
+        "description": "Runs help.sh which checks WROLPi services, certificates, database, and dependencies."
+                       " Read-only; changes nothing.",
+        "service_name": "wrolpi-help-script.service",
+        "warnings": [],
+    },
     "repair": {
         "name": "repair",
         "display_name": "Repair WROLPi",

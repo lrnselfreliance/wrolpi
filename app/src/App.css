@@ -258,6 +258,17 @@ textarea.otp {
     background-color: transparent !important;
 }
 
+/* Semantic UI paints a definition table's empty corner cell white (background on the inverted
+   variant, white box-shadows on the celled/plain variants) to fake a "cut-out" corner on a white
+   page.  Our dark theme has a dark page, so the corner must be transparent with no shadow. */
+.ui.inverted.definition.table thead:not(.full-width) th:first-child,
+.ui.inverted.definition.table tfoot:not(.full-width) th:first-child,
+.ui.inverted.celled.definition.table thead:not(.full-width) th:first-child,
+.ui.inverted.celled.definition.table tfoot:not(.full-width) th:first-child {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
 /* Mobile-responsive Confirm modal */
 .ui.modal.themed-confirm {
     max-width: 95vw;

@@ -455,15 +455,27 @@ export const calcKelvinMilliVoltDrop = (amps, resistancePerKiloLength, length,
 const FourWireKelvinCalculator = ({wireType, isSAE, length}) => {
     const [ampsRange] = useState([1, 5, 10]);
     // Stored in Celsius; displayed in Fahrenheit when SAE.  Default is room temperature.
+    const decodeTemperature = (value) => {
+        const temperature = parseFloat(value);
+        return Number.isFinite(temperature) ? temperature : REFERENCE_TEMPERATURE_C;
+    };
     const [temperatureC, setTemperatureC] = useLocalStorage(
-        'calculators.kelvin.temperature_c', REFERENCE_TEMPERATURE_C, parseFloat, (num) => num.toString());
+        'calculators.kelvin.temperature_c', REFERENCE_TEMPERATURE_C, decodeTemperature, (num) => num.toString());
 
     const resistances = isSAE ? resistancesPerKFeet[wireType]
         : resistancesPerKm[wireType];
 
     const displayTemperature = isSAE ? roundDigits(temperatureC * 9 / 5 + 32, 1) : roundDigits(temperatureC, 1);
     const handleTemperatureChange = (value) => {
+        if (value === '') {
+            // Never store NaN; fall back to room temperature when the input is cleared.
+            setTemperatureC(REFERENCE_TEMPERATURE_C);
+            return;
+        }
         const temperature = parseFloat(value);
+        if (!Number.isFinite(temperature)) {
+            return;
+        }
         setTemperatureC(isSAE ? (temperature - 32) * 5 / 9 : temperature);
     };
 

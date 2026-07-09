@@ -98,7 +98,6 @@ fi
 # Cluster-level checks.  The umbrella postgresql.service reports active even
 # when every cluster is down, so inspect the real clusters.
 if command -v pg_lsclusters >/dev/null 2>&1; then
-  pg_lsclusters
   cluster_line=$(pg_lsclusters -h 2>/dev/null | head -1)
   if [ -z "${cluster_line}" ]; then
     echo "FAILED: No Postgres clusters exist (pg_lsclusters printed nothing)"
@@ -126,13 +125,18 @@ else
   echo "OK: /var/lib/postgresql is on the root filesystem (installed layout)"
 fi
 
-if sudo -i -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
+# Connect directly instead of `sudo -i -u wrolpi` so sudo/PAM do not spam the journal.
+wrolpi_psql() {
+  PGPASSWORD=wrolpi psql -h 127.0.0.1 -p 5432 -U wrolpi wrolpi "$@"
+}
+
+if wrolpi_psql -c 'select 1' >/dev/null 2>&1; then
   echo "OK: Found wrolpi database"
 
-  if sudo -i -u wrolpi psql wrolpi -c '\d' | grep "file_group" >/dev/null; then
+  if wrolpi_psql -c '\d' 2>/dev/null | grep "file_group" >/dev/null; then
     echo "OK: WROLPi database is initialized"
 
-    if [ "$(sudo -i -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout' 2>/dev/null)" -gt 0 ]; then
+    if [ "$(wrolpi_psql -c 'copy (select count(*) from file_group) to stdout' 2>/dev/null)" -gt 0 ]; then
       echo "OK: WROLPi database has files"
     else
       echo "FAILED: WROLPi database has no files.  You need to refresh your files: https://$(hostname).local/files"
@@ -195,13 +199,13 @@ if [ -f /opt/wrolpi/venv/bin/python3 ]; then
   if /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py -h 2>/dev/null > /dev/null; then
     echo 'OK: WROLPi main can be run'
   else
-    echo "Failed: WROLPi main could not be run"
+    echo "FAILED: WROLPi main could not be run"
   fi
 
   if /opt/wrolpi/venv/bin/sanic --help 2>/dev/null > /dev/null; then
     echo 'OK: Sanic can be run'
   else
-    echo "Failed: Sanic could not be run"
+    echo "FAILED: Sanic could not be run"
   fi
 
 else
@@ -234,7 +238,7 @@ echo
 if [ -d /opt/wrolpi/app ]; then
   echo "OK: WROLPi app directory exists"
 
-  if (cd /opt/wrolpi/app && npm ls >/dev/null); then
+  if (cd /opt/wrolpi/app && npm ls >/dev/null 2>&1); then
     echo "OK: WROLPi app exists"
   else
     echo "FAILED: WROLPi app does not exist"
@@ -324,7 +328,7 @@ if [ -f /etc/ssl/wrolpi/cert.crt ]; then
     echo "OK: TLS certificate is valid (expires $(openssl x509 -enddate -noout -in /etc/ssl/wrolpi/cert.crt | cut -d= -f2))"
   fi
 
-  if openssl x509 -in /etc/ssl/wrolpi/cert.crt -noout -text 2>/dev/null | grep -A1 'Subject Alternative Name' | grep -q "$(hostname).local"; then
+  if openssl x509 -in /etc/ssl/wrolpi/cert.crt -noout -checkhost "$(hostname).local" 2>/dev/null | grep -q "does match certificate"; then
     echo "OK: TLS certificate covers $(hostname).local"
   else
     echo "FAILED: TLS certificate does not cover $(hostname).local (was the hostname changed?  regenerate with /opt/wrolpi/scripts/generate_certificates.sh)"
@@ -393,8 +397,7 @@ fi
 check_directory /opt/wrolpi/modules/map/static "Map static assets exist" "Map static assets missing at /opt/wrolpi/modules/map/static"
 
 if ls /media/wrolpi/map/*.pmtiles >/dev/null 2>&1; then
-  echo "OK: PMTiles map files found"
-  ls -lh /media/wrolpi/map/*.pmtiles 2>/dev/null | awk '{print "  " $NF " (" $5 ")"}'
+  echo "OK: Found $(ls /media/wrolpi/map/*.pmtiles 2>/dev/null | wc -l | tr -d ' ') PMTiles map files"
 else
   echo "Note: No PMTiles map files found in /media/wrolpi/map/"
 fi

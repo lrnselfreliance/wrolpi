@@ -163,6 +163,16 @@ if ! command -v gnome-disks &>/dev/null; then
     -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold gnome-disk-utility
 fi
 
+# Install dnsmasq-base if not already installed (NetworkManager needs it for the hotspot's
+# DHCP; it is only a Recommends of network-manager, so ISOs built with --apt-recommends
+# false shipped without it).  iw and rfkill are WiFi diagnostic tools.
+if ! command -v dnsmasq &>/dev/null; then
+  echo "Installing dnsmasq-base, iw, rfkill..."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dnsmasq-base iw rfkill
+fi
+
 # Clean up stale landing page (Controller now serves port 80 directly).
 rm -f /var/www/landing.html
 

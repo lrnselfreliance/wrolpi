@@ -13,6 +13,7 @@ chromium
 chromium-driver
 cpufrequtils
 curl
+dnsmasq-base
 dosfstools
 ethtool
 exfat-fuse
@@ -36,6 +37,7 @@ hostapd
 htop
 iotop
 iperf3
+iw
 kiwix
 kiwix-tools
 libboost-all-dev
@@ -76,6 +78,7 @@ python3-doc
 python3-full
 python3-pip
 python3-venv
+rfkill
 rsync
 samba
 smartmontools

@@ -175,14 +175,14 @@ export function OhmsLawCalculator({setVolts}) {
 }
 
 // Dropdown options for wire types
-const resistancesPerKFeet = {
+export const resistancesPerKFeet = {
     solid: {
         '0000 AWG': 0.049,
         '00 AWG': 0.0779,
         '0 AWG': 0.0982,
         '2 AWG': 0.1563,
         '4 AWG': 0.2485,
-        '6 AWG': 0.3134,
+        '6 AWG': 0.3951,
         '8 AWG': 0.628,
         '10 AWG': 0.9987,
         '12 AWG': 1.588,
@@ -194,9 +194,9 @@ const resistancesPerKFeet = {
     stranded: {
         '0000 AWG': 0.0608,
         '00 AWG': 0.0967,
-        '0 AWG': 0.022,
-        '2 AWG': 0.019,
-        '4 AWG': 0.038,
+        '0 AWG': 0.122,
+        '2 AWG': 0.194,
+        '4 AWG': 0.308,
         '6 AWG': 0.491,
         '8 AWG': 0.778,
         '10 AWG': 1.24,
@@ -205,8 +205,37 @@ const resistancesPerKFeet = {
         '16 AWG': 4.99,
         '18 AWG': 7.95,
     },
+    solid_aluminum: {
+        '0000 AWG': 0.0804,
+        '00 AWG': 0.128,
+        '0 AWG': 0.161,
+        '2 AWG': 0.256,
+        '4 AWG': 0.408,
+        '6 AWG': 0.648,
+        '8 AWG': 1.03,
+        '10 AWG': 1.64,
+        '12 AWG': 2.61,
+        '14 AWG': 4.14,
+        '16 AWG': 6.59,
+        '20 AWG': 16.7,
+        '24 AWG': 42.1,
+    },
+    stranded_aluminum: {
+        '0000 AWG': 0.082,
+        '00 AWG': 0.130,
+        '0 AWG': 0.164,
+        '2 AWG': 0.261,
+        '4 AWG': 0.416,
+        '6 AWG': 0.661,
+        '8 AWG': 1.05,
+        '10 AWG': 1.67,
+        '12 AWG': 2.66,
+        '14 AWG': 4.22,
+        '16 AWG': 6.72,
+        '18 AWG': 10.7,
+    },
 };
-const resistancesPerKm = {
+export const resistancesPerKm = {
     solid: {
         ['120 mm²']: 0.153,
         ['70 mm²']: 0.272,
@@ -236,6 +265,36 @@ const resistancesPerKm = {
         ['1 mm²']: 18.1,
         ['0.75 mm²']: 24.5,
         ['0.5 mm²']: 36.0
+    },
+    solid_aluminum: {
+        ['120 mm²']: 0.235,
+        ['70 mm²']: 0.403,
+        ['50 mm²']: 0.564,
+        ['25 mm²']: 1.13,
+        ['16 mm²']: 1.76,
+        ['10 mm²']: 2.82,
+        ['6 mm²']: 4.70,
+        ['4 mm²']: 7.05,
+        ['2.5 mm²']: 11.3,
+        ['1.5 mm²']: 18.8,
+        ['1 mm²']: 28.2,
+        ['0.75 mm²']: 37.6,
+        ['0.5 mm²']: 56.4
+    },
+    stranded_aluminum: {
+        ['120 mm²']: 0.240,
+        ['70 mm²']: 0.411,
+        ['50 mm²']: 0.575,
+        ['25 mm²']: 1.15,
+        ['16 mm²']: 1.80,
+        ['10 mm²']: 2.88,
+        ['6 mm²']: 4.79,
+        ['4 mm²']: 7.19,
+        ['2.5 mm²']: 11.5,
+        ['1.5 mm²']: 19.2,
+        ['1 mm²']: 28.8,
+        ['0.75 mm²']: 38.4,
+        ['0.5 mm²']: 57.5
     }
 };
 
@@ -244,6 +303,8 @@ const resistancesPerKm = {
 const wireTypeOptions = [
     {key: 'solid', text: 'Solid Copper', value: 'solid'},
     {key: 'stranded', text: 'Stranded Copper', value: 'stranded'},
+    {key: 'solid_aluminum', text: 'Solid Aluminum', value: 'solid_aluminum'},
+    {key: 'stranded_aluminum', text: 'Stranded Aluminum', value: 'stranded_aluminum'},
 ];
 
 // Helper function to calculate power loss
@@ -261,10 +322,7 @@ export const calcPowerLossPercent = (isSAE, volts, amps, resistancePerKiloLength
     return (voltageDrop / volts) * 100; // Return as a percentage
 };
 
-const PowerLossCalculator = ({volts, setVolts}) => {
-    const [wireType, setWireType] = useLocalStorage('calculators.power_loss.wire_type', 'solid');
-    const [isSAE, setIsSAE] = useLocalStorage('calculators.power_loss.is_sae', true);
-    const [length, setLength] = useLocalStorageInt('calculators.power_loss.length', 100);
+const PowerLossCalculator = ({volts, setVolts, wireType, setWireType, isSAE, setIsSAE, length, setLength}) => {
     const [ampsRange] = useState([1, 5, 10, 20, 40, 100]);
 
     const {inverted} = React.useContext(ThemeContext);
@@ -375,10 +433,104 @@ const PowerLossCalculator = ({volts, setVolts}) => {
     </Form>
 };
 
+// Resistance changes with temperature; the resistance tables are referenced at 20°C.
+export const COPPER_TEMP_COEFFICIENT = 0.00393; // per °C
+export const ALUMINUM_TEMP_COEFFICIENT = 0.00403; // per °C
+const REFERENCE_TEMPERATURE_C = 20;
+
+const tempCoefficientForWireType = (wireType) =>
+    wireType.includes('aluminum') ? ALUMINUM_TEMP_COEFFICIENT : COPPER_TEMP_COEFFICIENT;
+
+// Helper function to calculate the expected millivolt drop across a single wire (4-wire Kelvin measurement).
+export const calcKelvinMilliVoltDrop = (amps, resistancePerKiloLength, length,
+                                        temperatureC = REFERENCE_TEMPERATURE_C,
+                                        tempCoefficient = COPPER_TEMP_COEFFICIENT) => {
+    const temperatureFactor = 1 + tempCoefficient * (temperatureC - REFERENCE_TEMPERATURE_C);
+    const resistancePerLength = (resistancePerKiloLength * temperatureFactor) / 1000;
+    // Sense leads measure across the single conductor, so the length is NOT doubled.
+    const resistance = length * resistancePerLength;
+    return amps * resistance * 1000; // Volts to millivolts.
+};
+
+const FourWireKelvinCalculator = ({wireType, isSAE, length}) => {
+    const [ampsRange] = useState([1, 5, 10]);
+    // Stored in Celsius; displayed in Fahrenheit when SAE.  Default is room temperature.
+    const [temperatureC, setTemperatureC] = useLocalStorage(
+        'calculators.kelvin.temperature_c', REFERENCE_TEMPERATURE_C, parseFloat, (num) => num.toString());
+
+    const resistances = isSAE ? resistancesPerKFeet[wireType]
+        : resistancesPerKm[wireType];
+
+    const displayTemperature = isSAE ? roundDigits(temperatureC * 9 / 5 + 32, 1) : roundDigits(temperatureC, 1);
+    const handleTemperatureChange = (value) => {
+        const temperature = parseFloat(value);
+        setTemperatureC(isSAE ? (temperature - 32) * 5 / 9 : temperature);
+    };
+
+    return <Form>
+        <Header as='h1'>4-Wire Kelvin</Header>
+        <p>
+            Expected millivolt drop across {length} {isSAE ? 'feet' : 'meters'} of wire when driving a known
+            current through it.  Measure with separate sense leads at each end of the wire.
+            <InfoPopup
+                content='Uses the length and wire type from the Power Loss calculator above.  The length is NOT doubled because the sense leads measure across a single conductor.'/>
+        </p>
+
+        <Grid columns={2}>
+            <Grid.Row>
+                <Grid.Column mobile={12} tablet={12}>
+                    <Input fluid
+                           label={isSAE ? '°F' : '°C'}
+                           labelPosition='right'
+                           type='number'
+                           value={displayTemperature}
+                           onChange={(e, {value}) => handleTemperatureChange(value)}
+                           autoComplete="off"
+                    />
+                </Grid.Column>
+                <Grid.Column mobile={4} tablet={2}>
+                    <InfoPopup
+                        content='Wire temperature.  Resistances are referenced at 20°C (68°F) and corrected using the temperature coefficient of the wire material (copper 0.393% per °C, aluminum 0.403% per °C).'/>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+
+        <Table unstackable compact celled definition>
+            <TableHeader>
+                <TableRow>
+                    <TableHeaderCell/>
+                    {ampsRange.map(amp => <TableHeaderCell key={amp}>{amp}A</TableHeaderCell>)}
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {Object.entries(resistances).map(([size, resistance]) => (
+                    <TableRow key={size}>
+                        <TableCell>{size}</TableCell>
+                        {ampsRange.map(amp => {
+                            const milliVolts = calcKelvinMilliVoltDrop(
+                                amp, resistance, length, temperatureC, tempCoefficientForWireType(wireType));
+                            return <TableCell key={`${size}-${amp}`}>
+                                {roundDigits(milliVolts, 1)} mV
+                            </TableCell>
+                        })}
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    </Form>
+};
+
 export const ElectricalCalculators = () => {
     const [volts, setVolts] = useLocalStorageInt('calculators.electrical.volts', 120);
+    const [wireType, setWireType] = useLocalStorage('calculators.power_loss.wire_type', 'solid');
+    const [isSAE, setIsSAE] = useLocalStorage('calculators.power_loss.is_sae', true);
+    const [length, setLength] = useLocalStorageInt('calculators.power_loss.length', 100);
     return <Container>
         <Segment><OhmsLawCalculator setVolts={setVolts}/></Segment>
-        <Segment><PowerLossCalculator volts={volts} setVolts={setVolts}/></Segment>
+        <Segment><PowerLossCalculator volts={volts} setVolts={setVolts}
+                                      wireType={wireType} setWireType={setWireType}
+                                      isSAE={isSAE} setIsSAE={setIsSAE}
+                                      length={length} setLength={setLength}/></Segment>
+        <Segment><FourWireKelvinCalculator wireType={wireType} isSAE={isSAE} length={length}/></Segment>
     </Container>
 }

@@ -1206,6 +1206,18 @@ async def test_get_bulk_tag_preview_directory(test_session, make_files_structure
 
 
 @pytest.mark.asyncio
+async def test_get_bulk_tag_preview_many_files(test_session, make_files_structure, test_directory):
+    """Previewing a directory containing well over 1000 files must not fail.
+
+    Regression test: the stem-prefix lookup OR'd a LIKE per stem, and more than ~1000
+    stems exceeded SQLite's expression-tree depth limit ("Expression tree is too large")."""
+    make_files_structure({f'mydir/file{i}.txt': str(i) for i in range(1200)})
+
+    preview = lib.get_bulk_tag_preview(['mydir/'])
+    assert preview.file_count == 1200
+
+
+@pytest.mark.asyncio
 async def test_get_bulk_tag_preview_multi_file_filegroup(async_client, test_session, make_files_structure,
                                                          test_directory, tag_factory):
     """get_bulk_tag_preview finds shared tags for multi-file FileGroups.

@@ -398,16 +398,16 @@ class Collection(ModelHelper, Base):
 
         # Step 3: Pre-fetch existing collections by (name, kind) for ALL collections
         # This handles cases where directory changed or directory-less collections
-        name_kind_pairs = [(d['name'], d.get('kind', 'channel')) for d in data_list]
+        # A flat IN on name stays within SQLite's expression-tree depth limit (an OR'd
+        # (name AND kind) pair per collection exceeds it past ~1000 collections); the
+        # exact (name, kind) match is applied in Python.
+        name_kind_pairs = {(d['name'], d.get('kind', 'channel')) for d in data_list}
         existing_by_name_kind = {}
         if name_kind_pairs:
-            from sqlalchemy import and_, or_
-            conditions = [
-                and_(Collection.name == name, Collection.kind == kind)
-                for name, kind in name_kind_pairs
-            ]
-            existing = session.query(Collection).filter(or_(*conditions)).all()
-            existing_by_name_kind = {(c.name, c.kind): c for c in existing}
+            names = {name for name, _ in name_kind_pairs}
+            existing = session.query(Collection).filter(Collection.name.in_(names)).all()
+            existing_by_name_kind = {(c.name, c.kind): c for c in existing
+                                     if (c.name, c.kind) in name_kind_pairs}
 
         # Step 4: Pre-fetch all tags in ONE query
         tag_names = {d['tag_name'] for d in data_list if d.get('tag_name')}

@@ -208,6 +208,30 @@ class TestDomainsConfig:
         assert 'test.org' in names
         assert 'invalid' not in names
 
+    def test_domains_config_import_many_collections(self, test_session: Session, test_directory: pathlib.Path,
+                                                    async_client):
+        """Importing well over 1000 domains must not fail.
+
+        Regression test for the 10.0.0.9 upgrade: `Collection.batch_from_config` OR'd a
+        (name = ? AND kind = ?) pair per collection, and 1,670 domains exceeded SQLite's
+        expression-tree depth limit of 1000 ("Expression tree is too large")."""
+        config_file = test_directory / 'domains.yaml'
+        config_data = {
+            'version': 0,
+            'collections': [{'name': f'domain{i}.example.com', 'kind': 'domain'} for i in range(1200)],
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        config = DomainsConfig()
+        config.import_config(file=config_file)
+
+        assert config.successful_import is True
+        assert test_session.query(Collection).filter_by(kind='domain').count() == 1200
+
+        # Re-import (the update path) must also survive the pre-fetch query.
+        config.import_config(file=config_file)
+        assert test_session.query(Collection).filter_by(kind='domain').count() == 1200
+
     def test_domains_config_global_instance(self):
         """Test that the global domains_config instance exists."""
         assert domains_config is not None

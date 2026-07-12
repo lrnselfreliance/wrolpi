@@ -1974,9 +1974,13 @@ def get_bulk_tag_preview(paths: List[str]) -> BulkTagPreview:
     with get_db_session() as session:
         from sqlalchemy import or_
         stems = [split_path_stem_and_suffix(f, full=True)[0] for f in unique_files]
-        file_groups = session.query(FileGroup).filter(
-            or_(*[FileGroup.primary_path.like(f'{stem}%') for stem in stems])
-        ).all()
+        # Chunk the OR'd LIKEs to stay within SQLite's expression-tree depth limit of 1000.
+        file_groups = []
+        for idx in range(0, len(stems), 500):
+            chunk = stems[idx:idx + 500]
+            file_groups.extend(session.query(FileGroup).filter(
+                or_(*[FileGroup.primary_path.like(f'{stem}%') for stem in chunk])
+            ).all())
 
         if not file_groups:
             # No FileGroups exist yet, no shared tags

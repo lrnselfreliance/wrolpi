@@ -172,8 +172,8 @@ async def test_zim_tags_config(async_client, test_session, test_directory, test_
     assert [(i.tag.name, i.zim.path, i.zim_entry) for i in tag_zim_entries] \
            == [('Tag2', test_zim.path, 'one'), ('Tag1', test_zim.path, 'two')]
 
-    # Tags were recreated.
-    assert {i[0] for i in test_session.query(tags.Tag.id)} == {3, 4}
+    # Tags were recreated.  (SQLite reuses row ids after DELETE, so assert by name rather than by id.)
+    assert {i.name for i in test_session.query(tags.Tag)} == {'Tag1', 'Tag2'}
 
 
 def test_zim_all_entries(test_session, test_zim):
@@ -376,7 +376,8 @@ async def test_zim_subscription_download_import(async_client, test_session):
     for _ in range(1):  # Import twice.
         # Importing the config restores the Download and ZimSubscription.
         await import_downloads_config()
-        recurring, once = test_session.query(Download).order_by(Download.frequency)
+        # NULLS LAST because SQLite sorts NULLs first (Postgres sorted them last).
+        recurring, once = test_session.query(Download).order_by(Download.frequency.nullslast())
         assert once.url == 'https://download.kiwix.org/zim/wikibooks/wikibooks_en_all_maxi_2021-03.zim'
         assert test_session.query(Download).count() == 2
         assert recurring.url == 'https://download.kiwix.org/zim/wikisource/wikisource_en_all_maxi_'

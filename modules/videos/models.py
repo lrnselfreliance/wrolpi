@@ -2,8 +2,7 @@ import json
 import pathlib
 from typing import Optional, Dict, List
 
-from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Boolean, Date, ForeignKey, BigInteger, Index, text, JSON
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -30,12 +29,14 @@ class Video(ModelHelper, Base):
         Index('video_channel_id_idx', 'channel_id'),
         Index('video_source_id_idx', 'source_id'),
         Index('video_view_count_idx', 'view_count'),
+        # Do not reuse ids of deleted Videos (like Postgres sequences).
+        {'sqlite_autoincrement': True},
     )
     id = Column(Integer, primary_key=True)
 
     source_id = Column(String)  # The id from yt-dlp
     view_count = Column(BigInteger)  # The view count from the ChannelDownloader (or from initial download)
-    ffprobe_json = deferred(Column(JSONB))  # Data that is fetched once from ffprobe (ffmpeg)
+    ffprobe_json = deferred(Column(JSON))  # Data that is fetched once from ffprobe (ffmpeg)
     have_comments = Column(Boolean, default=False)  # see `get_missing_videos_comments`
     comments_failed = Column(Boolean, default=False)  # see `get_missing_videos_comments`
 
@@ -164,19 +165,19 @@ class Video(ModelHelper, Base):
                                                        ROW_NUMBER() OVER (ORDER BY published_datetime ASC) AS row_number
                                                 FROM file_group fg
                                                          LEFT OUTER JOIN video v on fg.id = v.file_group_id
-                                                WHERE v.channel_id = %(channel_id)s
+                                                WHERE v.channel_id = :channel_id
                                                   AND fg.published_datetime IS NOT NULL)
                        SELECT v_id
                        FROM numbered_videos
                        WHERE row_number IN (SELECT row_number + i
                                             FROM numbered_videos
                                                      CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                                            WHERE fg_id = %(fg_id)s) \
+                                            WHERE fg_id = :fg_id) \
                        '''
             else:
                 # No videos near this Video with upload dates, recommend the files next to this Video.
                 # Only recommend videos in the same Channel (or similarly without a Channel).
-                channel_where = 'WHERE v.channel_id = %(channel_id)s' if self.channel_id \
+                channel_where = 'WHERE v.channel_id = :channel_id' if self.channel_id \
                     else 'WHERE v.channel_id IS NULL'
                 stmt = f'''
                     WITH numbered_videos AS (
@@ -192,7 +193,7 @@ class Video(ModelHelper, Base):
                         SELECT row_number+i
                         FROM numbered_videos
                         CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                        WHERE fg_id = %(fg_id)s
+                        WHERE fg_id = :fg_id
                     )
                 '''
             logger.debug(stmt)
@@ -584,7 +585,8 @@ class Channel(ModelHelper, Base):
         Index('channel_source_id', 'source_id'),
         Index('channel_total_size_idx', 'total_size'),
         Index('channel_video_count_idx', 'video_count'),
-        Index('channel_url_key', 'url', unique=True, postgresql_where=text('url IS NOT NULL')),
+        Index('channel_url_key', 'url', unique=True, postgresql_where=text('url IS NOT NULL'),
+              sqlite_where=text('url IS NOT NULL')),
     )
     id = Column(Integer, primary_key=True)
     # name and directory are stored in Collection, accessed via properties
@@ -600,7 +602,7 @@ class Channel(ModelHelper, Base):
     total_size = Column(BigInteger, default=0, nullable=False)  # update_channel_size
     minimum_frequency = Column(Integer)  # update_channel_minimum_frequency
 
-    info_json = deferred(Column(JSONB))
+    info_json = deferred(Column(JSON))
     info_date = Column(Date)
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
@@ -961,10 +963,10 @@ class Channel(ModelHelper, Base):
                           (SELECT COUNT(DISTINCT tf.file_group_id)
                            FROM tag_file tf
                                     INNER JOIN video v ON v.file_group_id = tf.file_group_id
-                           WHERE v.channel_id = %(id)s) AS "video_tags"
+                           WHERE v.channel_id = :id) AS "video_tags"
                    FROM video
                             LEFT JOIN file_group fg on fg.id = video.file_group_id
-                   WHERE channel_id = %(id)s \
+                   WHERE channel_id = :id \
                    '''
             curs.execute(stmt, dict(id=self.id))
             return dict(curs.fetchone())
@@ -976,15 +978,15 @@ class Channel(ModelHelper, Base):
         with get_db_curs() as curs:
             stmt = '''
                    SELECT COUNT(fg.id) AS "video_file_groups",
-                          COUNT(fg.id) FILTER ( WHERE v.channel_id = %(id)s ) AS "assigned_to_channel",
+                          COUNT(fg.id) FILTER ( WHERE v.channel_id = :id ) AS "assigned_to_channel",
                           COUNT(fg.id) FILTER ( WHERE v.channel_id IS NOT NULL
-                              AND v.channel_id != %(id)s ) AS "assigned_to_other_channels",
+                              AND v.channel_id != :id ) AS "assigned_to_other_channels",
                           COUNT(fg.id) FILTER ( WHERE v.id IS NULL
                               OR v.channel_id IS NULL ) AS "unassigned"
                    FROM file_group fg
                             LEFT JOIN video v ON v.file_group_id = fg.id
-                   WHERE (fg.directory = %(directory)s OR fg.directory LIKE %(directory)s || '/%%')
-                     AND (fg.mimetype LIKE 'video/%%' OR fg.mimetype LIKE 'audio/%%') \
+                   WHERE (fg.directory = :directory OR fg.directory LIKE :directory || '/%')
+                     AND (fg.mimetype LIKE 'video/%' OR fg.mimetype LIKE 'audio/%') \
                    '''
             curs.execute(stmt, dict(id=self.id, directory=str(self.directory)))
             return dict(curs.fetchone())

@@ -17,27 +17,27 @@ async def test_zim_search(async_client, test_session, test_zim, tag_factory, ass
     test_zim.tag_entry(test_session, tag1.name, 'two')
     test_session.commit()
 
-    # Test searching with only `search_str`.
+    # Test searching with only `search_str`.  (Ranks/headlines come from FTS5 `headline_texts`.)
     await assert_zim_search('one', 1, {
         'path': test_zim.path,
         'search': [
             # Entry "One" contains a 'one' in the title, and the text.
-            {'path': 'one', 'headline': 'This is the first item', 'rank': 0.06079271},
+            {'path': 'one', 'headline': 'This is the first item', 'rank': 1e-06},
             # Home only contains one 'one'.
-            {'path': 'home', 'rank': 0.06079271, 'headline': 'file for testing.\n<b>One</b>', },
+            {'path': 'home', 'rank': 8.8e-07, 'headline': '…an example ZIM file for testing.\n<b>One</b>\nTwo', },
         ],
         'estimate': 2,
     })
     await assert_zim_search('two', 1, {
         'path': test_zim.path,
-        'search': [{'path': 'two', 'headline': 'This is the second item', 'rank': 0.06079271},
-                   {'path': 'home', 'headline': 'testing.\nOne\n<b>Two</b>', 'rank': 0.06079271}],
+        'search': [{'path': 'two', 'headline': 'This is the second item', 'rank': 1e-06},
+                   {'path': 'home', 'headline': '…One\n<b>Two</b>', 'rank': 8.8e-07}],
         'estimate': 2,
     })
     await assert_zim_search('item', 1, {
         'path': test_zim.path,
-        'search': [{'path': 'one', 'headline': 'first <b>item</b>', 'rank': 0.06079271},
-                   {'path': 'two', 'headline': 'second <b>item</b>', 'rank': 0.06079271}],
+        'search': [{'path': 'one', 'headline': 'This is the first <b>item</b>', 'rank': 1e-06},
+                   {'path': 'two', 'headline': 'This is the second <b>item</b>', 'rank': 1e-06}],
         'estimate': 2,
     })
 
@@ -45,21 +45,21 @@ async def test_zim_search(async_client, test_session, test_zim, tag_factory, ass
     await assert_zim_search('one', 1, tag_names=[tag2.name, ], expected={
         'search': [
             # Only entry "One" is tagged with Tag 2.
-            {'path': 'one', 'headline': 'This is the first item', 'rank': 0.06079271},
+            {'path': 'one', 'headline': 'This is the first item', 'rank': 1e-06},
         ],
         'estimate': 1,
     })
     await assert_zim_search('one', 1, tag_names=[tag1.name, tag2.name], expected={
         'search': [
             # Only "One" is tagged with Tag 1 and contains "one".
-            {'path': 'one', 'headline': 'This is the first item', 'rank': 0.06079271},
+            {'path': 'one', 'headline': 'This is the first item', 'rank': 1e-06},
         ],
         'estimate': 1,
     })
     await assert_zim_search('two', 1, tag_names=[tag1.name, ], expected={
         'search': [
             # Only "Two" was tagged with Tag 1 and contains "two".
-            {'path': 'two', 'headline': 'This is the second item', 'rank': 0.06079271},
+            {'path': 'two', 'headline': 'This is the second item', 'rank': 1e-06},
         ],
         'estimate': 1,
     })

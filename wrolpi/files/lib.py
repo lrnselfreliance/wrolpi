@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Callable, List, Tuple, Union, Dict, Generator, Iterable, Set
 
 import cachetools.func
-import psycopg2
 from sqlalchemy import asc, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -31,7 +30,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     get_wrolpi_config, \
     unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
-from wrolpi.db import get_db_session, get_db_curs, mogrify
+from wrolpi.db import get_db_session, get_db_curs, values_clause
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory, IgnoredDirectoryError, UnsupportedArchive, InvalidArchiveMember
@@ -685,7 +684,6 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
         progress_callback: Optional callback(processed, total) called after each chunk is processed
 
     It is assumed all files exist."""
-    idempotency = str(idempotency)
     total_files = len(files)
     processed_count = 0
 
@@ -698,42 +696,54 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
             try:
-                primary_path = get_primary_file(group)
-                # Multiple files in this group.
-                primary_path: pathlib.Path = primary_path
-                # The primary mimetype allows modelers to find its file_groups.
-                mimetype = get_mimetype(primary_path)
-                # The group uses a common modification_datetime so the group will be re-indexed when any of it's files
-                # are modified.
-                modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
-                size = sum(i.stat().st_size for i in group)
-                files = json.dumps(_paths_to_files_dict(group))
-                suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
-                values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
-                non_primary_files = {i for i in group if i != primary_path}
-            except NoPrimaryFile:
-                # Cannot find primary path, create a `file_group` for each file.
-                for primary_path in group:
-                    primary_path: pathlib.Path
+                try:
+                    primary_path = get_primary_file(group)
+                    # Multiple files in this group.
+                    primary_path: pathlib.Path = primary_path
                     # The primary mimetype allows modelers to find its file_groups.
                     mimetype = get_mimetype(primary_path)
-                    modification_datetime = from_timestamp(primary_path.stat().st_mtime)
-                    size = primary_path.stat().st_size
-                    files = json.dumps(_paths_to_files_dict([primary_path]))
+                    # The group uses a common modification_datetime so the group will be re-indexed when any of it's
+                    # files are modified.
+                    modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
+                    size = sum(i.stat().st_size for i in group)
+                    files = json.dumps(_paths_to_files_dict(group))
                     suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
                     values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
+                    non_primary_files = {i for i in group if i != primary_path}
+                except NoPrimaryFile:
+                    # Cannot find primary path, create a `file_group` for each file.
+                    for primary_path in group:
+                        primary_path: pathlib.Path
+                        # The primary mimetype allows modelers to find its file_groups.
+                        mimetype = get_mimetype(primary_path)
+                        modification_datetime = from_timestamp(primary_path.stat().st_mtime)
+                        size = primary_path.stat().st_size
+                        files = json.dumps(_paths_to_files_dict([primary_path]))
+                        suffix = (split_path_stem_and_suffix(primary_path)[1] or '').lower() or None
+                        values[primary_path] = (modification_datetime, mimetype, size, files, suffix)
+            except FileNotFoundError as e:
+                # A file was deleted between discovery and upsert (temp files, WAL sidecars, etc.).
+                refresh_logger.warning(f'File vanished during refresh, skipping group near {group[0]}', exc_info=e)
+                continue
 
         values = [(str(primary_path),
                    str(primary_path.parent),  # directory
                    False,  # `indexed` is false to force indexing by default.
                    idempotency, *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
-            values = mogrify(curs, values)
+            # SQLite's RETURNING only exposes the post-upsert row; find the previously-indexed
+            # paths first so re-indexing invalidations can be counted.
+            primary_paths = [i[0] for i in values]
+            curs.execute('SELECT primary_path FROM file_group WHERE indexed = true AND primary_path IN '
+                         '(SELECT value FROM json_each(?))', (json.dumps(primary_paths),))
+            previously_indexed = {i['primary_path'] for i in curs.fetchall()}
+
+            placeholders, params = values_clause(values)
             stmt = f'''
                 INSERT INTO file_group
                     (primary_path, directory, indexed, idempotency, modification_datetime, mimetype, size, files,
                      suffix)
-                VALUES {values}
+                VALUES {placeholders}
                 ON CONFLICT (primary_path) DO UPDATE
                 SET
                     directory=EXCLUDED.directory,
@@ -749,7 +759,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                         WHEN
                             file_group.modification_datetime = EXCLUDED.modification_datetime
                             AND file_group.size = EXCLUDED.size
-                            AND jsonb_array_length(file_group.files) = jsonb_array_length(EXCLUDED.files)
+                            AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
                             THEN file_group.files
                         ELSE EXCLUDED.files
                         END
@@ -759,14 +769,15 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
                         file_group.indexed = true
                         AND file_group.modification_datetime = EXCLUDED.modification_datetime
                         AND file_group.size = EXCLUDED.size
-                        AND jsonb_array_length(file_group.files) = jsonb_array_length(EXCLUDED.files)
+                        AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
                     )
-                RETURNING id, file_group.indexed AS old_indexed, indexed
+                RETURNING id, primary_path, indexed
             '''
-            curs.execute(stmt)
+            curs.execute(stmt, params)
             results = list(curs.fetchall())
             # Count the files that used to be indexed, but need to be re-indexed.
-            invalidated_files = len([i['id'] for i in results if i['old_indexed'] and not i['indexed']])
+            invalidated_files = len([i['id'] for i in results
+                                     if i['primary_path'] in previously_indexed and not i['indexed']])
             if invalidated_files:
                 refresh_logger.info(f'Invalidated indexes of {invalidated_files} file groups near {chunk[0]}')
             else:
@@ -775,8 +786,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
             if non_primary_files:
                 # New files may have been added which change what primary paths exist.  Delete any file_groups which
                 # use paths which are not primary.
-                curs.execute('DELETE FROM file_group WHERE primary_path = ANY(%s)',
-                             (list(map(str, non_primary_files)),))
+                curs.execute('DELETE FROM file_group WHERE primary_path IN (SELECT value FROM json_each(?))',
+                             (json.dumps(list(map(str, non_primary_files))),))
 
         # Report progress after each chunk
         processed_count += len(chunk)
@@ -786,12 +797,17 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime,
 
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
     """Return a new list which does not contain any file paths that are in ignored directories."""
+    from wrolpi.db import get_db_file
+
     ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
     for idx, ignored_directory in enumerate(ignored_directories):
         ignored_directory = pathlib.Path(ignored_directory)
         if not ignored_directory.is_absolute():
             ignored_directories[idx] = str(get_media_directory() / ignored_directory)
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
+    # Never index the database (or its WAL sidecars), even if the user un-ignores `config`.
+    db_file = str(get_db_file())
+    files = [i for i in files if not str(i).startswith(db_file)]
     return files
 
 
@@ -859,32 +875,37 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         refresh_logger.info('Finished discovering files.  Will now remove deleted files from DB...')
 
     with get_db_curs(commit=True) as curs:
+        params = []
+        deleted_files = ''
+        if deleted:
+            # Delete any paths that do not exist.
+            deleted_files = ' OR '.join(['primary_path = ?'] * len(deleted))
+            params.extend(str(i) for i in deleted)
+
         wheres = ''
         if paths:
             # Use indexed directory column to delete any children of directories that are deleted.
             # Match exact directory or subdirectories
             conditions = []
+            where_params = []
             for p in paths:
                 p_str = str(p)
-                conditions.append(curs.mogrify('(directory = %s OR directory LIKE %s)', (p_str, f'{p_str}/%')).decode())
-            wheres = ' OR '.join(conditions)
-        deleted_files = ''
-        if deleted:
-            # Delete any paths that do not exist.
-            deleted_files = ' OR '.join([curs.mogrify('primary_path = %s', (str(i),)).decode() for i in deleted])
+                conditions.append('(directory = ? OR directory LIKE ?)')
+                where_params.extend([p_str, f'{p_str}/%'])
+            wheres = ' ( (idempotency != ? OR idempotency is null) AND (' + ' OR '.join(conditions) + '))'
+            params.append(idempotency)
+            params.extend(where_params)
 
-        idempotency = curs.mogrify('%s', (idempotency,)).decode()
-        wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
         stmt = f'''
             DELETE FROM file_group
             WHERE
                 -- Delete all known-deleted files.
                 {deleted_files}
                 -- Delete any files in the refreshed paths that were not updated.
-                {" OR " + wheres if deleted_files else wheres}
+                {" OR " + wheres if deleted_files and wheres else wheres}
         '''
         refresh_logger.debug(stmt)
-        curs.execute(stmt)
+        curs.execute(stmt, params)
 
 
 async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
@@ -978,7 +999,8 @@ async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
                     refresh_logger.error(f'Failed to fix UnicodeEncodeError, skipping batch: {e2}')
                     # Mark as indexed in a separate transaction so we don't loop forever
                     with get_db_curs(commit=True) as curs:
-                        curs.execute('UPDATE file_group SET indexed = TRUE WHERE id = ANY(%s)', (fg_ids,))
+                        curs.execute('UPDATE file_group SET indexed = TRUE WHERE id IN '
+                                     '(SELECT value FROM json_each(?))', (json.dumps(list(fg_ids)),))
                     continue
 
             if file_group:
@@ -1009,18 +1031,18 @@ def upsert_directories(parent_directories, directories):
         # Insert any directories that were created, update any directories which previously existed.
         with get_db_curs(commit=True) as curs:
             values = [(str(i.absolute()), i.name, idempotency) for i in directories]
-            values = mogrify(curs, values)
+            placeholders, params = values_clause(values)
             stmt = f'''
-                INSERT INTO directory (path, name, idempotency) VALUES {values}
+                INSERT INTO directory (path, name, idempotency) VALUES {placeholders}
                 ON CONFLICT (path) DO UPDATE
                 SET idempotency = EXCLUDED.idempotency
             '''
-            curs.execute(stmt)
+            curs.execute(stmt, params)
 
     with get_db_curs(commit=True) as curs:
         # Delete the children of any parent directory which no longer exists.
         for directory in parent_directories:
-            stmt = f'DELETE FROM directory WHERE path LIKE %(directory)s AND idempotency != %(idempotency)s'
+            stmt = f'DELETE FROM directory WHERE path LIKE :directory AND idempotency != :idempotency'
             curs.execute(stmt, dict(directory=f'{directory.absolute()}%', idempotency=idempotency))
 
 
@@ -1063,48 +1085,60 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param path: Filter by primary_path using case-insensitive partial match (ILIKE).
     @param deep: Search all text including captions/body (d_text); slower but more thorough.
     """
-    params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
+    from wrolpi import fts
+
+    # The frontend may send explicit JSON nulls (bypassing the schema defaults); SQLite rejects
+    # `LIMIT NULL`/`OFFSET NULL` (Postgres treated them as no-ops).
+    limit = int(limit) if limit else 20
+    offset = int(offset) if offset else 0
+    params = dict(offset=offset, limit=limit, search_str=search_str)
     wheres = []
     selects = []
     order_by = '1 ASC'
     joins = []
 
-    if search_str:
-        # `textsearch` includes d_text (captions/body); `textsearch_abc` is much smaller and faster.
-        ts_col = 'textsearch' if deep else 'textsearch_abc'
-        wheres.append(f'{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
-        selects.append(f'ts_rank({ts_col}, websearch_to_tsquery(%(search_str)s))')
+    # The fast (non-deep) path excludes d_text (captions/body) from matching.
+    fts_search = fts.file_group_search_join(search_str, deep=deep, headlines=bool(headline)) \
+        if search_str else None
+    if search_str and not fts_search:
+        # Nothing usable to search (punctuation-only or all-negated query); match nothing, like
+        # an empty websearch_to_tsquery did.
+        return [], 0
+    if fts_search:
+        joins.append(fts_search.join)
+        selects.append(fts_search.rank_select)
+        params.update(fts_search.params)
         order_by = '2 DESC'
 
     wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
     if model:
         params['model'] = model
-        wheres.append('model = %(model)s')
+        wheres.append('model = :model')
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
     wheres, params = months_selector_to_where(wheres, params, months)
     wheres, params = date_range_to_where(wheres, params, from_year, to_year)
 
     if url:
+        # SQLite LIKE is case-insensitive (for ASCII), matching the old ILIKE behavior.
         params['url_filter'] = f'%{url}%'
-        wheres.append('fg.url ILIKE %(url_filter)s')
+        wheres.append('fg.url LIKE :url_filter')
 
     if suffix:
         # Suffix is stored lowercased with a leading dot; normalize the caller's value to match the index.
         normalized = suffix if suffix.startswith('.') else f'.{suffix}'
         params['suffix'] = normalized.lower()
-        wheres.append('fg.suffix = %(suffix)s')
+        wheres.append('fg.suffix = :suffix')
 
     if path:
         params['path_filter'] = f'%{path}%'
-        wheres.append('fg.primary_path ILIKE %(path_filter)s')
+        wheres.append('fg.primary_path LIKE :path_filter')
 
-    if search_str and headline:
-        headline = ''',
-           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+    if fts_search and headline:
+        # b/c/d headlines come from FTS5 snippets (computed in the fts subquery); the title
+        # headline is computed in Python by `handle_file_group_search_results` (title is not an
+        # FTS column).
+        headline = ', fts.b_headline, fts.c_headline, fts.d_headline'
     else:
         headline = ''
 
@@ -1127,7 +1161,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         {join}
         {f"WHERE {wheres}" if wheres else ""}
         ORDER BY {order_by}
-        OFFSET %(offset)s LIMIT %(limit)s
+        LIMIT :limit OFFSET :offset
     '''
     logger.debug(stmt)
 
@@ -1145,24 +1179,19 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
     """
     with get_db_curs() as curs:
         curs.execute(statement, params)
-        try:
-            results = [dict(i) for i in curs.fetchall()]
-        except psycopg2.ProgrammingError:
-            # No videos
-            return [], 0
+        results = [dict(i) for i in curs.fetchall()]
         total = results[0]['total'] if results else 0
         ordered_ids = [i['id'] for i in results]
-        try:
-            extras = [dict(
-                ts_rank=i.get('ts_rank'),
-                title_headline=i.get('title_headline'),
-                b_headline=i.get('b_headline'),
-                c_headline=i.get('c_headline'),
-                d_headline=i.get('d_headline'),
-            ) for i in results]
-        except KeyError:
-            # No `ts_rank`, probably not searching `file_group.textsearch`.
-            extras = []
+        extras = [dict(
+            ts_rank=i.get('ts_rank'),
+            # Snippet columns exist only when headlines were requested; `title_headline` is
+            # computed below (title is not an FTS5 column).
+            headlines=('b_headline' in i),
+            title_headline=i.get('title_headline'),
+            b_headline=i.get('b_headline'),
+            c_headline=i.get('c_headline'),
+            d_headline=i.get('d_headline'),
+        ) for i in results]
 
     with get_db_session() as session:
         from modules.archive.models import Archive
@@ -1190,9 +1219,19 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
                 results[-1]['c_headline'] = extra['c_headline']
                 results[-1]['d_headline'] = extra['d_headline']
 
+        search_str = params.get('search_str') if isinstance(params, dict) else None
+
+        # When headlines were requested, compute the title headlines in Python (the FTS5 snippet
+        # function only works on indexed columns; `title` is not one).
+        if search_str and any(extra and extra.get('headlines') for extra in extras):
+            from wrolpi import fts
+            titles = [result.get('title') or '' for result in results]
+            for result, (headline_text, rank) in zip(results, fts.headline_texts(titles, search_str)):
+                if rank > 0:
+                    result['title_headline'] = headline_text
+
         # When searching by text, attach a `section_hint` to any doc-modeled result so
         # the UI can deep-link into the matching EPUB chapter or PDF page.
-        search_str = params.get('search_str') if isinstance(params, dict) else None
         if search_str:
             from modules.docs.lib import _fetch_section_hints
             # `r['id']` is the FileGroup primary key; _fetch_section_hints filters
@@ -1290,7 +1329,7 @@ def get_file_statistics():
         curs.execute('''
                      SELECT
                          -- All items in file_group.files are real individual files.
-                         SUM(jsonb_array_length(files))                                                                            AS "total_count",
+                         SUM(json_array_length(files))                                                                             AS "total_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf')                                          AS "pdf_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip')                                          AS "zip_count",
                          COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%')                                               AS "video_count",
@@ -1301,7 +1340,7 @@ def get_file_statistics():
                          (SELECT COUNT(DISTINCT tag_file.file_group_id) FROM tag_file)                                             AS "tagged_files",
                          (SELECT COUNT(DISTINCT tag_zim.zim_entry) FROM tag_zim)                                                   AS "tagged_zims",
                          (SELECT COUNT(*) FROM tag)                                                                                AS "tags_count",
-                         SUM(size)::BIGINT                                                                                         AS "total_size",
+                         SUM(size)                                                                                                 AS "total_size",
                          (SELECT COUNT(*) FROM archive)                                                                            AS archive_count
                      FROM file_group
                      ''')
@@ -1425,10 +1464,10 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(jsonb_array_length(files)) FILTER (WHERE idempotency = %(idempotency)s)  AS "total_file_groups",
-                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = %(idempotency)s)   AS "indexed",
-                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = %(idempotency)s)  AS "unindexed",
-                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = %(idempotency)s) AS "modeled"
+                   SUM(json_array_length(files)) FILTER (WHERE idempotency = :idempotency)   AS "total_file_groups",
+                   COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency = :idempotency)   AS "indexed",
+                   COUNT(id) FILTER (WHERE indexed IS FALSE AND idempotency = :idempotency)  AS "unindexed",
+                   COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency = :idempotency) AS "modeled"
                FROM file_group \
                '''
     else:
@@ -1436,7 +1475,7 @@ def get_refresh_progress() -> RefreshProgress:
         stmt = '''
                SELECT
                    -- Sum all the files in each FileGroup.
-                   SUM(jsonb_array_length(files))             AS "total_file_groups",
+                   SUM(json_array_length(files))              AS "total_file_groups",
                    COUNT(id) FILTER (WHERE indexed IS TRUE)   AS "indexed",
                    COUNT(id) FILTER (WHERE indexed IS FALSE)  AS "unindexed",
                    COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
@@ -1474,7 +1513,7 @@ def mimetypes_to_sql_wheres(wheres: List[str], params: dict, mimetypes: List[str
                 params[key] = f'{mimetype}/%'
             else:
                 params[key] = f'{mimetype}%'
-            local_wheres.append(f'mimetype LIKE %({key})s')
+            local_wheres.append(f'mimetype LIKE :{key}')
         wheres.append(f'({" OR ".join(local_wheres)})')
     return wheres, params
 
@@ -1485,24 +1524,26 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     """
     Return FileGroup counts of what will be returned if the search is actually performed.
 
-    Returns both the fast (`textsearch_abc`) and deep (`textsearch`) counts so the UI can show the count
+    Returns both the fast (a/b/c columns) and deep (all columns) counts so the UI can show the count
     matching the current search mode, and offer deep search when it has more results.  Both are cheap
-    index-bound COUNTs (no ts_rank).
+    index-bound COUNTs (no ranking).
     """
+    from wrolpi import fts
+
     wheres = []
     joins = list()
-    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes)
-    group_by = ''
-    having = ''
+    params = dict()
 
-    if search_str:
-        # `textsearch` matches are a superset of `textsearch_abc`, so filter by the deep column and count
-        # the fast subset with FILTER in the same pass.
-        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
-        selects = ('COUNT(*) FILTER (WHERE fg.textsearch_abc @@ websearch_to_tsquery(%(search_str)s)) AS estimate,'
-                   ' COUNT(*) AS deep_estimate')
-    else:
-        selects = 'COUNT(*) AS estimate, COUNT(*) AS deep_estimate'
+    # The deep match is a superset of the fast (column-filtered) match; both are counted with the
+    # same statement, differing only in the MATCH expression.
+    deep_match = fts.translate_websearch(search_str) if search_str else None
+    fast_match = fts.translate_websearch(search_str, fts.ABC_COLUMNS) if search_str else None
+    if search_str and deep_match is None:
+        # Nothing usable to search; match nothing (like an empty websearch_to_tsquery).
+        return dict(file_groups=0, file_groups_deep=0)
+    if deep_match:
+        joins.append('JOIN file_group_fts fts ON fts.rowid = fg.id')
+        wheres.append('fts.file_group_fts MATCH :fts_match')
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names, any_tag)
     wheres, params = mimetypes_to_sql_wheres(wheres, params, mimetypes)
@@ -1512,21 +1553,23 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     joins = "\n".join(joins)
     wheres = 'WHERE ' + "\nAND ".join(wheres) if wheres else ''
     stmt = f'''
-        SELECT {selects}
+        SELECT COUNT(*) AS estimate
         FROM file_group fg
             {joins}
         {wheres}
-        {group_by}
-        {having}
     '''
-    logger.debug(stmt, params)
+    logger.debug(f'search_file_suggestion_count: {stmt} {params}')
 
     with get_db_curs() as curs:
-        curs.execute(stmt, params)
-        result = curs.fetchone()
-        if result:
-            return dict(file_groups=int(result['estimate']), file_groups_deep=int(result['deep_estimate']))
-        return dict(file_groups=0, file_groups_deep=0)
+        if deep_match:
+            curs.execute(stmt, {**params, 'fts_match': deep_match})
+            deep_estimate = int(curs.fetchone()['estimate'])
+            curs.execute(stmt, {**params, 'fts_match': fast_match})
+            estimate = int(curs.fetchone()['estimate'])
+        else:
+            curs.execute(stmt, params)
+            estimate = deep_estimate = int(curs.fetchone()['estimate'])
+        return dict(file_groups=estimate, file_groups_deep=deep_estimate)
 
 
 MOVE_CHUNK_SIZE = 100
@@ -1571,25 +1614,23 @@ def _bulk_update_file_groups_db(session: Session, chunk_plan: Dict[pathlib.Path,
     if not chunk_plan:
         return
 
-    # Use psycopg2 cursor for safe SQL building via mogrify
     with get_db_curs(commit=True) as curs:
-        # Build VALUES list for the update: (old_path, new_dir, new_path)
-        values = [
-            (str(old_path), str(new_path.parent), str(new_path))
+        # Build the update rows: [old_path, new_dir, new_path]
+        updates = json.dumps([
+            [str(old_path), str(new_path.parent), str(new_path)]
             for old_path, new_path in chunk_plan.items()
-        ]
-        values_sql = mogrify(curs, values)
+        ])
 
-        # Use UPDATE FROM VALUES pattern for efficient batch update
-        sql = f'''
+        # Use UPDATE FROM json_each pattern for efficient batch update
+        sql = '''
             UPDATE file_group AS fg SET
-                directory = v.new_dir,
-                primary_path = v.new_path,
+                directory = json_extract(v.value, '$[1]'),
+                primary_path = json_extract(v.value, '$[2]'),
                 indexed = CASE WHEN fg.data IS NULL THEN FALSE ELSE fg.indexed END
-            FROM (VALUES {values_sql}) AS v(old_path, new_dir, new_path)
-            WHERE fg.primary_path = v.old_path
+            FROM json_each(?) AS v
+            WHERE fg.primary_path = json_extract(v.value, '$[0]')
         '''
-        curs.execute(sql)
+        curs.execute(sql, (updates,))
 
 
 def _json_serial(obj):
@@ -1617,11 +1658,11 @@ def _bulk_update_file_groups_reorganize(updates: List[dict]):
             # Don't change indexed - reorganization only moves files, content unchanged
             curs.execute('''
                          UPDATE file_group
-                         SET directory    = %s,
-                             primary_path = %s,
-                             files        = %s,
-                             data         = %s
-                         WHERE id = %s
+                         SET directory    = ?,
+                             primary_path = ?,
+                             files        = ?,
+                             data         = ?
+                         WHERE id = ?
                          ''', (
                              update['directory'],
                              update['primary_path'],
@@ -1654,9 +1695,8 @@ def delete_directory(directory: pathlib.Path, recursive: bool = False, force: bo
         else:
             directory.rmdir()
     # Always clean up DB record even if directory was already deleted
-    with get_db_curs(commit=True) as curs:
-        stmt = 'DELETE FROM directory WHERE path=%s'
-        curs.execute(stmt, (str(directory),))
+    with get_db_session(commit=True) as session:
+        session.query(Directory).filter_by(path=str(directory)).delete(synchronize_session=False)
 
 
 async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
@@ -2045,13 +2085,13 @@ def _bulk_insert_tag_files(tag_files: List[Tuple[int, int]]):
                   for tag_id, file_group_id in chunk]
 
         with get_db_curs(commit=True) as curs:
-            values_str = mogrify(curs, values)
+            placeholders, params = values_clause(values)
             stmt = f'''
                 INSERT INTO tag_file (tag_id, file_group_id, created_at)
-                VALUES {values_str}
+                VALUES {placeholders}
                 ON CONFLICT (tag_id, file_group_id) DO NOTHING
             '''
-            curs.execute(stmt)
+            curs.execute(stmt, params)
             logger.debug(f'Bulk inserted {len(chunk)} TagFiles')
 
 
@@ -2070,12 +2110,12 @@ def _bulk_delete_tag_files(tag_files: List[Tuple[int, int]]):
         pairs = [(tag_id, file_group_id) for tag_id, file_group_id in chunk]
 
         with get_db_curs(commit=True) as curs:
-            pairs_str = mogrify(curs, pairs)
+            placeholders, params = values_clause(pairs)
             stmt = f'''
                 DELETE FROM tag_file
-                WHERE (tag_id, file_group_id) IN ({pairs_str})
+                WHERE (tag_id, file_group_id) IN (VALUES {placeholders})
             '''
-            curs.execute(stmt)
+            curs.execute(stmt, params)
             logger.debug(f'Bulk deleted {curs.rowcount} TagFiles')
 
 

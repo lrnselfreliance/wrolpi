@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video, Channel
+from wrolpi import fts
 from wrolpi.common import logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
@@ -58,8 +59,8 @@ VIDEO_ORDERS = {
     '-size': 'fg.size DESC, LOWER(fg.primary_path) DESC',
     'length': 'fg.length ASC, LOWER(fg.primary_path) ASC',
     '-length': 'fg.length DESC, LOWER(fg.primary_path) DESC',
-    'size_to_duration': 'CASE WHEN fg.length > 0 THEN fg.size::float / fg.length ELSE fg.size END ASC, LOWER(fg.primary_path) ASC',
-    '-size_to_duration': 'CASE WHEN fg.length > 0 THEN fg.size::float / fg.length ELSE fg.size END DESC, LOWER(fg.primary_path) DESC',
+    'size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END ASC, LOWER(fg.primary_path) ASC',
+    '-size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END DESC, LOWER(fg.primary_path) DESC',
     'viewed': 'fg.viewed ASC',
     '-viewed': 'fg.viewed DESC',
     'view_count': 'v.view_count ASC',
@@ -97,41 +98,42 @@ def search_videos(
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Search videos and audio-only files.
-    wheres = ["(fg.mimetype LIKE 'video/%%' OR fg.mimetype LIKE 'audio/%%')"]
+    wheres = ["(fg.mimetype LIKE 'video/%' OR fg.mimetype LIKE 'audio/%')"]
     if censored:
         # Only return videos which are no longer available for download.
         wheres.append('fg.censored = TRUE')
     joins = list()
     join_video = False
 
-    params = dict(search_str=search_str, offset=offset or 0)
+    # Explicit JSON nulls bypass the schema defaults; SQLite rejects LIMIT/OFFSET NULL.
+    limit = int(limit) if limit else 20
+    params = dict(search_str=search_str, offset=int(offset) if offset else 0)
     if channel_id:
-        wheres.append('v.channel_id = %(channel_id)s')
+        wheres.append('v.channel_id = :channel_id')
         joins.append('LEFT JOIN channel c ON c.id = v.channel_id')
         join_video = True
         params['channel_id'] = channel_id
 
-    if search_str:
+    # `deep` searches d_text (captions) as well; the default abc search is much smaller and faster.
+    # The subquery join is required: snippet() cannot coexist with COUNT(*) OVER() in one SELECT.
+    fts_search = fts.file_group_search_join(search_str, deep=deep, headlines=bool(headline)) \
+        if search_str else None
+    if fts_search:
         # A search_str was provided by the user, modify the query to filter by it.
-        # `textsearch` includes d_text (captions); `textsearch_abc` is much smaller and faster.
-        ts_col = 'textsearch' if deep else 'textsearch_abc'
-        select_columns = f'fg.id, ts_rank(fg.{ts_col}, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-        wheres.append(f'fg.{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
-        params['search_str'] = search_str
+        select_columns = f'fg.id, {fts_search.rank_select}, COUNT(*) OVER() AS total'
+        joins.append(fts_search.join)
+        params.update(fts_search.params)
     else:
-        # No search_str provided.  Get id and total only.
+        # No (usable) search_str provided.  Get id and total only.
         select_columns = 'fg.id, COUNT(*) OVER() AS total'
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
-    if search_str and headline:
-        headline = ''',
-           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+    if fts_search and headline:
+        # The title headline is computed in Python by `handle_file_group_search_results`.
+        headline_selects = ', fts.b_headline, fts.c_headline, fts.d_headline'
     else:
-        headline = ''
+        headline_selects = ''
 
     # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
     # whitelist.
@@ -155,14 +157,14 @@ def search_videos(
     stmt = f'''
         SELECT
             {select_columns}
-            {headline}
+            {headline_selects}
         FROM file_group fg
         {join}
         {where}
         ORDER BY {order_by}
-        OFFSET %(offset)s LIMIT {int(limit)}
+        LIMIT {int(limit)} OFFSET :offset
     '''.strip()
-    logger.debug(stmt, params)
+    logger.debug(f'{stmt} {params}')
 
     results, total = handle_file_group_search_results(stmt, params)
     return results, total

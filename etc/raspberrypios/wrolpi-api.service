@@ -1,6 +1,5 @@
 [Unit]
 Description=WROLPi Python API
-Wants=postgresql.service
 PartOf=wrolpi.target
 Conflicts=wrolpi-api-dev.service
 

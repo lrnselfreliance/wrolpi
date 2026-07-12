@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from modules.archive.models import Archive
 from wrolpi import dates
+from wrolpi import fts
 from wrolpi.cmd import READABILITY_BIN, run_command
 from wrolpi.collections import Collection
 from wrolpi.common import get_media_directory, get_relative_to_media_directory, logger, extract_domain, \
@@ -120,6 +121,7 @@ class DomainsConfig(ConfigFile):
                         name = collection_data.get('name')
                         if not name:
                             logger.error(f'Domain collection at index {idx} has no name, skipping')
+                            self.import_skipped += 1
                             continue
 
                         # Validate domain name format before batching
@@ -128,6 +130,7 @@ class DomainsConfig(ConfigFile):
                                 f"Domain collection at index {idx} has invalid name '{name}' "
                                 f"(must contain at least one '.' and not start/end with '.'), skipping"
                             )
+                            self.import_skipped += 1
                             continue
 
                         # Ensure kind is 'domain'
@@ -140,6 +143,7 @@ class DomainsConfig(ConfigFile):
                         valid_data_list.append(collection_data)
                     except Exception as e:
                         logger.error(f'Failed to validate domain collection at index {idx}', exc_info=e)
+                        self.import_skipped += 1
                         continue
 
                 # Batch create/update collections
@@ -1344,10 +1348,10 @@ def get_domain(domain_id: int) -> dict:
     # Get archive statistics for this domain
     with get_db_curs() as curs:
         stmt = '''
-               SELECT COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
+               SELECT COUNT(a.id) AS url_count, SUM(fg.size) AS size
                FROM archive a
                         LEFT JOIN file_group fg on fg.id = a.file_group_id
-               WHERE a.collection_id = %(domain_id)s
+               WHERE a.collection_id = :domain_id
                '''
         curs.execute(stmt, {'domain_id': domain_id})
         stats = dict(curs.fetchone())
@@ -1377,20 +1381,6 @@ ARCHIVE_ORDERS = {
     'viewed': 'fg.viewed ASC',
     '-viewed': 'fg.viewed DESC',
 }
-ORDER_GROUP_BYS = {
-    'published_datetime': 'fg.effective_datetime',
-    '-published_datetime': 'fg.effective_datetime',
-    'published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
-    '-published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
-    'download_datetime': 'fg.download_datetime',
-    '-download_datetime': 'fg.download_datetime',
-    'rank': 'fg.published_datetime, fg.download_datetime',
-    '-rank': 'fg.published_datetime, fg.download_datetime',
-    'size': 'fg.size, fg.published_datetime, fg.primary_path',
-    '-size': 'fg.size, fg.published_datetime, fg.primary_path',
-    'viewed': 'fg.viewed',
-    '-viewed': 'fg.viewed',
-}
 NO_NULL_ORDERS = {
     'viewed': 'fg.viewed IS NOT NULL',
     '-viewed': 'fg.viewed IS NOT NULL',
@@ -1404,26 +1394,40 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
-    group_by = 'fg.effective_datetime, a.file_group_id'
 
-    params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
+    # Explicit JSON nulls bypass the schema defaults; SQLite rejects LIMIT/OFFSET NULL.
+    params = dict(search_str=search_str, offset=int(offset) if offset else 0, limit=int(limit) if limit else 20)
     order_by = ARCHIVE_ORDERS['-published_datetime']
 
     select_columns = ''
-    if search_str:
-        # A search_str was provided by the user, modify the query to filter by it.
-        # `textsearch` includes d_text (page contents); `textsearch_abc` is much smaller and faster.
-        ts_col = 'textsearch' if deep else 'textsearch_abc'
-        select_columns = f'ts_rank(fg.{ts_col}, websearch_to_tsquery(%(search_str)s)) AS rank,' \
-                         ' COUNT(*) OVER() AS total'
-        wheres.append(f'fg.{ts_col} @@ websearch_to_tsquery(%(search_str)s)')
-        params['search_str'] = search_str
-        group_by = f'{group_by}, rank'
+    fts_join = ''
+    headline_columns = ''
+    # The fast (deep=False) search only matches the a/b/c FTS columns; deep also matches d
+    # (page contents).  `file_group_search` returns None when the search string is unusable, in
+    # which case we behave as if no search was requested.
+    file_group_search = fts.file_group_search(search_str, deep=deep) if search_str else None
+    if file_group_search:
+        # A search_str was provided by the user, modify the query to filter by it.  The rank and
+        # snippets come from a subquery because FTS5 auxiliary functions (snippet) cannot appear
+        # in a query that also uses window functions (COUNT(*) OVER()).
+        headline_selects = fts.file_group_headline_selects() if headline else ''
+        fts_join = f'''JOIN (
+                SELECT fts.rowid AS id, {file_group_search.rank_select}{headline_selects}
+                FROM file_group_fts fts
+                WHERE {file_group_search.where}
+            ) fts ON fts.id = fg.id'''
+        select_columns = 'fts.ts_rank AS ts_rank'  # positive, higher is better.
+        params.update(file_group_search.params)
+        if headline:
+            # b/c/d headlines come from the FTS index.  `title` is not an FTS column; select it
+            # plainly and highlight it in Python below.
+            headline_columns = ''',
+                fts.b_headline, fts.c_headline, fts.d_headline,
+                fg.title AS title_headline'''
 
     if order:
         try:
             order_by = ARCHIVE_ORDERS[order]
-            group_by = f'{group_by}, {ORDER_GROUP_BYS[order]}'
         except KeyError:
             raise InvalidOrderBy(f'Invalid order byy {order}')
         if order in NO_NULL_ORDERS:
@@ -1431,41 +1435,40 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
     wheres, params = tag_append_sub_select_where(wheres, params, tag_names)
 
-    if search_str and headline:
-        headline = ''',
-                ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-                ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-                ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-                ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
-        group_by = f'{group_by}, title_headline, b_headline, c_headline, d_headline'
-    else:
-        headline = ''
-
     if domain:
         params['domain'] = domain
         # Use LIMIT 1 to handle potential duplicate domain collections with the same name
         wheres.append(
-            "a.collection_id = (select id from collection where collection.name = %(domain)s and collection.kind = 'domain' LIMIT 1)")
+            "a.collection_id = (select id from collection where collection.name = :domain and collection.kind = 'domain' LIMIT 1)")
 
-    select_columns = f", {select_columns}" if select_columns else ""
+    select_columns = f"{select_columns}," if select_columns else ""
     wheres = '\n AND '.join(wheres)
     where = f'WHERE\n{wheres}' if wheres else ''
     stmt = f'''
             SELECT
                 a.file_group_id AS id, -- always get `file_group.id` for `handle_file_group_search_results`
-                COUNT(*) OVER() AS total
                 {select_columns}
-                {headline}
+                COUNT(*) OVER() AS total
+                {headline_columns}
             FROM archive a
             LEFT JOIN file_group fg ON fg.id = a.file_group_id
+            {fts_join}
             {where}
-            GROUP BY {group_by}
             ORDER BY {order_by}
-            OFFSET %(offset)s LIMIT %(limit)s
+            LIMIT :limit OFFSET :offset
         '''.strip()
-    logger.debug(stmt, params)
+    logger.debug(f'{stmt} {params}')
 
     results, total = handle_file_group_search_results(stmt, params)
+
+    if file_group_search and headline and results:
+        # Highlight the plain titles like the FTS snippets above (Postgres used ts_headline).
+        titles = [i.get('title_headline') for i in results]
+        highlighted = fts.headline_texts(titles, search_str)
+        for result, title, (title_headline, _) in zip(results, titles, highlighted):
+            if title is not None:
+                result['title_headline'] = title_headline
+
     return results, total
 
 
@@ -1617,39 +1620,41 @@ async def get_statistics():
         curs.execute('''
                      SELECT
                          -- total archives
-                         COUNT(a.id)                                                                         AS "archives",
+                         COUNT(a.id)                                                                            AS "archives",
                          -- total archives downloaded over the past week/month/year
-                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= current_date - interval '1 week') AS "week",
+                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= datetime('now', '-7 days'))          AS "week",
                          COUNT(a.id)
-                         FILTER (WHERE fg.download_datetime >= current_date - interval '1 month')            AS "month",
-                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= current_date - interval '1 year') AS "year",
+                         FILTER (WHERE fg.download_datetime >= datetime('now', '-1 month'))                     AS "month",
+                         COUNT(a.id) FILTER (WHERE fg.download_datetime >= datetime('now', '-1 year'))          AS "year",
                          -- sum of all archive file sizes
-                         COALESCE(SUM(fg.size), 0)::BIGINT                                                   AS "sum_size",
+                         COALESCE(SUM(fg.size), 0)                                                              AS "sum_size",
                          -- largest archive
-                         COALESCE(MAX(fg.size), 0)                                                           AS "max_size"
+                         COALESCE(MAX(fg.size), 0)                                                              AS "max_size"
                      FROM archive a
                               LEFT JOIN file_group fg on a.file_group_id = fg.id
                      ''')
         archive_stats = dict(curs.fetchone())
 
-        # Get the total archives downloaded every month for the past two years.
+        # Get the total archives downloaded every month for the past two years (excluding the
+        # current month, like the old generate_series query).
         curs.execute('''
-                     SELECT DATE_TRUNC('month', months.a),
-                            COUNT(archive.id)::BIGINT,
-                            SUM(size)::BIGINT AS "size"
-                     FROM generate_series(
-                                  date_trunc('month', current_date) - interval '2 years',
-                                  date_trunc('month', current_date) - interval '1 month',
-                                  '1 month'::interval) AS months(a),
-                          archive
+                     SELECT strftime('%Y-%m-01 00:00:00', fg.download_datetime) AS "date_trunc",
+                            COUNT(archive.id)                                   AS "count",
+                            SUM(fg.size)                                        AS "size"
+                     FROM archive
                               LEFT JOIN file_group fg on archive.file_group_id = fg.id
-                     WHERE fg.download_datetime >= date_trunc('month', months.a)
-                       AND fg.download_datetime < date_trunc('month', months.a) + interval '1 month'
-                       AND fg.download_datetime IS NOT NULL
+                     WHERE fg.download_datetime IS NOT NULL
+                       AND fg.download_datetime >= datetime('now', 'start of month', '-24 months')
+                       AND fg.download_datetime < datetime('now', 'start of month')
                      GROUP BY 1
                      ORDER BY 1
                      ''')
-        monthly_archives = [dict(i) for i in curs.fetchall()]
+        monthly_archives = []
+        for row in curs.fetchall():
+            row = dict(row)
+            # Convert the month strings back to datetimes so the JSON response shape is unchanged.
+            row['date_trunc'] = datetime.strptime(row['date_trunc'], '%Y-%m-%d %H:%M:%S')
+            monthly_archives.append(row)
 
         historical_stats = dict(monthly_archives=monthly_archives)
         historical_stats['average_count'] = (sum(i['count'] for i in monthly_archives) // len(monthly_archives)) \

@@ -364,15 +364,14 @@ async def update_view_counts_and_censored(channel_id: int):
     with get_db_curs(commit=True) as curs:
         # Update the view_count for each video.
         stmt = '''
-               WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count bigint))
                UPDATE video
-               SET view_count = s.view_count
-               FROM source as s
-               WHERE source_id = s.id
-                 AND channel_id = %s
-               RETURNING video.id AS updated_ids \
+               SET view_count = CAST(json_extract(s.value, '$.view_count') AS INTEGER)
+               FROM json_each(:view_counts) AS s
+               WHERE video.source_id = json_extract(s.value, '$.id')
+                 AND video.channel_id = :channel_id
+               RETURNING video.id \
                '''
-        curs.execute(stmt, (view_counts_str, channel_id))
+        curs.execute(stmt, {'view_counts': view_counts_str, 'channel_id': channel_id})
         count = len(curs.fetchall())
         logger.info(f'Updated {count} view counts in DB for {channel_name}.')
 
@@ -380,13 +379,13 @@ async def update_view_counts_and_censored(channel_id: int):
     with get_db_curs(commit=True) as curs:
         # Set FileGroup.censored if the video is no longer on the Channel.
         stmt = '''
-               UPDATE file_group fg
-               SET censored = NOT (v.source_id = ANY (%(source_ids)s))
+               UPDATE file_group AS fg
+               SET censored = (v.source_id NOT IN (SELECT value FROM json_each(:source_ids)))
                FROM video v
                WHERE v.file_group_id = fg.id
-                 AND v.channel_id = %(channel_id)s
-               RETURNING fg.id, fg.censored \
+                 AND v.channel_id = :channel_id
+               RETURNING id, censored \
                '''
-        curs.execute(stmt, {'channel_id': channel_id, 'source_ids': source_ids})
+        curs.execute(stmt, {'channel_id': channel_id, 'source_ids': json.dumps(source_ids)})
         censored = len([i for i in curs.fetchall() if i['censored']])
         logger.info(f'Set {censored} censored videos for {channel_name}.')

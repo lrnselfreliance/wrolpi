@@ -664,8 +664,12 @@ def test_url_strip_host(url, expected):
 
 @pytest.mark.parametrize(
     'search_str,expected', [
-        ('jump', [('<b>jumps</b> over the lazy brown', 0.06079271), ('<b>jumped</b> over the lazy', 0.06079271)]),
-        ('brown', [('over the lazy <b>brown</b>', 0.06079271), ('The fox jumped over the lazy dog', 0.0)]),
+        # Matches are highlighted (stemmed: jump matches jumps/jumped); non-matches return the
+        # start of the entry with a rank of 0.
+        ('jump', [('The fox <b>jumps</b> over the lazy brown dog.', True),
+                  ('The fox <b>jumped</b> over the lazy dog.', True)]),
+        ('brown', [('The fox jumps over the lazy <b>brown</b> dog.', True),
+                   ('The fox jumped over the lazy dog.', False)]),
     ]
 )
 def test_extract_headlines(test_session, search_str, expected):
@@ -673,7 +677,9 @@ def test_extract_headlines(test_session, search_str, expected):
         'The fox jumps over the lazy brown dog.',
         'The fox jumped over the lazy dog.',
     ]
-    assert common.extract_headlines(entries, search_str) == expected
+    results = common.extract_headlines(entries, search_str)
+    # Compare the headline text, and whether the entry matched (exact ranks are engine noise).
+    assert [(headline, rank > 0) for headline, rank in results] == expected
 
 
 def test_extract_html_text():

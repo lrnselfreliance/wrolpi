@@ -75,9 +75,9 @@ async def test_archives_search(test_session, archive_directory, archive_factory,
     data = {'search_str': 'baz', 'domain': 'example.org', 'deep': True}
     await check_results(async_client, data, [3, ])
 
-    # 1's title contains "my", this is ignored by Postgres.
+    # 1's title contains "my".  Postgres ignored this stopword; FTS5 has no stopwords, so it matches.
     data = {'search_str': 'my', 'deep': True}
-    await check_results(async_client, data, [])
+    await check_results(async_client, data, [1, ])
 
     # 3's title contains "third", found by the default (fast) search and the deep search.
     data = {'search_str': 'third'}

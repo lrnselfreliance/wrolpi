@@ -4,9 +4,10 @@ import pathlib
 import re
 from typing import List, Optional
 
-from sqlalchemy import asc, desc, func, nullslast, text
+from sqlalchemy import asc, desc, func, nullslast, text, column, bindparam, Integer, Float
 from sqlalchemy.orm import Session
 
+from wrolpi import fts
 from wrolpi.collections.models import Collection
 from wrolpi.collections.types import collection_type_registry
 from wrolpi.db import get_db_session
@@ -351,14 +352,21 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
     from .models import Doc
     from wrolpi.files.models import FileGroup
 
-    # `textsearch` includes d_text (document contents); `textsearch_abc` is much smaller and faster.
-    ts_col = FileGroup.textsearch if deep else FileGroup.textsearch_abc
+    # Deep search matches all FTS columns (including d_text, the document contents); the default matches only
+    # the much smaller a/b/c columns.
+    match = fts.translate_websearch(search_str, None if deep else fts.ABC_COLUMNS) if search_str else None
 
     with get_db_session() as session:
         query = session.query(FileGroup).join(Doc, Doc.file_group_id == FileGroup.id)
 
-        if search_str:
-            query = query.filter(ts_col.op('@@')(func.websearch_to_tsquery(search_str)))
+        fts_sq = None
+        if match is not None:
+            fts_sq = text('SELECT rowid AS id, -rank AS ts_rank'
+                          ' FROM file_group_fts WHERE file_group_fts MATCH :fts_match') \
+                .bindparams(fts_match=match) \
+                .columns(column('id', Integer), column('ts_rank', Float)) \
+                .alias('fts')
+            query = query.join(fts_sq, fts_sq.c.id == FileGroup.id)
 
         if author:
             query = query.filter(FileGroup.b_text.ilike(f'%{author}%'))
@@ -383,9 +391,9 @@ def _search_docs(search_str=None, author=None, subject=None, language=None, mime
         total = query.count()
 
         # Ordering.
-        if order_by == 'rank' and search_str:
+        if order_by == 'rank' and fts_sq is not None:
             query = query.order_by(
-                desc(func.ts_rank(ts_col, func.websearch_to_tsquery(search_str))),
+                desc(fts_sq.c.ts_rank),
                 desc(FileGroup.id),
             )
         elif order_by == 'published_datetime':
@@ -416,26 +424,35 @@ def _fetch_section_hints(session, file_group_ids, search_str):
 
     Returns a mapping of file_group_id -> {kind, ordinal, label, snippet}.
     """
-    from .models import Doc, DocSection
-
     if not file_group_ids:
         return {}
 
+    match = fts.translate_websearch(search_str)
+    if match is None:
+        return {}
+
+    # FTS5 auxiliary functions (snippet, rank) must be evaluated in the innermost SELECT that scans the
+    # FTS table; the window function must live in a separate outer layer.
     sql = text('''
-        SELECT DISTINCT ON (d.file_group_id)
-            d.file_group_id AS fg_id,
-            ds.kind AS kind,
-            ds.ordinal AS ordinal,
-            ds.label AS label,
-            ts_headline('english', ds.content, q,
-                        'MaxWords=20,MinWords=5,ShortWord=3,StartSel=[[WROLPI_HL]],StopSel=[[/WROLPI_HL]]') AS snippet
-        FROM doc_section ds
-        JOIN doc d ON d.id = ds.doc_id,
-             websearch_to_tsquery('english', :q) q
-        WHERE d.file_group_id = ANY(:ids) AND ds.tsv @@ q
-        ORDER BY d.file_group_id, ts_rank(ds.tsv, q) DESC, ds.ordinal ASC
-    ''')
-    rows = session.execute(sql, {'q': search_str, 'ids': list(file_group_ids)}).fetchall()
+        SELECT fg_id, kind, ordinal, label, snippet FROM (
+            SELECT fg_id, kind, ordinal, label, snippet,
+                   row_number() OVER (PARTITION BY fg_id
+                                      ORDER BY fts_rank ASC, ordinal ASC) AS rn
+            FROM (
+                SELECT d.file_group_id AS fg_id,
+                       ds.kind AS kind,
+                       ds.ordinal AS ordinal,
+                       ds.label AS label,
+                       snippet(doc_section_fts, 0, '[[WROLPI_HL]]', '[[/WROLPI_HL]]', '…', 20) AS snippet,
+                       doc_section_fts.rank AS fts_rank
+                FROM doc_section_fts
+                JOIN doc_section ds ON ds.id = doc_section_fts.rowid
+                JOIN doc d ON d.id = ds.doc_id
+                WHERE doc_section_fts MATCH :q AND d.file_group_id IN :ids
+            )
+        ) WHERE rn = 1
+    ''').bindparams(bindparam('ids', expanding=True))
+    rows = session.execute(sql, {'q': match, 'ids': list(file_group_ids)}).fetchall()
     hints = {}
     for row in rows:
         hints[row['fg_id']] = {

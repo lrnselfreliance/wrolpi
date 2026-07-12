@@ -74,12 +74,6 @@ DEFAULT_CPU_FREQUENCY = 'ondemand'
 
 DEFAULT_FILE_PERMISSIONS = 0o644
 
-DB_HOST = os.environ.get('DB_HOST', '127.0.0.1')
-DB_PORT = int(os.environ.get('DB_PORT', 5432))
-DB_NAME = os.environ.get('DB_NAME', 'wrolpi')
-DB_USER = os.environ.get('DB_USER', 'wrolpi')
-DB_PASSWORD = os.environ.get('DB_PASSWORD', 'wrolpi')
-
 API_HOST = os.environ.get('API_HOST', '127.0.0.1')
 API_PORT = os.environ.get('API_PORT', '8081')
 API_WORKERS = os.environ.get('API_WORKERS', multiprocessing.cpu_count())

@@ -23,8 +23,9 @@ class TestTable(Base):
 def assert_raw_datetime(expected_datetime: str):
     with get_db_curs() as curs:
         curs.execute('SELECT * FROM test_table')
+        # SQLite stores datetimes as TEXT (`YYYY-MM-DD HH:MM:SS.ffffff` UTC).
         dt_ = curs.fetchone()['dt']
-        assert dt_.isoformat() == expected_datetime
+        assert datetime.fromisoformat(dt_).isoformat() == expected_datetime
 
 
 def test_TZDateTime(test_session):

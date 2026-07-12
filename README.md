@@ -79,13 +79,11 @@ You can try out WROLPi by running the docker containers.
 6. Create volumes.
     * `docker volume create --name=openstreetmap-data`
     * `docker volume create --name=openstreetmap-rendered-tiles`
-7. Start the database.
-    * `docker-compose up -d db`
-8. Initialize the database.
+7. Initialize the database (SQLite in the media directory).
     * `docker-compose run --rm api db upgrade`
-9. Start the docker containers.
+8. Start the docker containers.
     * `docker-compose up`
-10. Browse to WROLPi.
+9. Browse to WROLPi.
     * https://0.0.0.0:8443
 
 More Docker documentation is available in [docker/README.md](docker/README.md)

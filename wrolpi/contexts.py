@@ -80,6 +80,8 @@ def attach_shared_contexts(app: Sanic):
     app.shared_ctx.config_save_lock = multiprocessing.Lock()
     app.shared_ctx.config_update_lock = multiprocessing.Lock()
     app.shared_ctx.configs_imported = manager.dict()
+    # Count of config entries skipped during each config's import (blocks dumps until re-imported cleanly).
+    app.shared_ctx.configs_import_skipped = manager.dict()
 
     # Events.
     app.shared_ctx.events_lock = multiprocessing.Lock()
@@ -143,6 +145,7 @@ def reset_shared_contexts(app: Sanic):
 
     # Configs
     app.shared_ctx.configs_imported.clear()
+    app.shared_ctx.configs_import_skipped.clear()
 
     # Switches
     app.shared_ctx.switches.clear()

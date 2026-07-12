@@ -5,6 +5,7 @@ This module provides memory-efficient comparison of potentially millions of file
 on resource-constrained devices like Raspberry Pi.
 """
 import asyncio
+import json
 import os
 import pathlib
 import shlex
@@ -14,6 +15,7 @@ import time
 import uuid
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum, auto
 from multiprocessing.queues import Queue
 from pathlib import Path
@@ -234,7 +236,8 @@ async def find_directories(directories: list[Path]) -> set[Path]:
     find_args = [str(d) for d in directories]
     find_args.extend(['-type', 'd', '-not', '-path', '*/.*'])
     for ignored in _get_normalized_ignored_directories():
-        find_args.extend(['-not', '-path', f'{ignored}/*'])
+        # Exclude the ignored directory itself as well as its contents.
+        find_args.extend(['-not', '-path', ignored, '-not', '-path', f'{ignored}/*'])
 
     proc = await asyncio.create_subprocess_exec(
         'find', *find_args,
@@ -265,6 +268,9 @@ async def _stream_filesystem_paths(root: Path) -> AsyncGenerator[str, None]:
     find_args = [str(root), '-type', 'f', '-not', '-path', '*/.*']
     for ignored in _get_normalized_ignored_directories():
         find_args.extend(['-not', '-path', f'{ignored}/*'])
+    # Never index the database (or its WAL sidecars), even if `config` is un-ignored.
+    from wrolpi.db import get_db_file
+    find_args.extend(['-not', '-path', f'{get_db_file()}*'])
 
     proc = await asyncio.create_subprocess_exec(
         'find', *find_args,
@@ -283,26 +289,31 @@ async def _stream_filesystem_paths(root: Path) -> AsyncGenerator[str, None]:
             await proc.wait()
 
 
-def _insert_fs_batch(session, table_name: str, batch: list):
-    """Bulk insert filesystem files using unnest for speed."""
+def _datetime_text_to_epoch(value) -> float:
+    """Convert a raw DB datetime (TEXT `YYYY-MM-DD HH:MM:SS.ffffff`, UTC) to a Unix epoch.
+
+    Preserves microsecond precision (SQL `unixepoch()` truncates to whole seconds, which
+    would break sub-second mtime comparisons)."""
+    if not value:
+        return 0
+    dt = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        # TZDateTime stores all datetimes as naive UTC text.
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def _insert_fs_batch(conn, table_name: str, batch: list):
+    """Bulk insert filesystem files using executemany for speed."""
     if not batch:
         return
-    session.execute(
+    conn.execute(
         text(f"""
              INSERT INTO {table_name} (directory, filename, stem)
-             SELECT *
-             FROM unnest(
-                     CAST(:dirs AS text[]),
-                     CAST(:files AS text[]),
-                     CAST(:stems AS text[])
-                  )
+             VALUES (:directory, :filename, :stem)
              ON CONFLICT DO NOTHING
              """),
-        {
-            "dirs": [b[0] for b in batch],
-            "files": [b[1] for b in batch],
-            "stems": [b[2] for b in batch],
-        }
+        [{"directory": b[0], "filename": b[1], "stem": b[2]} for b in batch],
     )
 
 
@@ -314,7 +325,7 @@ async def compare_file_groups(
     """
     Compare FileGroups in DB to filesystem. Memory efficient for Raspberry Pi.
 
-    Uses a uniquely-named PostgreSQL work table to handle millions of files without
+    Uses a uniquely-named SQLite work table to handle millions of files without
     loading everything into Python memory.
 
     Returns which FileGroups are new, deleted, modified, or unchanged.
@@ -323,15 +334,17 @@ async def compare_file_groups(
     the subprocess scanning the filesystem.
     """
     root = root or get_media_directory()
-    # Per-call table name so concurrent scans don't collide, and so commits on the
-    # session (which can come from unrelated callers in tests, where get_db_session
-    # is mocked to share one session) don't drop the table mid-scan.
+    # Per-call table name so concurrent scans don't collide.  The work table is a TEMP table on
+    # its own dedicated connection: it never shares a transaction (or locks) with the session,
+    # it is invisible to other connections, and it is dropped automatically when the connection
+    # closes — orphaned work tables are impossible.
     table_name = f'fs_files_{uuid.uuid4().hex[:12]}'
 
     with get_db_session() as session:
+        work_conn = session.get_bind().connect()
         try:
-            session.execute(text(f"""
-                                 CREATE TABLE {table_name}
+            work_conn.execute(text(f"""
+                                 CREATE TEMP TABLE {table_name}
                                  (
                                      directory TEXT NOT NULL,
                                      filename  TEXT NOT NULL,
@@ -353,7 +366,7 @@ async def compare_file_groups(
                     batch.append((directory, filename, stem))
 
                     if len(batch) >= batch_size:
-                        _insert_fs_batch(session, table_name, batch)
+                        _insert_fs_batch(work_conn, table_name, batch)
                         file_count += len(batch)
                         batch = []
                         if progress_callback:
@@ -363,24 +376,25 @@ async def compare_file_groups(
                 await path_gen.aclose()  # Ensure subprocess is killed on cancellation
 
             if batch:
-                _insert_fs_batch(session, table_name, batch)
+                _insert_fs_batch(work_conn, table_name, batch)
                 file_count += len(batch)
 
             logger.info(f'Scanned {file_count} files from filesystem')
 
             # Index for fast grouping
-            session.execute(text(f"CREATE INDEX ON {table_name}(directory, stem)"))
-            session.execute(text(f"ANALYZE {table_name}"))
+            work_conn.execute(
+                text(f"CREATE INDEX IF NOT EXISTS {table_name}_dir_stem_idx ON {table_name}(directory, stem)"))
+            work_conn.execute(text(f"ANALYZE {table_name}"))
 
             # Get filesystem files grouped by (directory, stem)
             fs_groups: Dict[Tuple[str, str], Set[str]] = {}
-            result = session.execute(text(f"""
-                                          SELECT directory, stem, array_agg(filename) as files
+            result = work_conn.execute(text(f"""
+                                          SELECT directory, stem, json_group_array(filename) as files
                                           FROM {table_name}
                                           GROUP BY directory, stem
                                           """))
             for row in result:
-                fs_groups[(row.directory, row.stem)] = set(row.files)
+                fs_groups[(row.directory, row.stem)] = set(json.loads(row.files))
 
             logger.info(f'Found {len(fs_groups)} file groups on filesystem')
 
@@ -394,31 +408,37 @@ async def compare_file_groups(
                                           SELECT fg.id,
                                                  fg.directory,
                                                  fg.primary_path,
-                                                 fg.files IS NULL OR fg.files = '[]'::jsonb   as is_empty,
-                                                 EXTRACT(EPOCH FROM fg.modification_datetime) as mtime_epoch,
-                                                 CASE
-                                                     WHEN fg.files IS NOT NULL AND jsonb_typeof(fg.files) = 'array' AND
-                                                          fg.files != '[]'::jsonb
-                                                         THEN (SELECT array_agg(f ->> 'path')
-                                                               FROM jsonb_array_elements(fg.files) as f)
-                                                     ELSE NULL
-                                                     END                                      as files
+                                                 (fg.files IS NULL
+                                                     OR (json_type(fg.files) = 'array'
+                                                         AND json_array_length(fg.files) = 0)) as is_empty,
+                                                 fg.modification_datetime                      as modification_datetime,
+                                                 fg.files                                      as files
                                           FROM file_group fg
                                           WHERE fg.directory IS NOT NULL
                                             AND (fg.directory = :root OR fg.directory LIKE :root_pattern)
                                           """), {"root": root_str, "root_pattern": f"{root_str}/%"})
 
             for row in result:
+                # Raw TEXT datetime (UTC, microsecond precision); unixepoch() would truncate to
+                # whole seconds which breaks the sub-second MTIME_TOLERANCE_SECONDS comparison.
+                mtime_epoch = _datetime_text_to_epoch(row.modification_datetime)
                 if row.is_empty:
                     empty_count += 1
                     stem, _ = split_path_stem_and_suffix(Path(row.primary_path))
                     key = (row.directory, stem)
-                    db_groups[key].append((row.id, set(), row.mtime_epoch or 0))
-                elif row.files:
-                    first_file = row.files[0]
+                    db_groups[key].append((row.id, set(), mtime_epoch))
+                else:
+                    raw_files = row.files
+                    if isinstance(raw_files, str):
+                        raw_files = json.loads(raw_files)
+                    if not isinstance(raw_files, list) or not raw_files:
+                        # Matches the old Postgres behavior: non-array `files` was skipped.
+                        continue
+                    files = [f['path'] for f in raw_files]
+                    first_file = files[0]
                     stem, _ = split_path_stem_and_suffix(Path(row.directory) / first_file)
                     key = (row.directory, stem)
-                    db_groups[key].append((row.id, set(row.files), row.mtime_epoch or 0))
+                    db_groups[key].append((row.id, set(files), mtime_epoch))
 
             logger.info(f'Found {len(db_groups)} file groups in database')
             if empty_count:
@@ -486,23 +506,11 @@ async def compare_file_groups(
                 modified=modified,
             )
         finally:
-            # Drop the work table regardless of success/failure. Prefer the caller's
-            # session so the DROP joins the same transaction as the CREATE (cleanup
-            # follows whatever the caller does with the tx). If the tx is aborted —
-            # e.g. an external commit + later SQL error left us mid-error — Postgres
-            # rejects DDL on the session; fall back to a fresh connection so the
-            # already-committed work table doesn't orphan.
+            # Closing the dedicated connection drops its TEMP work table.
             try:
-                session.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+                work_conn.close()
             except Exception:
-                from wrolpi.db import get_db_context
-                try:
-                    engine, _ = get_db_context()
-                    with engine.connect() as conn:
-                        with conn.begin():
-                            conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
-                except Exception:
-                    logger.exception(f'Failed to drop work table {table_name}')
+                logger.exception(f'Failed to close work table connection for {table_name}')
 
 
 async def build_move_plan_bulk(
@@ -558,196 +566,191 @@ async def build_move_plan_bulk(
             progress_callback(i, total_sources * 2)  # *2 because file collection is second half
 
     with get_db_session() as session:
-        # Create temp table for source paths
-        session.execute(text("""
-                             CREATE TEMP TABLE IF NOT EXISTS move_sources
-                             (
-                                 source_path      TEXT PRIMARY KEY,
-                                 source_type      TEXT NOT NULL,
-                                 source_directory TEXT
-                             ) ON COMMIT DROP
-                             """))
-        session.execute(text("TRUNCATE move_sources"))
+        try:
+            # Create temp table for source paths.  SQLite has no ON COMMIT DROP; the table is
+            # explicitly dropped below on success/failure (and IF NOT EXISTS + DELETE guard
+            # against any leftover from a previous failed run on the same connection).
+            session.execute(text("""
+                                 CREATE TEMP TABLE IF NOT EXISTS move_sources
+                                 (
+                                     source_path      TEXT PRIMARY KEY,
+                                     source_type      TEXT NOT NULL,
+                                     source_directory TEXT
+                                 )
+                                 """))
+            session.execute(text("DELETE FROM move_sources"))
 
-        # Collect all paths to insert: file paths + expanded directory contents
-        all_file_paths: list[pathlib.Path] = []
-        files_collected = 0
-        # Use total_sources as the denominator for the second half of progress
-        total_items = len(file_sources) + len(dir_sources)
+            # Collect all paths to insert: file paths + expanded directory contents
+            all_file_paths: list[pathlib.Path] = []
+            files_collected = 0
+            # Use total_sources as the denominator for the second half of progress
+            total_items = len(file_sources) + len(dir_sources)
 
-        # For files, collect the file and its shared-stem siblings
-        for i, source in enumerate(file_sources, 1):
-            files = glob_shared_stem(source)
-            all_file_paths.extend(files)
-            files_collected += 1
-            # Report progress (second half: 50-100%)
-            if progress_callback and files_collected % 50 == 0:
-                progress = total_sources + (files_collected * total_sources // max(total_items, 1))
-                progress_callback(progress, total_sources * 2)
+            # For files, collect the file and its shared-stem siblings
+            for i, source in enumerate(file_sources, 1):
+                files = glob_shared_stem(source)
+                all_file_paths.extend(files)
+                files_collected += 1
+                # Report progress (second half: 50-100%)
+                if progress_callback and files_collected % 50 == 0:
+                    progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+                    progress_callback(progress, total_sources * 2)
 
-        # For directories, walk and collect all files
-        dir_file_mapping: Dict[pathlib.Path, pathlib.Path] = {}  # file -> source_dir
-        for i, source_dir in enumerate(dir_sources, 1):
-            for f in walk(source_dir):
-                if f.is_file():
-                    all_file_paths.append(f)
-                    dir_file_mapping[f] = source_dir
-            files_collected += 1
-            # Report progress during directory walking (every 10 directories)
-            if progress_callback and files_collected % 10 == 0:
-                progress = total_sources + (files_collected * total_sources // max(total_items, 1))
-                progress_callback(progress, total_sources * 2)
+            # For directories, walk and collect all files
+            dir_file_mapping: Dict[pathlib.Path, pathlib.Path] = {}  # file -> source_dir
+            for i, source_dir in enumerate(dir_sources, 1):
+                for f in walk(source_dir):
+                    if f.is_file():
+                        all_file_paths.append(f)
+                        dir_file_mapping[f] = source_dir
+                files_collected += 1
+                # Report progress during directory walking (every 10 directories)
+                if progress_callback and files_collected % 10 == 0:
+                    progress = total_sources + (files_collected * total_sources // max(total_items, 1))
+                    progress_callback(progress, total_sources * 2)
 
-        # Final progress update before deduplication
-        if progress_callback:
-            progress_callback(total_sources * 2, total_sources * 2)
+            # Final progress update before deduplication
+            if progress_callback:
+                progress_callback(total_sources * 2, total_sources * 2)
 
-        # Deduplicate
-        all_file_paths = list(set(all_file_paths))
+            # Deduplicate
+            all_file_paths = list(set(all_file_paths))
 
-        # Bulk insert file paths into temp table
-        if all_file_paths:
-            paths_data = [(str(p), 'file', str(p.parent)) for p in all_file_paths]
-            session.execute(
-                text("""
-                     INSERT INTO move_sources (source_path, source_type, source_directory)
-                     SELECT *
-                     FROM unnest(
-                             CAST(:paths AS text[]),
-                             CAST(:types AS text[]),
-                             CAST(:dirs AS text[])
-                          )
-                     ON CONFLICT DO NOTHING
-                     """),
-                {
-                    "paths": [p[0] for p in paths_data],
-                    "types": [p[1] for p in paths_data],
-                    "dirs": [p[2] for p in paths_data],
-                }
-            )
+            # Bulk insert file paths into temp table
+            if all_file_paths:
+                session.execute(
+                    text("""
+                         INSERT INTO move_sources (source_path, source_type, source_directory)
+                         VALUES (:path, :type, :dir)
+                         ON CONFLICT DO NOTHING
+                         """),
+                    [{"path": str(p), "type": 'file', "dir": str(p.parent)} for p in all_file_paths],
+                )
 
-        # Also insert deleted sources (for pre-moved files lookup)
-        if deleted_sources:
-            deleted_data = [(str(p), 'deleted', str(p.parent)) for p in deleted_sources]
-            session.execute(
-                text("""
-                     INSERT INTO move_sources (source_path, source_type, source_directory)
-                     SELECT *
-                     FROM unnest(
-                             CAST(:paths AS text[]),
-                             CAST(:types AS text[]),
-                             CAST(:dirs AS text[])
-                          )
-                     ON CONFLICT DO NOTHING
-                     """),
-                {
-                    "paths": [p[0] for p in deleted_data],
-                    "types": [p[1] for p in deleted_data],
-                    "dirs": [p[2] for p in deleted_data],
-                }
-            )
+            # Also insert deleted sources (for pre-moved files lookup)
+            if deleted_sources:
+                session.execute(
+                    text("""
+                         INSERT INTO move_sources (source_path, source_type, source_directory)
+                         VALUES (:path, :type, :dir)
+                         ON CONFLICT DO NOTHING
+                         """),
+                    [{"path": str(p), "type": 'deleted', "dir": str(p.parent)} for p in deleted_sources],
+                )
 
-        # Single bulk query to get all FileGroups matching our sources
-        result = session.execute(text("""
-                                      SELECT fg.id, fg.primary_path, fg.directory, ms.source_path, ms.source_type
-                                      FROM file_group fg
-                                               JOIN move_sources ms ON fg.primary_path = ms.source_path
-                                      """))
+            # Single bulk query to get all FileGroups matching our sources
+            result = session.execute(text("""
+                                          SELECT fg.id, fg.primary_path, fg.directory, ms.source_path, ms.source_type
+                                          FROM file_group fg
+                                                   JOIN move_sources ms ON fg.primary_path = ms.source_path
+                                          """))
 
-        # Build lookup of found FileGroups
-        fg_by_path: Dict[str, Tuple[int, str, str]] = {}  # path -> (id, primary_path, directory)
-        for row in result:
-            fg_by_path[row.source_path] = (row.id, row.primary_path, row.directory)
+            # Build lookup of found FileGroups
+            fg_by_path: Dict[str, Tuple[int, str, str]] = {}  # path -> (id, primary_path, directory)
+            for row in result:
+                fg_by_path[row.source_path] = (row.id, row.primary_path, row.directory)
 
-        logger.info(f'build_move_plan_bulk: found {len(fg_by_path)} FileGroups for {len(all_file_paths)} files')
+            logger.info(f'build_move_plan_bulk: found {len(fg_by_path)} FileGroups for {len(all_file_paths)} files')
 
-        # Build plan for file sources (direct files, not from directories)
-        file_source_set = set()
-        for source in file_sources:
-            files = glob_shared_stem(source)
-            file_source_set.update(str(f) for f in files)
+            # Build plan for file sources (direct files, not from directories)
+            file_source_set = set()
+            for source in file_sources:
+                files = glob_shared_stem(source)
+                file_source_set.update(str(f) for f in files)
 
-        # Process files from direct file sources
-        for path_str, (fg_id, primary_path, directory) in fg_by_path.items():
-            path = pathlib.Path(path_str)
-            primary_path = pathlib.Path(primary_path)
+            # Process files from direct file sources
+            for path_str, (fg_id, primary_path, directory) in fg_by_path.items():
+                path = pathlib.Path(path_str)
+                primary_path = pathlib.Path(primary_path)
 
-            # Is this from a file source or a directory source?
-            if path_str in file_source_set:
-                # Direct file source -> destination / filename
-                new_path = destination / primary_path.name
-            elif path in dir_file_mapping:
-                # From directory source -> destination / source_dir.name / relative_path
-                source_dir = dir_file_mapping[path]
-                new_path = destination / source_dir.name / primary_path.relative_to(source_dir)
-            else:
-                # Deleted source (pre-moved) -> destination / filename
-                new_path = destination / primary_path.name
-
-            # Check for conflicts (destination exists)
-            if new_path.exists():
-                if not primary_path.exists():
-                    # Pre-moved - OK to proceed
-                    plan[primary_path] = new_path
+                # Is this from a file source or a directory source?
+                if path_str in file_source_set:
+                    # Direct file source -> destination / filename
+                    new_path = destination / primary_path.name
+                elif path in dir_file_mapping:
+                    # From directory source -> destination / source_dir.name / relative_path
+                    source_dir = dir_file_mapping[path]
+                    new_path = destination / source_dir.name / primary_path.relative_to(source_dir)
                 else:
-                    raise FileExistsError(f'Cannot move: {new_path} already exists')
-            else:
-                plan[primary_path] = new_path
+                    # Deleted source (pre-moved) -> destination / filename
+                    new_path = destination / primary_path.name
 
-        # Handle files not in DB - create FileGroups
-        found_paths = set(fg_by_path.keys())
-        missing_db_files = [p for p in all_file_paths if str(p) not in found_paths and p.exists()]
-
-        if missing_db_files:
-            logger.info(f'build_move_plan_bulk: creating FileGroups for {len(missing_db_files)} files not in DB')
-            for paths in group_files_by_stem(missing_db_files):
-                try:
-                    get_primary_file(paths)
-                    fg = FileGroup.from_paths(session, *paths)
-                    session.flush()
-
-                    # Determine destination path
-                    if any(str(p) in file_source_set for p in paths):
-                        new_path = destination / fg.primary_path.name
+                # Check for conflicts (destination exists)
+                if new_path.exists():
+                    if not primary_path.exists():
+                        # Pre-moved - OK to proceed
+                        plan[primary_path] = new_path
                     else:
-                        # Find which directory source this came from
-                        source_dir = None
-                        for p in paths:
-                            if p in dir_file_mapping:
-                                source_dir = dir_file_mapping[p]
-                                break
-                        if source_dir:
-                            new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
-                        else:
-                            new_path = destination / fg.primary_path.name
-
-                    if new_path.exists() and fg.primary_path.exists():
                         raise FileExistsError(f'Cannot move: {new_path} already exists')
-                    plan[fg.primary_path] = new_path
+                else:
+                    plan[primary_path] = new_path
 
-                except NoPrimaryFile:
-                    for file in paths:
-                        fg = FileGroup.from_paths(session, file)
+            # Handle files not in DB - create FileGroups
+            found_paths = set(fg_by_path.keys())
+            missing_db_files = [p for p in all_file_paths if str(p) not in found_paths and p.exists()]
+
+            if missing_db_files:
+                logger.info(f'build_move_plan_bulk: creating FileGroups for {len(missing_db_files)} files not in DB')
+                for paths in group_files_by_stem(missing_db_files):
+                    try:
+                        get_primary_file(paths)
+                        fg = FileGroup.from_paths(session, *paths)
                         session.flush()
+
+                        # Determine destination path
                         if any(str(p) in file_source_set for p in paths):
                             new_path = destination / fg.primary_path.name
-                        elif file in dir_file_mapping:
-                            source_dir = dir_file_mapping[file]
-                            new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
                         else:
-                            new_path = destination / fg.primary_path.name
+                            # Find which directory source this came from
+                            source_dir = None
+                            for p in paths:
+                                if p in dir_file_mapping:
+                                    source_dir = dir_file_mapping[p]
+                                    break
+                            if source_dir:
+                                new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
+                            else:
+                                new_path = destination / fg.primary_path.name
+
                         if new_path.exists() and fg.primary_path.exists():
                             raise FileExistsError(f'Cannot move: {new_path} already exists')
                         plan[fg.primary_path] = new_path
 
-        # Add directories to plan for cleanup
-        for source_dir in dir_sources:
-            for directory in (i for i in walk(source_dir) if i.is_dir()):
-                new_directory = destination / source_dir.name / directory.relative_to(source_dir)
-                plan[directory] = new_directory
+                    except NoPrimaryFile:
+                        for file in paths:
+                            fg = FileGroup.from_paths(session, file)
+                            session.flush()
+                            if any(str(p) in file_source_set for p in paths):
+                                new_path = destination / fg.primary_path.name
+                            elif file in dir_file_mapping:
+                                source_dir = dir_file_mapping[file]
+                                new_path = destination / source_dir.name / fg.primary_path.relative_to(source_dir)
+                            else:
+                                new_path = destination / fg.primary_path.name
+                            if new_path.exists() and fg.primary_path.exists():
+                                raise FileExistsError(f'Cannot move: {new_path} already exists')
+                            plan[fg.primary_path] = new_path
 
-        # Commit to drop the temporary table
-        session.commit()
+            # Add directories to plan for cleanup
+            for source_dir in dir_sources:
+                for directory in (i for i in walk(source_dir) if i.is_dir()):
+                    new_directory = destination / source_dir.name / directory.relative_to(source_dir)
+                    plan[directory] = new_directory
+
+        except BaseException:
+            # SQLite has no ON COMMIT DROP; attempt to drop the temp table, but do NOT
+            # commit — partial plan work must not be persisted on failure.  (Outside of
+            # tests, get_db_session rolls back, which also undoes the CREATE TEMP TABLE;
+            # the IF NOT EXISTS + DELETE guard above handles any leftover.)
+            try:
+                session.execute(text("DROP TABLE IF EXISTS move_sources"))
+            except Exception:
+                logger.exception('Failed to drop move_sources temp table')
+            raise
+        else:
+            # Drop the temp table, then commit the plan work (SQLite has no ON COMMIT DROP).
+            session.execute(text("DROP TABLE IF EXISTS move_sources"))
+            session.commit()
 
     # Sort plan by depth (deepest first) for safe move ordering
     plan = OrderedDict(
@@ -1248,7 +1251,7 @@ class FileWorker:
             from wrolpi.db import get_db_curs
             with get_db_curs(commit=True) as curs:
                 for path in deleted_paths:
-                    curs.execute('DELETE FROM directory WHERE path = %s', (str(path.absolute()),))
+                    curs.execute('DELETE FROM directory WHERE path = ?', (str(path.absolute()),))
 
         # Send appropriate completion event based on refresh scope
         if is_global_refresh:
@@ -1322,8 +1325,8 @@ class FileWorker:
                 curs.execute(
                     '''SELECT primary_path, id
                        FROM file_group
-                       WHERE primary_path = ANY (%s)''',
-                    (all_new_paths,)
+                       WHERE primary_path IN (SELECT value FROM json_each(:paths))''',
+                    {'paths': json.dumps(all_new_paths)}
                 )
                 existing_path_to_id = {row[0]: row[1] for row in curs.fetchall()}
 
@@ -1338,15 +1341,17 @@ class FileWorker:
                         logger.warning(
                             f'Skipping primary_path update for fg_id={fg_id}: {new_path} already exists')
 
-                # Bulk UPDATE using VALUES clause for all valid updates
+                # Bulk UPDATE using UPDATE...FROM over a JSON array of [id, new_path] pairs
                 if valid_updates:
                     curs.execute(
-                        '''UPDATE file_group AS fg
+                        '''UPDATE file_group
                            SET primary_path = v.new_path
-                           FROM (SELECT unnest(%s::integer[]) AS id, unnest(%s::text[]) AS new_path) AS v
-                           WHERE fg.id = v.id
-                             AND fg.primary_path != v.new_path''',
-                        ([u[0] for u in valid_updates], [u[1] for u in valid_updates])
+                           FROM (SELECT json_extract(value, '$[0]') AS id,
+                                        json_extract(value, '$[1]') AS new_path
+                                 FROM json_each(:updates)) AS v
+                           WHERE file_group.id = v.id
+                             AND file_group.primary_path != v.new_path''',
+                        {'updates': json.dumps([[fg_id, new_path] for fg_id, new_path in valid_updates])}
                     )
 
         # Collect all file paths from the diffs (fast operation, no progress tracking needed)
@@ -1472,18 +1477,18 @@ class FileWorker:
                          SELECT 'video' AS model_type, v.id AS model_id, fg.id AS fg_id, fg.primary_path
                          FROM video v
                                   JOIN file_group fg ON v.file_group_id = fg.id
-                         WHERE fg.id = ANY (%s)
+                         WHERE fg.id IN (SELECT value FROM json_each(:fg_ids))
                          UNION ALL
                          SELECT 'archive', a.id, fg.id, fg.primary_path
                          FROM archive a
                                   JOIN file_group fg ON a.file_group_id = fg.id
-                         WHERE fg.id = ANY (%s)
+                         WHERE fg.id IN (SELECT value FROM json_each(:fg_ids))
                          UNION ALL
                          SELECT 'doc', d.id, fg.id, fg.primary_path
                          FROM doc d
                                   JOIN file_group fg ON d.file_group_id = fg.id
-                         WHERE fg.id = ANY (%s)
-                         ''', (file_group_ids, file_group_ids, file_group_ids))
+                         WHERE fg.id IN (SELECT value FROM json_each(:fg_ids))
+                         ''', {'fg_ids': json.dumps(file_group_ids)})
 
             # Group results by model type
             video_ids_to_delete = []
@@ -1503,30 +1508,39 @@ class FileWorker:
             # Batch delete each model type
             if video_ids_to_delete:
                 logger.info(f'Deleting {len(video_ids_to_delete)} Videos whose primary file was removed')
+                params = {'ids': json.dumps(video_ids_to_delete)}
                 curs.execute('''
                              UPDATE file_group
                              SET model = NULL
-                             WHERE id IN (SELECT file_group_id FROM video WHERE id = ANY (%s))
-                             ''', (video_ids_to_delete,))
-                curs.execute('DELETE FROM video WHERE id = ANY(%s)', (video_ids_to_delete,))
+                             WHERE id IN (SELECT file_group_id
+                                          FROM video
+                                          WHERE id IN (SELECT value FROM json_each(:ids)))
+                             ''', params)
+                curs.execute('DELETE FROM video WHERE id IN (SELECT value FROM json_each(:ids))', params)
 
             if archive_ids_to_delete:
                 logger.info(f'Deleting {len(archive_ids_to_delete)} Archives whose primary file was removed')
+                params = {'ids': json.dumps(archive_ids_to_delete)}
                 curs.execute('''
                              UPDATE file_group
                              SET model = NULL
-                             WHERE id IN (SELECT file_group_id FROM archive WHERE id = ANY (%s))
-                             ''', (archive_ids_to_delete,))
-                curs.execute('DELETE FROM archive WHERE id = ANY(%s)', (archive_ids_to_delete,))
+                             WHERE id IN (SELECT file_group_id
+                                          FROM archive
+                                          WHERE id IN (SELECT value FROM json_each(:ids)))
+                             ''', params)
+                curs.execute('DELETE FROM archive WHERE id IN (SELECT value FROM json_each(:ids))', params)
 
             if doc_ids_to_delete:
                 logger.info(f'Deleting {len(doc_ids_to_delete)} Docs whose primary file was removed')
+                params = {'ids': json.dumps(doc_ids_to_delete)}
                 curs.execute('''
                              UPDATE file_group
                              SET model = NULL
-                             WHERE id IN (SELECT file_group_id FROM doc WHERE id = ANY (%s))
-                             ''', (doc_ids_to_delete,))
-                curs.execute('DELETE FROM doc WHERE id = ANY(%s)', (doc_ids_to_delete,))
+                             WHERE id IN (SELECT file_group_id
+                                          FROM doc
+                                          WHERE id IN (SELECT value FROM json_each(:ids)))
+                             ''', params)
+                curs.execute('DELETE FROM doc WHERE id IN (SELECT value FROM json_each(:ids))', params)
 
     def _validate_move_paths(
             self,
@@ -1697,7 +1711,8 @@ class FileWorker:
         # Batch cleanup DB records for directories that were already deleted
         if deleted_dirs_for_db:
             with get_db_curs(commit=True) as curs:
-                curs.execute('DELETE FROM directory WHERE path = ANY(%s)', (deleted_dirs_for_db,))
+                curs.execute('DELETE FROM directory WHERE path IN (SELECT value FROM json_each(:paths))',
+                             {'paths': json.dumps(deleted_dirs_for_db)})
 
     async def _refresh_files_directly(
             self,

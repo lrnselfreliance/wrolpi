@@ -44,7 +44,7 @@ from wrolpi.common import logger, await_background_tasks as await_background_tas
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
-from wrolpi.db import postgres_engine, get_db_args
+from wrolpi.db import create_wrolpi_engine
 from wrolpi.downloader import DownloadContext, DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context, download_cache_config_context
 from wrolpi.errors import UnrecoverableDownloadError
@@ -56,34 +56,32 @@ from wrolpi.vars import PROJECT_DIR
 logger = logger.getChild(__name__)
 
 
-def get_test_db_engine():
-    suffix = str(uuid1()).replace('-', '')
-    db_name = f'wrolpi_testing_{suffix}'
-    conn = postgres_engine.connect()
-    conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
-    conn.execute(f'CREATE DATABASE {db_name}')
-    conn.execute('commit')
-    conn.close()
-
-    test_args = get_db_args(db_name)
-    test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
-    return test_engine
-
-
 def test_db() -> Tuple[Engine, Session]:
-    """Create a unique SQLAlchemy engine/session for a test."""
-    test_engine = get_test_db_engine()
-    if test_engine.engine.url.database == 'wrolpi':
-        raise ValueError('Refusing the test on wrolpi database!')
+    """Create a SQLAlchemy engine/session on a SQLite DB inside the (temporary) media directory.
 
+    The DB file is at the production location (`<media>/config/wrolpi.db`), so each test's
+    TemporaryDirectory provides isolation (also under pytest-xdist) and removes the DB (and its
+    WAL sidecars) on teardown."""
+    from wrolpi.common import get_media_directory, is_tempfile
+    from wrolpi.schema_ddl import install_raw_ddl
+
+    db_file = get_media_directory() / 'config' / 'wrolpi.db'
+    if not is_tempfile(db_file):
+        raise ValueError(f'Refusing to test on a non-temporary database! {db_file}')
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+
+    test_engine = create_wrolpi_engine(db_file)
     # Create all tables.  No need to check if they exist because this is a test DB.
     Base.metadata.create_all(test_engine, checkfirst=False)
+    # Triggers and FTS5 tables, exactly as the alembic baseline installs them.
+    with test_engine.connect() as conn:
+        install_raw_ddl(conn)
     session = sessionmaker(bind=test_engine)()
     return test_engine, session
 
 
 @pytest.fixture()
-def test_session() -> Generator[Session, Any, None]:
+def test_session(test_directory) -> Generator[Session, Any, None]:
     """Pytest Fixture to get a test database session."""
     test_engine, session = test_db()
 
@@ -98,9 +96,6 @@ def test_session() -> Generator[Session, Any, None]:
         session.rollback()
         session.close()
         test_engine.dispose()
-        conn = postgres_engine.connect()
-        conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
-        conn.close()
 
 
 @pytest.fixture(autouse=True)
@@ -417,7 +412,7 @@ def production_like_sessions(test_session) -> Generator[sessionmaker, Any, None]
     A dedicated NullPool engine is used and disposed on exit so its connections are released before the test DB
     is dropped during fixture teardown.
     """
-    engine = create_engine(test_session.get_bind().url, poolclass=NullPool)
+    engine = create_wrolpi_engine(test_session.get_bind().url)
     maker = sessionmaker(bind=engine)
     sessions = []
 

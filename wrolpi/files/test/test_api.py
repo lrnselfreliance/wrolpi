@@ -287,6 +287,51 @@ async def test_files_search_recent(test_session, test_directory, async_client, v
 
 
 @pytest.mark.asyncio
+async def test_files_search_null_params(test_session, test_directory, async_client, video_file_factory,
+                                        refresh_files):
+    """Explicit JSON nulls (as the dashboard sends) must not break the search.
+
+    Regression test: the frontend sends `{"search_str": null, "offset": null, ...}`; explicit
+    nulls bypass the schema defaults and reached `OFFSET NULL`, which Postgres treated as 0 but
+    SQLite rejects with 'datatype mismatch'."""
+    video_file_factory(test_directory / 'foo.mp4')
+    await refresh_files()
+    file_group = test_session.query(FileGroup).one()
+    file_group.set_viewed(datetime(2000, 1, 1, 1, 1, 1, tzinfo=timezone.utc))
+    test_session.commit()
+
+    # The exact dashboard "recent files" payload.
+    body = {'search_str': None, 'offset': None, 'limit': 12, 'any_tag': False, 'tag_names': [], 'order': 'viewed'}
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert [i['name'] for i in response.json['file_groups']] == ['foo.mp4']
+
+    # Null limit as well.
+    body = {'search_str': None, 'offset': None, 'limit': None}
+    request, response = await async_client.post('/api/files/search', json=body)
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert response.json['file_groups']
+
+
+@pytest.mark.asyncio
+async def test_files_search_stemming(test_session, async_client, make_files_structure, refresh_files,
+                                     assert_files_search):
+    """Searching any grammatical variant of a word finds files named with other variants.
+
+    End-to-end stemming contract: "watch" must find "watching", "fishes" must find "fishing"."""
+    make_files_structure(['watching birds.mp4', 'fishing guide.txt', 'two cats.txt', 'unrelated.txt'])
+    await refresh_files()
+
+    await assert_files_search('watch', [dict(name='watching birds.mp4')])
+    await assert_files_search('watched', [dict(name='watching birds.mp4')])
+    await assert_files_search('fish', [dict(name='fishing guide.txt')])
+    await assert_files_search('fishes', [dict(name='fishing guide.txt')])
+    await assert_files_search('cat', [dict(name='two cats.txt')])
+    # Stemmers do not lemmatize: derived words are their own terms (same as the old engine).
+    await assert_files_search('runner', [])
+
+
+@pytest.mark.asyncio
 async def test_files_search(test_session, async_client, make_files_structure, assert_files_search):
     # You can search an empty directory.
     await assert_files_search('nothing', [])

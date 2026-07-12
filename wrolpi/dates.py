@@ -206,8 +206,11 @@ def months_selector_to_where(wheres: list, params: dict, months: List[int]):
     if not set(months).issubset(set(range(1, 13))):
         raise ValueError('Months must be between 1 and 12')
 
-    wheres.append('EXTRACT (MONTH FROM published_datetime) IN %(months_list)s')
-    params['months_list'] = tuple(months)
+    # sqlite3 cannot bind a tuple; use a named placeholder for each month.
+    placeholders = ', '.join(f':month_{idx}' for idx in range(len(months)))
+    for idx, month in enumerate(months):
+        params[f'month_{idx}'] = month
+    wheres.append(f"CAST(strftime('%m', published_datetime) AS INTEGER) IN ({placeholders})")
     return wheres, params
 
 
@@ -220,14 +223,14 @@ def date_range_to_where(wheres: list, params: dict, from_year: int, to_year: int
     @param params: Dict which contains the parameters passed to SQLAlchemy query.
     """
     if from_year and to_year:
-        wheres.append('EXTRACT (YEAR FROM published_datetime) BETWEEN %(from_year)s AND %(to_year)s')
+        wheres.append("CAST(strftime('%Y', published_datetime) AS INTEGER) BETWEEN :from_year AND :to_year")
         params['from_year'] = from_year
         params['to_year'] = to_year
     elif from_year:
-        wheres.append('EXTRACT (YEAR FROM published_datetime) >= %(from_year)s')
+        wheres.append("CAST(strftime('%Y', published_datetime) AS INTEGER) >= :from_year")
         params['from_year'] = from_year
     elif to_year:
-        wheres.append('EXTRACT (YEAR FROM published_datetime) <= %(to_year)s')
+        wheres.append("CAST(strftime('%Y', published_datetime) AS INTEGER) <= :to_year")
         params['to_year'] = to_year
 
     return wheres, params

@@ -14,7 +14,7 @@ from wrolpi import dates, flags
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, \
     get_relative_to_media_directory, is_valid_hex_color, walk, INVALID_FILE_CHARS, get_wrolpi_config
 from wrolpi.dates import TZDateTime
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session, named_placeholders
 from wrolpi.downloader import save_downloads_config
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag, FileWorkerConflict, NoPrimaryFile
 from wrolpi.events import Events
@@ -449,6 +449,7 @@ class TagsConfig(ConfigFile):
                                 session.flush([file_group, ])
                             except NoPrimaryFile:
                                 logger.error(f'Failed to tag {absolute_path}')
+                                self.import_skipped += 1
                                 continue
 
                         if tag and file_group:
@@ -464,8 +465,10 @@ class TagsConfig(ConfigFile):
                             need_commit = True
                         elif not file_group:
                             logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
+                            self.import_skipped += 1
                         elif not tag:
                             logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
+                            self.import_skipped += 1
 
                 # Tag all Zim entries.
                 if config.tag_zims:
@@ -489,6 +492,7 @@ class TagsConfig(ConfigFile):
                             possible_zims = {i: j for i, j in zims_by_path.items() if i.name.startswith(name)}
                             if not possible_zims:
                                 logger.warning(f'Cannot find Zim for {repr(str(zim_path))}')
+                                self.import_skipped += 1
                                 continue
                             zim = zims_by_path[sorted(possible_zims.keys())[-1]]
                             new_zim_path = get_relative_to_media_directory(media_directory / zim.path)
@@ -508,6 +512,7 @@ class TagsConfig(ConfigFile):
                             need_commit = True
                         elif not tag:
                             logger.warning(f'Cannot find Tag for {repr(str(zim_path))}')
+                            self.import_skipped += 1
 
                 # Delete missing Tags last in case they are used above.
                 if config.tags:
@@ -838,7 +843,7 @@ def get_recent_tags(limit: int = 5) -> List[str]:
                                  FROM tag_zim) AS combined
                            GROUP BY tag_id
                            ORDER BY latest DESC
-                           LIMIT %(limit)s) AS recent
+                           LIMIT :limit) AS recent
                               JOIN tag t ON t.id = recent.tag_id
                      ORDER BY recent.latest DESC
                      ''', dict(limit=limit))
@@ -849,22 +854,25 @@ def get_overlapping_tags(tag_names: Union[str, List[str]], limit: int = 5) -> Li
     if isinstance(tag_names, str):
         tag_names = [tag_names]
 
-    limit_clause = 'LIMIT %(limit)s' if limit is not None else ''
+    limit_clause = 'LIMIT :limit' if limit is not None else ''
+
+    params = dict(tag_count=len(tag_names), limit=limit)
+    tag_names_placeholders = named_placeholders('tag_name', tag_names, params)
 
     with get_db_curs() as curs:
         curs.execute(f'''
-                     WITH target_tags AS (SELECT id FROM tag WHERE name = ANY(%(tag_names)s::TEXT[])),
+                     WITH target_tags AS (SELECT id FROM tag WHERE name IN ({tag_names_placeholders})),
                      file_matching AS (
                          SELECT tf.file_group_id FROM tag_file tf
                          WHERE tf.tag_id IN (SELECT id FROM target_tags)
                          GROUP BY tf.file_group_id
-                         HAVING COUNT(DISTINCT tf.tag_id) = %(tag_count)s
+                         HAVING COUNT(DISTINCT tf.tag_id) = :tag_count
                      ),
                      zim_matching AS (
                          SELECT tz.zim_id, tz.zim_entry FROM tag_zim tz
                          WHERE tz.tag_id IN (SELECT id FROM target_tags)
                          GROUP BY tz.zim_id, tz.zim_entry
-                         HAVING COUNT(DISTINCT tz.tag_id) = %(tag_count)s
+                         HAVING COUNT(DISTINCT tz.tag_id) = :tag_count
                      ),
                      file_overlap AS (
                          SELECT tf.tag_id, COUNT(*) AS cnt FROM tag_file tf
@@ -882,7 +890,7 @@ def get_overlapping_tags(tag_names: Union[str, List[str]], limit: int = 5) -> Li
                          ) AS all_overlap GROUP BY tag_id
                      )
                      SELECT t.name FROM combined c JOIN tag t ON t.id = c.tag_id ORDER BY c.total DESC {limit_clause}
-                     ''', dict(tag_names=tag_names, tag_count=len(tag_names), limit=limit))
+                     ''', params)
         return [row['name'] for row in curs.fetchall()]
 
 
@@ -915,16 +923,17 @@ def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tu
     if not tag_names:
         return '', params
 
-    # This select gets an array of FileGroup.id's which are tagged with the provided tag names.
-    sub_select = '''
+    # This select gets the FileGroup.id's which are tagged with the provided tag names.
+    tag_names_placeholders = named_placeholders('tag_name', tag_names, params)
+    sub_select = f'''
                  SELECT tf.file_group_id
                  FROM tag_file tf
-                          LEFT JOIN tag t on t.id = tf.tag_id
-                 GROUP BY file_group_id
+                          JOIN tag t ON t.id = tf.tag_id AND t.name IN ({tag_names_placeholders})
+                 GROUP BY tf.file_group_id
                  -- Match only FileGroups that have at least all the Tag names.
-                 HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+                 HAVING COUNT(DISTINCT t.name) = :tag_names_count \
                  '''
-    params['tag_names'] = tag_names
+    params['tag_names_count'] = len(tag_names)
     return sub_select, params
 
 
@@ -942,7 +951,7 @@ def tag_append_sub_select_where(wheres: List[str], params: dict, tag_names: List
         tags_sub_select = 'SELECT file_group_id FROM tag_file'
     else:
         tags_sub_select, params = tag_names_to_file_group_sub_select(tag_names, params)
-    wheres.append(f'fg.id = ANY({tags_sub_select})')
+    wheres.append(f'fg.id IN ({tags_sub_select})')
     return wheres, params
 
 
@@ -950,27 +959,28 @@ def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tup
     if not tag_names:
         return '', dict()
 
-    params = dict(tag_names=tag_names)
+    params = dict(tag_names_count=len(tag_names))
+    tag_names_placeholders = named_placeholders('tag_name', tag_names, params)
     if zim_id:
-        stmt = '''
+        stmt = f'''
                SELECT tz.zim_id,
                       tz.zim_entry
                FROM tag_zim tz
-                        LEFT JOIN tag t on tz.tag_id = t.id
-               WHERE tz.zim_id = %(zim_id)s
+                        JOIN tag t ON t.id = tz.tag_id AND t.name IN ({tag_names_placeholders})
+               WHERE tz.zim_id = :zim_id
                GROUP BY tz.zim_id, tz.zim_entry
                -- Match only TagZimEntries that have all the Tag names.
-               HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+               HAVING COUNT(DISTINCT t.name) = :tag_names_count \
                '''
         params['zim_id'] = zim_id
     else:
-        stmt = '''
+        stmt = f'''
                SELECT tz.zim_id,
                       tz.zim_entry
                FROM tag_zim tz
-                        LEFT JOIN tag t on tz.tag_id = t.id
+                        JOIN tag t ON t.id = tz.tag_id AND t.name IN ({tag_names_placeholders})
                GROUP BY tz.zim_id, tz.zim_entry
                -- Match only TagZimEntries that have all the Tag names.
-               HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[] \
+               HAVING COUNT(DISTINCT t.name) = :tag_names_count \
                '''
     return stmt, params

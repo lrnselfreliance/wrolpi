@@ -8,7 +8,9 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-if psql -l 2>/dev/null | grep wrolpi >/dev/null; then
+DB_FILE=/media/wrolpi/config/wrolpi.db
+
+if [ -f "${DB_FILE}" ]; then
   yes_or_no "Are you sure you want to reset the API database? All data will be lost." || exit 0
 fi
 
@@ -16,19 +18,10 @@ set -x
 
 systemctl stop wrolpi-api
 
-# Heal Postgres cluster ownership before touching the database.  A stray recursive chown or an
-# interrupted install can leave cluster files unreadable by the server; new backends then die
-# with: FATAL: could not open file "global/pg_filenode.map": Permission denied
-if id postgres >/dev/null 2>&1; then
-  [ -d /var/lib/postgresql ] && chown -R postgres:postgres /var/lib/postgresql
-  [ -d /etc/postgresql ] && chown -R postgres:postgres /etc/postgresql
-  systemctl restart postgresql
-fi
+# Delete the SQLite database (and its WAL sidecars), if it exists.
+rm -f "${DB_FILE}" "${DB_FILE}-wal" "${DB_FILE}-shm"
 
-# Delete the WROLPi API DB, if it exists.
-sudo -iu postgres dropdb wrolpi
-sudo -iu postgres dropuser wrolpi
-
-/bin/bash /opt/wrolpi/scripts/initialize_api_db.sh
+# Recreate the database, run all migrations.
+sudo -iu wrolpi /bin/bash -c 'cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 main.py db upgrade'
 
 systemctl start wrolpi-api

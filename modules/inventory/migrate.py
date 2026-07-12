@@ -70,8 +70,8 @@ def _legacy_inventories_from_db() -> list:
     inventories = []
     try:
         with get_db_curs() as curs:
-            curs.execute("SELECT to_regclass('public.inventory')")
-            if curs.fetchone()[0] is None:
+            curs.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory'")
+            if curs.fetchone() is None:
                 return []
             curs.execute('SELECT id, name, created_at, viewed_at FROM inventory WHERE deleted_at IS NULL')
             rows = curs.fetchall()
@@ -79,7 +79,7 @@ def _legacy_inventories_from_db() -> list:
                 inv = dict(id=row[0], name=row[1], created_at=row[2], viewed_at=row[3], items=[])
                 curs.execute(
                     'SELECT brand, name, item_size, unit, count, category, subcategory, expiration_date '
-                    'FROM item WHERE inventory_id = %s AND deleted_at IS NULL', (row[0],))
+                    'FROM item WHERE inventory_id = ? AND deleted_at IS NULL', (row[0],))
                 for item in curs.fetchall():
                     inv['items'].append(dict(
                         brand=item[0], name=item[1], item_size=item[2], unit=item[3], count=item[4],

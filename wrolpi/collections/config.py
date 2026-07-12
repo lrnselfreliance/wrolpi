@@ -85,6 +85,7 @@ class PlaylistsConfig(ConfigFile):
                     name = data.get('name')
                     if not name:
                         logger.error(f'Playlist config entry has no name, skipping: {data}')
+                        self.import_skipped += 1
                         continue
 
                     collection = session.query(Collection).filter_by(
@@ -119,6 +120,7 @@ class PlaylistsConfig(ConfigFile):
                             else:
                                 logger.warning(f'Playlist {name!r}: file not indexed, skipping '
                                                f'{item_data["file"]!r}')
+                                self.import_skipped += 1
                         elif 'zim' in item_data:
                             zpath = get_media_directory() / item_data['zim']
                             zim = session.query(Zim).filter_by(path=str(zpath)).one_or_none()
@@ -128,6 +130,7 @@ class PlaylistsConfig(ConfigFile):
                             else:
                                 logger.warning(f'Playlist {name!r}: zim not found, skipping '
                                                f'{item_data["zim"]!r}')
+                                self.import_skipped += 1
                         elif 'url' in item_data:
                             item = CollectionItem(collection_id=collection.id, item_kind='url',
                                                   url=item_data['url'])

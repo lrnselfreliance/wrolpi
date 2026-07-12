@@ -1053,8 +1053,9 @@ def test_collection_unique_name_kind_constraint(test_directory, test_session, ar
     with pytest.raises(IntegrityError) as exc_info:
         test_session.commit()
 
-    # Verify it's the unique constraint violation
-    assert 'uq_collection_name_kind' in str(exc_info.value)
+    # Verify it's the unique constraint violation.  SQLite reports the columns, not the
+    # constraint name (Postgres reported 'uq_collection_name_kind').
+    assert 'collection.name, collection.kind' in str(exc_info.value)
     test_session.rollback()
 
 

@@ -11,7 +11,6 @@ git submodule update --init
 docker-compose build --parallel
 docker volume create --name=openstreetmap-data
 docker volume create --name=openstreetmap-rendered-tiles
-docker-compose up -d db
 docker-compose run --rm api db upgrade
 docker-compose up
 ```
@@ -26,7 +25,6 @@ Browse to https://localhost:8443
 | **api**        | 8081                     | Sanic API server            |
 | **app**        | (via web)                | React frontend              |
 | **controller** | 8080                     | System management (FastAPI) |
-| **db**         | 5432                     | PostgreSQL 12               |
 | **archive**    | 8083                     | SingleFile/Readability      |
 | **zim**        | (via web:8085)           | Kiwix                       |
 | **help**       | (via web:8086)           | MkDocs documentation        |

@@ -32,22 +32,24 @@ def get_incomplete_videos(limit: int, offset: int, channel_id: int) -> List[dict
         stmt = '''
             WITH all_videos AS (
                 -- Extract 'codec_type' from all 'stream' objects of each video.
-                -- {'streams': [{'codec_type': 'video'}, {'codec_type': 'audio'}]} -> {video,audio}
-                select v.id, array_agg(s ->> 'codec_type')::TEXT[] AS codec_types
-                from video v
-                         cross join lateral jsonb_array_elements(ffprobe_json -> 'streams') s
-                         where channel_id = %(channel_id)s
+                -- {'streams': [{'codec_type': 'video'}, {'codec_type': 'audio'}]} -> ["video","audio"]
+                select v.id, json_group_array(json_extract(s.value, '$.codec_type')) AS codec_types
+                from video v, json_each(v.ffprobe_json, '$.streams') s
+                where channel_id = :channel_id
                 group by v.id)
             SELECT all_videos.id AS video_id, fg.primary_path, all_videos.codec_types
             FROM all_videos
                      LEFT JOIN video v ON v.id = all_videos.id
-                     LEFT JOIN public.file_group fg on fg.id = v.file_group_id
+                     LEFT JOIN file_group fg on fg.id = v.file_group_id
             -- Filter out videos that have video AND audio streams.
-            WHERE NOT all_videos.codec_types @> '{video,audio}'::TEXT[]
-              AND fg.primary_path like '/media/wrolpi/videos/%%'
+            WHERE NOT (
+                EXISTS (SELECT 1 FROM json_each(all_videos.codec_types) WHERE value = 'video')
+                AND EXISTS (SELECT 1 FROM json_each(all_videos.codec_types) WHERE value = 'audio')
+            )
+              AND fg.primary_path like '/media/wrolpi/videos/%'
             ORDER BY all_videos.id
-            LIMIT %(limit)s
-            OFFSET %(offset)s
+            LIMIT :limit
+            OFFSET :offset
         '''
         curs.execute(stmt, params)
         return [dict(i) for i in curs.fetchall()]

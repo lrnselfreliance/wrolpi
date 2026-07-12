@@ -43,8 +43,9 @@ def db_main(args):
     """
     from alembic.config import Config
     from alembic import command
-    from wrolpi.db import uri
+    from wrolpi.db import get_db_uri
 
+    uri = get_db_uri()
     config = Config(PROJECT_DIR / 'alembic.ini')
     # Overwrite the Alembic config, the is usually necessary when running in a docker container.
     config.set_main_option('sqlalchemy.url', uri)
@@ -190,6 +191,14 @@ async def main_process_startup(app: Sanic):
     except Exception as e:
         logger.error('Failed to create initial config files', exc_info=e)
 
+    try:
+        # Create/migrate the SQLite database (if the media directory is available).  If the media
+        # directory is mounted later, `perpetual_check_db_is_up_worker` retries this.
+        from wrolpi import db_bootstrap
+        db_bootstrap.ensure_db()
+    except Exception as e:
+        logger.error('Failed to create/migrate the database', exc_info=e)
+
 
 @api_app.listener('after_server_start')  # FileConfigs need to be initialized first.
 async def initialize_configs(app: Sanic):
@@ -324,6 +333,13 @@ async def perpetual_check_log_level():
 @perpetual_signal(sleep=10)
 async def perpetual_check_db_is_up_worker():
     try:
+        if not flags.db_up.is_set():
+            # The DB may not exist yet (media drive mounted after startup); try to create/migrate
+            # it.  Only one worker bootstraps at a time.
+            from wrolpi import db_bootstrap
+            with db_bootstrap.bootstrap_lock() as acquired:
+                if acquired:
+                    db_bootstrap.ensure_db()
         flags.check_db_is_up()
         flags.init_flags()
     except Exception as e:

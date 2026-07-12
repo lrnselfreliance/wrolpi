@@ -2,7 +2,7 @@ import pathlib
 from pathlib import Path
 from typing import List, Union
 
-from sqlalchemy import or_, func, desc, asc
+from sqlalchemy import or_, func, desc
 from sqlalchemy.orm import Session, joinedload
 
 from wrolpi import flags
@@ -203,6 +203,9 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
                                   order_by_video_count: bool = False) -> List[Channel]:
     name = name or ''
     name_no_spaces = ''.join(name.split(' '))
+    # SQLite sorts by byte value; emulate the old locale-aware (en_US.UTF-8) ordering: compare
+    # names case-insensitively and without spaces, ties broken with lowercase names first.
+    name_order = (func.lower(func.replace(Collection.name, ' ', '')).asc(), Collection.name.desc())
     if order_by_video_count:
         stmt = session.query(Channel, func.count(Video.id).label('video_count')) \
             .join(Collection) \
@@ -212,7 +215,7 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
         )) \
             .outerjoin(Video, Video.channel_id == Channel.id) \
             .group_by(Channel.id, Collection.id, Collection.name) \
-            .order_by(desc('video_count'), asc(Collection.name)) \
+            .order_by(desc('video_count'), *name_order) \
             .limit(limit)
         channels = [i[0] for i in stmt]
     else:
@@ -222,7 +225,7 @@ async def search_channels_by_name(session: Session, name: str, limit: int = 5,
             Collection.name.ilike(f'%{name}%'),
             Collection.name.ilike(f'%{name_no_spaces}%'),
         )) \
-            .order_by(asc(Collection.name)) \
+            .order_by(*name_order) \
             .limit(limit)
         channels = stmt.all()
     return channels

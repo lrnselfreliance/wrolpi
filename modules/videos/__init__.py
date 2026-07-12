@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Callable, List, Tuple
 
 from sqlalchemy import or_
@@ -82,19 +83,23 @@ def video_cleanup():
     with get_db_curs(commit=True) as curs:
         # Delete all Videos if the FileModel no longer contains a video or audio file.
         curs.execute('''
-                     WITH deleted AS
-                              (UPDATE file_group SET model = null
-                               WHERE model = 'video'
-                                 AND mimetype NOT LIKE 'video/%%'
-                                 AND mimetype NOT LIKE 'audio/%%'
-                               RETURNING id)
-                     DELETE
-                     FROM video
-                     WHERE file_group_id = ANY (select id from deleted)
+                     UPDATE file_group
+                     SET model = NULL
+                     WHERE model = 'video'
+                       AND mimetype NOT LIKE 'video/%'
+                       AND mimetype NOT LIKE 'audio/%'
+                     RETURNING id
                      ''')
+        deleted_ids = [i['id'] for i in curs.fetchall()]
+        if deleted_ids:
+            curs.execute('''
+                         DELETE
+                         FROM video
+                         WHERE file_group_id IN (SELECT value FROM json_each(:ids))
+                         ''', dict(ids=json.dumps(deleted_ids)))
         # Claim all Videos in a Channel's directory for that Channel.  But, only if they have not yet been claimed.
         curs.execute('''
-                     UPDATE video v
+                     UPDATE video AS v
                      SET channel_id = c.id
                      FROM channel c
                               INNER JOIN collection col ON col.id = c.collection_id
@@ -123,13 +128,13 @@ def claim_videos_for_channels(channel_ids: List[int]):
     logger.info(f'Claiming Videos for {len(channel_ids)} channel(s)')
     with get_db_curs(commit=True) as curs:
         curs.execute('''
-                     UPDATE video v
+                     UPDATE video AS v
                      SET channel_id = c.id
                      FROM channel c
                               INNER JOIN collection col ON col.id = c.collection_id
                               LEFT JOIN file_group fg ON fg.directory = col.directory
-                                                      OR fg.directory LIKE col.directory || '/%%'
+                                                      OR fg.directory LIKE col.directory || '/%'
                      WHERE v.channel_id IS NULL
                        AND fg.id = v.file_group_id
-                       AND c.id = ANY (%s)
-                     ''', (list(channel_ids),))
+                       AND c.id IN (SELECT value FROM json_each(:channel_ids))
+                     ''', dict(channel_ids=json.dumps(list(channel_ids))))

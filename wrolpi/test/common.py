@@ -6,13 +6,11 @@ from functools import partialmethod
 from itertools import zip_longest
 from typing import List
 
-import mock
 import pytest
 
 from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.common import get_media_directory
 from wrolpi.conftest import test_db, async_client  # noqa
-from wrolpi.db import postgres_engine
 from wrolpi.vars import CIRCLECI, IS_MACOS
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
@@ -20,34 +18,6 @@ TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in Circle CI')
 skip_macos = pytest.mark.skipif(IS_MACOS, reason='This test is not supported on MacOS')
 only_macos = pytest.mark.skipif(not IS_MACOS, reason='This test is only supported on MacOS')
-
-
-def wrap_test_db(func):
-    """
-    Wrap a test so that when calling wrolpi.common.get_db, it returns a testing database cloned from the api
-    template.
-    """
-
-    def wrapped(*a, **kw):
-        test_engine, session = test_db()
-
-        def fake_get_db_session():
-            """Get the testing db"""
-            return test_engine, session
-
-        try:
-            with mock.patch('wrolpi.db._get_db_session', fake_get_db_session):
-                # Run the test.
-                result = func(*a, **kw)
-                return result
-        finally:
-            session.rollback()
-            session.close()
-            test_engine.dispose()
-            conn = postgres_engine.connect()
-            conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
-
-    return wrapped
 
 
 class PytestCase:

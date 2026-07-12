@@ -348,9 +348,9 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
         async for p in original(root):
             yield p
             test_session.commit()
-            # Poison the transaction so any later DDL fails unless rolled back.
+            # A failed statement mid-transaction must not prevent the work-table cleanup.
             try:
-                test_session.execute(text('SELECT FROM does_not_exist_xyz'))
+                test_session.execute(text('SELECT * FROM does_not_exist_xyz'))
             except Exception:
                 pass
             raise RuntimeError('simulated crash mid-scan')
@@ -360,8 +360,8 @@ async def test_compare_file_groups_cleans_up_work_table_on_aborted_tx(
             await compare_file_groups(test_directory)
 
     test_session.rollback()
-    leftover = [row.tablename for row in test_session.execute(text(
-        "SELECT tablename FROM pg_tables WHERE tablename LIKE 'fs_files_%'"
+    leftover = [row[0] for row in test_session.execute(text(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'fs_files_%'"
     ))]
     assert leftover == [], f'orphaned work tables: {leftover}'
 

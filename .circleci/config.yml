@@ -8,11 +8,6 @@ jobs:
   api-tests-3-11:
     docker:
       - image: cimg/python:3.11
-      - image: cimg/postgres:15.6
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: wrolpi
-          POSTGRES_PASSWORD: "wrolpi"
     # `large` (4 vCPU, 8 GB) so pytest-xdist's `-nauto` has room to scale.
     resource_class: large
     steps:
@@ -41,11 +36,6 @@ jobs:
   api-alembic-migrations:
     docker:
       - image: cimg/python:3.11
-      - image: cimg/postgres:15.6
-        environment:
-          POSTGRES_USER: wrolpi
-          POSTGRES_DB: wrolpi
-          POSTGRES_PASSWORD: "wrolpi"
     resource_class: medium
     steps:
       - checkout
@@ -57,24 +47,18 @@ jobs:
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
-      - save_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}-5
-          paths:
-            - "venv"
+      - run:
+          name: Create Media Directory
+          command: mkdir -p /tmp/wrolpi-media/config
       - run:
           name: Run Alembic Migrations
-          command: ./venv/bin/python ./main.py db upgrade
+          command: MEDIA_DIRECTORY=/tmp/wrolpi-media ./venv/bin/python ./main.py db upgrade
       - run:
           name: Check for Missing Migrations
-          command: ./venv/bin/python ./main.py db check
+          command: MEDIA_DIRECTORY=/tmp/wrolpi-media ./venv/bin/python ./main.py db check
   api-tests-3-12:
     docker:
       - image: cimg/python:3.12
-      - image: cimg/postgres:15.6
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: wrolpi
-          POSTGRES_PASSWORD: "wrolpi"
     resource_class: large
     steps:
       - checkout

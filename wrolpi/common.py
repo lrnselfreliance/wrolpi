@@ -36,7 +36,6 @@ from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from sqlalchemy import types
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
@@ -277,7 +276,6 @@ __all__ = [
     'check_media_directory',
     'chunks',
     'chunks_by_stem',
-    'compile_tsvector',
     'create_empty_config_files',
     'cum_timer',
     'date_range',
@@ -328,7 +326,6 @@ __all__ = [
     'trim_file_name',
     'truncate_generator_bytes',
     'truncate_object_bytes',
-    'tsvector',
     'unique_by_predicate',
     'url_strip_host',
     'walk',
@@ -380,15 +377,6 @@ class ModelHelper:
             session.flush([self])
         else:
             raise RuntimeError(f'{self} is not in a session!')
-
-
-class tsvector(types.TypeDecorator):
-    impl = types.UnicodeText
-
-
-@compiles(tsvector, 'postgresql')
-def compile_tsvector(element, compiler, **kw):
-    return 'tsvector'
 
 
 URL_CHARS = string.ascii_lowercase + string.digits
@@ -542,6 +530,20 @@ class ConfigFile:
         from wrolpi.api_utils import api_app
         api_app.shared_ctx.configs_imported[self.file_name] = value
 
+    @property
+    def import_skipped(self) -> int:
+        """Count of config entries that could not be imported (e.g. their files are not yet indexed).
+
+        While non-zero, `save()` refuses to overwrite the config file so the skipped entries are not
+        lost when a dump regenerates the config from the (incomplete) database."""
+        from wrolpi.api_utils import api_app
+        return int(api_app.shared_ctx.configs_import_skipped.get(self.file_name) or 0)
+
+    @import_skipped.setter
+    def import_skipped(self, value: int):
+        from wrolpi.api_utils import api_app
+        api_app.shared_ctx.configs_import_skipped[self.file_name] = int(value)
+
     def read_config_file(self, file: pathlib.Path = None) -> dict:
         file = file or self.get_file()
         with file.open('rt') as fh:
@@ -632,6 +634,11 @@ class ConfigFile:
             if not self.successful_import:
                 Events.send_config_save_failed(f'Failed to save config: {rel_path}')
                 raise RuntimeError(f'Refusing to save config because it was never successfully imported! {rel_path}')
+            if self.import_skipped:
+                message = f'Refusing to save config because {self.import_skipped} entries were skipped' \
+                          f' during import: {rel_path}'
+                Events.send_config_save_failed(message)
+                raise RuntimeError(message)
             version = self.read_config_file(file).get('version')
             if version and version > self.version:
                 message = f'Refusing to overwrite newer config ({rel_path}): {version} > {self.version}'
@@ -697,6 +704,8 @@ class ConfigFile:
         file_str = str(get_relative_to_media_directory(file))
         # Caller will set to successful if it works.
         self.successful_import = False
+        # Subclasses count entries they cannot import; a fresh import starts clean.
+        self.import_skipped = 0
         if file.is_file():
             if not self.is_valid(file):
                 raise InvalidConfig(f'Config is invalid: {file_str}')
@@ -2624,10 +2633,15 @@ def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
 
 
 def get_global_statistics():
-    from wrolpi.db import get_db_curs
-    with get_db_curs() as curs:
-        curs.execute('select pg_database_size(current_database())')
-        db_size = curs.fetchall()[0][0]
+    from wrolpi.db import get_db_file
+    db_size = 0
+    db_file = get_db_file()
+    if db_file.is_file():
+        db_size = db_file.stat().st_size
+        # Include the WAL sidecar; its contents are part of the database.
+        wal_file = db_file.with_name(db_file.name + '-wal')
+        if wal_file.is_file():
+            db_size += wal_file.stat().st_size
 
     return dict(
         db_size=db_size,
@@ -2755,51 +2769,34 @@ def extract_html_text(html: str) -> str:
 
 
 def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, float]]:
-    """Use Postgres to extract Headlines and ranks of the `search_str` from the provided entries."""
-    from wrolpi.db import get_db_curs
+    """Extract headlines (highlighted snippets) and ranks of the `search_str` from the provided entries.
 
-    source = json.dumps([{'content': i} for i in entries])
-    with get_db_curs() as curs:
-        stmt = '''
-               WITH vectored AS (
-                   -- Convert the "source" json to a recordset.
-                   with source as (select * from json_to_recordset(%s::json) AS (content TEXT))
-                   select to_tsvector('english'::regconfig, source.content) AS vector,
-                          source.content
-                   from source)
-               SELECT ts_headline(vectored.content, websearch_to_tsquery(%s),
-                                  'MaxFragments=10, MaxWords=8, MinWords=7'),
-                      ts_rank(vectored.vector, websearch_to_tsquery(%s))
-               FROM vectored \
-               '''
-        curs.execute(stmt, [source, search_str, search_str])
-        headlines = [tuple(i) for i in curs.fetchall()]
+    Entries which do not match get the start of their text with a rank of 0."""
+    from wrolpi import fts
 
-    return headlines
+    return fts.headline_texts(entries, search_str, tokens=8)
 
 
 async def search_other_estimates(tag_names: List[str]) -> dict:
     """Estimate other things that are Tagged."""
-    from wrolpi.db import get_db_curs
+    from sqlalchemy import func
+    from wrolpi.db import get_db_session
+    from wrolpi.collections.models import Collection
+    from wrolpi.tags import Tag
+    from modules.videos.models import Channel
 
     if not tag_names:
         return dict(
             channel_count=0,
         )
 
-    with get_db_curs() as curs:
-        stmt = '''
-               SELECT COUNT(c.id)
-               FROM channel c
-                        INNER JOIN collection col ON col.id = c.collection_id
-                        LEFT OUTER JOIN public.tag t on t.id = col.tag_id
-               WHERE t.name = %(tag_name)s \
-               '''
+    with get_db_session() as session:
         # TODO handle multiple tags
-        params = dict(tag_name=tag_names[0])
-        curs.execute(stmt, params)
-
-        channel_count = curs.fetchone()[0]
+        channel_count = session.query(func.count(Channel.id)) \
+            .join(Collection, Collection.id == Channel.collection_id) \
+            .join(Tag, Tag.id == Collection.tag_id) \
+            .filter(Tag.name == tag_names[0]) \
+            .scalar()
 
     others = dict(
         channel_count=channel_count,

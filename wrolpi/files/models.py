@@ -6,12 +6,11 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional, Iterable
 
-from sqlalchemy import Column, String, Computed, BigInteger, Boolean, event, Index
+from sqlalchemy import Column, String, BigInteger, Boolean, event, Index, Integer, JSON
 from sqlalchemy import types
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import deferred, relationship, Session
 
-from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
+from wrolpi.common import Base, ModelHelper, logger, recursive_map, get_media_directory, \
     get_relative_to_media_directory, unique_by_predicate, replace_file
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import get_db_session
@@ -50,7 +49,7 @@ class FancyJSON(types.TypeDecorator):
 
     Converts datetime to ISO strings when moving into DB, and vice versa.
     """
-    impl = JSONB
+    impl = JSON
 
     def process_bind_param(self, value, dialect):
         if value:
@@ -79,12 +78,11 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_published_datetime_idx', 'published_datetime'),
         Index('file_group_published_modified_datetime_idx', 'published_modified_datetime'),
         Index('file_group_size_ix', 'size'),
-        Index('file_group_textsearch_abc_idx', 'textsearch_abc'),
-        Index('file_group_textsearch_idx', 'textsearch'),
         Index('file_group_url_idx', 'url'),
         Index('file_group_viewed_idx', 'viewed'),
     )
-    id: int = Column(BigInteger, primary_key=True)
+    # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
+    id: int = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
 
     # Directory containing all files in this group (absolute path).
     # All paths in `files` and `data` are relative to this directory.
@@ -116,24 +114,12 @@ class FileGroup(ModelHelper, Base):
 
     tag_files: Iterable[TagFile] = relationship('TagFile', cascade='all')
 
+    # Full-text search over these columns is provided by the external-content FTS5 table
+    # `file_group_fts` (see `wrolpi.fts`): a=title, b=author-ish, c=description, d=body/captions.
     a_text = deferred(Column(String))
     b_text = deferred(Column(String))
     c_text = deferred(Column(String))
     d_text = deferred(Column(String))
-    textsearch = deferred(
-        Column(tsvector, Computed('''
-            setweight(to_tsvector('english'::regconfig, COALESCE(a_text, '')), 'A'::"char") ||
-            setweight(to_tsvector('english'::regconfig, COALESCE(b_text, '')), 'B'::"char") ||
-            setweight(to_tsvector('english'::regconfig, COALESCE(c_text, '')), 'C'::"char") ||
-            setweight(to_tsvector('english'::regconfig, COALESCE(d_text, '')), 'D'::"char")
-            ''')))
-    # Excludes d_text (captions/body); much smaller than `textsearch`, used for the default fast search.
-    textsearch_abc = deferred(
-        Column(tsvector, Computed('''
-            setweight(to_tsvector('english'::regconfig, COALESCE(a_text, '')), 'A'::"char") ||
-            setweight(to_tsvector('english'::regconfig, COALESCE(b_text, '')), 'B'::"char") ||
-            setweight(to_tsvector('english'::regconfig, COALESCE(c_text, '')), 'C'::"char")
-            ''')))
 
     def __repr__(self):
         m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'

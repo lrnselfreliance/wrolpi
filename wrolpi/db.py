@@ -1,70 +1,120 @@
+"""WROLPi's database: SQLite stored inside the media directory.
+
+The database file lives at `<media directory>/config/wrolpi.db`, next to the YAML configs it
+complements, so a user's entire library (files + configs + database) travels with the drive.
+
+Engines are created lazily (the media directory must be known first) and use NullPool with a
+fresh session per use.  Every connection gets the same PRAGMAs (WAL, busy_timeout, foreign keys)
+via `create_wrolpi_engine` — use that factory for any engine touching a WROLPi database.
+"""
+import pathlib
+import sqlite3
+import threading
 import types
 from contextlib import contextmanager
 from typing import Tuple, List, Union, Type, Generator, Any
 
-import psycopg2
-import psycopg2.extensions
 import sqlalchemy
 import sqlalchemy.exc
-from psycopg2._psycopg import cursor
+from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
 from wrolpi.common import logger, Base
-from wrolpi.vars import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DOCKERIZED, PYTEST
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
 
-def get_db_args(dbname: str = None):
-    db_args = dict(
-        dbname=dbname or DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        host=DB_HOST,
-        port=DB_PORT,
+def _adapt_datetime(value):
+    """Store datetimes from raw SQL exactly like SQLAlchemy does: naive UTC with microseconds."""
+    from datetime import timezone
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.strftime('%Y-%m-%d %H:%M:%S.%f')
+
+
+# Keep raw-SQL parameter formats identical to the ORM's storage formats.
+import datetime as _datetime  # noqa: E402
+
+sqlite3.register_adapter(_datetime.datetime, _adapt_datetime)
+sqlite3.register_adapter(_datetime.date, lambda value: value.isoformat())
+sqlite3.register_adapter(pathlib.PosixPath, str)
+sqlite3.register_adapter(pathlib.Path, str)
+
+
+def get_db_file() -> pathlib.Path:
+    """The SQLite database file: `<media directory>/config/wrolpi.db`."""
+    from wrolpi.common import get_media_directory
+    return get_media_directory() / 'config' / 'wrolpi.db'
+
+
+def get_db_uri() -> str:
+    return f'sqlite:///{get_db_file()}'
+
+
+def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.Engine:
+    """Create a SQLAlchemy engine for a WROLPi SQLite database.
+
+    The single place every WROLPi engine is built (production, tests, alembic) so that all
+    connections get identical PRAGMAs and transactional behavior."""
+    uri = str(target) if str(target).startswith('sqlite') else f'sqlite:///{target}'
+    engine = sqlalchemy.create_engine(
+        uri,
+        poolclass=NullPool,
+        # NullPool + executor threads mean connections may be closed on another thread.
+        connect_args=dict(check_same_thread=False, timeout=30),
     )
-    if DOCKERIZED:
-        # Deployed in docker, use the docker database.
-        db_args['user'] = 'postgres'
-        db_args['host'] = 'db'
-    elif PYTEST:
-        # Pytest is running, but we're not in docker, use the exposed docker container port.
-        db_args['user'] = 'postgres'
 
-    return db_args
+    @event.listens_for(engine, 'connect')
+    def _sqlite_on_connect(dbapi_conn, _):
+        # Driver-level autocommit; the `begin` listener below emits BEGIN so SQLAlchemy's
+        # transactions still work.  (pysqlite's implicit BEGIN is broken for SQLAlchemy, and
+        # PRAGMA journal_mode cannot run inside a transaction.)
+        dbapi_conn.isolation_level = None
+        curs = dbapi_conn.cursor()
+        curs.execute('PRAGMA journal_mode=WAL')
+        curs.execute('PRAGMA busy_timeout=30000')
+        curs.execute('PRAGMA synchronous=NORMAL')
+        curs.execute('PRAGMA foreign_keys=ON')
+        curs.execute('PRAGMA recursive_triggers=ON')
+        curs.close()
+
+    @event.listens_for(engine, 'begin')
+    def _sqlite_do_begin(conn):
+        conn.execute('BEGIN')
+
+    return engine
 
 
-# This engine is used to modify the databases.
-connect_args = dict(application_name='wrolpi_api_super')
-postgres_args = get_db_args('postgres')
-postgres_engine = sqlalchemy.create_engine(
-    'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**postgres_args),
-    execution_options={'isolation_level': 'AUTOCOMMIT'}, connect_args=connect_args)
+_engine_lock = threading.Lock()
+_engine: sqlalchemy.engine.Engine = None
+_session_maker: sessionmaker = None
 
-# This engine is used for all normal tasks (except testing).
-db_args = get_db_args()
-connect_args = dict(application_name='wrolpi_api', connect_timeout=1)
-uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
-engine = sqlalchemy.create_engine(uri, poolclass=NullPool, connect_args=connect_args)
-session_maker = sessionmaker(bind=engine)
 
-LOGGED_ARGS = False
+def get_engine() -> sqlalchemy.engine.Engine:
+    """The lazy singleton engine for the WROLPi database.
+
+    Created on first use (the media directory must be known by then); recreated automatically if
+    the media directory (and therefore the database file) changes."""
+    global _engine, _session_maker
+    with _engine_lock:
+        db_file = get_db_file()
+        if _engine is None or _engine.url.database != str(db_file):
+            if _engine is not None:
+                _engine.dispose()
+            logger.info(f'Creating database engine: {db_file}')
+            _engine = create_wrolpi_engine(db_file)
+            _session_maker = sessionmaker(bind=_engine)
+        return _engine
 
 
 def _get_db_session():
     """
-    This function allows the database to be wrapped during testing.  See: api.test.common.wrap_test_db
+    This function allows the database to be wrapped during testing.  See: wrolpi.conftest.test_session
     """
-    global LOGGED_ARGS
-    if LOGGED_ARGS is False:
-        # Print the DB args for troubleshooting.
-        LOGGED_ARGS = True
-        logging_args = db_args.copy()
-        logging_args['password'] = '***'
-        logger.debug(f'DB args: {logging_args}')
-
-    session = session_maker()
+    engine = get_engine()
+    session = _session_maker()
     return engine, session
 
 
@@ -72,8 +122,9 @@ def get_db_context() -> Tuple[sqlalchemy.engine.Engine, Session]:
     """
     Get a DB engine and session.
     """
+    from wrolpi.common import is_tempfile
     local_engine, session = _get_db_session()
-    if PYTEST and not local_engine.url.database.startswith('wrolpi_testing_'):
+    if PYTEST and not is_tempfile(local_engine.url.database or ''):
         raise ValueError(f'Running tests, but a test database is not being used!! {local_engine.url=}')
     return local_engine, session
 
@@ -100,41 +151,38 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
 
 
 @contextmanager
-def get_db_conn(isolation_level=psycopg2.extensions.ISOLATION_LEVEL_DEFAULT):
+def get_db_curs(commit: bool = False) -> Generator[sqlite3.Cursor, Any, None]:
+    """
+    Context manager that yields a `sqlite3.Cursor` to execute raw SQL statements.
+
+    Rows are `sqlite3.Row` (index and name access; `dict(row)` works).  SQL uses the sqlite3
+    paramstyle: `?` positional, `:name` named (a statement must use only one style).
+    """
     local_engine, session = get_db_context()
     if PYTEST:
         # During tests, use the session's connection to avoid lock issues.
         # The test_session is mocked to be shared, so getting a raw_connection would
         # create a new connection that blocks waiting for locks held by test_session.
         connection = session.connection().connection
+        curs = connection.cursor()
+        curs.row_factory = sqlite3.Row
         try:
-            yield connection, session
+            yield curs
+            if commit:
+                connection.commit()
         except sqlalchemy.exc.DatabaseError:
             session.rollback()
             raise
         # Don't rollback in finally during tests - test_session manages this
     else:
         connection = local_engine.raw_connection()
-        connection.set_isolation_level(isolation_level)
+        curs = connection.cursor()
+        curs.row_factory = sqlite3.Row
         try:
-            yield connection, session
-        except sqlalchemy.exc.DatabaseError:
-            session.rollback()
-            raise
-        finally:
-            # Rollback only if a transaction hasn't been committed.
-            if session.transaction.is_active:
-                connection.rollback()
-
-
-@contextmanager
-def get_db_curs(commit: bool = False, isolation_level=psycopg2.extensions.ISOLATION_LEVEL_DEFAULT):
-    """
-    Context manager that yields a DictCursor to execute raw SQL statements.
-    """
-    with get_db_conn(isolation_level=isolation_level) as (connection, session):
-        curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        try:
+            if commit:
+                # Take the write lock up front; busy_timeout absorbs contention.  (A deferred
+                # transaction upgrading to a write mid-way can deadlock under concurrency.)
+                curs.execute('BEGIN IMMEDIATE')
             yield curs
             if commit:
                 connection.commit()
@@ -143,8 +191,9 @@ def get_db_curs(commit: bool = False, isolation_level=psycopg2.extensions.ISOLAT
             raise
         finally:
             # Rollback only if a transaction hasn't been committed.
-            if session.transaction.is_active:
+            if connection.in_transaction:
                 connection.rollback()
+            connection.close()
 
 
 def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session) -> List[Base]:
@@ -156,10 +205,61 @@ def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Ses
     return results
 
 
-def mogrify(curs: cursor, values: Union[List, Generator]) -> str:
-    values = list(values) if isinstance(values, types.GeneratorType) else values.copy()
-    count = len(values[0])
-    # If `count = 3`, then s = '(%s,%s,%s)'
-    s = '(' + ','.join("%s" for _ in range(count)) + ')'
-    result = ',\n'.join([curs.mogrify(s, i).decode() for i in values])
-    return result
+# SQLite's default variable limit; multi-row VALUES clauses must stay under it.
+SQLITE_MAX_VARIABLES = 32_000
+
+
+def values_clause(rows: Union[List, Generator]) -> Tuple[str, list]:
+    """Build a multi-row VALUES clause and its flat parameter list.
+
+    >>> values_clause([(1, 'a'), (2, 'b')])
+    ('(?,?),(?,?)', [1, 'a', 2, 'b'])
+
+    The caller must chunk `rows` so that `len(rows) * width` stays under SQLITE_MAX_VARIABLES."""
+    rows = list(rows) if isinstance(rows, types.GeneratorType) else rows
+    width = len(rows[0])
+    if len(rows) * width > SQLITE_MAX_VARIABLES:
+        raise RuntimeError(f'values_clause: too many parameters ({len(rows)} rows x {width}); chunk the rows')
+    row_placeholders = '(' + ','.join(['?'] * width) + ')'
+    sql = ','.join([row_placeholders] * len(rows))
+    params = [value for row in rows for value in row]
+    return sql, params
+
+
+def named_placeholders(prefix: str, values: List, params: dict) -> str:
+    """Add each value to `params` under a generated name, return the comma-joined placeholders.
+
+    >>> params = dict()
+    >>> named_placeholders('tag_name', ['one', 'two'], params)
+    ':tag_name_0, :tag_name_1'
+    """
+    names = []
+    for idx, value in enumerate(values):
+        name = f'{prefix}_{idx}'
+        params[name] = value
+        names.append(f':{name}')
+    return ', '.join(names)
+
+
+def json_each_in(param_name: str) -> str:
+    """An IN-clause subquery over a JSON array parameter; bind `json.dumps(list)` as the parameter.
+
+    Immune to SQLite's variable-count limit regardless of list size."""
+    return f'(SELECT value FROM json_each(:{param_name}))'
+
+
+def parse_db_datetime(value: Union[str, None]):
+    """Parse a datetime TEXT value read by a raw cursor into a UTC-aware datetime.
+
+    (The ORM's TZDateTime does this automatically; raw cursors return the stored TEXT.)"""
+    if not value:
+        return None
+    if isinstance(value, _datetime.datetime):
+        return value
+    try:
+        parsed = _datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f')
+    except ValueError:
+        parsed = _datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+    return parsed.replace(tzinfo=_datetime.timezone.utc)
+
+

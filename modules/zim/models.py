@@ -251,14 +251,16 @@ class Zim(Base, ModelHelper):
     def _entries_with_tags_process(limit: int, offset: int, params: dict, session: Session, tags_sub_select: str):
         with get_db_curs() as curs:
             curs.execute(tags_sub_select, params)
-            zim_ids_entries: List[Tuple[int, int]] = list(curs.fetchall())
+            # sqlite3.Row is not a tuple; convert for the `tuple_(...).in_()` below.
+            zim_ids_entries: List[Tuple[int, str]] = [tuple(row) for row in curs.fetchall()]
 
+        # GROUP BY dedupes entries with multiple Tags (SQLite has no DISTINCT ON).
         tag_zim_entries = session.query(TagZimEntry, Zim) \
             .join(Zim, Zim.id == TagZimEntry.zim_id) \
             .filter(tuple_(TagZimEntry.zim_id, TagZimEntry.zim_entry).in_(zim_ids_entries)) \
+            .group_by(TagZimEntry.zim_id, TagZimEntry.zim_entry) \
             .order_by(TagZimEntry.zim_id, TagZimEntry.zim_entry) \
-            .offset(offset).limit(limit) \
-            .distinct(TagZimEntry.zim_id, TagZimEntry.zim_entry)
+            .offset(offset).limit(limit)
 
         entries = list()
         for tag_zim_entry, zim in tag_zim_entries:

@@ -12,11 +12,13 @@ yes_or_no "Are you sure you want to delete all tags? This cannot be undone." || 
 
 set -x
 
+DB_FILE=/media/wrolpi/config/wrolpi.db
+
 systemctl stop wrolpi-api
 
 # Delete all tag relationships and tags from the database.
-sudo -iu postgres psql -d wrolpi -c "DELETE FROM tag_zim;"
-sudo -iu postgres psql -d wrolpi -c "DELETE FROM tag_file;"
-sudo -iu postgres psql -d wrolpi -c "DELETE FROM tag;"
+sqlite3 "${DB_FILE}" "DELETE FROM tag_zim;"
+sqlite3 "${DB_FILE}" "DELETE FROM tag_file;"
+sqlite3 "${DB_FILE}" "DELETE FROM tag;"
 
 systemctl start wrolpi-api

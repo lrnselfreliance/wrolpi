@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import multiprocessing
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -87,15 +86,16 @@ class Flag:
 
     def _save(self, value: bool):
         if self.store_db:
-            from wrolpi.db import get_db_curs
+            from wrolpi.db import get_db_session
             # Store the value of this Flag in it's matching column in the DB.  Not all flags will do this.
             try:
-                with get_db_curs(commit=True) as curs:
+                with get_db_session(commit=True) as session:
                     # Upsert the only row in the table.
-                    curs.execute(f'''
-                        INSERT INTO wrolpi_flag (id, {self.name}) VALUES (1, %(value)s)
-                        ON CONFLICT (id) DO UPDATE SET {self.name} = %(value)s
-                        ''', dict(value=value))
+                    flag_row = session.query(WROLPiFlag).filter_by(id=1).one_or_none()
+                    if not flag_row:
+                        flag_row = WROLPiFlag(id=1)
+                        session.add(flag_row)
+                    setattr(flag_row, self.name, value)
             except Exception as e:
                 logger.critical(f'Unable to save flag! {repr(self)}', exc_info=e)
 
@@ -108,6 +108,9 @@ class Flag:
 
 # Set by `check_db_is_up`.
 db_up = Flag('db_up')
+# The database file was written by a NEWER WROLPi than this one (drive moved from another system).
+# While set, the database must not be written; upgrade this WROLPi instead.
+db_version_mismatch = Flag('db_version_mismatch')
 # Outdated Zims need to be removed.
 outdated_zims = Flag('outdated_zims', store_db=True)
 # Used to disable or enable downloading when Internet is down.
@@ -236,26 +239,28 @@ def _destinations_have_mounted_storage() -> bool:
 
 
 def check_db_is_up():
-    """Attempts to connect to the database, sets flags.db_up if successful."""
-    from wrolpi.db import get_db_curs, get_db_args
+    """Checks that the database file exists and is initialized, sets flags.db_up if so.
 
-    db_args = get_db_args()
-    db_host = db_args['host']
-    if db_host != '127.0.0.1':
-        # Check if database host is up before attempting connection.  This will fail faster than SQLAlchemy timeout.
-        try:
-            cmd = ['ping', '-w', '1', '-c', '1', db_host]
-            subprocess.check_call(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        except Exception as e:
-            logger.debug(f'Unable to resolve database host {db_host}', exc_info=e)
-            db_up.clear()
-            return
+    The database lives inside the media directory, so "DB down" usually means the media drive
+    is not mounted (or the DB has not been created/migrated yet)."""
+    import sqlite3
+    from wrolpi.db import get_db_file
+    from wrolpi.db_bootstrap import media_directory_is_unmounted_production
 
     try:
-        with get_db_curs() as curs:
-            curs.execute('SELECT * FROM alembic_version')
-            # If we get here, the database is up!
-            db_up.set()
+        if media_directory_is_unmounted_production():
+            # Any DB file at the media path is a root-filesystem shadow, not the real database.
+            db_up.clear()
+            return
+        db_file = get_db_file()
+        if not db_file.is_file() or db_version_mismatch.is_set():
+            db_up.clear()
+            return
+        # Read-only URI probe; a plain connect would create an empty database file.
+        with contextlib.closing(sqlite3.connect(f'file:{db_file}?mode=ro', uri=True)) as conn:
+            conn.execute('SELECT version_num FROM alembic_version').fetchone()
+        # If we get here, the database is up!
+        db_up.set()
     except Exception as e:
         logger.debug(f'DB is not up', exc_info=e)
         db_up.clear()

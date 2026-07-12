@@ -57,7 +57,7 @@ class TestManagedServicesConfig:
     def test_managed_services_count(self):
         """Should have expected number of managed services."""
         services = DEFAULT_CONFIG["managed_services"]
-        assert len(services) == 12
+        assert len(services) == 11
 
     @pytest.mark.parametrize("name,expected", [
         ("wrolpi-api",
@@ -67,7 +67,6 @@ class TestManagedServicesConfig:
         ("wrolpi-app", {"port": 3000, "viewable": False}),
         ("wrolpi-app-dev", {"port": 3000, "viewable": False, "show_only_when_running": True}),
         ("caddy", {"port": 443}),
-        ("postgresql", {"port": 5432, "viewable": False}),
         ("wrolpi-upgrade", {"port": None, "viewable": False, "show_only_when_running": True}),
     ])
     def test_service_config(self, name, expected):
@@ -83,7 +82,6 @@ class TestManagedServicesConfig:
         ("wrolpi-kiwix", True),
         ("wrolpi-api", False),
         ("wrolpi-app", False),
-        ("postgresql", False),
     ])
     def test_service_use_https(self, name, use_https):
         """HTTPS services should have use_https=True, others should have False."""

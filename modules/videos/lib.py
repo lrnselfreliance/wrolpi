@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import html
+import json
 import pathlib
 import re
 from dataclasses import dataclass, field
@@ -988,13 +989,13 @@ async def get_statistics():
                          -- total videos
                          COUNT(v.id)                                                                        AS "videos",
                          -- total videos downloaded over the past week/month/year
-                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 week')  AS "week",
-                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 month') AS "month",
-                         COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 year')  AS "year",
+                         COUNT(v.id) FILTER (WHERE published_datetime >= datetime('now', '-7 days'))  AS "week",
+                         COUNT(v.id) FILTER (WHERE published_datetime >= datetime('now', '-1 month')) AS "month",
+                         COUNT(v.id) FILTER (WHERE published_datetime >= datetime('now', '-1 year'))  AS "year",
                          -- sum of all video lengths in seconds
-                         COALESCE(SUM(fg.length), 0)                                                        AS "sum_duration",
+                         COALESCE(SUM(fg.length), 0)                                                  AS "sum_duration",
                          -- sum of all video file sizes
-                         COALESCE(SUM(fg.size), 0)::BIGINT                                                  AS "sum_size",
+                         COALESCE(SUM(fg.size), 0)                                                    AS "sum_size",
                          -- largest video
                          COALESCE(MAX(fg.size), 0)                                                          AS "max_size",
                          -- Videos may or may not have comments.
@@ -1010,23 +1011,24 @@ async def get_statistics():
         video_stats = dict(curs.fetchone())
 
         # Get the total videos downloaded every month for the past two years.
+        # (Not parameterized, so `%` needs no escaping.)  Like the old Postgres query, months
+        # without any videos are absent from the results.
         curs.execute('''
-                     SELECT DATE_TRUNC('month', months.a),
-                            COUNT(video.id)::BIGINT,
-                            SUM(size)::BIGINT AS "size"
-                     FROM generate_series(
-                                  date_trunc('month', current_date) - interval '2 years',
-                                  date_trunc('month', current_date) - interval '1 month',
-                                  '1 month'::interval) AS months(a),
-                          video
+                     SELECT strftime('%Y-%m-01 00:00:00', fg.published_datetime) AS "month",
+                            COUNT(video.id)                                      AS "count",
+                            SUM(fg.size)                                         AS "size"
+                     FROM video
                               LEFT JOIN file_group fg on video.file_group_id = fg.id
-                     WHERE published_datetime >= date_trunc('month', months.a)
-                       AND published_datetime < date_trunc('month', months.a) + interval '1 month'
-                       AND published_datetime IS NOT NULL
+                     WHERE fg.published_datetime IS NOT NULL
+                       AND fg.published_datetime >= datetime('now', 'start of month', '-24 months')
+                       AND fg.published_datetime < datetime('now', 'start of month')
                      GROUP BY 1
                      ORDER BY 1
                      ''')
         monthly_videos = [dict(i) for i in curs.fetchall()]
+        for monthly_video in monthly_videos:
+            # The frontend expects a datetime, not the TEXT that SQLite stores.
+            monthly_video['month'] = datetime.fromisoformat(monthly_video['month'])
 
         historical_stats = dict(monthly_videos=monthly_videos)
         historical_stats['average_count'] = (sum(i['count'] for i in monthly_videos) // len(monthly_videos)) \
@@ -1039,7 +1041,7 @@ async def get_statistics():
                             COUNT(c.id) FILTER ( WHERE col.tag_id IS NOT NULL ) AS "tagged_channels"
                      FROM channel c
                               LEFT JOIN collection col on col.id = c.collection_id
-                              LEFT JOIN public.tag t on t.id = col.tag_id
+                              LEFT JOIN tag t on t.id = col.tag_id
                      ''')
         channel_stats = dict(curs.fetchone())
     ret = dict(statistics=dict(
@@ -1153,16 +1155,21 @@ def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path
 
         # Query returns directory and files - files may contain relative or absolute paths
         # Use indexed directory column for efficient lookup
+        # (Not parameterized, so `%` needs no escaping.)
         curs.execute(f'''
             SELECT directory, files
             FROM file_group
             WHERE
-                mimetype NOT LIKE 'video%%'
-                AND (directory = '{directory_str}' OR directory LIKE '{directory_str}/%%')
+                mimetype NOT LIKE 'video%'
+                AND (directory = '{directory_str}' OR directory LIKE '{directory_str}/%')
         ''')
         for row in curs.fetchall():
             fg_directory = pathlib.Path(row[0]) if row[0] else None
-            for file_info in row[1]:
+            files = row[1]
+            if isinstance(files, str):
+                # Raw cursor reads return the JSON column as TEXT.
+                files = json.loads(files)
+            for file_info in files:
                 path = pathlib.Path(file_info['path'])
                 if not path.is_absolute() and fg_directory:
                     # Resolve relative path using directory

@@ -2,7 +2,7 @@
 Description=WROLPi Controller Service
 Documentation=https://github.com/lrnselfreliance/wrolpi
 After=network.target
-Before=wrolpi-api.service wrolpi-app.service postgresql.service
+Before=wrolpi-api.service wrolpi-app.service
 
 [Service]
 Type=simple

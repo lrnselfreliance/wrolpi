@@ -1,10 +1,10 @@
 import pathlib
 from typing import Optional
 
-from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, Computed, or_
-from sqlalchemy.orm import relationship, Session, deferred
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, String, Text, Index, or_
+from sqlalchemy.orm import relationship, Session
 
-from wrolpi.common import ModelHelper, Base, tsvector
+from wrolpi.common import ModelHelper, Base
 from wrolpi.db import get_db_session
 from wrolpi.files.models import FileGroup
 
@@ -139,23 +139,23 @@ class DocSection(ModelHelper, Base):
 
     For EPUB files, one row per spine item with `ordinal` as the 0-based spine index.
     For PDF files, one row per page with `ordinal` as the 1-based page number.
-    Each row maintains its own tsvector for per-section full-text search, which lets us
-    deep-link from a search result into a specific chapter or page.
+    Each row is indexed by the `doc_section_fts` FTS5 table for per-section full-text search,
+    which lets us deep-link from a search result into a specific chapter or page.
     """
     __tablename__ = 'doc_section'
     __table_args__ = (
         Index('doc_section_doc_id_idx', 'doc_id', 'ordinal'),
-        Index('doc_section_tsv_idx', 'tsv', postgresql_using='gin'),
     )
 
-    id = Column(BigInteger, primary_key=True)
+    # SQLite requires exactly "INTEGER PRIMARY KEY" for the rowid alias (FTS5 content_rowid).
+    id = Column(BigInteger().with_variant(Integer, 'sqlite'), primary_key=True)
     doc_id = Column(Integer, ForeignKey('doc.id', ondelete='CASCADE'), nullable=False)
     kind = Column(String, nullable=False)
     ordinal = Column(Integer, nullable=False)
     label = Column(String)
+    # Full-text search over `content` is provided by the external-content FTS5 table
+    # `doc_section_fts` (see `wrolpi.fts`).
     content = Column(Text)
-    tsv = deferred(Column(tsvector, Computed(
-        "to_tsvector('english'::regconfig, COALESCE(content, ''))")))
 
     doc = relationship('Doc', back_populates='sections')
 

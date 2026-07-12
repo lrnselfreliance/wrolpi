@@ -74,11 +74,11 @@ async def test_refresh_videos(async_client, test_session, test_directory, simple
     video_file = test_directory / 'foo.mp4'
     with get_db_curs(commit=True) as curs:
         stmt = "INSERT INTO file_group (mimetype, directory, primary_path, indexed, files, model)" \
-               " values ('video/mp4', %(directory)s, %(primary_path)s, true, %(files)s, 'video') RETURNING id"
+               " values ('video/mp4', :directory, :primary_path, true, :files, 'video') RETURNING id"
         params = {'directory': str(test_directory), 'primary_path': str(video_file), 'files': '[]'}
         curs.execute(stmt, params)
         video4_id = curs.fetchall()[0][0]
-        stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"
+        stmt = "INSERT INTO video (file_group_id) values (:video_id)"
         curs.execute(stmt, {'video_id': str(video4_id)})
 
     await async_client.post('/api/files/refresh')
@@ -198,8 +198,10 @@ async def test_search_videos_file(test_session, test_directory, video_with_searc
     # Captions are d_text, so a deep search is required to match them.
     # Repeated runs should return the same result
     for _ in range(2):
-        # Only videos with a b are returned, ordered by the amount of b's
-        await assert_video_search(search_str='b', deep=True, assert_ids=[1, 2, 3, 4])
+        # Only videos with a b are returned, ordered by their rank.  (FTS5's bm25 normalizes by
+        # document length, so the short 'b b' caption outranks longer captions with more b's;
+        # Postgres' ts_rank ordered by raw frequency.)
+        await assert_video_search(search_str='b', deep=True, assert_ids=[3, 1, 2, 4])
 
     # The default (fast) search does not match captions.
     await assert_video_search(search_str='b', assert_ids=[])
@@ -220,11 +222,11 @@ async def test_search_videos_file(test_session, test_directory, video_with_searc
     # only video 1 has e and d
     await assert_video_search(search_str='e d', deep=True, assert_ids=[1, ])
 
-    # video 1 and 4 have b and e, but 1 has more
-    await assert_video_search(search_str='b e', deep=True, assert_ids=[1, 4])
+    # Videos 1 and 4 have b and e; 4's caption is shorter so bm25 ranks it higher.
+    await assert_video_search(search_str='b e', deep=True, assert_ids=[4, 1])
 
     # Check totals are correct even with a limit
-    await assert_video_search(search_str='b', deep=True, limit=2, assert_ids=[1, 2], assert_total=4)
+    await assert_video_search(search_str='b', deep=True, limit=2, assert_ids=[3, 1], assert_total=4)
 
 
 @pytest.mark.asyncio

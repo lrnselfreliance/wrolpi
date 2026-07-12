@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import json
 import pathlib
 import re
 from datetime import datetime
@@ -132,7 +133,7 @@ def get_all_entries_tags():
             },
         """
     stmt = '''
-           SELECT tz.zim_id, tz.zim_entry, array_agg(t.name)::TEXT[]
+           SELECT tz.zim_id, tz.zim_entry, json_group_array(t.name)
            FROM tag t
                     LEFT JOIN tag_zim tz on t.id = tz.tag_id
            GROUP BY 1, 2 \
@@ -143,6 +144,7 @@ def get_all_entries_tags():
         for zim_id, zim_entry, tag_names in curs.fetchall():
             if not zim_id:
                 continue
+            tag_names = json.loads(tag_names)
             try:
                 entries[zim_id][zim_entry] = tag_names
             except KeyError:
@@ -195,8 +197,7 @@ def headline_zim(session: Session, search_str: str, zim_id: int, tag_names: List
 
     entries_tag_names = get_entries_tags([i.path for i in entries], zim_id)
 
-    # Always get headlines even if there is no search_str.  This is because Postgres will return the start of each
-    # article.
+    # Always get headlines even if there is no search_str.  Non-matches get the leading text of each article.
     headlines = extract_headlines(articles, search_str)
 
     search = list()

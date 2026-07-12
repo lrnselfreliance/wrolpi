@@ -96,11 +96,20 @@ find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
 
 # Install any new Python requirements.
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
-# Upgrade the WROLPi database.  Never fatal: the database may be down and
-# repair.sh (which runs at the end of this upgrade) may be exactly what fixes
-# it; initialize_api_db.sh re-runs this migration there.
+# Upgrade the WROLPi database.  Never fatal: the media drive may not be mounted;
+# the API creates/migrates the database itself at startup once the media directory is available.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade) || \
-  echo "WARNING: db upgrade failed (database down?); it will be retried during repair."
+  echo "WARNING: db upgrade failed (media directory unavailable?); the API will retry at startup."
+
+# WROLPi now uses SQLite (inside the media directory); stop and disable PostgreSQL to free
+# system resources.  The old Postgres data is NOT deleted -- to get it back:
+#   sudo systemctl enable --now postgresql
+if id postgres >/dev/null 2>&1; then
+  echo "Disabling PostgreSQL; WROLPi now uses SQLite.  Your old Postgres data is untouched."
+  # Stop the umbrella and any per-cluster instances (postgresql@15-main, etc.).
+  systemctl stop 'postgresql*' 2>/dev/null || :
+  systemctl disable postgresql 2>/dev/null || :
+fi
 
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."

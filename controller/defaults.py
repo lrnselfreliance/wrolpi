@@ -78,14 +78,6 @@ DEFAULT_CONFIG = {
         },
         # System services
         {
-            "name": "postgresql",
-            "systemd_name": "postgresql",
-            "port": 5432,
-            "viewable": False,
-            "use_https": False,
-            "description": "PostgreSQL database",
-        },
-        {
             "name": "caddy",
             "systemd_name": "caddy",
             "port": 443,

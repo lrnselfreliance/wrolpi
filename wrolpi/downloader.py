@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import logging
 import multiprocessing
 import os
@@ -23,10 +24,8 @@ from zoneinfo import ZoneInfo
 import feedparser
 import pytz
 from feedparser import FeedParserDict
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, ARRAY, Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON
 from sqlalchemy.orm import Session, relationship
-from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app, perpetual_signal
@@ -252,14 +251,14 @@ class Download(ModelHelper, Base):  # noqa
     sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
     error = Column(Text)  # traceback from an error during downloading.
     frequency = Column(Integer)  # seconds between re-downloading.
-    info_json = Column(JSONB)  # information retrieved WHILE downloading (from yt-dlp)
+    info_json = Column(JSON)  # information retrieved WHILE downloading (from yt-dlp)
     last_download_attempt = Column(TZDateTime)  # last time this Download was dispatched (success or failure)
     last_successful_download = Column(TZDateTime)
     location = Column(Text)  # Relative App URL where the downloaded item can be viewed.
     next_download = Column(TZDateTime)
-    settings = Column(JSONB)  # information about how the download should happen (video_resolution, etc.)
+    settings = Column(JSON)  # information about how the download should happen (video_resolution, etc.)
     status = Column(String, default=DownloadStatus.new)  # `DownloadStatus` enum.
-    tag_names = Column(ARRAY(Text))
+    tag_names = Column(JSON)  # a list of Tag names.
 
     # A Download may be associated with a Collection (downloads for channels, domains, etc.).
     collection_id = Column(Integer, ForeignKey('collection.id', ondelete='SET NULL'))
@@ -917,13 +916,11 @@ class DownloadManager:
 
         # Ensure all Tags exist before creating downloads.
         if tag_names:
-            with get_db_curs() as curs:
-                stmt = 'SELECT name FROM tag WHERE name = ANY(%(tag_names)s)'
-                curs.execute(stmt, dict(tag_names=tag_names))
-                existing_tag_names = {i[0] for i in curs.fetchall()}
-                missing_tag_names = set(tag_names) - existing_tag_names
-                if missing_tag_names:
-                    raise ValidationError(f'Tag does not exist: {missing_tag_names.pop()}')
+            from wrolpi.tags import Tag
+            existing_tag_names = {name for name, in session.query(Tag.name).filter(Tag.name.in_(tag_names))}
+            missing_tag_names = set(tag_names) - existing_tag_names
+            if missing_tag_names:
+                raise ValidationError(f'Tag does not exist: {missing_tag_names.pop()}')
 
         downloads = []
         # Throws an error if no downloader is found.
@@ -1201,12 +1198,11 @@ class DownloadManager:
 
         @param reset_attempts: Will set `download.attempts` to 0 if True.
         """
-        with get_db_curs(commit=True) as curs:
-            if reset_attempts:
-                stmt = "UPDATE download SET status='new', attempts=0 WHERE status='pending' OR status='deferred' OR status='failed'"
-            else:
-                stmt = "UPDATE download SET status='new' WHERE status='pending' OR status='deferred' OR status='failed'"
-            curs.execute(stmt)
+        values = dict(status=DownloadStatus.new, attempts=0) if reset_attempts else dict(status=DownloadStatus.new)
+        with get_db_session(commit=True) as session:
+            session.query(Download) \
+                .filter(Download.status.in_((DownloadStatus.pending, DownloadStatus.deferred, DownloadStatus.failed))) \
+                .update(values, synchronize_session=False)
 
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
         """
@@ -1345,6 +1341,19 @@ class DownloadManager:
                         WHEN (status = 'complete') THEN 4
                     END'''
 
+    @staticmethod
+    def _parse_fe_download_row(download: dict) -> dict:
+        """Raw cursor rows return JSON columns as text and datetimes as naive strings; restore
+        the Python types the frontend serialization expects."""
+        from wrolpi.db import parse_db_datetime
+        for key in ('settings', 'tag_names'):
+            if isinstance(download.get(key), str):
+                download[key] = json.loads(download[key])
+        for key in ('last_successful_download', 'next_download'):
+            if download.get(key):
+                download[key] = parse_db_datetime(download[key])
+        return download
+
     def get_fe_downloads(self):
         """Get downloads for the Frontend.  Uses raw SQL for faster result."""
         # Use custom SQL because SQLAlchemy is slow.
@@ -1369,11 +1378,11 @@ class DownloadManager:
                 WHERE frequency IS NOT NULL
                 ORDER BY
                     {self._status_order},
-                    next_download,
+                    next_download NULLS LAST,
                     frequency
             '''
             curs.execute(stmt)
-            recurring_downloads = list(map(dict, curs.fetchall()))
+            recurring_downloads = [self._parse_fe_download_row(dict(i)) for i in curs.fetchall()]
 
             stmt = f'''
                 SELECT
@@ -1393,12 +1402,12 @@ class DownloadManager:
                 WHERE frequency IS NULL
                 ORDER BY
                     {self._status_order},
-                    last_successful_download DESC,
+                    last_successful_download DESC NULLS FIRST,
                     id
                 LIMIT 100
             '''
             curs.execute(stmt)
-            once_downloads = list(map(dict, curs.fetchall()))
+            once_downloads = [self._parse_fe_download_row(dict(i)) for i in curs.fetchall()]
 
             stmt = '''
                    SELECT COUNT(id) FILTER (
@@ -1429,17 +1438,16 @@ class DownloadManager:
         """
         Get a summary of what Downloads are happening as well as the status of the DownloadManager.
         """
-        with get_db_curs() as curs:
-            stmt = """
-                   SELECT COUNT(*) FILTER (WHERE status = 'pending')    AS pending_downloads,
-                          COUNT(*) FILTER (WHERE frequency IS NOT NULL) AS recurring_downloads
-                   FROM download \
-                   """
-            curs.execute(stmt)
-            counts = list(map(dict, curs.fetchall()))[0]
+        from sqlalchemy import func
+
+        with get_db_session() as session:
+            pending_downloads, recurring_downloads = session.query(
+                func.count(Download.id).filter(Download.status == DownloadStatus.pending),
+                func.count(Download.id).filter(Download.frequency != None),  # noqa
+            ).one()
         summary = dict(
-            pending=counts['pending_downloads'],
-            recurring=counts['recurring_downloads'],
+            pending=pending_downloads,
+            recurring=recurring_downloads,
             disabled=self.is_disabled,
             stopped=self.is_stopped,
             outside_download_window=self.outside_download_window,
@@ -1527,25 +1535,33 @@ class DownloadManager:
         return [i for i, j in zip(zagger, range(len(downloads)))][index]
 
     @staticmethod
-    def _delete_downloads_q(once: bool = False, status: str = None, returning=Download.id) -> Delete:
-        stmt = Download.__table__.delete().returning(returning)
+    def _delete_downloads(session: Session, once: bool = False, status: str = None, returning=Download.id) -> List:
+        """Delete matching Downloads; returns the requested column of the deleted rows.
+
+        (SQLAlchemy 1.3's SQLite dialect does not support DELETE ... RETURNING, so the values are
+        selected before deleting, in the same transaction.)"""
+        query = session.query(returning)
+        delete = Download.__table__.delete()
         if once:
-            stmt = stmt.where(Download.frequency == None)
+            query = query.filter(Download.frequency == None)  # noqa
+            delete = delete.where(Download.frequency == None)  # noqa
         if status:
-            stmt = stmt.where(Download.status == status)
-        return stmt
+            query = query.filter(Download.status == status)
+            delete = delete.where(Download.status == status)
+        values = [i for i, in query.all()]
+        session.execute(delete)
+        return values
 
     def delete_completed(self, session: Session) -> List[int]:
         """Delete any completed download records."""
-        stmt = self._delete_downloads_q(once=True, status=DownloadStatus.complete)
-        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        deleted_ids = self._delete_downloads(session, once=True, status=DownloadStatus.complete)
         session.commit()
         return deleted_ids
 
     def delete_failed(self, session: Session):
         """Delete any failed download records."""
-        stmt = self._delete_downloads_q(once=True, status=DownloadStatus.failed, returning=Download.url)
-        deleted_urls = [i for i, in session.execute(stmt).fetchall()]
+        deleted_urls = self._delete_downloads(session, once=True, status=DownloadStatus.failed,
+                                              returning=Download.url)
 
         # Add all downloads to permanent skip list.
         self.add_to_skip_list(*deleted_urls)
@@ -1554,8 +1570,7 @@ class DownloadManager:
 
     def delete_once(self, session: Session):
         """Delete all once-download records."""
-        stmt = self._delete_downloads_q(once=True)
-        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        deleted_ids = self._delete_downloads(session, once=True)
         session.commit()
         save_downloads_config.activate_switch()
         return deleted_ids
@@ -1564,8 +1579,8 @@ class DownloadManager:
         """Delete specific downloads by their IDs."""
         if not download_ids:
             return []
-        stmt = Download.__table__.delete().where(Download.id.in_(download_ids)).returning(Download.id)
-        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        deleted_ids = [i for i, in session.query(Download.id).filter(Download.id.in_(download_ids)).all()]
+        session.execute(Download.__table__.delete().where(Download.id.in_(deleted_ids)))
         session.commit()
         save_downloads_config.activate_switch()
         return deleted_ids
@@ -1588,14 +1603,13 @@ class DownloadManager:
         if not download_ids:
             return []
         from sqlalchemy import and_
-        stmt = Download.__table__.delete().where(
-            and_(
-                Download.id.in_(download_ids),
-                Download.status == DownloadStatus.complete,
-                Download.frequency == None  # noqa - only once-downloads
-            )
-        ).returning(Download.id)
-        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        conditions = and_(
+            Download.id.in_(download_ids),
+            Download.status == DownloadStatus.complete,
+            Download.frequency == None  # noqa - only once-downloads
+        )
+        deleted_ids = [i for i, in session.query(Download.id).filter(conditions).all()]
+        session.execute(Download.__table__.delete().where(conditions))
         session.commit()
         return deleted_ids
 

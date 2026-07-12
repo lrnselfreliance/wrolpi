@@ -1,9 +1,6 @@
-import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,13 +23,40 @@ from wrolpi.collections.models import Collection, CollectionItem  # noqa: F401
 from modules.videos.models import Video, Channel  # noqa: F401
 from modules.archive.models import Archive  # noqa: F401
 from modules.zim.models import Zim, TagZimEntry, ZimSubscription  # noqa: F401
+
 target_metadata = Base.metadata
 
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+def get_url() -> str:
+    """The database URL: from the ini/CLI when overridden, otherwise derived from the media directory."""
+    url = config.get_main_option('sqlalchemy.url')
+    if url and not url.startswith('sqlite:///CHANGEME'):
+        return url
+    from wrolpi.db import get_db_uri
+    return get_db_uri()
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    """Exclude tables Alembic must not manage from autogenerate/check.
+
+    The FTS5 virtual tables and their shadow tables (created by wrolpi.schema_ddl /
+    wrolpi.fts) plus SQLite internals would otherwise be proposed for DROP."""
+    if type_ == 'table':
+        from wrolpi.fts import FTS_TABLE_PREFIXES
+        if name == 'sqlite_sequence' or any(name.startswith(prefix) for prefix in FTS_TABLE_PREFIXES):
+            return False
+    return True
+
+
+def process_revision_directives(context_, revision, directives):
+    """New revisions get date ids (e.g. 2026_07_10_1350) instead of random hashes.
+
+    Filenames therefore self-sort chronologically, and the `alembic_version` value in a
+    database says when its schema was created.  Underscores, not dashes: alembic forbids
+    `-` in revision identifiers (it is reserved for relative-revision syntax like `head-1`)."""
+    from datetime import datetime, timezone
+    script = directives[0]
+    script.rev_id = datetime.now(timezone.utc).strftime('%Y_%m_%d_%H%M')
 
 
 def run_migrations_offline():
@@ -47,12 +71,14 @@ def run_migrations_offline():
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=get_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        render_as_batch=True,
+        include_object=include_object,
+        process_revision_directives=process_revision_directives,
     )
 
     with context.begin_transaction():
@@ -66,18 +92,18 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    from wrolpi.db import create_wrolpi_engine
+
+    connectable = create_wrolpi_engine(get_url())
 
     with connectable.connect() as connection:
-        if not os.environ.get('DOCKER', '').lower().startswith('t'):
-            # Set role when not in a docker container
-            connection.execute("SET ROLE 'wrolpi'")
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            # SQLite's limited ALTER TABLE requires batch mode for most column changes.
+            render_as_batch=True,
+            include_object=include_object,
+            process_revision_directives=process_revision_directives,
         )
 
         with context.begin_transaction():

@@ -79,73 +79,41 @@ check_file /opt/wrolpi/main.py "The WROLPi main script exists" "The WROLPi main 
 check_file ${MEDIA_DIRECTORY}/config/wrolpi.yaml "The WROLPi config file exists" "The WROLPi config file does not exist"
 
 echo
-# Postgresql
+# Database (SQLite in the media directory)
 
-systemctl status postgresql.service >/dev/null &&
-  echo "OK: Postgres found" ||
-  echo "FAILED: Postgres service does not exist"
+WROLPI_DB="${MEDIA_DIRECTORY}/config/wrolpi.db"
+if [ -f "${WROLPI_DB}" ]; then
+  echo "OK: Found wrolpi database at ${WROLPI_DB}"
 
-if netstat -ant | grep LISTEN | grep -E '[:\.]5432\b' >/dev/null; then
-  echo "OK: Port 5432 is occupied"
-else
-  echo "FAILED: Port 5432 is not occupied"
-fi
+  if command -v sqlite3 >/dev/null 2>&1; then
+    # Run as the wrolpi user: a read of a WAL database needs write access to
+    # the -shm sidecar, which root-created files would break for the API.
+    wrolpi_sqlite() {
+      sudo -u wrolpi sqlite3 "${WROLPI_DB}" "$@" 2>/dev/null
+    }
 
-[ -S /var/run/postgresql/.s.PGSQL.5432 ] &&
-  echo "OK: Postgres is using file socket" ||
-  echo "FAILED: Postgres is not using file socket"
-
-# Cluster-level checks.  The umbrella postgresql.service reports active even
-# when every cluster is down, so inspect the real clusters.
-if command -v pg_lsclusters >/dev/null 2>&1; then
-  cluster_line=$(pg_lsclusters -h 2>/dev/null | head -1)
-  if [ -z "${cluster_line}" ]; then
-    echo "FAILED: No Postgres clusters exist (pg_lsclusters printed nothing)"
-  elif [ "$(echo "${cluster_line}" | awk '{print $4}')" = "online" ]; then
-    echo "OK: Postgres cluster is online (port $(echo "${cluster_line}" | awk '{print $3}'))"
-  else
-    echo "FAILED: Postgres cluster is not online: ${cluster_line}"
-  fi
-  cluster_data_dir=$(echo "${cluster_line}" | awk '{print $6}')
-  if [ -n "${cluster_data_dir}" ]; then
-    case "${cluster_data_dir}" in
-      /var/lib/postgresql/*) echo "OK: Postgres data directory is at ${cluster_data_dir}" ;;
-      *) echo "FAILED: Postgres data directory is in an unexpected location: ${cluster_data_dir}" ;;
-    esac
-  fi
-fi
-
-# A mount over /var/lib/postgresql means the Portable bind layout (expected
-# only on live boots).  On an installed system this indicates the cluster is
-# on the media drive — the wrong spot; see mount-issues.md Problem 8.
-if findmnt -n /var/lib/postgresql >/dev/null 2>&1; then
-  echo "Note: /var/lib/postgresql is a mount: $(findmnt -n -o SOURCE,FSTYPE /var/lib/postgresql)"
-  echo "      (Portable/live-boot layout; on an installed system this is WRONG)"
-else
-  echo "OK: /var/lib/postgresql is on the root filesystem (installed layout)"
-fi
-
-# Connect directly instead of `sudo -i -u wrolpi` so sudo/PAM do not spam the journal.
-wrolpi_psql() {
-  PGPASSWORD=wrolpi psql -h 127.0.0.1 -p 5432 -U wrolpi wrolpi "$@"
-}
-
-if wrolpi_psql -c 'select 1' >/dev/null 2>&1; then
-  echo "OK: Found wrolpi database"
-
-  if wrolpi_psql -c '\d' 2>/dev/null | grep "file_group" >/dev/null; then
-    echo "OK: WROLPi database is initialized"
-
-    if [ "$(wrolpi_psql -c 'copy (select count(*) from file_group) to stdout' 2>/dev/null)" -gt 0 ]; then
-      echo "OK: WROLPi database has files"
+    if [ "$(wrolpi_sqlite 'PRAGMA quick_check;' | head -1)" = "ok" ]; then
+      echo "OK: WROLPi database passes quick_check"
     else
-      echo "FAILED: WROLPi database has no files.  You need to refresh your files: https://$(hostname).local/files"
+      echo "FAILED: WROLPi database is corrupt or unreadable (PRAGMA quick_check)"
+    fi
+
+    if wrolpi_sqlite ".tables" | grep -q "file_group"; then
+      echo "OK: WROLPi database is initialized"
+
+      if [ "$(wrolpi_sqlite 'select count(*) from file_group;')" -gt 0 ] 2>/dev/null; then
+        echo "OK: WROLPi database has files"
+      else
+        echo "FAILED: WROLPi database has no files.  You need to refresh your files: https://$(hostname).local/files"
+      fi
+    else
+      echo "FAILED: WROLPi is not initialized"
     fi
   else
-    echo "FAILED: WROLPi is not initialized"
+    echo "Note: sqlite3 CLI not installed; skipping database integrity checks"
   fi
 else
-  echo "FAILED: Unable to find wrolpi database"
+  echo "FAILED: Unable to find wrolpi database at ${WROLPI_DB} (the API creates it on first start)"
 fi
 
 echo

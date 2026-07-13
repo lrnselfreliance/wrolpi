@@ -1,6 +1,7 @@
 import asyncio
 import ctypes.wintypes
 import json
+import sys
 import multiprocessing
 import os
 import pathlib
@@ -313,22 +314,37 @@ def test_escape_file_name(name, expected):
 
 def test_truncate_object_bytes():
     """
-    Objects can be truncated (lists will be shortened) so they will fit in tsvector columns.
+    Objects can be truncated (lists will be shortened) so they will fit in the search index.
+
+    Exact result lengths depend on the interpreter's object sizes (which changed in
+    Python 3.12), so assert the contract: the result fits the byte budget and is a
+    prefix of the input.
     """
-    assert common.truncate_object_bytes(['foo'] * 10, 100) == ['foo'] * 5
-    assert common.truncate_object_bytes(['foo'] * 1_000, 100) == ['foo'] * 5
-    assert common.truncate_object_bytes(['foo'] * 1_000_000, 100) == ['foo'] * 5
-    assert common.truncate_object_bytes(['foo'] * 1_000_000, 200) == ['foo'] * 14
+    for count in (10, 1_000, 1_000_000):
+        previous_length = 0
+        for maximum_bytes in (100, 200):
+            result = common.truncate_object_bytes(['foo'] * count, maximum_bytes)
+            assert sys.getsizeof(result) < maximum_bytes
+            # Small lists that already fit are returned whole.
+            assert 0 < len(result) <= count
+            assert result == ['foo'] * len(result)
+            # A larger budget must never retain fewer items.
+            assert len(result) >= previous_length
+            previous_length = len(result)
     assert common.truncate_object_bytes([], 200) == []
 
     assert common.truncate_object_bytes(None, 100) is None
     assert common.truncate_object_bytes('', 100) == ''
 
-    assert common.truncate_object_bytes('foo' * 100, 99) == 'foofoofoofoofoofoofoofoofoofoofoofoofoof'
-    assert common.truncate_object_bytes('foo' * 100, 80) == 'foofoofoofoofoofoofoofoofo'
-    assert common.truncate_object_bytes('foo' * 100, 55) == 'foofo'
-    assert common.truncate_object_bytes('foo' * 100, 51) == 'f'
-    assert common.truncate_object_bytes('foo' * 100, 50) == ''
+    previous_length = 301
+    for maximum_bytes in (99, 80, 55, 51, 50):
+        result = common.truncate_object_bytes('foo' * 100, maximum_bytes)
+        assert sys.getsizeof(result) < maximum_bytes
+        assert len(result) < 300
+        assert ('foo' * 100).startswith(result)
+        # A smaller budget must never retain more characters.
+        assert len(result) <= previous_length
+        previous_length = len(result)
     assert common.truncate_object_bytes('foo' * 100, 0) == ''
 
 
@@ -340,8 +356,19 @@ def test_truncate_generator_bytes():
             yield 'foo'
         raise ValueError('Truncate should not get here')
 
-    assert list(common.truncate_generator_bytes(generator(), 80)) == ['foo', 'foo']
-    assert list(common.truncate_generator_bytes(generator(), 200)) == ['foo', 'foo', 'foo', 'foo']
+    # Exact chunk counts depend on the interpreter's str object size (which changed
+    # in Python 3.12), so assert the contract: only whole chunks are yielded, all
+    # chunks before the last fit within the budget, and the generator is never
+    # consumed past the budget (the ValueError is never raised).
+    previous_length = 0
+    for maximum_bytes in (80, 200):
+        result = list(common.truncate_generator_bytes(generator(), maximum_bytes))
+        assert result == ['foo'] * len(result)
+        assert 0 < len(result) <= 5
+        assert sum(sys.getsizeof(chunk) for chunk in result[:-1]) < maximum_bytes
+        # A larger budget must never yield fewer chunks.
+        assert len(result) >= previous_length
+        previous_length = len(result)
 
 
 def test_check_media_directory(test_directory):

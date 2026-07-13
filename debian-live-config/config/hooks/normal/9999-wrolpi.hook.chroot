@@ -174,10 +174,11 @@ systemctl enable wrolpi-mounts.service
 systemctl enable wrolpi-cert-renew.timer
 
 # Bootstrap service: on a Live USB it creates the persistence partition on
-# first boot; on every boot (Live or Installed) it ensures a Postgres
-# cluster exists on /media/wrolpi/config/postgresql and the wrolpi-* runtime
-# services are enabled.  Installed deployments find no live medium and
-# short-circuit the partition step.
+# first boot; on every boot (Live or Installed) it ensures the config
+# directory exists and the wrolpi-* runtime services are enabled.  The
+# SQLite database is created by the API itself on first start (it lives in
+# /media/wrolpi/config/wrolpi.db).  Installed deployments find no live
+# medium and short-circuit the partition step.
 chmod +x /usr/local/sbin/wrolpi-bootstrap.sh
 systemctl enable wrolpi-bootstrap.service
 
@@ -220,16 +221,6 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi-help-files.desktop /home/wrolpi/Desktop/
 
 chmod +x /home/wrolpi/Desktop/*.desktop
 chown -R wrolpi:wrolpi /home/wrolpi/Desktop
-
-# Drop the default Postgres cluster created by the postgresql-* package.
-# wrolpi-bootstrap.service creates a fresh cluster on /media/wrolpi/config/postgresql
-# at first boot regardless of deployment shape; the cluster files installed
-# here would be masked by the bind-mount on Live and orphaned on Installed.
-# Version derived from the installed binary so this stays correct if the
-# package list is later bumped past postgresql-15.
-PG_VERSION=$(pg_lsclusters -h | awk 'NR==1{print $1}')
-[ -n "${PG_VERSION}" ] || (echo "ERROR: no Postgres cluster found to drop" && exit 1)
-pg_dropcluster --stop "${PG_VERSION}" main
 
 # Protect blob files from accidental modification or deletion.
 if [ -d /opt/wrolpi-blobs ] && ls /opt/wrolpi-blobs/* >/dev/null 2>&1; then

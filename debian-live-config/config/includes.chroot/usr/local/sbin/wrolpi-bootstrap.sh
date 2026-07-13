@@ -7,12 +7,12 @@
 #    drive, formats it as ext4 (label `persistence`), writes a
 #    persistence.conf so future boots pick it up automatically via
 #    live-boot, bind-mounts the persistence root over /media/wrolpi,
-#    creates the Postgres cluster under /media/wrolpi/config/postgresql/,
-#    runs initialize_api_db.sh, and enables the WROLPi runtime services.
+#    and enables the WROLPi runtime services.  The SQLite database is
+#    created by the API itself on first start (in /media/wrolpi/config/).
 #
 # 2. Live USB (direct), subsequent boot.  live-boot's initramfs has
 #    already applied the /media/wrolpi bind mount from persistence.conf.
-#    Cluster and DB already exist.  Most steps no-op; we always
+#    The database already exists.  Most steps no-op; we always
 #    regenerate the leaf TLS cert and ensure services are enabled.
 #
 # 3. Live USB (loop / Ventoy / multiboot).  The ISO is loop-mounted by a
@@ -25,11 +25,8 @@
 # 4. Installed.  No live medium present; partition-creation branch is
 #    skipped.  /media/wrolpi is mounted via /etc/fstab on an external
 #    drive, or is a plain directory on the root filesystem if the user
-#    installed without one.  Postgres lives at the normal Debian paths on
-#    the root filesystem: the bind-mounts are for live boots only, where
-#    the root filesystem is ephemeral.  An installed system's primary
-#    drive may be NTFS/exFAT, which cannot host a Postgres data
-#    directory at all.
+#    installed without one.  The SQLite database lives inside
+#    /media/wrolpi/config/ in every shape, so it travels with the drive.
 
 set -euo pipefail
 
@@ -173,9 +170,7 @@ if [ "$MODE" = "direct" ]; then
 
   # Mount the persistence partition + lay out the on-disk structure.
   # /media/wrolpi is bound to /mnt/persistence/wrolpi by either this
-  # script (first boot) or live-boot's initramfs (subsequent boots).  The
-  # Postgres bind-mounts are managed by THIS script in all cases — see
-  # the "Postgres bind-mounts" section below.
+  # script (first boot) or live-boot's initramfs (subsequent boots).
   mkdir -p /mnt/persistence
   mountpoint -q /mnt/persistence || mount "$PERSIST_PART" /mnt/persistence
   mkdir -p /mnt/persistence/wrolpi
@@ -183,10 +178,7 @@ if [ "$MODE" = "direct" ]; then
 
   # persistence.conf: live-boot reads this on boot and applies the bind
   # mount before systemd starts on subsequent boots.  Only /media/wrolpi
-  # is here; Postgres bind-mounts are intentionally managed by this
-  # script (they live under /media/wrolpi/config/postgresql/ on the
-  # mounted /media/wrolpi, so once that bind is in place they are
-  # reachable).
+  # needs to persist — the SQLite database lives inside it.
   cat > /mnt/persistence/persistence.conf <<'EOF'
 /media/wrolpi bind,source=wrolpi
 EOF
@@ -204,8 +196,8 @@ fi
 # which underlying disk is the user's data drive — appending a partition
 # would risk corrupting their Ventoy stick or whatever else they had on
 # that device.  Run from RAM instead.  Anything written to /media/wrolpi
-# vanishes on reboot, but the rest of WROLPi (Postgres bind-mounts,
-# config layout, services) works identically.
+# vanishes on reboot, but the rest of WROLPi (config layout, database,
+# services) works identically.
 
 if [ "$MODE" = "loop" ]; then
   if ! mountpoint -q /media/wrolpi; then
@@ -221,10 +213,12 @@ if [ "$MODE" = "loop" ]; then
   fi
 fi
 
-# --- /media/wrolpi/config + Postgres data layout ------------------------
+# --- /media/wrolpi/config layout -----------------------------------------
 # Works regardless of whether /media/wrolpi is a bind (Live), a regular
 # mount from /etc/fstab (Installed + external drive), or a plain
-# directory on root (Installed without external drive).
+# directory on root (Installed without external drive).  The SQLite
+# database (wrolpi.db) is created inside config/ by the API on first
+# start — no server or cluster setup is needed here.
 
 if [ ! -d /media/wrolpi ]; then
   mkdir -p /media/wrolpi
@@ -233,69 +227,6 @@ chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || true
 
 mkdir -p /media/wrolpi/config
 chown wrolpi:wrolpi /media/wrolpi/config
-
-# --- Postgres bind-mounts (live boots ONLY, idempotent) ------------------
-# On live boots the root filesystem is an ephemeral overlay, so the
-# cluster must live on the persistence partition: /var/lib/postgresql
-# (data) and /etc/postgresql (config) are bind-mounted onto
-# subdirectories of /media/wrolpi and travel with the stick.
-#
-# On INSTALLED systems Postgres stays at the normal Debian paths on the
-# root filesystem.  The primary drive there may be NTFS/exFAT, which
-# cannot host a Postgres data directory (no POSIX ownership/0700), and
-# repair.sh chowns /media/wrolpi/config for the wrolpi user.
-
-if [ "$MODE" != "installed" ]; then
-  mkdir -p /media/wrolpi/config/postgresql/data \
-           /media/wrolpi/config/postgresql/config
-  chown postgres:postgres /media/wrolpi/config/postgresql \
-                          /media/wrolpi/config/postgresql/data \
-                          /media/wrolpi/config/postgresql/config
-  chmod 0700 /media/wrolpi/config/postgresql/data
-
-  bind_if_unmounted() {
-    local src=$1 dest=$2
-    mkdir -p "$dest"
-    mountpoint -q "$dest" || mount --bind "$src" "$dest"
-  }
-
-  bind_if_unmounted /media/wrolpi/config/postgresql/data   /var/lib/postgresql
-  bind_if_unmounted /media/wrolpi/config/postgresql/config /etc/postgresql
-else
-  # Installed system that previously ran with the binds (older bootstrap):
-  # if a stale bind is still active from this boot, leave it alone — the
-  # cluster logic below would otherwise misdetect.  It disappears on the
-  # next reboot with this version.
-  if mountpoint -q /var/lib/postgresql; then
-    log "NOTE: /var/lib/postgresql is still bind-mounted (old layout); reboot to move Postgres to the root filesystem."
-  fi
-fi
-
-# --- Postgres cluster ---------------------------------------------------
-# Derive version from the installed Postgres binary so this stays correct
-# if the package list is later bumped past postgresql-15.
-
-PG_VERSION=$(ls /usr/lib/postgresql 2>/dev/null | sort -n | tail -1)
-if [ -z "$PG_VERSION" ]; then
-  log "ERROR: no postgresql server package found under /usr/lib/postgresql"
-  exit 1
-fi
-
-if ! pg_lsclusters -h | awk '{print $1,$2}' | grep -q "^${PG_VERSION} main$"; then
-  progress "Setting up Postgres cluster..."
-  pg_createcluster "${PG_VERSION}" main
-  note_action "Set up PostgreSQL ${PG_VERSION} cluster at /media/wrolpi/config/postgresql/"
-fi
-progress "Starting Postgres..."
-systemctl start "postgresql@${PG_VERSION}-main.service"
-
-# --- WROLPi DB schema + initial config import ---------------------------
-
-if ! sudo -iu postgres psql -lqt | cut -d \| -f 1 | grep -qw wrolpi; then
-  progress "Initializing WROLPi database (this can take a minute)..."
-  /opt/wrolpi/scripts/initialize_api_db.sh
-  note_action "Initialized the WROLPi database"
-fi
 
 # --- Certificates -------------------------------------------------------
 # CA persists in /media/wrolpi/config/ssl/ (created on first run).  Leaf
@@ -352,7 +283,7 @@ WROLPi finished setting itself up:
 $SUMMARY
 These persist between reboots:
   /media/wrolpi          — your library (videos, archives, zims, ...)
-  /media/wrolpi/config   — configuration + Postgres data
+  /media/wrolpi/config   — configuration + database
 EOF
   fi
   chmod 0644 "$SUMMARY_FILE"

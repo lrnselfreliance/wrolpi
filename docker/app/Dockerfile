@@ -1,5 +1,6 @@
 # base image
-FROM node:18-bullseye
+# Node 20 matches the nodejs package shipped by Debian 13 (trixie).
+FROM node:20-trixie
 
 WORKDIR /app
 ENV PATH /app/node_modules/.bin:$PATH

@@ -1206,6 +1206,46 @@ async def test_get_bulk_tag_preview_directory(test_session, make_files_structure
 
 
 @pytest.mark.asyncio
+async def test_apply_indexers_concurrent_writer(test_session, make_files_structure, async_client):
+    """apply_indexers must survive other connections committing writes while a batch is indexing.
+
+    Regression test for the 10.0.0.9 refresh failure: the batch held one ORM session across
+    minutes of indexer subprocesses, so its commit had to upgrade a stale read snapshot to a
+    write, and SQLite returned "database is locked" (SQLITE_BUSY_SNAPSHOT — busy_timeout does
+    not apply) whenever any other connection had committed a write in the meantime."""
+    from wrolpi.conftest import production_like_sessions
+
+    paths = make_files_structure({f'file{i}.txt': f'contents {i}' for i in range(3)})
+    for path in paths:
+        FileGroup.from_paths(test_session, path)
+    test_session.commit()
+
+    original_create_index = indexers.TextIndexer.create_index
+
+    with production_like_sessions(test_session) as maker:
+        def create_index_and_concurrent_write(path):
+            # Another connection commits a write mid-batch, like a modeler or download worker.
+            other = maker()
+            try:
+                other.execute("INSERT INTO directory (path, name, idempotency) "
+                              "VALUES ('/tmp/concurrent', 'concurrent', CURRENT_TIMESTAMP) "
+                              "ON CONFLICT (path) DO UPDATE SET name = 'concurrent'")
+                other.commit()
+            finally:
+                other.close()
+            return original_create_index(path)
+
+        with mock.patch.object(indexers.TextIndexer, 'create_index', create_index_and_concurrent_write):
+            await lib.apply_indexers()
+
+    test_session.expire_all()
+    file_groups = test_session.query(FileGroup).all()
+    assert len(file_groups) == 3
+    assert all(fg.indexed for fg in file_groups)
+    assert all(fg.d_text for fg in file_groups)
+
+
+@pytest.mark.asyncio
 async def test_get_bulk_tag_preview_many_files(test_session, make_files_structure, test_directory):
     """Previewing a directory containing well over 1000 files must not fail.
 

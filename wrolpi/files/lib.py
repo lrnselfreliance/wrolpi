@@ -925,95 +925,75 @@ async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
             total_to_index = session.query(FileGroup).filter(FileGroup.indexed != True).count()
         progress_callback(0, total_to_index)
 
+    update_stmt = ('UPDATE file_group SET "indexed" = 1, title = :title, a_text = :a_text, b_text = :b_text,'
+                   ' c_text = :c_text, d_text = :d_text WHERE id = :id')
+
+    def _strip_surrogates(value):
+        return value.encode('utf-8', errors='replace').decode('utf-8') if isinstance(value, str) else value
+
     while True:
-        # Continually query for Files that have not been indexed.
-        with get_db_session(commit=False) as session:
-            file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
-            file_groups: List[FileGroup] = list(file_groups)
+        # Read the next batch as plain columns and let the read transaction end.  Indexers can run
+        # subprocesses for minutes, and SQLite requires short write transactions: a session held
+        # across the batch fails its commit with "database is locked" (SQLITE_BUSY_SNAPSHOT, which
+        # ignores busy_timeout) whenever any other connection commits a write in the meantime.
+        with get_db_session() as session:
+            rows = session.query(FileGroup.id, FileGroup.primary_path, FileGroup.mimetype, FileGroup.title) \
+                .filter(FileGroup.indexed != True).limit(20).all()
 
-            file_group = None
-            processed = 0
-            for file_group in file_groups:
-                processed += 1
-                try:
-                    file_group.do_index()
-                except Exception:
-                    # Error has already been logged in .do_index.
-                    if PYTEST:
-                        raise
-                # Always mark the FileGroup as indexed.  We won't try to index it again.
-                file_group.indexed = True
+        if not rows:
+            break
 
-                # Sleep to catch cancel.
-                await asyncio.sleep(0)
-
-            # Commit may fail due to invalid UTF-8 surrogates in paths
+        # Index each file on a transient FileGroup: no session, no open transaction.
+        processed = 0
+        params = []
+        last_path = None
+        for fg_id, primary_path, mimetype, title in rows:
+            processed += 1
+            file_group = FileGroup(primary_path=primary_path, mimetype=mimetype, title=title)
             try:
-                session.commit()
-            except UnicodeEncodeError as e:
-                session.rollback()
-                refresh_logger.warning(f'UnicodeEncodeError during indexer commit, attempting to fix: {e}')
-                # Find and fix the problematic file(s) by re-querying after rollback
-                fg_ids = [fg.id for fg in file_groups if fg.id]
-                session.expire_all()
-                file_groups = session.query(FileGroup).filter(FileGroup.id.in_(fg_ids)).all()
+                file_group.do_index()
+            except Exception:
+                # Error has already been logged in .do_index.  It is still marked as indexed
+                # below; we won't try to index it again.
+                if PYTEST:
+                    raise
+            params.append(dict(id=fg_id, title=file_group.title, a_text=file_group.a_text,
+                               b_text=file_group.b_text, c_text=file_group.c_text, d_text=file_group.d_text))
+            last_path = primary_path
 
-                for fg in file_groups:
-                    try:
-                        # Check if primary_path has surrogates
-                        primary_path_str = str(fg.primary_path)
-                        try:
-                            primary_path_str.encode('utf-8')
-                        except UnicodeEncodeError:
-                            sanitized = sanitize_filename_surrogates(fg.primary_path)
-                            refresh_logger.info(f'Sanitized primary_path: {fg.primary_path} -> {sanitized}')
-                            fg.primary_path = sanitized
+            # Sleep to catch cancel.
+            await asyncio.sleep(0)
 
-                        # Check if files JSON has surrogates
-                        if fg.files:
-                            new_files = []
-                            for f in fg.files:
-                                path_val = f.get('path', '')
-                                # Convert to string if it's a Path object
-                                path_str = str(path_val) if path_val else ''
-                                try:
-                                    path_str.encode('utf-8')
-                                    new_files.append(f)
-                                except UnicodeEncodeError:
-                                    sanitized = sanitize_filename_surrogates(pathlib.Path(path_str))
-                                    refresh_logger.info(f'Sanitized file path: {path_str} -> {sanitized}')
-                                    new_files.append({**f, 'path': str(sanitized)})
-                            fg.files = new_files
-                    except Exception as fix_error:
-                        refresh_logger.error(f'Failed to sanitize path for FileGroup {fg.id}: {fix_error}',
-                                             exc_info=fix_error)
-                    # Re-mark as indexed (rollback undid this)
-                    fg.indexed = True
+        # Write the batch in one short transaction (BEGIN IMMEDIATE via commit=True).
+        try:
+            with get_db_curs(commit=True) as curs:
+                curs.executemany(update_stmt, params)
+        except UnicodeEncodeError as e:
+            # Paths with invalid UTF-8 surrogates produce titles/texts sqlite3 cannot store.
+            refresh_logger.warning(f'UnicodeEncodeError during indexer update, sanitizing batch: {e}')
+            params = [{k: _strip_surrogates(v) for k, v in p.items()} for p in params]
+            try:
+                with get_db_curs(commit=True) as curs:
+                    curs.executemany(update_stmt, params)
+            except UnicodeEncodeError as e2:
+                # Still failing - mark as indexed without the texts so we don't loop forever.
+                refresh_logger.error(f'Failed to fix UnicodeEncodeError, skipping batch: {e2}')
+                with get_db_curs(commit=True) as curs:
+                    curs.execute('UPDATE file_group SET "indexed" = 1 WHERE id IN '
+                                 '(SELECT value FROM json_each(?))',
+                                 (json.dumps([p['id'] for p in params]),))
 
-                # Retry commit after fixing
-                try:
-                    session.commit()
-                except UnicodeEncodeError as e2:
-                    # Still failing - skip these files and continue
-                    session.rollback()
-                    refresh_logger.error(f'Failed to fix UnicodeEncodeError, skipping batch: {e2}')
-                    # Mark as indexed in a separate transaction so we don't loop forever
-                    with get_db_curs(commit=True) as curs:
-                        curs.execute('UPDATE file_group SET indexed = TRUE WHERE id IN '
-                                     '(SELECT value FROM json_each(?))', (json.dumps(list(fg_ids)),))
-                    continue
+        if last_path:
+            refresh_logger.debug(f'Indexed {processed} files near {last_path}')
 
-            if file_group:
-                refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')
+        # Update progress
+        total_indexed += processed
+        if progress_callback and total_to_index > 0:
+            progress_callback(total_indexed, total_to_index)
 
-            # Update progress
-            total_indexed += processed
-            if progress_callback and total_to_index > 0:
-                progress_callback(total_indexed, total_to_index)
-
-            if processed < 20:
-                # Processed less than the limit, don't do the next query.
-                break
+        if processed < 20:
+            # Processed less than the limit, don't do the next query.
+            break
 
 
 def upsert_directories(parent_directories, directories):

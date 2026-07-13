@@ -3,8 +3,8 @@
 # XFCE session is up.
 #
 # wrolpi-bootstrap.service writes /tmp/wrolpi-firstboot-summary.txt when
-# it does notable work (creates the persistence partition, initialises
-# the Postgres cluster, runs the DB schema migration).  This script —
+# it does notable work (e.g. creates the persistence partition).  This
+# script —
 # autostarted via /etc/xdg/autostart/wrolpi-firstboot-notify.desktop —
 # reads it, shows the contents to the user, and removes the file.
 #

@@ -1,4 +1,4 @@
-FROM debian:12
+FROM debian:13
 ENV DOCKER=true
 
 RUN apt update && apt-get install -y kiwix kiwix-tools

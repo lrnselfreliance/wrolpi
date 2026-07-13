@@ -10,7 +10,9 @@
 # https://live-team.pages.debian.net/live-manual/html/live-manual/index.en.html
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-BUILD_DIR=/var/tmp/wrolpi-build-debian
+# Overridable so a development build can run beside the release pipeline's
+# build tree without colliding with it.
+BUILD_DIR="${WROLPI_BUILD_DIR:-/var/tmp/wrolpi-build-debian}"
 
 Help() {
   echo "Build WROLPi Debian Live ISO image."
@@ -19,6 +21,9 @@ Help() {
   echo "options:"
   echo "h     Print this help."
   echo "b     Build from this git BRANCH (default: 'release')."
+  echo
+  echo "Set WROLPI_BUILD_DIR to build somewhere other than the default"
+  echo "(${BUILD_DIR}), e.g. beside the release pipeline's tree."
   echo
 }
 
@@ -41,9 +46,11 @@ if [ -z "${VERSION}" ]; then
 fi
 echo "Building WROLPi version: ${VERSION} from branch: ${BRANCH}"
 
-# Re-execute this script if it wasn't called with sudo.
+# Re-execute this script if it wasn't called with sudo.  Pass BUILD_DIR
+# through explicitly — a plain `sudo "$0"` drops WROLPI_BUILD_DIR from the
+# environment and the build would silently land on the default path.
 if [ $EUID != 0 ]; then
-  sudo "$0" "$@"
+  sudo WROLPI_BUILD_DIR="${BUILD_DIR}" "$0" "$@"
   exit $?
 fi
 
@@ -71,7 +78,7 @@ lb config \
  --mode debian \
  --architectures amd64 \
  --linux-flavours amd64 \
- --distribution bookworm \
+ --distribution trixie \
  --debian-installer live \
  --debian-installer-gui true \
  --archive-areas "main contrib non-free non-free-firmware" \

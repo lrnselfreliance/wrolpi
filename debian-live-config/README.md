@@ -20,7 +20,7 @@ sudo ./build.sh -b master      # build from a specific branch
 Requires Debian / Ubuntu with `live-build` installed.  The resulting ISO is
 written to this directory as `WROLPi-v${VERSION}-amd64.iso`.
 
-Flash with Etcher, Rufus, Raspberry Pi Imager, or:
+Flash with Raspberry Pi Imager, Rufus, or:
 
 ```
 sudo dd if=WROLPi-v${VERSION}-amd64.iso of=/dev/sdX bs=4M status=progress conv=fsync
@@ -50,7 +50,7 @@ is no safe, filesystem-agnostic way to graft WROLPi onto a full drive.
 `scripts/wrolpi-usb.sh install` only prints this procedure:
 
 1. Back up everything on the drive to another disk.
-2. Flash the whole drive with the ISO (`dd`/Etcher/Rufus — this erases it).
+2. Flash the whole drive with the ISO (Raspberry Pi Imager/Rufus/`dd` — this erases it).
 3. Boot once so WROLPi creates its persistence partition and sets itself up.
 4. Copy your data into `/media/wrolpi/`, then let WROLPi refresh/repair to
    index the restored files.
@@ -60,8 +60,9 @@ Afterwards, future ISO upgrades preserve your library via the
 
 ## Layout on disk
 
-The drive carries everything WROLPi needs.  Postgres data lives alongside
-the user's library so a drive moved between hosts keeps its full state:
+The drive carries everything WROLPi needs.  The SQLite database lives
+alongside the user's library so a drive moved between hosts keeps its
+full state:
 
 ```
 /media/wrolpi/
@@ -75,9 +76,9 @@ the user's library so a drive moved between hosts keeps its full state:
     controller.yaml
     fstab.yaml
     ssl/
-    postgresql/
-      data/                              ← bind-mounted to /var/lib/postgresql
-      config/                            ← bind-mounted to /etc/postgresql
+    wrolpi.db                            ← SQLite database (created by the
+                                           API on first start; -wal/-shm
+                                           sidecars appear while running)
 ```
 
 ## Booting via Ventoy or other multiboot USBs
@@ -93,16 +94,16 @@ user's Ventoy stick, not a blank target — appending a new ext4 partition
 to it would risk corrupting the user's other ISOs and data.
 
 Instead the script mounts a `tmpfs` at `/media/wrolpi` (sized to half of
-RAM by default), and the rest of the boot is unchanged.  Postgres
-bind-mounts and DB initialisation all succeed, just into RAM.  The user
-sees a "Running ephemerally…" notice in the first-boot dialog.
+RAM by default), and the rest of the boot is unchanged.  The config
+layout and SQLite database are created as usual, just into RAM.  The
+user sees a "Running ephemerally…" notice in the first-boot dialog.
 
 Everything written to the WROLPi library — downloads, archives, video
 metadata, the database — is lost on reboot.  This mode is intended for
 trying WROLPi out without committing a USB stick; for any real use,
-flash the ISO directly to its own drive with `dd` or Etcher.
+flash the ISO directly to its own drive with Raspberry Pi Imager or `dd`.
 
-Direct (dd/Etcher) boot is distinguished by the live medium living under
+Direct (Raspberry Pi Imager/dd) boot is distinguished by the live medium living under
 `/dev/sd*`, `/dev/nvme*`, or `/dev/mmcblk*`; this is the only shape
 where `wrolpi-bootstrap.sh` will touch the partition table.
 

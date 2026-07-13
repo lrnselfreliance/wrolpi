@@ -1,9 +1,11 @@
 IMG_NAME=WROLPi
 BASE_QCOW2_SIZE=48G
-RELEASE=bookworm
+RELEASE=trixie
 LOCALE_DEFAULT=en_US.UTF-8
 TARGET_HOSTNAME=wrolpi
-KEYBOARD_KEYMAP=en_US
+# XKB keymap name (see /usr/share/X11/xkb/symbols/); trixie's console-setup
+# validates this, and "en_US" is not a valid keymap.
+KEYBOARD_KEYMAP=us
 KEYBOARD_LAYOUT="English (US)"
 ENABLE_SSH=1
 DEPLOY_COMPRESSION=xz

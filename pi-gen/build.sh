@@ -2,7 +2,9 @@
 # https://github.com/RPI-Distro/pi-gen
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-BUILD_DIR=/var/tmp/wrolpi-build-pi-gen
+# Overridable so a development build can run beside the release pipeline's
+# build tree without colliding with it.
+BUILD_DIR="${WROLPI_BUILD_DIR:-/var/tmp/wrolpi-build-pi-gen}"
 
 Help() {
   echo "Build WROLPi Raspberry Pi OS image."
@@ -11,6 +13,9 @@ Help() {
   echo "options:"
   echo "h     Print this help."
   echo "b     Build from this git BRANCH (default: 'release')."
+  echo
+  echo "Set WROLPI_BUILD_DIR to build somewhere other than the default"
+  echo "(${BUILD_DIR}), e.g. beside the release pipeline's tree."
   echo
 }
 
@@ -31,16 +36,18 @@ if [ -z "${VERSION}" ]; then
 fi
 echo "Building WROLPi version: ${VERSION} from branch: ${BRANCH}"
 
-# Re-execute this script if it wasn't called with sudo.
+# Re-execute this script if it wasn't called with sudo.  Pass BUILD_DIR
+# through explicitly — a plain `sudo "$0"` drops WROLPI_BUILD_DIR from the
+# environment and the build would silently land on the default path.
 if [ $EUID != 0 ]; then
-  sudo "$0" "$@"
+  sudo WROLPI_BUILD_DIR="${BUILD_DIR}" "$0" "$@"
   exit $?
 fi
 
 CHROOTFS="${BUILD_DIR}/work/WROLPi/stage0/rootfs"
 
 cleanup() {
-    [ -f /var/tmp/bookworm-arm64.zip ] && rm /var/tmp/bookworm-arm64.zip
+    [ -f /var/tmp/arm64.zip ] && rm /var/tmp/arm64.zip
 
     # Only unmount if it is actually a mountpoint
     for mp in \
@@ -99,12 +106,12 @@ fi
 # the stale one and break the build.  Strip the immutable flag off blob files
 # first (the chroot sets chattr +i), or rm -rf cannot remove them.
 chattr -i "${BUILD_DIR}"/work/*/stage*/rootfs/opt/wrolpi-blobs/* 2>/dev/null || :
-rm -rf "${BUILD_DIR}" /var/tmp/pi-gen-bookworm-arm64 /var/tmp/bookworm-arm64.zip
+rm -rf "${BUILD_DIR}" /var/tmp/pi-gen-arm64 /var/tmp/arm64.zip
 
-# Get the latest pi-gen code.
-wget https://github.com/RPi-Distro/pi-gen/archive/refs/heads/bookworm-arm64.zip -O /var/tmp/bookworm-arm64.zip
-unzip /var/tmp/bookworm-arm64.zip -d /var/tmp
-mv /var/tmp/pi-gen-bookworm-arm64 /var/tmp/wrolpi-build-pi-gen
+# Get the latest pi-gen code.  The `arm64` branch builds trixie (Debian 13).
+wget https://github.com/RPi-Distro/pi-gen/archive/refs/heads/arm64.zip -O /var/tmp/arm64.zip
+unzip /var/tmp/arm64.zip -d /var/tmp
+mv /var/tmp/pi-gen-arm64 "${BUILD_DIR}"
 
 # Copy the configuration and build files into the pi-gen directory.
 cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
@@ -112,7 +119,7 @@ echo "export WROLPI_BRANCH=${BRANCH}" >> "${BUILD_DIR}/config.txt"
 rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
 
 # We only need to build the Lite and Desktop images.
-rm "${BUILD_DIR}"/stage*/EXPORT*
+rm -f "${BUILD_DIR}"/stage*/EXPORT*
 #echo 'IMG_SUFFIX="-lite"' > "${BUILD_DIR}/stage2/EXPORT_IMAGE"
 echo 'IMG_SUFFIX="-desktop"' > "${BUILD_DIR}/stage5/EXPORT_IMAGE"
 

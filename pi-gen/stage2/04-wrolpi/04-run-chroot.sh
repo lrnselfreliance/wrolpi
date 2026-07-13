@@ -3,11 +3,6 @@
 set -e
 set -x
 
-# All users can access the wrolpi database.
-cat >/etc/skel/.pgpass <<'EOF'
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chmod 0600 /etc/skel/.pgpass
 cat >/etc/skel/.gitconfig  <<'EOF'
 [safe]
 	directory = /opt/wrolpi

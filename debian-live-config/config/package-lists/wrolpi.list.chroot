@@ -11,7 +11,6 @@ cargo
 catdoc
 chromium
 chromium-driver
-cpufrequtils
 curl
 dnsmasq-base
 dosfstools
@@ -29,6 +28,7 @@ gcc-doc
 gdisk
 git
 git-doc
+gnupg
 gnupg-agent
 gpsd
 gvfs
@@ -49,14 +49,14 @@ libfreetype6-dev
 libgeos++-dev
 libgeos-dev
 libicu-dev
-libpq-dev
 libproj-dev
 libreoffice
 libsqlite3-dev
 libssl-dev
-libtiff5-dev
+libtiff-dev
 libtool
 libxml2-dev
+locales
 lxpolkit
 netcat-openbsd
 network-manager
@@ -68,8 +68,6 @@ ntfs-3g
 parted
 pavucontrol
 pkg-config
-postgresql-15
-postgresql-doc
 pulseaudio
 pulseaudio-utils
 pv
@@ -82,7 +80,7 @@ rfkill
 rsync
 samba
 smartmontools
-software-properties-common
+sqlite3
 sudo
 sysstat
 tar

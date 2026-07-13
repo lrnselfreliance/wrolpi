@@ -10,7 +10,6 @@ cargo
 catdoc
 chromium-browser
 chromium-chromedriver
-cpufrequtils
 curl
 ethtool
 exfat-fuse
@@ -42,10 +41,9 @@ libfreetype6-dev
 libgeos++-dev
 libgeos-dev
 libicu-dev
-libpq-dev
 libproj-dev
 libssl-dev
-libtiff5-dev
+libtiff-dev
 libtool
 libxml2-dev
 netcat-openbsd
@@ -55,8 +53,6 @@ nodejs
 npm
 ntfs-3g
 pkg-config
-postgresql-15
-postgresql-doc
 pv
 python3-dev
 python3-doc
@@ -66,7 +62,7 @@ python3-venv
 rsync
 samba
 smartmontools
-software-properties-common
+sqlite3
 sysstat
 tar
 tcpdump

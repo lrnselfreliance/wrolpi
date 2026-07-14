@@ -257,9 +257,10 @@ async def test_search_videos(test_session, video_factory, assert_video_search, s
                               offset=1)
     await assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-published_datetime',
                               channel_id=simple_channel.id)
-    await assert_video_search(assert_total=2, assert_ids=[vid1.id, vid2.id], tag_names=[tag1.name])
+    # No search_str, so the default 'rank' order is a constant; ties fall to fg.id DESC.
+    await assert_video_search(assert_total=2, assert_ids=[vid2.id, vid1.id], tag_names=[tag1.name])
     await assert_video_search(assert_total=2, assert_ids=[vid3.id, vid2.id], tag_names=[tag2.name])
-    await assert_video_search(assert_total=2, assert_ids=[vid1.id], tag_names=[tag1.name], limit=1)
+    await assert_video_search(assert_total=2, assert_ids=[vid2.id], tag_names=[tag1.name], limit=1)
     # Only vid2 has both tags.
     await assert_video_search(assert_total=1, assert_ids=[vid2.id], tag_names=[tag1.name, tag2.name])
 

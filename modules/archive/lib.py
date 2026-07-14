@@ -1376,8 +1376,8 @@ ARCHIVE_ORDERS = {
     '-download_datetime': 'fg.download_datetime DESC NULLS LAST',
     'rank': f'2 DESC, {_date}',
     '-rank': f'2 ASC, {date}',
-    'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
-    '-size': 'fg.size DESC NULLS LAST, LOWER(fg.primary_path) DESC',
+    'size': 'fg.size ASC, fg.id ASC',
+    '-size': 'fg.size DESC NULLS LAST, fg.id DESC',
     'viewed': 'fg.viewed ASC',
     '-viewed': 'fg.viewed DESC',
 }
@@ -1444,15 +1444,24 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     select_columns = f"{select_columns}," if select_columns else ""
     wheres = '\n AND '.join(wheres)
     where = f'WHERE\n{wheres}' if wheres else ''
+    if where or fts_join:
+        from_clause = f'''FROM archive a
+            LEFT JOIN file_group fg ON fg.id = a.file_group_id
+            {fts_join}'''
+    else:
+        # Browse (no filters): CROSS JOIN pins file_group as the outer table so SQLite walks its
+        # date index and probes archive's covering index -- both sides stay index-only.  Driving
+        # from archive probes every (large) file_group row for the sort key, which takes ~90
+        # seconds cold on a Pi with 124k archives.
+        from_clause = 'FROM file_group fg CROSS JOIN archive a ON a.file_group_id = fg.id'
+
     stmt = f'''
             SELECT
                 a.file_group_id AS id, -- always get `file_group.id` for `handle_file_group_search_results`
                 {select_columns}
                 COUNT(*) OVER() AS total
                 {headline_columns}
-            FROM archive a
-            LEFT JOIN file_group fg ON fg.id = a.file_group_id
-            {fts_join}
+            {from_clause}
             {where}
             ORDER BY {order_by}
             LIMIT :limit OFFSET :offset

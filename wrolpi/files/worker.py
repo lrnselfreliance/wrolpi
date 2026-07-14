@@ -1269,6 +1269,12 @@ class FileWorker:
 
         # Set refresh_complete flag only when refreshing the entire media directory
         if is_global_refresh:
+            # Refresh statistics for the query planner; without sqlite_stat1 (or after the table
+            # contents change wholesale) SQLite picks full scans over the covering indexes.
+            from wrolpi.db import get_db_curs
+            with get_db_curs(commit=True) as curs:
+                curs.execute('PRAGMA optimize')
+
             flags.refresh_complete.set()
             flags.global_refresh_active.clear()
             # After a DB rebuild, playlists.yaml was imported before any files were indexed, so its

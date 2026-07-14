@@ -50,23 +50,25 @@ def get_video(file_group_id: int) -> Video:
 
 
 VIDEO_ORDERS = {
+    # fg.id (the rowid) is the pagination tiebreaker: it is present in every index, so these
+    # orders stay index-only.  LOWER(fg.primary_path) forced SQLite to read every (large) row.
     # Sometimes we don't have a published_datetime.  This is equivalent to COALESCE(fg.published_datetime, fg.download_datetime)
-    'published_datetime': 'fg.effective_datetime ASC, LOWER(fg.primary_path) ASC',
-    '-published_datetime': 'fg.effective_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
-    'rank': '2 DESC, LOWER(fg.primary_path) DESC',
-    '-rank': '2 ASC, LOWER(fg.primary_path) ASC',
-    'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
-    '-size': 'fg.size DESC, LOWER(fg.primary_path) DESC',
-    'length': 'fg.length ASC, LOWER(fg.primary_path) ASC',
-    '-length': 'fg.length DESC, LOWER(fg.primary_path) DESC',
-    'size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END ASC, LOWER(fg.primary_path) ASC',
-    '-size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END DESC, LOWER(fg.primary_path) DESC',
+    'published_datetime': 'fg.effective_datetime ASC, fg.id ASC',
+    '-published_datetime': 'fg.effective_datetime DESC NULLS LAST, fg.id ASC',
+    'rank': '2 DESC, fg.id DESC',
+    '-rank': '2 ASC, fg.id ASC',
+    'size': 'fg.size ASC, fg.id ASC',
+    '-size': 'fg.size DESC, fg.id DESC',
+    'length': 'fg.length ASC, fg.id ASC',
+    '-length': 'fg.length DESC, fg.id DESC',
+    'size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END ASC, fg.id ASC',
+    '-size_to_duration': 'CASE WHEN fg.length > 0 THEN CAST(fg.size AS REAL) / fg.length ELSE fg.size END DESC, fg.id DESC',
     'viewed': 'fg.viewed ASC',
     '-viewed': 'fg.viewed DESC',
     'view_count': 'v.view_count ASC',
     '-view_count': 'v.view_count DESC',
-    'download_datetime': 'fg.download_datetime ASC, LOWER(fg.primary_path) ASC',
-    '-download_datetime': 'fg.download_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
+    'download_datetime': 'fg.download_datetime ASC, fg.id ASC',
+    '-download_datetime': 'fg.download_datetime DESC NULLS LAST, fg.id ASC',
 }
 NO_NULL_ORDERS = {
     'viewed': 'fg.viewed IS NOT NULL',

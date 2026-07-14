@@ -72,6 +72,9 @@ class FileGroup(ModelHelper, Base):
         Index('file_group_download_datetime_idx', 'download_datetime'),
         Index('file_group_effective_datetime_idx', 'effective_datetime'),
         Index('file_group_length_idx', 'length'),
+        # Covering index for browse pages: mimetype filter + date order resolve index-only
+        # instead of scanning every (large) file_group row.
+        Index('file_group_mimetype_effective_idx', 'mimetype', 'effective_datetime'),
         Index('file_group_mimetype_idx', 'mimetype'),
         Index('file_group_model_idx', 'model'),
         Index('file_group_modification_datetime_idx', 'modification_datetime'),

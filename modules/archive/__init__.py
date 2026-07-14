@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, FIREFOX, DENO_BIN, SINGLE_FILE_DENO_SCRIPT
 from wrolpi.collections import Collection
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
-    slow_logger, get_title_from_html, TRACE_LEVEL
+    slow_logger, get_title_from_html, strip_surrogates, TRACE_LEVEL
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadContext, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -306,10 +306,13 @@ def model_archive(session: Session, file_group: FileGroup) -> Archive:
             title = get_title(readability_json_path)
         if not title:
             title = get_title_from_html(lib.read_singlefile_html(singlefile_path))
+        # Scraped titles can contain unpaired surrogates which sqlite3 refuses to store; a poisoned
+        # title fails the modeler's batch commit (it killed archive modeling on 10.0.0.9).
+        title = strip_surrogates(title)
 
         contents = None
         if readability_txt_path:
-            contents = get_article(readability_txt_path)
+            contents = strip_surrogates(get_article(readability_txt_path))
 
         # Check if an Archive already exists for this FileGroup
         archive = session.query(Archive).filter_by(file_group_id=file_group_id).one_or_none()
@@ -405,7 +408,17 @@ async def archive_modeler(progress_callback: Callable[[int], None] = None):
                             if PYTEST:
                                 raise
 
-            session.commit()
+            try:
+                session.commit()
+            except Exception as e:
+                # One poisoned row must not kill the modeler: skip this batch for the rest of this
+                # run and keep modeling.  The batch stays unindexed, so the next refresh retries it.
+                session.rollback()
+                logger.error(f'archive_modeler failed to commit batch, skipping {len(results_list)} FileGroups',
+                             exc_info=e)
+                invalid_archives.update(fg.id for fg, _ in results_list)
+                if PYTEST:
+                    raise
 
             # Report batch progress
             batch_count = len(results_list)

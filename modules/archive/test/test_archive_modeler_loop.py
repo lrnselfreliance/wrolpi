@@ -105,3 +105,43 @@ async def test_archive_modeler_processes_more_than_20_files(async_client, test_s
     ).count()
     assert still_unindexed == 0, \
         f"All HTML FileGroups should be indexed, but {still_unindexed} remain unindexed"
+
+
+@pytest.mark.asyncio
+async def test_archive_modeler_surrogate_title(async_client, test_session, test_directory,
+                                               make_files_structure):
+    """A scraped title containing an unpaired UTF-16 surrogate must not kill the modeler.
+
+    Regression test from 10.0.0.9: one archive's readability title contained half of an emoji
+    ('\\ud83c'); sqlite3 refused the batch commit with "UnicodeEncodeError: surrogates not
+    allowed", the whole archive_modeler run died, and every archive after it was left
+    unmodeled (their empty domain collections were then deleted by cleanup)."""
+    domain = 'example.com'
+    archive_dir = test_directory / 'archives' / domain
+    archive_dir.mkdir(parents=True)
+
+    files_structure = {}
+    for i in range(3):
+        timestamp = archive_strftime(datetime.datetime(2000, 1, 1 + i, 0, 0, 0).astimezone(pytz.UTC))
+        url = f'https://{domain}/article-{i}'
+        files_structure[str(archive_dir / f'{timestamp}_Article {i}.html')] = \
+            create_singlefile_content(url, f'Article {i}')
+        if i == 1:
+            # The readability json's title wins over the HTML title; give it a lone surrogate.
+            files_structure[str(archive_dir / f'{timestamp}_Article {i}.readability.json')] = \
+                '{"title": "Broken emoji \\ud83c title", "url": "%s"}' % url
+
+    files = make_files_structure(files_structure)
+    for file_path in files:
+        if pathlib.Path(file_path).suffix == '.html':
+            FileGroup.from_paths(test_session, *[f for f in files
+                                                 if str(f).startswith(str(file_path)[:-5])])
+    test_session.commit()
+
+    await archive_modeler()
+
+    archives = test_session.query(Archive).all()
+    assert len(archives) == 3
+    titles = sorted(a.file_group.title for a in archives)
+    # The surrogate was stripped, the rest of the title survived.
+    assert titles == ['Article 0', 'Article 2', 'Broken emoji  title']

@@ -28,7 +28,7 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     partition, \
     get_files_and_directories, chunks_by_stem, walk, \
     get_wrolpi_config, \
-    unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory
+    unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory, strip_surrogates
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, values_clause
 from wrolpi.downloader import download_manager, Download
@@ -929,7 +929,7 @@ async def apply_indexers(progress_callback: Callable[[int, int], None] = None):
                    ' c_text = :c_text, d_text = :d_text WHERE id = :id')
 
     def _strip_surrogates(value):
-        return value.encode('utf-8', errors='replace').decode('utf-8') if isinstance(value, str) else value
+        return strip_surrogates(value) if isinstance(value, str) else value
 
     while True:
         # Read the next batch as plain columns and let the read transaction end.  Indexers can run

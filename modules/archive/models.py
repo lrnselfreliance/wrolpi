@@ -9,7 +9,8 @@ from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
 from wrolpi.collections import Collection
-from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory
+from wrolpi.common import ModelHelper, Base, logger, get_title_from_html, get_wrolpi_config, get_media_directory, \
+    strip_surrogates
 from wrolpi.dates import now
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
@@ -283,8 +284,9 @@ class Archive(Base, ModelHelper):
         try:
             with readability_json_path.open() as fh:
                 json_contents = json.load(fh)
-                url = json_contents.get('url')
-                title = json_contents.get('title')
+                # Scraped strings can contain unpaired surrogates which sqlite3 refuses to store.
+                url = strip_surrogates(json_contents.get('url'))
+                title = strip_surrogates(json_contents.get('title'))
         except Exception as e:
             raise InvalidArchive() from e
 
@@ -346,7 +348,7 @@ class Archive(Base, ModelHelper):
         # Local import to avoid circular import within archive module
         from modules.archive import lib
         if self.singlefile_path and not self.file_group.title:
-            self.file_group.title = get_title_from_html(lib.read_singlefile_html(self.singlefile_path))
+            self.file_group.title = strip_surrogates(get_title_from_html(lib.read_singlefile_html(self.singlefile_path)))
 
     def apply_metadata(self):
         """Read and apply <meta> (and more) data from the Singlefile HTML."""
@@ -356,11 +358,11 @@ class Archive(Base, ModelHelper):
 
         metadata = lib.parse_article_html_metadata(contents)
         if metadata.author:
-            self.file_group.author = metadata.author
+            self.file_group.author = strip_surrogates(metadata.author)
         if metadata.title:
-            self.file_group.title = metadata.title
+            self.file_group.title = strip_surrogates(metadata.title)
         if metadata.description:
-            self.file_group.b_text = metadata.description
+            self.file_group.b_text = strip_surrogates(metadata.description)
         if metadata.published_datetime:
             self.file_group.published_datetime = metadata.published_datetime
         if metadata.modified_datetime:

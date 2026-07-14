@@ -2678,6 +2678,15 @@ WHITESPACE_SPLITTER = re.compile(r'\s+')
 TAB = re.compile(r'\t+')
 
 
+def strip_surrogates(text: Optional[str]) -> Optional[str]:
+    """Remove unpaired UTF-16 surrogate characters (e.g. broken emoji halves from scraped HTML).
+
+    sqlite3 refuses to store them: "UnicodeEncodeError: surrogates not allowed"."""
+    if text is None:
+        return None
+    return text.encode('utf-8', errors='ignore').decode('utf-8')
+
+
 def split_lines_by_length(text: str, max_line_length: int = 38) -> str:
     """
     Break up any long lines along word boundaries.

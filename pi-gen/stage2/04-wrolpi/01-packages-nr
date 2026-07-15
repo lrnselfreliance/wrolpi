@@ -42,6 +42,7 @@ libgeos++-dev
 libgeos-dev
 libicu-dev
 libproj-dev
+libsqlite3-dev
 libssl-dev
 libtiff-dev
 libtool
@@ -73,3 +74,4 @@ vim
 vlc
 wget
 zim-tools
+zlib1g-dev

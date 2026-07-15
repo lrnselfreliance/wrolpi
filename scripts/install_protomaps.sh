@@ -6,64 +6,11 @@
 set -e
 set -x
 
-# --- Install/upgrade pmtiles CLI ---
-
-install_pmtiles() {
-    PMTILES_VERSION="v1.30.1"
-    ARCH=$(uname -m)
-    if [ "$ARCH" = "aarch64" ]; then
-        PMTILES_ARCH="arm64"
-    elif [ "$ARCH" = "x86_64" ]; then
-        PMTILES_ARCH="amd64"
-    else
-        echo "Unsupported architecture for pmtiles: $ARCH"
-        return 1
-    fi
-
-    # Check if already installed at correct version.
-    if command -v pmtiles &>/dev/null; then
-        CURRENT=$(pmtiles version 2>&1 | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "")
-        if [ "$CURRENT" = "$PMTILES_VERSION" ]; then
-            echo "pmtiles ${PMTILES_VERSION} already installed"
-            return 0
-        fi
-    fi
-
-    echo "Installing pmtiles ${PMTILES_VERSION} for ${ARCH}..."
-    curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_${PMTILES_ARCH}.tar.gz" \
-      | tar -xz -C /usr/local/bin/ pmtiles
-    chmod +x /usr/local/bin/pmtiles
-    pmtiles version
-}
-
-install_pmtiles || echo "pmtiles CLI installation failed, continuing..."
-
-# --- Install/upgrade tippecanoe (for map search index building) ---
-
-install_tippecanoe() {
-    TIPPECANOE_VERSION="2.79.0"
-
-    # Check if already installed at correct version.
-    if command -v tippecanoe-decode &>/dev/null; then
-        CURRENT=$(tippecanoe --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
-        if [ "$CURRENT" = "$TIPPECANOE_VERSION" ]; then
-            echo "tippecanoe ${TIPPECANOE_VERSION} already installed"
-            return 0
-        fi
-    fi
-
-    echo "Building tippecanoe ${TIPPECANOE_VERSION}..."
-    apt-get install -y build-essential libsqlite3-dev zlib1g-dev
-
-    TIPPECANOE_BUILD_DIR=$(mktemp -d)
-    curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
-      | tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1
-    cd "${TIPPECANOE_BUILD_DIR}" && make -j$(nproc) && make install
-    rm -rf "${TIPPECANOE_BUILD_DIR}"
-    tippecanoe --version
-}
-
-install_tippecanoe || echo "tippecanoe installation failed, continuing..."
+# --- Install/upgrade the map toolchain (pmtiles CLI + tippecanoe) ---
+# Shared with the pi-gen and Debian Live image builds so the versions and hash
+# pins live in one place.  Version-guarded, so this is a no-op when the running
+# image already baked in the current versions.
+/opt/wrolpi/wrolpi/scripts/install_map_tools.sh || echo "Map tool installation failed, continuing..."
 
 # --- Migrate from old map stack (runs once) ---
 

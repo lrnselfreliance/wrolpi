@@ -24,4 +24,7 @@ find /media/wrolpi/zims -iname '*.zim' -exec kiwix-manage ${LIBRARY} add {} \;
 [ ! -f ${LIBRARY} ] && echo "Could not find any Zim files to import" && exit 2
 
 # Serve HTTP kiwix on 9085.  Caddy will serve HTTPS on 8085.
-kiwix-serve --library ${LIBRARY} --address 0.0.0.0 --port 9085
+# Bind all interfaces by omitting --address: kiwix-serve defaults to all
+# interfaces, and trixie's kiwix-tools 3.7.0 rejects the literal
+# "--address 0.0.0.0" ("IP address is not available on this system").
+kiwix-serve --library ${LIBRARY} --port 9085

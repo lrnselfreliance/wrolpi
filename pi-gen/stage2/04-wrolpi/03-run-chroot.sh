@@ -32,6 +32,24 @@ chmod +x /usr/local/bin/deno
 rm /tmp/deno.zip
 deno --version
 
+# Build and bake in tippecanoe (used to build map search indexes).  Without this
+# the Pi compiles it on first boot/upgrade via scripts/install_protomaps.sh -- a
+# multi-minute, CPU-heavy C++ build on weak hardware.  The Debian Live image
+# already bakes it in; this brings the Pi image to parity.  Build deps
+# (build-essential, libsqlite3-dev, zlib1g-dev) come from 01-packages-nr.  Hash
+# pinned to the source tarball (arch-independent) to detect upstream tampering.
+TIPPECANOE_VERSION="2.79.0"
+TIPPECANOE_SHA256="b0fd9df49b6efc988288ea48774822c6de19eb48428017f27ee0b3b01d44f05d"
+TIPPECANOE_BUILD_DIR=$(mktemp -d)
+curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
+  -o /tmp/tippecanoe.tar.gz
+echo "${TIPPECANOE_SHA256}  /tmp/tippecanoe.tar.gz" | sha256sum -c -
+tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1 -f /tmp/tippecanoe.tar.gz
+rm /tmp/tippecanoe.tar.gz
+(cd "${TIPPECANOE_BUILD_DIR}" && make -j"$(nproc)" && make install)
+rm -rf "${TIPPECANOE_BUILD_DIR}"
+tippecanoe --version
+
 # Put the latest WROLPi in /opt/wrolpi.
 git clone -b "${WROLPI_BRANCH:-release}" https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 # `git config --global` needs HOME, which is empty when the build runs under

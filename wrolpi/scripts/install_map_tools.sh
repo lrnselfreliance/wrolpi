@@ -29,7 +29,7 @@ install_pmtiles() {
   local arch sha
   case "$(uname -m)" in
     aarch64) arch="arm64"; sha="${PMTILES_SHA256_arm64}" ;;
-    x86_64) arch="amd64"; sha="${PMTILES_SHA256_amd64}" ;;
+    x86_64) arch="x86_64"; sha="${PMTILES_SHA256_amd64}" ;;
     *) echo "Unsupported architecture for pmtiles: $(uname -m)"; return 1 ;;
   esac
 

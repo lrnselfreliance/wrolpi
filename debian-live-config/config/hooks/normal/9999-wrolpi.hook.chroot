@@ -60,8 +60,9 @@ npm install
 # does not exist and wrolpi-app.service (`serve build -l 3000 ...`) returns
 # 404 for every request.  Baking the build into the squashfs means the
 # live image works offline immediately and the installed deployment skips
-# a multi-minute first-boot step.
-BROWSERSLIST_IGNORE_OLD_DATA=true npm run build
+# a multi-minute first-boot step.  build_app.sh also writes build/.build-stamp
+# so the on-device repair.sh sees this build as current and never rebuilds it.
+/opt/wrolpi/scripts/build_app.sh
 
 # Install Node console commands.
 npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6

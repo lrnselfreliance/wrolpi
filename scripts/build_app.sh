@@ -36,9 +36,35 @@ app_build_stamp() {
   } | sort | sha256sum | cut -d' ' -f1
 }
 
+# Verify the built output is actually intact, not just present.
+#
+# A matching stamp only proves the *inputs* are unchanged; it says nothing about
+# whether the *outputs* survived.  repair.sh exists precisely to fix a corrupted
+# install, so a build/ that still has index.html + a stamp but is missing a JS/CSS
+# chunk must NOT be treated as current -- otherwise repair would leave the UI
+# broken where the old unconditional build restored it.  Check that every asset
+# referenced by build/asset-manifest.json exists on disk.  node is guaranteed
+# here: anything that can run `npm run build` can run node.
+build_output_intact() {
+  [ -f build/asset-manifest.json ] || return 1
+  node -e '
+    const fs = require("fs");
+    let m;
+    try { m = JSON.parse(fs.readFileSync("build/asset-manifest.json", "utf8")); }
+    catch { process.exit(1); }                       // unparseable manifest -> rebuild
+    const missing = Object.values(m.files || {})
+      .map(p => "build/" + p.replace(/^\//, ""))
+      .filter(p => !fs.existsSync(p));
+    process.exit(missing.length ? 1 : 0);
+  ' 2>/dev/null
+}
+
 need_build=false
 if [ ! -f build/index.html ]; then
   echo "app build is missing."
+  need_build=true
+elif ! build_output_intact; then
+  echo "app build is present but incomplete/corrupt (missing referenced assets)."
   need_build=true
 elif [ "$(app_build_stamp)" != "$(cat build/.build-stamp 2>/dev/null)" ]; then
   echo "app source changed since the last build."

@@ -159,8 +159,11 @@ if grep -qs /media/wrolpi /proc/mounts && [ -z "$(ls -A /media/wrolpi)" ] && [ !
   mkdir /media/wrolpi/config
 fi
 
-# Build the frontend app.
-(cd /opt/wrolpi/app && npm run build)
+# Build the frontend app -- only if build/ is missing or the app source changed.
+# The shipped image already contains a current build/, so on a healthy install
+# (including a weak Pi) this is a no-op; it only rebuilds after an upgrade that
+# changed app/, or if build/ went missing.  Stays offline: it never npm-installs.
+/opt/wrolpi/scripts/build_app.sh
 
 # Change owner of the media directory, ignore any errors because the drive may be fat/exfat/etc.
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."

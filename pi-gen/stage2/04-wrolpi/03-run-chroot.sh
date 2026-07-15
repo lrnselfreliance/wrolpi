@@ -57,6 +57,12 @@ echo "Controller pre-installed"
 # Install webapp.
 (cd /opt/wrolpi/app && npm install)
 
+# Build the React production bundle now, so it is baked into the image.  Without
+# this the Pi would build on first boot -- a multi-minute, memory-hungry step
+# that can OOM on a 2GB Pi.  build_app.sh stamps the output so the on-device
+# repair.sh sees it as current and never rebuilds.
+/opt/wrolpi/scripts/build_app.sh
+
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Install Caddy from official apt repo.

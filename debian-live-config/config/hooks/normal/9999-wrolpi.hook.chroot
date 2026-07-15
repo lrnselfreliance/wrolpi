@@ -119,33 +119,12 @@ mkdir /media/wrolpi
 [[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
   (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
 
-# Bake in pmtiles CLI so first boot does not need internet.
-# Mirrors scripts/install_protomaps.sh; duplicated here because that script's
-# migration logic relies on a running systemd, which is not present in chroot.
-# Hash pinned to detect tampering of the upstream release artifact.
-PMTILES_VERSION="v1.30.1"
-PMTILES_SHA256="23a2a2222f658320b539ccd06ac3b9b3b803ecbdd39a6cb5249d2ce2e16e38ae"
-curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION#v}_Linux_x86_64.tar.gz" \
-  -o /tmp/pmtiles.tar.gz
-echo "${PMTILES_SHA256}  /tmp/pmtiles.tar.gz" | sha256sum -c -
-tar -xz -C /usr/local/bin/ -f /tmp/pmtiles.tar.gz pmtiles
-rm /tmp/pmtiles.tar.gz
-chmod +x /usr/local/bin/pmtiles
-pmtiles version
-
-# Build and bake in tippecanoe (used to build map search indexes).
-# Hash pinned to detect tampering of the upstream release tarball.
-TIPPECANOE_VERSION="2.79.0"
-TIPPECANOE_SHA256="b0fd9df49b6efc988288ea48774822c6de19eb48428017f27ee0b3b01d44f05d"
-TIPPECANOE_BUILD_DIR=$(mktemp -d)
-curl -fsSL "https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz" \
-  -o /tmp/tippecanoe.tar.gz
-echo "${TIPPECANOE_SHA256}  /tmp/tippecanoe.tar.gz" | sha256sum -c -
-tar -xz -C "${TIPPECANOE_BUILD_DIR}" --strip-components=1 -f /tmp/tippecanoe.tar.gz
-rm /tmp/tippecanoe.tar.gz
-(cd "${TIPPECANOE_BUILD_DIR}" && make -j"$(nproc)" && make install)
-rm -rf "${TIPPECANOE_BUILD_DIR}"
-tippecanoe --version
+# Bake in the map toolchain (pmtiles CLI + tippecanoe) so first boot does not
+# need internet.  Shared with pi-gen and on-device upgrades via a single script
+# so versions/pins live in one place.  It is safe in the chroot: unlike
+# install_protomaps.sh it contains no migration logic that needs a running
+# systemd.
+/opt/wrolpi/wrolpi/scripts/install_map_tools.sh
 
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh

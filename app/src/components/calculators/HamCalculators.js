@@ -217,18 +217,31 @@ export function DipoleAntennaCalculator() {
     const handleMhzChange = (e, {value}) => {
         setMhzInputValue(value);
         const parsed = parseFloat(value);
-        setMhz(value && parsed > 0 ? parsed : 0);
+        // Require a finite positive frequency so overflow (e.g. 1e999 → Infinity) does not stick.
+        setMhz(value && Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
         localStorage.setItem(mhzStorageKey, value);
     }
 
     const handleWaveChange = (e, {value}) => {
         setWaveInputValue(value);
         const parsed = parseFloat(value);
-        if (value && parsed > 0) {
+        if (value && Number.isFinite(parsed) && parsed > 0) {
             const newMhz = frequencyMhzFromWavelengthMeters(parsed);
+            if (newMhz === null) {
+                // Conversion failed (should not happen for finite positive λ); treat as invalid.
+                setMhz(0);
+                setMhzInputValue('');
+                localStorage.setItem(mhzStorageKey, '');
+                return;
+            }
             setMhz(newMhz);
             setMhzInputValue(roundDigits(newMhz));
             localStorage.setItem(mhzStorageKey, String(roundDigits(newMhz)));
+        } else {
+            // Cleared / zero / non-finite wavelength: drop stale MHz and table results.
+            setMhz(0);
+            setMhzInputValue('');
+            localStorage.setItem(mhzStorageKey, '');
         }
     }
 

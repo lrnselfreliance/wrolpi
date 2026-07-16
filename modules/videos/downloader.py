@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL, DownloadError
 from yt_dlp.extractor import YoutubeTabIE  # noqa
 
+from wrolpi.captions import strip_youtube_caption_positioning
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
     trim_file_name, cached_multiprocessing_result, get_absolute_media_path, aiohttp_post, normalize_domain
@@ -1036,6 +1037,16 @@ class VideoDownloader(Downloader, ABC):
             video_paths = glob_shared_stem(video_path)
             video_paths = self._delete_part_files(video_path, video_paths)
             video_paths = self.normalize_video_file_names(video_path, video_paths)
+
+            if url and ('youtube.com' in url or 'youtu.be' in url):
+                # YouTube auto-captions pin the text to the bottom-left; center them at the source.  Runs
+                # before the FileGroup is created, so the first index reads the corrected file.
+                for path in video_paths:
+                    if path.name.endswith('.vtt'):
+                        try:
+                            strip_youtube_caption_positioning(path)
+                        except Exception:
+                            logger.warning(f'Failed to center YouTube captions in {path}', exc_info=True)
 
             return ExecutedVideo(
                 url=url,

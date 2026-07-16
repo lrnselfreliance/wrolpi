@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import pathlib
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -11,7 +12,35 @@ import webvtt
 from wrolpi.cmd import FFMPEG_BIN
 from wrolpi.common import logger
 
-__all__ = ['read_captions', 'read_captions_with_timestamps', 'extract_captions']
+__all__ = ['read_captions', 'read_captions_with_timestamps', 'extract_captions',
+           'strip_youtube_caption_positioning']
+
+# YouTube auto-generated captions (downloaded via yt-dlp) stamp every cue's timing line with
+# `align:start position:0%`, which pins the on-screen text to the bottom-left of the player and makes it hard
+# to read.  This matches only that exact signature on a cue timing line so we never touch a deliberately
+# positioned cue.  The `<c>` word-timing tags in the cue text are left untouched.
+YOUTUBE_CUE_SETTINGS = re.compile(
+    r'^(\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}) align:start position:0%[ \t]*$',
+    re.MULTILINE,
+)
+
+
+def strip_youtube_caption_positioning(caption_path: Union[str, Path]) -> bool:
+    """Remove YouTube's `align:start position:0%` cue settings from a .vtt file so the browser renders the
+    captions centered.  Rewrites the file in place only if something changed.
+
+    This is intended for captions downloaded from youtube.com; the caller is responsible for that gate.
+
+    :return: True if the file was modified.
+    """
+    caption_path = pathlib.Path(caption_path)
+    text = caption_path.read_text()
+    new_text = YOUTUBE_CUE_SETTINGS.sub(r'\1', text)
+    if new_text != text:
+        caption_path.write_text(new_text)
+        logger.info(f'Centered YouTube captions in {caption_path}')
+        return True
+    return False
 
 
 def _parse_vtt_timestamp(timestamp: str) -> float:

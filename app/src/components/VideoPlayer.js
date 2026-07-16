@@ -37,17 +37,18 @@ const MEDIA_PATH = '/media';
 // which pins the text to the bottom-left of the player and makes it hard to read.  Detect that signature and
 // reset those cues to the browser's centered default.  This mutates only the in-memory VTTCue objects the
 // browser parsed; the .vtt file on disk is never modified.  Cues that were deliberately positioned (anything
-// other than the auto-caption signature) are left untouched.
+// other than the auto-caption signature) are left untouched.  YouTube auto-captions never set `line`, so we
+// require `line === 'auto'` too; that leaves a deliberately placed cue (e.g. `line:0` for top-edge) alone even
+// if it happens to also be `align:start position:0%`.
 export function centerAutoCaptions(track) {
     if (!track || !track.cues) {
         return 0;
     }
     let changed = 0;
     for (const cue of track.cues) {
-        if (cue.align === 'start' && cue.position === 0) {
+        if (cue.align === 'start' && cue.position === 0 && cue.line === 'auto') {
             cue.align = 'center';
             cue.position = 'auto';
-            cue.line = 'auto';
             changed++;
         }
     }
@@ -63,11 +64,13 @@ function handleCaptionTrackLoad(event) {
         centerAutoCaptions(track);
     } else {
         // A non-default track has mode 'disabled' at load time, so its cues are not parsed yet.  Normalize
-        // them the first time the browser populates them (when the user selects the track and playback
-        // advances into a cue).
+        // them once the browser populates the cue list (when the user selects the track and playback advances
+        // into a cue).  Only detach after cues actually exist, in case a cuechange fires before they load.
         const onCueChange = () => {
-            centerAutoCaptions(track);
-            track.removeEventListener('cuechange', onCueChange);
+            if (track.cues && track.cues.length > 0) {
+                centerAutoCaptions(track);
+                track.removeEventListener('cuechange', onCueChange);
+            }
         };
         track.addEventListener('cuechange', onCueChange);
     }

@@ -37,6 +37,19 @@ describe('centerAutoCaptions', () => {
         expect(track.cues[1].line).toBe(0);
     });
 
+    test('does not touch a left/bottom cue that was deliberately given a line', () => {
+        // align:start + position:0 but an explicit line -> intentional placement, not the auto-caption
+        // signature (YouTube never sets line).  Must be left alone.
+        const track = makeTrack([
+            {align: 'start', position: 0, line: 0},
+        ]);
+
+        const changed = centerAutoCaptions(track);
+
+        expect(changed).toBe(0);
+        expect(track.cues[0]).toEqual({align: 'start', position: 0, line: 0});
+    });
+
     test('handles a track with no cues yet (mode disabled)', () => {
         expect(centerAutoCaptions({cues: null})).toBe(0);
         expect(centerAutoCaptions(null)).toBe(0);

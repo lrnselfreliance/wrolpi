@@ -5,69 +5,231 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {roundDigits} from "../Common";
 import {ColoredInput} from "../Apps";
 
-function convertFeetToFeetAndInches(decimalFeet) {
-    // Extract the integer part for feet
-    const feet = Math.floor(decimalFeet);
-    // Calculate the remainder in feet and convert it to inches (1 foot = 12 inches)
-    const inches = Math.round((decimalFeet - feet) * 12);
+// ---------------------------------------------------------------------------
+// Pure antenna math
+//
+// Wire antennas are shorter than free-space wavelength by ~5% (end effect).
+// The ARRL / ham-radio constants are:
+//   full-wave length (ft)  = 936 / f(MHz)
+//   half-wave dipole (ft)  = 468 / f(MHz)   = full * 0.5
+//   quarter-wave      (ft) = 234 / f(MHz)   = full * 0.25
+//   5/8-wave          (ft) = 585 / f(MHz)   = full * 0.625
+// Free-space wavelength uses the exact speed of light and is shown separately.
+// ---------------------------------------------------------------------------
 
+/** Speed of light in free space (m/s). */
+export const SPEED_OF_LIGHT = 299792458;
+
+/**
+ * Feet of wire for one full electrical wavelength, including end-effect.
+ * Free-space equivalent is ~984 / f; 936/984 ≈ 0.95 velocity factor.
+ */
+export const FULL_WAVE_FEET_PER_MHZ = 936;
+
+/** Common antenna fractions shown in the calculator. */
+export const ANTENNA_FRACTIONS = [
+    {name: '½ Antenna Length', multiplier: 0.5},
+    {name: '¼ Antenna Length', multiplier: 0.25},
+    {name: '⅝ Antenna Length', multiplier: 0.625},
+];
+
+/**
+ * Convert a decimal foot length into whole feet and inches.
+ * Rounds to the nearest inch and carries 12 inches into an extra foot
+ * (e.g. 3.96 ft → 4 ft 0 in, never "3 ft 12 in").
+ *
+ * @param {number} decimalFeet
+ * @returns {[number, number]} [feet, inches]
+ */
+export function convertFeetToFeetAndInches(decimalFeet) {
+    if (!Number.isFinite(decimalFeet) || decimalFeet < 0) {
+        return [0, 0];
+    }
+    const totalInches = Math.round(decimalFeet * 12);
+    const feet = Math.floor(totalInches / 12);
+    const inches = totalInches % 12;
     return [feet, inches];
 }
+
+/**
+ * Full-wave wire-antenna length in feet for a given frequency in MHz.
+ * Returns null when frequency is not a positive finite number.
+ *
+ * @param {number} mhz
+ * @returns {number|null}
+ */
+export function fullWaveFeet(mhz) {
+    if (!Number.isFinite(mhz) || !(mhz > 0)) {
+        return null;
+    }
+    return FULL_WAVE_FEET_PER_MHZ / mhz;
+}
+
+/**
+ * Free-space wavelength in meters for a given frequency in MHz.
+ * λ = c / f.  Returns null when frequency is not positive.
+ *
+ * @param {number} mhz
+ * @returns {number|null}
+ */
+export function freeSpaceWavelengthMeters(mhz) {
+    if (!Number.isFinite(mhz) || !(mhz > 0)) {
+        return null;
+    }
+    return SPEED_OF_LIGHT / (mhz * 1e6);
+}
+
+/**
+ * Frequency in MHz from a free-space wavelength in meters.
+ * f = c / λ.  Returns null when wavelength is not positive.
+ *
+ * @param {number} meters
+ * @returns {number|null}
+ */
+export function frequencyMhzFromWavelengthMeters(meters) {
+    if (!Number.isFinite(meters) || !(meters > 0)) {
+        return null;
+    }
+    return SPEED_OF_LIGHT / meters / 1e6;
+}
+
+/**
+ * Convert a full-wave length in feet into the unit set used by the UI.
+ *
+ * @param {number} feetValue - full-wave length in feet
+ * @returns {{feet: number, inches: number, meters: number, cm: number}}
+ */
+export function lengthUnitsFromFeet(feetValue) {
+    const meters = feetValue * 0.3048;
+    return {
+        feet: feetValue,
+        inches: feetValue * 12,
+        meters,
+        cm: meters * 100,
+    };
+}
+
+/**
+ * Scale a length-unit set by a fraction (0.5 half-wave, 0.25 quarter, etc.).
+ *
+ * @param {{feet: number, inches: number, meters: number, cm: number}} units
+ * @param {number} multiplier
+ * @returns {{feet: number, inches: number, meters: number, cm: number}}
+ */
+export function scaleLengthUnits(units, multiplier) {
+    return {
+        feet: units.feet * multiplier,
+        inches: units.inches * multiplier,
+        meters: units.meters * multiplier,
+        cm: units.cm * multiplier,
+    };
+}
+
+/**
+ * All length units for the full-wave wire antenna at a given frequency.
+ * Returns null when frequency is invalid.
+ *
+ * @param {number} mhz
+ * @returns {{feet: number, inches: number, meters: number, cm: number}|null}
+ */
+export function fullWaveLengthUnits(mhz) {
+    const feet = fullWaveFeet(mhz);
+    if (feet === null) {
+        return null;
+    }
+    return lengthUnitsFromFeet(feet);
+}
+
+/**
+ * Antenna total length and per-leg length for a fraction of a full wave.
+ * "Leg length" is half the total (center-fed dipole legs).
+ *
+ * @param {number} mhz
+ * @param {number} multiplier - e.g. 0.5 for half-wave
+ * @returns {{
+ *   total: {feet: number, inches: number, meters: number, cm: number, feetInches: [number, number]},
+ *   leg: {feet: number, inches: number, meters: number, cm: number, feetInches: [number, number]},
+ * }|null}
+ */
+export function antennaFractionLengths(mhz, multiplier) {
+    const full = fullWaveLengthUnits(mhz);
+    if (full === null || !Number.isFinite(multiplier)) {
+        return null;
+    }
+    const total = scaleLengthUnits(full, multiplier);
+    const leg = scaleLengthUnits(total, 0.5);
+    return {
+        total: {
+            ...total,
+            feetInches: convertFeetToFeetAndInches(total.feet),
+        },
+        leg: {
+            ...leg,
+            feetInches: convertFeetToFeetAndInches(leg.feet),
+        },
+    };
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
 
 const defaultMhzInputValue = '144.2';
 
 export function DipoleAntennaCalculator() {
     const [mhz, setMhz] = React.useState(144.2);
-    const [wave, setWave] = React.useState(2.08);
     const [mhzInputValue, setMhzInputValue] = React.useState(defaultMhzInputValue);
     const [waveInputValue, setWaveInputValue] = React.useState(0);
     const [feet, setFeet] = React.useState(0);
     const [inches, setInches] = React.useState(0);
     const [meters, setMeters] = React.useState(0);
     const [cm, setCM] = React.useState(0);
-    const c = 299792458;
-
-    // Reduce the full wavelength by the multiplier.
-    const lengths = [
-        {name: '½ Antenna Length', multiplier: 0.5},
-        {name: '¼ Antenna Length', multiplier: 0.25},
-        {name: '⅝ Antenna Length', multiplier: 0.625},
-    ];
 
     React.useEffect(() => {
-        // Calculate full wavelength.
-        const newFeet = 936 / mhz;
-        setFeet(newFeet);
-        setInches(newFeet * 12);
-        setMeters(newFeet * 0.3048);
-        setCM(newFeet * 0.3048 * 100);
-        setWaveInputValue(roundDigits(c / (mhz * 1e6)));
-    }, [mhz]);
-
-    React.useEffect(() => {
-        if (wave && parseFloat(wave) > 0) {
-            setMhzInputValue(roundDigits(c / parseFloat(wave) / 1e6));
+        const units = fullWaveLengthUnits(mhz);
+        if (!units) {
+            setFeet(0);
+            setInches(0);
+            setMeters(0);
+            setCM(0);
+            setWaveInputValue('');
+            return;
         }
-    }, [wave])
+        setFeet(units.feet);
+        setInches(units.inches);
+        setMeters(units.meters);
+        setCM(units.cm);
+        setWaveInputValue(roundDigits(freeSpaceWavelengthMeters(mhz)));
+    }, [mhz]);
 
     const mhzStorageKey = 'dipole_mhz';
     const storageMhzValue = localStorage.getItem(mhzStorageKey);
     React.useEffect(() => {
         if (storageMhzValue) {
-            setMhz(parseFloat(storageMhzValue));
-            setMhzInputValue(storageMhzValue);
+            const parsed = parseFloat(storageMhzValue);
+            if (parsed > 0) {
+                setMhz(parsed);
+                setMhzInputValue(storageMhzValue);
+            }
         }
     }, []);
 
     const handleMhzChange = (e, {value}) => {
         setMhzInputValue(value);
-        setMhz(value && parseFloat(value) > 0 ? parseFloat(value) : 0);
+        const parsed = parseFloat(value);
+        setMhz(value && parsed > 0 ? parsed : 0);
         localStorage.setItem(mhzStorageKey, value);
     }
 
     const handleWaveChange = (e, {value}) => {
         setWaveInputValue(value);
-        setWave(value && parseFloat(value) > 0 ? parseFloat(value) : 0);
+        const parsed = parseFloat(value);
+        if (value && parsed > 0) {
+            const newMhz = frequencyMhzFromWavelengthMeters(parsed);
+            setMhz(newMhz);
+            setMhzInputValue(roundDigits(newMhz));
+            localStorage.setItem(mhzStorageKey, String(roundDigits(newMhz)));
+        }
     }
 
     const [mhzSelected, setMhzSelected] = React.useState(true);
@@ -107,7 +269,7 @@ export function DipoleAntennaCalculator() {
             </Grid.Row>
         </Grid>
 
-        {lengths.map(i => {
+        {ANTENNA_FRACTIONS.map(i => {
             const [feet_, inches_] = convertFeetToFeetAndInches(feet * i.multiplier);
             const [half_feet, half_inches] = convertFeetToFeetAndInches(feet * i.multiplier / 2);
             return <Table key={i.name} size='large' striped unstackable>

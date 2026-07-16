@@ -33,7 +33,49 @@ const MEDIA_PATH = '/media';
 
 
 
+// YouTube auto-generated captions (downloaded via yt-dlp) stamp every cue with `align:start position:0%`,
+// which pins the text to the bottom-left of the player and makes it hard to read.  Detect that signature and
+// reset those cues to the browser's centered default.  This mutates only the in-memory VTTCue objects the
+// browser parsed; the .vtt file on disk is never modified.  Cues that were deliberately positioned (anything
+// other than the auto-caption signature) are left untouched.
+export function centerAutoCaptions(track) {
+    if (!track || !track.cues) {
+        return 0;
+    }
+    let changed = 0;
+    for (const cue of track.cues) {
+        if (cue.align === 'start' && cue.position === 0) {
+            cue.align = 'center';
+            cue.position = 'auto';
+            cue.line = 'auto';
+            changed++;
+        }
+    }
+    return changed;
+}
+
+function handleCaptionTrackLoad(event) {
+    const track = event.target.track;
+    if (!track) {
+        return;
+    }
+    if (track.cues && track.cues.length > 0) {
+        centerAutoCaptions(track);
+    } else {
+        // A non-default track has mode 'disabled' at load time, so its cues are not parsed yet.  Normalize
+        // them the first time the browser populates them (when the user selects the track and playback
+        // advances into a cue).
+        const onCueChange = () => {
+            centerAutoCaptions(track);
+            track.removeEventListener('cuechange', onCueChange);
+        };
+        track.addEventListener('cuechange', onCueChange);
+    }
+}
+
 export function CaptionTrack({src, ...props}) {
+    // Center YouTube auto-generated captions once the browser parses the cues (see centerAutoCaptions).
+    props = {onLoad: handleCaptionTrackLoad, ...props};
     if (src.endsWith('.de.vtt')) {
         return <track kind="captions" label="German" src={src} srcLang="de" {...props}/>
     } else if (src.endsWith('.es.vtt')) {

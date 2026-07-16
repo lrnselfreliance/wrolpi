@@ -68,5 +68,23 @@
     "transformIgnorePatterns": [
       "node_modules/(?!(react-hotkeys-hook)/)"
     ]
+  },
+  "overrides": {
+    "@babel/code-frame": "7.29.0",
+    "@babel/compat-data": "7.20.14",
+    "@babel/core": "7.20.12",
+    "@babel/generator": "7.29.1",
+    "@babel/helper-compilation-targets": "7.20.7",
+    "@babel/helper-globals": "7.28.0",
+    "@babel/helper-module-imports": "7.28.6",
+    "@babel/helper-module-transforms": "7.28.6",
+    "@babel/helper-string-parser": "7.27.1",
+    "@babel/helper-validator-identifier": "7.28.5",
+    "@babel/helper-validator-option": "7.18.6",
+    "@babel/helpers": "7.27.0",
+    "@babel/parser": "7.29.3",
+    "@babel/template": "7.28.6",
+    "@babel/traverse": "7.29.0",
+    "@babel/types": "7.29.0"
   }
 }

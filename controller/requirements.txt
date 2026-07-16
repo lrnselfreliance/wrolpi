@@ -2,8 +2,8 @@
 # Separate from main WROLPi API to keep venvs independent
 
 # Web framework
-fastapi>=0.136.3
-uvicorn[standard]>=0.48.0
+fastapi>=0.138.2
+uvicorn[standard]>=0.49.0
 pydantic>=2.13.4
 
 # Templates
@@ -20,10 +20,10 @@ pyyaml>=6.0.3
 
 # Docker management (optional, for Docker mode)
 docker>=7.1.0
-aiohttp==3.14.0
+aiohttp==3.14.1
 
 # Testing
-pytest>=9.0.3
+pytest>=9.1.1
 pytest-asyncio>=1.4.0
 pytest-xdist>=3.8.0
 httpx>=0.28.1

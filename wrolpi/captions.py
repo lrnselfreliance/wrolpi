@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import os
 import pathlib
 import re
 import subprocess
@@ -36,11 +37,19 @@ def strip_youtube_caption_positioning(caption_path: Union[str, Path]) -> bool:
     caption_path = pathlib.Path(caption_path)
     text = caption_path.read_text()
     new_text = YOUTUBE_CUE_SETTINGS.sub(r'\1', text)
-    if new_text != text:
-        caption_path.write_text(new_text)
-        logger.info(f'Centered YouTube captions in {caption_path}')
-        return True
-    return False
+    if new_text == text:
+        return False
+    # Write to a temp file in the same directory, then atomically replace the original.  A failed or partial
+    # write (e.g. the volume runs out of space) can never truncate/corrupt the existing caption file.
+    tmp_path = caption_path.with_name(f'{caption_path.name}.tmp')
+    try:
+        tmp_path.write_text(new_text)
+        os.replace(tmp_path, caption_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    logger.info(f'Centered YouTube captions in {caption_path}')
+    return True
 
 
 def _parse_vtt_timestamp(timestamp: str) -> float:

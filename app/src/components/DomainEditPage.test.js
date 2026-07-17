@@ -154,10 +154,13 @@ describe('DomainEditPage', () => {
     });
 
     describe('Error States', () => {
-        it('shows loader when form is not ready (fetch fails)', () => {
-            // When form.ready is false (e.g., fetch failed), show loader
+        it('shows error message when domain fetch fails', () => {
             const form = createTestForm({}, {
-                overrides: {ready: false, loading: false, error: new Error('Domain not found')}
+                overrides: {
+                    ready: false,
+                    loading: false,
+                    error: 'Domain collection with ID 999 not found',
+                }
             });
 
             mockUseDomain.mockReturnValue({
@@ -168,10 +171,26 @@ describe('DomainEditPage', () => {
 
             render(<DomainEditPage/>);
 
-            // Should show loading screen when not ready
-            expect(screen.getByText(/loading domain/i)).toBeInTheDocument();
+            expect(screen.getByText(/domain not found/i)).toBeInTheDocument();
+            expect(screen.getByText(/Domain collection with ID 999 not found/i)).toBeInTheDocument();
+            expect(screen.queryByText(/loading domain/i)).not.toBeInTheDocument();
+            expect(screen.queryByTestId('collection-edit-form')).not.toBeInTheDocument();
+        });
 
-            // Form should not be rendered
+        it('shows loader when form is not ready and there is no error', () => {
+            const form = createTestForm({}, {
+                overrides: {ready: false, loading: false, error: null}
+            });
+
+            mockUseDomain.mockReturnValue({
+                domain: null,
+                form,
+                fetchDomain: jest.fn(),
+            });
+
+            render(<DomainEditPage/>);
+
+            expect(screen.getByText(/loading domain/i)).toBeInTheDocument();
             expect(screen.queryByTestId('collection-edit-form')).not.toBeInTheDocument();
         });
 
@@ -182,7 +201,7 @@ describe('DomainEditPage', () => {
             });
 
             const form = createTestForm(mockDomain, {
-                overrides: {ready: true, loading: false, error: new Error('Update failed')}
+                overrides: {ready: true, loading: false, error: 'Update failed'}
             });
 
             mockUseDomain.mockReturnValue({

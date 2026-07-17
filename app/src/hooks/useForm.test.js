@@ -60,6 +60,7 @@ describe('useForm', () => {
             expect(result.current.dirty).toBe(false);
             expect(result.current.loading).toBe(false);
             expect(result.current.disabled).toBe(false);
+            expect(result.current.error).toBe(null);
             // Ready starts true when there are no validators or required fields
             expect(result.current.ready).toBe(true);
         });
@@ -91,6 +92,52 @@ describe('useForm', () => {
             await waitFor(() => {
                 expect(result.current.formData).toEqual(fetchedData);
             });
+            expect(result.current.error).toBe(null);
+        });
+
+        it('sets form error and stays not ready when fetcher rejects', async () => {
+            const fetcher = jest.fn().mockRejectedValue(new Error('Domain not found'));
+
+            const {result} = renderHook(() => useForm({
+                fetcher,
+                defaultFormData: {},
+                submitter: jest.fn(),
+            }));
+
+            await waitFor(() => {
+                expect(result.current.error).toBe('Domain not found');
+            });
+            expect(result.current.ready).toBe(false);
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                'Failed to fetch form data:',
+                expect.any(Error),
+            );
+        });
+
+        it('clears form error when a subsequent fetch succeeds', async () => {
+            const fetcher = jest.fn()
+                .mockRejectedValueOnce(new Error('Domain not found'))
+                .mockResolvedValueOnce({name: 'recovered'});
+
+            const {result} = renderHook(() => useForm({
+                fetcher,
+                defaultFormData: {},
+                submitter: jest.fn(),
+            }));
+
+            await waitFor(() => {
+                expect(result.current.error).toBe('Domain not found');
+            });
+
+            await act(async () => {
+                await result.current.fetcher();
+            });
+
+            await waitFor(() => {
+                expect(result.current.error).toBe(null);
+                expect(result.current.formData).toEqual({name: 'recovered'});
+            });
+            expect(result.current.ready).toBe(true);
         });
 
         it('initializes with empty object when no defaultFormData provided', () => {

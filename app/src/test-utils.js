@@ -245,6 +245,7 @@ export function createTestForm(initialData = {}, config = {}) {
         loading: false,
         disabled: false,
         dirty: false,
+        error: null,
         errors: {},
         // Methods that update formData directly
         patchFormData: jest.fn((updates) => {

@@ -24,6 +24,8 @@ export function useForm({
     const [loading, setLoading] = React.useState(false);
     const [ready, setReady] = React.useState(false);
     const [dirty, setDirty] = React.useState(false);
+    // Form-level error (e.g. initial fetch failed). Distinct from field-level `errors`.
+    const [error, setError] = React.useState(null);
 
     const [errors, setErrors] = React.useState({});
     const [validators, setValidators] = React.useState({});
@@ -47,6 +49,12 @@ export function useForm({
         // Form is dirty if it has deviated from the default.
         setDirty(!_.isEqual(defaultFormData, memoizedFormData));
 
+        // Fetch/load failures keep the form not ready so pages can show error UI.
+        if (error) {
+            console.debug('Form invalid because of form-level error');
+            setReady(false);
+            return
+        }
         const errorValues = Object.values(errors).filter(i => !!i);
         if (errorValues.length > 0) {
             console.debug('Form invalid because it has errors');
@@ -66,12 +74,21 @@ export function useForm({
             return
         }
         setReady(true);
-    }, [loading, memoizedFormData, memoizedErrors, memoizedValidValues, memoizedRequires]);
+    }, [loading, memoizedFormData, memoizedErrors, memoizedValidValues, memoizedRequires, error]);
 
     const localFetch = async () => {
         if (fetcher) {
-            const result = await fetcher();
-            setFormData(result);
+            try {
+                const result = await fetcher();
+                setFormData(result);
+                setError(null);
+                return result;
+            } catch (e) {
+                // Catch so callers (useEffect, page refresh) do not get an unhandled rejection
+                // (which would show the webpack-dev-server error overlay and break Cypress).
+                console.error('Failed to fetch form data:', e);
+                setError(e?.message || String(e) || 'Failed to load');
+            }
         }
     }
 
@@ -278,6 +295,7 @@ export function useForm({
     return {
         dirty,
         disabled,
+        error,
         fetcher: localFetch,
         formData,
         getCustomProps,

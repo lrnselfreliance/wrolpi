@@ -630,6 +630,15 @@ export function DomainEditPage() {
     };
 
     if (!form.ready) {
+        if (form.error) {
+            return <>
+                <BackButton/>
+                <Message error>
+                    <Message.Header>Domain not found</Message.Header>
+                    <p>{form.error}</p>
+                </Message>
+            </>;
+        }
         return <Loader active>Loading domain...</Loader>;
     }
 

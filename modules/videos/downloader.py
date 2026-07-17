@@ -186,6 +186,19 @@ def get_youtube_video_id(url: str) -> Optional[str]:
     return None
 
 
+YOUTUBE_HOSTS = ('youtube.com', 'youtu.be')
+
+
+def is_youtube_url(url: str) -> bool:
+    """Return True if the URL's host is a YouTube domain (youtube.com / youtu.be) or a subdomain of one.
+
+    Parses the hostname so unrelated hosts like `youtube.com.example.org` or `notyoutube.com` are rejected."""
+    if not url:
+        return False
+    host = (urlparse(url).hostname or '').lower()
+    return any(host == h or host.endswith(f'.{h}') for h in YOUTUBE_HOSTS)
+
+
 async def get_youtube_duration(video_url: str) -> Optional[int]:
     """Get video duration using YouTube's internal API. Returns None if URL is not YouTube or API fails."""
     video_id = get_youtube_video_id(video_url)
@@ -1038,7 +1051,7 @@ class VideoDownloader(Downloader, ABC):
             video_paths = self._delete_part_files(video_path, video_paths)
             video_paths = self.normalize_video_file_names(video_path, video_paths)
 
-            if url and ('youtube.com' in url or 'youtu.be' in url):
+            if is_youtube_url(url):
                 # YouTube auto-captions pin the text to the bottom-left; center them at the source.  Runs
                 # before the FileGroup is created, so the first index reads the corrected file.
                 for path in video_paths:

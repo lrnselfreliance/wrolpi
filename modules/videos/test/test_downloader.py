@@ -10,7 +10,7 @@ import pytest
 from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader, preview_filename, \
     prepare_filename, convert_wrolpi_filename_format, _bot_blocked, _skip_download, \
-    parse_ytdlp_progress, is_youtube_rss_feed_url
+    parse_ytdlp_progress, is_youtube_rss_feed_url, is_youtube_url
 from modules.videos.lib import get_videos_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.conftest import test_directory, await_switches
@@ -1405,3 +1405,22 @@ def test_prepare_uses_existing_video_location(test_session, video_factory):
 
     assert prepared.location == existing.location
     assert prepared.location is not None
+
+
+@pytest.mark.parametrize('url,expected', [
+    ('https://www.youtube.com/watch?v=abc123', True),
+    ('https://youtube.com/watch?v=abc123', True),
+    ('https://m.youtube.com/watch?v=abc123', True),
+    ('https://music.youtube.com/watch?v=abc123', True),
+    ('https://youtu.be/abc123', True),
+    # Lookalike / malicious hosts must be rejected.
+    ('https://youtube.com.example.org/watch?v=abc123', False),
+    ('https://notyoutube.com/watch?v=abc123', False),
+    ('https://vimeo.com/12345', False),
+    ('https://example.com/youtube.com', False),
+    ('', False),
+    (None, False),
+])
+def test_is_youtube_url(url, expected):
+    """is_youtube_url matches YouTube hosts (and subdomains) but rejects lookalike hosts."""
+    assert is_youtube_url(url) is expected

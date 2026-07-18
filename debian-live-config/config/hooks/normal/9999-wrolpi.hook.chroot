@@ -62,8 +62,11 @@ npm install
 # against the dirty lock can never match on first boot and the box rebuilds the app.
 # Reset to HEAD here, exactly as repair.sh does, so the baked stamp represents
 # committed source.  Only the lock is reverted; build/, node_modules, and the venvs
-# are untracked and survive.  The repo is cloned and reset as root (same owner),
-# so no safe.directory config is needed here.
+# are untracked and survive.  HOME is set explicitly so `git config --global`
+# cannot fail (and abort the build under `set -e`) when the chroot leaves HOME
+# unset; safe.directory avoids git's "dubious ownership" refusal.
+export HOME=/root
+git config --global --add safe.directory /opt/wrolpi
 git -C /opt/wrolpi reset --hard HEAD
 
 # Build the React production bundle.  Without this, /opt/wrolpi/app/build/

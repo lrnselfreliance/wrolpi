@@ -1195,7 +1195,7 @@ class CollectionItem(ModelHelper, Base):
         Index('idx_collection_item_file_group_id', 'file_group_id'),
         Index('idx_collection_item_position', 'position'),
         # A FileGroup/Zim-article/URL appears at most once per collection.  NULLs are distinct in
-        # Postgres, so each unique constraint only applies to items of that kind.
+        # SQLite unique constraints, so each constraint only applies to items of that kind.
         UniqueConstraint('collection_id', 'file_group_id', name='uq_collection_file_group'),
         UniqueConstraint('collection_id', 'zim_id', 'zim_entry', name='uq_collection_zim_entry'),
         UniqueConstraint('collection_id', 'url', name='uq_collection_url'),

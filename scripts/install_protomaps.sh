@@ -62,10 +62,8 @@ rm -f /etc/apache2/conf-available/mod_tile.conf
 rm -f /etc/apache2/sites-available/000-default.conf
 rm -rf /etc/systemd/system/postgresql@15-map.service.d
 rm -f /var/www/html/leaflet.js /var/www/html/leaflet.css
-# Remove old .pgpass entry for the map database.
-if [ -f /home/wrolpi/.pgpass ]; then
-  sed -i '/5433/d' /home/wrolpi/.pgpass
-fi
+# Remove legacy Postgres client credentials (no longer used).
+rm -f /home/wrolpi/.pgpass
 
 # --- Step 5: Update wrolpi.target to remove old services ---
 

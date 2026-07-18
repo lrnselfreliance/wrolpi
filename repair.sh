@@ -35,10 +35,6 @@ find /opt/wrolpi-help/venv -name "*.pyc" -delete 2>/dev/null || :
 
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
-[ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chmod 0600 /home/wrolpi/.pgpass
 
 # Reset any inadvertent changes to the WROLPi repo.  Restore ownership in case this repair script fails.
 git config --global --add safe.directory /opt/wrolpi
@@ -167,15 +163,8 @@ fi
 
 # Change owner of the media directory, ignore any errors because the drive may be fat/exfat/etc.
 chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to change media directory permissions."
-# Ensure the config directory is owned by wrolpi so the API can write config files.
+# Ensure the config directory is owned by wrolpi so the API can write config files and the SQLite DB.
 [ -d /media/wrolpi/config ] && chown -R wrolpi:wrolpi /media/wrolpi/config 2>/dev/null || :
-# On Portable (live-boot) systems the Postgres cluster lives under config/postgresql,
-# bind-mounted over /var/lib/postgresql — so the config chown above just swept it.  Restore
-# ownership only when that bind is active; on installed systems Postgres lives on the root
-# filesystem and any config/postgresql directory is inert (dead weight or a user's backup).
-if mountpoint -q /var/lib/postgresql 2>/dev/null && id postgres >/dev/null 2>&1; then
-  chown -R postgres:postgres /var/lib/postgresql /etc/postgresql 2>/dev/null || :
-fi
 
 # Remove immutable flag from blob files before chown (may not exist or may not be set).
 chattr -i /opt/wrolpi-blobs/* 2>/dev/null || :

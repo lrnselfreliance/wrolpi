@@ -14,7 +14,7 @@ export const HeadlineText = ({headline, openTag = '<u>', closeTag = '</u>'}) => 
         headline = headline.replaceAll('<b>', openTag);
         headline = headline.replaceAll('</b>', closeTag);
         headline = headline.replaceAll('\n', '<br/>');
-        // Postgres inserts <b>...</b> tags which we will use.
+        // FTS headlines use <b>...</b> tags which we will restyle.
         return <span {...s} dangerouslySetInnerHTML={{__html: headline}}></span>
     }
 }

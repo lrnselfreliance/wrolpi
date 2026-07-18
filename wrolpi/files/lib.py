@@ -74,7 +74,7 @@ def sanitize_filename_surrogates(path: pathlib.Path) -> pathlib.Path:
     on disk to replace them with underscores.
 
     Linux filesystems store filenames as bytes. Python represents invalid UTF-8
-    sequences as surrogates. These surrogates cannot be stored in PostgreSQL.
+    sequences as surrogates. These surrogates cannot be stored in the database.
 
     Returns the (possibly new) path.
     """
@@ -1057,7 +1057,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     @param mimetypes: Only return files that match these mimetypes.
     @param model: Only return files that match this model.
     @param tag_names: A list of tag names.
-    @param headline: Includes Postgresql headline if True.
+    @param headline: Includes FTS search headlines if True.
     @param months: A list of integers representing the index of the month of the year, starting at 1.
     @param order: Used to change results from most relevant to recently viewed.
     @param url: Filter by URL using case-insensitive partial match (ILIKE).

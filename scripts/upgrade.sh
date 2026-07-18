@@ -12,6 +12,110 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# --- Debian 12 (bookworm) hard cutoff --------------------------------------
+# WROLPi's Debian 12 line ends at the signed tag `debian12-final`.  Everything
+# after it (the Postgres->SQLite move and the Debian 13 rebase) requires a
+# fresh Debian 13 (trixie) system; there is no supported in-place 12 -> 13
+# upgrade.  ./upgrade.sh has already fetched and checked out the latest
+# release by the time we run, so on a Debian 12 machine we pin back to
+# `debian12-final` and never advance past it.  On Debian 13+ this is a no-op
+# and the normal upgrade proceeds.
+GUARD_TAG="debian12-final"
+GUARD_KEY="/opt/wrolpi/wrolpi/roland@learningselfreliance.com.gpg"
+
+# True only on Debian 13 (trixie) or newer.  A missing or non-numeric
+# VERSION_ID is treated as "older" so the frozen line fails safe (pins).
+os_is_debian_13_or_newer() {
+    local vid=""
+    [ -r /etc/os-release ] && vid=$(awk -F= '$1=="VERSION_ID"{gsub(/"/,"",$2);print $2}' /etc/os-release)
+    case "${vid}" in
+        '' | *[!0-9]*) return 1 ;;
+    esac
+    [ "${vid}" -ge 13 ]
+}
+
+# Verify the guard commit is signed by the trusted WROLPi key before we check
+# it out and execute it.  ./upgrade.sh only verified the release tip it landed
+# on; `debian12-final` is off that line, so we re-verify here with a throwaway
+# keyring (same trust model as ./upgrade.sh).
+verify_guard_commit() {
+    local ghome rc=1
+    ghome=$(mktemp -d)
+    if GNUPGHOME="${ghome}" gpg --batch --quiet --import "${GUARD_KEY}" 2>/dev/null; then
+        # Mark the pinned key ultimately trusted to silence cosmetic web-of-trust
+        # warnings; validity (not trust) is what verify-commit actually checks.
+        GNUPGHOME="${ghome}" gpg --batch --list-keys --with-colons 2>/dev/null \
+            | awk -F: '/^fpr:/ {print $10":6:"; exit}' \
+            | GNUPGHOME="${ghome}" gpg --batch --quiet --import-ownertrust 2>/dev/null || :
+        GNUPGHOME="${ghome}" git -C /opt/wrolpi verify-commit "${GUARD_TAG}^{commit}" 2>&1 && rc=0
+    fi
+    rm -rf "${ghome}"
+    return "${rc}"
+}
+
+debian12_guard() {
+    if os_is_debian_13_or_newer; then
+        return 0
+    fi
+
+    # Debian 12 (or older): make sure the cutoff tag is present locally.
+    # `debian12-final` is off the release line, so a plain fetch of the branch
+    # would not follow it.
+    git -C /opt/wrolpi fetch origin "refs/tags/${GUARD_TAG}:refs/tags/${GUARD_TAG}" 2>/dev/null \
+        || git -C /opt/wrolpi fetch origin --tags 2>/dev/null || :
+
+    # --verify --quiet: fail cleanly (empty, non-zero) instead of echoing the
+    # unresolved arg when the tag is absent.
+    local head target
+    head=$(git -C /opt/wrolpi rev-parse --verify --quiet HEAD 2>/dev/null || echo none)
+    target=$(git -C /opt/wrolpi rev-parse --verify --quiet "${GUARD_TAG}^{commit}" 2>/dev/null || echo none)
+
+    if [ "${target}" = "none" ]; then
+        echo "ERROR: Debian 12 cutoff tag '${GUARD_TAG}' not found; refusing to run newer code on Debian 12."
+        exit 10
+    fi
+
+    if [ "${head}" != "${target}" ]; then
+        # ./upgrade.sh checked out a newer release; roll back to the last
+        # supported commit, then hand off to ITS copy of this script via exec so
+        # we stop running the newer (already-overwritten) version.
+        if ! verify_guard_commit; then
+            echo "ERROR: '${GUARD_TAG}' is not signed by the trusted WROLPi key; aborting."
+            exit 11
+        fi
+        echo "Debian 12 detected: pinning WROLPi to its final supported version (${GUARD_TAG})."
+        git -C /opt/wrolpi checkout -f -B release "${GUARD_TAG}" \
+            || { echo "ERROR: could not check out ${GUARD_TAG}; aborting."; exit 12; }
+        # Loop guard: never re-exec unless the rollback actually landed on the target.
+        if [ "$(git -C /opt/wrolpi rev-parse HEAD)" != "${target}" ]; then
+            echo "ERROR: rollback did not land on ${GUARD_TAG}; aborting."
+            exit 13
+        fi
+        exec /opt/wrolpi/scripts/upgrade.sh "$@"
+    fi
+
+    # Already on the final supported commit: warn loudly, then fall through so
+    # this (final) version's normal upgrade runs and leaves the box healthy with
+    # services restarted.
+    cat <<'EOF'
+
+================================================================================
+  This is the FINAL WROLPi version for Debian 12 (bookworm).
+
+  No further updates will be installed on Debian 12.  To keep receiving
+  updates, reinstall WROLPi on Debian 13 (trixie):
+    * Download the latest image from https://wrolpi.org
+    * Write it to your SD card / USB and boot it.
+    * Reconnect your media drive; your files and configuration are preserved
+      on the drive and will be re-indexed automatically.
+================================================================================
+
+EOF
+}
+
+debian12_guard "$@"
+# ---------------------------------------------------------------------------
+
 # Upgrade Controller first so users can monitor the rest of the upgrade.
 upgrade_controller() {
     echo "Upgrading WROLPi Controller..."

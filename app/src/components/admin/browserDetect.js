@@ -12,7 +12,8 @@ export function detectBrowser() {
     if (ua.includes('Firefox')) return 'firefox';
     if (ua.includes('Edg/')) return 'chromium';
     if (ua.includes('OPR/') || ua.includes('Opera')) return 'chromium';
-    if (ua.includes('Chrome')) return 'chromium';
+    // Pure Chromium builds may advertise Chromium/ without Chrome/.
+    if (ua.includes('Chrome') || ua.includes('Chromium')) return 'chromium';
     return 'unknown';
 }
 

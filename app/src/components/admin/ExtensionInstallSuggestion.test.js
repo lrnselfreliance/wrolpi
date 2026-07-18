@@ -3,6 +3,7 @@ import {render, screen, waitFor} from '../../test-utils';
 import {ExtensionInstallSuggestion} from './ExtensionInstallSuggestion';
 
 const CHROME_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36';
+const CHROMIUM_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chromium/147.0.0.0 Safari/537.36';
 const FIREFOX_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0';
 const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
@@ -50,6 +51,15 @@ describe('ExtensionInstallSuggestion', () => {
 
     it('renders the install message on Firefox when the marker is absent', async () => {
         setUserAgent(FIREFOX_UA);
+        render(<ExtensionInstallSuggestion/>);
+        await waitFor(
+            () => expect(screen.getByText(/Install the WROLPi browser extension/i)).toBeInTheDocument(),
+            {timeout: 1500},
+        );
+    });
+
+    it('renders the install message on pure Chromium (Chromium/ without Chrome/)', async () => {
+        setUserAgent(CHROMIUM_UA);
         render(<ExtensionInstallSuggestion/>);
         await waitFor(
             () => expect(screen.getByText(/Install the WROLPi browser extension/i)).toBeInTheDocument(),

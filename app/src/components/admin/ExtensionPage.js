@@ -2,6 +2,7 @@ import React from "react";
 import {Button, Header, Icon, Segment} from "../Theme";
 import {Input, Message} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
+import {detectBrowser} from "./browserDetect";
 
 // The WROLPi browser extension is distributed off-store: Chrome users
 // sideload the unpacked .zip; Firefox users get a Mozilla-signed .xpi that
@@ -10,17 +11,6 @@ import {ThemeContext} from "../../contexts/contexts";
 
 const CHROME_ZIP_PATH = '/api/extensions/wrolpi-chrome.zip';
 const FIREFOX_XPI_PATH = '/api/extensions/wrolpi-firefox.xpi';
-
-function detectBrowser() {
-    if (typeof navigator === 'undefined') return 'unknown';
-    const ua = navigator.userAgent || '';
-    // Order matters: Edge / Brave / Opera all include 'Chrome' in their UA.
-    if (ua.includes('Firefox')) return 'firefox';
-    if (ua.includes('Edg/')) return 'chromium';
-    if (ua.includes('OPR/') || ua.includes('Opera')) return 'chromium';
-    if (ua.includes('Chrome')) return 'chromium';
-    return 'unknown';
-}
 
 function formatSize(bytes) {
     if (!bytes) return '';

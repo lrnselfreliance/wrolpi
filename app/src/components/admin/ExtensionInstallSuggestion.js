@@ -3,10 +3,13 @@ import {Link} from "react-router";
 import {Button, Icon, Message} from "semantic-ui-react";
 import {useLocalStorage} from "../Common";
 import {useExtensionInstalled} from "../../hooks/customHooks";
+import {isExtensionSupportedBrowser} from "./browserDetect";
 
 // Top-of-dashboard nudge for users who don't yet have the WROLPi browser
 // extension installed (or installed but haven't added this WROLPi as a
 // destination). Hidden once the user installs+configures, or dismisses it.
+// Only shown on Chromium / Firefox — Safari and other browsers cannot run
+// the extension.
 //
 // Detection is via a meta tag injected by the extension's content script.
 // The extension only injects on configured destination origins, so seeing
@@ -19,7 +22,8 @@ export function ExtensionInstallSuggestion() {
 
     // installed === null means "still checking" — render nothing rather
     // than flashing the banner before the content-script race resolves.
-    if (installed !== false || dismissed) return null;
+    // Also skip on browsers that cannot install the extension (e.g. Safari).
+    if (installed !== false || dismissed || !isExtensionSupportedBrowser()) return null;
 
     return <Message info icon onDismiss={() => setDismissed(true)}>
         <Icon name='puzzle piece'/>

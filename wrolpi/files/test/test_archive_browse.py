@@ -31,80 +31,28 @@ async def test_list_zip_contents(test_session, async_client, test_directory):
     assert len(dir1['children']) == 2
 
 
+@pytest.mark.parametrize('filename,mode,files', [
+    ('test.tar.gz', 'w:gz', [('readme.txt', b'hello tar'), ('subdir/nested.txt', b'nested file')]),
+    ('test.tar.xz', 'w:xz', [('data.bin', b'xz content')]),
+    ('test.tar', 'w', [('plain.txt', b'plain tar')]),
+    ('test.tar.bz2', 'w:bz2', [('bz2file.txt', b'bz2 content')]),
+])
 @pytest.mark.asyncio
-async def test_list_tar_gz_contents(test_session, async_client, test_directory):
-    """Tar.gz archive contents can be listed."""
-    archive_path = test_directory / 'test.tar.gz'
-    with tarfile.open(archive_path, 'w:gz') as tf:
-        data = b'hello tar'
-        info = tarfile.TarInfo(name='readme.txt')
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-        data2 = b'nested file'
-        info2 = tarfile.TarInfo(name='subdir/nested.txt')
-        info2.size = len(data2)
-        tf.addfile(info2, io.BytesIO(data2))
+async def test_list_tar_contents(test_session, async_client, test_directory, filename, mode, files):
+    """Tar archive contents can be listed across compression formats."""
+    archive_path = test_directory / filename
+    with tarfile.open(archive_path, mode) as tf:
+        for name, data in files:
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
 
     _, response = await async_client.post('/api/files/zip/contents',
-                                          content=json.dumps({'path': 'test.tar.gz'}))
+                                          content=json.dumps({'path': filename}))
     assert response.status_code == HTTPStatus.OK
     contents = response.json['contents']
-    assert contents['total_files'] == 2
-    assert contents['total_size'] == len(b'hello tar') + len(b'nested file')
-
-
-@pytest.mark.asyncio
-async def test_list_tar_xz_contents(test_session, async_client, test_directory):
-    """Tar.xz archive contents can be listed."""
-    archive_path = test_directory / 'test.tar.xz'
-    with tarfile.open(archive_path, 'w:xz') as tf:
-        data = b'xz content'
-        info = tarfile.TarInfo(name='data.bin')
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-    _, response = await async_client.post('/api/files/zip/contents',
-                                          content=json.dumps({'path': 'test.tar.xz'}))
-    assert response.status_code == HTTPStatus.OK
-    contents = response.json['contents']
-    assert contents['total_files'] == 1
-
-
-@pytest.mark.asyncio
-async def test_list_tar_contents(test_session, async_client, test_directory):
-    """Plain tar archive contents can be listed."""
-    archive_path = test_directory / 'test.tar'
-    with tarfile.open(archive_path, 'w') as tf:
-        data = b'plain tar'
-        info = tarfile.TarInfo(name='plain.txt')
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-    _, response = await async_client.post('/api/files/zip/contents',
-                                          content=json.dumps({'path': 'test.tar'}))
-    assert response.status_code == HTTPStatus.OK
-    contents = response.json['contents']
-    assert contents['total_files'] == 1
-    assert contents['total_size'] == len(b'plain tar')
-
-
-@pytest.mark.asyncio
-async def test_list_tar_bz2_contents(test_session, async_client, test_directory):
-    """Tar.bz2 archive contents can be listed."""
-    archive_path = test_directory / 'test.tar.bz2'
-    with tarfile.open(archive_path, 'w:bz2') as tf:
-        data = b'bz2 content'
-        info = tarfile.TarInfo(name='bz2file.txt')
-        info.size = len(data)
-        tf.addfile(info, io.BytesIO(data))
-
-    _, response = await async_client.post('/api/files/zip/contents',
-                                          content=json.dumps({'path': 'test.tar.bz2'}))
-    assert response.status_code == HTTPStatus.OK
-    contents = response.json['contents']
-    assert contents['total_files'] == 1
-    assert contents['total_size'] == len(b'bz2 content')
+    assert contents['total_files'] == len(files)
+    assert contents['total_size'] == sum(len(data) for _, data in files)
 
 
 @pytest.mark.asyncio
@@ -145,62 +93,23 @@ async def test_download_single_member_zip(test_session, async_client, test_direc
     assert 'readme.txt' in response.headers.get('Content-Disposition', '')
 
 
+@pytest.mark.parametrize('filename,mode,member', [
+    ('test.tar.gz', 'w:gz', 'data/file.dat'),
+    ('test.tar', 'w', 'doc.txt'),
+    ('test.tar.bz2', 'w:bz2', 'data/info.txt'),
+    ('test.tar.xz', 'w:xz', 'notes/readme.md'),
+])
 @pytest.mark.asyncio
-async def test_download_single_member_tar(test_session, async_client, test_directory):
-    """A single file can be streamed from a tar archive."""
-    archive_path = test_directory / 'test.tar.gz'
+async def test_download_single_member_tar(test_session, async_client, test_directory, filename, mode, member):
+    """A single file can be streamed from a tar archive across compression formats."""
+    archive_path = test_directory / filename
     file_content = b'tar member content'
-    with tarfile.open(archive_path, 'w:gz') as tf:
-        info = tarfile.TarInfo(name='data/file.dat')
+    with tarfile.open(archive_path, mode) as tf:
+        info = tarfile.TarInfo(name=member)
         info.size = len(file_content)
         tf.addfile(info, io.BytesIO(file_content))
 
-    _, response = await async_client.get('/api/files/zip/download?path=test.tar.gz&member=data/file.dat')
-    assert response.status_code == HTTPStatus.OK
-    assert response.body == file_content
-
-
-@pytest.mark.asyncio
-async def test_download_single_member_tar_plain(test_session, async_client, test_directory):
-    """A single file can be streamed from a plain tar archive."""
-    archive_path = test_directory / 'test.tar'
-    file_content = b'plain tar member'
-    with tarfile.open(archive_path, 'w') as tf:
-        info = tarfile.TarInfo(name='doc.txt')
-        info.size = len(file_content)
-        tf.addfile(info, io.BytesIO(file_content))
-
-    _, response = await async_client.get('/api/files/zip/download?path=test.tar&member=doc.txt')
-    assert response.status_code == HTTPStatus.OK
-    assert response.body == file_content
-
-
-@pytest.mark.asyncio
-async def test_download_single_member_tar_bz2(test_session, async_client, test_directory):
-    """A single file can be streamed from a tar.bz2 archive."""
-    archive_path = test_directory / 'test.tar.bz2'
-    file_content = b'bz2 member content'
-    with tarfile.open(archive_path, 'w:bz2') as tf:
-        info = tarfile.TarInfo(name='data/info.txt')
-        info.size = len(file_content)
-        tf.addfile(info, io.BytesIO(file_content))
-
-    _, response = await async_client.get('/api/files/zip/download?path=test.tar.bz2&member=data/info.txt')
-    assert response.status_code == HTTPStatus.OK
-    assert response.body == file_content
-
-
-@pytest.mark.asyncio
-async def test_download_single_member_tar_xz(test_session, async_client, test_directory):
-    """A single file can be streamed from a tar.xz archive."""
-    archive_path = test_directory / 'test.tar.xz'
-    file_content = b'xz member content'
-    with tarfile.open(archive_path, 'w:xz') as tf:
-        info = tarfile.TarInfo(name='notes/readme.md')
-        info.size = len(file_content)
-        tf.addfile(info, io.BytesIO(file_content))
-
-    _, response = await async_client.get('/api/files/zip/download?path=test.tar.xz&member=notes/readme.md')
+    _, response = await async_client.get(f'/api/files/zip/download?path={filename}&member={member}')
     assert response.status_code == HTTPStatus.OK
     assert response.body == file_content
 

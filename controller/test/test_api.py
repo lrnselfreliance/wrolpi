@@ -110,6 +110,10 @@ class TestOpenAPI:
         "/api/bluetooth/status", "/api/bluetooth/enable", "/api/bluetooth/disable",
         "/api/throttle/status", "/api/throttle/enable", "/api/throttle/disable",
         "/api/timezone/status", "/api/timezone/set",
+        "/api/network/info",
+        "/api/ssh/status", "/api/ssh/enable", "/api/ssh/disable",
+        "/api/desktop/status", "/api/desktop/enable", "/api/desktop/disable",
+        "/api/wrol-mode", "/api/wrol-mode/enable", "/api/wrol-mode/disable",
         "/api/shutdown", "/api/reboot", "/api/restart",
         # Disks.
         "/api/disks", "/api/disks/mounts", "/api/disks/mount", "/api/disks/unmount",

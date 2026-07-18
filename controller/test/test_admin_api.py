@@ -13,6 +13,9 @@ class TestStatusEndpoints:
         ("/api/bluetooth/status", ["enabled", "available"]),
         ("/api/throttle/status", ["enabled", "available"]),
         ("/api/timezone/status", ["available", "timezone"]),
+        ("/api/ssh/status", ["enabled", "available", "enabled_at_boot"]),
+        ("/api/desktop/status", ["enabled", "available"]),
+        ("/api/wrol-mode", ["enabled", "available", "flag_file"]),
     ])
     def test_status_endpoint_shape(self, test_client, endpoint, required_fields):
         """Each status endpoint should return 200 with the documented fields."""
@@ -27,6 +30,8 @@ class TestStatusEndpoints:
         "/api/bluetooth/status",
         "/api/throttle/status",
         "/api/timezone/status",
+        "/api/ssh/status",
+        "/api/desktop/status",
     ])
     def test_status_endpoint_unavailable_in_docker(self, test_client_docker_mode, endpoint):
         """Status endpoints should report available=False in Docker mode."""
@@ -93,6 +98,10 @@ class TestDockerModeRejectsAdminActions:
         ("post", "/api/bluetooth/disable", 500, None),
         ("post", "/api/throttle/enable", 500, None),
         ("post", "/api/throttle/disable", 500, None),
+        ("post", "/api/ssh/enable", 500, None),
+        ("post", "/api/ssh/disable", 500, None),
+        ("post", "/api/desktop/enable", 500, None),
+        ("post", "/api/desktop/disable", 500, None),
         ("post", "/api/timezone/set", 500, {"timezone": "America/Denver"}),
         # System control — return 501 (not implemented under Docker).
         ("post", "/api/shutdown", 501, None),
@@ -105,6 +114,88 @@ class TestDockerModeRejectsAdminActions:
         response = client_call(endpoint, json=payload) if payload else client_call(endpoint)
         assert response.status_code == expected_status
         assert "Docker" in response.json()["detail"]
+
+
+class TestNetworkInfoEndpoint:
+    """GET /api/network/info for hostname + IPv4 display."""
+
+    def test_network_info_shape(self, test_client):
+        from unittest import mock
+        fake = {
+            "hostname": "wrolpi",
+            "interfaces": [{"name": "eth0", "ipv4": ["192.168.1.10"], "up": True}],
+            "primary_ipv4": "192.168.1.10",
+        }
+        with mock.patch("controller.api.admin.get_network_info", return_value=fake):
+            response = test_client.get("/api/network/info")
+        assert response.status_code == 200
+        assert response.json() == fake
+
+
+class TestSshApi:
+    """SSH start/stop API (runtime only)."""
+
+    def test_enable_calls_start(self, test_client):
+        from unittest import mock
+        with mock.patch("controller.api.admin.enable_ssh", return_value={"success": True, "error": None}) as m:
+            response = test_client.post("/api/ssh/enable")
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        m.assert_called_once()
+
+    def test_disable_calls_stop(self, test_client):
+        from unittest import mock
+        with mock.patch("controller.api.admin.disable_ssh", return_value={"success": True, "error": None}) as m:
+            response = test_client.post("/api/ssh/disable")
+        assert response.status_code == 200
+        m.assert_called_once()
+
+
+class TestDesktopApi:
+    """Desktop start/stop API (runtime only)."""
+
+    def test_enable_calls_start(self, test_client):
+        from unittest import mock
+        with mock.patch("controller.api.admin.enable_desktop", return_value={"success": True, "error": None}) as m:
+            response = test_client.post("/api/desktop/enable")
+        assert response.status_code == 200
+        m.assert_called_once()
+
+    def test_disable_calls_stop(self, test_client):
+        from unittest import mock
+        with mock.patch("controller.api.admin.disable_desktop", return_value={"success": True, "error": None}) as m:
+            response = test_client.post("/api/desktop/disable")
+        assert response.status_code == 200
+        m.assert_called_once()
+
+
+class TestWrolModeApi:
+    """WROL Mode status and toggle endpoints."""
+
+    def test_enable_calls_lib(self, test_client):
+        from unittest import mock
+        result = {
+            "success": True,
+            "error": None,
+            "yaml_updated": True,
+            "api_notified": False,
+            "api_error": "connection refused",
+        }
+        with mock.patch("controller.api.admin.enable_wrol_mode", return_value=result) as m:
+            response = test_client.post("/api/wrol-mode/enable")
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        m.assert_called_once()
+
+    def test_disable_calls_lib(self, test_client):
+        from unittest import mock
+        with mock.patch(
+            "controller.api.admin.disable_wrol_mode",
+            return_value={"success": True, "error": None, "yaml_updated": True, "api_notified": True, "api_error": None},
+        ) as m:
+            response = test_client.post("/api/wrol-mode/disable")
+        assert response.status_code == 200
+        m.assert_called_once()
 
 
 # OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.

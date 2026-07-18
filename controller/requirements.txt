@@ -12,6 +12,15 @@ jinja2>=3.1.6
 # System monitoring
 psutil>=7.2.2
 
+# E-paper UI rendering (Waveshare HAT; mock mode works without SPI)
+Pillow>=10.0.0
+# WiFi join QR on status dashboard when hotspot is on
+segno>=1.6.0
+# RPi HAT: system packages preferred (python3-spidev, python3-gpiozero);
+# listed here for completeness when using a venv on the Pi.
+# spidev>=3.5
+# gpiozero>=2.0
+
 # Disk health
 pySMART>=1.4.3
 

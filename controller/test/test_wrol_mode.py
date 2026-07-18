@@ -7,7 +7,10 @@ from unittest import mock
 import pytest
 
 from controller.lib.wrol_mode import (
+    disable_wrol_mode,
+    enable_wrol_mode,
     get_wrol_mode_flag_path,
+    get_wrol_mode_status_dict,
     is_wrol_mode,
     require_normal_mode,
 )
@@ -81,3 +84,70 @@ class TestRequireNormalMode:
                 require_normal_mode("modify settings")
 
             assert "modify settings" in str(exc_info.value)
+
+
+class TestIsWrolModeYamlPreference:
+    """is_wrol_mode prefers wrolpi.yaml when the key is present."""
+
+    def test_yaml_true_overrides_missing_flag(self, tmp_path, monkeypatch):
+        media = tmp_path / "media"
+        config_dir = media / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "wrolpi.yaml").write_text("wrol_mode: true\n")
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(media))
+        # Clear any cached path assumptions — get_media_directory reads env
+        assert is_wrol_mode() is True
+
+    def test_yaml_false_overrides_flag(self, tmp_path, monkeypatch):
+        media = tmp_path / "media"
+        config_dir = media / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "wrolpi.yaml").write_text("wrol_mode: false\n")
+        (config_dir / ".wrol_mode").touch()
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(media))
+        assert is_wrol_mode() is False
+
+
+class TestEnableDisableWrolMode:
+    def test_enable_creates_flag_and_yaml(self, tmp_path, monkeypatch):
+        media = tmp_path / "media"
+        config_dir = media / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "wrolpi.yaml").write_text("timezone: UTC\n")
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(media))
+
+        with mock.patch("controller.lib.wrol_mode._notify_main_api", return_value=None):
+            result = enable_wrol_mode()
+
+        assert result["success"] is True
+        assert (config_dir / ".wrol_mode").exists()
+        assert "wrol_mode: true" in (config_dir / "wrolpi.yaml").read_text()
+        assert is_wrol_mode() is True
+
+    def test_disable_removes_flag_and_yaml(self, tmp_path, monkeypatch):
+        media = tmp_path / "media"
+        config_dir = media / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "wrolpi.yaml").write_text("wrol_mode: true\n")
+        (config_dir / ".wrol_mode").touch()
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(media))
+
+        with mock.patch("controller.lib.wrol_mode._notify_main_api", return_value=None):
+            result = disable_wrol_mode()
+
+        assert result["success"] is True
+        assert not (config_dir / ".wrol_mode").exists()
+        text = (config_dir / "wrolpi.yaml").read_text()
+        assert "wrol_mode: false" in text
+        assert is_wrol_mode() is False
+
+    def test_status_dict_shape(self, tmp_path, monkeypatch):
+        media = tmp_path / "media"
+        config_dir = media / "config"
+        config_dir.mkdir(parents=True)
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(media))
+        status = get_wrol_mode_status_dict()
+        assert status["enabled"] is False
+        assert status["available"] is True
+        assert status["flag_file"] is False
+        assert status["yaml_value"] is None

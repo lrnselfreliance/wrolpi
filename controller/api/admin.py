@@ -7,17 +7,24 @@ from fastapi import APIRouter, HTTPException
 from controller.api.schemas import (
     BluetoothActionResponse,
     BluetoothStatusResponse,
+    DesktopActionResponse,
+    DesktopStatusResponse,
     HotspotActionResponse,
+    WrolModeActionResponse,
+    WrolModeStatusResponse,
     HotspotDevicesResponse,
     HotspotSettingsRequest,
     HotspotSettingsResponse,
     HotspotStatusResponse,
+    NetworkInfoResponse,
     RestartServicesResponse,
     SambaShareAddRequest,
     SambaShareRemoveResponse,
     SambaShareResponse,
     SambaStatusResponse,
     ServiceRestartResult,
+    SshActionResponse,
+    SshStatusResponse,
     SystemActionResponse,
     ThrottleActionResponse,
     ThrottleStatusResponse,
@@ -47,10 +54,26 @@ from controller.lib.admin import (
     update_hotspot_settings,
 )
 from controller.lib.config import is_docker_mode
+from controller.lib.desktop import (
+    disable_desktop,
+    enable_desktop,
+    get_desktop_status_dict,
+)
+from controller.lib.network_info import get_network_info
 from controller.lib.samba import (
     add_share,
     get_samba_status_dict,
     remove_share,
+)
+from controller.lib.ssh import (
+    disable_ssh,
+    enable_ssh,
+    get_ssh_status_dict,
+)
+from controller.lib.wrol_mode import (
+    disable_wrol_mode,
+    enable_wrol_mode,
+    get_wrol_mode_status_dict,
 )
 
 router = APIRouter(tags=["admin"])
@@ -203,6 +226,93 @@ async def timezone_set(request: TimezoneSetRequest) -> TimezoneSetResponse:
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return TimezoneSetResponse(**result)
+
+
+# --- Network info (addresses for display) ---
+
+@router.get("/api/network/info", response_model=NetworkInfoResponse)
+async def network_info() -> NetworkInfoResponse:
+    """Hostname and IPv4 addresses for status displays (e-paper, emergency UI)."""
+    return NetworkInfoResponse(**get_network_info())
+
+
+# --- SSH (runtime start/stop only; fail open on reboot) ---
+
+@router.get("/api/ssh/status", response_model=SshStatusResponse)
+async def ssh_status() -> SshStatusResponse:
+    """Get SSH daemon status (enabled = currently running)."""
+    return SshStatusResponse(**get_ssh_status_dict())
+
+
+@router.post("/api/ssh/enable", response_model=SshActionResponse)
+async def ssh_enable() -> SshActionResponse:
+    """Start SSH for this session only (does not enable at boot)."""
+    result = enable_ssh()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return SshActionResponse(**result)
+
+
+@router.post("/api/ssh/disable", response_model=SshActionResponse)
+async def ssh_disable() -> SshActionResponse:
+    """Stop SSH for this session only (does not disable at boot; returns after reboot)."""
+    result = disable_ssh()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return SshActionResponse(**result)
+
+
+# --- Desktop (runtime start/stop only; fail open on reboot) ---
+
+@router.get("/api/desktop/status", response_model=DesktopStatusResponse)
+async def desktop_status() -> DesktopStatusResponse:
+    """Get desktop/display-manager status (enabled = currently running)."""
+    return DesktopStatusResponse(**get_desktop_status_dict())
+
+
+@router.post("/api/desktop/enable", response_model=DesktopActionResponse)
+async def desktop_enable() -> DesktopActionResponse:
+    """Start the display manager for this session only (does not change default target)."""
+    result = enable_desktop()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return DesktopActionResponse(**result)
+
+
+@router.post("/api/desktop/disable", response_model=DesktopActionResponse)
+async def desktop_disable() -> DesktopActionResponse:
+    """Stop the display manager for this session only (desktop returns after reboot)."""
+    result = disable_desktop()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return DesktopActionResponse(**result)
+
+
+# --- WROL Mode ---
+
+@router.get("/api/wrol-mode", response_model=WrolModeStatusResponse)
+@router.get("/api/wrol-mode/status", response_model=WrolModeStatusResponse)
+async def wrol_mode_status() -> WrolModeStatusResponse:
+    """Get WROL Mode status (yaml + flag file)."""
+    return WrolModeStatusResponse(**get_wrol_mode_status_dict())
+
+
+@router.post("/api/wrol-mode/enable", response_model=WrolModeActionResponse)
+async def wrol_mode_enable() -> WrolModeActionResponse:
+    """Enable WROL Mode (flag file, wrolpi.yaml, best-effort main API notify)."""
+    result = enable_wrol_mode()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return WrolModeActionResponse(**result)
+
+
+@router.post("/api/wrol-mode/disable", response_model=WrolModeActionResponse)
+async def wrol_mode_disable() -> WrolModeActionResponse:
+    """Disable WROL Mode (flag file, wrolpi.yaml, best-effort main API notify)."""
+    result = disable_wrol_mode()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return WrolModeActionResponse(**result)
 
 
 # --- System Control ---

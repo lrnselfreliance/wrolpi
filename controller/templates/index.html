@@ -958,6 +958,9 @@
         <div class="action-buttons" style="margin-bottom: 1rem;">
             <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
             <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
+            <button id="ssh-btn" class="btn" onclick="toggleSsh()" disabled title="Runtime only — returns on reboot">Loading...</button>
+            <button id="desktop-btn" class="btn" onclick="toggleDesktop()" disabled title="Runtime only — returns on reboot">Loading...</button>
+            <button id="wrol-mode-btn" class="btn" onclick="toggleWrolMode()" disabled>Loading...</button>
         </div>
         <details style="margin-bottom: 1rem;">
             <summary style="cursor: pointer;">Hotspot Settings</summary>
@@ -1473,6 +1476,140 @@
             alert(`Bluetooth error: ${e.message}`);
         }
         await updateBluetoothButton();
+    }
+
+    // --- SSH (runtime start/stop only; back on reboot) ---
+    let sshEnabled = null;
+
+    async function updateSshButton() {
+        const btn = document.getElementById('ssh-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/ssh/status');
+            sshEnabled = data.enabled;
+            if (!data.available) {
+                btn.textContent = 'SSH Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.enabled) {
+                btn.textContent = 'Stop SSH (until reboot)';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Start SSH';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'SSH Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleSsh() {
+        const btn = document.getElementById('ssh-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (sshEnabled) {
+                await apiCall('api/ssh/disable', 'POST');
+            } else {
+                await apiCall('api/ssh/enable', 'POST');
+            }
+        } catch (e) {
+            alert(`SSH error: ${e.message}`);
+        }
+        await updateSshButton();
+    }
+
+    // --- Desktop (runtime start/stop only; back on reboot) ---
+    let desktopEnabled = null;
+
+    async function updateDesktopButton() {
+        const btn = document.getElementById('desktop-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/desktop/status');
+            desktopEnabled = data.enabled;
+            if (!data.available) {
+                btn.textContent = 'Desktop Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.enabled) {
+                btn.textContent = 'Stop Desktop (until reboot)';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Start Desktop';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'Desktop Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleDesktop() {
+        const btn = document.getElementById('desktop-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (desktopEnabled) {
+                await apiCall('api/desktop/disable', 'POST');
+            } else {
+                await apiCall('api/desktop/enable', 'POST');
+            }
+        } catch (e) {
+            alert(`Desktop error: ${e.message}`);
+        }
+        await updateDesktopButton();
+    }
+
+    // --- WROL Mode ---
+    let wrolModeEnabled = null;
+
+    async function updateWrolModeButton() {
+        const btn = document.getElementById('wrol-mode-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/wrol-mode');
+            wrolModeEnabled = data.enabled;
+            if (!data.available) {
+                btn.textContent = 'WROL Mode Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.enabled) {
+                btn.textContent = 'Disable WROL Mode';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Enable WROL Mode';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'WROL Mode Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleWrolMode() {
+        const btn = document.getElementById('wrol-mode-btn');
+        const action = wrolModeEnabled ? 'disable' : 'enable';
+        if (!confirm(wrolModeEnabled
+            ? 'Disable WROL Mode? Downloads and configuration changes will be allowed again.'
+            : 'Enable WROL Mode? Downloads stop and some configuration changes are blocked.')) {
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            await apiCall(`api/wrol-mode/${action}`, 'POST');
+        } catch (e) {
+            alert(`WROL Mode error: ${e.message}`);
+        }
+        await updateWrolModeButton();
     }
 
     async function waitForController(maxWaitMs = 60000) {
@@ -2822,6 +2959,9 @@
         // Fetch hardware button status immediately
         updateHotspotButton();
         updateBluetoothButton();
+        updateSshButton();
+        updateDesktopButton();
+        updateWrolModeButton();
         loadHotspotSettings();
 
         // Initial update after a short delay (to not overlap with initial load)
@@ -2840,6 +2980,9 @@
             loadSmart();
             updateHotspotButton();
             updateBluetoothButton();
+            updateSshButton();
+            updateDesktopButton();
+            updateWrolModeButton();
         }, updateInterval);
     }
 </script>

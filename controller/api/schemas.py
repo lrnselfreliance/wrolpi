@@ -330,6 +330,103 @@ class TimezoneSetResponse(BaseModel):
 
 
 # ============================================================================
+# Admin - Network info (addresses for display)
+# ============================================================================
+
+class NetworkInterfaceInfo(BaseModel):
+    """One network interface with usable IPv4 addresses."""
+
+    name: str = Field(description="Interface name (e.g. eth0, wlan0)")
+    ipv4: list[str] = Field(default_factory=list, description="Usable IPv4 addresses")
+    up: bool = Field(description="Whether the interface is up")
+
+
+class NetworkInfoResponse(BaseModel):
+    """Response model for /api/network/info endpoint."""
+
+    hostname: str = Field(description="System hostname")
+    interfaces: list[NetworkInterfaceInfo] = Field(description="Non-loopback interfaces")
+    primary_ipv4: Optional[str] = Field(default=None, description="Best IPv4 to show on UI")
+
+
+# ============================================================================
+# Admin - SSH (runtime start/stop only; fail open on reboot)
+# ============================================================================
+
+class SshStatusResponse(BaseModel):
+    """Response model for /api/ssh/status endpoint."""
+
+    enabled: bool = Field(description="Whether SSH is currently running (UI ON)")
+    enabled_at_boot: bool = Field(
+        description="Whether the unit is enabled at boot (informational; toggles never change this)"
+    )
+    available: bool = Field(description="Whether SSH control is available")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+    unit: Optional[str] = Field(default=None, description="Resolved systemd unit name")
+
+
+class SshActionResponse(BaseModel):
+    """Response model for SSH start/stop actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
+# Admin - Desktop (runtime start/stop only; fail open on reboot)
+# ============================================================================
+
+class DesktopStatusResponse(BaseModel):
+    """Response model for /api/desktop/status endpoint."""
+
+    enabled: bool = Field(description="Whether the display manager is currently running (UI ON)")
+    default_target: Optional[str] = Field(
+        default=None,
+        description="systemd default target (informational; toggles never change this)",
+    )
+    available: bool = Field(description="Whether desktop control is available")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+    unit: Optional[str] = Field(default=None, description="Resolved display-manager unit name")
+
+
+class DesktopActionResponse(BaseModel):
+    """Response model for desktop start/stop actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
+# Admin - WROL Mode
+# ============================================================================
+
+class WrolModeStatusResponse(BaseModel):
+    """Response model for /api/wrol-mode status."""
+
+    enabled: bool = Field(description="Whether WROL Mode is active")
+    available: bool = Field(description="Whether WROL Mode control is available")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+    flag_file: bool = Field(description="Whether the Controller flag file exists")
+    yaml_value: Optional[bool] = Field(
+        default=None,
+        description="wrol_mode from wrolpi.yaml if present, else null",
+    )
+
+
+class WrolModeActionResponse(BaseModel):
+    """Response model for WROL Mode enable/disable."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    yaml_updated: Optional[bool] = Field(default=None, description="Whether wrolpi.yaml was updated")
+    api_notified: Optional[bool] = Field(
+        default=None,
+        description="Whether the main API was notified (download manager)",
+    )
+    api_error: Optional[str] = Field(default=None, description="API notify error if any")
+
+
+# ============================================================================
 # Services - Status
 # ============================================================================
 

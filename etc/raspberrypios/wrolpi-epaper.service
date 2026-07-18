@@ -1,0 +1,29 @@
+[Unit]
+Description=WROLPi e-Paper HAT UI
+Documentation=https://github.com/lrnselfreliance/wrolpi
+After=wrolpi-controller.service
+Wants=wrolpi-controller.service
+
+[Service]
+Type=simple
+# System python has working gpiozero/spidev pin factories on Bookworm/Trixie;
+# controller venv is used when those deps are installed there.
+ExecStart=/usr/bin/python3 -m controller.epaper
+WorkingDirectory=/opt/wrolpi
+User=root
+Group=root
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/wrolpi
+Environment=WROLPI_CONTROLLER_URL=http://127.0.0.1
+Environment=WROLPI_EPAPER_MOCK=0
+# Set WROLPI_EPAPER_MOCK=1 to write frames without a HAT.
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wrolpi-epaper
+
+[Install]
+WantedBy=multi-user.target

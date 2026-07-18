@@ -136,7 +136,7 @@ async def test_archives_search_headline(test_session, archive_directory, archive
     request, response = await async_client.post('/api/archive/search', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
 
-    # Postgresql uses <b>...</b> to highlight matching words.
+    # FTS headlines use <b>...</b> to highlight matching words.
     assert response.json['file_groups'][0]['d_headline'] == '<b>foo</b> baz qux qux'
     assert response.json['file_groups'][1]['d_headline'] == '<b>foo</b> bar qux'
 

@@ -102,14 +102,17 @@ find /opt/wrolpi/venv -name "*.pyc" -delete 2>/dev/null || :
   echo "WARNING: db upgrade failed (media directory unavailable?); the API will retry at startup."
 
 # WROLPi now uses SQLite (inside the media directory); stop and disable PostgreSQL to free
-# system resources.  The old Postgres data is NOT deleted -- to get it back:
-#   sudo systemctl enable --now postgresql
+# system resources on upgrades from older installs.  The old Postgres data is NOT deleted --
+# to get it back temporarily: sudo systemctl enable --now postgresql
+# To reclaim disk later: sudo apt-get remove --purge postgresql*
 if id postgres >/dev/null 2>&1; then
   echo "Disabling PostgreSQL; WROLPi now uses SQLite.  Your old Postgres data is untouched."
   # Stop the umbrella and any per-cluster instances (postgresql@15-main, etc.).
   systemctl stop 'postgresql*' 2>/dev/null || :
   systemctl disable postgresql 2>/dev/null || :
 fi
+# Remove legacy Postgres client credentials (no longer used).
+rm -f /home/wrolpi/.pgpass
 
 # Upgrade WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh || echo "Help install failed."

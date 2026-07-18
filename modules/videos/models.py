@@ -29,7 +29,7 @@ class Video(ModelHelper, Base):
         Index('video_channel_id_idx', 'channel_id'),
         Index('video_source_id_idx', 'source_id'),
         Index('video_view_count_idx', 'view_count'),
-        # Do not reuse ids of deleted Videos (like Postgres sequences).
+        # Do not reuse ids of deleted Videos (AUTOINCREMENT keeps a sequence table).
         {'sqlite_autoincrement': True},
     )
     id = Column(Integer, primary_key=True)

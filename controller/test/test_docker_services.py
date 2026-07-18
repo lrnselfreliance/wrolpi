@@ -127,12 +127,12 @@ class TestGetAllContainersStatus:
                 assert len(result) == 1
                 assert result[0]["name"] == "api"
 
-    def test_db_container_not_viewable(self):
-        """Database container should not be viewable (port 5432 is not HTTP)."""
+    def test_samba_container_not_viewable(self):
+        """Samba container should not be viewable (SMB is not HTTP)."""
         mock_container = mock.Mock()
-        mock_container.name = f"{CONTAINER_PREFIX}-db-1"
+        mock_container.name = f"{CONTAINER_PREFIX}-samba-1"
         mock_container.status = "running"
-        mock_container.attrs = {"NetworkSettings": {"Ports": {"5432/tcp": [{"HostPort": "5432"}]}}}
+        mock_container.attrs = {"NetworkSettings": {"Ports": {"445/tcp": [{"HostPort": "445"}]}}}
 
         mock_client = mock.Mock()
         mock_client.containers.list.return_value = [mock_container]
@@ -141,7 +141,7 @@ class TestGetAllContainersStatus:
             with mock.patch("controller.lib.docker_services._get_client", return_value=mock_client):
                 result = get_all_containers_status()
                 assert len(result) == 1
-                assert result[0]["name"] == "db"
+                assert result[0]["name"] == "samba"
                 assert result[0]["viewable"] is False
 
     def test_api_container_is_viewable(self):

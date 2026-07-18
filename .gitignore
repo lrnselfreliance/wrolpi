@@ -129,6 +129,7 @@ docker-compose.override.yml
 
 # test directory is used as media directory, we don't want to commit what a user downloads.
 /test
+# Legacy local Postgres data directory from pre-SQLite docker-compose (safe to delete).
 pg_data
 
 # Directories used to build images

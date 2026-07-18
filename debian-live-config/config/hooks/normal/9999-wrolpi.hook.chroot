@@ -56,6 +56,16 @@ npm --version
 node --version
 npm install
 
+# `npm install` rewrites the tracked app/package-lock.json.  build_app.sh (below)
+# stamps build/.build-stamp from that working tree, but on-device repair.sh runs
+# `git reset --hard` before it stamps -- reverting the lock -- so a stamp baked
+# against the dirty lock can never match on first boot and the box rebuilds the app.
+# Reset to HEAD here, exactly as repair.sh does, so the baked stamp represents
+# committed source.  Only the lock is reverted; build/, node_modules, and the venvs
+# are untracked and survive.  The repo is cloned and reset as root (same owner),
+# so no safe.directory config is needed here.
+git -C /opt/wrolpi reset --hard HEAD
+
 # Build the React production bundle.  Without this, /opt/wrolpi/app/build/
 # does not exist and wrolpi-app.service (`serve build -l 3000 ...`) returns
 # 404 for every request.  Baking the build into the squashfs means the

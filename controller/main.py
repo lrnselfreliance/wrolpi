@@ -33,14 +33,16 @@ from controller.api.scripts import router as scripts_router
 from controller.api.services import router as services_router
 from controller.api.status import router as status_router
 from controller.lib.config import (
+    get_ca_certificate_path,
     get_config_value,
-    get_media_directory,
+    is_ca_certificate_available,
     is_docker_mode,
     is_primary_drive_mounted,
     reload_config_from_drive,
     save_config,
     update_config,
 )
+from controller.lib.scripts import get_script_status
 from controller.lib.docker_services import (
     can_manage_containers,
     get_all_containers_status,
@@ -229,11 +231,22 @@ async def dashboard(request: Request):
     # Sort services by name for consistent display
     services = sorted(services, key=lambda s: s["name"])
 
+    # Root CA download is only useful after the media drive is mounted (so an
+    # existing CA on the drive is visible) and repair has finished generating
+    # or refreshing certificates. While repair is running the CA may not exist
+    # yet or the leaf/Caddyfile may still be mid-update.
+    script_status = get_script_status()
+    repair_running = (
+        script_status.get("running") and script_status.get("script_name") == "repair"
+    )
+    cert_download_ready = is_ca_certificate_available() and not repair_running
+
     context = {
         "version": __version__,
         "docker_mode": is_docker_mode(),
         "drive_mounted": is_primary_drive_mounted(),
         "hide_cert_banner": get_config_value("hide_cert_banner", False),
+        "cert_download_ready": cert_download_ready,
         "host": get_host(request),
 
         # Real status data
@@ -280,10 +293,20 @@ async def health_check() -> HealthResponse:
 
 @app.get("/ca.crt")
 async def download_ca_certificate():
-    """Serve the WROLPi Root CA certificate for browser trust setup."""
-    ca_path = get_media_directory() / "config" / "ssl" / "ca.crt"
+    """Serve the WROLPi Root CA certificate for browser trust setup.
+
+    Only available after the media drive is mounted so an existing CA on the
+    drive can be served (and never a transient pre-onboarding path).
+    """
+    from fastapi.responses import JSONResponse
+
+    if not is_docker_mode() and not is_primary_drive_mounted():
+        return JSONResponse(
+            status_code=404,
+            content={"error": "CA certificate not available until the media drive is mounted"},
+        )
+    ca_path = get_ca_certificate_path()
     if not ca_path.is_file():
-        from fastapi.responses import JSONResponse
         return JSONResponse(status_code=404, content={"error": "CA certificate not found"})
     return FileResponse(
         path=ca_path,

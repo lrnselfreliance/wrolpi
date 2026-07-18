@@ -730,13 +730,15 @@
     </div>
 </header>
 
-<!-- Certificate trust banner — shown by JS when HTTPS cert is not trusted -->
+<!-- Certificate trust banner — shown by JS when HTTPS cert is not trusted and Root CA is ready -->
 <div id="cert-banner" class="card" style="display: none; background: #16213e; border: 1px solid #1a3a5c; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem;">
     <h2 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: #4cc9f0;">HTTPS Certificate Setup</h2>
     <p style="line-height: 1.6; color: #ccc; margin-bottom: 1rem;">
         Install the WROLPi Root CA certificate so your browser trusts all WROLPi HTTPS services.
     </p>
+    {% if cert_download_ready %}
     <a class="btn btn-info" href="/ca.crt" download="wrolpi-ca.crt" style="margin-bottom: 1rem; display: inline-block;">Download WROLPi Root CA</a>
+    {% endif %}
 
     <details style="margin-bottom: 0.75rem;">
         <summary style="cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: #4cc9f0;">iOS / iPadOS</summary>
@@ -1211,8 +1213,10 @@
         var viewFilesBtn = document.getElementById('view-files-btn');
         if (viewFilesBtn) viewFilesBtn.href = httpsBase + '/media/';
 
-        // Skip cert check if user has permanently hidden the banner.
-        {% if hide_cert_banner %}return;{% endif %}
+        // Skip cert check if user permanently hid the banner, or if the Root CA
+        // is not ready yet (drive not mounted / repair still running / ca.crt missing).
+        // Advertising download before then 404s and can serve the wrong state.
+        {% if hide_cert_banner or not cert_download_ready %}return;{% endif %}
 
         // Probe the HTTPS endpoint; show the cert banner if it fails.
         var controller = new AbortController();

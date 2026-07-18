@@ -187,3 +187,75 @@ class TestDriveMountedStatus:
             with TestClient(app) as client:
                 response = client.get("/")
                 assert "Primary drive not mounted" in response.text
+
+
+class TestCertDownloadReadiness:
+    """Root CA download should stay hidden until drive + certs are ready."""
+
+    def test_dashboard_hides_ca_download_when_not_ready(self, test_client):
+        """No CA download button when ca is not ready (default test env: no drive/CA)."""
+        response = test_client.get("/")
+        assert response.status_code == 200
+        assert "Download WROLPi Root CA" not in response.text
+        # Cert IIFE short-circuits before HTTPS probe when not ready.
+        assert "ca.crt missing" in response.text
+
+    def test_dashboard_shows_ca_download_when_ready(self, reset_runtime_config, mock_docker_mode, tmp_path, monkeypatch):
+        """Download button is rendered once drive is mounted and ca.crt exists."""
+        from controller.main import app
+
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        ca = tmp_path / "config" / "ssl" / "ca.crt"
+        ca.parent.mkdir(parents=True)
+        ca.write_text("-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n")
+
+        with mock.patch("controller.main.is_primary_drive_mounted", return_value=True), \
+             mock.patch("controller.main.is_ca_certificate_available", return_value=True), \
+             mock.patch("controller.main.get_script_status", return_value={"running": False}):
+            with TestClient(app) as client:
+                response = client.get("/")
+                assert response.status_code == 200
+                assert "Download WROLPi Root CA" in response.text
+                assert 'href="/ca.crt"' in response.text
+
+    def test_dashboard_hides_ca_download_while_repair_running(
+            self, reset_runtime_config, mock_docker_mode, tmp_path, monkeypatch
+    ):
+        """Hide CA download while repair is regenerating certificates."""
+        from controller.main import app
+
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        with mock.patch("controller.main.is_primary_drive_mounted", return_value=True), \
+             mock.patch("controller.main.is_ca_certificate_available", return_value=True), \
+             mock.patch(
+                 "controller.main.get_script_status",
+                 return_value={"running": True, "script_name": "repair"},
+             ):
+            with TestClient(app) as client:
+                response = client.get("/")
+                assert "Download WROLPi Root CA" not in response.text
+
+    def test_ca_crt_404_when_drive_not_mounted(self, test_client):
+        """/ca.crt should 404 before the media drive is mounted."""
+        with mock.patch("controller.main.is_primary_drive_mounted", return_value=False):
+            response = test_client.get("/ca.crt")
+            assert response.status_code == 404
+            assert "not available until the media drive is mounted" in response.json()["error"]
+
+    def test_ca_crt_serves_file_when_ready(self, reset_runtime_config, mock_docker_mode, tmp_path, monkeypatch):
+        """/ca.crt returns the PEM when drive is mounted and file exists."""
+        from controller.main import app
+
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        ca = tmp_path / "config" / "ssl" / "ca.crt"
+        ca.parent.mkdir(parents=True)
+        body = "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n"
+        ca.write_text(body)
+
+        with mock.patch("controller.main.is_primary_drive_mounted", return_value=True), \
+             mock.patch("controller.main.get_ca_certificate_path", return_value=ca):
+            with TestClient(app) as client:
+                response = client.get("/ca.crt")
+                assert response.status_code == 200
+                assert body.encode() in response.content
+                assert "attachment" in response.headers.get("content-disposition", "")

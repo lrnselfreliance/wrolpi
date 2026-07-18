@@ -81,6 +81,24 @@ def is_primary_drive_mounted() -> bool:
     return CONFIG_PATH_ON_DRIVE.exists()
 
 
+def get_ca_certificate_path() -> Path:
+    """Path to the persistent WROLPi Root CA on the media directory."""
+    return get_media_directory() / "config" / "ssl" / "ca.crt"
+
+
+def is_ca_certificate_available() -> bool:
+    """True when the Root CA file is present on the media directory.
+
+    On native installs the primary drive must be mounted first so a CA that
+    already lives on the drive is visible (and so we never advertise a
+    transient CA written onto the root filesystem during onboarding).
+    Docker always has its media volume available.
+    """
+    if not is_docker_mode() and not is_primary_drive_mounted():
+        return False
+    return get_ca_certificate_path().is_file()
+
+
 def reload_config_from_drive() -> bool:
     """
     Load config from the mounted WROLPi drive and merge with defaults.

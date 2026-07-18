@@ -7,8 +7,10 @@ import pytest
 import yaml
 
 from controller.lib.config import (
+    get_ca_certificate_path,
     get_config,
     get_config_value,
+    is_ca_certificate_available,
     is_docker_mode,
     is_primary_drive_mounted,
     reload_config_from_drive,
@@ -98,6 +100,41 @@ class TestIsPrimaryDriveMounted:
         # test_config_directory creates the config dir but not controller.yaml
         assert test_config_directory.exists()
         assert is_primary_drive_mounted() is False
+
+
+class TestCaCertificateAvailable:
+    """Tests for is_ca_certificate_available / get_ca_certificate_path."""
+
+    def test_false_when_drive_not_mounted(self, mock_drive_not_mounted, tmp_path, monkeypatch):
+        """Native mode without drive mounted should not advertise a CA."""
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        ca = tmp_path / "config" / "ssl" / "ca.crt"
+        ca.parent.mkdir(parents=True)
+        ca.write_text("fake-cert")
+        assert is_ca_certificate_available() is False
+
+    def test_false_when_drive_mounted_but_ca_missing(self, mock_drive_mounted, tmp_path, monkeypatch):
+        """Mounted drive without ca.crt is not ready."""
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        assert is_ca_certificate_available() is False
+
+    def test_true_when_drive_mounted_and_ca_exists(self, mock_drive_mounted, tmp_path, monkeypatch):
+        """Mounted drive with ca.crt is ready."""
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        ca = get_ca_certificate_path()
+        ca.parent.mkdir(parents=True)
+        ca.write_text("fake-cert")
+        assert is_ca_certificate_available() is True
+
+    def test_true_in_docker_when_ca_exists_without_drive_mount(
+            self, mock_docker_mode_enabled, mock_drive_not_mounted, tmp_path, monkeypatch
+    ):
+        """Docker media volume can serve CA without native drive-mount check."""
+        monkeypatch.setenv("MEDIA_DIRECTORY", str(tmp_path))
+        ca = get_ca_certificate_path()
+        ca.parent.mkdir(parents=True)
+        ca.write_text("fake-cert")
+        assert is_ca_certificate_available() is True
 
 
 class TestReloadConfigFromDrive:

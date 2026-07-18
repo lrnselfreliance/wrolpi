@@ -63,6 +63,15 @@ echo "Controller pre-installed"
 # Install webapp.
 (cd /opt/wrolpi/app && npm install)
 
+# `npm install` rewrites the tracked app/package-lock.json.  build_app.sh (below)
+# stamps build/.build-stamp from that working tree, but on-device repair.sh runs
+# `git reset --hard` before it stamps -- reverting the lock -- so a stamp baked
+# against the dirty lock can never match on first boot and the Pi rebuilds the app
+# (the exact OOM-prone step this bake-in avoids).  Reset to HEAD here, exactly as
+# repair.sh does, so the baked stamp represents committed source.  Only the lock is
+# reverted; build/, node_modules, and the venvs are untracked and survive.
+git -C /opt/wrolpi reset --hard HEAD
+
 # Build the React production bundle now, so it is baked into the image.  Without
 # this the Pi would build on first boot -- a multi-minute, memory-hungry step
 # that can OOM on a 2GB Pi.  build_app.sh stamps the output so the on-device

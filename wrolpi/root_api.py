@@ -152,6 +152,10 @@ async def echo(request: Request):
 def get_settings(_: Request):
     wrolpi_config = get_wrolpi_config()
 
+    # Drop special directories (e.g. zims) that must never be ignored, if present from older configs.
+    from wrolpi.files.lib import sanitize_ignored_directories
+    sanitize_ignored_directories()
+
     ignored_directories = [get_relative_to_media_directory(i) for i in wrolpi_config.ignored_directories]
 
     settings = {

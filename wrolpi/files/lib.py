@@ -55,7 +55,8 @@ __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
            'search_file_suggestion_count', 'glob_shared_stem', 'upsert_file', 'get_unique_files_by_stem',
            'rename', 'delete_directory', 'handle_file_group_search_results', 'get_file_location_href',
-           'get_tagged_file_groups_by_ids', 'delete_file_groups']
+           'get_tagged_file_groups_by_ids', 'delete_file_groups', 'get_special_directories',
+           'get_normalized_ignored_directories', 'sanitize_ignored_directories']
 
 
 def get_file_tag_names(session: Session, file: pathlib.Path) -> List[str]:
@@ -799,11 +800,7 @@ def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathl
     """Return a new list which does not contain any file paths that are in ignored directories."""
     from wrolpi.db import get_db_file
 
-    ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
-    for idx, ignored_directory in enumerate(ignored_directories):
-        ignored_directory = pathlib.Path(ignored_directory)
-        if not ignored_directory.is_absolute():
-            ignored_directories[idx] = str(get_media_directory() / ignored_directory)
+    ignored_directories = get_normalized_ignored_directories()
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
     # Never index the database (or its WAL sidecars), even if the user un-ignores `config`.
     db_file = str(get_db_file())
@@ -1766,23 +1763,84 @@ async def rename(session: Session, path: pathlib.Path, new_name: str, send_event
     return await rename_file(path, new_name)
 
 
+def get_special_directories() -> List[pathlib.Path]:
+    """Return absolute directories that must never be ignored by file refresh.
+
+    These are module destinations that depend on FileGroup indexing (or are the media root).
+    Map is intentionally excluded: it lists PMTiles by walking the filesystem and benefits
+    from being ignored during refresh (very large files).
+    """
+    from modules.videos.common import get_videos_directory, get_no_channel_directory
+    from modules.archive.lib import get_archive_directory
+
+    media_directory = get_media_directory()
+    # Avoid importing modules.zim.lib here (circular import via files.worker).
+    zims_directory = media_directory / get_wrolpi_config().zims_destination
+    return [
+        media_directory.resolve(),
+        get_videos_directory().resolve(),
+        get_archive_directory().resolve(),
+        get_no_channel_directory().resolve(),
+        zims_directory.resolve(),
+    ]
+
+
+def get_normalized_ignored_directories() -> List[str]:
+    """Return absolute ignored directory paths, excluding special directories.
+
+    Special directories (media root, videos, archives, zims, …) are never treated as ignored,
+    even if they appear in config from older installs or manual edits.
+    """
+    media_directory = get_media_directory()
+    special = {str(p) for p in get_special_directories()}
+    result = []
+    for d in get_wrolpi_config().ignored_directories or []:
+        path = pathlib.Path(d)
+        absolute = str((media_directory / path).resolve() if not path.is_absolute() else path.resolve())
+        if absolute in special:
+            continue
+        result.append(absolute)
+    return result
+
+
+def sanitize_ignored_directories():
+    """Persistently remove special directories from the ignored list if present."""
+    wrolpi_config = get_wrolpi_config()
+    ignored = list(wrolpi_config.ignored_directories or [])
+    if not ignored:
+        return
+
+    media_directory = get_media_directory()
+    special = {str(p) for p in get_special_directories()}
+    cleaned = []
+    removed = False
+    for d in ignored:
+        path = pathlib.Path(d)
+        absolute = str((media_directory / path).resolve() if not path.is_absolute() else path.resolve())
+        if absolute in special:
+            removed = True
+            logger.warning(f'Removing special directory from ignored_directories: {d}')
+            continue
+        cleaned.append(d)
+
+    if removed:
+        wrolpi_config.ignored_directories = cleaned
+
+
 def add_ignore_directory(directory: Union[pathlib.Path, str]):
     """Add a directory to the `ignored_directories` in the WROLPi config.  This directory will be ignored when
     refreshing."""
-    media_directory = get_media_directory()
+    media_directory = get_media_directory().resolve()
 
     directory = pathlib.Path(directory)
+    if not directory.is_absolute():
+        directory = media_directory / directory
+    directory = directory.resolve()
 
-    from modules.videos.common import get_videos_directory
-    from modules.archive.lib import get_archive_directory
-    from modules.videos.common import get_no_channel_directory
-    special_directories = [
-        get_media_directory(),
-        get_videos_directory(),
-        get_archive_directory(),
-        get_no_channel_directory(),
-    ]
+    # Drop any special directories that were previously saved as ignored.
+    sanitize_ignored_directories()
 
+    special_directories = set(get_special_directories())
     if directory in special_directories:
         raise InvalidDirectory('Refusing to ignore special directory')
 
@@ -1792,7 +1850,9 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
     wrolpi_config = get_wrolpi_config()
     ignored_directories = wrolpi_config.ignored_directories if wrolpi_config.ignored_directories else list()
 
-    if str(directory) in ignored_directories:
+    # Accept either absolute or relative forms already present in config.
+    relative = str(get_relative_to_media_directory(directory))
+    if str(directory) in ignored_directories or relative in ignored_directories:
         logger.warning(f'Directory is already ignored: {directory}')
         return
 
@@ -1802,13 +1862,27 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
 
 def remove_ignored_directory(directory: Union[pathlib.Path, str]):
     """Remove a directory from the `ignored_directories` in the WROLPi config."""
-    directory = str(pathlib.Path(directory)).rstrip('/')
-    ignored_directories = get_wrolpi_config().ignored_directories
-    if directory in ignored_directories:
-        ignored_directories.remove(directory)
-        get_wrolpi_config().ignored_directories = ignored_directories
-    else:
+    media_directory = get_media_directory()
+    path = pathlib.Path(directory)
+    if not path.is_absolute():
+        path = media_directory / path
+    path = path.resolve()
+    absolute = str(path)
+
+    ignored_directories = list(get_wrolpi_config().ignored_directories or [])
+    kept = []
+    removed = False
+    for d in ignored_directories:
+        entry = pathlib.Path(d)
+        entry_abs = str((media_directory / entry).resolve() if not entry.is_absolute() else entry.resolve())
+        if entry_abs == absolute:
+            removed = True
+            continue
+        kept.append(d)
+
+    if not removed:
         raise UnknownDirectory('Directory is not ignored')
+    get_wrolpi_config().ignored_directories = kept
 
 
 async def upsert_file(file: pathlib.Path | str, tag_names: List[str] = None) -> FileGroup:

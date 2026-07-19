@@ -1,5 +1,6 @@
 import hashlib
 import json
+import pathlib
 from datetime import datetime, timezone
 from http import HTTPStatus
 from unittest import mock
@@ -1369,6 +1370,53 @@ async def test_ignore_directory(test_session, async_client, test_directory, make
     request, response = await async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert len(get_wrolpi_config().ignored_directories) == 0
+
+    # Zims directory depends on FileGroup indexing for Manage/search — cannot ignore.
+    content = dict(path=str(test_directory / 'zims'))
+    request, response = await async_client.post('/api/files/ignore_directory', json=content)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert len(get_wrolpi_config().ignored_directories) == 0
+
+    # Relative form of zims is also refused.
+    content = dict(path='zims')
+    request, response = await async_client.post('/api/files/ignore_directory', json=content)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert len(get_wrolpi_config().ignored_directories) == 0
+
+    # Map is allowed to be ignored (lists PMTiles from the filesystem, not FileGroups).
+    content = dict(path=str(test_directory / 'map'))
+    request, response = await async_client.post('/api/files/ignore_directory', json=content)
+    assert response.status_code == HTTPStatus.OK
+    assert any(pathlib.Path(i).name == 'map' or str(i).endswith('/map')
+               for i in get_wrolpi_config().ignored_directories)
+
+
+@pytest.mark.asyncio
+async def test_sanitize_ignored_zims_directory(test_session, async_client, test_directory, test_wrolpi_config):
+    """Zims previously saved as ignored is stripped so refresh can index them again."""
+    from wrolpi.files.lib import (
+        get_normalized_ignored_directories,
+        sanitize_ignored_directories,
+    )
+
+    # Simulate an older config that incorrectly ignored zims (and intentionally ignored map).
+    get_wrolpi_config().ignored_directories = ['config', 'tags', 'map', 'zims']
+
+    # Normalized list used by refresh must never exclude zims.
+    normalized = get_normalized_ignored_directories()
+    assert not any(pathlib.Path(i).name == 'zims' for i in normalized)
+    assert any(pathlib.Path(i).name == 'map' for i in normalized)
+
+    sanitize_ignored_directories()
+    assert 'zims' not in get_wrolpi_config().ignored_directories
+    assert 'map' in get_wrolpi_config().ignored_directories
+
+    # Settings endpoint also sanitizes so the UI eye-icon matches.
+    request, response = await async_client.get('/api/settings')
+    assert response.status_code == HTTPStatus.OK
+    ignored = [str(i) for i in response.json['ignored_directories']]
+    assert 'zims' not in ignored
+    assert 'map' in ignored
 
 
 # --- Bulk Tagging API Tests ---

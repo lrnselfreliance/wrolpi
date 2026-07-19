@@ -32,7 +32,7 @@ from wrolpi.files.lib import (
     split_path_stem_and_suffix, _upsert_files, get_unique_files_by_stem, glob_shared_stem,
     group_files_by_stem, get_primary_file, delete_directory, apply_indexers,
     _move_file_group_files, _bulk_update_file_groups_db, MOVE_CHUNK_SIZE,
-    _bulk_update_file_groups_reorganize,
+    _bulk_update_file_groups_reorganize, get_normalized_ignored_directories,
 )
 
 logger = logger.getChild(__name__)
@@ -138,18 +138,9 @@ def _diff_to_paths(diff: FileGroupDiff) -> list[pathlib.Path]:
 def _get_normalized_ignored_directories() -> list[str]:
     """Get ignored directories as absolute paths.
 
-    Matches the normalization logic in remove_files_in_ignored_directories().
+    Delegates to files.lib so special directories (zims, videos, …) are never excluded.
     """
-    ignored = list(map(str, get_wrolpi_config().ignored_directories))
-    media_dir = get_media_directory()
-    result = []
-    for d in ignored:
-        p = pathlib.Path(d)
-        if not p.is_absolute():
-            result.append(str(media_dir / d))
-        else:
-            result.append(d)
-    return result
+    return get_normalized_ignored_directories()
 
 
 async def count_files(directories: list[Path]) -> int:

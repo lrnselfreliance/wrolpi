@@ -68,6 +68,18 @@ class TestGitFunctions:
         with patch('wrolpi.upgrade.PROJECT_DIR', mock_path):
             assert get_current_branch() is None
 
+    def test_get_current_branch_detached_head(self):
+        """A detached HEAD (abbrev-ref prints the literal "HEAD") is not a branch."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = b'HEAD\n'
+        mock_path = MagicMock()
+        mock_path.is_dir.return_value = True
+
+        with patch('wrolpi.upgrade.PROJECT_DIR', mock_path), \
+                patch('subprocess.run', return_value=mock_result):
+            assert get_current_branch() is None
+
     def test_get_local_commit(self):
         """get_local_commit returns the short commit hash."""
         mock_result = MagicMock()

@@ -388,7 +388,7 @@ class TagsConfig(ConfigFile):
     def import_config(self, file: pathlib.Path = None, send_events=False):
         from modules.zim import lib as zim_lib
         from modules.zim.models import Zim, TagZimEntry
-        from wrolpi.files.lib import glob_shared_stem
+        from wrolpi.files.lib import split_path_stem_and_suffix
 
         if PYTEST and not TEST_TAGS_CONFIG:
             logger.warning('Refusing to import tags without test tags config.  '
@@ -435,40 +435,71 @@ class TagsConfig(ConfigFile):
                     # Get all TagFiles so we can create new ones.
                     tag_files = {(i.tag_id, i.file_group_id): i for i in session.query(TagFile)}
 
-                    for tag_name, primary_path, created_at in config.tag_files:
-                        tag: Tag = tags_by_name.get(tag_name)
-                        # Paths are absolute in the DB, relative in config.
-                        absolute_path = media_directory / primary_path
-                        file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
-                        if not file_group and absolute_path.is_file():
-                            # File exists, but is not yet in DB.
-                            files = glob_shared_stem(absolute_path)
-                            try:
-                                file_group = FileGroup.from_paths(session, *files)
-                                session.add(file_group)
-                                session.flush([file_group, ])
-                            except NoPrimaryFile:
-                                logger.error(f'Failed to tag {absolute_path}')
-                                self.import_skipped += 1
-                                continue
+                    # Cache each directory's listing so we scan it at most once, rather than globbing per file
+                    # (which is O(files²) for large Channel/Domain directories).
+                    dir_listings: Dict[pathlib.Path, List[pathlib.Path]] = dict()
 
-                        if tag and file_group:
-                            tag_file: TagFile = tag_files.get((tag.id, file_group.id))
-                            if not tag_file:
-                                # This FileGroup has not been tagged with the Tag, add it.
-                                logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
-                                tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id, tag=tag,
-                                                   file_group=file_group)
-                                tag_files[(tag_file.tag_id, tag_file.file_group_id)] = tag_file
-                                session.add(tag_file)
-                            tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
-                            need_commit = True
-                        elif not file_group:
-                            logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
-                            self.import_skipped += 1
-                        elif not tag:
-                            logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
-                            self.import_skipped += 1
+                    def shared_stem_files(path: pathlib.Path) -> List[pathlib.Path]:
+                        # Equivalent to `glob_shared_stem`, but reuses a cached directory listing.
+                        parent = path.parent
+                        if parent not in dir_listings:
+                            dir_listings[parent] = list(parent.iterdir()) if parent.is_dir() else []
+                        stem, _ = split_path_stem_and_suffix(path)
+                        return [i for i in dir_listings[parent] if i == path or i.name.startswith(f'{stem}.')]
+
+                    # First pass: resolve (and create) FileGroups.  Newly-created FileGroups are flushed in a single
+                    # batch below so we don't pay a DB round-trip per file.  `no_autoflush` keeps the pending
+                    # FileGroups from being flushed one-at-a-time by `from_paths`'s own query.
+                    resolved = list()  # [(tag, file_group, created_at), ...]
+                    new_file_groups = list()
+                    with session.no_autoflush:
+                        for tag_name, primary_path, created_at in config.tag_files:
+                            tag: Tag = tags_by_name.get(tag_name)
+                            # Paths are absolute in the DB, relative in config.
+                            absolute_path = media_directory / primary_path
+                            file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
+                            if not file_group and absolute_path.is_file():
+                                # File exists, but is not yet in DB.
+                                files = shared_stem_files(absolute_path)
+                                try:
+                                    file_group = FileGroup.from_paths(session, *files)
+                                    session.add(file_group)
+                                    # Cache every member path (not just this one) so another config entry for a
+                                    # different member of the same shared-stem group reuses this FileGroup.  Without
+                                    # this, `no_autoflush` would hide the pending group from `from_paths`, creating a
+                                    # duplicate primary_path that aborts the batch flush.
+                                    for member_path in files:
+                                        file_groups_by_primary_path[member_path] = file_group
+                                    new_file_groups.append(file_group)
+                                except NoPrimaryFile:
+                                    logger.error(f'Failed to tag {absolute_path}')
+                                    self.import_skipped += 1
+                                    continue
+
+                            if tag and file_group:
+                                resolved.append((tag, file_group, created_at))
+                            elif not file_group:
+                                logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
+                                self.import_skipped += 1
+                            elif not tag:
+                                logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
+                                self.import_skipped += 1
+
+                    if new_file_groups:
+                        # Assign IDs to all newly-created FileGroups in a single flush.
+                        session.flush(new_file_groups)
+
+                    # Second pass: create the TagFiles now that every FileGroup has an ID.
+                    for tag, file_group, created_at in resolved:
+                        tag_file: TagFile = tag_files.get((tag.id, file_group.id))
+                        if not tag_file:
+                            # This FileGroup has not been tagged with the Tag, add it.
+                            logger.debug(f'Creating TagFile for tag_id={tag.id} file_group_id={file_group.id}')
+                            tag_file = TagFile(file_group_id=file_group.id, tag_id=tag.id)
+                            tag_files[(tag_file.tag_id, tag_file.file_group_id)] = tag_file
+                            session.add(tag_file)
+                        tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
+                        need_commit = True
 
                 # Tag all Zim entries.
                 if config.tag_zims:

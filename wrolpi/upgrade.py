@@ -62,7 +62,13 @@ def get_current_branch() -> str | None:
             timeout=10,
         )
         if result.returncode == 0:
-            return result.stdout.decode().strip()
+            branch = result.stdout.decode().strip()
+            # A detached HEAD makes `--abbrev-ref HEAD` print the literal
+            # "HEAD" (not a branch).  Comparing origin/HEAD — the remote's
+            # default branch — against it yields a bogus "commits behind"
+            # count and a false "update available", so report no branch.
+            if branch and branch != 'HEAD':
+                return branch
     except Exception as e:
         logger.error('Failed to get current branch', exc_info=e)
 

@@ -263,6 +263,65 @@ async def test_import_tags_config(async_client, test_session, test_directory, te
 
 
 @pytest.mark.asyncio()
+async def test_import_tags_config_batches_creation_of_missing_file_groups(async_client, test_session, test_directory,
+                                                                          test_tags_config, make_files_structure,
+                                                                          video_bytes):
+    """Importing tags for files that are not yet in the DB must be efficient and correct.
+
+    Regression guards for the batched-import path:
+    - Each directory is scanned once and TagFiles are inserted in a single batch, not flushed once per row (the
+      old per-row flush made large imports crawl at ~a dozen rows/second).
+    - A file tagged by multiple Tags reuses one FileGroup.
+    - Config entries for different members of the same shared-stem group (`video.mp4`, `video.info.json`) reuse a
+      single FileGroup; otherwise the batch flush inserts a duplicate primary_path and aborts the whole import.
+    """
+    from sqlalchemy import event
+
+    # A shared-stem video group plus several plain files, none modeled yet.
+    make_files_structure({
+        'video.mp4': video_bytes, 'video.info.json': '{}', 'video.png': 'image',
+        **{f'file_{i}.txt': 'text' for i in range(5)},
+    })
+
+    tag_files_config = [
+        # Two members of the same shared-stem group -> must resolve to one FileGroup, tagged once.
+        ['a', 'video.mp4', None],
+        ['a', 'video.info.json', None],
+    ]
+    for i in range(5):
+        # Each plain file is tagged by two Tags -> one FileGroup, two TagFiles.
+        tag_files_config.append(['a', f'file_{i}.txt', None])
+        tag_files_config.append(['b', f'file_{i}.txt', None])
+    with test_tags_config.open('wt') as fh:
+        yaml.dump(dict(tags={'a': {'color': '#111111'}, 'b': {'color': '#222222'}},
+                       tag_files=tag_files_config), fh)
+    tags.get_tags_config().initialize()
+
+    tag_file_inserts = 0
+
+    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        nonlocal tag_file_inserts
+        if ' '.join(statement.lower().split()).startswith('insert into tag_file'):
+            tag_file_inserts += 1
+
+    engine = test_session.get_bind()
+    event.listen(engine, 'before_cursor_execute', before_cursor_execute)
+    try:
+        # Must not raise a uniqueness error from the shared-stem group.
+        tags.import_tags_config()
+    finally:
+        event.remove(engine, 'before_cursor_execute', before_cursor_execute)
+
+    # One FileGroup for the shared-stem video group, plus one per plain file.
+    assert test_session.query(FileGroup).count() == 1 + 5
+    # The video group is tagged once; each plain file has two TagFiles.
+    assert test_session.query(TagFile).count() == 1 + (5 * 2)
+    # TagFiles are inserted in a single batch, not once per row.
+    assert tag_file_inserts <= 2, \
+        f'Expected TagFiles to be batched, got {tag_file_inserts} INSERT statements.'
+
+
+@pytest.mark.asyncio()
 async def test_import_tags_config_missing_file(test_session, test_directory, test_tags_config, example_singlefile):
     """A FileGroup should be created (and tagged) when a file exists, but does not yet have a FileGroup."""
     with test_tags_config.open('wt') as fh:

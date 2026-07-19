@@ -1749,18 +1749,22 @@ def get_special_directories() -> List[pathlib.Path]:
     These are module destinations that depend on FileGroup indexing (or are the media root).
     Map is intentionally excluded: it lists PMTiles by walking the filesystem and benefits
     from being ignored during refresh (very large files).
+
+    Must not create directories — this runs during refresh ignore filtering and would
+    otherwise mkdir videos/ (and NO CHANNEL/) as a side effect of the videos helpers.
     """
-    from modules.videos.common import get_videos_directory, get_no_channel_directory
     from modules.archive.lib import get_archive_directory
+    from modules.videos.lib import format_videos_destination
 
     media_directory = get_media_directory()
+    videos_directory = media_directory / format_videos_destination()
     # Avoid importing modules.zim.lib here (circular import via files.worker).
     zims_directory = media_directory / get_wrolpi_config().zims_destination
     return [
         media_directory.resolve(),
-        get_videos_directory().resolve(),
+        videos_directory.resolve(),
         get_archive_directory().resolve(),
-        get_no_channel_directory().resolve(),
+        (videos_directory / 'NO CHANNEL').resolve(),
         zims_directory.resolve(),
     ]
 

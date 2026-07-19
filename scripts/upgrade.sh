@@ -58,11 +58,14 @@ debian12_guard() {
         return 0
     fi
 
-    # Debian 12 (or older): make sure the cutoff tag is present locally.
+    # Debian 12 (or older): make sure the cutoff tag is present AND current.
     # `debian12-final` is off the release line, so a plain fetch of the branch
-    # would not follow it.
-    git -C /opt/wrolpi fetch origin "refs/tags/${GUARD_TAG}:refs/tags/${GUARD_TAG}" 2>/dev/null \
-        || git -C /opt/wrolpi fetch origin --tags 2>/dev/null || :
+    # would not follow it.  Force (+ / --force) so a moved tag (e.g. a bumped
+    # final release) overwrites a stale local tag instead of being rejected as
+    # "would clobber existing tag" — otherwise the guard pins to the old target.
+    # Safe to force: the commit's signature is verified before checkout below.
+    git -C /opt/wrolpi fetch origin "+refs/tags/${GUARD_TAG}:refs/tags/${GUARD_TAG}" 2>/dev/null \
+        || git -C /opt/wrolpi fetch --force --tags origin 2>/dev/null || :
 
     # --verify --quiet: fail cleanly (empty, non-zero) instead of echoing the
     # unresolved arg when the tag is absent.

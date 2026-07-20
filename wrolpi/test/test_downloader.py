@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pathlib
+import sqlite3
 from abc import ABC
 from datetime import datetime, time, timezone, timedelta
 from http import HTTPStatus
@@ -10,6 +11,7 @@ from unittest import mock
 import pytest
 import pytz
 import yaml
+from sqlalchemy.exc import OperationalError
 
 from wrolpi.api_utils import api_app
 from wrolpi.common import get_wrolpi_config, normalize_domain
@@ -1704,6 +1706,32 @@ async def test_daily_limit_per_domain_allows_under_limit(test_session, test_down
     assert 'https://example.com/new' in _dispatched_urls(dispatch)
     test_session.refresh(new)
     assert new.last_download_attempt is not None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_downloads_tolerates_locked_db(test_session, test_download_manager, test_downloader):
+    """A transient 'database is locked' during dispatch is swallowed (retried next cycle), not raised.
+
+    Regression: once downloading is enabled at startup, the download worker races the write burst
+    (RSS catalog refresh, download claims, config saves) on the single SQLite file.  A raised
+    OperationalError flooded the logs with tracebacks -- and tripped the traceback renderer's
+    'Variable inspector failed' noise -- for a condition the next perpetual cycle resolves on its own.
+    """
+    locked = OperationalError('SELECT', {}, sqlite3.OperationalError('database is locked'))
+    with mock.patch.object(test_download_manager, '_dispatch_new_downloads',
+                           new_callable=mock.AsyncMock, side_effect=locked):
+        # Must return normally, not raise.
+        await test_download_manager.dispatch_downloads()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_downloads_reraises_other_db_errors(test_session, test_download_manager, test_downloader):
+    """Only transient locks are tolerated; a real database error still propagates."""
+    other = OperationalError('SELECT', {}, sqlite3.OperationalError('no such table: download'))
+    with mock.patch.object(test_download_manager, '_dispatch_new_downloads',
+                           new_callable=mock.AsyncMock, side_effect=other):
+        with pytest.raises(OperationalError):
+            await test_download_manager.dispatch_downloads()
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,7 @@ import feedparser
 import pytz
 from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, Index, JSON
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, relationship
 
 from wrolpi import flags
@@ -1060,6 +1061,23 @@ class DownloadManager:
             return
 
         # Find download whose domain isn't already being downloaded.
+        try:
+            await self._dispatch_new_downloads()
+        except OperationalError as e:
+            if 'locked' in str(e).lower():
+                # Transient SQLite write contention (e.g. the burst of RSS catalog refreshes,
+                # download claims, and config saves right after downloading is enabled at startup).
+                # This dispatch cycle is a no-op; the perpetual worker retries on its next cycle, so
+                # don't raise -- a raised error here floods the logs with tracebacks (and trips the
+                # traceback renderer's "Variable inspector failed" noise) for a self-healing condition.
+                self.log_debug('dispatch_downloads skipped: database is locked (will retry next cycle)')
+                return
+            raise
+
+    async def _dispatch_new_downloads(self):
+        """Claim and dispatch the next batch of `new` downloads.  Split out from `dispatch_downloads`
+        so a transient "database is locked" can be handled there without retrying the signal
+        dispatches inside this transaction."""
         with get_db_session(commit=True) as session:
             new_downloads = list(session.query(Download).filter(
                 Download.status == 'new',

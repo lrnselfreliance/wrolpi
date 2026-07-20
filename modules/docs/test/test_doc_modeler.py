@@ -1,4 +1,5 @@
 """Tests for the doc_modeler."""
+import asyncio
 import shutil
 from unittest.mock import patch
 
@@ -140,6 +141,36 @@ async def test_doc_modeler_models_indexed_filegroup_without_doc(async_client, te
     doc: Doc = test_session.query(Doc).one()
     assert doc.file_group_id == file_group.id
     assert doc.file_group.model == 'doc'
+
+
+@pytest.mark.asyncio
+async def test_doc_modeler_terminates_on_persistent_failure(async_client, test_session, test_directory):
+    """doc_modeler must terminate even when modeling consistently fails and never creates a Doc row.
+
+    Regression: the `Doc.id IS NULL` gate keeps matching a doc that fails to model.  Without a
+    per-run guard, a batch of >=DOC_PROCESSING_LIMIT permanently-failing docs is re-selected every
+    iteration, so the loop never breaks and later docs are starved.
+    """
+    ebook_dir = test_directory / 'ebooks'
+    ebook_dir.mkdir(parents=True)
+    num_docs = 15  # More than one batch (DOC_PROCESSING_LIMIT == 10).
+    for i in range(num_docs):
+        path = ebook_dir / f'test_ebook_{i:03d}.epub'
+        shutil.copy(PROJECT_DIR / 'test/ebook example.epub', path)
+    for path in ebook_dir.iterdir():
+        fg = FileGroup.from_paths(test_session, path)
+        fg.indexed = True  # Simulate apply_indexers having already run.
+    test_session.commit()
+
+    # _model_doc always raises without persisting a Doc row (patch replaces the whole function).
+    # PYTEST re-raises inside the loop's per-item handler; disable that so we exercise the failure
+    # path and the loop's termination guard, not the re-raise.
+    with patch('modules.docs._model_doc', side_effect=RuntimeError('boom')), \
+            patch('modules.docs.PYTEST', False):
+        await asyncio.wait_for(doc_modeler(), timeout=10)
+
+    # No Doc rows were created (every attempt failed), but the loop still terminated.
+    assert test_session.query(Doc).count() == 0
 
 
 @pytest.mark.asyncio

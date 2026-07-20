@@ -25,9 +25,13 @@ DOC_PROCESSING_LIMIT = 10
 async def doc_modeler(progress_callback: Callable[[int], None] = None):
     """Searches for doc files (epub, mobi, pdf, docx, doc, odt, cbz, cbr) and models them."""
     total_processed = 0
+    # Track FileGroups already attempted in this run so a doc that fails to model (and therefore
+    # keeps matching the `Doc.id IS NULL` gate below) cannot be re-selected forever, which would
+    # hang this loop and starve later docs.  Failed docs are simply retried on the next refresh.
+    attempted_ids: set = set()
     while True:
         with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup, Doc) \
+            query = session.query(FileGroup, Doc) \
                 .outerjoin(Doc, Doc.file_group_id == FileGroup.id) \
                 .filter(
                 or_(
@@ -42,12 +46,15 @@ async def doc_modeler(progress_callback: Callable[[int], None] = None):
                     Doc.id.is_(None),
                     FileGroup.indexed == False,
                 ),
-            ).limit(DOC_PROCESSING_LIMIT)
-            file_groups: List[Tuple[FileGroup, Doc]] = list(file_groups)
+            )
+            if attempted_ids:
+                query = query.filter(FileGroup.id.notin_(attempted_ids))
+            file_groups: List[Tuple[FileGroup, Doc]] = list(query.limit(DOC_PROCESSING_LIMIT))
 
             processed = 0
             for file_group, doc in file_groups:
                 processed += 1
+                attempted_ids.add(file_group.id)
                 try:
                     if PYTEST:
                         session.expire(file_group)

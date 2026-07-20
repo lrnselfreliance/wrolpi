@@ -34,6 +34,7 @@ import {
     Placeholder as SPlaceholder,
     Popup as SPopup,
     Progress as SProgress,
+    Ref as SRef,
     Segment as SSegment,
     Statistic as SStatistic,
     StatisticGroup as SStatisticGroup,
@@ -287,7 +288,13 @@ const ButtonGroup: ButtonGroupComponent = (props) => {
 const ButtonBase = forwardRef<any, ButtonProps>((props, ref) => {
     const {i, inverted} = useContext(ThemeContext);
     const mergedProps = defaultGrey({...i, ...props}, !!inverted);
-    return <SButton ref={ref} {...mergedProps}/>
+    // SButton is a class component, so a forwarded `ref` would resolve to the class instance rather than the DOM
+    // node. Semantic UI's Modal/Popup use the trigger's ref with `node.contains(...)`, which throws on a non-DOM
+    // value. Wrap in Ref (findDOMNode) so the forwarded ref always resolves to the underlying <button> element.
+    if (ref) {
+        return <SRef innerRef={ref}><SButton {...mergedProps}/></SRef>
+    }
+    return <SButton {...mergedProps}/>
 });
 ButtonBase.displayName = 'ButtonBase';
 

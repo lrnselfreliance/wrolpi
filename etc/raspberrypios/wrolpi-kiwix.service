@@ -7,6 +7,7 @@ ExecStart=/opt/wrolpi/scripts/start_kiwix_serve.sh
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/
+Restart=on-failure
 # Below the API, but above the Map.
 Nice=8
 

@@ -380,7 +380,52 @@ fi
 echo
 # Kiwix
 
+if systemctl list-unit-files "*wrolpi-kiwix*" >/dev/null 2>&1; then
+  echo "OK: WROLPi Kiwix systemd exists"
+else
+  echo "FAILED: WROLPi Kiwix systemd does not exist"
+fi
+
+if [ -f /etc/systemd/system/wrolpi-kiwix.service ]; then
+  if systemctl status wrolpi-kiwix.service >/dev/null 2>&1; then
+    echo "OK: WROLPi Kiwix service is up"
+  else
+    echo "FAILED: WROLPi Kiwix service is not up"
+  fi
+fi
+
+# kiwix-serve listens on 9085 (HTTP); Caddy proxies it as HTTPS on 8085.  A
+# running service that is not listening here means kiwix-serve failed to start.
+if netstat -ant | grep LISTEN | grep -E "(0\.0\.0\.0:|:::)9085\b" >/dev/null; then
+  echo "OK: Kiwix port 9085 is occupied"
+else
+  echo "FAILED: Kiwix is not listening on port 9085 (kiwix-serve did not start)"
+fi
+
+if curl -s http://0.0.0.0:9085 --max-time 5 2>/dev/null | grep -i kiwix >/dev/null; then
+  echo "OK: Kiwix responded on http://0.0.0.0:9085"
+else
+  echo "FAILED: Kiwix did not respond on http://0.0.0.0:9085"
+fi
+
 check_file /media/wrolpi/zims/library.xml "The kiwix library file exists" "The kiwix library file does not exist at /media/wrolpi/zims/library.xml"
+
+# Compare zim files on disk to the books actually loaded into the library.  A
+# shortfall means some zims could not be added (corrupt or incomplete download).
+zims_on_disk=$(find /media/wrolpi/zims -iname '*.zim' 2>/dev/null | wc -l | tr -d ' ')
+if [ -f /media/wrolpi/zims/library.xml ]; then
+  zims_loaded=$(grep -c '<book' /media/wrolpi/zims/library.xml 2>/dev/null)
+else
+  zims_loaded=0
+fi
+if [ "${zims_on_disk}" -gt 0 ] && [ "${zims_loaded}" -lt "${zims_on_disk}" ]; then
+  echo "FAILED: Only ${zims_loaded} of ${zims_on_disk} zim file(s) loaded into the library; the rest are corrupt or incomplete (re-download them)"
+elif [ "${zims_on_disk}" -gt 0 ]; then
+  echo "OK: All ${zims_on_disk} zim file(s) are loaded into the library"
+else
+  echo "Note: No zim files found in /media/wrolpi/zims/"
+fi
+
 if curl -k -s https://0.0.0.0:8085 --max-time 5 2>/dev/null | grep -i kiwix >/dev/null; then
   echo "OK: Kiwix app responded"
 else

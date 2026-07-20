@@ -117,6 +117,32 @@ async def test_doc_do_model_sets_model(test_session, example_pdf):
 
 
 @pytest.mark.asyncio
+async def test_doc_modeler_models_indexed_filegroup_without_doc(async_client, test_session, test_directory,
+                                                               example_pdf):
+    """A doc-mimetype FileGroup that was already indexed (indexed=True) but never modeled (no Doc
+    row) must still be picked up by the doc_modeler.
+
+    Regression: apply_indexers marks every FileGroup indexed=True.  If a doc file gets indexed
+    before it is modeled (e.g. the modeler errored, or the file was imported already-indexed), the
+    old `indexed == False` gate excluded it forever -- leaving thousands of docs invisible in
+    /api/docs even though they exist on disk.
+    """
+    # Simulate the stuck production state: the FileGroup has been swept by apply_indexers
+    # (indexed=True) but has no Doc row and no model.
+    file_group = FileGroup.from_paths(test_session, example_pdf)
+    file_group.indexed = True
+    file_group.model = None
+    test_session.commit()
+    assert test_session.query(Doc).count() == 0, 'Precondition: no Doc row exists yet'
+
+    await doc_modeler()
+
+    doc: Doc = test_session.query(Doc).one()
+    assert doc.file_group_id == file_group.id
+    assert doc.file_group.model == 'doc'
+
+
+@pytest.mark.asyncio
 async def test_doc_modeler_processes_more_than_batch_limit(async_client, test_session, test_directory):
     """Doc modeler processes more than one batch of files (limit=10)."""
     ebook_dir = test_directory / 'ebooks'

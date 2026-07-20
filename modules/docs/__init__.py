@@ -27,14 +27,22 @@ async def doc_modeler(progress_callback: Callable[[int], None] = None):
     total_processed = 0
     while True:
         with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup, Doc).filter(
+            file_groups = session.query(FileGroup, Doc) \
+                .outerjoin(Doc, Doc.file_group_id == FileGroup.id) \
+                .filter(
                 or_(
                     *[FileGroup.mimetype == mt for mt in DOC_MIMETYPES],
                     *[FileGroup.primary_path.like(f'%{suffix}') for suffix in COMIC_BOOK_SUFFIXES],
                 ),
-                FileGroup.indexed == False,
-            ).outerjoin(Doc, Doc.file_group_id == FileGroup.id) \
-                .limit(DOC_PROCESSING_LIMIT)
+                # Model any doc that has no Doc row yet (even if `apply_indexers` already set
+                # `indexed=True` before this modeler ran), or any doc explicitly flagged for
+                # re-indexing.  Gating solely on `indexed == False` left already-indexed docs
+                # permanently unmodeled and invisible in /api/docs.
+                or_(
+                    Doc.id.is_(None),
+                    FileGroup.indexed == False,
+                ),
+            ).limit(DOC_PROCESSING_LIMIT)
             file_groups: List[Tuple[FileGroup, Doc]] = list(file_groups)
 
             processed = 0

@@ -119,6 +119,37 @@ EOF
 debian12_guard "$@"
 # ---------------------------------------------------------------------------
 
+# --- Rebuild virtual environments after a Python major-version change -------
+# A Debian major upgrade (e.g. 12 -> 13) replaces /usr/bin/python3 (3.11 -> 3.13).
+# The existing venvs still resolve their `python3` to the system interpreter,
+# but their packages live in lib/python3.11/site-packages, which the new
+# interpreter never searches -- so every import fails and `pip install --upgrade`
+# cannot repair them.  Detect this by comparing each venv's recorded Python
+# version against the current one, and do a full rebuild (delete + recreate +
+# reinstall) via reset_virtual_environments.sh when they differ.
+rebuild_stale_venvs() {
+    local current
+    current=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null) || return 0
+    local cfg venv_version
+    for cfg in /opt/wrolpi/venv/pyvenv.cfg \
+               /opt/wrolpi/controller/venv/pyvenv.cfg \
+               /opt/wrolpi-help/venv/pyvenv.cfg; do
+        [ -r "${cfg}" ] || continue
+        # pyvenv.cfg records e.g. "version = 3.11.2"; match that key exactly so
+        # the newer "version_info = ..." line is ignored.  Reduce to major.minor.
+        venv_version=$(awk -F'=' '$1 ~ /^[[:space:]]*version[[:space:]]*$/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "${cfg}")
+        venv_version=${venv_version%.*}
+        if [ -n "${venv_version}" ] && [ "${venv_version}" != "${current}" ]; then
+            echo "Python changed (venv at ${cfg%/pyvenv.cfg} built for ${venv_version}, system is now ${current}); rebuilding all virtual environments..."
+            /opt/wrolpi/scripts/reset_virtual_environments.sh -y
+            return 0
+        fi
+    done
+}
+
+rebuild_stale_venvs
+# ---------------------------------------------------------------------------
+
 # Upgrade Controller first so users can monitor the rest of the upgrade.
 upgrade_controller() {
     echo "Upgrading WROLPi Controller..."

@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 # Deletes and recreates all WROLPi Python virtual environments.
 # This script requires internet access for pip install.
+#
+# Usage: reset_virtual_environments.sh [-y|--yes]
+#   -y, --yes   Skip the confirmation prompt.  Used by automated upgrades
+#               (wrolpi-upgrade.service), which run without a tty -- the
+#               interactive prompt would otherwise loop forever on EOF.
+
+ASSUME_YES=false
+for arg in "$@"; do
+  case "${arg}" in
+  -y | --yes) ASSUME_YES=true ;;
+  esac
+done
 
 # Re-execute this script if it wasn't called with sudo.
 if [ $EUID != 0 ]; then
@@ -10,7 +22,9 @@ fi
 
 source /opt/wrolpi/wrolpi/scripts/lib.sh
 
-yes_or_no "This script requires internet access. Do you want to continue?" || exit 0
+if [ "${ASSUME_YES}" != true ]; then
+  yes_or_no "This script requires internet access. Do you want to continue?" || exit 0
+fi
 
 set -e
 set -x

@@ -1,10 +1,12 @@
 """Tests for the doc_modeler."""
 import asyncio
 import shutil
+import sqlite3
 from unittest.mock import patch
 
 import pytest
 from PIL import Image
+from sqlalchemy.exc import OperationalError
 
 from modules.docs import doc_modeler
 from modules.docs.models import Doc, DocSection
@@ -171,6 +173,41 @@ async def test_doc_modeler_terminates_on_persistent_failure(async_client, test_s
 
     # No Doc rows were created (every attempt failed), but the loop still terminated.
     assert test_session.query(Doc).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_doc_modeler_survives_database_locked(async_client, test_session, test_directory, refresh_files):
+    """A transient SQLite "database is locked" on one doc must not abort the whole modeler run.
+
+    Regression: doc_modeler held one write transaction across a whole batch of slow extractions.
+    When another connection committed mid-batch, the deferred transaction failed to upgrade with
+    SQLITE_BUSY_SNAPSHOT ("database is locked"), the error handler crashed on the rolled-back
+    session, and the entire run aborted -- so no further docs were modeled.  Each doc now runs in
+    its own short transaction and a lock is retried.
+    """
+    ebook_dir = test_directory / 'ebooks'
+    ebook_dir.mkdir(parents=True)
+    for i in range(3):
+        shutil.copy(PROJECT_DIR / 'test/ebook example.epub', ebook_dir / f'book_{i:03d}.epub')
+
+    from modules.docs import _model_doc as real_model_doc
+
+    calls = {'n': 0}
+
+    def flaky_model_doc(file_group, session):
+        # Fail the very first modeling attempt with a lock error, then behave normally.  Proves the
+        # run recovers (retries the doc, keeps modeling the rest) instead of aborting.
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise OperationalError('stmt', {}, sqlite3.OperationalError('database is locked'))
+        return real_model_doc(file_group, session)
+
+    with patch('modules.docs._model_doc', side_effect=flaky_model_doc):
+        await refresh_files()
+
+    # All three ebooks were modeled despite the initial lock error.
+    assert test_session.query(Doc).count() == 3
+    assert calls['n'] >= 4  # 1 failed attempt + 1 retry + 2 more docs.
 
 
 @pytest.mark.asyncio

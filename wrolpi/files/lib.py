@@ -26,7 +26,7 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, \
     partition, \
-    get_files_and_directories, chunks_by_stem, walk, \
+    get_files_and_directories, chunks, chunks_by_stem, walk, \
     get_wrolpi_config, \
     unique_by_predicate, get_paths_in_media_directory, TRACE_LEVEL, get_relative_to_media_directory, strip_surrogates
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
@@ -1006,15 +1006,18 @@ def upsert_directories(parent_directories, directories):
 
     if directories:
         # Insert any directories that were created, update any directories which previously existed.
+        # Chunk the rows so the multi-row VALUES clause stays under SQLite's bound-variable limit;
+        # a large media directory can hold tens of thousands of directories.
+        values = [(str(i.absolute()), i.name, idempotency) for i in directories]
         with get_db_curs(commit=True) as curs:
-            values = [(str(i.absolute()), i.name, idempotency) for i in directories]
-            placeholders, params = values_clause(values)
-            stmt = f'''
-                INSERT INTO directory (path, name, idempotency) VALUES {placeholders}
-                ON CONFLICT (path) DO UPDATE
-                SET idempotency = EXCLUDED.idempotency
-            '''
-            curs.execute(stmt, params)
+            for chunk in chunks(values, BULK_SQL_CHUNK_SIZE):
+                placeholders, params = values_clause(chunk)
+                stmt = f'''
+                    INSERT INTO directory (path, name, idempotency) VALUES {placeholders}
+                    ON CONFLICT (path) DO UPDATE
+                    SET idempotency = EXCLUDED.idempotency
+                '''
+                curs.execute(stmt, params)
 
     with get_db_curs(commit=True) as curs:
         # Delete the children of any parent directory which no longer exists.

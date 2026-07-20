@@ -18,7 +18,7 @@ from wrolpi.conftest import await_switches
 from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
-from wrolpi.files.models import FileGroup
+from wrolpi.files.models import FileGroup, Directory
 from wrolpi.tags import TagFile
 from wrolpi.test.common import only_macos, skip_circleci
 from wrolpi.vars import PROJECT_DIR, IS_MACOS
@@ -854,6 +854,25 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     foo.mkdir()
     await refresh_files([foo])
     assert_directories({'foo', 'baz'})
+
+
+@pytest.mark.asyncio
+async def test_upsert_directories_chunks_large_batches(test_session, test_directory):
+    """A media directory with more directories than SQLite can bind in one statement is inserted in chunks.
+
+    Regression: SQLite limits the number of bound variables per statement, so a single multi-row VALUES
+    clause over tens of thousands of directories raised RuntimeError('values_clause: too many parameters')."""
+    from wrolpi.db import SQLITE_MAX_VARIABLES
+    # upsert_directories binds 3 columns per directory; exceed the limit so the un-chunked path would fail.
+    count = SQLITE_MAX_VARIABLES // 3 + 50
+    paths = [test_directory / f'd{i:05d}' for i in range(count)]
+    for path in paths:
+        path.mkdir()
+
+    lib.upsert_directories([test_directory], paths)
+
+    stored = {i.path for i in test_session.query(Directory).all()}
+    assert set(paths).issubset(stored), 'all discovered directories should be inserted'
 
 
 @pytest.mark.asyncio

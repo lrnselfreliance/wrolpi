@@ -2,12 +2,19 @@
 # This file imports all *.zim files in the Zim media directory, then starts kiwix-serve.
 set -u
 
-# The media directory is overridable for testing; defaults to the production mount.
+# The media directory and project directory are overridable for testing;
+# they default to the production locations.
 MEDIA_DIRECTORY="${MEDIA_DIRECTORY:-/media/wrolpi}"
+PROJECT_DIR="${PROJECT_DIR:-/opt/wrolpi}"
+# Default Zim shipped in /opt/wrolpi-blobs; served when no real zim is available.
+DEFAULT_ZIM="${DEFAULT_ZIM:-/opt/wrolpi-blobs/default.zim}"
 
 [ ! -d "${MEDIA_DIRECTORY}" ] && echo "Cannot start kiwix without media directory mounted" && exit 1
 
-ZIM_DIRECTORY="${MEDIA_DIRECTORY}/zims"
+# Honor the configured Zim directory (wrolpi.yaml `zims_destination`, always
+# relative to the media directory), defaulting to `zims`.
+ZIMS_DEST="$(MEDIA_DIRECTORY="${MEDIA_DIRECTORY}" "${PROJECT_DIR}/wrolpi/scripts/read_config_value.sh" zims_destination zims)"
+ZIM_DIRECTORY="${MEDIA_DIRECTORY}/${ZIMS_DEST}"
 LIBRARY="${ZIM_DIRECTORY}/library.xml"
 
 # Wait up to 30 seconds for the zims directory to be mounted.
@@ -44,11 +51,20 @@ done < <(find "${ZIM_DIRECTORY}" -iname '*.zim' -print0)
 if [ "${found_zim}" = false ]; then
   echo "Could not find any Zim files to import"
 elif [ "${added_zim}" = false ]; then
-  echo "Found Zim files but none could be added (all corrupt or incomplete?); starting Kiwix with an empty library" >&2
+  echo "Found Zim files but none could be added (all corrupt or incomplete?)" >&2
+fi
+
+# When no functioning zim was added, fall back to the default Zim shipped in
+# /opt/wrolpi-blobs so the user sees a helpful placeholder ("download some Zim
+# files") instead of a blank Kiwix.  A single corrupt zim must never take down
+# the server.
+if [ "${added_zim}" = false ] && [ -f "${DEFAULT_ZIM}" ]; then
+  echo "No usable Zim files found; serving the default WROLPi Zim: ${DEFAULT_ZIM}" >&2
+  kiwix-manage "${LIBRARY}" add "${DEFAULT_ZIM}" || echo "Failed to add the default Zim" >&2
 fi
 
 # Ensure a library file always exists so kiwix-serve can start even when there
-# are no valid zims.  A single corrupt zim must never take down the server.
+# are no valid zims and the default Zim is missing.
 if [ ! -f "${LIBRARY}" ]; then
   printf '<?xml version="1.0" encoding="UTF-8"?>\n<library version="20110515">\n</library>\n' > "${LIBRARY}"
 fi

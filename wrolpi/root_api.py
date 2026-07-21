@@ -223,6 +223,7 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
     # Remove any keys with None values, then save the config.
     new_config = {k: v for k, v in body.__dict__.items() if v is not None}
     wrolpi_config = get_wrolpi_config()
+    old_zims_destination = wrolpi_config.zims_destination
 
     if not new_config:
         raise InvalidConfig()
@@ -299,6 +300,13 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
 
     # Save config settings (hotspot control is now through Controller endpoints)
     wrolpi_config.update(new_config)
+
+    # If the Zim directory changed, restart Kiwix so it serves the new directory
+    # without waiting for a reboot.  Local import avoids a circular import
+    # (modules depend on wrolpi, not the reverse).
+    if wrolpi_config.zims_destination != old_zims_destination:
+        from modules.zim.lib import restart_kiwix_handler
+        restart_kiwix_handler.activate_switch()
 
     # Apply timezone to the system via Controller (native deployments only).
     if body.timezone is not None and not DOCKERIZED:

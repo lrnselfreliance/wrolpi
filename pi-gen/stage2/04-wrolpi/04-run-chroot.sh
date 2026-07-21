@@ -18,6 +18,10 @@ cp /opt/wrolpi/etc/raspberrypios/*desktop /etc/skel/Desktop
 [[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
   (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
 
+# Ship committed blobs (e.g. the default Zim served by Kiwix when the media dir
+# has no working zims) into /opt/wrolpi-blobs.
+cp /opt/wrolpi/wrolpi/blobs/* /opt/wrolpi-blobs/
+
 # Install WROLPi Help.
 /opt/wrolpi/scripts/install_help_service.sh
 

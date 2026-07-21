@@ -85,6 +85,26 @@ async def test_daily_download_limit_settings(test_session, async_client):
 
 
 @pytest.mark.asyncio
+async def test_changing_zims_destination_restarts_kiwix(test_session, async_client):
+    """Changing zims_destination should activate the restart_kiwix switch so Kiwix serves the new
+    directory; an unrelated settings change should not."""
+    from modules.zim import lib as zim_lib
+
+    with mock.patch.object(zim_lib.restart_kiwix_handler, 'activate_switch') as mock_activate:
+        # An unrelated change does not restart Kiwix.
+        request, response = await async_client.patch('/api/settings', content=json.dumps({'log_level': 20}))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        mock_activate.assert_not_called()
+
+        # Changing the Zim directory does.
+        data = {'zims_destination': 'my_zims'}
+        request, response = await async_client.patch('/api/settings', content=json.dumps(data))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        assert get_wrolpi_config().zims_destination == 'my_zims'
+        mock_activate.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_log_level(async_client):
     """Log level must be between 0 and 40."""
     data = {'log_level': 0}

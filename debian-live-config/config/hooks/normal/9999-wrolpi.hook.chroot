@@ -132,6 +132,10 @@ mkdir /media/wrolpi
 [[ -f /opt/wrolpi-blobs/map-overview.pmtiles && -s /opt/wrolpi-blobs/map-overview.pmtiles ]] || \
   (echo "ERROR: map-overview.pmtiles missing from /opt/wrolpi-blobs!" && exit 1)
 
+# Ship committed blobs (e.g. the default Zim served by Kiwix when the media dir
+# has no working zims) into /opt/wrolpi-blobs.
+cp /opt/wrolpi/wrolpi/blobs/* /opt/wrolpi-blobs/
+
 # Bake in the map toolchain (pmtiles CLI + tippecanoe) so first boot does not
 # need internet.  Shared with pi-gen and on-device upgrades via a single script
 # so versions/pins live in one place.  It is safe in the chroot: unlike

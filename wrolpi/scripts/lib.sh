@@ -16,6 +16,11 @@ PROJECT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PROJECT_DIR=$(dirname "${PROJECT_DIR}")
 PROJECT_DIR=$(dirname "${PROJECT_DIR}")
 
+# Read a top-level scalar value from wrolpi.yaml.  Usage: config_value KEY [DEFAULT]
+function config_value {
+  "${PROJECT_DIR}/wrolpi/scripts/read_config_value.sh" "$@"
+}
+
 rpi=false
 debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then

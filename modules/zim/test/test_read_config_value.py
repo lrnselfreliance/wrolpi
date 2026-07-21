@@ -57,6 +57,21 @@ def test_empty_value_returns_default(media_with_config):
     assert _read(media, 'zims_destination', 'zims') == 'zims'
 
 
+@pytest.mark.parametrize('null_repr', ['null', 'Null', 'NULL', '~'])
+def test_yaml_null_returns_default(media_with_config, null_repr):
+    """An unquoted YAML null means "unset" -> default, matching the Python config layer."""
+    media, write = media_with_config
+    write(f'zims_destination: {null_repr}\n')
+    assert _read(media, 'zims_destination', 'zims') == 'zims'
+
+
+def test_quoted_null_is_literal_string(media_with_config):
+    """A quoted "null" is the string null, not YAML null."""
+    media, write = media_with_config
+    write('zims_destination: "null"\n')
+    assert _read(media, 'zims_destination', 'zims') == 'null'
+
+
 def test_missing_config_file_returns_default(tmp_path):
     # No config directory/file at all (fresh install) -> default, no error.
     assert _read(tmp_path / 'media', 'zims_destination', 'zims') == 'zims'

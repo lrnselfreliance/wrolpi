@@ -159,6 +159,21 @@ def test_honors_configured_zims_destination(kiwix_env):
     assert 'mycustomzims/wikipedia.zim' in library.read_text()
 
 
+def test_traversal_zims_destination_is_rejected(kiwix_env):
+    """A traversal zims_destination must not let Kiwix escape the media root; it falls back to `zims`."""
+    kiwix_env['write_config']('zims_destination: ../../escape\n')
+    _write_zim(kiwix_env['zims'] / 'wikipedia.zim')  # a valid zim in the safe default dir
+
+    result = kiwix_env['run']()
+
+    assert result.returncode == 0, result.stderr
+    assert kiwix_env['started_marker'].exists(), 'kiwix-serve was not started'
+    # Served from the safe `zims` directory, and no library.xml was created outside media.
+    assert kiwix_env['library'].exists()
+    assert 'wikipedia.zim' in kiwix_env['library'].read_text()
+    assert not (kiwix_env['media'].parent / 'escape').exists()
+
+
 def test_falls_back_to_default_zim_when_no_usable_zim(kiwix_env):
     """When no functioning zim is present, the default Zim is served."""
     # No zims in the directory; create the default Zim the script should fall back to.

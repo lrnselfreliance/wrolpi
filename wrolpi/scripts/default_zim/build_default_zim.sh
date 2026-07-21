@@ -9,7 +9,9 @@ set -euo pipefail
 
 HERE="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &>/dev/null && pwd )"
 BLOBS="$( cd -- "${HERE}/../../blobs" &>/dev/null && pwd )"
-IMAGE="ghcr.io/openzim/zim-tools:latest"
+# Pinned (not :latest) so the committed default.zim is reproducible: identical
+# source assets always build with the same zimwriterfs release.
+IMAGE="ghcr.io/openzim/zim-tools:3.7.0"
 
 echo "Building default.zim from ${HERE}/src -> ${BLOBS}/default.zim ..."
 rm -f "${BLOBS}/default.zim"  # zimwriterfs refuses to overwrite an existing file.

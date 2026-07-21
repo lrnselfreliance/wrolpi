@@ -169,6 +169,16 @@ chown wrolpi:wrolpi /media/wrolpi 2>/dev/null || echo "Ignoring failure to chang
 # Remove immutable flag from blob files before chown (may not exist or may not be set).
 chattr -i /opt/wrolpi-blobs/* 2>/dev/null || :
 
+# Ship committed blobs (e.g. the default Zim served by Kiwix when the media dir
+# has no working zims) into /opt/wrolpi-blobs.  repair.sh runs on every install
+# and upgrade, so this keeps the blobs current there just like the image builds
+# do.  It runs after the immutable flag is cleared above (so existing blobs can
+# be overwritten) and before immutability is re-applied below.
+mkdir -p /opt/wrolpi-blobs
+if [ -d /opt/wrolpi/wrolpi/blobs ] && ls /opt/wrolpi/wrolpi/blobs/* >/dev/null 2>&1; then
+  cp /opt/wrolpi/wrolpi/blobs/* /opt/wrolpi-blobs/
+fi
+
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 # Protect blob files from accidental modification or deletion.

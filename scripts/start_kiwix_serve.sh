@@ -14,6 +14,14 @@ DEFAULT_ZIM="${DEFAULT_ZIM:-/opt/wrolpi-blobs/default.zim}"
 # Honor the configured Zim directory (wrolpi.yaml `zims_destination`, always
 # relative to the media directory), defaulting to `zims`.
 ZIMS_DEST="$(MEDIA_DIRECTORY="${MEDIA_DIRECTORY}" "${PROJECT_DIR}/wrolpi/scripts/read_config_value.sh" zims_destination zims)"
+# Defense in depth: never let an absolute path, traversal, or empty value escape
+# the media root (the settings API also rejects these).  Fall back to `zims`.
+case "${ZIMS_DEST}" in
+  ''|/*|*..*)
+    echo "Ignoring unsafe zims_destination '${ZIMS_DEST}'; using 'zims'" >&2
+    ZIMS_DEST=zims
+    ;;
+esac
 ZIM_DIRECTORY="${MEDIA_DIRECTORY}/${ZIMS_DEST}"
 LIBRARY="${ZIM_DIRECTORY}/library.xml"
 

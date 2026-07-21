@@ -35,6 +35,12 @@ if [ -f "${CONFIG}" ]; then
         sub(/^[[:space:]]+/, "", v)        # leading whitespace
         sub(/[[:space:]]+#.*$/, "", v)     # trailing inline comment
         sub(/[[:space:]]+$/, "", v)        # trailing whitespace
+        # Unquoted YAML null means "unset"; return empty so the caller uses its
+        # default, matching how PyYAML/the Python config layer treat null.
+        if (v == "null" || v == "Null" || v == "NULL" || v == "~") {
+          print ""
+          exit
+        }
         # Strip a matching pair of surrounding quotes.
         if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/)
           v = substr(v, 2, length(v) - 2)

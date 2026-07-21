@@ -105,6 +105,15 @@ async def test_changing_zims_destination_restarts_kiwix(test_session, async_clie
 
 
 @pytest.mark.asyncio
+async def test_zims_destination_rejects_traversal(test_session, async_client):
+    """zims_destination must be relative and must not contain traversal ('..') or be absolute."""
+    for bad in ('../../escape', 'a/../../b', '/abs/path'):
+        request, response = await async_client.patch('/api/settings',
+                                                     content=json.dumps({'zims_destination': bad}))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, f'{bad!r} should be rejected'
+
+
+@pytest.mark.asyncio
 async def test_log_level(async_client):
     """Log level must be between 0 and 40."""
     data = {'log_level': 0}

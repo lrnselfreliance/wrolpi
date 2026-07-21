@@ -245,6 +245,9 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
 
     if body.zims_destination and pathlib.Path(body.zims_destination).is_absolute():
         raise InvalidConfig('Zims directory must be relative to media directory')
+    elif body.zims_destination and '..' in pathlib.Path(body.zims_destination).parts:
+        # Kiwix serves and rebuilds library.xml in this directory; traversal must not escape media.
+        raise InvalidConfig('Zims directory must not contain ".."')
     elif not body.zims_destination:
         new_config['zims_destination'] = wrolpi_config.default_config['zims_destination']
 
@@ -305,6 +308,15 @@ async def update_settings(_: Request, body: schema.SettingsRequest):
     # without waiting for a reboot.  Local import avoids a circular import
     # (modules depend on wrolpi, not the reverse).
     if wrolpi_config.zims_destination != old_zims_destination:
+        # Persist synchronously first: update() only queues an async background_save,
+        # and that switch has no ordering guarantee against the restart switch below.
+        # start_kiwix_serve.sh reads zims_destination from disk, so the file must be
+        # current before Kiwix restarts.  A save failure is non-fatal (background_save
+        # still runs); log and continue.
+        try:
+            wrolpi_config.save()
+        except Exception as e:
+            logger.warning(f'Could not synchronously save config before restarting Kiwix: {e}')
         from modules.zim.lib import restart_kiwix_handler
         restart_kiwix_handler.activate_switch()
 

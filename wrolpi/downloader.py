@@ -35,7 +35,7 @@ from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, C
     wrol_mode_enabled, background_task, get_absolute_media_path, timer, aiohttp_get, \
     get_download_info, trim_file_name, get_wrolpi_config, TRACE_LEVEL, normalize_domain
 from wrolpi.dates import TZDateTime, now, Seconds
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, get_immediate_db_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError, BotBlockedDownloadError, UnknownDownload, \
     ValidationError, DownloadError
 from wrolpi.events import Events
@@ -1077,8 +1077,12 @@ class DownloadManager:
     async def _dispatch_new_downloads(self):
         """Claim and dispatch the next batch of `new` downloads.  Split out from `dispatch_downloads`
         so a transient "database is locked" can be handled there without retrying the signal
-        dispatches inside this transaction."""
-        with get_db_session(commit=True) as session:
+        dispatches inside this transaction.
+
+        Uses `get_immediate_db_session` because this is a read-then-write transaction (it reads the
+        `new` downloads, then claims each by setting `last_download_attempt`); a deferred lock
+        upgrade here fails instantly with "database is locked" under concurrency."""
+        with get_immediate_db_session() as session:
             new_downloads = list(session.query(Download).filter(
                 Download.status == 'new',
                 Download.domain not in self.processing_domains,

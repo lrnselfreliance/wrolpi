@@ -25,6 +25,10 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
+# Toggled only by `get_immediate_db_session()` (below) while such a session is open on this thread,
+# so the engine's `begin` listener knows to emit `BEGIN IMMEDIATE` instead of a deferred `BEGIN`.
+_immediate_txn = threading.local()
+
 
 def _adapt_datetime(value):
     """Store datetimes from raw SQL exactly like SQLAlchemy does: naive UTC with microseconds."""
@@ -82,7 +86,12 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):
-        conn.execute('BEGIN')
+        # `get_immediate_db_session()` sessions take the write lock up front; everything else stays
+        # deferred so WAL readers never block (see `_immediate_txn`).
+        if getattr(_immediate_txn, 'active', False):
+            conn.execute('BEGIN IMMEDIATE')
+        else:
+            conn.execute('BEGIN')
 
     return engine
 
@@ -148,6 +157,28 @@ def get_db_session(commit: bool = False) -> Generator[Session, Any, None]:
         # so we should not rollback here - that would undo other test operations.
         if not PYTEST and session.transaction.is_active:
             session.rollback()
+
+
+@contextmanager
+def get_immediate_db_session() -> Generator[Session, Any, None]:
+    """A committing session that takes the SQLite write lock up front (`BEGIN IMMEDIATE`).
+
+    Use this for read-then-write transactions (read some rows, then UPDATE/INSERT them).  A plain
+    `get_db_session(commit=True)` begins *deferred* and only upgrades to a writer at its first
+    write; if another connection holds the write lock at that moment, SQLite returns "database is
+    locked" *immediately* — `busy_timeout` is skipped for lock upgrades to avoid deadlock.  Taking
+    the write lock at BEGIN instead lets `busy_timeout` (30s) absorb the contention.
+
+    The `_immediate_txn` flag is read by the engine's `begin` listener when the transaction opens
+    (on the caller's first statement), so keep queries inside this `with` block.
+    """
+    previous = getattr(_immediate_txn, 'active', False)
+    _immediate_txn.active = True
+    try:
+        with get_db_session(commit=True) as session:
+            yield session
+    finally:
+        _immediate_txn.active = previous
 
 
 @contextmanager

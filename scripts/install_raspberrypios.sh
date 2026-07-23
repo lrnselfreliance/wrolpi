@@ -44,6 +44,10 @@ npm install || npm install || npm install || npm install # try install multiple 
 python3 -m venv /opt/wrolpi/venv
 /opt/wrolpi/venv/bin/pip3 install --upgrade -r /opt/wrolpi/requirements.txt
 
+# Create the Controller venv (kept separate from the main API venv).
+python3 -m venv /opt/wrolpi/controller/venv
+/opt/wrolpi/controller/venv/bin/pip3 install --upgrade -r /opt/wrolpi/controller/requirements.txt
+
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 

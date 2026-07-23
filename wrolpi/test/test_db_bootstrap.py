@@ -92,9 +92,9 @@ def test_check_sqlite_environment_version_gate(test_directory):
             assert db_bootstrap.check_sqlite_environment(get_db_file()) is None
 
 
-@pytest.mark.parametrize('fs_type', ['vfat', 'exfat', 'msdos', 'ntfs', 'fuseblk'])
+@pytest.mark.parametrize('fs_type', ['vfat', 'exfat', 'msdos', 'ntfs', 'ntfs3'])
 def test_check_sqlite_environment_allows_wal_incompatible_fs_with_warning(test_directory, fs_type):
-    """A FAT/exFAT/NTFS drive is allowed (with a warning), not refused.
+    """A FAT/exFAT/NTFS drive on a native kernel driver is allowed (with a warning), not refused.
 
     These filesystems cannot support SQLite WAL — it needs mmap shared-memory they don't provide,
     so `PRAGMA journal_mode=WAL` raises `(sqlite3.OperationalError) disk I/O error` (the failure
@@ -116,9 +116,13 @@ def test_check_sqlite_environment_allows_wal_compatible_fs(test_directory, fs_ty
         assert db_bootstrap.check_sqlite_environment(get_db_file()) is None
 
 
-@pytest.mark.parametrize('fs_type', ['nfs', 'nfs4', 'cifs', 'fuse.sshfs'])
-def test_check_sqlite_environment_refuses_network_fs(test_directory, fs_type):
-    """Network filesystems remain refused: their locking is unsafe and no journal mode fixes it."""
+@pytest.mark.parametrize('fs_type', ['nfs', 'nfs4', 'cifs', 'fuse.sshfs', 'fuseblk'])
+def test_check_sqlite_environment_refuses_unsafe_locking_fs(test_directory, fs_type):
+    """Filesystems with unreliable locking are refused: no journal mode makes SQLite safe there.
+
+    Includes `fuseblk` (block-backed FUSE, e.g. ntfs-3g), whose byte-range locking is unreliable
+    under the workers' concurrent access.  NTFS on a modern kernel mounts as native `ntfs3` instead
+    and is allowed (with the WAL-unavailable warning)."""
     with mock.patch.object(db_bootstrap, '_media_fs_type', return_value=fs_type):
         error = db_bootstrap.check_sqlite_environment(get_db_file())
     assert error and fs_type in error

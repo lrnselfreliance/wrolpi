@@ -23,14 +23,19 @@ logger = logger.getChild(__name__)
 
 MINIMUM_SQLITE_VERSION = (3, 40, 0)
 
-# WAL locking is unsafe on network filesystems; refuse to run there.
-NETWORK_FS_TYPES = {'nfs', 'nfs4', 'cifs', 'smb3', 'smbfs', 'fuse.sshfs', 'fuse.rclone', '9p'}
+# SQLite locking is unsafe on these filesystems; refuse to run there.  Network filesystems break
+# POSIX locking outright.  `fuseblk` is a block-backed FUSE mount (ntfs-3g and the like) whose
+# byte-range locking is unreliable enough to risk corruption under the workers' concurrent access;
+# NTFS drives on a modern kernel mount via the native `ntfs3` driver instead (allowed below).
+UNSAFE_LOCKING_FS_TYPES = {'nfs', 'nfs4', 'cifs', 'smb3', 'smbfs', 'fuse.sshfs', 'fuse.rclone', '9p',
+                           'fuseblk'}
 
 # FAT/exFAT/NTFS drives (common when a USB drive is formatted for Windows compatibility) cannot
 # support SQLite WAL: it needs mmap'd shared-memory that these filesystems do not provide.  These
 # are still usable — the engine degrades to a rollback journal (see `_configure_sqlite_connection`)
-# — but with reduced write-concurrency, so we warn the user to prefer ext4.
-WAL_INCOMPATIBLE_FS_TYPES = {'vfat', 'exfat', 'msdos', 'ntfs', 'ntfs3', 'fuseblk'}
+# — but with reduced write-concurrency, so we warn the user to prefer ext4.  (Native kernel drivers
+# only; their POSIX locking is handled by the VFS layer and is reliable.)
+WAL_INCOMPATIBLE_FS_TYPES = {'vfat', 'exfat', 'msdos', 'ntfs', 'ntfs3'}
 
 
 def _media_fs_type(path: Path) -> Optional[str]:
@@ -59,8 +64,8 @@ def check_sqlite_environment(db_file: Path) -> Optional[str]:
     if sqlite3.sqlite_version_info < MINIMUM_SQLITE_VERSION:
         return f'SQLite {sqlite3.sqlite_version} is too old, WROLPi requires 3.40+'
     fs_type = _media_fs_type(db_file.parent if db_file.parent.exists() else db_file.parent.parent)
-    if fs_type in NETWORK_FS_TYPES:
-        return f'Refusing to use a database on a network filesystem ({fs_type}); WAL locking is unsafe there'
+    if fs_type in UNSAFE_LOCKING_FS_TYPES:
+        return f'Refusing to use a database on a {fs_type} filesystem; SQLite locking is unsafe there'
     if fs_type in WAL_INCOMPATIBLE_FS_TYPES:
         # Usable, but WAL is impossible here so the engine will use a slower rollback journal.
         logger.warning(f'Media filesystem is {fs_type}: SQLite WAL is unavailable, so the database will use a '

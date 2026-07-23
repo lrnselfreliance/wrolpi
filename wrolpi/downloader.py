@@ -1113,6 +1113,13 @@ class DownloadManager:
         Uses `get_immediate_db_session` because this is a read-then-write transaction (it reads the
         `new` downloads, then claims each by setting `last_download_attempt`); a deferred lock
         upgrade here fails instantly with "database is locked" under concurrency."""
+        # (download_id, url) pairs claimed this cycle.  The signals are dispatched AFTER the
+        # immediate (write) transaction below commits: dispatching inside it deadlocks, because the
+        # awaited `signal_download_download` opens its own write session (which also emits
+        # `BEGIN IMMEDIATE`, inheriting `_immediate_txn`) and blocks on the write lock this
+        # transaction still holds — timing out after `busy_timeout` with "database is locked" so no
+        # download ever starts.
+        to_dispatch = []
         with get_immediate_db_session() as session:
             new_downloads = list(session.query(Download).filter(
                 Download.status == 'new',
@@ -1193,8 +1200,8 @@ class DownloadManager:
                         domain_counts[limit_domain] = domain_counts.get(limit_domain, 0) + 1
 
                     self._add_processing_domain(domain)
-                    context = dict(download_id=download.id, download_url=download.url)
-                    await api_app.dispatch('wrolpi.download.download', context=context)
+                    # Claim now; dispatch after the transaction commits (see `to_dispatch` above).
+                    to_dispatch.append(dict(download_id=download.id, download_url=download.url))
                     count += 1
                 else:
                     # Domain is already being processed, or all worker slots are in use.  A domain
@@ -1216,6 +1223,11 @@ class DownloadManager:
                     self.log_debug(f'Rate limiting {domain}: {remaining:.1f}s remaining ({pending_count} pending)')
                 except (AttributeError, RuntimeError):
                     pass
+
+        # The immediate (write) transaction has now committed and released the write lock, so the
+        # download signal handlers can open their own write sessions without deadlocking.
+        for context in to_dispatch:
+            await api_app.dispatch('wrolpi.download.download', context=context)
 
     async def do_downloads(self):
         """Schedule any downloads that are new.

@@ -688,6 +688,11 @@ class DownloadManager:
     def __init__(self):
         self.instances: Tuple[Downloader] = tuple()
         self._instances = dict()
+        # Diagnostic change-detection: the dispatcher runs every few seconds, so these let us log
+        # the download-blocked reason and download-window state only when they CHANGE, instead of
+        # once per cycle (which would bury the useful transitions and rotate them out of the logs).
+        self._last_block_reason = '<unset>'
+        self._last_window_state = None
 
     def __repr__(self):
         return f'<DownloadManager pid={os.getpid()}>'
@@ -796,49 +801,66 @@ class DownloadManager:
         end_time = datetime.strptime(end, "%H:%M").time()
 
         if start_time <= end_time:
-            return start_time <= current < end_time
+            within = start_time <= current < end_time
         else:
             # Overnight window (e.g., 22:00-06:00)
-            return current >= start_time or current < end_time
+            within = current >= start_time or current < end_time
+
+        # Diagnostic: log only when the window opens/closes, including the computed local time and
+        # timezone, so a clock/timezone mismatch (e.g. system UTC-5 vs configured America/Denver)
+        # is visible at the exact moment the window is (re)evaluated.
+        if within != self._last_window_state:
+            self._last_window_state = within
+            tz = get_wrolpi_config().timezone or 'system-default'
+            self.log_debug(f'Download window {"OPEN" if within else "CLOSED"}: '
+                           f'now={current.strftime("%H:%M:%S")} window={start}-{end} tz={tz}')
+        return within
 
     @property
     def outside_download_window(self) -> bool:
         return not self.is_within_download_window()
 
-    @property
-    def can_download(self) -> bool:
-        """Returns True only if all steps necessary for downloading have been met."""
+    def blocked_download_reason(self) -> Optional[str]:
+        """The first reason downloading is currently blocked, or None when downloading is allowed.
+
+        Single source of truth for `can_download`; returning a reason string (rather than a bare
+        bool) lets the dispatcher log *why* a cycle was skipped."""
         if PYTEST:
-            return True
+            return None
         if self.is_disabled:
             # DownloadManager has been disabled and should not download.
-            return False
+            return 'download manager disabled'
         if self.is_stopped:
             # DownloadManager has been stopped and system is probably restarting.
-            return False
+            return 'download manager stopped'
         if not flags.have_internet.is_set():
             # Do not download without internet.
-            return False
+            return 'no internet'
         if wrol_mode_enabled():
             # Do not download with WROL Mode enabled.
-            return False
+            return 'WROL mode enabled'
         if get_wrolpi_config().require_media_mounted \
                 and not flags.media_mounted.is_set():
             # No mounted drive backs every destination; refuse to fill the root disk.
-            return False
+            return 'media not mounted'
         if get_wrolpi_config().require_cookies_unlocked \
                 and flags.cookies_exist.is_set() \
                 and not flags.cookies_unlocked.is_set():
             # Do not download when cookies exist but are not unlocked.
-            return False
+            return 'cookies locked'
         if not self.is_within_download_window():
             # Do not download outside the configured time window.
-            return False
-        if get_download_manager_config().successful_import:
-            # Finally, allow downloading because config was valid and imported.
-            return True
-        # Do not download by default.
-        return False
+            return 'outside download window'
+        if not get_download_manager_config().successful_import:
+            # Config was not valid/imported yet.
+            return 'download config not imported'
+        # All steps necessary for downloading have been met.
+        return None
+
+    @property
+    def can_download(self) -> bool:
+        """Returns True only if all steps necessary for downloading have been met."""
+        return self.blocked_download_reason() is None
 
     @property
     def processing_domains(self):
@@ -1051,9 +1073,18 @@ class DownloadManager:
     async def dispatch_downloads(self):
         """Dispatch Sanic signals to start downloads.  This only starts as many downloads as the
          SIMULTANEOUS_DOWNLOAD_DOMAINS variable."""
-        if not self.can_download:
-            # Don't queue downloads when disabled.
+        if reason := self.blocked_download_reason():
+            # Don't queue downloads when blocked.  Log the reason only when it changes so the
+            # 5-second dispatch cadence doesn't flood the logs (and the transition into/out of a
+            # blocked state stays visible).
+            if reason != self._last_block_reason:
+                self._last_block_reason = reason
+                self.log_debug(f'dispatch_downloads skipped: {reason}')
             return
+        if self._last_block_reason is not None:
+            # Just became unblocked; record the transition.
+            self._last_block_reason = None
+            self.log_debug('dispatch_downloads unblocked: downloading is allowed')
 
         if (domains := len(self.processing_domains)) > SIMULTANEOUS_DOWNLOAD_DOMAINS:
             self.log_debug(
@@ -1111,6 +1142,17 @@ class DownloadManager:
                 global_count, domain_counts = self.daily_download_counts(session)
             rate_limited_domains = {}  # Track domains we've already checked for rate limiting
             limits_enabled = bool(limit_per_domain or limit_global)
+            # Diagnostic: per-cycle snapshot + a tally of why due downloads were NOT dispatched.  Only
+            # emitted when there is actually due work, so it is bounded (recurring downloads only
+            # appear here once renewed to `new`).  `processing_domains` is the prime suspect for a
+            # stall: a dispatch that dies without cleanup leaks a slot, blocking that domain (and,
+            # once 4 leak, everything) with no other symptom.
+            skip_reasons: Dict[str, int] = {}
+            if new_downloads:
+                self.log_debug(
+                    f'_dispatch_new_downloads: {len(new_downloads)} new download(s); '
+                    f'processing_domains={list(self.processing_domains)}; '
+                    f'daily global_count={global_count}/{limit_global or "unlimited"}; download_wait={download_wait}s')
             for download in new_downloads:
                 domain = download.domain
                 is_recurring = download.frequency is not None
@@ -1123,9 +1165,11 @@ class DownloadManager:
                     if limit_domain is not None:
                         if limit_global and global_count >= limit_global:
                             # Global daily limit reached; skip all remaining counted downloads this cycle.
+                            skip_reasons['global daily limit'] = skip_reasons.get('global daily limit', 0) + 1
                             continue
                         if limit_per_domain and domain_counts.get(limit_domain, 0) >= limit_per_domain:
                             # This domain hit its daily limit; other domains may still have room.
+                            skip_reasons['per-domain daily limit'] = skip_reasons.get('per-domain daily limit', 0) + 1
                             continue
 
                     # Per-domain rate limiting.
@@ -1152,8 +1196,17 @@ class DownloadManager:
                     context = dict(download_id=download.id, download_url=download.url)
                     await api_app.dispatch('wrolpi.download.download', context=context)
                     count += 1
+                else:
+                    # Domain is already being processed, or all worker slots are in use.  A domain
+                    # that stays here across many cycles points to a leaked processing_domains slot.
+                    reason = 'domain already processing' if domain in self.processing_domains \
+                        else 'all download slots in use'
+                    skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
             if count:
                 self.log_debug(f'Added {count} downloads to queue.')
+            if skip_reasons:
+                self.log_debug(f'_dispatch_new_downloads skipped {sum(skip_reasons.values())} due download(s): '
+                               f'{skip_reasons}')
             # Log rate-limited domains once per dispatch cycle.
             for domain, pending_count in rate_limited_domains.items():
                 try:

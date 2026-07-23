@@ -1113,13 +1113,19 @@ class DownloadManager:
         Uses `get_immediate_db_session` because this is a read-then-write transaction (it reads the
         `new` downloads, then claims each by setting `last_download_attempt`); a deferred lock
         upgrade here fails instantly with "database is locked" under concurrency."""
-        # (download_id, url) pairs claimed this cycle.  The signals are dispatched AFTER the
-        # immediate (write) transaction below commits: dispatching inside it deadlocks, because the
-        # awaited `signal_download_download` opens its own write session (which also emits
-        # `BEGIN IMMEDIATE`, inheriting `_immediate_txn`) and blocks on the write lock this
-        # transaction still holds — timing out after `busy_timeout` with "database is locked" so no
-        # download ever starts.
+        # Downloads claimed this cycle: dicts of (download_id, download_url, domain).  Two things are
+        # deferred until AFTER the immediate (write) transaction below commits:
+        #   * `_add_processing_domain` — it mutates shared, non-transactional state, so adding it
+        #     before commit would leak the domain forever if the transaction fails (dispatch is then
+        #     skipped and no signal handler ever runs to release it);
+        #   * `api_app.dispatch` — dispatching inside the transaction deadlocks, because the awaited
+        #     `signal_download_download` opens its own write session (also `BEGIN IMMEDIATE`,
+        #     inheriting `_immediate_txn`) and blocks on the write lock this transaction still holds,
+        #     timing out after `busy_timeout` with "database is locked" so no download ever starts.
+        # `claimed` tracks the domains taken this cycle so the loop's own dedup / concurrency cap
+        # still holds even though `processing_domains` is not mutated until after commit.
         to_dispatch = []
+        claimed = []
         with get_immediate_db_session() as session:
             new_downloads = list(session.query(Download).filter(
                 Download.status == 'new',
@@ -1166,8 +1172,8 @@ class DownloadManager:
                 # Non-recurring downloads with limits enabled are grouped by their normalized domain.
                 limit_domain = self._normalize_download_domain(download) \
                     if (limits_enabled and not is_recurring) else None
-                if domain not in self.processing_domains and len(
-                        self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
+                if domain not in self.processing_domains and domain not in claimed and (
+                        len(self.processing_domains) + len(claimed)) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
                     # Daily download limits (recurring downloads bypass the gate entirely).
                     if limit_domain is not None:
                         if limit_global and global_count >= limit_global:
@@ -1199,14 +1205,16 @@ class DownloadManager:
                         global_count += 1
                         domain_counts[limit_domain] = domain_counts.get(limit_domain, 0) + 1
 
-                    self._add_processing_domain(domain)
-                    # Claim now; dispatch after the transaction commits (see `to_dispatch` above).
-                    to_dispatch.append(dict(download_id=download.id, download_url=download.url))
+                    # Claim now (in the DB via last_download_attempt); the shared processing_domain is
+                    # added and the signal dispatched only after this transaction commits.
+                    claimed.append(domain)
+                    to_dispatch.append(dict(download_id=download.id, download_url=download.url, domain=domain))
                     count += 1
                 else:
-                    # Domain is already being processed, or all worker slots are in use.  A domain
-                    # that stays here across many cycles points to a leaked processing_domains slot.
-                    reason = 'domain already processing' if domain in self.processing_domains \
+                    # Domain is already being processed (this cycle or a prior one), or all worker
+                    # slots are in use.  A domain that stays here across many cycles points to a
+                    # leaked processing_domains slot.
+                    reason = 'domain already processing' if (domain in self.processing_domains or domain in claimed) \
                         else 'all download slots in use'
                     skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
             if count:
@@ -1224,9 +1232,12 @@ class DownloadManager:
                 except (AttributeError, RuntimeError):
                     pass
 
-        # The immediate (write) transaction has now committed and released the write lock, so the
-        # download signal handlers can open their own write sessions without deadlocking.
+        # The immediate (write) transaction has now committed and released the write lock.  Claim the
+        # shared processing_domain and dispatch each signal: doing both here (not inside the txn)
+        # means a failed transaction leaks nothing, and the handler's write session cannot deadlock
+        # against a lock we no longer hold.
         for context in to_dispatch:
+            self._add_processing_domain(context.pop('domain'))
             await api_app.dispatch('wrolpi.download.download', context=context)
 
     async def do_downloads(self):
@@ -1728,7 +1739,11 @@ async def signal_download_download(download_id: int, download_url: str):
 
     with timer('signal_download_download', 'trace'):
         url = download_url
-        download_domain = None
+        # Derive the processing-domain from the URL up front (it is `urlparse(url).netloc`, the same
+        # value the dispatcher claimed): the download row may already be gone (deleted after the
+        # claim committed), in which case `find_by_id` raises before we could read `download.domain`
+        # -- and the `finally` below must still release the claim, or the domain leaks forever.
+        download_domain = urlparse(download_url).netloc
 
         name = f'download_worker'
         worker_logger = logger.getChild(name)
@@ -1740,7 +1755,6 @@ async def signal_download_download(download_id: int, download_url: str):
                 # Mark the download as started in new session so the change is committed.
                 download = Download.find_by_id(session, download_id)
                 download.started()
-            download_domain = download.domain
 
             downloader: Downloader = download.get_downloader()
             if not downloader:

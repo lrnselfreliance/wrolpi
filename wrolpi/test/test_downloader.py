@@ -1745,6 +1745,56 @@ async def test_download_dispatched_outside_immediate_transaction(test_session, t
 
 
 @pytest.mark.asyncio
+async def test_signal_releases_processing_domain_when_download_missing(test_session, test_download_manager,
+                                                                       test_downloader):
+    """A claimed processing_domain must be released even if the Download row is gone by dispatch time.
+
+    Regression (Greptile P1): if a claimed download is deleted between the dispatcher committing the
+    claim and `signal_download_download` running, `Download.find_by_id` raises `UnknownDownload`
+    before `download_domain` is assigned, so the handler's `finally` released nothing -- leaking the
+    processing domain.  Enough leaked domains permanently exclude their domains and stall the
+    scheduler until restart."""
+    from wrolpi.downloader import signal_download_download, download_manager
+    from wrolpi.conftest import production_like_sessions
+
+    download_manager._add_processing_domain('example.com')
+    assert 'example.com' in download_manager.processing_domains
+
+    with production_like_sessions(test_session):
+        # No Download row with this id exists (it was deleted after the claim committed).
+        await signal_download_download(999_999, 'https://example.com/deleted')
+
+    assert 'example.com' not in download_manager.processing_domains, \
+        'processing_domain leaked when the download row was missing at dispatch time'
+
+
+@pytest.mark.asyncio
+async def test_dispatch_releases_claimed_domains_when_transaction_fails(test_session, test_download_manager,
+                                                                        test_downloader):
+    """Domains claimed during a dispatch cycle must be released if that cycle's transaction fails.
+
+    Regression (Greptile P1): `_add_processing_domain` mutates shared, non-transactional state before
+    the claim transaction commits.  If the commit (or any error in the claim loop) fails, dispatch is
+    skipped but the domain stays claimed forever -- future cycles exclude it, and enough leaks stall
+    the scheduler until restart."""
+    name = test_downloader.name
+    d = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(d)
+    test_session.commit()
+    assert 'example.com' not in test_download_manager.processing_domains
+
+    # Fail the claim transaction's commit (e.g. an I/O error while the write lock is held).
+    locked = OperationalError('COMMIT', {}, sqlite3.OperationalError('database is locked'))
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock), \
+            mock.patch.object(test_session, 'commit', side_effect=locked):
+        # A transient lock is swallowed by dispatch_downloads; it must not leave the claim leaked.
+        await test_download_manager.dispatch_downloads()
+
+    assert 'example.com' not in test_download_manager.processing_domains, \
+        'processing_domain leaked after the claim transaction failed'
+
+
+@pytest.mark.asyncio
 async def test_dispatch_downloads_tolerates_locked_db(test_session, test_download_manager, test_downloader):
     """A transient 'database is locked' during dispatch is swallowed (retried next cycle), not raised.
 

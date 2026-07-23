@@ -228,8 +228,13 @@ async def dashboard(request: Request):
     else:
         services = get_all_services_status()
 
-    # Sort services by name for consistent display
-    services = sorted(services, key=lambda s: s["name"])
+    # Sort services so problems surface first, then alphabetically. The
+    # template partitions on each service's "group" (core vs optional).
+    _status_order = {"failed": 0, "unknown": 1, "stopped": 2, "running": 3}
+    services = sorted(
+        services,
+        key=lambda s: (_status_order.get(s.get("status"), 1), s["name"]),
+    )
 
     # Root CA download is only useful after the media drive is mounted (so an
     # existing CA on the drive is visible) and repair has finished generating

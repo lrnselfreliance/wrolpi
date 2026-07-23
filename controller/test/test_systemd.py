@@ -13,6 +13,8 @@ from controller.lib.systemd import (
     discover_wrolpi_services,
     get_all_services_status,
     get_discovered_service_status,
+    get_service_kind,
+    classify_service_group,
     _get_systemd_name,
     start_service,
     stop_service,
@@ -490,3 +492,73 @@ class TestActionsOnDiscoveredServices:
             result = get_service_status("wrolpi-fix-media-permissions")
             assert result["name"] == "wrolpi-fix-media-permissions"
             assert result["status"] == "running"
+
+
+class TestGetServiceKind:
+    """Tests for get_service_kind classification."""
+
+    def test_explicit_kind_wins(self):
+        assert get_service_kind({"kind": "task"}) == "task"
+        assert get_service_kind({"kind": "persistent"}) == "persistent"
+
+    def test_show_only_when_running_is_a_task(self):
+        """Dev/upgrade units (show_only_when_running) default to 'task'."""
+        assert get_service_kind({"show_only_when_running": True}) == "task"
+
+    def test_default_is_persistent(self):
+        """A plain managed service is a persistent, always-on service."""
+        assert get_service_kind({}) == "persistent"
+        assert get_service_kind({"name": "wrolpi-api"}) == "persistent"
+
+
+class TestClassifyServiceGroup:
+    """Tests for classify_service_group."""
+
+    def test_persistent_and_enabled_is_core(self):
+        assert classify_service_group("persistent", True) == "core"
+
+    def test_persistent_but_disabled_is_optional(self):
+        """A persistent service the user disabled at boot (e.g. Samba with no
+        shares) drops to the Optional & Maintenance group."""
+        assert classify_service_group("persistent", False) == "optional"
+
+    def test_task_is_always_optional(self):
+        """One-off/dev/maintenance tasks are optional regardless of boot state."""
+        assert classify_service_group("task", True) == "optional"
+        assert classify_service_group("task", False) == "optional"
+
+
+class TestServiceStatusGroup:
+    """Group/kind are exposed on the status dicts the UI consumes."""
+
+    def test_enabled_persistent_service_is_core(self):
+        # is-active -> running, is-enabled -> enabled, LoadState -> loaded
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                mock.Mock(returncode=0, stdout="active", stderr=""),
+                mock.Mock(returncode=0, stdout="enabled", stderr=""),
+                mock.Mock(returncode=0, stdout="loaded", stderr=""),
+            ]
+            result = get_service_status("wrolpi-api")
+            assert result["kind"] == "persistent"
+            assert result["enabled"] is True
+            assert result["group"] == "core"
+
+    def test_disabled_persistent_service_is_optional(self):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                mock.Mock(returncode=0, stdout="inactive", stderr=""),
+                mock.Mock(returncode=0, stdout="disabled", stderr=""),
+                mock.Mock(returncode=0, stdout="loaded", stderr=""),
+            ]
+            result = get_service_status("smbd")
+            assert result["kind"] == "persistent"
+            assert result["enabled"] is False
+            assert result["group"] == "optional"
+
+    def test_discovered_service_is_optional_task(self):
+        with mock.patch("subprocess.run") as mock_run:
+            mock_run.return_value = mock.Mock(returncode=0, stdout="active", stderr="")
+            result = get_discovered_service_status("wrolpi-repair")
+            assert result["kind"] == "task"
+            assert result["group"] == "optional"

@@ -42,6 +42,30 @@ const statusColors = {
     unknown: 'yellow',
 };
 
+// Sort order within a group: problems first so they stay visible.
+const statusSortOrder = {
+    failed: 0,
+    unknown: 1,
+    stopped: 2,
+    running: 3,
+};
+
+// Partition services into the two Controller groups. The backend computes each
+// service's `group` ("core" | "optional"); a missing group (e.g. Docker
+// containers) is treated as core so nothing is hidden. Within each group,
+// failed/stopped services sort first, then alphabetically.
+export const groupServices = (services) => {
+    const byStatusThenName = (a, b) => {
+        const sa = statusSortOrder[a.status] ?? 1;
+        const sb = statusSortOrder[b.status] ?? 1;
+        if (sa !== sb) return sa - sb;
+        return a.name.localeCompare(b.name);
+    };
+    const core = services.filter(s => s.group !== 'optional').sort(byStatusThenName);
+    const optional = services.filter(s => s.group === 'optional').sort(byStatusThenName);
+    return {core, optional};
+};
+
 
 const linesOptions = [
     {key: 100, text: '100 lines', value: 100},
@@ -480,6 +504,36 @@ function ServicesSection() {
         </Table.Footer>
     );
 
+    const {core, optional} = groupServices(services);
+
+    // Full-width labeled separator between the two service groups.
+    const groupLabelRow = (key, title, colSpan) => (
+        <Table.Row key={key} className='service-group-label'>
+            <Table.Cell colSpan={colSpan} style={{fontWeight: 'bold'}}>
+                {title}
+            </Table.Cell>
+        </Table.Row>
+    );
+
+    const groupedRows = (RowComponent, colSpan, extraProps = {}) => {
+        const rows = [];
+        // Only label the Core group when there is also an Optional group to
+        // distinguish it from; otherwise a lone header adds noise.
+        if (core.length > 0 && optional.length > 0) {
+            rows.push(groupLabelRow('label-core', 'Core Services', colSpan));
+        }
+        core.forEach(service => rows.push(
+            <RowComponent key={service.name} service={service} onAction={fetchServices} {...extraProps}/>
+        ));
+        if (optional.length > 0) {
+            rows.push(groupLabelRow('label-optional', 'Optional & Maintenance', colSpan));
+            optional.forEach(service => rows.push(
+                <RowComponent key={service.name} service={service} onAction={fetchServices} {...extraProps}/>
+            ));
+        }
+        return rows;
+    };
+
     return (
         <Segment>
             <Header as='h3'>
@@ -496,13 +550,7 @@ function ServicesSection() {
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {services.map(service => (
-                            <MobileServiceRow
-                                key={service.name}
-                                service={service}
-                                onAction={fetchServices}
-                            />
-                        ))}
+                        {groupedRows(MobileServiceRow, 2)}
                     </Table.Body>
                     {restartButton(2)}
                 </Table>
@@ -519,14 +567,7 @@ function ServicesSection() {
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {services.map(service => (
-                            <DesktopServiceRow
-                                dockerized={dockerized}
-                                key={service.name}
-                                service={service}
-                                onAction={fetchServices}
-                            />
-                        ))}
+                        {groupedRows(DesktopServiceRow, dockerized ? 3 : 4, {dockerized})}
                     </Table.Body>
                     {restartButton(dockerized ? 4 : 5)}
                 </Table>

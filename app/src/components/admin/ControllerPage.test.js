@@ -14,6 +14,8 @@ jest.mock('../../api/controller', () => ({
             viewable: true,
             view_path: '/docs',
             enabled: true,
+            kind: 'persistent',
+            group: 'core',
         },
         {
             name: 'wrolpi-app',
@@ -22,6 +24,28 @@ jest.mock('../../api/controller', () => ({
             viewable: true,
             view_path: '',
             enabled: true,
+            kind: 'persistent',
+            group: 'core',
+        },
+        {
+            name: 'smbd',
+            port: 445,
+            status: 'stopped',
+            viewable: false,
+            view_path: '',
+            enabled: false,
+            kind: 'persistent',
+            group: 'optional',
+        },
+        {
+            name: 'wrolpi-repair',
+            port: null,
+            status: 'stopped',
+            viewable: false,
+            view_path: '',
+            enabled: false,
+            kind: 'task',
+            group: 'optional',
         },
     ]),
     startService: jest.fn().mockResolvedValue({success: true}),
@@ -149,6 +173,39 @@ describe('ControllerPage', () => {
             expect(screen.getByTestId('restart-button')).toBeInTheDocument();
             expect(screen.getByTestId('shutdown-button')).toBeInTheDocument();
         });
+    });
+
+});
+
+describe('groupServices', () => {
+    const {groupServices} = require('./ControllerPage');
+
+    test('splits core from optional by group field', () => {
+        const {core, optional} = groupServices([
+            {name: 'wrolpi-api', status: 'running', group: 'core'},
+            {name: 'smbd', status: 'stopped', group: 'optional'},
+            {name: 'wrolpi-repair', status: 'stopped', group: 'optional'},
+        ]);
+        expect(core.map(s => s.name)).toEqual(['wrolpi-api']);
+        expect(optional.map(s => s.name)).toEqual(['smbd', 'wrolpi-repair']);
+    });
+
+    test('treats a missing group (Docker containers) as core', () => {
+        const {core, optional} = groupServices([
+            {name: 'api', status: 'running'},
+            {name: 'db', status: 'running'},
+        ]);
+        expect(core).toHaveLength(2);
+        expect(optional).toHaveLength(0);
+    });
+
+    test('sorts problems first, then alphabetically, within a group', () => {
+        const {core} = groupServices([
+            {name: 'caddy', status: 'running', group: 'core'},
+            {name: 'wrolpi-api', status: 'failed', group: 'core'},
+            {name: 'wrolpi-app', status: 'running', group: 'core'},
+        ]);
+        expect(core.map(s => s.name)).toEqual(['wrolpi-api', 'caddy', 'wrolpi-app']);
     });
 });
 

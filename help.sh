@@ -92,12 +92,9 @@ if [ -f "${WROLPI_DB}" ]; then
       sudo -u wrolpi sqlite3 "${WROLPI_DB}" "$@" 2>/dev/null
     }
 
-    if [ "$(wrolpi_sqlite 'PRAGMA quick_check;' | head -1)" = "ok" ]; then
-      echo "OK: WROLPi database passes quick_check"
-    else
-      echo "FAILED: WROLPi database is corrupt or unreadable (PRAGMA quick_check)"
-    fi
-
+    # NOTE: A full integrity scan (PRAGMA quick_check/integrity_check) reads every
+    # page of the database and can take many minutes on a large DB or slow disk.
+    # It is intentionally NOT run here; use scripts/check_database_integrity.sh.
     if wrolpi_sqlite ".tables" | grep -q "file_group"; then
       echo "OK: WROLPi database is initialized"
 

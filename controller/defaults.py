@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
             "viewable": True,
             "use_https": False,
             "description": "Python API (Development)",
+            "kind": "task",
             "show_only_when_running": True,
         },
         {
@@ -58,6 +59,7 @@ DEFAULT_CONFIG = {
             "viewable": False,
             "use_https": False,
             "description": "React frontend (Development)",
+            "kind": "task",
             "show_only_when_running": True,
         },
         {
@@ -110,6 +112,7 @@ DEFAULT_CONFIG = {
             "viewable": False,
             "use_https": False,
             "description": "WROLPi upgrade process",
+            "kind": "task",
             "show_only_when_running": True,
         },
     ],

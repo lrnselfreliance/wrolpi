@@ -40,6 +40,45 @@ def get_service_config(name: str) -> Optional[dict]:
     return None
 
 
+def get_service_kind(service_config: dict) -> str:
+    """
+    Classify a service as 'persistent' or 'task'.
+
+    'persistent' services are the always-on parts of a running WROLPi (api,
+    app, caddy, kiwix, ...). 'task' services are one-off/dev/maintenance units
+    (bootstrap, repair, upgrade, *-dev) that run on demand and are not expected
+    to stay running.
+
+    An explicit "kind" in the service config wins. Otherwise services flagged
+    show_only_when_running (dev/upgrade units) are treated as tasks, and
+    everything else defaults to persistent.
+    """
+    kind = service_config.get("kind")
+    if kind:
+        return kind
+    if service_config.get("show_only_when_running"):
+        return "task"
+    return "persistent"
+
+
+def classify_service_group(kind: str, enabled: bool) -> str:
+    """
+    Group a service for display in the Controller UI.
+
+    Returns:
+        "core"     - a persistent service enabled at boot: the normal running
+                     system the user cares about day-to-day.
+        "optional" - one-off/dev/maintenance tasks, or persistent services the
+                     user has disabled at boot (e.g. Samba with no shares).
+
+    Membership only changes when the user toggles Boot for a persistent
+    service, never on start/stop or polling, so rows stay put.
+    """
+    if kind == "persistent" and enabled:
+        return "core"
+    return "optional"
+
+
 def _run_systemctl(command: str, service: str, timeout: int = 30) -> dict:
     """
     Run a systemctl command.
@@ -118,6 +157,7 @@ def get_service_status(name: str) -> dict:
         )
         load_state = load_result.stdout.strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
+        kind = get_service_kind(service_config)
         return {
             "name": name,
             "systemd_name": systemd_name,
@@ -130,6 +170,8 @@ def get_service_status(name: str) -> dict:
             "view_path": service_config.get("view_path", ""),
             "use_https": service_config.get("use_https", False),
             "description": service_config.get("description", ""),
+            "kind": kind,
+            "group": classify_service_group(kind, False),
             "error": "systemctl not available",
         }
 
@@ -145,18 +187,22 @@ def get_service_status(name: str) -> dict:
     else:
         status = "unknown"
 
+    enabled = is_enabled == "enabled"
+    kind = get_service_kind(service_config)
     return {
         "name": name,
         "systemd_name": systemd_name,
         "status": status,
         "installed": load_state not in ("not-found", ""),
         "active": is_active,
-        "enabled": is_enabled == "enabled",
+        "enabled": enabled,
         "port": service_config.get("port"),
         "viewable": service_config.get("viewable", False),
         "view_path": service_config.get("view_path", ""),
         "use_https": service_config.get("use_https", False),
         "description": service_config.get("description", ""),
+        "kind": kind,
+        "group": classify_service_group(kind, enabled),
     }
 
 
@@ -241,6 +287,8 @@ def get_discovered_service_status(name: str) -> dict:
             "view_path": "",
             "use_https": False,
             "description": "",
+            "kind": "task",
+            "group": "optional",
             "error": "systemctl not available",
         }
 
@@ -266,6 +314,9 @@ def get_discovered_service_status(name: str) -> dict:
         "view_path": "",
         "use_https": False,
         "description": "",
+        # Discovered wrolpi-* units are always one-off/maintenance tasks.
+        "kind": "task",
+        "group": "optional",
     }
 
 

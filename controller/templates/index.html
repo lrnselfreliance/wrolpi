@@ -241,6 +241,20 @@
             background: #1a3a5c;
         }
 
+        /* Service group separators (Core vs Optional & Maintenance) */
+        tr.service-group-label td {
+            background: #0f3460;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: #a9b7d0;
+            padding-top: 0.9rem;
+        }
+
+        tr.service-group-label:hover {
+            background: transparent;
+        }
+
         /* Status indicators */
         .status-running {
             color: #4ecca3;
@@ -988,8 +1002,55 @@
         </div>
     </section>
 
+    {% macro service_row(service, docker_mode, host) %}
+    <tr>
+        <td>
+            {{ service.name }}
+            {% if service.port %}<span class="sub">:{{ service.port }}</span>{% endif %}
+        </td>
+        <td class="status-{{ service.status }}">{{ service.status }}</td>
+        <td>
+            {% if service.status == 'running' %}
+            <button class="btn btn-danger" onclick="serviceAction('{{ service.name }}', 'stop')">Stop</button>
+            {% else %}
+            <button class="btn btn-primary" onclick="serviceAction('{{ service.name }}', 'start')">Start
+            </button>
+            {% endif %}
+            <button class="btn btn-warning" onclick="serviceAction('{{ service.name }}', 'restart')">Restart
+            </button>
+            <button class="btn btn-info" onclick="showLogs('{{ service.name }}', true)">Logs</button>
+            {% if service.viewable and service.status == 'running' and service.port %}
+            {% set is_default_port = (service.use_https and service.port == 443) or (not service.use_https and service.port == 80) %}
+            <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}{% if not is_default_port %}:{{ service.port }}{% endif %}{{ service.view_path|default('') }}"
+               target="_blank" class="btn btn-violet">View</a>
+            {% endif %}
+        </td>
+        {% if not docker_mode %}
+        <td>
+            {% if service.name == 'wrolpi-upgrade' %}
+            <span style="color: #666;">--</span>
+            {% else %}
+            <label class="toggle">
+                <input type="checkbox"
+                       id="boot-{{ service.name }}"
+                       {% if service.enabled %}checked{% endif %}
+                       onchange="toggleBoot('{{ service.name }}', this.checked)">
+                <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label" id="boot-label-{{ service.name }}">
+                        {{ 'Enabled' if service.enabled else 'Disabled' }}
+                    </span>
+            {% endif %}
+        </td>
+        {% endif %}
+    </tr>
+    {% endmacro %}
+
     <section id="services">
         <h2>Services</h2>
+        {% set core = services | rejectattr('group', 'equalto', 'optional') | list %}
+        {% set optional = services | selectattr('group', 'equalto', 'optional') | list %}
+        {% set span = 3 if docker_mode else 4 %}
         <table>
             <thead>
             <tr>
@@ -1002,55 +1063,22 @@
             </tr>
             </thead>
             <tbody>
-            {% for service in services %}
-            <tr>
-                <td>
-                    {{ service.name }}
-                    {% if service.port %}<span class="sub">:{{ service.port }}</span>{% endif %}
-                </td>
-                <td class="status-{{ service.status }}">{{ service.status }}</td>
-                <td>
-                    {% if service.status == 'running' %}
-                    <button class="btn btn-danger" onclick="serviceAction('{{ service.name }}', 'stop')">Stop</button>
-                    {% else %}
-                    <button class="btn btn-primary" onclick="serviceAction('{{ service.name }}', 'start')">Start
-                    </button>
-                    {% endif %}
-                    <button class="btn btn-warning" onclick="serviceAction('{{ service.name }}', 'restart')">Restart
-                    </button>
-                    <button class="btn btn-info" onclick="showLogs('{{ service.name }}', true)">Logs</button>
-                    {% if service.viewable and service.status == 'running' and service.port %}
-                    {% set is_default_port = (service.use_https and service.port == 443) or (not service.use_https and service.port == 80) %}
-                    <a href="{{ 'https' if service.use_https else 'http' }}://{{ host }}{% if not is_default_port %}:{{ service.port }}{% endif %}{{ service.view_path|default('') }}"
-                       target="_blank" class="btn btn-violet">View</a>
-                    {% endif %}
-                </td>
-                {% if not docker_mode %}
-                <td>
-                    {% if service.name == 'wrolpi-upgrade' %}
-                    <span style="color: #666;">--</span>
-                    {% else %}
-                    <label class="toggle">
-                        <input type="checkbox"
-                               id="boot-{{ service.name }}"
-                               {% if service.enabled %}checked{% endif %}
-                               onchange="toggleBoot('{{ service.name }}', this.checked)">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span class="toggle-label" id="boot-label-{{ service.name }}">
-                                {{ 'Enabled' if service.enabled else 'Disabled' }}
-                            </span>
-                    {% endif %}
-                </td>
+            {% if services %}
+                {% if core and optional %}
+                <tr class="service-group-label"><td colspan="{{ span }}"><strong>Core Services</strong></td></tr>
                 {% endif %}
-            </tr>
+                {% for service in core %}{{ service_row(service, docker_mode, host) }}{% endfor %}
+                {% if optional %}
+                <tr class="service-group-label"><td colspan="{{ span }}"><strong>Optional &amp; Maintenance</strong></td></tr>
+                {% for service in optional %}{{ service_row(service, docker_mode, host) }}{% endfor %}
+                {% endif %}
             {% else %}
             <tr>
-                <td colspan="{% if docker_mode %}3{% else %}4{% endif %}" style="text-align: center; color: #666;">
+                <td colspan="{{ span }}" style="text-align: center; color: #666;">
                     Service status not yet implemented
                 </td>
             </tr>
-            {% endfor %}
+            {% endif %}
             </tbody>
         </table>
     </section>
@@ -2728,10 +2756,10 @@
 
             // Check if we're in docker mode by looking for Boot column
             const isDockerMode = !document.querySelector('th:last-child')?.textContent?.includes('Boot');
+            const colspan = isDockerMode ? 3 : 4;
 
-            let html = '';
-            for (const service of services) {
-                html += `<tr>
+            function serviceRowHtml(service) {
+                let row = `<tr>
                     <td>
                         ${service.name}
                         ${service.port ? `<span class="sub">:${service.port}</span>` : ''}
@@ -2740,12 +2768,12 @@
                     <td>`;
 
                 if (service.status === 'running') {
-                    html += `<button class="btn btn-danger" onclick="serviceAction('${service.name}', 'stop')">Stop</button>`;
+                    row += `<button class="btn btn-danger" onclick="serviceAction('${service.name}', 'stop')">Stop</button>`;
                 } else {
-                    html += `<button class="btn btn-primary" onclick="serviceAction('${service.name}', 'start')">Start</button>`;
+                    row += `<button class="btn btn-primary" onclick="serviceAction('${service.name}', 'start')">Start</button>`;
                 }
 
-                html += `<button class="btn btn-warning" onclick="serviceAction('${service.name}', 'restart')">Restart</button>
+                row += `<button class="btn btn-warning" onclick="serviceAction('${service.name}', 'restart')">Restart</button>
                     <button class="btn btn-info" onclick="showLogs('${service.name}', true)">Logs</button>`;
 
                 if (service.viewable && service.status === 'running' && service.port) {
@@ -2754,16 +2782,16 @@
                     const viewPath = service.view_path || '';
                     const isDefaultPort = (protocol === 'https' && service.port === 443) || (protocol === 'http' && service.port === 80);
                     const portSuffix = isDefaultPort ? '' : ':' + service.port;
-                    html += `<a href="${protocol}://${host}${portSuffix}${viewPath}" target="_blank" class="btn btn-violet">View</a>`;
+                    row += `<a href="${protocol}://${host}${portSuffix}${viewPath}" target="_blank" class="btn btn-violet">View</a>`;
                 }
 
-                html += '</td>';
+                row += '</td>';
 
                 if (!isDockerMode) {
                     if (service.name === 'wrolpi-upgrade') {
-                        html += `<td><span style="color: #666;">--</span></td>`;
+                        row += `<td><span style="color: #666;">--</span></td>`;
                     } else {
-                        html += `<td>
+                        row += `<td>
                             <label class="toggle">
                                 <input type="checkbox"
                                        id="boot-${service.name}"
@@ -2778,11 +2806,34 @@
                     }
                 }
 
-                html += '</tr>';
+                row += '</tr>';
+                return row;
+            }
+
+            // Sort problems first, then alphabetically, and split into the two
+            // Controller groups (Core vs Optional & Maintenance).
+            const statusOrder = {failed: 0, unknown: 1, stopped: 2, running: 3};
+            const byStatusThenName = (a, b) => {
+                const sa = statusOrder[a.status] ?? 1;
+                const sb = statusOrder[b.status] ?? 1;
+                if (sa !== sb) return sa - sb;
+                return a.name.localeCompare(b.name);
+            };
+            const core = services.filter(s => s.group !== 'optional').sort(byStatusThenName);
+            const optional = services.filter(s => s.group === 'optional').sort(byStatusThenName);
+            const labelRow = (title) => `<tr class="service-group-label"><td colspan="${colspan}"><strong>${title}</strong></td></tr>`;
+
+            let html = '';
+            if (core.length && optional.length) {
+                html += labelRow('Core Services');
+            }
+            html += core.map(serviceRowHtml).join('');
+            if (optional.length) {
+                html += labelRow('Optional &amp; Maintenance');
+                html += optional.map(serviceRowHtml).join('');
             }
 
             if (services.length === 0) {
-                const colspan = isDockerMode ? 3 : 4;
                 html = `<tr><td colspan="${colspan}" style="text-align: center; color: #666;">No services</td></tr>`;
             }
 

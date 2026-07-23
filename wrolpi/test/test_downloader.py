@@ -1709,6 +1709,42 @@ async def test_daily_limit_per_domain_allows_under_limit(test_session, test_down
 
 
 @pytest.mark.asyncio
+async def test_download_dispatched_outside_immediate_transaction(test_session, test_download_manager, test_downloader):
+    """The download signal must be dispatched AFTER the claiming write transaction commits.
+
+    Regression test for a production deadlock (found on 10.0.0.9, where downloads silently stopped):
+    `_dispatch_new_downloads` claimed downloads inside a `get_immediate_db_session()` (BEGIN
+    IMMEDIATE) transaction and `await`ed `api_app.dispatch(...)` while that transaction was still
+    open.  Under NullPool (production) the dispatched `signal_download_download` opens its OWN
+    connection and — inheriting the `_immediate_txn` flag — also issues BEGIN IMMEDIATE, which
+    blocks on the write lock the outer transaction still holds until `busy_timeout` (30s) expires:
+    `database is locked`, and no download ever starts.
+
+    The test database shares a single connection, so it cannot reproduce the lock itself; instead it
+    asserts the invariant that prevents it — the signal is dispatched with no immediate transaction
+    active."""
+    from wrolpi.db import _immediate_txn
+    name = test_downloader.name
+    d = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(d)
+    test_session.commit()
+
+    immediate_active_at_dispatch = []
+
+    async def record(event, *args, **kwargs):
+        if event == 'wrolpi.download.download':
+            immediate_active_at_dispatch.append(getattr(_immediate_txn, 'active', False))
+
+    with mock.patch.object(type(api_app), 'dispatch', new_callable=mock.AsyncMock) as dispatch:
+        dispatch.side_effect = record
+        await test_download_manager.dispatch_downloads()
+
+    assert immediate_active_at_dispatch, 'expected the download to be dispatched'
+    assert not any(immediate_active_at_dispatch), \
+        'download signal was dispatched inside an open BEGIN IMMEDIATE transaction (deadlocks under NullPool)'
+
+
+@pytest.mark.asyncio
 async def test_dispatch_downloads_tolerates_locked_db(test_session, test_download_manager, test_downloader):
     """A transient 'database is locked' during dispatch is swallowed (retried next cycle), not raised.
 

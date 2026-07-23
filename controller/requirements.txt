@@ -2,7 +2,7 @@
 # Separate from main WROLPi API to keep venvs independent
 
 # Web framework
-fastapi>=0.138.2
+fastapi>=0.139.0
 uvicorn[standard]>=0.49.0
 pydantic>=2.13.4
 

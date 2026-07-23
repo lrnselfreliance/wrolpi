@@ -57,6 +57,45 @@ def get_db_uri() -> str:
     return f'sqlite:///{get_db_file()}'
 
 
+def _configure_sqlite_connection(dbapi_conn, journal_mode: str = None) -> str:
+    """Apply WROLPi's PRAGMAs to a raw DBAPI connection; returns the journal mode actually set.
+
+    WAL is preferred (readers never block writers, so the Sanic workers stay concurrent).  But
+    FAT/exFAT/NTFS drives — common when a USB drive is formatted for Windows compatibility —
+    cannot support WAL: it needs mmap'd shared-memory those filesystems don't provide, so
+    `PRAGMA journal_mode=WAL` raises `disk I/O error`.  There we fall back to a TRUNCATE rollback
+    journal so the drive still works, at the cost of write-concurrency; `synchronous=FULL` keeps
+    it crash-safe (WROLPi is off-grid, so power loss is expected).
+
+    `journal_mode` is the mode chosen on a previous connection of the same engine: once WAL has
+    been ruled out we skip re-attempting (and re-logging) it on every fresh NullPool connection."""
+    # Driver-level autocommit; the `begin` listener emits BEGIN so SQLAlchemy's transactions still
+    # work.  (pysqlite's implicit BEGIN is broken for SQLAlchemy, and PRAGMA journal_mode cannot
+    # run inside a transaction.)
+    dbapi_conn.isolation_level = None
+    curs = dbapi_conn.cursor()
+    try:
+        if journal_mode != 'TRUNCATE':
+            try:
+                curs.execute('PRAGMA journal_mode=WAL')
+                curs.execute('PRAGMA synchronous=NORMAL')
+                journal_mode = 'WAL'
+            except sqlite3.OperationalError:
+                logger.warning('SQLite WAL is unavailable on this filesystem (exFAT/FAT/NTFS?); '
+                               'falling back to a slower TRUNCATE rollback journal with reduced '
+                               'write-concurrency.  Reformat the media drive as ext4 for best performance.')
+                journal_mode = 'TRUNCATE'
+        if journal_mode == 'TRUNCATE':
+            curs.execute('PRAGMA journal_mode=TRUNCATE')
+            curs.execute('PRAGMA synchronous=FULL')
+        curs.execute('PRAGMA busy_timeout=30000')
+        curs.execute('PRAGMA foreign_keys=ON')
+        curs.execute('PRAGMA recursive_triggers=ON')
+        return journal_mode
+    finally:
+        curs.close()
+
+
 def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.Engine:
     """Create a SQLAlchemy engine for a WROLPi SQLite database.
 
@@ -70,24 +109,18 @@ def create_wrolpi_engine(target: Union[str, pathlib.Path]) -> sqlalchemy.engine.
         connect_args=dict(check_same_thread=False, timeout=30),
     )
 
+    # The journal mode is decided on the first connection and reused for the engine's life, so WAL
+    # is not re-attempted (and re-logged) on every fresh NullPool connection.
+    journal_state = {'mode': None}
+
     @event.listens_for(engine, 'connect')
     def _sqlite_on_connect(dbapi_conn, _):
-        # Driver-level autocommit; the `begin` listener below emits BEGIN so SQLAlchemy's
-        # transactions still work.  (pysqlite's implicit BEGIN is broken for SQLAlchemy, and
-        # PRAGMA journal_mode cannot run inside a transaction.)
-        dbapi_conn.isolation_level = None
-        curs = dbapi_conn.cursor()
-        curs.execute('PRAGMA journal_mode=WAL')
-        curs.execute('PRAGMA busy_timeout=30000')
-        curs.execute('PRAGMA synchronous=NORMAL')
-        curs.execute('PRAGMA foreign_keys=ON')
-        curs.execute('PRAGMA recursive_triggers=ON')
-        curs.close()
+        journal_state['mode'] = _configure_sqlite_connection(dbapi_conn, journal_state['mode'])
 
     @event.listens_for(engine, 'begin')
     def _sqlite_do_begin(conn):
         # `get_immediate_db_session()` sessions take the write lock up front; everything else stays
-        # deferred so WAL readers never block (see `_immediate_txn`).
+        # deferred so readers never block (in WAL; see `_immediate_txn`).
         if getattr(_immediate_txn, 'active', False):
             conn.execute('BEGIN IMMEDIATE')
         else:

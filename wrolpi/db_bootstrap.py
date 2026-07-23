@@ -26,6 +26,12 @@ MINIMUM_SQLITE_VERSION = (3, 40, 0)
 # WAL locking is unsafe on network filesystems; refuse to run there.
 NETWORK_FS_TYPES = {'nfs', 'nfs4', 'cifs', 'smb3', 'smbfs', 'fuse.sshfs', 'fuse.rclone', '9p'}
 
+# FAT/exFAT/NTFS drives (common when a USB drive is formatted for Windows compatibility) cannot
+# support SQLite WAL: it needs mmap'd shared-memory that these filesystems do not provide.  These
+# are still usable — the engine degrades to a rollback journal (see `_configure_sqlite_connection`)
+# — but with reduced write-concurrency, so we warn the user to prefer ext4.
+WAL_INCOMPATIBLE_FS_TYPES = {'vfat', 'exfat', 'msdos', 'ntfs', 'ntfs3', 'fuseblk'}
+
 
 def _media_fs_type(path: Path) -> Optional[str]:
     """The filesystem type of the mount containing `path` (Linux only)."""
@@ -55,6 +61,11 @@ def check_sqlite_environment(db_file: Path) -> Optional[str]:
     fs_type = _media_fs_type(db_file.parent if db_file.parent.exists() else db_file.parent.parent)
     if fs_type in NETWORK_FS_TYPES:
         return f'Refusing to use a database on a network filesystem ({fs_type}); WAL locking is unsafe there'
+    if fs_type in WAL_INCOMPATIBLE_FS_TYPES:
+        # Usable, but WAL is impossible here so the engine will use a slower rollback journal.
+        logger.warning(f'Media filesystem is {fs_type}: SQLite WAL is unavailable, so the database will use a '
+                       f'slower rollback journal with reduced write-concurrency.  Reformat the drive as ext4 '
+                       f'for best performance.')
     return None
 
 

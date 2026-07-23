@@ -1,7 +1,74 @@
 import sqlite3
 
 from wrolpi.conftest import production_like_sessions
-from wrolpi.db import get_db_session, get_immediate_db_session
+from wrolpi.db import get_db_session, get_immediate_db_session, _configure_sqlite_connection
+
+
+class _FakeCursor:
+    """A minimal DBAPI cursor that records executed statements and can be told to fail WAL.
+
+    Simulates a FAT/exFAT/NTFS drive, where `PRAGMA journal_mode=WAL` raises `disk I/O error`."""
+
+    def __init__(self, fail_wal: bool):
+        self.fail_wal = fail_wal
+        self.executed = []
+
+    def execute(self, statement):
+        if self.fail_wal and statement == 'PRAGMA journal_mode=WAL':
+            raise sqlite3.OperationalError('disk I/O error')
+        self.executed.append(statement)
+
+    def close(self):
+        pass
+
+
+class _FakeConnection:
+    def __init__(self, fail_wal: bool):
+        self._cursor = _FakeCursor(fail_wal)
+        self.isolation_level = 'DEFERRED'
+
+    def cursor(self):
+        return self._cursor
+
+
+def test_configure_connection_uses_wal_when_supported():
+    """On a normal filesystem the connection is configured for WAL + synchronous=NORMAL."""
+    conn = _FakeConnection(fail_wal=False)
+    mode = _configure_sqlite_connection(conn)
+    assert mode == 'WAL'
+    assert conn.isolation_level is None
+    assert 'PRAGMA journal_mode=WAL' in conn._cursor.executed
+    assert 'PRAGMA synchronous=NORMAL' in conn._cursor.executed
+    assert 'PRAGMA busy_timeout=30000' in conn._cursor.executed
+    assert 'PRAGMA foreign_keys=ON' in conn._cursor.executed
+
+
+def test_configure_connection_falls_back_to_rollback_journal_on_wal_failure():
+    """When WAL raises `disk I/O error` (exFAT/FAT/NTFS), fall back to a crash-safe rollback journal.
+
+    Regression test for the whole-API outage on 10.0.0.8: an exFAT media drive made
+    `PRAGMA journal_mode=WAL` raise on every connection.  The connection must still come up, using
+    a TRUNCATE rollback journal with synchronous=FULL (WROLPi is off-grid; power loss is expected)."""
+    conn = _FakeConnection(fail_wal=True)
+    mode = _configure_sqlite_connection(conn)
+    assert mode == 'TRUNCATE'
+    assert 'PRAGMA journal_mode=TRUNCATE' in conn._cursor.executed
+    assert 'PRAGMA synchronous=FULL' in conn._cursor.executed
+    # WAL's less-durable synchronous setting must NOT be applied on a rollback journal.
+    assert 'PRAGMA synchronous=NORMAL' not in conn._cursor.executed
+    # The connection is still fully configured.
+    assert 'PRAGMA busy_timeout=30000' in conn._cursor.executed
+    assert 'PRAGMA foreign_keys=ON' in conn._cursor.executed
+
+
+def test_configure_connection_does_not_reattempt_wal_once_ruled_out():
+    """Once WAL is known-unavailable for an engine, later connections skip (and don't re-log) it."""
+    conn = _FakeConnection(fail_wal=True)
+    # `journal_mode='TRUNCATE'` is the remembered decision from a previous connection.
+    mode = _configure_sqlite_connection(conn, journal_mode='TRUNCATE')
+    assert mode == 'TRUNCATE'
+    assert 'PRAGMA journal_mode=WAL' not in conn._cursor.executed
+    assert 'PRAGMA journal_mode=TRUNCATE' in conn._cursor.executed
 
 
 def _probe_write_lock_is_held(db_file: str) -> bool:

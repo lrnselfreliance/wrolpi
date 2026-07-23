@@ -92,6 +92,38 @@ def test_check_sqlite_environment_version_gate(test_directory):
             assert db_bootstrap.check_sqlite_environment(get_db_file()) is None
 
 
+@pytest.mark.parametrize('fs_type', ['vfat', 'exfat', 'msdos', 'ntfs', 'fuseblk'])
+def test_check_sqlite_environment_allows_wal_incompatible_fs_with_warning(test_directory, fs_type):
+    """A FAT/exFAT/NTFS drive is allowed (with a warning), not refused.
+
+    These filesystems cannot support SQLite WAL — it needs mmap shared-memory they don't provide,
+    so `PRAGMA journal_mode=WAL` raises `(sqlite3.OperationalError) disk I/O error` (the failure
+    seen on 10.0.0.8; the tell-tale sign was `Media directory has the wrong permissions: 0o40777`,
+    since these filesystems can't store Unix permission bits).  Rather than crash the whole API,
+    the engine degrades to a rollback journal, so the environment check must NOT refuse the drive
+    — it only warns that performance is reduced."""
+    with mock.patch.object(db_bootstrap, '_media_fs_type', return_value=fs_type), \
+            mock.patch.object(db_bootstrap.logger, 'warning') as mock_warning:
+        assert db_bootstrap.check_sqlite_environment(get_db_file()) is None
+    assert mock_warning.call_count == 1
+    assert 'WAL is unavailable' in mock_warning.call_args.args[0], 'expected a WAL-unavailable warning'
+
+
+@pytest.mark.parametrize('fs_type', ['ext4', 'btrfs', 'xfs', 'f2fs'])
+def test_check_sqlite_environment_allows_wal_compatible_fs(test_directory, fs_type):
+    """Ordinary Linux filesystems support WAL and must not be refused."""
+    with mock.patch.object(db_bootstrap, '_media_fs_type', return_value=fs_type):
+        assert db_bootstrap.check_sqlite_environment(get_db_file()) is None
+
+
+@pytest.mark.parametrize('fs_type', ['nfs', 'nfs4', 'cifs', 'fuse.sshfs'])
+def test_check_sqlite_environment_refuses_network_fs(test_directory, fs_type):
+    """Network filesystems remain refused: their locking is unsafe and no journal mode fixes it."""
+    with mock.patch.object(db_bootstrap, '_media_fs_type', return_value=fs_type):
+        error = db_bootstrap.check_sqlite_environment(get_db_file())
+    assert error and fs_type in error
+
+
 def test_unmounted_production_guard(test_directory):
     """An unmounted production media directory blocks DB creation/migration and db_up.
 

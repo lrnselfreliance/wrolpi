@@ -5,26 +5,39 @@ from wrolpi.db import get_db_session, get_immediate_db_session, _configure_sqlit
 
 
 class _FakeCursor:
-    """A minimal DBAPI cursor that records executed statements and can be told to fail WAL.
+    """A minimal DBAPI cursor that records executed statements and simulates WAL rejection.
 
-    Simulates a FAT/exFAT/NTFS drive, where `PRAGMA journal_mode=WAL` raises `disk I/O error`."""
+    A FAT/exFAT/NTFS drive rejects WAL either by raising `disk I/O error` (`fail_wal`) or by
+    silently keeping the current rollback journal — `PRAGMA journal_mode` returns the mode SQLite
+    actually selected, so a WAL request can return e.g. 'delete' without raising (`wal_returns`)."""
 
-    def __init__(self, fail_wal: bool):
+    def __init__(self, fail_wal: bool, wal_returns: str = 'wal'):
         self.fail_wal = fail_wal
+        self.wal_returns = wal_returns
         self.executed = []
+        self._last_row = None
 
     def execute(self, statement):
-        if self.fail_wal and statement == 'PRAGMA journal_mode=WAL':
-            raise sqlite3.OperationalError('disk I/O error')
+        if statement == 'PRAGMA journal_mode=WAL':
+            if self.fail_wal:
+                raise sqlite3.OperationalError('disk I/O error')
+            self._last_row = (self.wal_returns,)
+        elif statement.startswith('PRAGMA journal_mode='):
+            self._last_row = (statement.split('=', 1)[1].lower(),)
+        else:
+            self._last_row = None
         self.executed.append(statement)
+
+    def fetchone(self):
+        return self._last_row
 
     def close(self):
         pass
 
 
 class _FakeConnection:
-    def __init__(self, fail_wal: bool):
-        self._cursor = _FakeCursor(fail_wal)
+    def __init__(self, fail_wal: bool, wal_returns: str = 'wal'):
+        self._cursor = _FakeCursor(fail_wal, wal_returns)
         self.isolation_level = 'DEFERRED'
 
     def cursor(self):
@@ -59,6 +72,20 @@ def test_configure_connection_falls_back_to_rollback_journal_on_wal_failure():
     # The connection is still fully configured.
     assert 'PRAGMA busy_timeout=30000' in conn._cursor.executed
     assert 'PRAGMA foreign_keys=ON' in conn._cursor.executed
+
+
+def test_configure_connection_falls_back_when_wal_silently_refused():
+    """SQLite can refuse WAL WITHOUT raising, returning the still-active rollback mode instead.
+
+    The requested mode is not always the applied mode, so we must confirm `PRAGMA journal_mode`'s
+    return value.  Here WAL 'succeeds' but reports 'delete'; that must trigger the durable fallback
+    (TRUNCATE + synchronous=FULL), not cache WAL with the weaker synchronous=NORMAL."""
+    conn = _FakeConnection(fail_wal=False, wal_returns='delete')
+    mode = _configure_sqlite_connection(conn)
+    assert mode == 'TRUNCATE'
+    assert 'PRAGMA journal_mode=TRUNCATE' in conn._cursor.executed
+    assert 'PRAGMA synchronous=FULL' in conn._cursor.executed
+    assert 'PRAGMA synchronous=NORMAL' not in conn._cursor.executed
 
 
 def test_configure_connection_does_not_reattempt_wal_once_ruled_out():

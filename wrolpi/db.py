@@ -62,10 +62,13 @@ def _configure_sqlite_connection(dbapi_conn, journal_mode: str = None) -> str:
 
     WAL is preferred (readers never block writers, so the Sanic workers stay concurrent).  But
     FAT/exFAT/NTFS drives — common when a USB drive is formatted for Windows compatibility —
-    cannot support WAL: it needs mmap'd shared-memory those filesystems don't provide, so
-    `PRAGMA journal_mode=WAL` raises `disk I/O error`.  There we fall back to a TRUNCATE rollback
-    journal so the drive still works, at the cost of write-concurrency; `synchronous=FULL` keeps
-    it crash-safe (WROLPi is off-grid, so power loss is expected).
+    cannot support WAL: it needs mmap'd shared-memory those filesystems don't provide.  SQLite may
+    reject WAL either by raising `disk I/O error` OR by silently keeping the current rollback
+    journal (`PRAGMA journal_mode` returns the mode it actually selected, not necessarily the one
+    requested), so we confirm the returned mode rather than assume the request succeeded.  When WAL
+    is unavailable we fall back to a TRUNCATE rollback journal so the drive still works, at the cost
+    of write-concurrency; `synchronous=FULL` keeps it crash-safe (WROLPi is off-grid, so power loss
+    is expected).
 
     `journal_mode` is the mode chosen on a previous connection of the same engine: once WAL has
     been ruled out we skip re-attempting (and re-logging) it on every fresh NullPool connection."""
@@ -76,11 +79,17 @@ def _configure_sqlite_connection(dbapi_conn, journal_mode: str = None) -> str:
     curs = dbapi_conn.cursor()
     try:
         if journal_mode != 'TRUNCATE':
+            wal_ok = False
             try:
                 curs.execute('PRAGMA journal_mode=WAL')
+                row = curs.fetchone()
+                wal_ok = bool(row) and str(row[0]).lower() == 'wal'
+            except sqlite3.OperationalError:
+                wal_ok = False
+            if wal_ok:
                 curs.execute('PRAGMA synchronous=NORMAL')
                 journal_mode = 'WAL'
-            except sqlite3.OperationalError:
+            else:
                 logger.warning('SQLite WAL is unavailable on this filesystem (exFAT/FAT/NTFS?); '
                                'falling back to a slower TRUNCATE rollback journal with reduced '
                                'write-concurrency.  Reformat the media drive as ext4 for best performance.')

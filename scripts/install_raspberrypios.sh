@@ -4,6 +4,13 @@ echo "Raspberry Pi OS install start: $(date '+%Y-%m-%d %H:%M:%S')"
 set -x
 set -e
 
+# Run the install in a predictable UTF-8 locale.  Fresh images (or SSH sessions
+# forwarding LC_* variables from the client) may reference an ungenerated
+# locale, which makes apt/perl/python emit "Cannot set LC_CTYPE" warnings
+# throughout the install.  C.UTF-8 is built into glibc, always present, and
+# locale-neutral, so this does not change the user's configured locale.
+export LC_ALL=C.UTF-8
+
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies.

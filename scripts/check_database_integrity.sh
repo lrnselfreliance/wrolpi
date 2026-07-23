@@ -20,13 +20,15 @@ MEDIA_DIRECTORY=${MEDIA_DIRECTORY:-/media/wrolpi}
 
 # Re-execute this script under sudo if not already root.  Reading a WAL database
 # needs write access to the -shm sidecar; we run sqlite3 as the wrolpi user so we
-# do not create root-owned sidecar files that would break the API.
+# do not create root-owned sidecar files that would break the API.  Preserve the
+# database overrides, since sudo strips them from the environment by default.
 if [ "$EUID" != 0 ]; then
-  exec sudo "$0" "$@"
+  exec sudo MEDIA_DIRECTORY="${MEDIA_DIRECTORY}" WROLPI_DB="${WROLPI_DB:-}" "$0" "$@"
 fi
 
 PRAGMA='quick_check'
 DB_FILE=${WROLPI_DB:-${MEDIA_DIRECTORY}/config/wrolpi.db}
+db_file_set=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -38,8 +40,19 @@ while [ $# -gt 0 ]; do
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
+    -*)
+      echo "FAILED: Unknown option: $1" >&2
+      grep '^#' "$0" | sed 's/^# \{0,1\}//' >&2
+      exit 2
+      ;;
     *)
+      if [ "${db_file_set}" = true ]; then
+        echo "FAILED: Unexpected extra argument: $1" >&2
+        grep '^#' "$0" | sed 's/^# \{0,1\}//' >&2
+        exit 2
+      fi
       DB_FILE=$1
+      db_file_set=true
       shift
       ;;
   esac

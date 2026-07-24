@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, waitFor} from '@testing-library/react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {BrowserRouter} from 'react-router';
 import {ThemeContext, SettingsContext} from '../../contexts/contexts';
 import {ControllerPage} from './ControllerPage';
@@ -56,7 +56,13 @@ jest.mock('../../api/controller', () => ({
     getServiceLogs: jest.fn().mockResolvedValue({logs: 'Sample log output'}),
     getDisks: jest.fn().mockResolvedValue([]),
     getMounts: jest.fn().mockResolvedValue([]),
+    getFstabEntries: jest.fn().mockResolvedValue([]),
     getSmartStatus: jest.fn().mockResolvedValue({}),
+    mountDisk: jest.fn().mockResolvedValue({success: true}),
+    unmountDisk: jest.fn().mockResolvedValue(
+        {success: true, stopped_services: ['wrolpi-api']}),
+    addFstabEntry: jest.fn().mockResolvedValue({success: true}),
+    removeFstabEntry: jest.fn().mockResolvedValue({success: true}),
     restartServices: jest.fn().mockResolvedValue({success: true}),
     getSambaStatus: jest.fn().mockResolvedValue({enabled: false, available: true, shares: []}),
     addSambaShare: jest.fn().mockResolvedValue({success: true}),
@@ -176,6 +182,51 @@ describe('ControllerPage', () => {
     });
 
 });
+
+describe('DiskSection primary unmount', () => {
+    const controllerApi = require('../../api/controller');
+
+    beforeEach(() => {
+        controllerApi.getDisks.mockResolvedValue([
+            {
+                name: 'sda1',
+                path: '/dev/sda1',
+                size: '500G',
+                fstype: 'ext4',
+                label: 'wrolpi',
+                mountpoint: '/media/wrolpi',
+                uuid: 'abc-123',
+            },
+        ]);
+        controllerApi.unmountDisk.mockClear();
+    });
+
+    afterEach(() => {
+        controllerApi.getDisks.mockResolvedValue([]);
+    });
+
+    test('primary mount shows Unmount button; confirming warns and unmounts', async () => {
+        renderControllerPage();
+
+        // The primary mount is no longer labeled "System"; it gets Unmount.
+        const unmountButton = await screen.findByText('Unmount');
+        fireEvent.click(unmountButton);
+
+        // The confirm modal warns that the API service will be stopped.
+        await waitFor(() => {
+            expect(screen.getByText(/API service will/)).toBeInTheDocument();
+        });
+
+        // Semantic's Confirm renders confirmButton='Unmount' as the last match.
+        const buttons = screen.getAllByText('Unmount');
+        fireEvent.click(buttons[buttons.length - 1]);
+
+        await waitFor(() => {
+            expect(controllerApi.unmountDisk).toHaveBeenCalledWith('/media/wrolpi');
+        });
+    });
+});
+
 
 describe('groupServices', () => {
     const {groupServices} = require('./ControllerPage');

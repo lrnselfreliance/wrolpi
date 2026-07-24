@@ -688,9 +688,10 @@ function SmartDetailsModal({drive, open, onClose}) {
 }
 
 
-// The primary mount cannot be unmounted from the UI, but its persistence
-// (an /etc/fstab entry) can be toggled.  Any mount outside /media belongs to
-// the system (/, /boot/efi, /boot/firmware, …) and is entirely untouchable.
+// The primary mount can be unmounted (to swap in a backup drive), but doing
+// so stops the WROLPi API service — the unmount modal warns about this.  Any
+// mount outside /media belongs to the system (/, /boot/efi, /boot/firmware, …)
+// and is entirely untouchable.
 const PRIMARY_MOUNT = '/media/wrolpi';
 
 // Helper to format disk size
@@ -942,12 +943,15 @@ function DiskSection() {
         if (!unmountTarget) return;
 
         try {
-            await unmountDisk(unmountTarget);
+            const result = await unmountDisk(unmountTarget);
+            const stoppedServices = (result && result.stopped_services) || [];
             toast({
                 type: 'success',
                 title: 'Disk Unmounted',
-                description: `Unmounted ${unmountTarget}`,
-                time: 3000,
+                description: stoppedServices.length > 0 ?
+                    `Unmounted ${unmountTarget}; stopped ${stoppedServices.join(', ')}` :
+                    `Unmounted ${unmountTarget}`,
+                time: 5000,
             });
             fetchDiskInfo();
         } catch (e) {
@@ -1077,7 +1081,7 @@ function DiskSection() {
                                         )}
                                     </Table.Cell>
                                     <Table.Cell>
-                                        {isMounted && (isSystemMount || isPrimary) ? (
+                                        {isMounted && isSystemMount ? (
                                             <span style={{color: '#888'}}>System</span>
                                         ) : isMounted ? (
                                             <Button
@@ -1168,7 +1172,18 @@ function DiskSection() {
             <Confirm
                 open={unmountConfirmOpen}
                 header='Unmount Disk'
-                content={`Are you sure you want to unmount ${unmountTarget}?`}
+                content={unmountTarget === PRIMARY_MOUNT ? (
+                    <div className='content'>
+                        <p>Are you sure you want to unmount <code>{unmountTarget}</code>?</p>
+                        <p>
+                            <Icon name='warning sign' color='yellow'/>
+                            This is the primary WROLPi drive. The WROLPi API service will
+                            be <strong>stopped</strong> before unmounting, and your media will be
+                            unavailable until a drive is mounted at <code>{PRIMARY_MOUNT}</code> and
+                            the API service is started again.
+                        </p>
+                    </div>
+                ) : `Are you sure you want to unmount ${unmountTarget}?`}
                 onCancel={() => {
                     setUnmountConfirmOpen(false);
                     setUnmountTarget(null);

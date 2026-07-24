@@ -20,8 +20,11 @@ apt-get install -y $(cat /opt/wrolpi/pi-gen/stage2/04-wrolpi/01-packages-nr)
 node -v
 npm -v
 
-# Install serve, and archiving tools.
-single-file --version || sudo npm i -g serve@12.0.1 single-file-cli@2.0.73 readability-extractor@0.0.6
+# Install serve, and archiving tools.  Check each independently so a present
+# single-file cannot mask a missing serve (which breaks wrolpi-app).
+command -v serve >/dev/null || sudo npm i -g serve@12.0.1
+single-file --version >/dev/null 2>&1 || sudo npm i -g single-file-cli@2.0.73
+command -v readability-extractor >/dev/null || sudo npm i -g readability-extractor@0.0.6
 
 # Install Deno runtime; single-file runs under it.
 command -v deno || {

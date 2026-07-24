@@ -6,7 +6,9 @@ Conflicts=wrolpi-app-dev.service
 
 [Service]
 # Use explicit `serve.json` so `epub.html` is not lost.
-ExecStart=/usr/local/bin/serve build -l 3000 -c /opt/wrolpi/app/serve.json
+# Resolve `serve` via PATH so it works regardless of npm's global prefix
+# (/usr/local/bin vs /usr/bin depending on how node was installed).
+ExecStart=/usr/bin/env serve build -l 3000 -c /opt/wrolpi/app/serve.json
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/

@@ -348,6 +348,8 @@ class ServiceStatusResponse(BaseModel):
     view_path: Optional[str] = Field(default="", description="Path to web UI")
     use_https: Optional[bool] = Field(default=False, description="Whether service uses HTTPS")
     description: Optional[str] = Field(default="", description="Service description")
+    kind: Optional[str] = Field(default=None, description="Service kind (persistent or task)")
+    group: Optional[str] = Field(default=None, description="Display group (core or optional)")
     available: Optional[bool] = Field(default=None, description="Whether management is available")
     reason: Optional[str] = Field(default=None, description="Reason if unavailable")
     error: Optional[str] = Field(default=None, description="Error message if any")

@@ -22,6 +22,28 @@ class TestServicesListEndpoint:
         # Should be a list (when docker can manage) or error dict
         assert isinstance(data, (list, dict))
 
+    def test_services_list_includes_group_and_kind(self, test_client):
+        """The React UI partitions on `group`; the response model must not
+        strip it (or `kind`) from the systemd status dicts."""
+        statuses = [
+            {"name": "wrolpi-api", "status": "running", "enabled": True,
+             "kind": "persistent", "group": "core"},
+            {"name": "wrolpi-repair", "status": "stopped", "enabled": False,
+             "kind": "task", "group": "optional"},
+        ]
+        with mock.patch("controller.api.services.is_docker_mode", return_value=False):
+            with mock.patch(
+                    "controller.api.services.get_all_services_status",
+                    return_value=statuses,
+            ):
+                response = test_client.get("/api/services")
+        assert response.status_code == 200
+        data = {s["name"]: s for s in response.json()}
+        assert data["wrolpi-api"]["group"] == "core"
+        assert data["wrolpi-api"]["kind"] == "persistent"
+        assert data["wrolpi-repair"]["group"] == "optional"
+        assert data["wrolpi-repair"]["kind"] == "task"
+
 
 class TestServicesListDockerMode:
     """Tests for /api/services in Docker mode."""

@@ -938,7 +938,7 @@
             <div class="status-card">
                 <h3>CPU</h3>
                 <p class="value">{{ cpu.percent if cpu.percent is not none else '--' }}%</p>
-                <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}</p>
+                <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}{% if cpu.fan_rpm %} &middot; {{ cpu.fan_rpm }} RPM{% endif %}</p>
             </div>
             <div class="status-card">
                 <h3>Memory</h3>
@@ -2692,7 +2692,13 @@
             const cpuValue = document.querySelector('.status-card:nth-child(1) .value');
             const cpuSub = document.querySelector('.status-card:nth-child(1) .sub');
             if (cpuValue) cpuValue.textContent = (cpu.percent !== null ? cpu.percent : '--') + '%';
-            if (cpuSub) cpuSub.innerHTML = cpu.temperature ? cpu.temperature + '&deg;C' : '--';
+            if (cpuSub) {
+                let cpuSubText = cpu.temperature ? cpu.temperature + '&deg;C' : '--';
+                if (cpu.fan_rpm) {
+                    cpuSubText += ' &middot; ' + cpu.fan_rpm + ' RPM';
+                }
+                cpuSub.innerHTML = cpuSubText;
+            }
 
             // Update Memory card
             const memValue = document.querySelector('.status-card:nth-child(2) .value');

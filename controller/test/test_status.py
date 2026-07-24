@@ -52,6 +52,26 @@ class TestGetCpuStatus:
         assert isinstance(result["cores"], int)
         assert result["cores"] > 0
 
+    def test_fan_rpm(self):
+        """Fan RPM should be reported when a fan sensor exists (e.g. RPi 5 pwmfan)."""
+        fan = mock.Mock()
+        fan.current = 2599
+        with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, return_value={"pwmfan": [fan]}):
+            result = get_cpu_status()
+        assert result["fan_rpm"] == 2599
+
+    def test_fan_rpm_no_fan(self):
+        """Fan RPM should be None when no fan sensor exists."""
+        with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, return_value={}):
+            result = get_cpu_status()
+        assert result["fan_rpm"] is None
+
+    def test_fan_rpm_sensor_error(self):
+        """Fan RPM should be None when the sensor read fails."""
+        with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, side_effect=OSError("no sysfs")):
+            result = get_cpu_status()
+        assert result["fan_rpm"] is None
+
 
 class TestGetMemoryStatus:
     """Tests for get_memory_status function."""

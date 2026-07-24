@@ -92,6 +92,17 @@ def get_cpu_status() -> dict:
     except Exception:
         pass
 
+    # Get fan RPM (e.g. the RPi 5 fan connector's `pwmfan` hwmon device).
+    # sensors_fans only exists on Linux psutil.
+    fan_rpm = None
+    try:
+        fans = psutil.sensors_fans() if hasattr(psutil, "sensors_fans") else {}
+        readings = [i.current for readings_ in fans.values() for i in readings_ if i.current]
+        if readings:
+            fan_rpm = int(max(readings))
+    except Exception:
+        pass
+
     return {
         "cores": cpu_count,
         "cur_frequency": cur_frequency - min_frequency if cur_frequency and min_frequency else None,
@@ -101,6 +112,7 @@ def get_cpu_status() -> dict:
         "temperature": int(temperature) if temperature else None,
         "high_temperature": int(high_temperature) if high_temperature else None,
         "critical_temperature": int(critical_temperature) if critical_temperature else None,
+        "fan_rpm": fan_rpm,
     }
 
 

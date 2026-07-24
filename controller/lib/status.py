@@ -97,7 +97,9 @@ def get_cpu_status() -> dict:
     fan_rpm = None
     try:
         fans = psutil.sensors_fans() if hasattr(psutil, "sensors_fans") else {}
-        readings = [i.current for readings_ in fans.values() for i in readings_ if i.current]
+        # Prefer a CPU-labeled fan when several fan groups exist; 0 RPM is a valid reading (idle fan).
+        cpu_fans = {k: v for k, v in fans.items() if k == "pwmfan" or "cpu" in k.lower()}
+        readings = [i.current for group in (cpu_fans or fans).values() for i in group if i.current is not None]
         if readings:
             fan_rpm = int(max(readings))
     except Exception:

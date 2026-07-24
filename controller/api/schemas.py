@@ -32,6 +32,7 @@ class CpuStatusResponse(BaseModel):
     frequency_max_mhz: Optional[int] = Field(default=None, description="Maximum CPU frequency in MHz")
     temperature_c: Optional[float] = Field(default=None, description="CPU temperature in Celsius")
     cores: int = Field(description="Number of CPU cores")
+    fan_rpm: Optional[int] = Field(default=None, description="Cooling fan speed in RPM, if a fan is present")
 
 
 # ============================================================================

@@ -258,6 +258,7 @@ async def dashboard(request: Request):
         "cpu": {
             "percent": cpu["percent"],
             "temperature_c": cpu["temperature"],  # Field renamed
+            "fan_rpm": cpu.get("fan_rpm"),
         },
         "memory": {
             "percent": round((memory["used"] / memory["total"]) * 100, 1) if memory["total"] > 0 else 0,

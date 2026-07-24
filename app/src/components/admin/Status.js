@@ -93,6 +93,14 @@ function CPUTemperatureStatistic({temperature, high_temperature, critical_temper
     return <Statistic label='Temp C°' value={temperature} {...props}/>
 }
 
+function FanRPMStatistic({fan_rpm, ...props}) {
+    // Only rendered when the device reports a fan (e.g. RPi 5 fan connector).
+    if (fan_rpm === null || fan_rpm === undefined) {
+        return null;
+    }
+    return <Statistic label='Fan RPM' value={fan_rpm} {...props}/>
+}
+
 function IOWaitStatistic({percent_iowait, ...props}) {
     if (percent_iowait === null || percent_iowait === undefined) {
         return <Statistic label='IO Wait %' value='?'/>
@@ -236,6 +244,7 @@ export function StatusPage() {
     let temperature;
     let high_temperature;
     let critical_temperature;
+    let fan_rpm;
     let processesStats = null;
     let minute_1;
     let minute_5;
@@ -255,6 +264,7 @@ export function StatusPage() {
         temperature = cpu_stats['temperature'];
         high_temperature = cpu_stats['high_temperature'];
         critical_temperature = cpu_stats['critical_temperature'];
+        fan_rpm = cpu_stats['fan_rpm'];
         processesStats = processes_stats;
 
         minute_1 = load_stats['minute_1'];
@@ -312,6 +322,7 @@ export function StatusPage() {
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
                     />
+                    <FanRPMStatistic fan_rpm={fan_rpm}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>
@@ -332,6 +343,7 @@ export function StatusPage() {
                         critical_temperature={critical_temperature}
                         style={{marginRight: 0}}
                     />
+                    <FanRPMStatistic fan_rpm={fan_rpm}/>
                     <IOWaitStatistic percent_iowait={percent_iowait}/>
                     <UptimeStatistic uptime_seconds={uptime_seconds}/>
                 </Statistic.Group>

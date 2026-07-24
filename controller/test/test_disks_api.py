@@ -292,8 +292,10 @@ class TestUnmountPrimaryEndpoint:
         with mock.patch("controller.api.disks.get_media_directory",
                         return_value=Path("/media/wrolpi")), \
              mock.patch("controller.api.disks.stop_service",
-                        return_value={"success": True}) as stop:
-            yield {**disks_env, "stop_service": stop}
+                        return_value={"success": True}) as stop, \
+             mock.patch("controller.api.disks.start_service",
+                        return_value={"success": True}) as start:
+            yield {**disks_env, "stop_service": stop, "start_service": start}
 
     @pytest.mark.parametrize("mount_point", [
         "/media/wrolpi",
@@ -314,13 +316,16 @@ class TestUnmountPrimaryEndpoint:
         assert body["removed_from_fstab"] is False
         assert body["stopped_services"] == ["wrolpi-api"]
         primary_env["stop_service"].assert_called_once_with("wrolpi-api")
+        # A successful unmount must not restart the API behind the user's back.
+        primary_env["start_service"].assert_not_called()
         assert primary_env["fake"].current_mount_points() == set()
 
     def test_unmount_primary_returns_500_when_still_mounted(
         self, test_client, primary_env,
     ):
-        # umount fails (e.g. busy) — surface the failure, but the service
-        # stop should still have been attempted first.
+        # umount fails (e.g. busy) — surface the failure.  The drive is
+        # still mounted, so the API service must be started again rather
+        # than left stopped for nothing.
         primary_env["fake"]._live.add("/media/wrolpi")
         primary_env["fake"].fail_for_unmount = frozenset({"/media/wrolpi"})
 
@@ -331,6 +336,21 @@ class TestUnmountPrimaryEndpoint:
         assert response.status_code == 500
         assert "still mounted" in response.json()["detail"]
         primary_env["stop_service"].assert_called_once_with("wrolpi-api")
+        primary_env["start_service"].assert_called_once_with("wrolpi-api")
+
+    def test_unmount_primary_already_unmounted_does_not_stop_api(
+        self, test_client, primary_env,
+    ):
+        # Nothing to unmount — succeed without touching the API service.
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["stopped_services"] == []
+        primary_env["stop_service"].assert_not_called()
 
     def test_unmount_primary_stop_failure_still_unmounts(
         self, test_client, primary_env,

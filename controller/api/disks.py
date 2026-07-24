@@ -54,7 +54,7 @@ from controller.lib.smart import (
     get_all_smart_status,
     is_smart_available,
 )
-from controller.lib.systemd import stop_service
+from controller.lib.systemd import start_service, stop_service
 from controller.lib.wrol_mode import require_normal_mode
 
 logger = logging.getLogger(__name__)
@@ -274,18 +274,34 @@ def _unmount_primary(normalized: str) -> dict:
     reconciler never manages the primary mount, so umount directly.  The
     /etc/fstab entry is left in place so a reboot restores the mount.
     """
+    if normalized not in _executor.current_mount_points():
+        # Nothing to unmount — do not take the API service down for a no-op.
+        return {
+            "success": True,
+            "mount_point": normalized,
+            "removed_from_fstab": False,
+            "stopped_services": [],
+        }
+
     stopped = stop_service("wrolpi-api")
     if not stopped.get("success"):
         logger.warning("Could not stop wrolpi-api before unmounting %s: %s",
                        normalized, stopped.get("error"))
 
-    if normalized in _executor.current_mount_points():
-        result = _executor.unmount(normalized)
-        if not result.ok:
-            raise HTTPException(
-                status_code=500,
-                detail=f"{normalized} is still mounted: {result.error}",
-            )
+    result = _executor.unmount(normalized)
+    if not result.ok:
+        # The drive is still mounted, so don't leave the API stopped for
+        # nothing; best effort — the 500 below is the primary signal.
+        if stopped.get("success"):
+            restarted = start_service("wrolpi-api")
+            if not restarted.get("success"):
+                logger.warning(
+                    "Could not restart wrolpi-api after failed unmount of %s: %s",
+                    normalized, restarted.get("error"))
+        raise HTTPException(
+            status_code=500,
+            detail=f"{normalized} is still mounted: {result.error}",
+        )
 
     return {
         "success": True,

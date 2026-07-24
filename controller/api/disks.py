@@ -13,6 +13,11 @@ not claimed, so foreign mounts (udisks2 desktop automounts, manual
 mounts) under /media/ would otherwise be impossible to remove from the
 UI.  When a reconcile leaves the requested mount point live, /unmount
 falls back to a direct umount(8) for non-reserved /media/ paths.
+
+The primary mount (the media directory) is also unmountable, to support
+swapping in a backup drive: the wrolpi-api service is stopped first so
+it releases open files, then the mount is released with a direct
+umount(8).  See _unmount_primary().
 """
 
 import logging
@@ -49,6 +54,7 @@ from controller.lib.smart import (
     get_all_smart_status,
     is_smart_available,
 )
+from controller.lib.systemd import stop_service
 from controller.lib.wrol_mode import require_normal_mode
 
 logger = logging.getLogger(__name__)
@@ -260,6 +266,35 @@ async def disk_mount(request: MountRequest):
     }
 
 
+def _unmount_primary(normalized: str) -> dict:
+    """Unmount the primary WROLPi drive (drive swap).
+
+    The API service holds files open on the drive, so it is stopped first;
+    a failed stop is not fatal — the umount result decides success.  The
+    reconciler never manages the primary mount, so umount directly.  The
+    /etc/fstab entry is left in place so a reboot restores the mount.
+    """
+    stopped = stop_service("wrolpi-api")
+    if not stopped.get("success"):
+        logger.warning("Could not stop wrolpi-api before unmounting %s: %s",
+                       normalized, stopped.get("error"))
+
+    if normalized in _executor.current_mount_points():
+        result = _executor.unmount(normalized)
+        if not result.ok:
+            raise HTTPException(
+                status_code=500,
+                detail=f"{normalized} is still mounted: {result.error}",
+            )
+
+    return {
+        "success": True,
+        "mount_point": normalized,
+        "removed_from_fstab": False,
+        "stopped_services": ["wrolpi-api"] if stopped.get("success") else [],
+    }
+
+
 @router.post("/unmount")
 async def disk_unmount(request: UnmountRequest):
     """Remove a mount from fstab.yaml and reconcile.
@@ -280,20 +315,21 @@ async def disk_unmount(request: UnmountRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # The direct-umount fallback below runs as root, so be strict about
-    # what we will pass to umount(8): a normalized path strictly under
-    # /media/ that is not the primary drive.
+    # The direct-umount paths below run as root, so be strict about what
+    # we will pass to umount(8): a normalized path strictly under /media/.
     normalized = os.path.normpath(request.mount_point)
-    if normalized in RESERVED_MOUNT_POINTS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot unmount {request.mount_point}: it is the primary "
-                   f"WROLPi drive.",
-        )
     if not normalized.startswith("/media/"):
         raise HTTPException(
             status_code=400,
             detail=f"Refusing to unmount {normalized}: not under /media/.",
+        )
+    if normalized == str(get_media_directory()):
+        return _unmount_primary(normalized)
+    if normalized in RESERVED_MOUNT_POINTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot unmount {request.mount_point}: it is a reserved "
+                   f"mount point.",
         )
 
     data = load_fstab()

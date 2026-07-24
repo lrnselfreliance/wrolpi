@@ -255,7 +255,6 @@ class TestUnmountEndpoint:
     @pytest.mark.parametrize("mount_point", [
         "/media",            # not strictly under /media/
         "/media_evil",       # prefix-collides with /media
-        "/media/wrolpi/../wrolpi",  # normalizes to the reserved primary
     ])
     def test_unmount_rejects_paths_outside_media(
         self, test_client, disks_env, mount_point,
@@ -268,18 +267,89 @@ class TestUnmountEndpoint:
         assert disks_env["fake"].unmount_calls == []
 
     def test_unmount_reserved_mount_point_rejected(self, test_client, disks_env):
-        # The primary WROLPi drive must never be unmountable from the API.
-        disks_env["fake"]._live.add("/media/wrolpi")
+        # The onboarding temp mount belongs to the Controller itself.
+        disks_env["fake"]._live.add("/media/wrolpi_temp_onboarding")
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi_temp_onboarding"},
+        )
+        assert response.status_code == 400
+        assert "reserved" in response.json()["detail"].lower()
+        # No umount was attempted, directly or via the reconciler.
+        assert disks_env["fake"].unmount_calls == []
+        assert disks_env["fake"].current_mount_points() == {
+            "/media/wrolpi_temp_onboarding"}
+
+
+class TestUnmountPrimaryEndpoint:
+    """Unmounting the primary drive stops the API service, then umounts
+    directly (the reconciler never manages the primary mount).  The
+    /etc/fstab entry is left alone so a reboot restores the mount."""
+
+    @pytest.fixture
+    def primary_env(self, disks_env):
+        with mock.patch("controller.api.disks.get_media_directory",
+                        return_value=Path("/media/wrolpi")), \
+             mock.patch("controller.api.disks.stop_service",
+                        return_value={"success": True}) as stop:
+            yield {**disks_env, "stop_service": stop}
+
+    @pytest.mark.parametrize("mount_point", [
+        "/media/wrolpi",
+        "/media/wrolpi/../wrolpi",  # normalizes to the primary
+    ])
+    def test_unmount_primary_stops_api_and_unmounts(
+        self, test_client, primary_env, mount_point,
+    ):
+        primary_env["fake"]._live.add("/media/wrolpi")
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": mount_point},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["removed_from_fstab"] is False
+        assert body["stopped_services"] == ["wrolpi-api"]
+        primary_env["stop_service"].assert_called_once_with("wrolpi-api")
+        assert primary_env["fake"].current_mount_points() == set()
+
+    def test_unmount_primary_returns_500_when_still_mounted(
+        self, test_client, primary_env,
+    ):
+        # umount fails (e.g. busy) — surface the failure, but the service
+        # stop should still have been attempted first.
+        primary_env["fake"]._live.add("/media/wrolpi")
+        primary_env["fake"].fail_for_unmount = frozenset({"/media/wrolpi"})
 
         response = test_client.post(
             "/api/disks/unmount",
             json={"mount_point": "/media/wrolpi"},
         )
-        assert response.status_code == 400
-        assert "primary" in response.json()["detail"].lower()
-        # No umount was attempted, directly or via the reconciler.
-        assert disks_env["fake"].unmount_calls == []
-        assert disks_env["fake"].current_mount_points() == {"/media/wrolpi"}
+        assert response.status_code == 500
+        assert "still mounted" in response.json()["detail"]
+        primary_env["stop_service"].assert_called_once_with("wrolpi-api")
+
+    def test_unmount_primary_stop_failure_still_unmounts(
+        self, test_client, primary_env,
+    ):
+        # A failed service stop (e.g. unit not installed) must not block
+        # the unmount; the umount result decides success.
+        primary_env["fake"]._live.add("/media/wrolpi")
+        primary_env["stop_service"].return_value = {
+            "success": False, "error": "unit not found"}
+
+        response = test_client.post(
+            "/api/disks/unmount",
+            json={"mount_point": "/media/wrolpi"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["stopped_services"] == []
+        assert primary_env["fake"].current_mount_points() == set()
 
 
 # --- /api/disks/fstab read endpoint ---------------------------------------

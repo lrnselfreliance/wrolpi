@@ -1695,9 +1695,9 @@
                         <td>
                 `;
 
-                // The primary mount cannot be unmounted, but its persistence
-                // (/etc/fstab entry) can be toggled.  Mounts outside /media
-                // (/, /boot/efi, ...) are system mounts: entirely untouchable.
+                // The primary mount can be unmounted (to swap in a backup
+                // drive); doing so stops the API service.  Mounts outside
+                // /media (/, /boot/efi, ...) are system mounts: untouchable.
                 const isPrimary = disk.mountpoint === '/media/wrolpi';
                 const isSystemMount = mounted && !isPrimary && !disk.mountpoint.startsWith('/media/');
 
@@ -1732,7 +1732,7 @@
                 html += `</td><td>`;
 
                 // Actions column
-                if (mounted && (isSystemMount || isPrimary)) {
+                if (mounted && isSystemMount) {
                     html += `<span style="color: #888;">System</span>`;
                 } else if (mounted) {
                     html += `<button class="btn btn-danger" onclick="unmountDisk('${disk.mountpoint}')">Unmount</button>`;
@@ -1809,7 +1809,13 @@
     }
 
     async function unmountDisk(mountPoint) {
-        if (!confirm(`Unmount ${mountPoint}?`)) return;
+        const message = mountPoint === '/media/wrolpi' ?
+            `Unmount ${mountPoint}?\n\nWARNING: This is the primary WROLPi drive. ` +
+            `The WROLPi API service will be STOPPED before unmounting, and your media ` +
+            `will be unavailable until a drive is mounted at /media/wrolpi and the API ` +
+            `service is started again.` :
+            `Unmount ${mountPoint}?`;
+        if (!confirm(message)) return;
 
         try {
             await apiCall('api/disks/unmount', 'POST', {

@@ -938,7 +938,7 @@
             <div class="status-card">
                 <h3>CPU</h3>
                 <p class="value">{{ cpu.percent if cpu.percent is not none else '--' }}%</p>
-                <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}{% if cpu.fan_rpm %} &middot; {{ cpu.fan_rpm }} RPM{% endif %}</p>
+                <p class="sub">{% if cpu.temperature_c %}{{ cpu.temperature_c }}&deg;C{% else %}--{% endif %}{% if cpu.fan_rpm is not none %} &middot; {{ cpu.fan_rpm }} RPM{% endif %}</p>
             </div>
             <div class="status-card">
                 <h3>Memory</h3>
@@ -2694,7 +2694,7 @@
             if (cpuValue) cpuValue.textContent = (cpu.percent !== null ? cpu.percent : '--') + '%';
             if (cpuSub) {
                 let cpuSubText = cpu.temperature ? cpu.temperature + '&deg;C' : '--';
-                if (cpu.fan_rpm) {
+                if (cpu.fan_rpm !== null && cpu.fan_rpm !== undefined) {
                     cpuSubText += ' &middot; ' + cpu.fan_rpm + ' RPM';
                 }
                 cpuSub.innerHTML = cpuSubText;

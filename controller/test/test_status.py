@@ -60,6 +60,25 @@ class TestGetCpuStatus:
             result = get_cpu_status()
         assert result["fan_rpm"] == 2599
 
+    def test_fan_rpm_zero_is_reported(self):
+        """A stopped/idle fan (0 RPM) should be reported, not hidden (RPi 5 stops its fan when cool)."""
+        fan = mock.Mock()
+        fan.current = 0
+        with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, return_value={"pwmfan": [fan]}):
+            result = get_cpu_status()
+        assert result["fan_rpm"] == 0
+
+    def test_fan_rpm_prefers_cpu_fan(self):
+        """When multiple fan groups exist, the CPU fan should be preferred over faster case fans."""
+        cpu_fan = mock.Mock()
+        cpu_fan.current = 1200
+        case_fan = mock.Mock()
+        case_fan.current = 3000
+        fans = {"dell_smm_cpu": [cpu_fan], "case": [case_fan]}
+        with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, return_value=fans):
+            result = get_cpu_status()
+        assert result["fan_rpm"] == 1200
+
     def test_fan_rpm_no_fan(self):
         """Fan RPM should be None when no fan sensor exists."""
         with mock.patch("controller.lib.status.psutil.sensors_fans", create=True, return_value={}):

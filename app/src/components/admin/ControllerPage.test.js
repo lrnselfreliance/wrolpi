@@ -65,6 +65,10 @@ jest.mock('../../api/controller', () => ({
     removeFstabEntry: jest.fn().mockResolvedValue({success: true}),
     restartServices: jest.fn().mockResolvedValue({success: true}),
     getSambaStatus: jest.fn().mockResolvedValue({enabled: false, available: true, shares: []}),
+    getHotspotSettings: jest.fn(),
+    getHotspotDevices: jest.fn(),
+    getHotspotProtocols: jest.fn(),
+    updateHotspotSettings: jest.fn(),
     addSambaShare: jest.fn().mockResolvedValue({success: true}),
     removeSambaShare: jest.fn().mockResolvedValue({success: true}),
 }));
@@ -141,6 +145,14 @@ describe('ControllerPage', () => {
         // Reset useDockerized to false for regular tests
         const {useDockerized} = require('../../hooks/customHooks');
         useDockerized.mockReturnValue(false);
+        // resetMocks clears module-factory implementations, so configure hotspot mocks here.
+        const controllerApi = require('../../api/controller');
+        controllerApi.getHotspotSettings.mockResolvedValue(
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2'});
+        controllerApi.getHotspotDevices.mockResolvedValue({devices: ['wlan0']});
+        controllerApi.getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2', 'wpa3']});
+        controllerApi.updateHotspotSettings.mockResolvedValue(
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa2'});
     });
 
     test('renders Services section', async () => {
@@ -179,6 +191,34 @@ describe('ControllerPage', () => {
             expect(screen.getByTestId('restart-button')).toBeInTheDocument();
             expect(screen.getByTestId('shutdown-button')).toBeInTheDocument();
         });
+    });
+
+    test('hotspot protocol dropdown lists the protocols supported by the device', async () => {
+        const {getHotspotProtocols} = require('../../api/controller');
+        renderControllerPage();
+        await waitFor(() => {
+            expect(getHotspotProtocols).toHaveBeenCalledWith('wlan0');
+        });
+        expect(screen.getByText('Hotspot Protocol')).toBeInTheDocument();
+        // The saved protocol is selected; WPA3 is offered because the device supports it.
+        // Semantic UI renders the selected value as both the dropdown text and an option.
+        await waitFor(() => {
+            expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
+            expect(screen.getAllByText('WPA3').length).toBeGreaterThan(0);
+        });
+    });
+
+    test('hotspot protocol dropdown only offers WPA2 on a Raspberry Pi', async () => {
+        const {getHotspotProtocols} = require('../../api/controller');
+        getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2']});
+        renderControllerPage();
+        await waitFor(() => {
+            expect(getHotspotProtocols).toHaveBeenCalledWith('wlan0');
+        });
+        await waitFor(() => {
+            expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
+        });
+        expect(screen.queryByText('WPA3')).not.toBeInTheDocument();
     });
 
 });

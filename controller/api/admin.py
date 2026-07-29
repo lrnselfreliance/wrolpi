@@ -9,6 +9,7 @@ from controller.api.schemas import (
     BluetoothStatusResponse,
     HotspotActionResponse,
     HotspotDevicesResponse,
+    HotspotProtocolsResponse,
     HotspotSettingsRequest,
     HotspotSettingsResponse,
     HotspotStatusResponse,
@@ -33,8 +34,10 @@ from controller.lib.admin import (
     enable_hotspot,
     enable_throttle,
     get_bluetooth_status_dict,
+    get_device_hotspot_protocols,
     get_hotspot_device,
     get_hotspot_password,
+    get_hotspot_protocol,
     get_hotspot_ssid,
     get_hotspot_status_dict,
     get_throttle_status_dict,
@@ -70,6 +73,13 @@ async def hotspot_devices() -> HotspotDevicesResponse:
     return HotspotDevicesResponse(devices=get_wifi_devices())
 
 
+@router.get("/api/hotspot/protocols", response_model=HotspotProtocolsResponse)
+async def hotspot_protocols(device: str = None) -> HotspotProtocolsResponse:
+    """List the hotspot protocols a WiFi device can host; defaults to the configured device."""
+    device = device or get_hotspot_device()
+    return HotspotProtocolsResponse(device=device, protocols=get_device_hotspot_protocols(device))
+
+
 @router.get("/api/hotspot/settings", response_model=HotspotSettingsResponse)
 async def hotspot_settings() -> HotspotSettingsResponse:
     """Get WiFi hotspot settings."""
@@ -77,6 +87,7 @@ async def hotspot_settings() -> HotspotSettingsResponse:
         device=get_hotspot_device(),
         ssid=get_hotspot_ssid(),
         password=get_hotspot_password(),
+        protocol=get_hotspot_protocol(),
     )
 
 
@@ -86,10 +97,12 @@ async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSet
     # 500 matches the other subsystem endpoints (hotspot/bluetooth/throttle) in Docker mode.
     if is_docker_mode():
         raise HTTPException(status_code=500, detail="Not available in Docker mode")
-    result = update_hotspot_settings(device=request.device, ssid=request.ssid, password=request.password)
+    result = update_hotspot_settings(device=request.device, ssid=request.ssid, password=request.password,
+                                     protocol=request.protocol)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Failed"))
-    return HotspotSettingsResponse(device=result["device"], ssid=result["ssid"], password=result["password"])
+    return HotspotSettingsResponse(device=result["device"], ssid=result["ssid"], password=result["password"],
+                                   protocol=result["protocol"])
 
 
 @router.post("/api/hotspot/enable", response_model=HotspotActionResponse)

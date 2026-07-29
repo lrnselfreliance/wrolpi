@@ -52,6 +52,34 @@ class TestHotspotDevicesEndpoint:
         assert response.json() == {"devices": []}
 
 
+class TestHotspotProtocolsEndpoint:
+    """GET /api/hotspot/protocols lists the protocols a device can host."""
+
+    def test_protocols_endpoint_shape(self, test_client):
+        """Should probe the requested device."""
+        from unittest import mock
+        with mock.patch("controller.api.admin.get_device_hotspot_protocols",
+                        return_value=["wpa2", "wpa3"]) as mock_protocols:
+            response = test_client.get("/api/hotspot/protocols?device=wlp2s0")
+        assert response.status_code == 200
+        assert response.json() == {"device": "wlp2s0", "protocols": ["wpa2", "wpa3"]}
+        mock_protocols.assert_called_once_with("wlp2s0")
+
+    def test_protocols_defaults_to_configured_device(self, test_client):
+        """Should probe the configured hotspot device when none is given."""
+        from unittest import mock
+        with mock.patch("controller.api.admin.get_device_hotspot_protocols", return_value=["wpa2"]):
+            response = test_client.get("/api/hotspot/protocols")
+        assert response.status_code == 200
+        assert response.json() == {"device": "wlan0", "protocols": ["wpa2"]}
+
+    def test_protocols_empty_in_docker(self, test_client_docker_mode):
+        """Docker mode cannot host a hotspot."""
+        response = test_client_docker_mode.get("/api/hotspot/protocols?device=wlan0")
+        assert response.status_code == 200
+        assert response.json() == {"device": "wlan0", "protocols": []}
+
+
 class TestHotspotSettingsEndpoint:
     """GET/POST /api/hotspot/settings manage hotspot settings in controller.yaml."""
 
@@ -59,21 +87,29 @@ class TestHotspotSettingsEndpoint:
         """Should return the current hotspot settings."""
         response = test_client.get("/api/hotspot/settings")
         assert response.status_code == 200
-        assert response.json() == {"device": "wlan0", "ssid": "WROLPi", "password": "wrolpi hotspot"}
+        assert response.json() == {"device": "wlan0", "ssid": "WROLPi", "password": "wrolpi hotspot",
+                                   "protocol": "wpa2"}
 
     def test_post_settings(self, test_client, mock_config_path):
         """Should update settings and persist them to controller.yaml."""
         response = test_client.post(
             "/api/hotspot/settings",
-            json={"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123"},
+            json={"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123", "protocol": "wpa3"},
         )
         assert response.status_code == 200
-        assert response.json() == {"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123"}
+        assert response.json() == {"device": "wlp2s0", "ssid": "RafaelPi", "password": "password123",
+                                   "protocol": "wpa3"}
         assert "wlp2s0" in mock_config_path.read_text()
+        assert "wpa3" in mock_config_path.read_text()
 
     def test_post_rejects_short_password(self, test_client, mock_config_path):
         """Should reject a password shorter than 8 characters."""
         response = test_client.post("/api/hotspot/settings", json={"password": "short"})
+        assert response.status_code == 400
+
+    def test_post_rejects_invalid_protocol(self, test_client, mock_config_path):
+        """Should reject protocols other than wpa2/wpa3."""
+        response = test_client.post("/api/hotspot/settings", json={"protocol": "wep"})
         assert response.status_code == 400
 
     def test_post_rejected_in_docker(self, test_client_docker_mode):

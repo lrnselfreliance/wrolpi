@@ -12,6 +12,7 @@ import {
     getDisks,
     getFstabEntries,
     getHotspotDevices,
+    getHotspotProtocols,
     getHotspotSettings,
     getSambaStatus,
     getServiceLogs,
@@ -1410,10 +1411,17 @@ function SambaSection() {
 }
 
 
+// Human labels for the hotspot protocols reported by the Controller.
+const hotspotProtocolLabels = {
+    wpa2: 'WPA2 (most compatible)',
+    wpa3: 'WPA3',
+};
+
 function HotspotSettingsForm() {
     const dockerized = useDockerized();
     const [devices, setDevices] = React.useState([]);
-    const [form, setForm] = React.useState({device: '', ssid: '', password: ''});
+    const [protocols, setProtocols] = React.useState([]);
+    const [form, setForm] = React.useState({device: '', ssid: '', password: '', protocol: ''});
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [qrOpen, setQrOpen] = React.useState(false);
@@ -1422,7 +1430,12 @@ function HotspotSettingsForm() {
         const fetchSettings = async () => {
             try {
                 const [settings, devicesResponse] = await Promise.all([getHotspotSettings(), getHotspotDevices()]);
-                setForm({device: settings.device, ssid: settings.ssid, password: settings.password});
+                setForm({
+                    device: settings.device,
+                    ssid: settings.ssid,
+                    password: settings.password,
+                    protocol: settings.protocol,
+                });
                 setDevices(devicesResponse.devices || []);
             } catch (e) {
                 console.error('Failed to fetch hotspot settings', e);
@@ -1432,6 +1445,23 @@ function HotspotSettingsForm() {
         };
         fetchSettings();
     }, []);
+
+    // The supported protocols depend on the selected device's hardware.
+    React.useEffect(() => {
+        if (!form.device) {
+            return;
+        }
+        const fetchProtocols = async () => {
+            try {
+                const response = await getHotspotProtocols(form.device);
+                setProtocols(response.protocols || []);
+            } catch (e) {
+                console.error('Failed to fetch hotspot protocols', e);
+                setProtocols([]);
+            }
+        };
+        fetchProtocols();
+    }, [form.device]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -1460,6 +1490,10 @@ function HotspotSettingsForm() {
     // (e.g. a USB WiFi dongle is unplugged).
     const deviceOptions = [...new Set([...devices, form.device].filter(Boolean))]
         .map(device => ({key: device, value: device, text: device}));
+
+    // Keep the saved protocol selectable even if the device does not report it.
+    const protocolOptions = [...new Set([...protocols, form.protocol].filter(Boolean))]
+        .map(protocol => ({key: protocol, value: protocol, text: hotspotProtocolLabels[protocol] || protocol}));
 
     // Special string which allows a mobile device to connect to a specific Wi-Fi.
     // The WPA QR format requires backslash-escaping of \ ; , " in the SSID and password.
@@ -1493,6 +1527,15 @@ function HotspotSettingsForm() {
                     value={form.device}
                     disabled={dockerized || saving}
                     onChange={(e, {value}) => setForm({...form, device: value})}
+                />
+                <Form.Dropdown
+                    selection
+                    label='Hotspot Protocol'
+                    placeholder='No protocols supported'
+                    options={protocolOptions}
+                    value={form.protocol}
+                    disabled={dockerized || saving}
+                    onChange={(e, {value}) => setForm({...form, protocol: value})}
                 />
             </Form.Group>
             <Button

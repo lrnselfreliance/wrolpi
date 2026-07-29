@@ -975,6 +975,7 @@
             <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
             <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
             <button id="desktop-btn" class="btn" onclick="toggleDesktop()" disabled>Loading...</button>
+            <button id="vnc-btn" class="btn" onclick="toggleVnc()" disabled>Loading...</button>
         </div>
         <details style="margin-bottom: 1rem;">
             <summary style="cursor: pointer;">Hotspot Settings</summary>
@@ -1593,6 +1594,60 @@
             alert(`Desktop error: ${e.message}`);
         }
         await updateDesktopButton();
+        await updateVncButton();
+    }
+
+    // --- VNC ---
+    let vncRunning = null;
+
+    async function updateVncButton() {
+        const btn = document.getElementById('vnc-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/vnc/status');
+            vncRunning = data.running;
+            if (!data.available) {
+                btn.textContent = 'VNC Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+                btn.title = data.reason || '';
+            } else if (data.running) {
+                btn.textContent = 'Stop VNC';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+                // VNC serves the desktop session, so say when there is nothing to serve.
+                btn.title = data.desktop_running ? '' : 'The Desktop is stopped, so VNC clients see nothing';
+            } else if (!data.can_start) {
+                btn.textContent = 'Start VNC';
+                btn.disabled = true;
+                btn.className = 'btn';
+                btn.title = data.reason || '';
+            } else {
+                btn.textContent = 'Start VNC';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+                btn.title = '';
+            }
+        } catch (e) {
+            btn.textContent = 'VNC Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleVnc() {
+        const btn = document.getElementById('vnc-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (vncRunning) {
+                await apiCall('api/vnc/stop', 'POST');
+            } else {
+                await apiCall('api/vnc/start', 'POST');
+            }
+        } catch (e) {
+            alert(`VNC error: ${e.message}`);
+        }
+        await updateVncButton();
     }
 
     async function waitForController(maxWaitMs = 60000) {
@@ -2978,6 +3033,7 @@
         updateHotspotButton();
         updateBluetoothButton();
         updateDesktopButton();
+        updateVncButton();
         loadHotspotSettings();
 
         // Initial update after a short delay (to not overlap with initial load)
@@ -2997,6 +3053,7 @@
             updateHotspotButton();
             updateBluetoothButton();
             updateDesktopButton();
+            updateVncButton();
         }, updateInterval);
     }
 </script>

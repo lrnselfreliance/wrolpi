@@ -49,6 +49,8 @@ import {
     stopHotspot,
     startDesktop,
     stopDesktop,
+    startVnc,
+    stopVnc,
     enableThrottle,
     disableThrottle,
     getControllerStats,
@@ -1250,6 +1252,48 @@ export const useDesktop = () => {
     }
 
     return {on, setDesktop: localSetDesktop};
+}
+
+export const useVnc = () => {
+    const [on, setOn] = useState(null);
+    const {status} = useContext(StatusContext);
+    // VNC serves the desktop session, so it cannot be started without one.
+    const desktopRunning = status?.desktop_status === 'on';
+
+    useEffect(() => {
+        const vncStatus = status?.vnc_status;
+        if (vncStatus === 'on') {
+            setOn(true);
+        } else if (vncStatus === 'off') {
+            setOn(false);
+        } else {
+            setOn(null);
+        }
+    }, [status?.vnc_status]);
+
+    const localSetVnc = async (running) => {
+        const previous = on;
+        setOn(null);
+        try {
+            if (running) {
+                await startVnc();
+            } else {
+                await stopVnc();
+            }
+        } catch (e) {
+            console.error('VNC error:', e);
+            toast({
+                type: 'error',
+                title: 'VNC Error',
+                description: e.message || 'Could not start/stop VNC. See server logs.',
+                time: 5000,
+            });
+            // The status poll will not re-sync `on` because VNC did not change.
+            setOn(previous);
+        }
+    }
+
+    return {on, desktopRunning, setVnc: localSetVnc};
 }
 
 export const useSearchDirectories = (value) => {

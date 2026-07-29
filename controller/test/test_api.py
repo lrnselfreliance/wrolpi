@@ -109,6 +109,7 @@ class TestOpenAPI:
         "/api/hotspot/status", "/api/hotspot/start", "/api/hotspot/stop",
         "/api/bluetooth/status", "/api/bluetooth/unblock", "/api/bluetooth/block",
         "/api/desktop/status", "/api/desktop/start", "/api/desktop/stop",
+        "/api/vnc/status", "/api/vnc/start", "/api/vnc/stop",
         "/api/throttle/status", "/api/throttle/enable", "/api/throttle/disable",
         "/api/timezone/status", "/api/timezone/set",
         "/api/shutdown", "/api/reboot", "/api/restart",

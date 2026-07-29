@@ -21,7 +21,7 @@ import {
 } from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
+import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useVnc, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
@@ -1059,6 +1059,34 @@ export function DesktopToggle() {
             onChange={handleChange}
         />
         {disabled && <InfoPopup content='The Desktop is not supported on this server'/>}
+    </div>;
+}
+
+export function VncToggle() {
+    let {on, desktopRunning, setVnc} = useVnc();
+    const unsupported = on === null;
+    // VNC serves the desktop session; it cannot be started without one.  Stopping
+    // stays available so a running VNC server is never stranded on.
+    const blockedByDesktop = !desktopRunning && on !== true;
+    const disabled = unsupported || blockedByDesktop;
+
+    let info = null;
+    if (unsupported) {
+        info = 'VNC is not supported on this server';
+    } else if (blockedByDesktop) {
+        info = 'Start the Desktop before starting VNC';
+    } else if (on === true && !desktopRunning) {
+        info = 'The Desktop is stopped, so VNC clients will see nothing';
+    }
+
+    return <div style={{margin: '0.5em'}}>
+        <Toggle
+            label='VNC'
+            disabled={disabled}
+            checked={on === true}
+            onChange={checked => setVnc(checked)}
+        />
+        {info && <InfoPopup content={info}/>}
     </div>;
 }
 

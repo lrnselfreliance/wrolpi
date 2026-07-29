@@ -164,12 +164,20 @@ class HotspotDevicesResponse(BaseModel):
     devices: list[str] = Field(description="Available WiFi device names")
 
 
+class HotspotProtocolsResponse(BaseModel):
+    """Response model for /api/hotspot/protocols endpoint."""
+
+    device: str = Field(description="WiFi device name that was probed")
+    protocols: list[str] = Field(description="Hotspot protocols the device can host (wpa2, wpa3)")
+
+
 class HotspotSettingsRequest(BaseModel):
     """Request model for updating hotspot settings; only provided values are changed."""
 
     device: Optional[str] = Field(default=None, description="WiFi device name")
     ssid: Optional[str] = Field(default=None, description="Hotspot SSID")
     password: Optional[str] = Field(default=None, description="Hotspot password (8 to 63 characters)")
+    protocol: Optional[str] = Field(default=None, description="Hotspot protocol (wpa2 or wpa3)")
 
 
 class HotspotSettingsResponse(BaseModel):
@@ -178,6 +186,7 @@ class HotspotSettingsResponse(BaseModel):
     device: str = Field(description="WiFi device name")
     ssid: str = Field(description="Hotspot SSID")
     password: str = Field(description="Hotspot password")
+    protocol: str = Field(description="Hotspot protocol (wpa2 or wpa3)")
 
 
 class HotspotActionResponse(BaseModel):

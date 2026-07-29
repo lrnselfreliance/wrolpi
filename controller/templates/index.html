@@ -985,7 +985,12 @@
                     <input type="text" id="hotspot-password">
                 </label>
                 <label>Device
-                    <select id="hotspot-device"
+                    <select id="hotspot-device" onchange="loadHotspotProtocols()"
+                            style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
+                    </select>
+                </label>
+                <label>Protocol
+                    <select id="hotspot-protocol"
                             style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #fff; font-size: 1rem;">
                     </select>
                 </label>
@@ -1442,8 +1447,35 @@
                 option.selected = name === settings.device;
                 select.appendChild(option);
             }
+            await loadHotspotProtocols(settings.protocol);
         } catch (e) {
             console.error('Failed to load hotspot settings', e);
+        }
+    }
+
+    // Human labels for the hotspot protocols reported by the Controller.
+    const hotspotProtocolLabels = {wpa2: 'WPA2 (most compatible)', wpa3: 'WPA3'};
+
+    async function loadHotspotProtocols(savedProtocol) {
+        // The supported protocols depend on the selected device's hardware.
+        const select = document.getElementById('hotspot-protocol');
+        const device = document.getElementById('hotspot-device').value;
+        if (!select || !device) return;
+        savedProtocol = savedProtocol || select.value;
+        try {
+            const response = await apiCall(`api/hotspot/protocols?device=${encodeURIComponent(device)}`);
+            select.innerHTML = '';
+            // Keep the saved protocol selectable even if the device does not report it.
+            const protocols = [...new Set([...(response.protocols || []), savedProtocol])].filter(Boolean);
+            for (const protocol of protocols) {
+                const option = document.createElement('option');
+                option.value = protocol;
+                option.textContent = hotspotProtocolLabels[protocol] || protocol;
+                option.selected = protocol === savedProtocol;
+                select.appendChild(option);
+            }
+        } catch (e) {
+            console.error('Failed to load hotspot protocols', e);
         }
     }
 
@@ -1455,6 +1487,7 @@
                 ssid: document.getElementById('hotspot-ssid').value,
                 password: document.getElementById('hotspot-password').value,
                 device: document.getElementById('hotspot-device').value,
+                protocol: document.getElementById('hotspot-protocol').value || null,
             });
             await updateHotspotButton();
         } catch (e) {

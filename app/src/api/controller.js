@@ -79,6 +79,11 @@ export async function getHotspotDevices() {
     return controllerFetch('/hotspot/devices');
 }
 
+export async function getHotspotProtocols(device) {
+    const query = device ? `?device=${encodeURIComponent(device)}` : '';
+    return controllerFetch(`/hotspot/protocols${query}`);
+}
+
 export async function getHotspotSettings() {
     return controllerFetch('/hotspot/settings');
 }

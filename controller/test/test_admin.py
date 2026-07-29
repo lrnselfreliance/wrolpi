@@ -21,8 +21,10 @@ from controller.lib.admin import (
     get_hotspot_status_dict,
     get_throttle_status,
     get_timezone_status_dict,
+    get_device_hotspot_protocols,
     get_hotspot_device,
     get_hotspot_password,
+    get_hotspot_protocol,
     get_hotspot_ssid,
     get_wifi_devices,
     migrate_hotspot_settings_from_wrolpi_config,
@@ -387,6 +389,26 @@ class TestUpdateHotspotSettings:
         assert result["ssid"] == 'WROLPi'
         assert result["password"] == 'wrolpi hotspot'
 
+    def test_updates_protocol(self, mock_config_path, reset_runtime_config):
+        """The protocol is saved to controller.yaml and returned."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(protocol='wpa3')
+
+        assert result["success"] is True
+        assert result["protocol"] == 'wpa3'
+        assert get_hotspot_protocol() == 'wpa3'
+        saved = yaml.safe_load(mock_config_path.read_text())
+        assert saved['hotspot']['protocol'] == 'wpa3'
+
+    def test_rejects_invalid_protocol(self, mock_config_path, reset_runtime_config):
+        """Only wpa2 and wpa3 are valid protocols."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            result = update_hotspot_settings(protocol='wep')
+
+        assert result["success"] is False
+        assert "protocol" in result["error"].lower()
+        assert get_hotspot_protocol() == 'wpa2'
+
     def test_rejects_short_password(self, mock_config_path, reset_runtime_config):
         """nmcli requires a WPA password of 8 to 63 characters."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
@@ -424,6 +446,134 @@ class TestUpdateHotspotSettings:
 
         assert result["success"] is False
         assert "not mounted" in result["error"]
+
+
+# `iw dev wlan0 info` output; only the "wiphy" line matters.
+IW_DEV_INFO = """Interface wlan0
+\tifindex 3
+\twdev 0x1
+\taddr d8:3a:dd:11:22:33
+\ttype managed
+\twiphy 0
+\ttxpower 31.00 dBm
+"""
+
+# Raspberry Pi brcmfmac (verified on real Pi 4/Pi 5 hardware): AP mode, but no
+# AP/VLAN (fullmac driver) and no AP-mode SAE, so WPA3 hotspot is not possible.
+# "SAE with AUTHENTICATE command" is station-mode WPA3 (joining, not hosting).
+IW_PHY_BRCMFMAC = """Wiphy phy0
+\twiphy index: 0
+\tmax # scan SSIDs: 10
+\tSupported Ciphers:
+\t\t* WEP40 (00-0f-ac:1)
+\t\t* WEP104 (00-0f-ac:5)
+\t\t* TKIP (00-0f-ac:2)
+\t\t* CCMP-128 (00-0f-ac:4)
+\t\t* CMAC (00-0f-ac:6)
+\tAvailable Antennas: TX 0 RX 0
+\tSupported interface modes:
+\t\t * IBSS
+\t\t * managed
+\t\t * AP
+\t\t * P2P-client
+\t\t * P2P-GO
+\t\t * P2P-device
+\tDevice supports SAE with AUTHENTICATE command
+\tSupported extended features:
+\t\t* [ CQM_RSSI_LIST ]: multiple CQM_RSSI_THOLD records
+\t\t* [ DFS_OFFLOAD ]: DFS offload
+"""
+
+# mac80211 driver (Intel/Atheros style): AP/VLAN plus the CMAC cipher means
+# wpa_supplicant can run SAE in software for the AP.
+IW_PHY_MAC80211 = """Wiphy phy0
+\tmax # scan SSIDs: 4
+\tSupported Ciphers:
+\t\t* WEP40 (00-0f-ac:1)
+\t\t* TKIP (00-0f-ac:2)
+\t\t* CCMP-128 (00-0f-ac:4)
+\t\t* CMAC (00-0f-ac:6)
+\tSupported interface modes:
+\t\t * IBSS
+\t\t * managed
+\t\t * AP
+\t\t * AP/VLAN
+\t\t * monitor
+\t\t * mesh point
+\tSupported extended features:
+\t\t* [ RRM ]: RRM
+\t\t* [ FILS_STA ]: FILS shared key authentication support
+"""
+
+# Fullmac driver with AP-mode SAE offload advertised by the firmware.
+# Older iw releases print "Extended features:" instead of "Supported extended features:".
+IW_PHY_SAE_OFFLOAD_AP = """Wiphy phy0
+\tSupported Ciphers:
+\t\t* CCMP-128 (00-0f-ac:4)
+\tSupported interface modes:
+\t\t * managed
+\t\t * AP
+\tExtended features:
+\t\t* [ SAE_OFFLOAD ]: SAE offload support
+\t\t* [ SAE_OFFLOAD_AP ]: SAE offload support (AP mode)
+"""
+
+# Station-only hardware which cannot host a hotspot at all.
+IW_PHY_NO_AP = """Wiphy phy0
+\tSupported Ciphers:
+\t\t* CCMP-128 (00-0f-ac:4)
+\tSupported interface modes:
+\t\t * managed
+\t\t * monitor
+"""
+
+
+class TestGetDeviceHotspotProtocols:
+    """Tests for get_device_hotspot_protocols; WPA3 requires SAE support in AP mode."""
+
+    @staticmethod
+    def _protocols(phy_info: str) -> list:
+        dev_info = mock.Mock(returncode=0, stdout=IW_DEV_INFO, stderr="")
+        phy = mock.Mock(returncode=0, stdout=phy_info, stderr="")
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=[dev_info, phy]) as mock_run:
+                result = get_device_hotspot_protocols("wlan0")
+        # The wiphy index from `iw dev` is used to query the phy.
+        assert mock_run.call_args_list[1][0][0] == ["/usr/sbin/iw", "phy", "phy0", "info"]
+        return result
+
+    def test_rpi_brcmfmac_is_wpa2_only(self):
+        """The Raspberry Pi's fullmac driver cannot host a WPA3 (SAE) AP."""
+        assert self._protocols(IW_PHY_BRCMFMAC) == ["wpa2"]
+
+    def test_mac80211_driver_supports_wpa3(self):
+        """mac80211 drivers (AP/VLAN listed) with the CMAC cipher can run software SAE."""
+        assert self._protocols(IW_PHY_MAC80211) == ["wpa2", "wpa3"]
+
+    def test_sae_offload_ap_supports_wpa3(self):
+        """Firmware advertising SAE_OFFLOAD_AP can host a WPA3 AP."""
+        assert self._protocols(IW_PHY_SAE_OFFLOAD_AP) == ["wpa2", "wpa3"]
+
+    def test_station_only_hardware_has_no_protocols(self):
+        """A device without AP mode cannot host a hotspot at all."""
+        assert self._protocols(IW_PHY_NO_AP) == []
+
+    def test_returns_empty_in_docker_mode(self):
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            assert get_device_hotspot_protocols("wlan0") == []
+
+    def test_unknown_device_has_no_protocols(self):
+        """`iw dev` fails for a device which does not exist."""
+        dev_info = mock.Mock(returncode=237, stdout="", stderr="command failed: No such device")
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=[dev_info]):
+                assert get_device_hotspot_protocols("wlan9") == []
+
+    def test_assumes_wpa2_when_iw_missing(self):
+        """Without `iw` we cannot probe; assume the WPA2 hotspot nmcli has always created."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
+                assert get_device_hotspot_protocols("wlan0") == ["wpa2"]
 
 
 class TestGetWifiDevices:
@@ -514,9 +664,10 @@ class TestEnableHotspot:
             with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
                 radio_on = mock.Mock(returncode=0, stdout="", stderr="")
                 device_ready = mock.Mock(returncode=0, stdout="wlan1:disconnected\n", stderr="")
-                hotspot_ok = mock.Mock(returncode=0, stdout="", stderr="")
+                ok = mock.Mock(returncode=0, stdout="", stderr="")
 
-                with mock.patch("subprocess.run", side_effect=[radio_on, device_ready, hotspot_ok]) as mock_subprocess:
+                with mock.patch("subprocess.run",
+                                side_effect=[radio_on, device_ready, ok, ok, ok]) as mock_subprocess:
                     with mock.patch("time.sleep"):
                         enable_hotspot()
 
@@ -529,6 +680,64 @@ class TestEnableHotspot:
                     assert "TestSSID" in cmd_args
                     assert "testpassword123" in cmd_args
 
+    @staticmethod
+    def _run_enable(protocol: str, results: list) -> tuple:
+        """Run enable_hotspot() with the given hotspot.protocol and subprocess results."""
+        def mock_get_config(key, default=None):
+            return {'hotspot.protocol': protocol}.get(key, default)
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
+                with mock.patch("subprocess.run", side_effect=results) as mock_subprocess:
+                    with mock.patch("time.sleep"):
+                        result = enable_hotspot()
+        return result, mock_subprocess.call_args_list
+
+    def test_wpa2_sets_psk_key_mgmt(self):
+        """The Hotspot connection is explicitly set to WPA2 so a reused profile
+        does not keep a previously configured protocol."""
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        result, calls = self._run_enable('wpa2', [ok, device_ready, ok, ok, ok])
+
+        assert result["success"] is True
+        modify_call = [c[0][0] for c in calls if 'modify' in c[0][0]]
+        assert modify_call and "wpa-psk" in modify_call[0]
+
+    def test_wpa3_sets_sae_key_mgmt(self):
+        """WPA3 modifies the Hotspot connection to SAE with required PMF, then re-activates."""
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        result, calls = self._run_enable('wpa3', [ok, device_ready, ok, ok, ok])
+
+        assert result["success"] is True
+        modify_call = [c[0][0] for c in calls if 'modify' in c[0][0]]
+        assert modify_call and "sae" in modify_call[0]
+        assert "802-11-wireless-security.pmf" in modify_call[0]
+        up_call = [c[0][0] for c in calls if 'up' in c[0][0]]
+        assert up_call, "Hotspot connection was not re-activated"
+
+    def test_wpa3_failure_reverts_to_wpa2(self):
+        """If the driver rejects WPA3, the hotspot is reverted to WPA2 and an error returned."""
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        sae_failed = mock.Mock(returncode=1, stdout="", stderr="Error: SAE not supported")
+        # radio, poll, hotspot, modify(sae) fails, revert modify, revert up.
+        result, calls = self._run_enable('wpa3', [ok, device_ready, ok, sae_failed, ok, ok])
+
+        assert result["success"] is False
+        assert "wpa3" in result["error"].lower()
+        modify_calls = [c[0][0] for c in calls if 'modify' in c[0][0]]
+        assert len(modify_calls) == 2 and "wpa-psk" in modify_calls[1]
+
+    def test_wpa2_modify_failure_still_succeeds(self):
+        """A failure setting WPA2 explicitly is not fatal; nmcli already created a WPA2 hotspot."""
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        failed = mock.Mock(returncode=1, stdout="", stderr="Error: unknown property")
+        result, _ = self._run_enable('wpa2', [ok, device_ready, ok, failed])
+
+        assert result["success"] is True
 
     def test_waits_for_device_ready_after_radio_on(self):
         """Should poll device status after turning radio on, waiting for device
@@ -546,6 +755,8 @@ class TestEnableHotspot:
                 device_unavailable,  # nmcli -t device status (not ready)
                 device_ready,        # nmcli -t device status (ready)
                 hotspot_result,      # nmcli device wifi hotspot
+                hotspot_result,      # nmcli connection modify Hotspot
+                hotspot_result,      # nmcli connection up Hotspot
             ]):
                 with mock.patch("time.sleep"):  # Don't actually sleep in tests
                     result = enable_hotspot()

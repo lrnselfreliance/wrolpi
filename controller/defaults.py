@@ -121,6 +121,7 @@ DEFAULT_CONFIG = {
         "device": "wlan0",
         "ssid": "WROLPi",
         "password": "wrolpi hotspot",
+        "protocol": "wpa2",  # wpa2 (wpa-psk) or wpa3 (sae); see get_device_hotspot_protocols
     },
 
     "throttle": {

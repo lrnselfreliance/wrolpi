@@ -58,7 +58,95 @@ def get_hotspot_password() -> str:
     return get_config_value('hotspot.password', 'wrolpi hotspot')
 
 
-def update_hotspot_settings(device: str = None, ssid: str = None, password: str = None) -> dict:
+# WPA2 uses nmcli's default `wpa-psk` key management; WPA3 uses `sae`.
+HOTSPOT_PROTOCOLS = ('wpa2', 'wpa3')
+
+
+def get_hotspot_protocol() -> str:
+    return get_config_value('hotspot.protocol', 'wpa2')
+
+
+def get_device_hotspot_protocols(device: str) -> list[str]:
+    """
+    Probe a WiFi device with `iw` and report which hotspot protocols it can host.
+
+    WPA2 only requires AP mode.  WPA3 requires SAE in AP mode, which is only possible
+    when the firmware offloads SAE for APs (SAE_OFFLOAD_AP), or the driver is
+    mac80211-based (advertises AP/VLAN) with the CMAC cipher so wpa_supplicant can run
+    SAE in software.  Notably the Raspberry Pi's brcmfmac driver supports neither.
+    """
+    if is_docker_mode():
+        return []
+
+    try:
+        # Absolute path like rfkill; `iw` is in /usr/sbin which is not on every PATH.
+        result = subprocess.run(
+            ["/usr/sbin/iw", "dev", device, "info"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+        wiphy = None
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("wiphy "):
+                wiphy = stripped.split()[1]
+                break
+        if wiphy is None:
+            return []
+
+        result = subprocess.run(
+            ["/usr/sbin/iw", "phy", f"phy{wiphy}", "info"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+        # Cannot probe without `iw`; assume the WPA2 hotspot nmcli has always created.
+        return ['wpa2']
+
+    modes, ciphers, ext_features = set(), set(), set()
+    section = None
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('Supported interface modes:'):
+            section = 'modes'
+            continue
+        elif stripped.startswith('Supported Ciphers:'):
+            section = 'ciphers'
+            continue
+        elif stripped.startswith(('Supported extended features:', 'Extended features:')):
+            # Real Pi hardware prints "Supported extended features:"; older iw
+            # releases print "Extended features:".
+            section = 'ext'
+            continue
+        if not stripped.startswith('*'):
+            section = None
+            continue
+        value = stripped.lstrip('* ').strip()
+        if section == 'modes':
+            modes.add(value)
+        elif section == 'ciphers':
+            ciphers.add(value.split()[0])
+        elif section == 'ext' and '[' in stripped and ']' in stripped:
+            ext_features.add(stripped.split('[', 1)[1].split(']', 1)[0].strip())
+
+    protocols = []
+    if 'AP' in modes:
+        protocols.append('wpa2')
+        sae_offload_ap = 'SAE_OFFLOAD_AP' in ext_features
+        software_sae = 'AP/VLAN' in modes and any('CMAC' in cipher for cipher in ciphers)
+        if sae_offload_ap or software_sae:
+            protocols.append('wpa3')
+    return protocols
+
+
+def update_hotspot_settings(device: str = None, ssid: str = None, password: str = None,
+                            protocol: str = None) -> dict:
     """
     Update hotspot settings in controller.yaml.  Only provided values are changed.
 
@@ -75,6 +163,8 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
     # nmcli requires a WPA password of 8 to 63 characters.
     if password is not None and not 8 <= len(password) <= 63:
         return {"success": False, "error": "Hotspot password must be 8 to 63 characters"}
+    if protocol is not None and protocol not in HOTSPOT_PROTOCOLS:
+        return {"success": False, "error": f"Hotspot protocol must be one of: {', '.join(HOTSPOT_PROTOCOLS)}"}
 
     changed = False
     if device:
@@ -86,6 +176,9 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
     if password:
         config_lib.update_config('hotspot.password', password)
         changed = True
+    if protocol:
+        config_lib.update_config('hotspot.protocol', protocol)
+        changed = True
 
     if changed:
         try:
@@ -93,12 +186,14 @@ def update_hotspot_settings(device: str = None, ssid: str = None, password: str 
         except RuntimeError as e:
             return {"success": False, "error": str(e)}
 
-    logger.info("Hotspot settings updated (device=%s, ssid=%s)", get_hotspot_device(), get_hotspot_ssid())
+    logger.info("Hotspot settings updated (device=%s, ssid=%s, protocol=%s)",
+                get_hotspot_device(), get_hotspot_ssid(), get_hotspot_protocol())
     return {
         "success": True,
         "device": get_hotspot_device(),
         "ssid": get_hotspot_ssid(),
         "password": get_hotspot_password(),
+        "protocol": get_hotspot_protocol(),
     }
 
 
@@ -299,6 +394,7 @@ def enable_hotspot() -> dict:
     device = get_hotspot_device()
     ssid = get_hotspot_ssid()
     password = get_hotspot_password()
+    protocol = get_hotspot_protocol()
 
     try:
         # First ensure radio is on
@@ -349,12 +445,54 @@ def enable_hotspot() -> dict:
             timeout=30,
         )
 
-        if result.returncode == 0:
-            logger.info("Hotspot enabled successfully on %s", device)
-            return {"success": True, "ssid": ssid, "device": device}
-        else:
+        if result.returncode != 0:
             logger.warning("Failed to enable hotspot: %s", result.stderr.strip())
             return {"success": False, "error": result.stderr.strip() or "Unknown error"}
+
+        # Explicitly set the key management so a reused "Hotspot" profile does not
+        # keep a previously configured protocol.  WPA3 (SAE) requires PMF.
+        key_mgmt = "sae" if protocol == "wpa3" else "wpa-psk"
+        pmf = "3" if protocol == "wpa3" else "0"  # 3=required, 0=default
+        modify = subprocess.run(
+            ["nmcli", "connection", "modify", "Hotspot",
+             "802-11-wireless-security.key-mgmt", key_mgmt,
+             "802-11-wireless-security.pmf", pmf],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        up = None
+        if modify.returncode == 0:
+            # Re-activate so the profile change takes effect.
+            up = subprocess.run(
+                ["nmcli", "connection", "up", "Hotspot"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+        if modify.returncode != 0 or up.returncode != 0:
+            error = (modify.stderr if modify.returncode != 0 else up.stderr).strip()
+            if protocol == "wpa3":
+                # The driver likely rejected SAE; revert so the hotspot still works.
+                logger.warning("Failed to enable WPA3 hotspot, reverting to WPA2: %s", error)
+                subprocess.run(
+                    ["nmcli", "connection", "modify", "Hotspot",
+                     "802-11-wireless-security.key-mgmt", "wpa-psk",
+                     "802-11-wireless-security.pmf", "0"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                subprocess.run(
+                    ["nmcli", "connection", "up", "Hotspot"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                return {"success": False,
+                        "error": f"WPA3 is not supported by {device}; hotspot reverted to WPA2: {error}"}
+            # WPA2 is what nmcli created the hotspot with anyway; not fatal.
+            logger.warning("Failed to explicitly set WPA2 on hotspot: %s", error)
+
+        logger.info("Hotspot enabled successfully on %s (%s)", device, protocol)
+        return {"success": True, "ssid": ssid, "device": device}
 
     except subprocess.TimeoutExpired:
         logger.warning("Timeout enabling hotspot on %s", device)

@@ -730,6 +730,19 @@ class TestEnableHotspot:
         modify_calls = [c[0][0] for c in calls if 'modify' in c[0][0]]
         assert len(modify_calls) == 2 and "wpa-psk" in modify_calls[1]
 
+    def test_wpa3_failed_revert_is_reported(self):
+        """If reverting to WPA2 also fails, the error must not claim the hotspot was reverted."""
+        ok = mock.Mock(returncode=0, stdout="", stderr="")
+        device_ready = mock.Mock(returncode=0, stdout="wlan0:disconnected\n", stderr="")
+        sae_failed = mock.Mock(returncode=1, stdout="", stderr="Error: SAE not supported")
+        revert_failed = mock.Mock(returncode=1, stdout="", stderr="Error: connection not found")
+        # radio, poll, hotspot, modify(sae) fails, revert modify fails.
+        result, _ = self._run_enable('wpa3', [ok, device_ready, ok, sae_failed, revert_failed])
+
+        assert result["success"] is False
+        assert "reverted" not in result["error"].lower()
+        assert "wpa3" in result["error"].lower()
+
     def test_wpa2_modify_failure_still_succeeds(self):
         """A failure setting WPA2 explicitly is not fatal; nmcli already created a WPA2 hotspot."""
         ok = mock.Mock(returncode=0, stdout="", stderr="")

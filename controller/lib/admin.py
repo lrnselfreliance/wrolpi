@@ -476,18 +476,26 @@ def enable_hotspot() -> dict:
             if protocol == "wpa3":
                 # The driver likely rejected SAE; revert so the hotspot still works.
                 logger.warning("Failed to enable WPA3 hotspot, reverting to WPA2: %s", error)
-                subprocess.run(
+                revert_modify = subprocess.run(
                     ["nmcli", "connection", "modify", "Hotspot",
                      "802-11-wireless-security.key-mgmt", "wpa-psk",
                      "802-11-wireless-security.pmf", "0"],
                     capture_output=True, text=True, timeout=10,
                 )
-                subprocess.run(
-                    ["nmcli", "connection", "up", "Hotspot"],
-                    capture_output=True, text=True, timeout=30,
-                )
+                revert_up = None
+                if revert_modify.returncode == 0:
+                    revert_up = subprocess.run(
+                        ["nmcli", "connection", "up", "Hotspot"],
+                        capture_output=True, text=True, timeout=30,
+                    )
+                if revert_modify.returncode == 0 and revert_up.returncode == 0:
+                    return {"success": False,
+                            "error": f"WPA3 is not supported by {device}; hotspot reverted to WPA2: {error}"}
+                revert_error = (revert_modify.stderr if revert_modify.returncode != 0 else revert_up.stderr).strip()
+                logger.error("Reverting hotspot to WPA2 also failed: %s", revert_error)
                 return {"success": False,
-                        "error": f"WPA3 is not supported by {device}; hotspot reverted to WPA2: {error}"}
+                        "error": f"WPA3 failed on {device} and falling back to WPA2 also failed;"
+                                 f" the hotspot may be down: {error}"}
             # WPA2 is what nmcli created the hotspot with anyway; not fatal.
             logger.warning("Failed to explicitly set WPA2 on hotspot: %s", error)
 

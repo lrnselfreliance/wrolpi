@@ -208,6 +208,19 @@ describe('ControllerPage', () => {
         });
     });
 
+    test('a saved protocol the device does not support is reset to a supported one', async () => {
+        const controllerApi = require('../../api/controller');
+        controllerApi.getHotspotSettings.mockResolvedValue(
+            {device: 'wlan0', ssid: 'WROLPi', password: 'wrolpi hotspot', protocol: 'wpa3'});
+        controllerApi.getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2']});
+        renderControllerPage();
+        // The stale WPA3 selection is replaced by the only protocol the device supports.
+        await waitFor(() => {
+            expect(screen.getAllByText('WPA2 (most compatible)').length).toBeGreaterThan(0);
+        });
+        expect(screen.queryByText('WPA3')).not.toBeInTheDocument();
+    });
+
     test('hotspot protocol dropdown only offers WPA2 on a Raspberry Pi', async () => {
         const {getHotspotProtocols} = require('../../api/controller');
         getHotspotProtocols.mockResolvedValue({device: 'wlan0', protocols: ['wpa2']});

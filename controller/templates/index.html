@@ -1464,14 +1464,19 @@
         savedProtocol = savedProtocol || select.value;
         try {
             const response = await apiCall(`api/hotspot/protocols?device=${encodeURIComponent(device)}`);
+            // Ignore out-of-order responses when the user switches devices quickly.
+            if (document.getElementById('hotspot-device').value !== device) return;
             select.innerHTML = '';
-            // Keep the saved protocol selectable even if the device does not report it.
-            const protocols = [...new Set([...(response.protocols || []), savedProtocol])].filter(Boolean);
+            // Keep the saved protocol only when probing found nothing (e.g. the saved
+            // device is unplugged); a successful probe is authoritative.
+            const supported = (response.protocols || []).filter(Boolean);
+            const protocols = supported.length ? supported : [savedProtocol].filter(Boolean);
+            const selected = protocols.includes(savedProtocol) ? savedProtocol : protocols[0];
             for (const protocol of protocols) {
                 const option = document.createElement('option');
                 option.value = protocol;
                 option.textContent = hotspotProtocolLabels[protocol] || protocol;
-                option.selected = protocol === savedProtocol;
+                option.selected = protocol === selected;
                 select.appendChild(option);
             }
         } catch (e) {

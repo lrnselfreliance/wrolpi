@@ -1451,16 +1451,32 @@ function HotspotSettingsForm() {
         if (!form.device) {
             return;
         }
+        // Ignore out-of-order responses when the user switches devices quickly.
+        let cancelled = false;
         const fetchProtocols = async () => {
             try {
                 const response = await getHotspotProtocols(form.device);
-                setProtocols(response.protocols || []);
+                if (cancelled) {
+                    return;
+                }
+                const supported = response.protocols || [];
+                setProtocols(supported);
+                // Reset a selection the probed device does not support (e.g. WPA3 kept
+                // after switching to a WPA2-only adapter).
+                if (supported.length) {
+                    setForm(f => supported.includes(f.protocol) ? f : {...f, protocol: supported[0]});
+                }
             } catch (e) {
-                console.error('Failed to fetch hotspot protocols', e);
-                setProtocols([]);
+                if (!cancelled) {
+                    console.error('Failed to fetch hotspot protocols', e);
+                    setProtocols([]);
+                }
             }
         };
         fetchProtocols();
+        return () => {
+            cancelled = true;
+        };
     }, [form.device]);
 
     const handleSave = async () => {

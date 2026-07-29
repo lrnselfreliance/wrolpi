@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException
 from controller.api.schemas import (
     BluetoothActionResponse,
     BluetoothStatusResponse,
+    DesktopActionResponse,
+    DesktopStatusResponse,
     HotspotActionResponse,
     HotspotDevicesResponse,
     HotspotProtocolsResponse,
@@ -27,13 +29,11 @@ from controller.api.schemas import (
     TimezoneStatusResponse,
 )
 from controller.lib.admin import (
-    disable_bluetooth,
-    disable_hotspot,
+    block_bluetooth,
     disable_throttle,
-    enable_bluetooth,
-    enable_hotspot,
     enable_throttle,
     get_bluetooth_status_dict,
+    get_desktop_status_dict,
     get_device_hotspot_protocols,
     get_hotspot_device,
     get_hotspot_password,
@@ -47,6 +47,11 @@ from controller.lib.admin import (
     restart_all_services,
     set_timezone,
     shutdown_system,
+    start_desktop,
+    start_hotspot,
+    stop_desktop,
+    stop_hotspot,
+    unblock_bluetooth,
     update_hotspot_settings,
 )
 from controller.lib.config import is_docker_mode
@@ -105,19 +110,19 @@ async def hotspot_settings_update(request: HotspotSettingsRequest) -> HotspotSet
                                    protocol=result["protocol"])
 
 
-@router.post("/api/hotspot/enable", response_model=HotspotActionResponse)
-async def hotspot_enable() -> HotspotActionResponse:
-    """Enable WiFi hotspot."""
-    result = enable_hotspot()
+@router.post("/api/hotspot/start", response_model=HotspotActionResponse)
+async def hotspot_start() -> HotspotActionResponse:
+    """Start the WiFi hotspot."""
+    result = start_hotspot()
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return HotspotActionResponse(**result)
 
 
-@router.post("/api/hotspot/disable", response_model=HotspotActionResponse)
-async def hotspot_disable() -> HotspotActionResponse:
-    """Disable WiFi hotspot."""
-    result = disable_hotspot()
+@router.post("/api/hotspot/stop", response_model=HotspotActionResponse)
+async def hotspot_stop() -> HotspotActionResponse:
+    """Stop the WiFi hotspot by turning the WiFi radio off."""
+    result = stop_hotspot()
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return HotspotActionResponse(**result)
@@ -131,22 +136,48 @@ async def bluetooth_status() -> BluetoothStatusResponse:
     return BluetoothStatusResponse(**await get_bluetooth_status_dict())
 
 
-@router.post("/api/bluetooth/enable", response_model=BluetoothActionResponse)
-async def bluetooth_enable() -> BluetoothActionResponse:
-    """Enable Bluetooth radio."""
-    result = await enable_bluetooth()
+@router.post("/api/bluetooth/unblock", response_model=BluetoothActionResponse)
+async def bluetooth_unblock() -> BluetoothActionResponse:
+    """Unblock the Bluetooth radio (turn it on)."""
+    result = await unblock_bluetooth()
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return BluetoothActionResponse(**result)
 
 
-@router.post("/api/bluetooth/disable", response_model=BluetoothActionResponse)
-async def bluetooth_disable() -> BluetoothActionResponse:
-    """Disable Bluetooth radio."""
-    result = await disable_bluetooth()
+@router.post("/api/bluetooth/block", response_model=BluetoothActionResponse)
+async def bluetooth_block() -> BluetoothActionResponse:
+    """Block the Bluetooth radio (turn it off)."""
+    result = await block_bluetooth()
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return BluetoothActionResponse(**result)
+
+
+# --- Desktop ---
+
+@router.get("/api/desktop/status", response_model=DesktopStatusResponse)
+async def desktop_status() -> DesktopStatusResponse:
+    """Get graphical desktop (display manager) status."""
+    return DesktopStatusResponse(**await get_desktop_status_dict())
+
+
+@router.post("/api/desktop/start", response_model=DesktopActionResponse)
+async def desktop_start() -> DesktopActionResponse:
+    """Start the graphical desktop until stopped or reboot."""
+    result = await start_desktop()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return DesktopActionResponse(**result)
+
+
+@router.post("/api/desktop/stop", response_model=DesktopActionResponse)
+async def desktop_stop() -> DesktopActionResponse:
+    """Stop the graphical desktop; it returns on the next boot (fail open)."""
+    result = await stop_desktop()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return DesktopActionResponse(**result)
 
 
 # --- Samba ---

@@ -974,6 +974,7 @@
         <div class="action-buttons" style="margin-bottom: 1rem;">
             <button id="hotspot-btn" class="btn" onclick="toggleHotspot()" disabled>Loading...</button>
             <button id="bluetooth-btn" class="btn" onclick="toggleBluetooth()" disabled>Loading...</button>
+            <button id="desktop-btn" class="btn" onclick="toggleDesktop()" disabled>Loading...</button>
         </div>
         <details style="margin-bottom: 1rem;">
             <summary style="cursor: pointer;">Hotspot Settings</summary>
@@ -1396,11 +1397,11 @@
                 btn.disabled = true;
                 btn.className = 'btn';
             } else if (data.enabled) {
-                btn.textContent = 'Disable Hotspot';
+                btn.textContent = 'Stop Hotspot';
                 btn.disabled = false;
                 btn.className = 'btn btn-warning';
             } else {
-                btn.textContent = 'Enable Hotspot';
+                btn.textContent = 'Start Hotspot';
                 btn.disabled = false;
                 btn.className = 'btn btn-primary';
             }
@@ -1416,9 +1417,9 @@
         btn.innerHTML = '<span class="loading"></span>';
         try {
             if (hotspotEnabled) {
-                await apiCall('api/hotspot/disable', 'POST');
+                await apiCall('api/hotspot/stop', 'POST');
             } else {
-                await apiCall('api/hotspot/enable', 'POST');
+                await apiCall('api/hotspot/start', 'POST');
             }
         } catch (e) {
             alert(`Hotspot error: ${e.message}`);
@@ -1535,14 +1536,63 @@
         btn.innerHTML = '<span class="loading"></span>';
         try {
             if (bluetoothEnabled) {
-                await apiCall('api/bluetooth/disable', 'POST');
+                await apiCall('api/bluetooth/block', 'POST');
             } else {
-                await apiCall('api/bluetooth/enable', 'POST');
+                await apiCall('api/bluetooth/unblock', 'POST');
             }
         } catch (e) {
             alert(`Bluetooth error: ${e.message}`);
         }
         await updateBluetoothButton();
+    }
+
+    // --- Desktop ---
+    let desktopRunning = null;
+
+    async function updateDesktopButton() {
+        const btn = document.getElementById('desktop-btn');
+        if (!btn) return;
+        try {
+            const data = await apiCall('api/desktop/status');
+            desktopRunning = data.running;
+            if (!data.available) {
+                btn.textContent = 'Desktop Unavailable';
+                btn.disabled = true;
+                btn.className = 'btn';
+            } else if (data.running) {
+                btn.textContent = 'Stop Desktop';
+                btn.disabled = false;
+                btn.className = 'btn btn-warning';
+            } else {
+                btn.textContent = 'Start Desktop';
+                btn.disabled = false;
+                btn.className = 'btn btn-primary';
+            }
+        } catch (e) {
+            btn.textContent = 'Desktop Unavailable';
+            btn.disabled = true;
+        }
+    }
+
+    async function toggleDesktop() {
+        const btn = document.getElementById('desktop-btn');
+        if (desktopRunning && !confirm(
+            'Stop the desktop? Anyone using this WROLPi\'s own screen will lose their session.'
+            + ' The desktop will return on the next reboot.')) {
+            return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span>';
+        try {
+            if (desktopRunning) {
+                await apiCall('api/desktop/stop', 'POST');
+            } else {
+                await apiCall('api/desktop/start', 'POST');
+            }
+        } catch (e) {
+            alert(`Desktop error: ${e.message}`);
+        }
+        await updateDesktopButton();
     }
 
     async function waitForController(maxWaitMs = 60000) {
@@ -2927,6 +2977,7 @@
         // Fetch hardware button status immediately
         updateHotspotButton();
         updateBluetoothButton();
+        updateDesktopButton();
         loadHotspotSettings();
 
         // Initial update after a short delay (to not overlap with initial load)
@@ -2945,6 +2996,7 @@
             loadSmart();
             updateHotspotButton();
             updateBluetoothButton();
+            updateDesktopButton();
         }, updateInterval);
     }
 </script>

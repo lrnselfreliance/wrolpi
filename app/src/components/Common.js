@@ -21,7 +21,7 @@ import {
 } from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useBluetooth, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
+import {useBluetooth, useDesktop, useHotspot, useSearchDirectories, useSearchOrder, useThrottle, useWROLMode} from "../hooks/customHooks";
 import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Accordion,
@@ -1019,6 +1019,49 @@ export function BluetoothToggle() {
     </div>;
 }
 
+export function DesktopToggle() {
+    let {on, setDesktop} = useDesktop();
+    const [confirmOpen, setConfirmOpen] = React.useState(false);
+    const disabled = on === null;
+
+    const handleChange = (checked) => {
+        if (checked) {
+            setDesktop(true);
+        } else {
+            // Stopping the desktop kills any session on this WROLPi's own screen.
+            setConfirmOpen(true);
+        }
+    }
+
+    const handleConfirmStop = (e) => {
+        if (e) {
+            e.preventDefault()
+        }
+        setConfirmOpen(false);
+        setDesktop(false);
+    }
+
+    return <div style={{margin: '0.5em'}}>
+        <Confirm
+            open={confirmOpen}
+            onCancel={() => setConfirmOpen(false)}
+            onClose={() => setConfirmOpen(false)}
+            onConfirm={handleConfirmStop}
+            header='Stop the desktop'
+            content={"Anyone using this WROLPi's own screen will lose their session."
+                + ' The desktop will return on the next reboot. Are you sure?'}
+            confirmButton='Stop'
+        />
+        <Toggle
+            label='Desktop'
+            disabled={disabled}
+            checked={on === true}
+            onChange={handleChange}
+        />
+        {disabled && <InfoPopup content='The Desktop is not supported on this server'/>}
+    </div>;
+}
+
 export function Toggle({label, checked, disabled, onChange, icon, popupContent = null, info = null}) {
     // Custom toggle because Semantic UI does not handle inverted labels correctly.
     const {t, inverted} = useContext(ThemeContext);
@@ -1352,14 +1395,14 @@ export function HotspotStatusIcon() {
     const {on, inUse, setHotspot, dockerized, hotspotSsid} = useHotspot();
     const {modal: unsupportedModal, doOpen: openUnsupportedModal} =
         UnsupportedModal('Unsupported', 'You cannot toggle the hotspot on this machine.');
-    const [disableHotspotOpen, setDisableHotspotOpen] = React.useState(false);
+    const [stopHotspotOpen, setStopHotspotOpen] = React.useState(false);
     const [inUseOpen, setInUseOpen] = React.useState(false);
 
-    const handleConfirmDisable = (e) => {
+    const handleConfirmStop = (e) => {
         if (e) {
             e.preventDefault()
         }
-        setDisableHotspotOpen(false);
+        setStopHotspotOpen(false);
         setHotspot(false);
     }
 
@@ -1372,8 +1415,8 @@ export function HotspotStatusIcon() {
     }
 
     if (inUse === true) {
-        const content = hotspotSsid ? `Wifi device is in use for ${hotspotSsid}.  Disconnect and enable hotspot?`
-            : 'Wifi device is in use.  Disconnect and enable hotspot?'
+        const content = hotspotSsid ? `Wifi device is in use for ${hotspotSsid}.  Disconnect and start hotspot?`
+            : 'Wifi device is in use.  Disconnect and start hotspot?'
         return <>
             <Confirm open={inUseOpen}
                      onCancel={() => setInUseOpen(false)}
@@ -1381,7 +1424,7 @@ export function HotspotStatusIcon() {
                      onConfirm={handleConfirmInUse}
                      header='Wifi is in-use'
                      content={content}
-                     confirmButton='Enable Hotspot'
+                     confirmButton='Start Hotspot'
             />
             <a href='#' onClick={() => setInUseOpen(true)}>
                 <IconGroup size='large'>
@@ -1393,15 +1436,15 @@ export function HotspotStatusIcon() {
     } else if (dockerized === false && on === true) {
         return <>
             <Confirm
-                open={disableHotspotOpen}
-                onCancel={() => setDisableHotspotOpen(false)}
-                onClose={() => setDisableHotspotOpen(false)}
-                onConfirm={handleConfirmDisable}
-                header='Disable the hotspot'
+                open={stopHotspotOpen}
+                onCancel={() => setStopHotspotOpen(false)}
+                onClose={() => setStopHotspotOpen(false)}
+                onConfirm={handleConfirmStop}
+                header='Stop the hotspot'
                 content='You will be disconnected when using the hotspot. Are you sure?'
-                confirmButton='Disable'
+                confirmButton='Stop'
             />
-            <a href='#' onClick={() => setDisableHotspotOpen(true)}>
+            <a href='#' onClick={() => setStopHotspotOpen(true)}>
                 <IconGroup size='large'>
                     <Icon name='wifi' disabled={on !== true}/>
                     {on === false && <Icon corner name='x'/>}

@@ -6,11 +6,12 @@ import pytest
 
 
 class TestStatusEndpoints:
-    """Status endpoints (hotspot/bluetooth/throttle/timezone) — shape + docker behaviour."""
+    """Status endpoints (hotspot/bluetooth/desktop/throttle/timezone) — shape + docker behaviour."""
 
     @pytest.mark.parametrize("endpoint,required_fields", [
         ("/api/hotspot/status", ["enabled", "available"]),
         ("/api/bluetooth/status", ["enabled", "available"]),
+        ("/api/desktop/status", ["running", "available"]),
         ("/api/throttle/status", ["enabled", "available"]),
         ("/api/timezone/status", ["available", "timezone"]),
     ])
@@ -25,6 +26,7 @@ class TestStatusEndpoints:
     @pytest.mark.parametrize("endpoint", [
         "/api/hotspot/status",
         "/api/bluetooth/status",
+        "/api/desktop/status",
         "/api/throttle/status",
         "/api/timezone/status",
     ])
@@ -122,11 +124,13 @@ class TestDockerModeRejectsAdminActions:
     """Admin action endpoints should reject requests when running in Docker."""
 
     @pytest.mark.parametrize("method,endpoint,expected_status,payload", [
-        # Subsystem enable/disable — return 500 with a Docker-flavoured error.
-        ("post", "/api/hotspot/enable", 500, None),
-        ("post", "/api/hotspot/disable", 500, None),
-        ("post", "/api/bluetooth/enable", 500, None),
-        ("post", "/api/bluetooth/disable", 500, None),
+        # Subsystem actions — return 500 with a Docker-flavoured error.
+        ("post", "/api/hotspot/start", 500, None),
+        ("post", "/api/hotspot/stop", 500, None),
+        ("post", "/api/bluetooth/unblock", 500, None),
+        ("post", "/api/bluetooth/block", 500, None),
+        ("post", "/api/desktop/start", 500, None),
+        ("post", "/api/desktop/stop", 500, None),
         ("post", "/api/throttle/enable", 500, None),
         ("post", "/api/throttle/disable", 500, None),
         ("post", "/api/timezone/set", 500, {"timezone": "America/Denver"}),
@@ -144,3 +148,43 @@ class TestDockerModeRejectsAdminActions:
 
 
 # OpenAPI endpoint-presence tests are consolidated in test_api.py::TestOpenAPI.
+
+
+class TestDesktopEndpoints:
+    """Desktop start/stop endpoints drive the display-manager.service unit."""
+
+    @pytest.mark.parametrize("endpoint,systemctl_action", [
+        ("/api/desktop/start", "start"),
+        ("/api/desktop/stop", "stop"),
+    ])
+    def test_action_runs_systemctl(self, test_client, endpoint, systemctl_action):
+        """Each action endpoint should run systemctl with the matching action."""
+        from unittest import mock
+
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+            response = test_client.post(endpoint)
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        mock_exec.assert_called_once_with(
+            "systemctl", systemctl_action, "display-manager.service",
+            stdout=mock.ANY,
+            stderr=mock.ANY,
+        )
+
+    @pytest.mark.parametrize("endpoint", ["/api/desktop/start", "/api/desktop/stop"])
+    def test_action_reports_failure(self, test_client, endpoint):
+        """A failed systemctl action should return a 500 with the error detail."""
+        from unittest import mock
+
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"Failed to connect to bus")
+        mock_proc.returncode = 1
+
+        with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            response = test_client.post(endpoint)
+        assert response.status_code == 500
+        assert "Failed to connect to bus" in response.json()["detail"]

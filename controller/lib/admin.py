@@ -39,6 +39,14 @@ class BluetoothStatus(enum.Enum):
     unknown = enum.auto()  # Docker mode or cannot determine.
 
 
+class DesktopStatus(enum.Enum):
+    """Graphical desktop (display manager) status."""
+    on = enum.auto()  # Display manager is running.
+    off = enum.auto()  # Display manager is installed, but stopped.
+    unavailable = enum.auto()  # No display manager installed.
+    unknown = enum.auto()  # Docker mode or cannot determine.
+
+
 class GovernorStatus(enum.Enum):
     """CPU governor status enum matching wrolpi/admin.py"""
     ondemand = enum.auto()
@@ -362,7 +370,7 @@ def get_hotspot_status_dict() -> dict:
 
     # Map enum status to enabled/available flags
     enabled = status == HotspotStatus.connected
-    # Hotspot is available even when radio is off because enable_hotspot()
+    # Hotspot is available even when radio is off because start_hotspot()
     # turns the radio on first.
     available = status != HotspotStatus.unknown
 
@@ -381,9 +389,9 @@ def get_hotspot_status_dict() -> dict:
     }
 
 
-def enable_hotspot() -> dict:
+def start_hotspot() -> dict:
     """
-    Enable the WiFi hotspot.
+    Start the WiFi hotspot (turn the radio on and bring up the Hotspot connection).
 
     Returns:
         dict with success status and message
@@ -432,7 +440,7 @@ def enable_hotspot() -> dict:
             return {"success": False, "error": f"WiFi device {device} not ready after turning radio on"}
 
         # Create hotspot using NetworkManager
-        logger.info("Enabling hotspot on %s with SSID %s", device, ssid)
+        logger.info("Starting hotspot on %s with SSID %s", device, ssid)
         result = subprocess.run(
             [
                 "nmcli", "device", "wifi", "hotspot",
@@ -446,7 +454,7 @@ def enable_hotspot() -> dict:
         )
 
         if result.returncode != 0:
-            logger.warning("Failed to enable hotspot: %s", result.stderr.strip())
+            logger.warning("Failed to start hotspot: %s", result.stderr.strip())
             return {"success": False, "error": result.stderr.strip() or "Unknown error"}
 
         # Explicitly set the key management so a reused "Hotspot" profile does not
@@ -475,7 +483,7 @@ def enable_hotspot() -> dict:
             error = (modify.stderr if modify.returncode != 0 else up.stderr).strip()
             if protocol == "wpa3":
                 # The driver likely rejected SAE; revert so the hotspot still works.
-                logger.warning("Failed to enable WPA3 hotspot, reverting to WPA2: %s", error)
+                logger.warning("Failed to start WPA3 hotspot, reverting to WPA2: %s", error)
                 revert_modify = subprocess.run(
                     ["nmcli", "connection", "modify", "Hotspot",
                      "802-11-wireless-security.key-mgmt", "wpa-psk",
@@ -499,23 +507,23 @@ def enable_hotspot() -> dict:
             # WPA2 is what nmcli created the hotspot with anyway; not fatal.
             logger.warning("Failed to explicitly set WPA2 on hotspot: %s", error)
 
-        logger.info("Hotspot enabled successfully on %s (%s)", device, protocol)
+        logger.info("Hotspot started successfully on %s (%s)", device, protocol)
         return {"success": True, "ssid": ssid, "device": device}
 
     except subprocess.TimeoutExpired:
-        logger.warning("Timeout enabling hotspot on %s", device)
-        return {"success": False, "error": "Timeout enabling hotspot"}
+        logger.warning("Timeout starting hotspot on %s", device)
+        return {"success": False, "error": "Timeout starting hotspot"}
     except FileNotFoundError:
-        logger.warning("nmcli not found, cannot enable hotspot")
+        logger.warning("nmcli not found, cannot start hotspot")
         return {"success": False, "error": "nmcli not found"}
     except subprocess.SubprocessError as e:
-        logger.warning("Failed to enable hotspot: %s", e)
+        logger.warning("Failed to start hotspot: %s", e)
         return {"success": False, "error": str(e)}
 
 
-def disable_hotspot() -> dict:
+def stop_hotspot() -> dict:
     """
-    Disable the WiFi hotspot.
+    Stop the WiFi hotspot by turning the WiFi radio off.
 
     Returns:
         dict with success status
@@ -523,7 +531,7 @@ def disable_hotspot() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    logger.info("Disabling hotspot")
+    logger.info("Stopping hotspot (turning WiFi radio off)")
     try:
         # Turn off the radio to disconnect hotspot
         result = subprocess.run(
@@ -534,17 +542,17 @@ def disable_hotspot() -> dict:
         )
 
         # Success even if already off
-        logger.info("Hotspot disabled successfully")
+        logger.info("Hotspot stopped successfully")
         return {"success": True}
 
     except subprocess.TimeoutExpired:
-        logger.warning("Timeout disabling hotspot")
-        return {"success": False, "error": "Timeout disabling hotspot"}
+        logger.warning("Timeout stopping hotspot")
+        return {"success": False, "error": "Timeout stopping hotspot"}
     except FileNotFoundError:
-        logger.warning("nmcli not found, cannot disable hotspot")
+        logger.warning("nmcli not found, cannot stop hotspot")
         return {"success": False, "error": "nmcli not found"}
     except subprocess.SubprocessError as e:
-        logger.warning("Failed to disable hotspot: %s", e)
+        logger.warning("Failed to stop hotspot: %s", e)
         return {"success": False, "error": str(e)}
 
 
@@ -624,9 +632,9 @@ async def get_bluetooth_status_dict() -> dict:
     }
 
 
-async def enable_bluetooth() -> dict:
+async def unblock_bluetooth() -> dict:
     """
-    Enable Bluetooth radio using rfkill.
+    Unblock the Bluetooth radio using rfkill (turns it on).
 
     Returns:
         dict with success status
@@ -634,7 +642,7 @@ async def enable_bluetooth() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    logger.info("Enabling Bluetooth radio")
+    logger.info("Unblocking Bluetooth radio")
     try:
         proc = await asyncio.create_subprocess_exec(
             "/usr/sbin/rfkill", "unblock", "bluetooth",
@@ -644,27 +652,27 @@ async def enable_bluetooth() -> dict:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
 
         if proc.returncode == 0:
-            logger.info("Bluetooth radio enabled successfully")
+            logger.info("Bluetooth radio unblocked successfully")
             return {"success": True}
         else:
             error_msg = stderr.decode().strip()
-            logger.warning("Failed to enable Bluetooth: %s", error_msg)
+            logger.warning("Failed to unblock Bluetooth: %s", error_msg)
             return {"success": False, "error": error_msg or "Unknown error"}
 
     except asyncio.TimeoutError:
-        logger.warning("Timeout enabling Bluetooth")
-        return {"success": False, "error": "Timeout enabling Bluetooth"}
+        logger.warning("Timeout unblocking Bluetooth")
+        return {"success": False, "error": "Timeout unblocking Bluetooth"}
     except FileNotFoundError:
-        logger.warning("rfkill not found, cannot enable Bluetooth")
+        logger.warning("rfkill not found, cannot unblock Bluetooth")
         return {"success": False, "error": "rfkill not found"}
     except OSError as e:
-        logger.warning("Failed to enable Bluetooth: %s", e)
+        logger.warning("Failed to unblock Bluetooth: %s", e)
         return {"success": False, "error": str(e)}
 
 
-async def disable_bluetooth() -> dict:
+async def block_bluetooth() -> dict:
     """
-    Disable Bluetooth radio using rfkill.
+    Block the Bluetooth radio using rfkill (turns it off).
 
     Returns:
         dict with success status
@@ -672,7 +680,7 @@ async def disable_bluetooth() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    logger.info("Disabling Bluetooth radio")
+    logger.info("Blocking Bluetooth radio")
     try:
         proc = await asyncio.create_subprocess_exec(
             "/usr/sbin/rfkill", "block", "bluetooth",
@@ -682,22 +690,153 @@ async def disable_bluetooth() -> dict:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
 
         if proc.returncode == 0:
-            logger.info("Bluetooth radio disabled successfully")
+            logger.info("Bluetooth radio blocked successfully")
             return {"success": True}
         else:
             error_msg = stderr.decode().strip()
-            logger.warning("Failed to disable Bluetooth: %s", error_msg)
+            logger.warning("Failed to block Bluetooth: %s", error_msg)
             return {"success": False, "error": error_msg or "Unknown error"}
 
     except asyncio.TimeoutError:
-        logger.warning("Timeout disabling Bluetooth")
-        return {"success": False, "error": "Timeout disabling Bluetooth"}
+        logger.warning("Timeout blocking Bluetooth")
+        return {"success": False, "error": "Timeout blocking Bluetooth"}
     except FileNotFoundError:
-        logger.warning("rfkill not found, cannot disable Bluetooth")
+        logger.warning("rfkill not found, cannot block Bluetooth")
         return {"success": False, "error": "rfkill not found"}
     except OSError as e:
-        logger.warning("Failed to disable Bluetooth: %s", e)
+        logger.warning("Failed to block Bluetooth: %s", e)
         return {"success": False, "error": str(e)}
+
+
+# --- Desktop ---
+
+# Every display manager (lightdm on RPi OS, gdm3/sddm on Debian) provides this
+# systemd alias, so the Controller does not need to know which one is installed.
+DISPLAY_MANAGER_UNIT = "display-manager.service"
+
+
+async def get_desktop_status() -> DesktopStatus:
+    """
+    Get the graphical desktop status by checking the display manager's systemd unit.
+
+    Returns:
+        DesktopStatus enum value
+    """
+    if is_docker_mode():
+        return DesktopStatus.unknown
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", "show", DISPLAY_MANAGER_UNIT, "--property=LoadState,ActiveState",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+
+        if proc.returncode != 0:
+            return DesktopStatus.unknown
+
+        properties = dict(
+            line.split("=", 1) for line in stdout.decode().strip().splitlines() if "=" in line
+        )
+        if properties.get("LoadState") != "loaded":
+            # "not-found" when no display manager is installed (e.g. RPi OS Lite).
+            return DesktopStatus.unavailable
+
+        return DesktopStatus.on if properties.get("ActiveState") == "active" else DesktopStatus.off
+
+    except asyncio.TimeoutError:
+        return DesktopStatus.unknown
+    except FileNotFoundError:
+        return DesktopStatus.unavailable
+    except OSError:
+        return DesktopStatus.unknown
+
+
+async def get_desktop_status_dict() -> dict:
+    """
+    Get desktop status as a dict for API responses.
+
+    Returns dict matching DesktopStatusResponse schema:
+        running: bool - Whether the display manager is currently running
+        available: bool - Whether a display manager is installed
+        reason: Optional[str] - Reason if unavailable
+    """
+    status = await get_desktop_status()
+
+    running = status == DesktopStatus.on
+    available = status in (DesktopStatus.on, DesktopStatus.off)
+
+    reason = None
+    if status == DesktopStatus.unknown:
+        reason = "Desktop not supported or systemctl unavailable"
+    elif status == DesktopStatus.unavailable:
+        reason = "No display manager installed"
+
+    return {
+        "running": running,
+        "available": available,
+        "reason": reason,
+    }
+
+
+async def _systemctl_desktop(action: str) -> dict:
+    """Run `systemctl <start|stop> display-manager.service` and report the result."""
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    logger.info("Desktop %s requested (%s)", action, DISPLAY_MANAGER_UNIT)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", action, DISPLAY_MANAGER_UNIT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+        if proc.returncode == 0:
+            logger.info("Desktop %s succeeded", action)
+            return {"success": True}
+        else:
+            error_msg = stderr.decode().strip()
+            logger.warning("Failed to %s desktop: %s", action, error_msg)
+            return {"success": False, "error": error_msg or "Unknown error"}
+
+    except asyncio.TimeoutError:
+        logger.warning("Timeout during desktop %s", action)
+        return {"success": False, "error": f"Timeout during desktop {action}"}
+    except FileNotFoundError:
+        logger.warning("systemctl not found, cannot %s desktop", action)
+        return {"success": False, "error": "systemctl not found"}
+    except OSError as e:
+        logger.warning("Failed to %s desktop: %s", action, e)
+        return {"success": False, "error": str(e)}
+
+
+async def start_desktop() -> dict:
+    """
+    Start the graphical desktop (display manager) until stopped or reboot.
+
+    This deliberately does not `systemctl enable` the unit; whether the desktop
+    starts on boot is left to the system's default target.
+
+    Returns:
+        dict with success status
+    """
+    return await _systemctl_desktop("start")
+
+
+async def stop_desktop() -> dict:
+    """
+    Stop the graphical desktop (display manager) until started or reboot.
+
+    Fail open: this deliberately does not `systemctl disable` the unit, so the
+    desktop returns on the next boot.
+
+    Returns:
+        dict with success status
+    """
+    return await _systemctl_desktop("stop")
 
 
 GOVERNOR_MAP = {

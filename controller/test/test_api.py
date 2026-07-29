@@ -105,9 +105,10 @@ class TestOpenAPI:
         # Stats (per-resource + aggregated).
         "/api/stats/cpu", "/api/stats/memory", "/api/stats/load",
         "/api/stats/drives/primary", "/api/stats/network", "/api/stats/power",
-        # Admin: hotspot, bluetooth, throttle, timezone, power.
-        "/api/hotspot/status", "/api/hotspot/enable", "/api/hotspot/disable",
-        "/api/bluetooth/status", "/api/bluetooth/enable", "/api/bluetooth/disable",
+        # Admin: hotspot, bluetooth, desktop, throttle, timezone, power.
+        "/api/hotspot/status", "/api/hotspot/start", "/api/hotspot/stop",
+        "/api/bluetooth/status", "/api/bluetooth/unblock", "/api/bluetooth/block",
+        "/api/desktop/status", "/api/desktop/start", "/api/desktop/stop",
         "/api/throttle/status", "/api/throttle/enable", "/api/throttle/disable",
         "/api/timezone/status", "/api/timezone/set",
         "/api/shutdown", "/api/reboot", "/api/restart",

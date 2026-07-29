@@ -190,7 +190,7 @@ class HotspotSettingsResponse(BaseModel):
 
 
 class HotspotActionResponse(BaseModel):
-    """Response model for hotspot enable/disable actions."""
+    """Response model for hotspot start/stop actions."""
 
     success: bool = Field(description="Whether the action succeeded")
     ssid: Optional[str] = Field(default=None, description="Hotspot SSID")
@@ -211,7 +211,26 @@ class BluetoothStatusResponse(BaseModel):
 
 
 class BluetoothActionResponse(BaseModel):
-    """Response model for Bluetooth enable/disable actions."""
+    """Response model for Bluetooth block/unblock actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
+# Admin - Desktop
+# ============================================================================
+
+class DesktopStatusResponse(BaseModel):
+    """Response model for /api/desktop/status endpoint."""
+
+    running: bool = Field(description="Whether the display manager is currently running")
+    available: bool = Field(description="Whether a display manager is installed")
+    reason: Optional[str] = Field(default=None, description="Reason if unavailable")
+
+
+class DesktopActionResponse(BaseModel):
+    """Response model for desktop start/stop actions."""
 
     success: bool = Field(description="Whether the action succeeded")
     error: Optional[str] = Field(default=None, description="Error message if failed")

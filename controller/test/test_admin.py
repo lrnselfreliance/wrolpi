@@ -10,11 +10,11 @@ import yaml
 from controller.lib.config import reload_config_from_drive
 from controller.lib.admin import (
     apply_timezone_from_config,
-    disable_bluetooth,
-    disable_hotspot,
+    block_bluetooth,
+    stop_hotspot,
     disable_throttle,
-    enable_bluetooth,
-    enable_hotspot,
+    unblock_bluetooth,
+    start_hotspot,
     enable_throttle,
     get_bluetooth_status,
     get_hotspot_status,
@@ -33,7 +33,12 @@ from controller.lib.admin import (
     set_timezone,
     shutdown_system,
     update_hotspot_settings,
+    get_desktop_status,
+    get_desktop_status_dict,
+    start_desktop,
+    stop_desktop,
     BluetoothStatus,
+    DesktopStatus,
     HotspotStatus,
     GovernorStatus,
 )
@@ -129,13 +134,13 @@ class TestGetBluetoothStatus:
                 assert result == BluetoothStatus.unknown
 
 
-class TestBluetoothEnableDisable:
-    """Tests for enable_bluetooth / disable_bluetooth — they share the same shape."""
+class TestBluetoothBlockUnblock:
+    """Tests for unblock_bluetooth / block_bluetooth — they share the same shape."""
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("func,rfkill_arg", [
-        (enable_bluetooth, "unblock"),
-        (disable_bluetooth, "block"),
+        (unblock_bluetooth, "unblock"),
+        (block_bluetooth, "block"),
     ])
     async def test_calls_rfkill_with_correct_action(self, func, rfkill_arg):
         """Each function should invoke rfkill with the expected action."""
@@ -154,9 +159,135 @@ class TestBluetoothEnableDisable:
                 )
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("func", [enable_bluetooth, disable_bluetooth])
+    @pytest.mark.parametrize("func", [unblock_bluetooth, block_bluetooth])
     async def test_handles_rfkill_not_found(self, func):
         """Should handle rfkill not being available."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
+                result = await func()
+                assert result["success"] is False
+
+
+def _mock_systemctl_show_proc(load_state: str, active_state: str) -> mock.AsyncMock:
+    """A mocked `systemctl show` process reporting the given unit states."""
+    mock_proc = mock.AsyncMock()
+    output = f"LoadState={load_state}\nActiveState={active_state}\n"
+    mock_proc.communicate.return_value = (output.encode(), b"")
+    mock_proc.returncode = 0
+    return mock_proc
+
+
+class TestGetDesktopStatus:
+    """Tests for get_desktop_status function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_unknown_in_docker_mode(self):
+        """Should return unknown when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            result = await get_desktop_status()
+            assert result == DesktopStatus.unknown
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("load_state,active_state,expected", [
+        ("loaded", "active", DesktopStatus.on),
+        ("loaded", "inactive", DesktopStatus.off),
+        ("loaded", "failed", DesktopStatus.off),
+        ("not-found", "inactive", DesktopStatus.unavailable),
+    ])
+    async def test_parses_systemctl_show(self, load_state, active_state, expected):
+        """Should map the display manager's LoadState/ActiveState to a DesktopStatus."""
+        mock_proc = _mock_systemctl_show_proc(load_state, active_state)
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_desktop_status()
+                assert result == expected
+
+    @pytest.mark.asyncio
+    async def test_returns_unavailable_when_systemctl_not_found(self):
+        """Should return unavailable when systemctl is not installed."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
+                result = await get_desktop_status()
+                assert result == DesktopStatus.unavailable
+
+    @pytest.mark.asyncio
+    async def test_returns_unknown_when_systemctl_fails(self):
+        """Should return unknown when systemctl returns an error."""
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"some error")
+        mock_proc.returncode = 1
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await get_desktop_status()
+                assert result == DesktopStatus.unknown
+
+
+class TestGetDesktopStatusDict:
+    """Tests for get_desktop_status_dict function."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status,running,available", [
+        (DesktopStatus.on, True, True),
+        (DesktopStatus.off, False, True),
+        (DesktopStatus.unavailable, False, False),
+        (DesktopStatus.unknown, False, False),
+    ])
+    async def test_maps_status_to_flags(self, status, running, available):
+        """Should map each DesktopStatus to running/available flags."""
+        with mock.patch("controller.lib.admin.get_desktop_status", return_value=status):
+            result = await get_desktop_status_dict()
+            assert result["running"] is running
+            assert result["available"] is available
+            if available:
+                assert result["reason"] is None
+            else:
+                assert result["reason"]
+
+
+class TestDesktopStartStop:
+    """Tests for start_desktop / stop_desktop — they share the same shape."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("func,systemctl_action", [
+        (start_desktop, "start"),
+        (stop_desktop, "stop"),
+    ])
+    async def test_calls_systemctl_with_correct_action(self, func, systemctl_action):
+        """Each function should invoke systemctl with the expected action; never enable/disable."""
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+                result = await func()
+                assert result["success"] is True
+                # Fail open: only start/stop the unit, never enable/disable or
+                # change the default target.
+                mock_exec.assert_called_once_with(
+                    "systemctl", systemctl_action, "display-manager.service",
+                    stdout=mock.ANY,
+                    stderr=mock.ANY,
+                )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("func", [start_desktop, stop_desktop])
+    async def test_reports_systemctl_error(self, func):
+        """Should report systemctl's stderr when the action fails."""
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"Unit display-manager.service not loaded.")
+        mock_proc.returncode = 5
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                result = await func()
+                assert result["success"] is False
+                assert "not loaded" in result["error"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("func", [start_desktop, stop_desktop])
+    async def test_handles_systemctl_not_found(self, func):
+        """Should handle systemctl not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
                 result = await func()
@@ -285,7 +416,7 @@ class TestGetHotspotStatusDict:
 
     def test_available_when_radio_off(self):
         """Hotspot should be available when WiFi radio is off,
-        because enable_hotspot() turns the radio on first."""
+        because start_hotspot() turns the radio on first."""
         with mock.patch("controller.lib.admin.get_hotspot_status", return_value=HotspotStatus.off):
             result = get_hotspot_status_dict()
             assert result["available"] is True
@@ -617,10 +748,12 @@ class TestDockerModeErrors:
     """Admin functions should return an error result when running in Docker mode."""
 
     @pytest.mark.parametrize("func,is_async,args", [
-        (enable_bluetooth, True, ()),
-        (disable_bluetooth, True, ()),
-        (enable_hotspot, False, ()),
-        (disable_hotspot, False, ()),
+        (unblock_bluetooth, True, ()),
+        (block_bluetooth, True, ()),
+        (start_hotspot, False, ()),
+        (stop_hotspot, False, ()),
+        (start_desktop, True, ()),
+        (stop_desktop, True, ()),
         (enable_throttle, False, ()),
         (disable_throttle, False, ()),
         (shutdown_system, False, ()),
@@ -639,14 +772,14 @@ class TestDockerModeErrors:
             assert "Docker" in error
 
 
-class TestEnableHotspot:
-    """Tests for enable_hotspot function."""
+class TestStartHotspot:
+    """Tests for start_hotspot function."""
 
     def test_handles_nmcli_not_found(self):
         """Should handle nmcli not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
-                result = enable_hotspot()
+                result = start_hotspot()
                 assert result["success"] is False
                 assert "nmcli" in result.get("error", "").lower()
 
@@ -669,7 +802,7 @@ class TestEnableHotspot:
                 with mock.patch("subprocess.run",
                                 side_effect=[radio_on, device_ready, ok, ok, ok]) as mock_subprocess:
                     with mock.patch("time.sleep"):
-                        enable_hotspot()
+                        start_hotspot()
 
                     # Find the hotspot creation call (nmcli device wifi hotspot)
                     calls = mock_subprocess.call_args_list
@@ -682,7 +815,7 @@ class TestEnableHotspot:
 
     @staticmethod
     def _run_enable(protocol: str, results: list) -> tuple:
-        """Run enable_hotspot() with the given hotspot.protocol and subprocess results."""
+        """Run start_hotspot() with the given hotspot.protocol and subprocess results."""
         def mock_get_config(key, default=None):
             return {'hotspot.protocol': protocol}.get(key, default)
 
@@ -690,7 +823,7 @@ class TestEnableHotspot:
             with mock.patch("controller.lib.admin.get_config_value", side_effect=mock_get_config):
                 with mock.patch("subprocess.run", side_effect=results) as mock_subprocess:
                     with mock.patch("time.sleep"):
-                        result = enable_hotspot()
+                        result = start_hotspot()
         return result, mock_subprocess.call_args_list
 
     def test_wpa2_sets_psk_key_mgmt(self):
@@ -772,7 +905,7 @@ class TestEnableHotspot:
                 hotspot_result,      # nmcli connection up Hotspot
             ]):
                 with mock.patch("time.sleep"):  # Don't actually sleep in tests
-                    result = enable_hotspot()
+                    result = start_hotspot()
                     assert result["success"] is True
 
     def test_fails_if_device_never_becomes_ready(self):
@@ -786,19 +919,19 @@ class TestEnableHotspot:
                 radio_on_result,
             ] + [device_unavailable] * 20):
                 with mock.patch("time.sleep"):
-                    result = enable_hotspot()
+                    result = start_hotspot()
                     assert result["success"] is False
                     assert "not ready" in result.get("error", "").lower() or "unavailable" in result.get("error", "").lower()
 
 
-class TestDisableHotspot:
-    """Tests for disable_hotspot function."""
+class TestStopHotspot:
+    """Tests for stop_hotspot function."""
 
     def test_handles_nmcli_not_found(self):
         """Should handle nmcli not being available."""
         with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
             with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
-                result = disable_hotspot()
+                result = stop_hotspot()
                 assert result["success"] is False
                 assert "nmcli" in result.get("error", "").lower()
 

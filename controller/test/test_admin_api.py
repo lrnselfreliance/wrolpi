@@ -203,8 +203,8 @@ class TestVncEndpoints:
         from unittest import mock
         from controller.lib.admin import DesktopStatus
 
-        with mock.patch("controller.lib.admin.get_vnc_backend",
-                        return_value=("wayvnc.service", "wayvnc", None)):
+        with mock.patch("controller.lib.admin.get_vnc_backends",
+                        return_value=([{"unit": "wayvnc.service", "name": "wayvnc", "active": False}], None)):
             with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
                 response = test_client.post("/api/vnc/start")
 
@@ -220,8 +220,8 @@ class TestVncEndpoints:
         mock_proc.communicate.return_value = (b"", b"")
         mock_proc.returncode = 0
 
-        with mock.patch("controller.lib.admin.get_vnc_backend",
-                        return_value=("wayvnc.service", "wayvnc", None)):
+        with mock.patch("controller.lib.admin.get_vnc_backends",
+                        return_value=([{"unit": "wayvnc.service", "name": "wayvnc", "active": False}], None)):
             with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
                 with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
                     response = test_client.post("/api/vnc/start")
@@ -240,8 +240,8 @@ class TestVncEndpoints:
         mock_proc.communicate.return_value = (b"", b"")
         mock_proc.returncode = 0
 
-        with mock.patch("controller.lib.admin.get_vnc_backend",
-                        return_value=("wayvnc.service", "wayvnc", None)):
+        with mock.patch("controller.lib.admin.get_vnc_backends",
+                        return_value=([{"unit": "wayvnc.service", "name": "wayvnc", "active": True}], None)):
             with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
                 with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
                     response = test_client.post("/api/vnc/stop")
@@ -259,8 +259,8 @@ class TestVncEndpoints:
         mock_proc.communicate.return_value = (b"", b"Job for wayvnc.service failed")
         mock_proc.returncode = 1
 
-        with mock.patch("controller.lib.admin.get_vnc_backend",
-                        return_value=("wayvnc.service", "wayvnc", None)):
+        with mock.patch("controller.lib.admin.get_vnc_backends",
+                        return_value=([{"unit": "wayvnc.service", "name": "wayvnc", "active": False}], None)):
             with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
                 with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
                     response = test_client.post("/api/vnc/start")

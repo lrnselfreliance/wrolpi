@@ -1,6 +1,7 @@
 """
 Tests for the WROLPi upgrade system.
 """
+import subprocess
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -69,16 +70,51 @@ class TestGitFunctions:
             assert get_current_branch() is None
 
     def test_get_current_branch_detached_head(self):
-        """A detached HEAD (abbrev-ref prints the literal "HEAD") is not a branch."""
+        """A detached HEAD (`git branch --show-current` prints nothing) defaults to 'release'."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = b'HEAD\n'
+        mock_result.stdout = b'\n'
+        mock_path = MagicMock()
+        mock_path.is_dir.return_value = True
+
+        with patch('wrolpi.upgrade.PROJECT_DIR', mock_path), \
+                patch('subprocess.run', return_value=mock_result):
+            assert get_current_branch() == 'release'
+
+    def test_get_current_branch_command_failed(self):
+        """A failing git command (e.g. not a repository) returns None."""
+        mock_result = MagicMock()
+        mock_result.returncode = 128
+        mock_result.stdout = b''
         mock_path = MagicMock()
         mock_path.is_dir.return_value = True
 
         with patch('wrolpi.upgrade.PROJECT_DIR', mock_path), \
                 patch('subprocess.run', return_value=mock_result):
             assert get_current_branch() is None
+
+    def test_get_current_branch_with_ambiguous_tag(self, test_directory):
+        """A tag with the same name as the branch must not change the reported branch name.
+
+        `git rev-parse --abbrev-ref HEAD` reports "heads/release" when a `release` tag also
+        exists, which breaks the origin/{branch} comparison in check_for_update.
+        """
+        repo = test_directory / 'repo'
+        repo.mkdir()
+        env = {'GIT_AUTHOR_NAME': 'test', 'GIT_AUTHOR_EMAIL': 'test@example.com',
+               'GIT_COMMITTER_NAME': 'test', 'GIT_COMMITTER_EMAIL': 'test@example.com'}
+        for cmd in (
+                ['git', 'init', '--initial-branch=release'],
+                ['git', 'commit', '--allow-empty', '-m', 'one'],
+                ['git', 'commit', '--allow-empty', '-m', 'two'],
+                # Tag an old commit with the same name as the branch, like the stale
+                # `release` tag found on real WROLPi installs.
+                ['git', 'tag', 'release', 'HEAD~1'],
+        ):
+            subprocess.run(cmd, cwd=repo, check=True, capture_output=True, env=env)
+
+        with patch('wrolpi.upgrade.PROJECT_DIR', repo):
+            assert get_current_branch() == 'release'
 
     def test_get_local_commit(self):
         """get_local_commit returns the short commit hash."""

@@ -78,17 +78,20 @@ def get_current_branch() -> Optional[str]:
     Get the current git branch of /opt/wrolpi.
 
     Returns:
-        Branch name, or None if unable to determine
+        Branch name ('release' on a detached HEAD), or None if unable to determine
     """
     try:
+        # Not `rev-parse --abbrev-ref HEAD`: it reports "heads/release" when a stale
+        # `release` tag exists alongside the branch, breaking origin/{branch} lookups.
         result = subprocess.run(
-            ["git", "-C", "/opt/wrolpi", "rev-parse", "--abbrev-ref", "HEAD"],
+            ["git", "-C", "/opt/wrolpi", "branch", "--show-current"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            # A detached HEAD prints nothing; upgrades come from `release` by default.
+            return result.stdout.strip() or "release"
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         pass
     return None

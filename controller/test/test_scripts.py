@@ -7,11 +7,50 @@ from unittest import mock
 
 from controller.lib.scripts import (
     AVAILABLE_SCRIPTS,
+    get_current_branch,
     get_script_output,
     get_script_status,
     list_available_scripts,
     start_script,
 )
+
+
+class TestGetCurrentBranch:
+    """Tests for get_current_branch function."""
+
+    def test_returns_branch_name(self):
+        """Should return the branch name from `git branch --show-current`.
+
+        `git rev-parse --abbrev-ref HEAD` must not be used: it reports "heads/release" when a
+        stale `release` tag exists alongside the `release` branch.
+        """
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "release\n"
+
+        with mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+            assert get_current_branch() == "release"
+        cmd = mock_run.call_args[0][0]
+        assert "--show-current" in cmd
+        assert "--abbrev-ref" not in cmd
+
+    def test_detached_head_defaults_to_release(self):
+        """A detached HEAD (empty output) should default to 'release'."""
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "\n"
+
+        with mock.patch("subprocess.run", return_value=mock_result):
+            assert get_current_branch() == "release"
+
+    def test_git_failure_returns_none(self):
+        """A failing git command should return None."""
+        mock_result = mock.MagicMock()
+        mock_result.returncode = 128
+        mock_result.stdout = ""
+
+        with mock.patch("subprocess.run", return_value=mock_result):
+            assert get_current_branch() is None
 
 
 class TestAvailableScripts:

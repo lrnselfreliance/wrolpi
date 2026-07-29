@@ -49,26 +49,24 @@ def get_current_branch() -> str | None:
     """
     Get the current git branch name (e.g., 'release', 'master').
 
-    Returns None if unable to determine.
+    Defaults to 'release' on a detached HEAD.  Returns None if unable to determine.
     """
     if not PROJECT_DIR.is_dir():
         return None
 
     try:
+        # Not `rev-parse --abbrev-ref HEAD`: it reports "heads/release" when a stale
+        # `release` tag exists alongside the branch, breaking origin/{branch} lookups.
         result = subprocess.run(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            ['git', 'branch', '--show-current'],
             cwd=str(PROJECT_DIR),
             capture_output=True,
             timeout=10,
         )
         if result.returncode == 0:
             branch = result.stdout.decode().strip()
-            # A detached HEAD makes `--abbrev-ref HEAD` print the literal
-            # "HEAD" (not a branch).  Comparing origin/HEAD — the remote's
-            # default branch — against it yields a bogus "commits behind"
-            # count and a false "update available", so report no branch.
-            if branch and branch != 'HEAD':
-                return branch
+            # A detached HEAD prints nothing; upgrades come from `release` by default.
+            return branch or 'release'
     except Exception as e:
         logger.error('Failed to get current branch', exc_info=e)
 

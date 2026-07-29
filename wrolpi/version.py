@@ -17,10 +17,13 @@ def git_revision():
 
 def git_branch():
     try:
-        cmd = ('git', 'rev-parse', '--abbrev-ref', 'HEAD')
+        # Not `rev-parse --abbrev-ref HEAD`: it reports "heads/release" when a stale
+        # `release` tag exists alongside the branch.
+        cmd = ('git', 'branch', '--show-current')
         branch = subprocess.check_output(cmd, stderr=subprocess.PIPE)
         branch = branch.decode().strip()
-        return branch
+        # A detached HEAD prints nothing.
+        return branch or 'HEAD'
     except Exception:
         return 'unknown'
 

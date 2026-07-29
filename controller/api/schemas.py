@@ -239,6 +239,29 @@ class DesktopActionResponse(BaseModel):
 
 
 # ============================================================================
+# Admin - VNC
+# ============================================================================
+
+class VncStatusResponse(BaseModel):
+    """Response model for /api/vnc/status endpoint."""
+
+    running: bool = Field(description="Whether the VNC server is currently running")
+    available: bool = Field(description="Whether a usable VNC server is installed")
+    desktop_running: bool = Field(description="Whether the desktop VNC would serve is running")
+    can_start: bool = Field(description="Whether VNC can be started right now")
+    reason: Optional[str] = Field(default=None, description="Why VNC is unavailable or cannot start")
+    backend: Optional[str] = Field(default=None, description="VNC backend in use (wayvnc or realvnc)")
+    port: int = Field(description="Port the VNC server listens on")
+
+
+class VncActionResponse(BaseModel):
+    """Response model for VNC start/stop actions."""
+
+    success: bool = Field(description="Whether the action succeeded")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ============================================================================
 # Admin - Samba
 # ============================================================================
 

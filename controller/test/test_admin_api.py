@@ -12,6 +12,7 @@ class TestStatusEndpoints:
         ("/api/hotspot/status", ["enabled", "available"]),
         ("/api/bluetooth/status", ["enabled", "available"]),
         ("/api/desktop/status", ["running", "available"]),
+        ("/api/vnc/status", ["running", "available", "desktop_running", "can_start", "port"]),
         ("/api/throttle/status", ["enabled", "available"]),
         ("/api/timezone/status", ["available", "timezone"]),
     ])
@@ -27,6 +28,7 @@ class TestStatusEndpoints:
         "/api/hotspot/status",
         "/api/bluetooth/status",
         "/api/desktop/status",
+        "/api/vnc/status",
         "/api/throttle/status",
         "/api/timezone/status",
     ])
@@ -131,6 +133,8 @@ class TestDockerModeRejectsAdminActions:
         ("post", "/api/bluetooth/block", 500, None),
         ("post", "/api/desktop/start", 500, None),
         ("post", "/api/desktop/stop", 500, None),
+        ("post", "/api/vnc/start", 500, None),
+        ("post", "/api/vnc/stop", 500, None),
         ("post", "/api/throttle/enable", 500, None),
         ("post", "/api/throttle/disable", 500, None),
         ("post", "/api/timezone/set", 500, {"timezone": "America/Denver"}),
@@ -189,3 +193,77 @@ class TestDesktopEndpoints:
             response = test_client.post(endpoint)
         assert response.status_code == 500
         assert "Failed to connect to bus" in response.json()["detail"]
+
+
+class TestVncEndpoints:
+    """VNC endpoints gate starting on a running desktop."""
+
+    def test_start_returns_409_when_desktop_stopped(self, test_client):
+        """A stopped desktop is a precondition failure, not a server error."""
+        from unittest import mock
+        from controller.lib.admin import DesktopStatus
+
+        with mock.patch("controller.lib.admin.get_vnc_backend",
+                        return_value=("wayvnc.service", "wayvnc", None)):
+            with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
+                response = test_client.post("/api/vnc/start")
+
+        assert response.status_code == 409
+        assert "Desktop must be running" in response.json()["detail"]
+
+    def test_start_runs_systemctl_when_desktop_running(self, test_client):
+        """With the desktop up, start should start the backend unit."""
+        from unittest import mock
+        from controller.lib.admin import DesktopStatus
+
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.get_vnc_backend",
+                        return_value=("wayvnc.service", "wayvnc", None)):
+            with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
+                with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+                    response = test_client.post("/api/vnc/start")
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        mock_exec.assert_called_once_with(
+            "systemctl", "start", "wayvnc.service", stdout=mock.ANY, stderr=mock.ANY)
+
+    def test_stop_works_with_desktop_stopped(self, test_client):
+        """Stopping is never gated, so VNC cannot be stranded on."""
+        from unittest import mock
+        from controller.lib.admin import DesktopStatus
+
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"")
+        mock_proc.returncode = 0
+
+        with mock.patch("controller.lib.admin.get_vnc_backend",
+                        return_value=("wayvnc.service", "wayvnc", None)):
+            with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
+                with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+                    response = test_client.post("/api/vnc/stop")
+
+        assert response.status_code == 200
+        mock_exec.assert_called_once_with(
+            "systemctl", "stop", "wayvnc.service", stdout=mock.ANY, stderr=mock.ANY)
+
+    def test_start_failure_returns_500(self, test_client):
+        """A systemctl failure is still a 500, distinct from the 409 gate."""
+        from unittest import mock
+        from controller.lib.admin import DesktopStatus
+
+        mock_proc = mock.AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"Job for wayvnc.service failed")
+        mock_proc.returncode = 1
+
+        with mock.patch("controller.lib.admin.get_vnc_backend",
+                        return_value=("wayvnc.service", "wayvnc", None)):
+            with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
+                with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+                    response = test_client.post("/api/vnc/start")
+
+        assert response.status_code == 500
+        assert "failed" in response.json()["detail"]

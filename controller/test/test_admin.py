@@ -37,8 +37,14 @@ from controller.lib.admin import (
     get_desktop_status_dict,
     start_desktop,
     stop_desktop,
+    get_vnc_backend,
+    get_vnc_status,
+    get_vnc_status_dict,
+    start_vnc,
+    stop_vnc,
     BluetoothStatus,
     DesktopStatus,
+    VncStatus,
     HotspotStatus,
     GovernorStatus,
 )
@@ -871,6 +877,8 @@ class TestDockerModeErrors:
         (stop_hotspot, False, ()),
         (start_desktop, True, ()),
         (stop_desktop, True, ()),
+        (start_vnc, True, ()),
+        (stop_vnc, True, ()),
         (enable_throttle, False, ()),
         (disable_throttle, False, ()),
         (shutdown_system, False, ()),
@@ -1304,3 +1312,226 @@ class TestApplyTimezoneFromConfig:
                 with mock.patch("controller.lib.admin.set_timezone") as mock_set:
                     apply_timezone_from_config()
                     mock_set.assert_not_called()
+
+
+def _show_proc(output: str, returncode: int = 0) -> mock.AsyncMock:
+    """A mocked `systemctl show` process printing the given properties."""
+    proc = mock.AsyncMock()
+    proc.communicate.return_value = (output.encode(), b"")
+    proc.returncode = returncode
+    return proc
+
+
+def _ok_proc() -> mock.AsyncMock:
+    proc = mock.AsyncMock()
+    proc.communicate.return_value = (b"", b"")
+    proc.returncode = 0
+    return proc
+
+
+class TestGetVncBackend:
+    """wayvnc is preferred over RealVNC, and must actually be configured."""
+
+    @pytest.mark.asyncio
+    async def test_prefers_wayvnc_when_configured(self):
+        """A loaded, configured wayvnc wins even when RealVNC is also installed."""
+        with mock.patch("asyncio.create_subprocess_exec", return_value=_show_proc("LoadState=loaded\n")):
+            with mock.patch("controller.lib.admin.WAYVNC_CONFIG") as config:
+                config.is_file.return_value = True
+                unit, name, reason = await get_vnc_backend()
+
+        assert unit == "wayvnc.service"
+        assert name == "wayvnc"
+        assert reason is None
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_realvnc_when_wayvnc_unconfigured(self):
+        """An unconfigured wayvnc must not be chosen; RealVNC is used instead."""
+        with mock.patch("asyncio.create_subprocess_exec", return_value=_show_proc("LoadState=loaded\n")):
+            with mock.patch("controller.lib.admin.WAYVNC_CONFIG") as config:
+                config.is_file.return_value = False
+                unit, name, reason = await get_vnc_backend()
+
+        assert unit == "vncserver-x11-serviced.service"
+        assert name == "realvnc"
+        assert reason is None
+
+    @pytest.mark.asyncio
+    async def test_reports_unconfigured_wayvnc_when_alone(self):
+        """wayvnc installed but unconfigured, with no RealVNC, explains itself."""
+        procs = [_show_proc("LoadState=loaded\n"), _show_proc("LoadState=not-found\n")]
+        with mock.patch("asyncio.create_subprocess_exec", side_effect=procs):
+            with mock.patch("controller.lib.admin.WAYVNC_CONFIG") as config:
+                config.is_file.return_value = False
+                unit, name, reason = await get_vnc_backend()
+
+        assert unit is None
+        assert name is None
+        assert "not configured" in reason
+
+    @pytest.mark.asyncio
+    async def test_reports_nothing_installed(self):
+        """Neither backend installed is reported plainly."""
+        with mock.patch("asyncio.create_subprocess_exec", return_value=_show_proc("LoadState=not-found\n")):
+            unit, name, reason = await get_vnc_backend()
+
+        assert unit is None
+        assert reason == "No VNC server installed"
+
+    @pytest.mark.asyncio
+    async def test_does_not_probe_the_compositor(self):
+        """Backend choice must not depend on a running compositor.
+
+        raspi-config uses `pgrep labwc` to decide Wayland-vs-X11, which reports X11
+        whenever the desktop is stopped and would pick the wrong backend.
+        """
+        with mock.patch("asyncio.create_subprocess_exec", return_value=_show_proc("LoadState=loaded\n")) as mock_exec:
+            with mock.patch("controller.lib.admin.WAYVNC_CONFIG") as config:
+                config.is_file.return_value = True
+                await get_vnc_backend()
+
+        for call in mock_exec.call_args_list:
+            assert "pgrep" not in call.args[0]
+
+
+class TestGetVncStatus:
+    """Tests for get_vnc_status."""
+
+    @pytest.mark.asyncio
+    async def test_returns_unknown_in_docker_mode(self):
+        """Should return unknown when in Docker mode."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=True):
+            assert await get_vnc_status() == VncStatus.unknown
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("active_state,expected", [
+        ("active", VncStatus.on),
+        ("inactive", VncStatus.off),
+        ("failed", VncStatus.off),
+    ])
+    async def test_maps_active_state(self, active_state, expected):
+        """ActiveState of the chosen unit decides on/off."""
+        procs = [_show_proc("LoadState=loaded\n"), _show_proc(f"ActiveState={active_state}\n")]
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs):
+                with mock.patch("controller.lib.admin.WAYVNC_CONFIG") as config:
+                    config.is_file.return_value = True
+                    assert await get_vnc_status() == expected
+
+    @pytest.mark.asyncio
+    async def test_unavailable_without_a_backend(self):
+        """No installed backend reports unavailable."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=_show_proc("LoadState=not-found\n")):
+                assert await get_vnc_status() == VncStatus.unavailable
+
+
+class TestGetVncStatusDict:
+    """The status dict gates starting on the desktop being up."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("vnc,desktop_up,running,available,can_start", [
+        (VncStatus.on, True, True, True, True),
+        (VncStatus.off, True, False, True, True),
+        (VncStatus.off, False, False, True, False),  # desktop stopped: cannot start
+        (VncStatus.on, False, True, True, False),  # running, but could not be started now
+        (VncStatus.unavailable, True, False, False, False),
+        (VncStatus.unknown, True, False, False, False),
+    ])
+    async def test_flags(self, vnc, desktop_up, running, available, can_start):
+        """running/available/can_start reflect VNC and desktop state."""
+        desktop = DesktopStatus.on if desktop_up else DesktopStatus.off
+        with mock.patch("controller.lib.admin.get_vnc_status", return_value=vnc):
+            with mock.patch("controller.lib.admin.get_vnc_backend", return_value=("u", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=desktop):
+                    result = await get_vnc_status_dict()
+
+        assert result["running"] is running
+        assert result["available"] is available
+        assert result["can_start"] is can_start
+        assert result["desktop_running"] is desktop_up
+        assert result["port"] == 5900
+
+    @pytest.mark.asyncio
+    async def test_explains_a_stopped_desktop(self):
+        """The reason should name the desktop when that is what blocks VNC."""
+        with mock.patch("controller.lib.admin.get_vnc_status", return_value=VncStatus.off):
+            with mock.patch("controller.lib.admin.get_vnc_backend", return_value=("u", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
+                    result = await get_vnc_status_dict()
+
+        assert "Desktop must be running" in result["reason"]
+
+
+class TestVncStartStop:
+    """Starting requires a desktop; stopping never does."""
+
+    @pytest.mark.asyncio
+    async def test_start_runs_systemctl_start(self):
+        """With a desktop up, start should start the chosen unit and nothing else."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_vnc_backend",
+                            return_value=("wayvnc.service", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
+                    with mock.patch("asyncio.create_subprocess_exec", return_value=_ok_proc()) as mock_exec:
+                        result = await start_vnc()
+
+        assert result["success"] is True
+        mock_exec.assert_called_once_with(
+            "systemctl", "start", "wayvnc.service", stdout=mock.ANY, stderr=mock.ANY)
+
+    @pytest.mark.asyncio
+    async def test_start_refused_when_desktop_stopped(self):
+        """The gate lives here, not only in the UI, so curl callers get it too."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_vnc_backend",
+                            return_value=("wayvnc.service", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
+                    with mock.patch("asyncio.create_subprocess_exec") as mock_exec:
+                        result = await start_vnc()
+
+        assert result["success"] is False
+        assert result["precondition_failed"] is True
+        assert "Desktop must be running" in result["error"]
+        mock_exec.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_allowed_with_desktop_stopped(self):
+        """A running VNC must always be stoppable, or it could be stranded on."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_vnc_backend",
+                            return_value=("wayvnc.service", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.off):
+                    with mock.patch("asyncio.create_subprocess_exec", return_value=_ok_proc()) as mock_exec:
+                        result = await stop_vnc()
+
+        assert result["success"] is True
+        mock_exec.assert_called_once_with(
+            "systemctl", "stop", "wayvnc.service", stdout=mock.ANY, stderr=mock.ANY)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("func", [start_vnc, stop_vnc])
+    async def test_never_enables_or_disables(self, func):
+        """Runtime-only: VNC must not be persisted across reboots."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_vnc_backend",
+                            return_value=("wayvnc.service", "wayvnc", None)):
+                with mock.patch("controller.lib.admin.get_desktop_status", return_value=DesktopStatus.on):
+                    with mock.patch("asyncio.create_subprocess_exec", return_value=_ok_proc()) as mock_exec:
+                        await func()
+
+        forbidden = {"enable", "disable", "mask", "unmask", "set-default", "isolate"}
+        for call in mock_exec.call_args_list:
+            assert not forbidden.intersection(call.args), call.args
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("func", [start_vnc, stop_vnc])
+    async def test_reports_missing_backend(self, func):
+        """Without a backend both actions explain themselves instead of failing obscurely."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("controller.lib.admin.get_vnc_backend",
+                            return_value=(None, None, "No VNC server installed")):
+                result = await func()
+
+        assert result["success"] is False
+        assert result["error"] == "No VNC server installed"

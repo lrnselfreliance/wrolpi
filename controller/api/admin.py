@@ -27,6 +27,8 @@ from controller.api.schemas import (
     TimezoneSetRequest,
     TimezoneSetResponse,
     TimezoneStatusResponse,
+    VncActionResponse,
+    VncStatusResponse,
 )
 from controller.lib.admin import (
     block_bluetooth,
@@ -34,6 +36,7 @@ from controller.lib.admin import (
     enable_throttle,
     get_bluetooth_status_dict,
     get_desktop_status_dict,
+    get_vnc_status_dict,
     get_device_hotspot_protocols,
     get_hotspot_device,
     get_hotspot_password,
@@ -49,8 +52,10 @@ from controller.lib.admin import (
     shutdown_system,
     start_desktop,
     start_hotspot,
+    start_vnc,
     stop_desktop,
     stop_hotspot,
+    stop_vnc,
     unblock_bluetooth,
     update_hotspot_settings,
 )
@@ -178,6 +183,34 @@ async def desktop_stop() -> DesktopActionResponse:
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
     return DesktopActionResponse(**result)
+
+
+# --- VNC ---
+
+@router.get("/api/vnc/status", response_model=VncStatusResponse)
+async def vnc_status() -> VncStatusResponse:
+    """Get VNC server status."""
+    return VncStatusResponse(**await get_vnc_status_dict())
+
+
+@router.post("/api/vnc/start", response_model=VncActionResponse)
+async def vnc_start() -> VncActionResponse:
+    """Start the VNC server; requires a running desktop."""
+    result = await start_vnc()
+    if not result.get("success"):
+        # 409 distinguishes "the desktop is not running" from a systemctl failure.
+        status_code = 409 if result.get("precondition_failed") else 500
+        raise HTTPException(status_code=status_code, detail=result.get("error", "Failed"))
+    return VncActionResponse(success=True)
+
+
+@router.post("/api/vnc/stop", response_model=VncActionResponse)
+async def vnc_stop() -> VncActionResponse:
+    """Stop the VNC server; allowed even when the desktop is stopped."""
+    result = await stop_vnc()
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed"))
+    return VncActionResponse(success=True)
 
 
 # --- Samba ---

@@ -47,6 +47,14 @@ class DesktopStatus(enum.Enum):
     unknown = enum.auto()  # Docker mode or cannot determine.
 
 
+class VncStatus(enum.Enum):
+    """VNC server status."""
+    on = enum.auto()  # VNC server is running.
+    off = enum.auto()  # A VNC server is installed, but stopped.
+    unavailable = enum.auto()  # No usable VNC server installed.
+    unknown = enum.auto()  # Docker mode or cannot determine.
+
+
 class GovernorStatus(enum.Enum):
     """CPU governor status enum matching wrolpi/admin.py"""
     ondemand = enum.auto()
@@ -708,6 +716,68 @@ async def block_bluetooth() -> dict:
         return {"success": False, "error": str(e)}
 
 
+# --- systemd units ---
+
+async def _unit_properties(unit: str, *properties: str) -> dict | None:
+    """
+    Read systemd properties for a unit, e.g. LoadState and ActiveState.
+
+    `systemctl show` exits 0 even for a unit that does not exist (reporting
+    LoadState=not-found), so callers must judge existence from LoadState.
+    Note ConditionResult is useless here: it reports "no" for any unit that has
+    never been started, configured or not.
+
+    Returns None when systemctl itself failed.  Timeouts and OSError propagate so
+    callers can tell "no systemd here" from "systemd would not answer".
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "systemctl", "show", unit, f"--property={','.join(properties)}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+
+    if proc.returncode != 0:
+        return None
+
+    return dict(
+        line.split("=", 1) for line in stdout.decode().strip().splitlines() if "=" in line
+    )
+
+
+async def _systemctl_unit(action: str, unit: str, label: str) -> dict:
+    """Run `systemctl <start|stop> <unit>` and report the result."""
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    logger.info("%s %s requested (%s)", label, action, unit)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", action, unit,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+        if proc.returncode == 0:
+            logger.info("%s %s succeeded", label, action)
+            return {"success": True}
+        else:
+            error_msg = stderr.decode().strip()
+            logger.warning("Failed to %s %s: %s", action, label.lower(), error_msg)
+            return {"success": False, "error": error_msg or "Unknown error"}
+
+    except asyncio.TimeoutError:
+        logger.warning("Timeout during %s %s", label.lower(), action)
+        return {"success": False, "error": f"Timeout during {label.lower()} {action}"}
+    except FileNotFoundError:
+        logger.warning("systemctl not found, cannot %s %s", action, label.lower())
+        return {"success": False, "error": "systemctl not found"}
+    except OSError as e:
+        logger.warning("Failed to %s %s: %s", action, label.lower(), e)
+        return {"success": False, "error": str(e)}
+
+
 # --- Desktop ---
 
 # Every display manager (lightdm on RPi OS, gdm3/sddm on Debian) provides this
@@ -726,19 +796,10 @@ async def get_desktop_status() -> DesktopStatus:
         return DesktopStatus.unknown
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "systemctl", "show", DISPLAY_MANAGER_UNIT, "--property=LoadState,ActiveState",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
-
-        if proc.returncode != 0:
+        properties = await _unit_properties(DISPLAY_MANAGER_UNIT, "LoadState", "ActiveState")
+        if properties is None:
             return DesktopStatus.unknown
 
-        properties = dict(
-            line.split("=", 1) for line in stdout.decode().strip().splitlines() if "=" in line
-        )
         if properties.get("LoadState") != "loaded":
             # "not-found" when no display manager is installed (e.g. RPi OS Lite).
             return DesktopStatus.unavailable
@@ -782,35 +843,7 @@ async def get_desktop_status_dict() -> dict:
 
 async def _systemctl_desktop(action: str) -> dict:
     """Run `systemctl <start|stop> display-manager.service` and report the result."""
-    if is_docker_mode():
-        return {"success": False, "error": "Not available in Docker mode"}
-
-    logger.info("Desktop %s requested (%s)", action, DISPLAY_MANAGER_UNIT)
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "systemctl", action, DISPLAY_MANAGER_UNIT,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-
-        if proc.returncode == 0:
-            logger.info("Desktop %s succeeded", action)
-            return {"success": True}
-        else:
-            error_msg = stderr.decode().strip()
-            logger.warning("Failed to %s desktop: %s", action, error_msg)
-            return {"success": False, "error": error_msg or "Unknown error"}
-
-    except asyncio.TimeoutError:
-        logger.warning("Timeout during desktop %s", action)
-        return {"success": False, "error": f"Timeout during desktop {action}"}
-    except FileNotFoundError:
-        logger.warning("systemctl not found, cannot %s desktop", action)
-        return {"success": False, "error": "systemctl not found"}
-    except OSError as e:
-        logger.warning("Failed to %s desktop: %s", action, e)
-        return {"success": False, "error": str(e)}
+    return await _systemctl_unit(action, DISPLAY_MANAGER_UNIT, "Desktop")
 
 
 # Stopping the display manager leaves the monitor black with only a blinking
@@ -932,6 +965,176 @@ async def stop_desktop() -> dict:
     if result.get("success"):
         result["switched_to_console"] = await _switch_to_console_vt()
     return result
+
+
+# --- VNC ---
+
+# Raspberry Pi OS ships wayvnc for Wayland sessions and RealVNC for X11; a Pi may
+# have both installed.  wayvnc only works when its config exists, which is also
+# the unit's own ConditionPathExists.
+WAYVNC_UNIT = "wayvnc.service"
+WAYVNC_CONFIG = Path("/etc/wayvnc/config")
+REALVNC_UNIT = "vncserver-x11-serviced.service"
+VNC_PORT = 5900
+
+
+async def _unit_is_loaded(unit: str) -> bool:
+    """Whether systemd knows about a unit."""
+    properties = await _unit_properties(unit, "LoadState")
+    return bool(properties) and properties.get("LoadState") == "loaded"
+
+
+async def get_vnc_backend() -> tuple[str | None, str | None, str | None]:
+    """
+    Pick the VNC backend to control.
+
+    Prefers wayvnc (Raspberry Pi OS uses Wayland), falling back to RealVNC.
+
+    Deliberately does not copy `raspi-config`'s live-compositor probe
+    (`pgrep labwc || pgrep wayfire`), which reports X11 — and would therefore pick
+    RealVNC — whenever the desktop happens to be stopped.
+
+    Never raises: a host without systemd simply has no VNC backend.
+
+    Returns:
+        (unit, name, reason) where reason explains an absent backend
+    """
+    try:
+        wayvnc_loaded = await _unit_is_loaded(WAYVNC_UNIT)
+        if wayvnc_loaded and WAYVNC_CONFIG.is_file():
+            return WAYVNC_UNIT, "wayvnc", None
+
+        if await _unit_is_loaded(REALVNC_UNIT):
+            return REALVNC_UNIT, "realvnc", None
+    except (asyncio.TimeoutError, OSError):
+        return None, None, "VNC not supported or systemctl unavailable"
+
+    if wayvnc_loaded:
+        # Installed but unconfigured; starting it would fail its own condition.
+        return None, None, f"wayvnc is installed but not configured ({WAYVNC_CONFIG} is missing)"
+
+    return None, None, "No VNC server installed"
+
+
+async def get_vnc_status() -> VncStatus:
+    """
+    Get the VNC server status from whichever backend is installed.
+
+    Returns:
+        VncStatus enum value
+    """
+    if is_docker_mode():
+        return VncStatus.unknown
+
+    try:
+        unit, _, _ = await get_vnc_backend()
+        if unit is None:
+            return VncStatus.unavailable
+
+        properties = await _unit_properties(unit, "ActiveState")
+        if properties is None:
+            return VncStatus.unknown
+
+        return VncStatus.on if properties.get("ActiveState") == "active" else VncStatus.off
+
+    except asyncio.TimeoutError:
+        return VncStatus.unknown
+    except FileNotFoundError:
+        return VncStatus.unavailable
+    except OSError:
+        return VncStatus.unknown
+
+
+async def get_vnc_status_dict() -> dict:
+    """
+    Get VNC status as a dict for API responses.
+
+    Returns dict matching VncStatusResponse schema:
+        running: bool - Whether the VNC server is currently running
+        available: bool - Whether a usable VNC server is installed
+        desktop_running: bool - Whether the desktop VNC would serve is running
+        can_start: bool - Whether VNC can be started right now
+        reason: Optional[str] - Why VNC is unavailable or cannot be started
+        backend: Optional[str] - "wayvnc" or "realvnc"
+        port: int - Port the VNC server listens on
+    """
+    status = await get_vnc_status()
+    _, backend, unavailable_reason = await get_vnc_backend()
+    desktop_running = await get_desktop_status() == DesktopStatus.on
+
+    running = status == VncStatus.on
+    available = status in (VncStatus.on, VncStatus.off)
+    # VNC serves the desktop session, so there is nothing to show without it.
+    can_start = available and desktop_running
+
+    reason = None
+    if status == VncStatus.unknown:
+        reason = "VNC not supported or systemctl unavailable"
+    elif status == VncStatus.unavailable:
+        reason = unavailable_reason or "No VNC server installed"
+    elif not desktop_running:
+        reason = "The Desktop must be running to use VNC"
+
+    return {
+        "running": running,
+        "available": available,
+        "desktop_running": desktop_running,
+        "can_start": can_start,
+        "reason": reason,
+        "backend": backend,
+        "port": VNC_PORT,
+    }
+
+
+async def start_vnc() -> dict:
+    """
+    Start the VNC server until stopped or reboot.
+
+    Requires a running desktop: VNC serves that session, so starting it without
+    one gives clients a blank screen.
+
+    Fail open in the same sense as the desktop: the unit is never enabled, so VNC
+    does not come back after a reboot.  Users who want it permanently on can
+    enable it with raspi-config.
+
+    Returns:
+        dict with success status
+    """
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    unit, _, reason = await get_vnc_backend()
+    if unit is None:
+        return {"success": False, "error": reason or "No VNC server installed"}
+
+    if await get_desktop_status() != DesktopStatus.on:
+        return {
+            "success": False,
+            "error": "The Desktop must be running to start VNC",
+            "precondition_failed": True,
+        }
+
+    return await _systemctl_unit("start", unit, "VNC")
+
+
+async def stop_vnc() -> dict:
+    """
+    Stop the VNC server.
+
+    Always allowed, even with the desktop stopped, so a running VNC server can
+    never be left on with no way to turn it off.
+
+    Returns:
+        dict with success status
+    """
+    if is_docker_mode():
+        return {"success": False, "error": "Not available in Docker mode"}
+
+    unit, _, reason = await get_vnc_backend()
+    if unit is None:
+        return {"success": False, "error": reason or "No VNC server installed"}
+
+    return await _systemctl_unit("stop", unit, "VNC")
 
 
 GOVERNOR_MAP = {

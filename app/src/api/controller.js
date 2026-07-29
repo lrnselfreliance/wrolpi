@@ -136,6 +136,18 @@ export async function stopDesktop() {
     return controllerFetch('/desktop/stop', {method: 'POST'});
 }
 
+export async function getVncStatus() {
+    return controllerFetch('/vnc/status');
+}
+
+export async function startVnc() {
+    return controllerFetch('/vnc/start', {method: 'POST'});
+}
+
+export async function stopVnc() {
+    return controllerFetch('/vnc/stop', {method: 'POST'});
+}
+
 // --- Samba Endpoints ---
 
 export async function getSambaStatus() {

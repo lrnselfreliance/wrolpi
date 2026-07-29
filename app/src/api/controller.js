@@ -92,12 +92,12 @@ export async function updateHotspotSettings(settings) {
     return controllerFetch('/hotspot/settings', {method: 'POST', body: JSON.stringify(settings)});
 }
 
-export async function enableHotspot() {
-    return controllerFetch('/hotspot/enable', {method: 'POST'});
+export async function startHotspot() {
+    return controllerFetch('/hotspot/start', {method: 'POST'});
 }
 
-export async function disableHotspot() {
-    return controllerFetch('/hotspot/disable', {method: 'POST'});
+export async function stopHotspot() {
+    return controllerFetch('/hotspot/stop', {method: 'POST'});
 }
 
 export async function getThrottleStatus() {
@@ -116,12 +116,24 @@ export async function getBluetoothStatus() {
     return controllerFetch('/bluetooth/status');
 }
 
-export async function enableBluetooth() {
-    return controllerFetch('/bluetooth/enable', {method: 'POST'});
+export async function unblockBluetooth() {
+    return controllerFetch('/bluetooth/unblock', {method: 'POST'});
 }
 
-export async function disableBluetooth() {
-    return controllerFetch('/bluetooth/disable', {method: 'POST'});
+export async function blockBluetooth() {
+    return controllerFetch('/bluetooth/block', {method: 'POST'});
+}
+
+export async function getDesktopStatus() {
+    return controllerFetch('/desktop/status');
+}
+
+export async function startDesktop() {
+    return controllerFetch('/desktop/start', {method: 'POST'});
+}
+
+export async function stopDesktop() {
+    return controllerFetch('/desktop/stop', {method: 'POST'});
 }
 
 // --- Samba Endpoints ---

@@ -43,10 +43,12 @@ import {
     updateDomain,
 } from "../api";
 import {
-    enableBluetooth,
-    disableBluetooth,
-    enableHotspot,
-    disableHotspot,
+    unblockBluetooth,
+    blockBluetooth,
+    startHotspot,
+    stopHotspot,
+    startDesktop,
+    stopDesktop,
     enableThrottle,
     disableThrottle,
     getControllerStats,
@@ -1049,9 +1051,9 @@ export const useHotspot = () => {
         setOn(null);
         try {
             if (enable) {
-                await enableHotspot();
+                await startHotspot();
             } else {
-                await disableHotspot();
+                await stopHotspot();
             }
         } catch (e) {
             console.error('Hotspot error:', e);
@@ -1191,9 +1193,9 @@ export const useBluetooth = () => {
         setOn(null);
         try {
             if (enable) {
-                await enableBluetooth();
+                await unblockBluetooth();
             } else {
-                await disableBluetooth();
+                await blockBluetooth();
             }
         } catch (e) {
             console.error('Bluetooth error:', e);
@@ -1207,6 +1209,43 @@ export const useBluetooth = () => {
     }
 
     return {on, setBluetooth: localSetBluetooth};
+}
+
+export const useDesktop = () => {
+    const [on, setOn] = useState(null);
+    const {status} = useContext(StatusContext);
+
+    useEffect(() => {
+        const desktopStatus = status?.desktop_status;
+        if (desktopStatus === 'on') {
+            setOn(true);
+        } else if (desktopStatus === 'off') {
+            setOn(false);
+        } else {
+            setOn(null);
+        }
+    }, [status?.desktop_status]);
+
+    const localSetDesktop = async (running) => {
+        setOn(null);
+        try {
+            if (running) {
+                await startDesktop();
+            } else {
+                await stopDesktop();
+            }
+        } catch (e) {
+            console.error('Desktop error:', e);
+            toast({
+                type: 'error',
+                title: 'Desktop Error',
+                description: e.message || 'Could not start/stop the desktop. See server logs.',
+                time: 5000,
+            });
+        }
+    }
+
+    return {on, setDesktop: localSetDesktop};
 }
 
 export const useSearchDirectories = (value) => {

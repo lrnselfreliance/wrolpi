@@ -79,6 +79,7 @@ jest.mock('../../hooks/customHooks', () => ({
     useDockerized: jest.fn().mockReturnValue(false),
     useMediaDirectory: jest.fn().mockReturnValue('/media/wrolpi'),
     useBluetooth: jest.fn().mockReturnValue({on: false, setBluetooth: jest.fn()}),
+    useDesktop: jest.fn().mockReturnValue({on: true, setDesktop: jest.fn()}),
     useHotspot: jest.fn().mockReturnValue({on: true, setHotspot: jest.fn()}),
     useThrottle: jest.fn().mockReturnValue({on: false, setThrottle: jest.fn()}),
 }));
@@ -89,6 +90,7 @@ jest.mock('../Common', () => {
     return {
         ...actual,
         BluetoothToggle: () => <div data-testid="bluetooth-toggle">BluetoothToggle</div>,
+        DesktopToggle: () => <div data-testid="desktop-toggle">DesktopToggle</div>,
         HotspotToggle: () => <div data-testid="hotspot-toggle">HotspotToggle</div>,
         ThrottleToggle: () => <div data-testid="throttle-toggle">ThrottleToggle</div>,
         Toggle: ({label, checked, onChange}) => (
@@ -174,6 +176,10 @@ describe('ControllerPage', () => {
         await waitFor(() => {
             expect(screen.getByText('Hardware Controls')).toBeInTheDocument();
         });
+        expect(screen.getByTestId('hotspot-toggle')).toBeInTheDocument();
+        expect(screen.getByTestId('bluetooth-toggle')).toBeInTheDocument();
+        expect(screen.getByTestId('desktop-toggle')).toBeInTheDocument();
+        expect(screen.getByTestId('throttle-toggle')).toBeInTheDocument();
     });
 
     test('calls getServices on mount', async () => {

@@ -1860,6 +1860,51 @@ async def test_daily_limit_counts_failed_attempts(test_session, test_download_ma
 
 
 @pytest.mark.asyncio
+async def test_summary_daily_limit_reached(test_session, test_download_manager, test_downloader):
+    """get_summary reports daily_limit_reached only when every due download is blocked by a daily limit."""
+    config = get_wrolpi_config()
+    name = test_downloader.name
+
+    # No limits configured.
+    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+
+    config.download_daily_limit_per_domain = 2
+    # No due downloads => not reached, even though limits are configured.
+    _make_processed_download(test_session, name, 'https://example.com/1')
+    _make_processed_download(test_session, name, 'https://example.com/2')
+    test_session.commit()
+    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+
+    # A due download for the capped domain => reached.
+    blocked = Download(url='https://example.com/new', downloader=name, status='new')
+    test_session.add(blocked)
+    test_session.commit()
+    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+
+    # A due download for another domain can still dispatch => not reached.
+    allowed = Download(url='https://rumble.com/new', downloader=name, status='new')
+    test_session.add(allowed)
+    test_session.commit()
+    assert test_download_manager.get_summary()['daily_limit_reached'] is False
+
+    # Recurring downloads are never gated by daily limits and must not count as "due".
+    test_session.delete(allowed)
+    recurring = Download(url='https://example.com/feed', downloader=name, status='new',
+                         frequency=DownloadFrequency.daily)
+    test_session.add(recurring)
+    test_session.commit()
+    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+
+    # Global limit blocks everything, even a fresh domain.
+    config.download_daily_limit_per_domain = None
+    config.download_daily_limit_global = 2
+    fresh = Download(url='https://wikipedia.org/new', downloader=name, status='new')
+    test_session.add(fresh)
+    test_session.commit()
+    assert test_download_manager.get_summary()['daily_limit_reached'] is True
+
+
+@pytest.mark.asyncio
 async def test_daily_limit_global_blocks(test_session, test_download_manager, test_downloader):
     """The global daily limit caps downloads across all domains."""
     config = get_wrolpi_config()

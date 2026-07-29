@@ -1543,14 +1543,40 @@ class DownloadManager:
                 func.count(Download.id).filter(Download.status == DownloadStatus.pending),
                 func.count(Download.id).filter(Download.frequency != None),  # noqa
             ).one()
+            daily_limit_reached = self.daily_limit_reached(session)
         summary = dict(
             pending=pending_downloads,
             recurring=recurring_downloads,
             disabled=self.is_disabled,
             stopped=self.is_stopped,
             outside_download_window=self.outside_download_window,
+            daily_limit_reached=daily_limit_reached,
         )
         return summary
+
+    def daily_limit_reached(self, session: Session) -> bool:
+        """True when due (`new`, non-recurring) downloads exist and every one of them is blocked by the
+        daily download limits.  This is what the UI uses to explain a stalled-looking queue; partial
+        blockage (some domains capped, others still downloading) does not count."""
+        limit_per_domain = get_wrolpi_config().download_daily_limit_per_domain or 0
+        limit_global = get_wrolpi_config().download_daily_limit_global or 0
+        if not limit_per_domain and not limit_global:
+            return False
+
+        due_downloads = session.query(Download).filter(
+            Download.status == DownloadStatus.new,
+            Download.frequency.is_(None),
+        ).all()
+        if not due_downloads:
+            return False
+
+        global_count, domain_counts = self.daily_download_counts(session)
+        if limit_global and global_count >= limit_global:
+            return True
+        if limit_per_domain:
+            return all(domain_counts.get(self._normalize_download_domain(download), 0) >= limit_per_domain
+                       for download in due_downloads)
+        return False
 
     @staticmethod
     def calculate_next_download(session: Session, download: Download) -> Optional[datetime]:

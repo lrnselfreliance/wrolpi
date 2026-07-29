@@ -262,13 +262,15 @@ class TestDesktopStartStop:
             with mock.patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
                 result = await func()
                 assert result["success"] is True
-                # Fail open: only start/stop the unit, never enable/disable or
-                # change the default target.
-                mock_exec.assert_called_once_with(
+                assert mock_exec.call_args_list[0] == mock.call(
                     "systemctl", systemctl_action, "display-manager.service",
                     stdout=mock.ANY,
                     stderr=mock.ANY,
                 )
+                # Fail open: never enable/disable the unit or change the default target.
+                forbidden = {"enable", "disable", "mask", "unmask", "set-default", "isolate"}
+                for call in mock_exec.call_args_list:
+                    assert not forbidden.intersection(call.args), call.args
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("func", [start_desktop, stop_desktop])
@@ -292,6 +294,121 @@ class TestDesktopStartStop:
             with mock.patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError()):
                 result = await func()
                 assert result["success"] is False
+
+
+class TestStopDesktopDropsToConsole:
+    """Stopping the desktop must leave the physical display on a usable terminal.
+
+    The display manager owns its own VT (7 on Raspberry Pi OS); stopping it leaves
+    that VT blank with only a cursor, so the display is switched to the console VT.
+    """
+
+    @staticmethod
+    def _proc(returncode=0, stdout=b"", stderr=b""):
+        proc = mock.AsyncMock()
+        proc.communicate.return_value = (stdout, stderr)
+        proc.returncode = returncode
+        return proc
+
+    @pytest.mark.asyncio
+    async def test_activates_and_repaints_console(self):
+        """Should check for a getty, activate the console VT, then bounce to repaint it.
+
+        The console VT is normally already in the foreground when the display manager
+        stops, but the monitor is left black until something forces a redraw.
+        """
+        procs = [self._proc(), self._proc(0, b"active\n"), self._proc(), self._proc(), self._proc()]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs) as mock_exec:
+                with mock.patch("builtins.open", mock.mock_open()) as mock_console:
+                    result = await stop_desktop()
+
+        assert result["success"] is True
+        assert result["switched_to_console"] is True
+        commands = [call.args for call in mock_exec.call_args_list]
+        assert commands[0] == ("systemctl", "stop", "display-manager.service")
+        assert commands[1] == ("systemctl", "is-active", "getty@tty1.service")
+        # Land on the console, bounce away, and come back so it is repainted.
+        assert commands[2:] == [("/usr/bin/chvt", "1"), ("/usr/bin/chvt", "2"), ("/usr/bin/chvt", "1")]
+        mock_console.assert_called_once_with("/dev/tty1", "w")
+        written = mock_console().write.call_args.args[0]
+        assert "stopped the desktop" in written
+        assert "systemctl start display-manager" in written
+
+    @pytest.mark.asyncio
+    async def test_console_write_failure_is_tolerated(self):
+        """A console that cannot be written to must not fail the stop."""
+        procs = [self._proc(), self._proc(0, b"active\n"), self._proc(), self._proc(), self._proc()]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs):
+                with mock.patch("builtins.open", side_effect=OSError("No such device")):
+                    result = await stop_desktop()
+
+        assert result["success"] is True
+        assert result["switched_to_console"] is True
+
+    @pytest.mark.asyncio
+    async def test_reports_failure_when_stranded_on_repaint_vt(self):
+        """If the bounce cannot return to the console, say so rather than claim success."""
+        procs = [self._proc(), self._proc(0, b"active\n"), self._proc(), self._proc(), self._proc(1)]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs):
+                result = await stop_desktop()
+
+        assert result["success"] is True
+        assert result["switched_to_console"] is False
+
+    @pytest.mark.asyncio
+    async def test_does_not_switch_when_no_getty(self):
+        """Without a getty on the console VT, switching would be just as blank — skip it."""
+        procs = [self._proc(), self._proc(3, b"inactive\n")]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs) as mock_exec:
+                result = await stop_desktop()
+
+        assert result["success"] is True
+        assert result["switched_to_console"] is False
+        assert len(mock_exec.call_args_list) == 2  # no chvt
+
+    @pytest.mark.asyncio
+    async def test_chvt_failure_does_not_fail_the_stop(self):
+        """A missing or failing chvt is reported, but the desktop is still stopped."""
+        procs = [self._proc(), self._proc(0, b"active\n"), FileNotFoundError()]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs):
+                result = await stop_desktop()
+
+        assert result["success"] is True
+        assert result["switched_to_console"] is False
+
+    @pytest.mark.asyncio
+    async def test_no_switch_when_stop_failed(self):
+        """A failed stop leaves the desktop up, so the display must not be switched."""
+        procs = [self._proc(5, b"", b"Unit not loaded.")]
+
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", side_effect=procs) as mock_exec:
+                result = await stop_desktop()
+
+        assert result["success"] is False
+        assert "switched_to_console" not in result
+        assert len(mock_exec.call_args_list) == 1
+
+    @pytest.mark.asyncio
+    async def test_start_never_switches_vt(self):
+        """Starting the desktop must not touch the VT; the display manager claims one itself."""
+        with mock.patch("controller.lib.admin.is_docker_mode", return_value=False):
+            with mock.patch("asyncio.create_subprocess_exec", return_value=self._proc()) as mock_exec:
+                result = await start_desktop()
+
+        assert result["success"] is True
+        assert "switched_to_console" not in result
+        assert len(mock_exec.call_args_list) == 1
 
 
 class TestGetHotspotStatus:

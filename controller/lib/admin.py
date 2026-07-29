@@ -813,6 +813,97 @@ async def _systemctl_desktop(action: str) -> dict:
         return {"success": False, "error": str(e)}
 
 
+# Stopping the display manager leaves the monitor black with only a blinking
+# cursor, even though the console VT is already in the foreground with a getty
+# and a shell on it: the display manager hands the display back without the
+# console being repainted.  Bouncing through another VT forces a modeset and
+# redraw, and a short message guarantees there is something legible on screen.
+CONSOLE_VT = "1"
+CONSOLE_GETTY_UNIT = "getty@tty1.service"
+CONSOLE_DEVICE = "/dev/tty1"
+REPAINT_VT = "2"
+
+CONSOLE_MESSAGE = (
+    "\n*** The WROLPi Controller stopped the desktop. ***\n"
+    "*** Press Enter for a prompt.  Start the desktop again with: ***\n"
+    "***   sudo systemctl start display-manager ***\n\n"
+)
+
+
+async def _console_getty_active() -> bool:
+    """Whether a getty is running on the console VT (i.e. switching there gives a terminal)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "systemctl", "is-active", CONSOLE_GETTY_UNIT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(proc.communicate(), timeout=5)
+        return proc.returncode == 0
+    except (asyncio.TimeoutError, FileNotFoundError, OSError):
+        return False
+
+
+async def _chvt(vt: str) -> bool:
+    """Activate a virtual terminal.  Returns True on success."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "/usr/bin/chvt", vt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        if proc.returncode == 0:
+            return True
+        logger.warning("Failed to switch to VT %s: %s", vt, stderr.decode().strip())
+        return False
+    except asyncio.TimeoutError:
+        logger.warning("Timeout switching to VT %s", vt)
+        return False
+    except FileNotFoundError:
+        logger.warning("chvt not found; cannot switch VTs")
+        return False
+    except OSError as e:
+        logger.warning("Failed to switch to VT %s: %s", vt, e)
+        return False
+
+
+def _write_console_message():
+    """Print a short message on the console so the screen is not left blank."""
+    try:
+        with open(CONSOLE_DEVICE, "w") as console:
+            console.write(CONSOLE_MESSAGE)
+    except OSError as e:
+        logger.warning("Could not write to %s: %s", CONSOLE_DEVICE, e)
+
+
+async def _switch_to_console_vt() -> bool:
+    """
+    Leave the physical display showing a usable terminal.
+
+    Best-effort: never fails the caller.  Returns True when the console was
+    activated and repainted.
+    """
+    if not await _console_getty_active():
+        # Without a getty there is no terminal to show, so leave the display alone.
+        logger.warning("No getty on %s; leaving the display as-is", CONSOLE_GETTY_UNIT)
+        return False
+
+    if not await _chvt(CONSOLE_VT):
+        return False
+
+    # The console VT is usually already in the foreground, but stale after the
+    # display manager released the display; bounce off another VT to repaint it.
+    if await _chvt(REPAINT_VT) and not await _chvt(CONSOLE_VT):
+        logger.error("Left the display on VT %s after failing to return to VT %s",
+                     REPAINT_VT, CONSOLE_VT)
+        return False
+
+    _write_console_message()
+    logger.info("Console VT %s activated and repainted", CONSOLE_VT)
+    return True
+
+
 async def start_desktop() -> dict:
     """
     Start the graphical desktop (display manager) until stopped or reboot.
@@ -828,15 +919,19 @@ async def start_desktop() -> dict:
 
 async def stop_desktop() -> dict:
     """
-    Stop the graphical desktop (display manager) until started or reboot.
+    Stop the graphical desktop (display manager) until started or reboot, then
+    drop the physical display to a console terminal.
 
     Fail open: this deliberately does not `systemctl disable` the unit, so the
     desktop returns on the next boot.
 
     Returns:
-        dict with success status
+        dict with success status and whether the display reached the console
     """
-    return await _systemctl_desktop("stop")
+    result = await _systemctl_desktop("stop")
+    if result.get("success"):
+        result["switched_to_console"] = await _switch_to_console_vt()
+    return result
 
 
 GOVERNOR_MAP = {

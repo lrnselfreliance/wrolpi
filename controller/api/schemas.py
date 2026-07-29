@@ -233,6 +233,8 @@ class DesktopActionResponse(BaseModel):
     """Response model for desktop start/stop actions."""
 
     success: bool = Field(description="Whether the action succeeded")
+    switched_to_console: Optional[bool] = Field(
+        default=None, description="Whether stopping switched the display to a console terminal")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
 

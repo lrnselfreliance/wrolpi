@@ -169,7 +169,8 @@ class TestDesktopEndpoints:
             response = test_client.post(endpoint)
         assert response.status_code == 200
         assert response.json()["success"] is True
-        mock_exec.assert_called_once_with(
+        # Stopping also switches the display to a console VT, so assert the first call.
+        assert mock_exec.call_args_list[0] == mock.call(
             "systemctl", systemctl_action, "display-manager.service",
             stdout=mock.ANY,
             stderr=mock.ANY,

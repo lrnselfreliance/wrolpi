@@ -1048,8 +1048,8 @@ export function DesktopToggle() {
             onClose={() => setConfirmOpen(false)}
             onConfirm={handleConfirmStop}
             header='Stop the desktop'
-            content={"Anyone using this WROLPi's own screen will lose their session."
-                + ' The desktop will return on the next reboot. Are you sure?'}
+            content={"Anyone using this WROLPi's own screen will lose their session and the display will"
+                + ' drop to a terminal. The desktop will return on the next reboot. Are you sure?'}
             confirmButton='Stop'
         />
         <Toggle

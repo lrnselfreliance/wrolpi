@@ -1577,8 +1577,8 @@
     async function toggleDesktop() {
         const btn = document.getElementById('desktop-btn');
         if (desktopRunning && !confirm(
-            'Stop the desktop? Anyone using this WROLPi\'s own screen will lose their session.'
-            + ' The desktop will return on the next reboot.')) {
+            'Stop the desktop? Anyone using this WROLPi\'s own screen will lose their session'
+            + ' and the display will drop to a terminal. The desktop will return on the next reboot.')) {
             return;
         }
         btn.disabled = true;

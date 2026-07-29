@@ -1227,6 +1227,7 @@ export const useDesktop = () => {
     }, [status?.desktop_status]);
 
     const localSetDesktop = async (running) => {
+        const previous = on;
         setOn(null);
         try {
             if (running) {
@@ -1242,6 +1243,9 @@ export const useDesktop = () => {
                 description: e.message || 'Could not start/stop the desktop. See server logs.',
                 time: 5000,
             });
+            // The desktop did not change, so the status poll will not re-sync `on`;
+            // restore it or the toggle stays disabled.
+            setOn(previous);
         }
     }
 

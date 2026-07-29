@@ -611,6 +611,17 @@ export function DownloadWindowMessage() {
     return null;
 }
 
+export function DailyLimitMessage() {
+    const {status} = React.useContext(StatusContext);
+    const downloads = status ? status.downloads : null;
+
+    if (downloads && downloads.daily_limit_reached && !downloads.disabled && !downloads.stopped) {
+        return <Message icon='pause circle outline' header='Max Daily Downloads Reached'
+                        content='Downloads are paused because the daily download limit has been reached. Downloads will resume tomorrow.'/>
+    }
+    return null;
+}
+
 export function CookiesUnlockModal({open, onClose, onSuccess}) {
     const [password, setPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);

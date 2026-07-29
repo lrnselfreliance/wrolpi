@@ -745,6 +745,36 @@ async def _unit_properties(unit: str, *properties: str) -> dict | None:
     )
 
 
+async def _units_properties(units: list[str], *properties: str) -> list[dict] | None:
+    """
+    Read the same systemd properties for several units in one `systemctl show` call.
+
+    Output is one blank-line-separated block per unit, in the order asked for.
+    Batching matters because these probes run on every /api/stats request.
+
+    Returns one dict per unit, or None when systemctl itself failed.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "systemctl", "show", *units, f"--property={','.join(properties)}",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+
+    if proc.returncode != 0:
+        return None
+
+    blocks = []
+    for block in stdout.decode().strip().split("\n\n"):
+        blocks.append(dict(
+            line.split("=", 1) for line in block.strip().splitlines() if "=" in line
+        ))
+    # Pad so callers can index by unit even if systemd reported fewer blocks.
+    while len(blocks) < len(units):
+        blocks.append({})
+    return blocks
+
+
 async def _systemctl_unit(action: str, unit: str, label: str) -> dict:
     """Run `systemctl <start|stop> <unit>` and report the result."""
     if is_docker_mode():
@@ -978,18 +1008,17 @@ REALVNC_UNIT = "vncserver-x11-serviced.service"
 VNC_PORT = 5900
 
 
-async def _unit_is_loaded(unit: str) -> bool:
-    """Whether systemd knows about a unit."""
-    properties = await _unit_properties(unit, "LoadState")
-    return bool(properties) and properties.get("LoadState") == "loaded"
-
-
-async def get_vnc_backend() -> tuple[str | None, str | None, str | None]:
+async def get_vnc_backends() -> tuple[list[dict], str | None]:
     """
-    Pick the VNC backend to control.
+    List the usable VNC backends in preference order, with their current state.
 
-    Prefers wayvnc (Raspberry Pi OS uses Wayland), falling back to RealVNC.
+    Both stacks can be installed at once and *either* can be running — a user may
+    have started RealVNC through raspi-config.  Reporting only the preferred
+    backend would claim "VNC is off" while the other one is still serving the
+    screen, so every installed backend is reported and `stop_vnc()` stops all of
+    the running ones.
 
+    Prefers wayvnc (Raspberry Pi OS uses Wayland) when choosing what to start.
     Deliberately does not copy `raspi-config`'s live-compositor probe
     (`pgrep labwc || pgrep wayfire`), which reports X11 — and would therefore pick
     RealVNC — whenever the desktop happens to be stopped.
@@ -997,28 +1026,45 @@ async def get_vnc_backend() -> tuple[str | None, str | None, str | None]:
     Never raises: a host without systemd simply has no VNC backend.
 
     Returns:
-        (unit, name, reason) where reason explains an absent backend
+        (backends, reason) where each backend is {"unit", "name", "active"} and
+        reason explains an empty list
     """
+    unavailable = "VNC not supported or systemctl unavailable"
     try:
-        wayvnc_loaded = await _unit_is_loaded(WAYVNC_UNIT)
-        if wayvnc_loaded and WAYVNC_CONFIG.is_file():
-            return WAYVNC_UNIT, "wayvnc", None
-
-        if await _unit_is_loaded(REALVNC_UNIT):
-            return REALVNC_UNIT, "realvnc", None
+        properties = await _units_properties([WAYVNC_UNIT, REALVNC_UNIT], "LoadState", "ActiveState")
     except (asyncio.TimeoutError, OSError):
-        return None, None, "VNC not supported or systemctl unavailable"
+        return [], unavailable
+    if properties is None:
+        return [], unavailable
 
+    wayvnc_properties, realvnc_properties = properties[0], properties[1]
+
+    backends = []
+    wayvnc_loaded = wayvnc_properties.get("LoadState") == "loaded"
+    if wayvnc_loaded and WAYVNC_CONFIG.is_file():
+        backends.append({
+            "unit": WAYVNC_UNIT,
+            "name": "wayvnc",
+            "active": wayvnc_properties.get("ActiveState") == "active",
+        })
+    if realvnc_properties.get("LoadState") == "loaded":
+        backends.append({
+            "unit": REALVNC_UNIT,
+            "name": "realvnc",
+            "active": realvnc_properties.get("ActiveState") == "active",
+        })
+
+    if backends:
+        return backends, None
     if wayvnc_loaded:
         # Installed but unconfigured; starting it would fail its own condition.
-        return None, None, f"wayvnc is installed but not configured ({WAYVNC_CONFIG} is missing)"
-
-    return None, None, "No VNC server installed"
+        return [], f"wayvnc is installed but not configured ({WAYVNC_CONFIG} is missing)"
+    return [], "No VNC server installed"
 
 
 async def get_vnc_status() -> VncStatus:
     """
-    Get the VNC server status from whichever backend is installed.
+    Get the VNC server status; on when *any* installed backend is running.
 
     Returns:
         VncStatus enum value
@@ -1026,23 +1072,11 @@ async def get_vnc_status() -> VncStatus:
     if is_docker_mode():
         return VncStatus.unknown
 
-    try:
-        unit, _, _ = await get_vnc_backend()
-        if unit is None:
-            return VncStatus.unavailable
-
-        properties = await _unit_properties(unit, "ActiveState")
-        if properties is None:
-            return VncStatus.unknown
-
-        return VncStatus.on if properties.get("ActiveState") == "active" else VncStatus.off
-
-    except asyncio.TimeoutError:
-        return VncStatus.unknown
-    except FileNotFoundError:
+    backends, _ = await get_vnc_backends()
+    if not backends:
         return VncStatus.unavailable
-    except OSError:
-        return VncStatus.unknown
+
+    return VncStatus.on if any(backend["active"] for backend in backends) else VncStatus.off
 
 
 async def get_vnc_status_dict() -> dict:
@@ -1050,27 +1084,39 @@ async def get_vnc_status_dict() -> dict:
     Get VNC status as a dict for API responses.
 
     Returns dict matching VncStatusResponse schema:
-        running: bool - Whether the VNC server is currently running
+        running: bool - Whether any VNC server is currently running
         available: bool - Whether a usable VNC server is installed
         desktop_running: bool - Whether the desktop VNC would serve is running
         can_start: bool - Whether VNC can be started right now
         reason: Optional[str] - Why VNC is unavailable or cannot be started
-        backend: Optional[str] - "wayvnc" or "realvnc"
+        backend: Optional[str] - The running backend, else the preferred one
         port: int - Port the VNC server listens on
     """
-    status = await get_vnc_status()
-    _, backend, unavailable_reason = await get_vnc_backend()
+    if is_docker_mode():
+        return {
+            "running": False,
+            "available": False,
+            "desktop_running": False,
+            "can_start": False,
+            "reason": "Not available in Docker mode",
+            "backend": None,
+            "port": VNC_PORT,
+        }
+
+    backends, unavailable_reason = await get_vnc_backends()
     desktop_running = await get_desktop_status() == DesktopStatus.on
 
-    running = status == VncStatus.on
-    available = status in (VncStatus.on, VncStatus.off)
+    active = [backend for backend in backends if backend["active"]]
+    running = bool(active)
+    available = bool(backends)
     # VNC serves the desktop session, so there is nothing to show without it.
     can_start = available and desktop_running
+    # Name whichever backend is actually serving, so the UI cannot report wayvnc
+    # while RealVNC is the one running.
+    backend = (active or backends)[0]["name"] if backends else None
 
     reason = None
-    if status == VncStatus.unknown:
-        reason = "VNC not supported or systemctl unavailable"
-    elif status == VncStatus.unavailable:
+    if not available:
         reason = unavailable_reason or "No VNC server installed"
     elif not desktop_running:
         reason = "The Desktop must be running to use VNC"
@@ -1103,8 +1149,8 @@ async def start_vnc() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    unit, _, reason = await get_vnc_backend()
-    if unit is None:
+    backends, reason = await get_vnc_backends()
+    if not backends:
         return {"success": False, "error": reason or "No VNC server installed"}
 
     if await get_desktop_status() != DesktopStatus.on:
@@ -1114,12 +1160,16 @@ async def start_vnc() -> dict:
             "precondition_failed": True,
         }
 
-    return await _systemctl_unit("start", unit, "VNC")
+    return await _systemctl_unit("start", backends[0]["unit"], "VNC")
 
 
 async def stop_vnc() -> dict:
     """
-    Stop the VNC server.
+    Stop every running VNC server.
+
+    All running backends are stopped, not just the preferred one: leaving the
+    other stack serving while the Controller reports VNC as off would keep the
+    screen remotely accessible.
 
     Always allowed, even with the desktop stopped, so a running VNC server can
     never be left on with no way to turn it off.
@@ -1130,11 +1180,22 @@ async def stop_vnc() -> dict:
     if is_docker_mode():
         return {"success": False, "error": "Not available in Docker mode"}
 
-    unit, _, reason = await get_vnc_backend()
-    if unit is None:
+    backends, reason = await get_vnc_backends()
+    if not backends:
         return {"success": False, "error": reason or "No VNC server installed"}
 
-    return await _systemctl_unit("stop", unit, "VNC")
+    # Nothing running: still issue a stop so the call stays idempotent.
+    units = [backend["unit"] for backend in backends if backend["active"]] or [backends[0]["unit"]]
+
+    errors = []
+    for unit in units:
+        result = await _systemctl_unit("stop", unit, "VNC")
+        if not result.get("success"):
+            errors.append(f"{unit}: {result.get('error')}")
+
+    if errors:
+        return {"success": False, "error": "; ".join(errors)}
+    return {"success": True}
 
 
 GOVERNOR_MAP = {

@@ -12,6 +12,5 @@
   "src/components/Upload.js",
   "src/components/VideoPlayer.js",
   "src/components/Zim.js",
-  "src/components/admin/ControllerPage.js",
   "src/components/admin/Downloads.js"
 ]

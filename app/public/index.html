@@ -28,6 +28,29 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>WROLPi: Create your own off-grid library</title>
+    <script>
+        /*
+          Stamp the saved theme on <html> before first paint.  ThemeProvider sets the same
+          attribute once React mounts, but the bundle can take a while to arrive over a
+          hotspot — without this the page would paint in the wrong theme first.  Keep the
+          storage key and theme names in sync with src/components/Theme.tsx.
+        */
+        (function () {
+            var theme = 'light';
+            try {
+                var saved = localStorage.getItem('color-scheme');
+                if (saved === 'light' || saved === 'dark' || saved === 'night' || saved === 'amber') {
+                    theme = saved;
+                } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    // `system`, unset, or written by an older version.
+                    theme = 'dark';
+                }
+            } catch (e) {
+                // Storage blocked; fall back to light.
+            }
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
 </head>
 <body>
 <noscript>You need to enable JavaScript to run this app.</noscript>

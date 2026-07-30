@@ -100,9 +100,46 @@ import {ThemeContextValue, ThemeName, SavedThemeName} from "../types/theme";
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
+export const nightTheme = 'night';
+export const amberTheme = 'amber';
 export const defaultTheme = lightTheme;
 export const systemTheme = 'system';
 export const themeSessionKey = 'color-scheme';
+
+// Every theme a user can apply, in the order the theme picker offers them.
+export const themeNames: ThemeName[] = [lightTheme, darkTheme, nightTheme, amberTheme];
+// Themes built on a dark background.  Semantic components are `inverted` in these.
+const darkThemes: ThemeName[] = [darkTheme, nightTheme, amberTheme];
+// Themes a user must choose deliberately; `prefers-color-scheme` never picks them.
+const explicitOnlyThemes: ThemeName[] = [nightTheme, amberTheme];
+
+export const isDarkTheme = (theme: ThemeName): boolean => darkThemes.includes(theme);
+
+const isThemeName = (value: unknown): value is ThemeName => themeNames.includes(value as ThemeName);
+
+/** Resolve the saved preference to the theme that should be applied right now. */
+export const resolveTheme = (saved: SavedThemeName): ThemeName => {
+    if (isThemeName(saved)) {
+        return saved;
+    }
+    // `system`, null, or a value written by an older version.
+    const prefersDark = typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? darkTheme : lightTheme;
+}
+
+const readSavedTheme = (): SavedThemeName => {
+    try {
+        const value = localStorage.getItem(themeSessionKey);
+        if (isThemeName(value) || value === systemTheme) {
+            return value;
+        }
+    } catch (e) {
+        // localStorage can throw when cookies/storage are blocked.
+        console.error('Unable to read the saved theme', e);
+    }
+    return null;
+}
 
 interface ThemeProviderProps {
     children: React.ReactNode;
@@ -114,97 +151,88 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
         console.error('ThemeWrapper does not support props!');
     }
 
-    // Properties to manipulate elements with theme.
-    // Invert when Semantic supports it.  Example: <Menu {...i}>
-    const [i, setI] = useState<{inverted?: boolean}>({});
-    // Invert style when Semantic does not support it.  Example: <p {...s}>This paragraph changes style</p>
-    const [s, setS] = useState<{style?: CSSProperties}>({});
-    // Invert text when Semantic does not support it.
-    const [t, setT] = useState<{style?: CSSProperties}>({});
-    const [inverted, setInverted] = useState<string>('');
+    // savedTheme is the user's preference: a theme name, `system`, or null (never chosen).
+    const [savedTheme, setSavedTheme] = useState<SavedThemeName>(readSavedTheme);
+    // theme is what is currently applied.
+    const [theme, setThemeName] = useState<ThemeName>(() => resolveTheme(readSavedTheme()));
 
-    // theme can be one of [darkTheme, lightTheme]
-    const [theme, setTheme] = useState<ThemeName>(lightTheme);
-    // savedTheme can be one of [null, darkTheme, lightTheme, systemTheme]
-    const [savedTheme, setSavedTheme] = useState<SavedThemeName>(
-        localStorage.getItem('color-scheme') as SavedThemeName
-    );
+    // `data-theme` on <html> is what the token CSS keys off of.  index.html stamps it before
+    // first paint from the same localStorage value, so the first render already matches.
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+    }, [theme]);
 
-    const setDarkTheme = (save = false) => {
-        console.debug('setDarkTheme');
-        setI({inverted: true});
-        setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
-        setT({style: {color: '#eeeeee'}});
-        setInverted('inverted');
-        setTheme(darkTheme);
-        document.body.style.background = '#171616';
-        if (save) {
-            saveTheme(darkTheme);
+    // Follow the OS preference only while the user has not chosen a specific theme.
+    useEffect(() => {
+        if (isThemeName(savedTheme) || typeof window.matchMedia !== 'function') {
+            return;
         }
+        const query = window.matchMedia('(prefers-color-scheme: dark)');
+        const onChange = () => setThemeName(resolveTheme(savedTheme));
+        query.addEventListener('change', onChange);
+        return () => query.removeEventListener('change', onChange);
+    }, [savedTheme]);
+
+    const saveTheme = (value: SavedThemeName) => {
+        setSavedTheme(value);
+        try {
+            if (value === null) {
+                localStorage.removeItem(themeSessionKey);
+            } else {
+                localStorage.setItem(themeSessionKey, value);
+            }
+        } catch (e) {
+            console.error('Unable to save the theme', e);
+        }
+    }
+
+    /** Apply and persist a theme.  Pass `system` to follow the OS preference. */
+    const setTheme = (value: SavedThemeName) => {
+        if (value !== systemTheme && value !== null && !isThemeName(value)) {
+            console.error(`Unknown theme! ${value}`);
+            return;
+        }
+        saveTheme(value);
+        setThemeName(resolveTheme(value));
+    }
+
+    // Retained for callers written against the old two-theme API.
+    const setDarkTheme = (save = false) => {
+        setThemeName(darkTheme);
+        if (save) saveTheme(darkTheme);
     }
 
     const setLightTheme = (save = false) => {
-        console.debug('setLightTheme');
-        setI({inverted: undefined});
-        setS({});
-        setT({});
-        setInverted('');
-        setTheme(lightTheme);
-        document.body.style.background = '#FFFFFF';
-        if (save) {
-            saveTheme(lightTheme);
-        }
-    }
-
-    const saveTheme = (value: ThemeName) => {
-        setSavedTheme(value);
-        localStorage.setItem(themeSessionKey, value);
+        setThemeName(lightTheme);
+        if (save) saveTheme(lightTheme);
     }
 
     const cycleSavedTheme = (e?: React.MouseEvent) => {
-        // Cycle: System -> Dark -> Light
+        // Cycle: System -> Light -> Dark -> Night -> Amber -> System
         if (e) {
             e.preventDefault();
         }
-        if (savedTheme === systemTheme || savedTheme == null) {
-            saveTheme(darkTheme);
-        } else if (savedTheme === darkTheme) {
-            saveTheme(lightTheme);
-        } else if (savedTheme === lightTheme) {
-            saveTheme(systemTheme as ThemeName);
-        } else {
-            console.error(`Unknown theme! savedTheme=${savedTheme}`);
-        }
-        applyTheme();
+        const order: SavedThemeName[] = [systemTheme, ...themeNames];
+        const current = order.indexOf(isThemeName(savedTheme) ? savedTheme : systemTheme);
+        setTheme(order[(current + 1) % order.length]);
     }
 
-    const matchTheme = (): ThemeName => {
-        // Returns darkTheme if saved theme is dark, lightTheme if saved theme is dark,
-        // darkTheme if system prefers dark, otherwise lightTheme.
-        const colorScheme = localStorage.getItem(themeSessionKey);
-        setSavedTheme(colorScheme as SavedThemeName);
-        if (colorScheme === darkTheme) {
-            return darkTheme;
-        } else if (colorScheme === lightTheme) {
-            return lightTheme
-        }
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? darkTheme : lightTheme;
+    const dark = isDarkTheme(theme);
+
+    // Compatibility layer for components which have not been migrated to tokens yet.  Semantic
+    // has no concept of the night/amber themes, so they reuse its dark treatment while pulling
+    // their colors from the tokens.  These values disappear with the last Semantic component.
+    const i = dark ? {inverted: true} : {inverted: undefined};
+    const inverted = dark ? 'inverted' : '';
+    let s: {style?: CSSProperties} = {};
+    let t: {style?: CSSProperties} = {};
+    if (theme === darkTheme) {
+        s = {style: {backgroundColor: '#1B1C1D', color: '#dddddd'}};
+        t = {style: {color: '#eeeeee'}};
+    } else if (explicitOnlyThemes.includes(theme)) {
+        s = {style: {backgroundColor: 'var(--panel)', color: 'var(--text)'}};
+        t = {style: {color: 'var(--text)'}};
     }
-
-    const applyTheme = () => {
-        const match = matchTheme();
-        if (match === darkTheme) {
-            setDarkTheme();
-        } else {
-            setLightTheme();
-        }
-    };
-
-    useEffect(() => {
-        applyTheme();
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     const themeValue: ThemeContextValue = {
         i, // Used for Semantic elements which support "inverted".
@@ -213,6 +241,8 @@ export function ThemeProvider({children, ...props}: ThemeProviderProps) {
         inverted, // Used to add "invert" to className.
         theme,
         savedTheme,
+        isDark: dark,
+        setTheme,
         setDarkTheme,
         setLightTheme,
         cycleSavedTheme,

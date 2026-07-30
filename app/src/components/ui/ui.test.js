@@ -5,6 +5,7 @@ import {MantineProvider} from '@mantine/core';
 import {IconMoodSmile} from '@tabler/icons-react';
 import {ThemeContext} from '../../contexts/contexts';
 import {cssVariablesResolver, mantineTheme, semanticColorNames} from '../../themes/mantine';
+import {themeChoices} from '../../themes/names';
 import {
     Button,
     Confirm,
@@ -59,6 +60,15 @@ describe('Icon', () => {
         expect(decorative).toHaveAttribute('aria-hidden', 'true');
         expect(labelled).toHaveAttribute('aria-label', 'Delete');
         expect(labelled).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('maps every icon the theme choices ask for', () => {
+        // Regression: the map was built by grepping literal name='...' strings, so icons
+        // passed through a variable (the nav bar's picker) were missed and three of the
+        // five theme choices rendered a fallback glyph.
+        const unmapped = themeChoices.filter(choice => !resolveIconName(choice.icon));
+
+        expect(unmapped.map(c => `${c.text}: ${c.icon}`)).toEqual([]);
     });
 
     it('reports an unknown name instead of failing silently', () => {

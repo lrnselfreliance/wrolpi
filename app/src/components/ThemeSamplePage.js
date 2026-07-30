@@ -398,7 +398,7 @@ export function ThemeSamplePage() {
                 />)}
             </CardGroup>
             <p style={{fontSize: 12, color: 'var(--muted)', marginTop: 10}}>
-                The top edge carries the file type's colour, so a grid of results is
+                The bottom edge carries the file type's colour, so a grid of results is
                 scannable by kind before any title is read. It comes from a token, so night
                 and amber render the accent in their own single hue rather than four.
             </p>

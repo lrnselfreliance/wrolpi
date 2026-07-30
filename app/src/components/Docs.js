@@ -1,8 +1,7 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Link, Route, Routes, useLocation, useNavigate, useParams, useSearchParams} from "react-router";
-import {Grid, Icon as SIcon, Loader, StatisticLabel, StatisticValue} from "semantic-ui-react";
 import {deleteFileGroups, getDocStatistics, tagFileGroup, untagFileGroup} from "../api";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Media} from "../contexts/contexts";
 import {
     APIButton,
     BackButton,
@@ -18,7 +17,7 @@ import {
     toLocaleString,
     useTitle
 } from "./Common";
-import {Button, darkTheme, Header, Icon, Segment, Statistic, Tab} from "./Theme";
+import {Button, ButtonGroup, Group, Header, Loading, Panel, Statistic, StatisticGroup, Tabs} from "./ui";
 import {BulkTagModal} from "./BulkTagModal";
 import {TaggedDeleteConfirmModal} from "./TaggedDeleteConfirmModal";
 import {DeepSearchHint, docMimetypeFilterOptions, FilesView, SearchControlBar} from "./Files";
@@ -88,15 +87,15 @@ function DocsPage() {
         <Button color='violet' disabled={_.isEmpty(selectedDocs)}
                 onClick={() => setBulkTagOpen(true)}>Tag</Button>
         <APIButton
-            color='red'
+            role='danger'
             disabled={_.isEmpty(selectedDocs)}
             confirmButton='Delete'
             confirmContent='Are you sure you want to delete these documents? This cannot be undone.'
             onClick={() => onDelete(false)}
             obeyWROLMode={true}
         >Delete</APIButton>
-        <Button color='grey' onClick={invertSelection} disabled={_.isEmpty(docs)}>Invert</Button>
-        <Button color='yellow' onClick={clearSelection}
+        <Button role='cancel' onClick={invertSelection} disabled={_.isEmpty(docs)}>Invert</Button>
+        <Button role='cancel' onClick={clearSelection}
                 disabled={_.isEmpty(docs) || _.isEmpty(selectedDocs)}>Clear</Button>
         <BulkTagModal
             open={bulkTagOpen}
@@ -159,7 +158,6 @@ function DocPage() {
     const {fileGroupId} = useParams();
     const navigate = useNavigate();
     const {docFile, doc, fetchDoc} = useDoc(parseInt(fileGroupId));
-    const {theme} = useContext(ThemeContext);
     const [searchParams] = useSearchParams();
     const [taggedFileGroups, setTaggedFileGroups] = useState(null);
     // Deep-link params: `loc` = EPUB spine index, `page` = PDF page, `q` = search term.
@@ -173,7 +171,7 @@ function DocPage() {
     const [selectedFileIndex, setSelectedFileIndex] = useState(0);
 
     if (docFile === null) {
-        return <Segment><Loader active/></Segment>;
+        return <Panel><Loading/></Panel>;
     }
     if (docFile === undefined) {
         return <>
@@ -282,72 +280,63 @@ function DocPage() {
         return mt.split('/').pop().toUpperCase();
     };
 
-    // About pane.
-    const aboutPane = {
-        menuItem: 'About', render: () => <Tab.Pane>
-            {doc && doc.description && <>
-                <Header as='h3'>Description</Header>
-                <p>{doc.description}</p>
-            </>}
+    // About tab.
+    const aboutTab = <>
+        {doc && doc.description && <>
+            <Header as='h3'>Description</Header>
+            <p>{doc.description}</p>
+        </>}
 
-            {doc && doc.publisher && <>
-                <Header as='h3'>Publisher</Header>
-                <p>{doc.publisher}</p>
-            </>}
+        {doc && doc.publisher && <>
+            <Header as='h3'>Publisher</Header>
+            <p>{doc.publisher}</p>
+        </>}
 
-            {doc && doc.language && <>
-                <Header as='h3'>Language</Header>
-                <p>{doc.language}</p>
-            </>}
+        {doc && doc.language && <>
+            <Header as='h3'>Language</Header>
+            <p>{doc.language}</p>
+        </>}
 
-            {doc && doc.subject && <>
-                <Header as='h3'>Subject</Header>
-                <p><Link to={`/docs?subject=${encodeURIComponent(doc.subject)}`}>{doc.subject}</Link></p>
-            </>}
+        {doc && doc.subject && <>
+            <Header as='h3'>Subject</Header>
+            <p><Link to={`/docs?subject=${encodeURIComponent(doc.subject)}`}>{doc.subject}</Link></p>
+        </>}
 
-            {doc && doc.page_count && <>
-                <Header as='h3'>Page Count</Header>
-                <p>{doc.page_count}</p>
-            </>}
+        {doc && doc.page_count && <>
+            <Header as='h3'>Page Count</Header>
+            <p>{doc.page_count}</p>
+        </>}
 
-            <Header as='h3'>Size</Header>
-            <p>{humanFileSize(size)}</p>
-        </Tab.Pane>
-    };
+        <Header as='h3'>Size</Header>
+        <p>{humanFileSize(size)}</p>
+    </>;
 
-    // Files pane.
+    // Files tab.
     const tableStyle = {width: '100%', borderCollapse: 'separate', borderSpacing: '0 0.7em'};
     const labelStyle = {whiteSpace: 'nowrap', paddingRight: '1.5em', verticalAlign: 'top'};
-    const filesPane = {
-        menuItem: 'Files', render: () => <Tab.Pane>
-            <table style={tableStyle}>
-                <tbody>
-                {docFile.files && docFile.files.map((file, idx) =>
-                    <tr key={idx}>
-                        <td style={labelStyle}>
-                            <strong>{file.path.split('.').pop().toUpperCase()}</strong>
-                        </td>
-                        <td>
-                            <PreviewPath path={file.path} mimetype={file.mimetype} taggable={false}>
-                                {file.path}
-                            </PreviewPath>
-                            {file.size && <span style={{marginLeft: '1em', color: 'grey'}}>
-                                ({humanFileSize(file.size)})
-                            </span>}
-                        </td>
-                    </tr>
-                )}
-                <tr>
-                    <td style={labelStyle}><strong>Directory</strong></td>
-                    <td><DirectoryLink path={directory}/></td>
-                </tr>
-                </tbody>
-            </table>
-        </Tab.Pane>
-    };
-
-    const tabPanes = [aboutPane, filesPane];
-    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
+    const filesTab = <table style={tableStyle}>
+        <tbody>
+        {docFile.files && docFile.files.map((file, idx) =>
+            <tr key={idx}>
+                <td style={labelStyle}>
+                    <strong>{file.path.split('.').pop().toUpperCase()}</strong>
+                </td>
+                <td>
+                    <PreviewPath path={file.path} mimetype={file.mimetype} taggable={false}>
+                        {file.path}
+                    </PreviewPath>
+                    {file.size && <span style={{marginLeft: '1em', color: 'var(--muted)'}}>
+                        ({humanFileSize(file.size)})
+                    </span>}
+                </td>
+            </tr>
+        )}
+        <tr>
+            <td style={labelStyle}><strong>Directory</strong></td>
+            <td><DirectoryLink path={directory}/></td>
+        </tr>
+        </tbody>
+    </table>;
 
     return <>
         <BackButton/>
@@ -358,56 +347,51 @@ function DocPage() {
             <iframe
                 src={embedUrl}
                 title={docFile.title || docFile.name}
-                style={{width: '100%', height: '80vh', border: '1px solid #ccc', borderRadius: '4px'}}
+                style={{width: '100%', height: '80vh', border: '1px solid var(--border)'}}
             />
         </div>}
 
-        <Segment>
+        <Panel>
             <Header as='h2'>{docFile.title || docFile.name}</Header>
 
             {docFile.author && <Header as='h3'>
                 Author: <Link to={`/docs?author=${encodeURIComponent(docFile.author)}`}>{docFile.author}</Link>
             </Header>}
 
-            <Grid columns={2} stackable>
-                <Grid.Row>
-                    <Grid.Column>
-                        <Header as='h4'>Format: {formatLabel()}{doc && doc.page_count && ` (${doc.page_count} pages)`}</Header>
-                    </Grid.Column>
-                    {publishedDatetimeString && <Grid.Column>
-                        <Header as='h4'>Published: {publishedDatetimeString}</Header>
-                    </Grid.Column>}
-                </Grid.Row>
-            </Grid>
+            <Group gap='xl' wrap='wrap'>
+                <Header as='h4'>Format: {formatLabel()}{doc && doc.page_count && ` (${doc.page_count} pages)`}</Header>
+                {publishedDatetimeString && <Header as='h4'>Published: {publishedDatetimeString}</Header>}
+            </Group>
 
             {(() => {
-                const formatButtons = viewableFiles.length > 1 ? <Button.Group>
+                const formatButtons = viewableFiles.length > 1 ? <ButtonGroup>
                     {viewableFiles.map((file, idx) => {
                         const mt = file.mimetype || '';
                         let btnColor;
                         if (mt.startsWith('application/epub')) btnColor = 'yellow';
                         else if (mt === 'application/pdf') btnColor = 'red';
+                        const isSelected = idx === selectedFileIndex;
                         return <Button
                             key={file.path}
-                            active={idx === selectedFileIndex}
                             onClick={() => setSelectedFileIndex(idx)}
-                            color={idx === selectedFileIndex ? btnColor : undefined}
-                            basic={idx !== selectedFileIndex}
+                            color={isSelected ? btnColor : undefined}
+                            variant={isSelected ? 'filled' : 'default'}
                         >
                             {formatLabel(file.mimetype)}
                         </Button>;
                     })}
-                </Button.Group> : null;
+                </ButtonGroup> : null;
 
                 const actionButtons = <>
-                    {openUrl && <Button as='a' href={openUrl} target='_blank' rel='noreferrer' color='violet'>
-                        <SIcon name='expand arrows alternate'/> Open
+                    {openUrl && <Button component='a' href={openUrl} target='_blank' rel='noreferrer'
+                                        color='violet' icon='expand arrows alternate'>
+                        Open
                     </Button>}
-                    {downloadUrl && <Button as='a' href={downloadUrl}>
-                        <SIcon name='download'/> Download
+                    {downloadUrl && <Button component='a' href={downloadUrl} icon='download'>
+                        Download
                     </Button>}
                     <APIButton
-                        color='red'
+                        role='danger'
                         confirmContent='Are you sure you want to delete this document? All files will be deleted.'
                         confirmButton='Delete'
                         onClick={() => handleDelete(false)}
@@ -431,13 +415,20 @@ function DocPage() {
                     </Media>
                 </>;
             })()}
-        </Segment>
+        </Panel>
 
-        <Segment>
+        <Panel>
             <TagsSelector selectedTagNames={docFile.tags} onAdd={localAddTag} onRemove={localRemoveTag}/>
-        </Segment>
+        </Panel>
 
-        <Tab menu={tabMenu} panes={tabPanes}/>
+        <Tabs defaultValue='about'>
+            <Tabs.List>
+                <Tabs.Tab value='about'>About</Tabs.Tab>
+                <Tabs.Tab value='files'>Files</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value='about' pt='md'>{aboutTab}</Tabs.Panel>
+            <Tabs.Panel value='files' pt='md'>{filesTab}</Tabs.Panel>
+        </Tabs>
 
         <TaggedDeleteConfirmModal
             open={taggedFileGroups !== null}
@@ -479,22 +470,16 @@ function AuthorsPage() {
     const searchInputRef = React.useRef();
 
     const header = <div style={{marginBottom: '1em'}}>
-        <Grid stackable columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <SearchInput
-                        placeholder='Author filter...'
-                        size='large'
-                        searchStr={searchStr}
-                        disabled={!Array.isArray(authors) || authors.length === 0}
-                        onClear={() => setSearchStr('')}
-                        onChange={setSearchStr}
-                        onSubmit={null}
-                        inputRef={searchInputRef}
-                    />
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
+        <SearchInput
+            placeholder='Author filter...'
+            size='large'
+            searchStr={searchStr}
+            disabled={!Array.isArray(authors) || authors.length === 0}
+            onClear={() => setSearchStr('')}
+            onChange={setSearchStr}
+            onSubmit={null}
+            inputRef={searchInputRef}
+        />
     </div>;
 
     return <>
@@ -517,22 +502,16 @@ function SubjectsPage() {
     const searchInputRef = React.useRef();
 
     const header = <div style={{marginBottom: '1em'}}>
-        <Grid stackable columns={2}>
-            <Grid.Row>
-                <Grid.Column>
-                    <SearchInput
-                        placeholder='Subject filter...'
-                        size='large'
-                        searchStr={searchStr}
-                        disabled={!Array.isArray(subjects) || subjects.length === 0}
-                        onClear={() => setSearchStr('')}
-                        onChange={setSearchStr}
-                        onSubmit={null}
-                        inputRef={searchInputRef}
-                    />
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
+        <SearchInput
+            placeholder='Subject filter...'
+            size='large'
+            searchStr={searchStr}
+            disabled={!Array.isArray(subjects) || subjects.length === 0}
+            onClear={() => setSearchStr('')}
+            onChange={setSearchStr}
+            onSubmit={null}
+            inputRef={searchInputRef}
+        />
     </div>;
 
     return <>
@@ -568,45 +547,24 @@ function DocsStatisticsPage() {
     }, []);
 
     if (statistics === null) {
-        return <Loader active inline='centered'/>;
+        return <Loading/>;
     }
     if (statistics === undefined) {
         return <ErrorMessage>Unable to fetch Doc Statistics</ErrorMessage>;
     }
 
-    return <Segment>
-        <Header as='h1' textAlign='center'>Documents</Header>
-        <Statistic.Group>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.doc_count)}</StatisticValue>
-                <StatisticLabel>Documents</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.epub_count)}</StatisticValue>
-                <StatisticLabel>eBooks</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.pdf_count)}</StatisticValue>
-                <StatisticLabel>PDFs</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.other_count)}</StatisticValue>
-                <StatisticLabel>Other</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{humanFileSize(statistics.total_size)}</StatisticValue>
-                <StatisticLabel>Total Size</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.author_count)}</StatisticValue>
-                <StatisticLabel>Authors</StatisticLabel>
-            </Statistic>
-            <Statistic style={{margin: '2em'}}>
-                <StatisticValue>{toLocaleString(statistics.subject_count)}</StatisticValue>
-                <StatisticLabel>Subjects</StatisticLabel>
-            </Statistic>
-        </Statistic.Group>
-    </Segment>;
+    return <Panel>
+        <Header as='h1' style={{textAlign: 'center'}}>Documents</Header>
+        <StatisticGroup>
+            <Statistic value={toLocaleString(statistics.doc_count)} label='Documents'/>
+            <Statistic value={toLocaleString(statistics.epub_count)} label='eBooks'/>
+            <Statistic value={toLocaleString(statistics.pdf_count)} label='PDFs'/>
+            <Statistic value={toLocaleString(statistics.other_count)} label='Other'/>
+            <Statistic value={humanFileSize(statistics.total_size)} label='Total Size'/>
+            <Statistic value={toLocaleString(statistics.author_count)} label='Authors'/>
+            <Statistic value={toLocaleString(statistics.subject_count)} label='Subjects'/>
+        </StatisticGroup>
+    </Panel>;
 }
 
 export function DocsRoute() {

@@ -429,11 +429,24 @@ html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
     background: var(--bg);
 }
 
-/* Muted and on the header surface: it reads as context, not as something to edit. */
+/*
+ * Muted and on the header surface: it reads as context, not as something to edit.
+ *
+ * It shrinks and ellipsises rather than holding its full width.  The prefix is whatever the
+ * API reports as the media directory -- `/media/wrolpi` on a Pi, but a development box or an
+ * unusual Docker mount can report a much longer path -- and at `flex: none` a long one took
+ * the whole row and left the input 18px wide, a field nobody could type into.  Capping it at
+ * half the control keeps the editable part editable; the full path stays available through
+ * `title` and is read out in full by the accessible description either way.
+ */
 .wrolpi-path-input-prefix {
     display: flex;
     align-items: center;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 3ch;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: 0 6px 0 9px;
     background: var(--head);
     border-right: 1px solid var(--border);

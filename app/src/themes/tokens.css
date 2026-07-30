@@ -1,0 +1,178 @@
+/*
+ * WROLPi theme tokens.
+ *
+ * Every color in the interface resolves through these custom properties, so a
+ * theme is a table of values and components never branch on the current mode.
+ * See ui-design.md for the design rules and ui-migration-plan.md for the
+ * migration this is part of.
+ *
+ * Four built-in themes:
+ *   light  - default
+ *   dark   - default when the OS prefers dark
+ *   night  - night-vision preserving; red hues ONLY.  Status is encoded by
+ *            brightness, danger by dashed borders.  Explicit choice only.
+ *   amber  - monochrome amber terminal palette.  Explicit choice only.
+ *
+ * `data-theme` is stamped on <html> by an inline script in index.html before
+ * first paint, then maintained by ThemeProvider.
+ */
+
+/* Light is also the fallback when `data-theme` is missing or unrecognized. */
+:root,
+html[data-theme="light"] {
+    --bg: #f3f4f3;
+    --panel: #ffffff;
+    --head: #e4e6e5;
+    --border: #8f9698;
+    --text: #22282a;
+    --muted: #5f686a;
+
+    --red: #b23a3a;
+    --amber: #95661a;
+    --orange: #b05a24;
+    --yellow: #96821c;
+    --olive: #6f7a24;
+    --green: #3f7a2e;
+    --teal: #2a7d78;
+    --blue: #20629c;
+    --violet: #5c4fa8;
+    --purple: #7b3f9c;
+    --pink: #b03a72;
+    --brown: #7a5233;
+    --grey: #6a7072;
+    --black: #22282a;
+    --white: #ffffff;
+
+    /* Text drawn on top of a filled color button. */
+    --btn-text: #ffffff;
+}
+
+/*
+ * Role aliases.  Declared once: `var()` resolves on <html>, where each theme
+ * has already redefined the color it points at.
+ */
+:root {
+    --primary: var(--blue);
+    --success: var(--green);
+    --warning: var(--amber);
+    --danger: var(--red);
+}
+
+html[data-theme="dark"] {
+    --bg: #1c1f21;
+    --panel: #26292b;
+    --head: #141617;
+    --border: #4a5052;
+    --text: #e6e8e6;
+    --muted: #93999b;
+
+    --red: #e06c6c;
+    --amber: #d6a656;
+    --orange: #dd8a55;
+    --yellow: #d6c156;
+    --olive: #b5bd63;
+    --green: #7fb069;
+    --teal: #63bdb6;
+    --blue: #5c9dd6;
+    --violet: #9a8fe0;
+    --purple: #b884d6;
+    --pink: #dd7fae;
+    --brown: #b08a68;
+    --grey: #93999b;
+    --black: #0d0f10;
+    --white: #e6e8e6;
+
+    --btn-text: #1c1f21;
+}
+
+/*
+ * Night: red hues only.  A single non-red pixel defeats the purpose of the
+ * mode, so the whole palette collapses onto one red ramp ordered by
+ * brightness — dim for structural roles, brightest reserved for danger.
+ */
+html[data-theme="night"] {
+    --bg: #0a0000;
+    --panel: #160404;
+    --head: #000000;
+    --border: #5c1010;
+    --text: #e04a4a;
+    --muted: #7a2525;
+
+    --red: #ff3b3b;
+    --amber: #d94040;
+    --orange: #e04a4a;
+    --yellow: #d94040;
+    --olive: #5c1a1a;
+    --green: #b03030;
+    --teal: #963030;
+    --blue: #8a2828;
+    --violet: #7a2929;
+    --purple: #6e2020;
+    --pink: #c04848;
+    --brown: #451212;
+    --grey: #7a2525;
+    --black: #2a0808;
+    --white: #ff8a8a;
+
+    --btn-text: #0a0000;
+}
+
+/* Amber: a monochrome amber terminal palette, same flat style as the rest. */
+html[data-theme="amber"] {
+    --bg: #0d0600;
+    --panel: #1a0f00;
+    --head: #000000;
+    --border: #5c3a08;
+    --text: #ff9500;
+    --muted: #8a5810;
+
+    --red: #ffc040;
+    --amber: #e08a20;
+    --orange: #f09428;
+    --yellow: #e08a20;
+    --olive: #6e4610;
+    --green: #c97a10;
+    --teal: #8a581c;
+    --blue: #a86618;
+    --violet: #7a4c14;
+    --purple: #6e4410;
+    --pink: #d08430;
+    --brown: #452708;
+    --grey: #8a5810;
+    --black: #241504;
+    --white: #ffc875;
+
+    --btn-text: #0d0600;
+
+    /* Amber assigns the mono face to the body role; that is its character. */
+    --font-body: var(--font-system-mono);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Shell                                                                      */
+/* ------------------------------------------------------------------------- */
+
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Media filtering                                                            */
+/* ------------------------------------------------------------------------- */
+/*
+ * Videos, images, PDFs, embedded pages, and the map canvas cannot consume
+ * tokens, so night mode passes them through an SVG color matrix that maps
+ * luminance onto the red channel and drives green and blue to zero.  Nothing
+ * a user opens can break their dark adaptation.
+ *
+ * Tag the media element (or its immediate wrapper) with `.media`.  Never
+ * filter an app-level ancestor: a CSS filter creates a containing block, which
+ * breaks `position: fixed` descendants like modals and the nav bar.
+ *
+ * Filter definitions live in <MediaFilterDefs/> (mounted once by App).
+ */
+html[data-theme="night"] .media {
+    filter: url(#wrolpi-night-red);
+}

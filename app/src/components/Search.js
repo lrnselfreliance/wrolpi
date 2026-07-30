@@ -9,9 +9,8 @@ import {searchEstimateFiles, searchEstimateMap, searchEstimateOthers, searchEsti
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
-import {AccordionContent, AccordionTitle, Grid, GridColumn, GridRow, Header as SHeader, Label} from "semantic-ui-react";
-import {Accordion, Header, Icon, Loader, Modal, Segment} from "./Theme";
-import {QueryContext, ThemeContext} from "../contexts/contexts";
+import {Accordion, Header, Icon, Label, Loading, Panel, Stack} from "./ui";
+import {QueryContext} from "../contexts/contexts";
 import {KeyboardShortcutsContext} from "../contexts/KeyboardShortcutsContext";
 
 const SUGGESTED_APPS = [
@@ -460,7 +459,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames, anyTag) 
 
         if (description) {
             return <>
-                <SHeader as='h4'>{title}</SHeader>
+                <Header as='h4'>{title}</Header>
                 {description}
             </>
         }
@@ -526,56 +525,38 @@ export function SearchIconButton() {
 }
 
 function SearchChannelPreview({channel}) {
-    const {t} = React.useContext(ThemeContext);
-
-    return <GridRow {...t}>
-        <GridColumn>
-            <Link to={`/videos/channel/${channel.id}/video`}>
-                {channel.name}
-            </Link>
-        </GridColumn>
-    </GridRow>
+    return <div>
+        <Link to={`/videos/channel/${channel.id}/video`}>
+            {channel.name}
+        </Link>
+    </div>
 }
 
 function OtherSearchView({loading}) {
     const {searchParams} = React.useContext(QueryContext);
-    const [activeIndex, setActiveIndex] = React.useState(0);
+    const [activeValue, setActiveValue] = React.useState('channels');
     const activeTags = searchParams.getAll('tag');
     const {channels, loading: channelsLoading} = useSearchChannels(activeTags);
 
-    const handleClick = (newIndex) => {
-        console.log('newIndex', newIndex, 'activeIndex', activeIndex);
-        setActiveIndex(activeIndex === newIndex ? null : newIndex);
-    }
-
     if (loading || channelsLoading) {
-        return <Accordion>
-            <Segment><Loader active/></Segment>
-        </Accordion>
+        return <Panel><Loading/></Panel>
     }
 
-    const channelsAccordion = <React.Fragment>
-        <AccordionTitle
-            index={0}
-            active={activeIndex === 0}
-            onClick={() => handleClick(0)}
-        >
-            <Header as='h3'>
-                <Icon name='dropdown'/>
-                Channels
-                <Label>{normalizeEstimate(channels.length)}</Label>
-            </Header>
-        </AccordionTitle>
-        <AccordionContent active={activeIndex === 0}>
-            <Grid>
-                {!_.isEmpty(channels) ?
-                    channels.map(i => <SearchChannelPreview channel={i}/>)
-                    : 'No Channels'}
-            </Grid>
-        </AccordionContent>
-    </React.Fragment>;
-
-    return <Accordion>
-        {channelsAccordion}
+    return <Accordion value={activeValue} onChange={setActiveValue}>
+        <Accordion.Item value='channels'>
+            <Accordion.Control>
+                <span style={{display: 'inline-flex', alignItems: 'center', gap: 8}}>
+                    <Header as='h3' style={{margin: 0}}>Channels</Header>
+                    <Label>{normalizeEstimate(channels.length)}</Label>
+                </span>
+            </Accordion.Control>
+            <Accordion.Panel>
+                <Stack gap='xs'>
+                    {!_.isEmpty(channels) ?
+                        channels.map(i => <SearchChannelPreview key={i.id} channel={i}/>)
+                        : 'No Channels'}
+                </Stack>
+            </Accordion.Panel>
+        </Accordion.Item>
     </Accordion>
 }

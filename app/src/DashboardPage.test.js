@@ -1,8 +1,7 @@
 import React from 'react';
-import {render, screen} from '@testing-library/react';
-import {MemoryRouter} from 'react-router';
+import {render, screen} from './test-utils';
 import {Getters, FlagsMessages} from './DashboardPage';
-import {SettingsContext, StatusContext, ThemeContext} from './contexts/contexts';
+import {SettingsContext, StatusContext} from './contexts/contexts';
 
 // Replace DownloadMenu with a stub that records its props. The deep-link
 // behavior under test is just "Getters reads URL params and forwards them
@@ -23,18 +22,14 @@ jest.mock('./hooks/customHooks', () => ({
 }));
 
 function renderAtUrl(url) {
+    // test-utils' render() wraps content in a BrowserRouter (not MemoryRouter),
+    // so point the jsdom location at the desired URL before rendering.
+    window.history.pushState({}, '', url);
     const status = {flags: {refresh_complete: true}};
-    const theme = {
-        i: {}, s: {}, t: {}, theme: 'light', inverted: false, setInverted: () => {},
-    };
     return render(
-        <MemoryRouter initialEntries={[url]}>
-            <ThemeContext.Provider value={theme}>
-                <StatusContext.Provider value={{status}}>
-                    <Getters/>
-                </StatusContext.Provider>
-            </ThemeContext.Provider>
-        </MemoryRouter>
+        <StatusContext.Provider value={{status}}>
+            <Getters/>
+        </StatusContext.Provider>
     );
 }
 
@@ -80,13 +75,11 @@ describe('DashboardPage Getters deep-link', () => {
 function renderFlagsMessages({flags = {}, settings = {}} = {}) {
     const status = {flags: {refresh_complete: true, db_up: true, have_internet: true, ...flags}};
     return render(
-        <MemoryRouter>
-            <SettingsContext.Provider value={{settings, fetchSettings: () => {}}}>
-                <StatusContext.Provider value={{status}}>
-                    <FlagsMessages/>
-                </StatusContext.Provider>
-            </SettingsContext.Provider>
-        </MemoryRouter>
+        <SettingsContext.Provider value={{settings, fetchSettings: () => {}}}>
+            <StatusContext.Provider value={{status}}>
+                <FlagsMessages/>
+            </StatusContext.Provider>
+        </SettingsContext.Provider>
     );
 }
 

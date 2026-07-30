@@ -7,23 +7,18 @@ import {
     InfoPopup,
     mergeDeep,
     RequiredAsterisk,
-    useLocalStorage
+    SimpleAccordion,
+    Toggle,
+    useLocalStorage,
+    validURL,
+    validURLs,
 } from "./Common";
-import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Accordion, Button, Form, Header} from "./Theme";
-import {Form as SForm, FormDropdown} from "semantic-ui-react";
+import {Button, Group, Header, Icon, Message, MultiSelect, NumberInput, Select, Stack, TextInput, Textarea} from "./ui";
 import {Link} from "react-router";
 import {TagsSelector} from "../Tags";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {
     commaSeparatedValidator,
-    InputForm,
-    NumberInputForm,
-    ToggleForm,
-    UrlInput,
-    UrlsTextarea,
-    useForm
+    useForm,
 } from "../hooks/useForm";
 import {
     channelFrequencyOptions,
@@ -41,8 +36,134 @@ import {
     weeklyOption
 } from "./Vars";
 
+/*
+ * Download.js was built around Semantic UI's <Form> family (Form.Input,
+ * FormDropdown, TextArea) via `hooks/useForm.js`'s JSX helpers (InputForm,
+ * NumberInputForm, ToggleForm, UrlInput, UrlsTextarea).  `hooks/useForm.js` is
+ * off-limits for this migration and its JSX helpers still render through
+ * `./Theme` (Semantic UI).  Rather than use those helpers, the field
+ * components below call `useForm`'s plain data getters (getInputProps,
+ * getSelectionProps, getCustomProps) directly and render our own markup with
+ * the token-driven `./ui` library.  See the migration report for what this
+ * leaves out of scope (hooks/useForm.js itself is unmigrated).
+ */
+
+function FieldLabel({htmlFor, label, required, helpContent, helpPosition = 'top'}) {
+    if (!label) return null;
+    return <label htmlFor={htmlFor} style={{display: 'block', marginBottom: 4}}>
+        <b>{label} {required && <RequiredAsterisk/>}</b>
+        {helpContent && <InfoPopup content={helpContent} position={helpPosition}/>}
+    </label>
+}
+
+/** Text field backed by `form.getInputProps`.  TextInput passes a DOM event, which is exactly
+ *  what `handleInputEvent` (inside useForm) expects, so the props can be spread through. */
+function TextField({
+                        form, name, path, type = 'text', validator, required = false,
+                        placeholder = '', label, helpContent, helpPosition, disabled = false,
+                    }) {
+    const [inputProps] = form.getInputProps({name, path, validator, type, required});
+    return <div>
+        <FieldLabel htmlFor={`${name}_input`} label={label} required={required}
+                    helpContent={helpContent} helpPosition={helpPosition}/>
+        <TextInput
+            id={`${name}_input`}
+            name={name}
+            type={inputProps.type}
+            placeholder={placeholder}
+            value={inputProps.value ?? ''}
+            onChange={inputProps.onChange}
+            disabled={disabled || inputProps.disabled}
+            error={inputProps.error}
+            data-path={inputProps['data-path']}
+        />
+    </div>
+}
+
+/** Number field.  Mantine's NumberInput hands back the value itself, not an event, so it is
+ *  wrapped into the event shape `handleInputEvent` expects. */
+function NumberField({
+                         form, name, path, validator, required = false, placeholder = '',
+                         label, helpContent, helpPosition, min = 1, max = 9999999999,
+                     }) {
+    validator = validator || ((value) => {
+        value = typeof value === 'number' ? value : parseFloat(value);
+        if (value < 0) {
+            return 'Number must be positive';
+        }
+    });
+    const [inputProps] = form.getInputProps({name, path, validator, type: 'number', required});
+    const dataPath = inputProps['data-path'];
+    return <div>
+        <FieldLabel htmlFor={`${name}_input`} label={label} required={required}
+                    helpContent={helpContent} helpPosition={helpPosition}/>
+        <NumberInput
+            id={`${name}_input`}
+            placeholder={placeholder}
+            min={min}
+            max={max}
+            value={inputProps.value ?? ''}
+            onChange={(value) => inputProps.onChange({target: {value, type: 'number', dataset: {path: dataPath}}})}
+            disabled={inputProps.disabled}
+            error={inputProps.error}
+        />
+    </div>
+}
+
+/** A single-select field.  `options` are Semantic-shaped ({key, text, value}); Mantine's Select
+ *  requires string data values, so values are stringified for display and mapped back on change. */
+function SelectField({form, name, path, label, options, required = false, placeholder, disabled = false, afterChange}) {
+    const [inputProps] = form.getSelectionProps({name, path, required, afterChange});
+    const data = options.map(o => ({value: String(o.value), label: o.text}));
+    const stringValue = (inputProps.value === null || inputProps.value === undefined) ? null : String(inputProps.value);
+
+    const handleChange = (val) => {
+        if (val === null || val === undefined) {
+            inputProps.onChange(null, {value: null});
+            return;
+        }
+        const match = options.find(o => String(o.value) === val);
+        inputProps.onChange(null, {value: match ? match.value : val});
+    };
+
+    return <div>
+        <FieldLabel htmlFor={`${name}_select`} label={label} required={required}/>
+        <Select
+            id={`${name}_select`}
+            data={data}
+            value={stringValue}
+            onChange={handleChange}
+            placeholder={placeholder}
+            disabled={disabled || inputProps.disabled}
+            error={inputProps.error}
+        />
+    </div>
+}
+
+/** A multi-select field (Video Resolutions). */
+function MultiSelectField({form, name, path, options, onChange: afterChange}) {
+    const [inputProps] = form.getSelectionProps({name, path, type: 'array', afterChange});
+    const data = options.map(o => ({value: String(o.value), label: o.text}));
+    const values = (inputProps.value || []).map(String);
+
+    const handleChange = (vals) => {
+        const mapped = vals.map(v => {
+            const match = options.find(o => String(o.value) === v);
+            return match ? match.value : v;
+        });
+        inputProps.onChange(null, {value: mapped});
+    };
+
+    return <MultiSelect
+        data={data}
+        value={values}
+        onChange={handleChange}
+        error={inputProps.error}
+    />
+}
+
 export function DepthInputForm({form, required, name = 'depth', path = 'settings.depth'}) {
-    return <NumberInputForm
+    return <NumberField
         form={form}
         required={required}
         name={name}
@@ -54,7 +175,7 @@ export function DepthInputForm({form, required, name = 'depth', path = 'settings
 }
 
 export function MaximumPagesInputForm({form, required, name = 'max_pages', path = 'settings.max_pages'}) {
-    return <NumberInputForm
+    return <NumberField
         form={form}
         required={required}
         name={name}
@@ -73,11 +194,12 @@ export function DestinationForm({
                                     path = 'destination',
                                     required = false,
                                 }) {
-    const [inputProps, inputAttrs] = form.getCustomProps({name, path, required});
+    const [inputProps] = form.getCustomProps({name, path, required});
     const {disabled, value, onChange} = inputProps;
     const infoPopup = infoContent ? <InfoPopup content={infoContent}/> : null;
-    return <SForm.Field>
-        <label>{label} {required && <RequiredAsterisk/>}{infoPopup}</label>
+    return <div>
+        <FieldLabel htmlFor='destination_search_form' label={label} required={required}/>
+        {infoPopup}
         <DirectorySearch
             required={required}
             value={value}
@@ -85,11 +207,11 @@ export function DestinationForm({
             disabled={disabled}
             id='destination_search_form'
         />
-    </SForm.Field>
+    </div>
 }
 
 export function DownloadTagsSelector({form, limit, path = 'tag_names', name = 'tag_names'}) {
-    const [inputProps, inputAttrs] = form.getCustomProps({name, path});
+    const [inputProps] = form.getCustomProps({name, path});
     const {value, onChange} = inputProps;
 
     return <TagsSelector
@@ -107,23 +229,19 @@ export function DownloadFrequencySelector({
                                               name = 'frequency',
                                               path = 'frequency',
                                           }) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({name: 'frequency', path});
-
-    return <FormDropdown
+    return <SelectField
+        form={form}
+        name={name}
+        path={path}
         required
-        selection
         label='Download Frequency'
         placeholder='Frequency'
         options={freqOptions}
-        name={name}
-        id='download_frequency_selector'
-        {...inputProps}
     />
 }
 
 export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_downloader'}) {
     const [downloaders, setDownloaders] = React.useState([]);
-    const [inputProps, inputAttrs] = form.getSelectionProps({name, path, required: true});
 
     const fetchDownloaders = async () => {
         let {downloaders: downloaders_} = await getDownloaders();
@@ -137,17 +255,19 @@ export function DownloaderSelector({form, name = 'sub_downloader', path = 'sub_d
         fetchDownloaders();
     }, []);
 
-    return <FormDropdown selection required
-                         label='Downloader'
-                         placeholder='Select a downloader'
-                         options={downloaders}
-                         id='downloader_selector'
-                         {...inputProps}
+    return <SelectField
+        form={form}
+        name={name}
+        path={path}
+        required
+        label='Downloader'
+        placeholder='Select a downloader'
+        options={downloaders}
     />
 }
 
 export function ExcludedUrls({form, name = 'excluded_urls', path = 'settings.excluded_urls'}) {
-    return <InputForm
+    return <TextField
         form={form}
         type='text'
         name={name}
@@ -160,108 +280,75 @@ export function ExcludedUrls({form, name = 'excluded_urls', path = 'settings.exc
 }
 
 export function TitleInclusionInput({form, path = 'settings.title_include'}) {
-    const [inputProps, inputAttrs] = form.getInputProps({
-        name: 'title_include',
-        path,
-        validator: commaSeparatedValidator,
-    });
-
-    return <>
-        <InfoHeader
-            headerSize='h4'
-            headerContent='Title Match Words'
-            popupContent='List of words, separated by commas, that titles must contain to be downloaded.'
-        />
-        <Form.Input
-            placeholder='Shelter,Solar Power'
-            error={inputProps.error}
-        >
-            <input {...inputProps}/>
-        </Form.Input>
-    </>
+    return <TextField
+        form={form}
+        name='title_include'
+        path={path}
+        label='Title Match Words'
+        helpContent='List of words, separated by commas, that titles must contain to be downloaded.'
+        placeholder='Shelter,Solar Power'
+        validator={commaSeparatedValidator}
+    />
 }
 
 export function TitleExclusionInput({form, path = 'settings.title_exclude'}) {
-    const [inputProps, inputAttrs] = form.getInputProps({
-        name: 'title_exclude',
-        path,
-        validator: commaSeparatedValidator,
-    });
-
-    return <>
-        <InfoHeader
-            headerSize='h4'
-            headerContent='Title Exclusion Words'
-            popupContent='List of words, separated by commas, that may not appear in titles to be downloaded.'
-        />
-        <Form.Input
-            placeholder='Giveaway,Prize'
-            error={inputProps.error}
-        >
-            <input {...inputProps}/>
-        </Form.Input>
-    </>
+    return <TextField
+        form={form}
+        name='title_exclude'
+        path={path}
+        label='Title Exclusion Words'
+        helpContent='List of words, separated by commas, that may not appear in titles to be downloaded.'
+        placeholder='Giveaway,Prize'
+        validator={commaSeparatedValidator}
+    />
 }
 
 export function DownloadFormButtons({onCancel, form}) {
-    return <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column textAlign='left'>
-                <Button content='Cancel' onClick={onCancel} type='button'/>
-            </Grid.Column>
-            <Grid.Column textAlign='right'>
-                <APIButton
-                    disabled={form.disabled || !form.ready}
-                    type='submit'
-                    style={{marginTop: '0.5em'}}
-                    onClick={form.onSubmit}
-                    id='download_form_download_button'
-                >Download</APIButton>
-            </Grid.Column>
-        </Grid.Row>
-    </Grid>
+    return <Group justify='space-between' mt='sm'>
+        <Button role='cancel' onClick={onCancel} type='button'>Cancel</Button>
+        <APIButton
+            role='primary'
+            disabled={form.disabled || !form.ready}
+            type='submit'
+            onClick={form.onSubmit}
+            id='download_form_download_button'
+        >Download</APIButton>
+    </Group>
 }
 
 export function EditDownloadFormButtons({onDelete, onCancel, form}) {
-    return <Grid columns={2}>
-        <Grid.Row>
-            <Grid.Column textAlign='left'>
-                <APIButton
-                    confirmButton='Delete'
-                    confirmContent='Delete this Download?'
-                    confirmHeader='Delete'
-                    color='red'
-                    onClick={onDelete}
-                >Delete</APIButton>
-            </Grid.Column>
-            <Grid.Column textAlign='right'>
-                <Button content='Cancel' onClick={onCancel}/>
-                <APIButton
-                    disabled={form.disabled || !form.ready}
-                    type='submit'
-                    style={{marginTop: '0.5em'}}
-                    onClick={form.onSubmit}
-                >Save</APIButton>
-            </Grid.Column>
-        </Grid.Row>
-    </Grid>
+    return <Group justify='space-between' mt='sm'>
+        <APIButton
+            role='danger'
+            confirmButton='Delete'
+            confirmContent='Delete this Download?'
+            confirmHeader='Delete'
+            onClick={onDelete}
+        >Delete</APIButton>
+        <Group>
+            <Button role='cancel' onClick={onCancel}>Cancel</Button>
+            <APIButton
+                role='save'
+                disabled={form.disabled || !form.ready}
+                type='submit'
+                onClick={form.onSubmit}
+            >Save</APIButton>
+        </Group>
+    </Group>
 }
 
 function VideoDownloadOrder({form, path = 'settings.download_order'}) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({
-        name: 'download_order',
-        path,
-    });
-
-    return <FormDropdown selection
-                         label='Download Order'
-                         options={downloadOrderOptions}
-                         {...inputProps}
+    return <SelectField
+        form={form}
+        name='download_order'
+        path={path}
+        label='Download Order'
+        options={downloadOrderOptions}
     />
 }
 
 function VideoDownloadCountLimit({form, name = 'video_count_limit', path = 'settings.video_count_limit'}) {
-    return <NumberInputForm
+    return <NumberField
         form={form}
         helpContent='Stop downloading videos from this channel/playlist when this many have been downloaded.'
         helpPosition='top right'
@@ -278,85 +365,63 @@ export function VideoResolutionSelectorForm({
                                                 path = 'settings.video_resolutions',
                                                 onChange
                                             }) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({
-        name,
-        path,
-        type: 'array',
-        afterChange: onChange
-    });
-
-    return <>
+    return <div>
         <InfoHeader
             headerSize='h5'
             headerContent='Video Resolutions'
             popupContent='Videos will be downloaded in the first available resolution from the list you select.'
             for_='video_resolutions_input'
         />
-        <FormDropdown selection multiple
-                      id='video_resolutions_input'
-                      options={downloadResolutionOptions}
-                      {...inputProps}
+        <MultiSelectField
+            form={form}
+            name={name}
+            path={path}
+            options={downloadResolutionOptions}
+            onChange={onChange}
         />
-    </>
+    </div>
 }
 
 export function VideoFormatSelectorForm({form, name = 'video_format', path = 'settings.video_format'}) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({
-        name,
-        path,
-        defaultValue: defaultVideoFormatOption,
-    });
-
-    return <>
+    return <div>
         <InfoHeader
             headerSize='h5'
             headerContent='Video Format'
             popupContent='Videos will be downloaded in this format, or transcoded if not available.'
             for_='video_format_input'
         />
-        <FormDropdown selection
-                      id='video_format_input'
-                      options={downloadFormatOptions}
-                      {...inputProps}
-        />
-    </>
+        <SelectField form={form} name={name} path={path} options={downloadFormatOptions}/>
+    </div>
 }
 
 export function AudioOnlyToggle({form, onChange}) {
-    return <ToggleForm
-        form={form}
+    const [inputProps] = form.getCustomProps({name: 'audio_only', path: 'settings.audio_only'});
+    return <Toggle
         label='Audio only'
-        name='audio_only'
-        path='settings.audio_only'
-        helpContent='Download only the audio track from videos.'
-        onChange={onChange}
+        checked={!!inputProps.value}
+        disabled={form.disabled}
+        onChange={(value) => {
+            inputProps.onChange(value);
+            if (onChange) onChange(value);
+        }}
+        info='Download only the audio track from videos.'
     />
 }
 
 export function AudioFormatSelectorForm({form, name = 'audio_format', path = 'settings.audio_format'}) {
-    const [inputProps, inputAttrs] = form.getSelectionProps({
-        name,
-        path,
-        defaultValue: defaultAudioFormatOption,
-    });
-
-    return <>
+    return <div>
         <InfoHeader
             headerSize='h5'
             headerContent='Audio Format'
             popupContent='Audio will be downloaded and converted to this format.'
             for_='audio_format_input'
         />
-        <FormDropdown selection
-                      id='audio_format_input'
-                      options={downloadAudioFormatOptions}
-                      {...inputProps}
-        />
-    </>
+        <SelectField form={form} name={name} path={path} options={downloadAudioFormatOptions}/>
+    </div>
 }
 
 function VideoDurationLimit({form, name, path, label, helpContent, placeholder, helpPosition}) {
-    return <NumberInputForm
+    return <NumberField
         form={form}
         helpContent={helpContent}
         helpPosition={helpPosition}
@@ -368,18 +433,18 @@ function VideoDurationLimit({form, name, path, label, helpContent, placeholder, 
 }
 
 export function VideoTagsForm({form}) {
-    return <>
+    return <div>
         <InfoHeader
             headerSize='h4'
             headerContent='Videos Tags'
             popupContent='Tag all Videos with these Tags.'
         />
         <DownloadTagsSelector form={form}/>
-    </>
+    </div>
 }
 
 export function ChannelTagNameForm({form}) {
-    return <>
+    return <div>
         <InfoHeader
             headerSize='h4'
             headerContent='Channel Tag'
@@ -391,158 +456,101 @@ export function ChannelTagNameForm({form}) {
             name='channel_tag_name'
             path='settings.channel_tag_name'
         />
-    </>
+    </div>
 }
 
 function AdvancedVideoSettings({form, isVideoLevel = false, isConfigLoaded = true}) {
-    const [active, setActive] = React.useState(false);
-
     if (!isConfigLoaded) return null;
 
-    return <Accordion fluid>
-        <Accordion.Title active={active} onClick={() => setActive(!active)}>
-            <Icon name='dropdown'/>
-            Advanced Settings
-        </Accordion.Title>
-        <Accordion.Content active={active}>
-            <Grid stackable>
-                <Grid.Row columns={2}>
-                    <Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Download subtitles'
-                            name='writesubtitles'
-                            path='settings.writesubtitles'
-                            icon='closed captioning outline'
-                        />
-                    </Grid.Column>
-                    <Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Download automatic subtitles'
-                            name='writeautomaticsub'
-                            path='settings.writeautomaticsub'
-                            icon='closed captioning'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row columns={2}>
-                    <Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Download thumbnail'
-                            name='writethumbnail'
-                            path='settings.writethumbnail'
-                            icon='image'
-                        />
-                    </Grid.Column>
-                    <Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Download info JSON'
-                            name='writeinfojson'
-                            path='settings.writeinfojson'
-                            icon='file code'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                {isVideoLevel &&
-                    <Grid.Row columns={2}><Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Continue partial downloads'
-                            name='continue_dl'
-                            path='settings.continue_dl'
-                            icon='play'
-                        />
-                    </Grid.Column>
-                        <Grid.Column>
-                            <ToggleForm
-                                form={form}
-                                label='Do not overwrite existing files'
-                                name='nooverwrites'
-                                path='settings.nooverwrites'
-                                icon='file video'
-                            />
-                        </Grid.Column>
-                    </Grid.Row>}
-                <Grid.Row columns={2}>
-                    <Grid.Column>
-                        <NumberInputForm
-                            form={form}
-                            label='Sleep between requests (seconds)'
-                            name='sleep_requests'
-                            path='settings.sleep_requests'
-                            placeholder='0.75'
-                            min={0}
-                            max={60}
-                        />
-                    </Grid.Column>
-                    <Grid.Column>
-                        <InputForm
-                            form={form}
-                            label='User agent'
-                            name='user_agent'
-                            path='settings.user_agent'
-                            placeholder='Mozilla/5.0...'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-                <Grid.Row columns={1}>
-                    <Grid.Column>
-                        <InputForm
-                            form={form}
-                            label='Extra yt-dlp arguments'
-                            name='yt_dlp_extra_args'
-                            path='settings.yt_dlp_extra_args'
-                            placeholder='--no-playlist --geo-bypass'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Accordion.Content>
-    </Accordion>
+    return <SimpleAccordion title='Advanced Settings'>
+        <Stack gap='md'>
+            <Group grow align='flex-start' wrap='wrap'>
+                <AudioOnlyToggleLikeVideoSetting form={form} name='writesubtitles' path='settings.writesubtitles'
+                                                 label='Download subtitles' icon='closed captioning'/>
+                <AudioOnlyToggleLikeVideoSetting form={form} name='writeautomaticsub' path='settings.writeautomaticsub'
+                                                 label='Download automatic subtitles' icon='closed captioning'/>
+            </Group>
+            <Group grow align='flex-start' wrap='wrap'>
+                <AudioOnlyToggleLikeVideoSetting form={form} name='writethumbnail' path='settings.writethumbnail'
+                                                 label='Download thumbnail' icon='image'/>
+                <AudioOnlyToggleLikeVideoSetting form={form} name='writeinfojson' path='settings.writeinfojson'
+                                                 label='Download info JSON' icon='file code'/>
+            </Group>
+            {isVideoLevel &&
+                <Group grow align='flex-start' wrap='wrap'>
+                    <AudioOnlyToggleLikeVideoSetting form={form} name='continue_dl' path='settings.continue_dl'
+                                                     label='Continue partial downloads' icon='play'/>
+                    <AudioOnlyToggleLikeVideoSetting form={form} name='nooverwrites' path='settings.nooverwrites'
+                                                     label='Do not overwrite existing files' icon='file video'/>
+                </Group>}
+            <Group grow align='flex-start' wrap='wrap'>
+                <NumberField
+                    form={form}
+                    label='Sleep between requests (seconds)'
+                    name='sleep_requests'
+                    path='settings.sleep_requests'
+                    placeholder='0.75'
+                    min={0}
+                    max={60}
+                />
+                <TextField
+                    form={form}
+                    label='User agent'
+                    name='user_agent'
+                    path='settings.user_agent'
+                    placeholder='Mozilla/5.0...'
+                />
+            </Group>
+            <TextField
+                form={form}
+                label='Extra yt-dlp arguments'
+                name='yt_dlp_extra_args'
+                path='settings.yt_dlp_extra_args'
+                placeholder='--no-playlist --geo-bypass'
+            />
+        </Stack>
+    </SimpleAccordion>
+}
+
+/** A labeled Toggle backed by `form.getCustomProps`. */
+function AudioOnlyToggleLikeVideoSetting({form, name, path, label, icon}) {
+    const [inputProps] = form.getCustomProps({name, path});
+    return <Toggle
+        label={label}
+        icon={icon}
+        checked={!!inputProps.value}
+        disabled={form.disabled}
+        onChange={inputProps.onChange}
+    />
 }
 
 export function CompressSinglefileToggle({form}) {
-    return <>
+    const [inputProps] = form.getCustomProps({name: 'compress_singlefile', path: 'settings.compress_singlefile'});
+    return <div>
         <InfoHeader
             headerSize='h4'
             headerContent='Compress'
             popupContent='Create a compressed, self-extracting (SingleFileZ) archive.  The HTML file is smaller, but not
              human-readable.  Readability files are never compressed.'
         />
-        <ToggleForm
-            form={form}
-            name='compress_singlefile'
-            path='settings.compress_singlefile'
-        />
-    </>
+        <Toggle checked={!!inputProps.value} disabled={form.disabled} onChange={inputProps.onChange}/>
+    </div>
 }
 
 function AdvancedDownloadSettings({form}) {
-    const [active, setActive] = React.useState(false);
+    const [inputProps] = form.getCustomProps({
+        name: 'skip_already_downloaded',
+        path: 'settings.skip_already_downloaded'
+    });
 
-    return <Accordion fluid>
-        <Accordion.Title active={active} onClick={() => setActive(!active)}>
-            <Icon name='dropdown'/>
-            Advanced Settings
-        </Accordion.Title>
-        <Accordion.Content active={active}>
-            <Grid stackable>
-                <Grid.Row columns={1}>
-                    <Grid.Column>
-                        <ToggleForm
-                            form={form}
-                            label='Skip URLs already downloaded'
-                            name='skip_already_downloaded'
-                            path='settings.skip_already_downloaded'
-                        />
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Accordion.Content>
-    </Accordion>
+    return <SimpleAccordion title='Advanced Settings'>
+        <Toggle
+            label='Skip URLs already downloaded'
+            checked={!!inputProps.value}
+            disabled={form.disabled}
+            onChange={inputProps.onChange}
+        />
+    </SimpleAccordion>
 }
 
 export function VideosDownloadForm({
@@ -667,77 +675,42 @@ export function VideosDownloadForm({
 
     // This form can handle a single Video download, or multiple video downloads.
     const urlInput = singleDownload ?
-        <UrlInput required form={form} path='urls'/>
-        : <UrlsTextarea required form={form}/>;
+        <UrlField required form={form} path='urls'/>
+        : <UrlsField required form={form}/>;
 
-    return <Form>
-        <Header as='h3'>
-            <Icon name='film' color='blue'/>
-            Videos
-        </Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='film'>Videos</Header>
         <p>Download each video at the URLs provided below.</p>
 
-        <Grid stackable columns={1}>
-            <Grid.Row>
-                <Grid.Column>{urlInput}</Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Row columns={1}>
-                    <Grid.Column>
-                        <VideoTagsForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <DestinationForm
-                        form={form}
-                        helpContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this Channel/Playlist will download to this directory instead."
-                    />
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <AudioOnlyToggle form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+        <Stack gap='md'>
+            {urlInput}
+            <VideoTagsForm form={form}/>
+            <DestinationForm
+                form={form}
+                infoContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this Channel/Playlist will download to this directory instead."
+            />
+            <AudioOnlyToggle form={form}/>
             {form.formData?.settings?.audio_only
-                ? <Grid.Row columns={1}>
-                    <Grid.Column width={5}>
-                        <AudioFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
-                : <Grid.Row columns={2}>
-                    <Grid.Column width={11}>
+                ? <AudioFormatSelectorForm form={form}/>
+                : <Group align='flex-start' wrap='wrap'>
+                    <div style={{flex: 3, minWidth: 240}}>
                         <VideoResolutionSelectorForm
                             form={form}
                             onChange={() => setUserChangedResolutions(true)}
                         />
-                    </Grid.Column>
-                    <Grid.Column width={4}>
+                    </div>
+                    <div style={{flex: 1, minWidth: 140}}>
                         <VideoFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
+                    </div>
+                </Group>
             }
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <ChannelTagNameForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <AdvancedVideoSettings form={form} isVideoLevel={true} isConfigLoaded={isConfigLoaded}/>
-                </Grid.Column>
-            </Grid.Row>
+            <ChannelTagNameForm form={form}/>
+            <AdvancedVideoSettings form={form} isVideoLevel={true} isConfigLoaded={isConfigLoaded}/>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column>
-                    {actions ? actions({onCancel: localOnCancel, form}) :
-                        <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actions ? actions({onCancel: localOnCancel, form}) :
+                <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
+        </Stack>
+    </form>
 }
 
 
@@ -925,108 +898,67 @@ export function ChannelDownloadForm({
         }
     }, [form.formData]);
 
-    const onceMessage = <Message>
-        <Message.Header>Download Once</Message.Header>
-        <Message.Content>You have selected a frequency of Once, this is useful when you want to download
-            all videos in a Playlist, and when you do not want to download any videos added to the playlist
-            in the future.</Message.Content>
+    const onceMessage = <Message kind='info' title='Download Once'>
+        You have selected a frequency of Once, this is useful when you want to download
+        all videos in a Playlist, and when you do not want to download any videos added to the playlist
+        in the future.
     </Message>;
 
     // Default to "new" download buttons.
     actions = actions || DownloadFormButtons;
     const actionsElm = actions({onDelete, onCancel, form});
 
-    return <Form>
-        <Header as='h3'><Icon name='film' color='blue'/> Channel / Playlist</Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='film'>Channel / Playlist</Header>
 
-        <Grid stackable columns={1}>
-            <Grid.Row>
-                <Grid.Column>
-                    <UrlInput required form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <VideoTagsForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column mobile={4} tablet={4}>
+        <Stack gap='md'>
+            <UrlField required form={form}/>
+            <VideoTagsForm form={form}/>
+            <Group align='flex-start' wrap='wrap'>
+                <div style={{flex: 1, minWidth: 200}}>
                     <DownloadFrequencySelector form={form} freqOptions={channelFrequencyOptions}/>
-                </Grid.Column>
-                <Grid.Column mobile={4} tablet={12}>
+                </div>
+                <div style={{flex: 3, minWidth: 240}}>
                     <DestinationForm
                         form={form}
-                        helpContent='Destination is not required.  Videos will download into the automatically created Channel directory.'
+                        infoContent='Destination is not required.  Videos will download into the automatically created Channel directory.'
                     />
-                </Grid.Column>
-            </Grid.Row>
-            {form.formData.frequency === 0 && <Grid.Row><Grid.Column>{onceMessage}</Grid.Column></Grid.Row>}
-            <Grid.Row columns={2}>
-                <Grid.Column>
-                    <TitleInclusionInput form={form}/>
-                </Grid.Column>
-                <Grid.Column>
-                    <TitleExclusionInput form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column mobile={4} tablet={5}>
-                    <VideoDownloadOrder form={form}/>
-                </Grid.Column>
-                <Grid.Column mobile={4} tablet={5}>
-                    <VideoDownloadCountLimit form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <AudioOnlyToggle form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+                </div>
+            </Group>
+            {form.formData.frequency === 0 && onceMessage}
+            <Group grow align='flex-start' wrap='wrap'>
+                <TitleInclusionInput form={form}/>
+                <TitleExclusionInput form={form}/>
+            </Group>
+            <Group grow align='flex-start' wrap='wrap'>
+                <VideoDownloadOrder form={form}/>
+                <VideoDownloadCountLimit form={form}/>
+            </Group>
+            <AudioOnlyToggle form={form}/>
             {form.formData?.settings?.audio_only
-                ? <Grid.Row columns={1}>
-                    <Grid.Column width={5}>
-                        <AudioFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
-                : <Grid.Row columns={2}>
-                    <Grid.Column width={11}>
+                ? <AudioFormatSelectorForm form={form}/>
+                : <Group align='flex-start' wrap='wrap'>
+                    <div style={{flex: 3, minWidth: 240}}>
                         <VideoResolutionSelectorForm
                             form={form}
                             onChange={() => setUserChangedResolutions(true)}
                         />
-                    </Grid.Column>
-                    <Grid.Column width={4}>
+                    </div>
+                    <div style={{flex: 1, minWidth: 140}}>
                         <VideoFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
+                    </div>
+                </Group>
             }
-            <Grid.Row columns={2}>
-                <Grid.Column tablet={8} computer={4}>
-                    <VideoMinimumDurationForm form={form}/>
-                </Grid.Column>
-                <Grid.Column tablet={8} computer={4}>
-                    <VideoMaximumDurationForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <ChannelTagNameForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
-                </Grid.Column>
-            </Grid.Row>
+            <Group grow align='flex-start' wrap='wrap'>
+                <VideoMinimumDurationForm form={form}/>
+                <VideoMaximumDurationForm form={form}/>
+            </Group>
+            <ChannelTagNameForm form={form}/>
+            <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column textAlign='right'>
-                    {actionsElm}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actionsElm}
+        </Stack>
+    </form>
 }
 
 export function EditChannelDownloadForm({
@@ -1064,15 +996,9 @@ export function EditChannelDownloadForm({
 }
 
 function SuccessfulDownloadSubmitMessage() {
-    return <Grid.Row>
-        <Grid.Column><Message positive>
-            <Message.Header>Download Submitted</Message.Header>
-            <Message.Content>
-                <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>
-            </Message.Content>
-        </Message>
-        </Grid.Column>
-    </Grid.Row>
+    return <Message kind='success' title='Download Submitted'>
+        <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>
+    </Message>
 }
 
 export function EditArchiveDownloadForm({
@@ -1166,43 +1092,23 @@ export function ArchiveDownloadForm({
     }
 
     const urlInput = singleDownload ?
-        <UrlInput required form={form} path='urls'/>
-        : <UrlsTextarea required form={form}/>;
+        <UrlField required form={form} path='urls'/>
+        : <UrlsField required form={form}/>;
 
-    return <Form>
-        <Header as='h3'><Icon name='file text' color='green'/> Archives</Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='file text'>Archives</Header>
         <p>Create a Singlefile Archive for each of the URLs provided below.</p>
 
-        <Grid stackable columns={1}>
-            <Grid.Row>
-                <Grid.Column>
-                    {urlInput}
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <DownloadTagsSelector form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <CompressSinglefileToggle form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <AdvancedDownloadSettings form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+        <Stack gap='md'>
+            {urlInput}
+            <DownloadTagsSelector form={form}/>
+            <CompressSinglefileToggle form={form}/>
+            <AdvancedDownloadSettings form={form}/>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column textAlign='right'>
-                    {actions ? actions({onCancel: localOnCancel, form}) :
-                        <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actions ? actions({onCancel: localOnCancel, form}) :
+                <DownloadFormButtons onCancel={localOnCancel} form={form}/>}
+        </Stack>
+    </form>
 }
 
 export function RSSDownloadForm({download, submitter, onDelete, onCancel, actions, clearOnSuccess = true}) {
@@ -1323,106 +1229,58 @@ export function RSSDownloadForm({download, submitter, onDelete, onCancel, action
     let downloaderRows;
     if (form.formData.sub_downloader === Downloaders.Video) {
         downloaderRows = <>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <DestinationForm
-                        form={form}
-                        helpContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this feed will download to this directory instead."
-                    />
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column mobile={16} computer={8}>
-                    <TitleInclusionInput form={form}/>
-                </Grid.Column>
-                <Grid.Column mobile={16} computer={8}>
-                    <TitleExclusionInput form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <AudioOnlyToggle form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+            <DestinationForm
+                form={form}
+                infoContent="Videos download into their Channel's directory, by default.  If this is provided, then videos in this feed will download to this directory instead."
+            />
+            <Group grow align='flex-start' wrap='wrap'>
+                <TitleInclusionInput form={form}/>
+                <TitleExclusionInput form={form}/>
+            </Group>
+            <AudioOnlyToggle form={form}/>
             {form.formData?.settings?.audio_only
-                ? <Grid.Row columns={1}>
-                    <Grid.Column width={5}>
-                        <AudioFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
-                : <Grid.Row columns={2}>
-                    <Grid.Column mobile={16} computer={11}>
+                ? <AudioFormatSelectorForm form={form}/>
+                : <Group align='flex-start' wrap='wrap'>
+                    <div style={{flex: 3, minWidth: 240}}>
                         <VideoResolutionSelectorForm
                             form={form}
                             onChange={() => setUserChangedResolutions(true)}
                         />
-                    </Grid.Column>
-                    <Grid.Column mobile={8} computer={3}>
+                    </div>
+                    <div style={{flex: 1, minWidth: 140}}>
                         <VideoFormatSelectorForm form={form}/>
-                    </Grid.Column>
-                </Grid.Row>
+                    </div>
+                </Group>
             }
-            <Grid.Row columns={2}>
-                <Grid.Column tablet={8} computer={4}>
-                    <VideoMinimumDurationForm form={form}/>
-                </Grid.Column>
-                <Grid.Column tablet={8} computer={4}>
-                    <VideoMaximumDurationForm form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={1}>
-                <Grid.Column>
-                    <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
-                </Grid.Column>
-            </Grid.Row>
+            <Group grow align='flex-start' wrap='wrap'>
+                <VideoMinimumDurationForm form={form}/>
+                <VideoMaximumDurationForm form={form}/>
+            </Group>
+            <AdvancedVideoSettings form={form} isConfigLoaded={isConfigLoaded}/>
         </>;
     } else if (form.formData.sub_downloader === Downloaders.Archive) {
         downloaderRows = <>
-            <Grid.Row>
-                <Grid.Column>
-                    <ExcludedUrls form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <CompressSinglefileToggle form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+            <ExcludedUrls form={form}/>
+            <CompressSinglefileToggle form={form}/>
         </>;
     }
 
-    return <Form>
-        <Header as='h3'><Icon name='rss' color='orange'/> RSS Feed</Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='rss'>RSS Feed</Header>
         <p>Download each link provided by this RSS feed using the selected downloader.</p>
 
-        <Grid columns={1}>
-            <Grid.Row>
-                <Grid.Column>
-                    <UrlInput required form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <DownloadTagsSelector form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={8}>
-                    <DownloadFrequencySelector form={form} freqOptions={extendedFrequencyOptions}/>
-                </Grid.Column>
-                <Grid.Column width={8}>
-                    <DownloaderSelector form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+        <Stack gap='md'>
+            <UrlField required form={form}/>
+            <DownloadTagsSelector form={form}/>
+            <Group grow align='flex-start' wrap='wrap'>
+                <DownloadFrequencySelector form={form} freqOptions={extendedFrequencyOptions}/>
+                <DownloaderSelector form={form}/>
+            </Group>
             {downloaderRows}
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column textAlign='right'>
-                    {actionsElm}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actionsElm}
+        </Stack>
+    </form>
 }
 
 export function EditRSSDownloadForm({download, onDelete, onCancel, actions = EditDownloadFormButtons}) {
@@ -1486,28 +1344,16 @@ export function EditZimDownloadForm({download, onDelete, onCancel, actions = Edi
     actions = actions || DownloadFormButtons;
     const actionsElm = actions({onDelete, onCancel, form});
 
-    return <Form>
+    return <form onSubmit={(e) => e.preventDefault()}>
         <Header as='h3'>Zim File</Header>
 
-        <Grid stackable columns={1}>
-            <Grid.Row>
-                <Grid.Column>
-                    <UrlInput required form={form} disabled={true}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={8}>
-                    <DownloadFrequencySelector form={form} longFrequenciesAvailable={true}/>
-                </Grid.Column>
-            </Grid.Row>
+        <Stack gap='md'>
+            <UrlField required form={form} disabled={true}/>
+            <DownloadFrequencySelector form={form} freqOptions={extendedFrequencyOptions}/>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column textAlign='right'>
-                    {actionsElm}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actionsElm}
+        </Stack>
+    </form>
 }
 
 export function FilesDownloadForm({
@@ -1549,39 +1395,19 @@ export function FilesDownloadForm({
 
     const actionsElm = actions({onCancel, form});
 
-    return <Form>
-        <Header as='h3'><Icon name='file'/> Files</Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='file'>Files</Header>
         <p>Download each file at the URLs provided below.</p>
 
-        <Grid>
-            <Grid.Row>
-                <Grid.Column>
-                    <UrlsTextarea form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <DownloadTagsSelector form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <DestinationForm required form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row>
-                <Grid.Column>
-                    <AdvancedDownloadSettings form={form}/>
-                </Grid.Column>
-            </Grid.Row>
+        <Stack gap='md'>
+            <UrlsField form={form}/>
+            <DownloadTagsSelector form={form}/>
+            <DestinationForm required form={form}/>
+            <AdvancedDownloadSettings form={form}/>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column textAlign='right'>
-                    {actionsElm}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actionsElm}
+        </Stack>
+    </form>
 }
 
 const suffixValidator = (value) => {
@@ -1602,7 +1428,7 @@ const suffixValidator = (value) => {
 }
 
 export function SuffixFormInput({form, name = 'suffix', path = 'settings.suffix'}) {
-    return <InputForm
+    return <TextField
         form={form}
         label='File Suffixes'
         helpContent='Comma-separated list of file suffixes that should be downloaded'
@@ -1665,47 +1491,35 @@ export function ScrapeFilesDownloadForm({
     });
 
     const urlInput = singleDownload ?
-        <UrlInput required form={form} path='url'/>
-        : <UrlsTextarea required form={form}/>;
+        <UrlField required form={form} path='url'/>
+        : <UrlsField required form={form}/>;
 
     // Default to "new" download buttons.
     actions = actions || DownloadFormButtons;
     const actionsElm = actions({onDelete, onCancel, form});
 
-    return <Form>
-        <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
+    return <form onSubmit={(e) => e.preventDefault()}>
+        <Header as='h3' icon='file alternate'>Scrape Files</Header>
         <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
 
-        <Grid>
-            <Grid.Row>
-                <Grid.Column>
-                    {urlInput}
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={10}>
+        <Stack gap='md'>
+            {urlInput}
+            <Group align='flex-start' wrap='wrap'>
+                <div style={{flex: 3, minWidth: 240}}>
                     <DestinationForm required={true} form={form}/>
-                </Grid.Column>
-                <Grid.Column width={6}>
+                </div>
+                <div style={{flex: 2, minWidth: 200}}>
                     <SuffixFormInput required={true} form={form}/>
-                </Grid.Column>
-            </Grid.Row>
-            <Grid.Row columns={2}>
-                <Grid.Column width={4}>
-                    <DepthInputForm form={form} required={true}/>
-                </Grid.Column>
-                <Grid.Column width={4}>
-                    <MaximumPagesInputForm form={form} required={true}/>
-                </Grid.Column>
-            </Grid.Row>
+                </div>
+            </Group>
+            <Group grow align='flex-start' wrap='wrap'>
+                <DepthInputForm form={form} required={true}/>
+                <MaximumPagesInputForm form={form} required={true}/>
+            </Group>
             {showMessage && <SuccessfulDownloadSubmitMessage/>}
-            <Grid.Row>
-                <Grid.Column>
-                    {actionsElm}
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
-    </Form>
+            {actionsElm}
+        </Stack>
+    </form>
 }
 
 export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuccess}) {
@@ -1733,6 +1547,67 @@ export function EditScrapeFilesDownloadForm({download, onDelete, onCancel, onSuc
     />
 }
 
+/** URL field for a single URL (Semantic's `UrlInput`). */
+function UrlField({form, required = true, name = 'url', path = 'url', disabled = false}) {
+    const validator = (i) => validURL(i) ? null : 'Invalid URL';
+    return <TextField
+        form={form}
+        type='url'
+        label='URL'
+        required={required}
+        name={name}
+        path={path}
+        validator={validator}
+        disabled={disabled}
+    />
+}
+
+/** Multiline URLs field (Semantic's `UrlsTextarea`). */
+function UrlsField({name = 'urls', required, form}) {
+    required = required !== undefined;
+
+    const validator = (value) => {
+        if (!validURLs(value)) {
+            return 'Invalid URLs';
+        }
+    };
+
+    const [inputProps, inputAttrs] = form.getInputProps({name, validator, required});
+
+    const handleDrop = (e) => {
+        if (e) e.preventDefault();
+        const droppedUrl = e.dataTransfer.getData('text');
+        let urls = (inputProps.value || '').split('\n');
+        urls = [...urls, droppedUrl];
+        urls = urls.filter(i => !!i).join('\n');
+        inputAttrs.localSetValue(`${urls}\n`);
+    };
+
+    const handleKeyDown = (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+            event.preventDefault();
+            form.onSubmit();
+        }
+    };
+
+    return <div>
+        <FieldLabel htmlFor='urls_textarea' label='URLs' required={required}/>
+        <Textarea
+            id='urls_textarea'
+            placeholder='Enter one URL per line'
+            name='urls'
+            minRows={4}
+            autosize
+            value={inputProps.value ?? ''}
+            onChange={inputProps.onChange}
+            onDrop={handleDrop}
+            onKeyDown={handleKeyDown}
+            error={inputProps.error}
+            data-path={inputProps['data-path']}
+        />
+    </div>
+}
+
 export function DownloadMenu({onOpen, disabled, initialDownloader, initialUrls}) {
     // initialDownloader and initialUrls support the deep-link flow used by the
     // WROLPi browser extension's "Configure Download" button: visiting
@@ -1747,49 +1622,14 @@ export function DownloadMenu({onOpen, disabled, initialDownloader, initialUrls})
         }
     }
 
-    let body = (<>
-        <Button
-            color='blue'
-            content='Videos'
-            disabled={disabled}
-            onClick={() => localOnOpen('video')}
-            style={{marginBottom: '1em'}}
-        />
-        <Button
-            color='green'
-            content='Archives'
-            disabled={disabled}
-            onClick={() => localOnOpen('archive')}
-            style={{marginBottom: '1em'}}
-        />
-        <Button
-            color='blue'
-            content='Channel/Playlist'
-            disabled={disabled}
-            onClick={() => localOnOpen('video_channel')}
-            style={{marginBottom: '1em'}}
-        />
-        <Button
-            content='RSS Feed'
-            disabled={disabled}
-            onClick={() => localOnOpen('rss')}
-            style={{marginBottom: '1em'}}
-        />
-        <Button
-            color='black'
-            content='Files'
-            disabled={disabled}
-            onClick={() => localOnOpen('file')}
-            style={{marginBottom: '1em'}}
-        />
-        <Button
-            color='red'
-            content='Scrape'
-            disabled={disabled}
-            onClick={() => localOnOpen('scrape')}
-            style={{marginBottom: '1em'}}
-        />
-    </>);
+    let body = (<Stack gap='xs'>
+        <Button color='blue' disabled={disabled} onClick={() => localOnOpen('video')}>Videos</Button>
+        <Button color='green' disabled={disabled} onClick={() => localOnOpen('archive')}>Archives</Button>
+        <Button color='blue' disabled={disabled} onClick={() => localOnOpen('video_channel')}>Channel/Playlist</Button>
+        <Button disabled={disabled} onClick={() => localOnOpen('rss')}>RSS Feed</Button>
+        <Button color='grey' disabled={disabled} onClick={() => localOnOpen('file')}>Files</Button>
+        <Button role='danger' disabled={disabled} onClick={() => localOnOpen('scrape')}>Scrape</Button>
+    </Stack>);
 
     function clearSelected() {
         localOnOpen(null);

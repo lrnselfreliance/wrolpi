@@ -1,7 +1,5 @@
 import React from "react";
-import {GridColumn, Input, Label, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Form, Header, Segment, Table} from "../Theme";
+import {Button, Grid, Group, Header, NumberInput, Panel, Table} from "../ui";
 import {InfoPopup, roundDigits, Toggle, useLocalStorage} from "../Common";
 
 // Pure calculation functions for the Water Storage calculator.
@@ -171,11 +169,13 @@ const DEMAND_INFO = 'Per-person daily water includes drinking plus basic hygiene
     + 'livestock, or other needs not covered by the per-person categories.';
 
 // Per-category colors (Paul Tol bright palette) so the count inputs read at a glance.
+// These are diagram/legend colors matched to a fixed visual identity per category —
+// not themed UI chrome — so they stay literal hex.
 const CATEGORY_META = [
-    {key: 'men', label: 'Men', icon: 'man', color: '#4477aa'},
-    {key: 'women', label: 'Women', icon: 'woman', color: '#aa3377'},
-    {key: 'children', label: 'Children', icon: 'child', color: '#228833'},
-    {key: 'pregnant', label: 'Pregnant/Nursing', icon: 'heart', color: '#ee6677'},
+    {key: 'men', label: 'Men', color: '#4477aa'},
+    {key: 'women', label: 'Women', color: '#aa3377'},
+    {key: 'children', label: 'Children', color: '#228833'},
+    {key: 'pregnant', label: 'Pregnant/Nursing', color: '#ee6677'},
 ];
 
 // Pick black or white label text for legibility on a given background color.
@@ -202,7 +202,21 @@ export function clampNonNegative(value) {
     if (value === '') {
         return '';
     }
-    return value.startsWith('-') ? value.slice(1) : value;
+    return `${value}`.startsWith('-') ? `${value}`.slice(1) : value;
+}
+
+// A labeled numeric input whose label is tinted to match a category's diagram color.
+// The color is a literal hex from CATEGORY_META, not a theme token, so this is a small
+// local composition rather than the token-driven `Label`.
+function SwatchInput({hex, label, value, onChange, name, min, step}) {
+    return <Group gap={0} wrap='nowrap' align='stretch' style={{marginBottom: '0.25em'}}>
+        <span style={{
+            display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 13, fontWeight: 500,
+            whiteSpace: 'nowrap', background: hex, color: textColorFor(hex), border: `1px solid ${hex}`,
+        }}>{label}</span>
+        <NumberInput name={name} value={value} onChange={onChange} min={min} step={step}
+                     onFocus={e => e.target.select()} hideControls style={{flex: 1}}/>
+    </Group>;
 }
 
 export function WaterCalculator() {
@@ -236,69 +250,51 @@ export function WaterCalculator() {
     const total = totalWater(daily, days);
     const weight = waterWeight(total, metric);
 
-    const inputProps = {fluid: true, type: 'number', onSelect: e => e.target.select(), autoComplete: 'off'};
-
     // One count input per category, label colored to match.
-    const countInput = ({key, label, icon, color}) =>
-        <Input {...inputProps} min={0} step={1} name={`count-${key}`}
-               labelPosition='left' value={counts[key]}
-               onChange={e => setCounts({...counts, [key]: e.target.value === '' ? '' : String(Math.max(0, Math.round(Number(e.target.value))))})}
-               label={<Label style={{backgroundColor: color, color: textColorFor(color), borderColor: color}}>
-                   <i className={`${icon} icon`} style={{marginRight: '0.4em'}}/>{label}</Label>}/>;
+    const countInput = ({key, label, color}) =>
+        <SwatchInput hex={color} label={label} value={counts[key]} min={0} step={1} name={`count-${key}`}
+                     onChange={value => setCounts({
+                         ...counts,
+                         [key]: value === '' ? '' : String(Math.max(0, Math.round(Number(value)))),
+                     })}/>;
 
     // One editable rate input per category, sharing the category color.
     const rateInput = ({key, label, color}) =>
-        <Input {...inputProps} min={0} step={0.1} name={`rate-${key}`}
-               labelPosition='left' value={rates[key]}
-               onChange={e => setRates({...rates, [key]: clampNonNegative(e.target.value)})}
-               label={<Label style={{backgroundColor: color, color: textColorFor(color), borderColor: color}}>
-                   {label}</Label>}/>;
+        <SwatchInput hex={color} label={label} value={rates[key]} min={0} step={0.1} name={`rate-${key}`}
+                     onChange={value => setRates({...rates, [key]: clampNonNegative(value)})}/>;
 
-    const presetButtons = (
-        <div>
-            {Object.entries(WATER_PRESETS).map(([key, p]) => (
-                <button
-                    key={key}
-                    type="button"
-                    onClick={() => setPreset(key)}
-                    style={{
-                        marginRight: '0.5em',
-                        padding: '0.4em 0.8em',
-                        border: preset === key ? '2px solid #2185d0' : '1px solid #ccc',
-                        background: preset === key ? '#e8f4fc' : 'white',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    <strong>{p.label}</strong> — {p.description}
-                </button>
-            ))}
-            <span style={{fontSize: '0.85em', opacity: 0.7, marginLeft: '0.5em'}}>
-                (switching resets rates to preset defaults)
-            </span>
-        </div>
-    );
+    const presetButtons = <Group gap='xs' style={{flexWrap: 'wrap'}}>
+        {Object.entries(WATER_PRESETS).map(([key, p]) => (
+            <Button key={key} type='button' role={preset === key ? 'primary' : 'cancel'}
+                    onClick={() => setPreset(key)}>
+                {p.label} — {p.description}
+            </Button>
+        ))}
+        <span style={{fontSize: '0.85em', opacity: 0.7}}>
+            (switching resets rates to preset defaults)
+        </span>
+    </Group>;
 
     // One row per container: how many of it the total water would fill, and the spare
     // capacity in the last one.  Shown for every container so the user can compare.
     const containerRows = CONTAINERS.map(c => {
         const capacity = metric ? c.liters : c.gallons;
         const need = total !== null ? containersNeeded(total, capacity) : null;
-        return <TableRow key={c.key}>
-            <TableCell>{c.label}</TableCell>
-            <TableCell>{capacity} {volumeUnit}</TableCell>
-            <TableCell>
+        return <Table.Row key={c.key}>
+            <Table.Cell>{c.label}</Table.Cell>
+            <Table.Cell>{capacity} {volumeUnit}</Table.Cell>
+            <Table.Cell>
                 {need === null
                     ? '—'
                     : <span><b>{need.count}</b>
                         {need.leftover > 0 &&
                             <span style={{opacity: 0.7}}> ({fmt(need.leftover, volumeUnit)} spare)</span>}
                     </span>}
-            </TableCell>
-        </TableRow>;
+            </Table.Cell>
+        </Table.Row>;
     });
 
-    return <Form>
+    return <div>
         <Header as='h1'>Water Storage</Header>
 
         <div style={{marginBottom: '1em'}}>
@@ -308,25 +304,23 @@ export function WaterCalculator() {
         <div style={{marginBottom: '1em'}}>{presetButtons}</div>
 
         <Header as='h3'>People</Header>
-        <Grid stackable columns={2}>
+        <Grid>
             {CATEGORY_META.map(meta =>
-                <GridColumn key={meta.key}>{countInput(meta)}</GridColumn>)}
+                <Grid.Col key={meta.key} span={{base: 12, xs: 6}}>{countInput(meta)}</Grid.Col>)}
         </Grid>
 
         <Header as='h3' style={{marginTop: '1em'}}>
             Daily Use ({rateUnit} per person) <InfoPopup content={DEMAND_INFO}/>
         </Header>
-        <Grid stackable columns={2}>
+        <Grid>
             {CATEGORY_META.map(meta =>
-                <GridColumn key={meta.key}>{rateInput(meta)}</GridColumn>)}
+                <Grid.Col key={meta.key} span={{base: 12, xs: 6}}>{rateInput(meta)}</Grid.Col>)}
         </Grid>
 
         <Header as='h3' style={{marginTop: '1em'}}>Additional daily demand</Header>
         <div style={{maxWidth: '320px'}}>
-            <Input {...inputProps} min={0} step={0.1} name="extra"
-                   labelPosition='left' value={extra}
-                   onChange={e => setExtra(clampNonNegative(e.target.value))}
-                   label={<Label>Extra {rateUnit}</Label>}/>
+            <SwatchInput hex='#5f686a' label={`Extra ${rateUnit}`} value={extra} min={0} step={0.1} name="extra"
+                         onChange={value => setExtra(clampNonNegative(value))}/>
             <p style={{fontSize: '0.85em', opacity: 0.7, marginTop: '0.25em'}}>
                 Pets, livestock, guests, sick household members, or anything else not covered above.
             </p>
@@ -338,40 +332,40 @@ export function WaterCalculator() {
                    value={durationStop} aria-label='Duration'
                    onChange={e => setDurationIndex(Number(e.target.value))}
                    style={{width: '100%'}}/>
-            <Header as='h2' textAlign='center' style={{marginTop: '0.25em'}}>
+            <Header as='h2' style={{marginTop: '0.25em', textAlign: 'center'}}>
                 {formatDuration(days)}
             </Header>
         </div>
 
-        <Segment style={{marginTop: '1em'}}>
-            <Table definition unstackable>
-                <TableBody>
-                    <TableRow>
-                        <TableCell width={6}>Daily Use</TableCell>
-                        <TableCell>{fmt(daily, `${volumeUnit}/day`)}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell>Total Water for {formatDuration(days)}</TableCell>
-                        <TableCell>{fmt(total, volumeUnit)}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell>Water Weight</TableCell>
-                        <TableCell>{fmt(weight, weightUnit)}</TableCell>
-                    </TableRow>
-                </TableBody>
+        <Panel style={{marginTop: '1em'}}>
+            <Table>
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell style={{fontWeight: 600}}>Daily Use</Table.Cell>
+                        <Table.Cell>{fmt(daily, `${volumeUnit}/day`)}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell style={{fontWeight: 600}}>Total Water for {formatDuration(days)}</Table.Cell>
+                        <Table.Cell>{fmt(total, volumeUnit)}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell style={{fontWeight: 600}}>Water Weight</Table.Cell>
+                        <Table.Cell>{fmt(weight, weightUnit)}</Table.Cell>
+                    </Table.Row>
+                </Table.Body>
             </Table>
 
             <Header as='h3'>Containers Needed</Header>
-            <Table unstackable>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell>Container</TableHeaderCell>
-                        <TableHeaderCell>Capacity</TableHeaderCell>
-                        <TableHeaderCell>Needed</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>{containerRows}</TableBody>
+            <Table>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Container</Table.HeaderCell>
+                        <Table.HeaderCell>Capacity</Table.HeaderCell>
+                        <Table.HeaderCell>Needed</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>{containerRows}</Table.Body>
             </Table>
-        </Segment>
-    </Form>;
+        </Panel>
+    </div>;
 }

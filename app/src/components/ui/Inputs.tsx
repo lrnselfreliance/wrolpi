@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {forwardRef} from 'react';
 import {
     Checkbox as MCheckbox,
     MultiSelect,
@@ -71,13 +71,18 @@ export interface ActionInputProps extends React.ComponentProps<typeof MTextInput
  * as a single control — the input's own right border is dropped and the button
  * supplies the edge.
  */
-export function ActionInput({action, className, ...props}: ActionInputProps) {
-    if (!action) return <MTextInput className={className} {...props}/>
+export const ActionInput = forwardRef<HTMLInputElement, ActionInputProps>((
+    {action, className, ...props}, ref
+) => {
+    // The ref reaches the input, not the wrapper: callers use it to focus or select the
+    // field, and a ref to the surrounding div would do neither.
+    if (!action) return <MTextInput ref={ref} className={className} {...props}/>
     return <div className={['wrolpi-action-input', className].filter(Boolean).join(' ')}>
-        <MTextInput {...props}/>
+        <MTextInput ref={ref} {...props}/>
         {action}
     </div>
-}
+});
+ActionInput.displayName = 'ActionInput';
 
 export {
     MTextInput as TextInput,

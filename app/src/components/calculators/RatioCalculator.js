@@ -1,5 +1,4 @@
-import {Dropdown, MessageHeader, TableBody, TableCell, TableRow} from "semantic-ui-react";
-import {Form, Header, Table} from "../Theme";
+import {Group, Header, Label, NumberInput, Select, Table} from "../ui";
 import React from "react";
 import {HandPointMessage, roundDigits, useLocalStorage} from "../Common";
 import {createUnit, multiply, unit} from "mathjs";
@@ -91,65 +90,65 @@ function ratioReducer(prevState, e) {
 
 const baseToUnitsMap = {
     'length': [
-        {key: 'centimeter', value: 'centimeter', text: 'centimeter'},
-        {key: 'feet', value: 'feet', text: 'feet'},
-        {key: 'inch', value: 'inch', text: 'inch'},
-        {key: 'kilometer', value: 'kilometer', text: 'kilometer'},
-        {key: 'meter', value: 'meter', text: 'meter'},
-        {key: 'mile', value: 'mile', text: 'mile'},
+        {value: 'centimeter', text: 'centimeter'},
+        {value: 'feet', text: 'feet'},
+        {value: 'inch', text: 'inch'},
+        {value: 'kilometer', text: 'kilometer'},
+        {value: 'meter', text: 'meter'},
+        {value: 'mile', text: 'mile'},
     ],
     'area': [
-        {key: 'm2', value: 'm2', text: 'm²'},
-        {key: 'sqin', value: 'sqin', text: 'square inch'},
-        {key: 'sqyd', value: 'sqyd', text: 'square yard'},
-        {key: 'sqmi', value: 'sqmi', text: 'square mile'},
-        {key: 'acre', value: 'acre', text: 'acre'},
-        {key: 'hectare', value: 'hectare', text: 'hectare'},
+        {value: 'm2', text: 'm²'},
+        {value: 'sqin', text: 'square inch'},
+        {value: 'sqyd', text: 'square yard'},
+        {value: 'sqmi', text: 'square mile'},
+        {value: 'acre', text: 'acre'},
+        {value: 'hectare', text: 'hectare'},
     ],
     'volume': [
-        {key: 'cc', value: 'cc', text: 'cc'},
-        {key: 'liter', value: 'liter', text: 'liter'},
-        {key: 'm3', value: 'm3', text: 'meters³'},
-        {key: 'cup', value: 'cup', text: 'cup'},
-        {key: 'fluidounce', value: 'fluidounce', text: 'fl.oz'},
-        {key: 'gallon', value: 'gallon', text: 'gallon'},
-        {key: 'quart', value: 'quart', text: 'quart'},
-        {key: 'milliliter', value: 'milliliter', text: 'ml'},
-        {key: 'tablespoon', value: 'tablespoon', text: 'tablespoon'},
-        {key: 'teaspoon', value: 'teaspoon', text: 'teaspoon'},
-        {key: 'cuin', value: 'cuin', text: 'cuin'},
+        {value: 'cc', text: 'cc'},
+        {value: 'liter', text: 'liter'},
+        {value: 'm3', text: 'meters³'},
+        {value: 'cup', text: 'cup'},
+        {value: 'fluidounce', text: 'fl.oz'},
+        {value: 'gallon', text: 'gallon'},
+        {value: 'quart', text: 'quart'},
+        {value: 'milliliter', text: 'ml'},
+        {value: 'tablespoon', text: 'tablespoon'},
+        {value: 'teaspoon', text: 'teaspoon'},
+        {value: 'cuin', text: 'cuin'},
     ],
     'mass': [
-        {key: 'grain', value: 'grain', text: 'grain'},
-        {key: 'gram', value: 'gram', text: 'gram'},
-        {key: 'lbs', value: 'lbs', text: 'pound'},
-        {key: 'stone', value: 'stone', text: 'stone'},
-        {key: 'ton', value: 'ton', text: 'ton'},
+        {value: 'grain', text: 'grain'},
+        {value: 'gram', text: 'gram'},
+        {value: 'lbs', text: 'pound'},
+        {value: 'stone', text: 'stone'},
+        {value: 'ton', text: 'ton'},
     ],
     'energy': [
-        {key: 'joule', value: 'joule', text: 'joule'},
-        {key: 'Wh', value: 'Wh', text: 'Wh'},
-        {key: 'BTU', value: 'BTU', text: 'BTU'},
-        {key: 'watt', value: 'watt', text: 'watt'},
-        {key: 'hp', value: 'hp', text: 'hp'},
+        {value: 'joule', text: 'joule'},
+        {value: 'Wh', text: 'Wh'},
+        {value: 'BTU', text: 'BTU'},
+        {value: 'watt', text: 'watt'},
+        {value: 'hp', text: 'hp'},
     ],
 };
 
 // Used to get from unit like `BTU` back to the base `energy`.
 let unitsToBaseMap = {};
 for (const [base, units] of Object.entries(baseToUnitsMap)) {
-    for (const {key} of units) {
-        unitsToBaseMap[key] = base;
+    for (const {value} of units) {
+        unitsToBaseMap[value] = base;
     }
 }
 
 const defaultUnits = {
     // These will be replaced using local storage.
-    length: baseToUnitsMap.length[0]['key'], // centimeter
-    area: baseToUnitsMap.area[0]['key'], // m2
-    volume: baseToUnitsMap.volume[0]['key'], // cc
-    mass: baseToUnitsMap.mass[0]['key'], // grain
-    energy: baseToUnitsMap.energy[0]['key'], // joule
+    length: baseToUnitsMap.length[0]['value'], // centimeter
+    area: baseToUnitsMap.area[0]['value'], // m2
+    volume: baseToUnitsMap.volume[0]['value'], // cc
+    mass: baseToUnitsMap.mass[0]['value'], // grain
+    energy: baseToUnitsMap.energy[0]['value'], // joule
     [null]: null, // nullUnit
 };
 
@@ -175,37 +174,40 @@ const unitToInputValue = (u) => {
     return roundDigits(num, 3)
 }
 
+// "None" is represented by an empty string in the Select (which needs a string value);
+// the reducer still receives/produces `null` for the base, same as before migration.
 const baseOptions = [
-    {key: null, value: null, text: 'None'},
-    {key: 'length', value: 'length', label: 'meter, feet, inch, etc.', text: 'Length'},
-    {key: 'area', value: 'area', label: 'inch², m², etc.', text: 'Area'},
-    {key: 'volume', value: 'volume', label: 'liter, m³, cup, etc.', text: 'Volume'},
-    {key: 'mass', value: 'mass', label: 'gram, pound, etc.', text: 'Mass'},
-    {key: 'energy', value: 'energy', label: 'joule, watt, etc.', text: 'Energy'},
+    {value: '', label: 'None'},
+    {value: 'length', label: 'Length — meter, feet, inch, etc.'},
+    {value: 'area', label: 'Area — inch², m², etc.'},
+    {value: 'volume', label: 'Volume — liter, m³, cup, etc.'},
+    {value: 'mass', label: 'Mass — gram, pound, etc.'},
+    {value: 'energy', label: 'Energy — joule, watt, etc.'},
 ];
 
 const RatioInput = React.forwardRef(({name, label, value, unitValue, unitName, unitOptions, color, dispatch, onKeyDown}, ref) => (
-    <div className="ui fluid labeled input" style={{marginBottom: '0.25em'}}>
-        <div className={`ui label ${color}`}>{label}</div>
-        <input
+    <Group gap={0} wrap='nowrap' align='stretch' style={{marginBottom: '0.25em'}}>
+        <Label color={color || 'grey'}>{label}</Label>
+        <NumberInput
             id={name}
             name={name}
-            type="number"
             ref={ref}
             value={unitToInputValue(value)}
-            onChange={e => dispatch(e)}
+            onChange={val => dispatch({name, value: val})}
             onKeyDown={onKeyDown}
             onFocus={e => e.target.select()}
+            hideControls
+            style={{flex: 1}}
         />
         {unitOptions &&
-            <Dropdown
-                options={unitOptions}
-                className='label'
-                onChange={(_, data) => dispatch(data)}
+            <Select
+                data={unitOptions.map(o => ({value: o.value, label: o.text}))}
+                onChange={val => dispatch({name: unitName, value: val})}
                 name={unitName}
                 value={unitValue}
+                style={{minWidth: 150}}
             />}
-    </div>
+    </Group>
 ));
 
 const RatioCalculator = () => {
@@ -239,16 +241,17 @@ const RatioCalculator = () => {
 
     const unitOptions = baseToUnitsMap[state.base];
 
-    const getColor = (name) => state.lastUpdated.includes(name) ? '' : 'grey';
+    // Recently-updated inputs (the ones the user is actively typing) are highlighted;
+    // the others read as inactive/grey.
+    const getColor = (name) => state.lastUpdated.includes(name) ? 'blue' : 'grey';
 
-    const baseDropdown = <Dropdown selection
-                                   fluid
-                                   placeholder='Base Units'
-                                   options={baseOptions}
-                                   value={state.base}
-                                   name='base'
-                                   onChange={(_, data) => dispatch(data)}
-                                   style={{marginBottom: '1em'}}
+    const baseDropdown = <Select
+        placeholder='Base Units'
+        data={baseOptions}
+        value={state.base ?? ''}
+        name='base'
+        onChange={val => dispatch({name: 'base', value: val || null})}
+        style={{marginBottom: '1em'}}
     />;
 
     const handleInputChange = (e) => {
@@ -318,7 +321,7 @@ const RatioCalculator = () => {
         }
     }, []);
 
-    return <Form>
+    return <div>
         <Header as='h1'>Ratio</Header>
         <Header as='h2'>A : B = C : D</Header>
 
@@ -335,37 +338,36 @@ const RatioCalculator = () => {
         </Media>
 
         <Media greaterThanOrEqual='tablet'>
-            <Table unstackable className='ratio-table'>
-                <TableBody>
-                    <TableRow>
-                        <TableCell className='equal-width'>{inputA}</TableCell>
-                        <TableCell className='min-width'/>
-                        <TableCell className='equal-width'>{inputC}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell className='equal-width'>
+            <Table className='ratio-table'>
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell className='equal-width'>{inputA}</Table.Cell>
+                        <Table.Cell className='min-width'/>
+                        <Table.Cell className='equal-width'>{inputC}</Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell className='equal-width'>
                             <hr/>
-                        </TableCell>
-                        <TableCell textAlign='center' className='min-width'>
+                        </Table.Cell>
+                        <Table.Cell style={{textAlign: 'center'}} className='min-width'>
                             <Header as='h1'>=</Header>
-                        </TableCell>
-                        <TableCell className='equal-width'>
+                        </Table.Cell>
+                        <Table.Cell className='equal-width'>
                             <hr/>
-                        </TableCell>
-                    </TableRow>
-                    <TableRow>
-                        <TableCell className='equal-width'>{inputB}</TableCell>
-                        <TableCell className='min-width'/>
-                        <TableCell className='equal-width'>{inputD}</TableCell>
-                    </TableRow>
-                </TableBody>
+                        </Table.Cell>
+                    </Table.Row>
+                    <Table.Row>
+                        <Table.Cell className='equal-width'>{inputB}</Table.Cell>
+                        <Table.Cell className='min-width'/>
+                        <Table.Cell className='equal-width'>{inputD}</Table.Cell>
+                    </Table.Row>
+                </Table.Body>
             </Table>
         </Media>
         <HandPointMessage storageName='hint_ratio_calculator'>
-            <MessageHeader>Tip</MessageHeader>
-            You can change inputs using the <b>a</b>, <b>b</b>, <b>c</b>, and <b>d</b> keys.
+            <strong>Tip</strong> You can change inputs using the <b>a</b>, <b>b</b>, <b>c</b>, and <b>d</b> keys.
         </HandPointMessage>
-    </Form>
+    </div>
 }
 
 export const RatioCalculators = () => {

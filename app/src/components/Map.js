@@ -15,19 +15,10 @@ import {
     deleteMapFile, deleteMapPin, fetchMapSubscriptions, getMapFiles, getMapPins,
     mapSubscribe, mapUnsubscribe, rebuildMapSearchIndex, updateMapPin
 } from "../api";
-import {
-    Button,
-    Divider,
-    Input,
-    TableCell,
-    TableRow
-} from "semantic-ui-react";
+import {Button, Divider, Header, Icon, Modal, Table, TextInput} from "./ui";
 import {SortableTable} from "./SortableTable";
-import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Header} from "./Theme";
 import {Media, StatusContext} from "../contexts/contexts";
 import {MAP_VIEWER_URI} from "./Vars";
-import {Modal} from "./Theme";
 import MapViewer from "./MapViewer";
 import {AddToPlaylistButton} from "./AddToPlaylist";
 import maplibregl from "maplibre-gl";
@@ -124,15 +115,16 @@ function RegionPreviewModal({bbox, name, open, onClose}) {
         return () => { if (map) map.remove(); };
     }, [open, bbox]);
 
-    return <Modal open={open} onClose={onClose} size='large' closeIcon>
-        <Modal.Header>{name}</Modal.Header>
-        <Modal.Content>
-            <div ref={mapContainer} style={{width: '100%', height: '50vh'}}/>
-        </Modal.Content>
+    return <Modal open={open} onClose={onClose} size='large' closeIcon title={name}>
+        {/* No `.media` here: the bbox highlight is drawn as a map layer on the canvas itself
+            (see the `bbox` source/layers above), so the automatic `canvas` element-type filter
+            already covers it. There is no separate DOM overlay to wrap. */}
+        <div ref={mapContainer} style={{width: '100%', height: '50vh'}}/>
     </Modal>;
 }
 
-// Random-ish distinct colors for region boxes.
+// Random-ish distinct colors for region boxes. These are map-data paint colors (drawn
+// on the WebGL canvas itself), not UI chrome, so they are not theme tokens.
 const REGION_COLORS = [
     '#6435c9', '#e03997', '#00b5ad', '#2185d0', '#f2711c', '#b5cc18',
     '#a333c8', '#21ba45', '#db2828', '#fbbd08', '#a5673f', '#767676',
@@ -211,11 +203,9 @@ function AllRegionsPreviewModal({catalog, open, onClose}) {
         return () => { if (map) map.remove(); };
     }, [open, catalog]);
 
-    return <Modal open={open} onClose={onClose} size='fullscreen' closeIcon>
-        <Modal.Header>All Map Regions</Modal.Header>
-        <Modal.Content>
-            <div ref={mapContainer} style={{width: '100%', height: '75vh'}}/>
-        </Modal.Content>
+    return <Modal open={open} onClose={onClose} size='fullscreen' closeIcon title='All Map Regions'>
+        {/* No `.media` here either — same reasoning as RegionPreviewModal. */}
+        <div ref={mapContainer} style={{width: '100%', height: '75vh'}}/>
     </Modal>;
 }
 
@@ -235,30 +225,31 @@ function MapCatalogRow({item, subscribedRegions, fetchData}) {
         }
     };
 
-    return <TableRow>
-        <TableCell>{name}</TableCell>
-        <TableCell>{humanFileSize(size_estimate)}</TableCell>
-        <TableCell collapsing>
+    return <Table.Row>
+        <Table.Cell>{name}</Table.Cell>
+        <Table.Cell>{humanFileSize(size_estimate)}</Table.Cell>
+        <Table.Cell>
             {bbox && <Button
-                size='tiny'
+                size='xs'
                 icon='eye'
                 onClick={() => setPreviewOpen(true)}
             />}
             <Button
-                color={isSubscribed ? 'red' : 'violet'}
-                size='tiny'
+                role={isSubscribed ? 'danger' : undefined}
+                color={isSubscribed ? undefined : 'violet'}
+                size='xs'
                 onClick={handleButton}
             >
                 {isSubscribed ? 'Unsubscribe' : 'Subscribe'}
             </Button>
-        </TableCell>
+        </Table.Cell>
         {previewOpen && <RegionPreviewModal
             bbox={bbox}
             name={name}
             open={previewOpen}
             onClose={() => setPreviewOpen(false)}
         />}
-    </TableRow>;
+    </Table.Row>;
 }
 
 function ManageMap() {
@@ -319,38 +310,39 @@ function ManageMap() {
     };
 
     const fileRowFunc = (file) => {
-        return <TableRow key={file.name}>
-            <TableCell>{file.name}</TableCell>
-            <TableCell>{humanFileSize(file.size)}</TableCell>
-            <TableCell collapsing>
+        return <Table.Row key={file.name}>
+            <Table.Cell>{file.name}</Table.Cell>
+            <Table.Cell>{humanFileSize(file.size)}</Table.Cell>
+            <Table.Cell>
                 {file.name.startsWith('terrain')
                     ? null
                     : file.has_search_index
-                        ? <Button size='tiny' icon='check' content='Built' disabled color='green'/>
-                        : <APIButton size='tiny' icon='search'
-                                     content={searchBuilding ? 'Building...' : 'Build'}
+                        ? <Button size='xs' icon='check' disabled role='save'>Built</Button>
+                        : <APIButton size='xs' icon='search'
                                      disabled={searchBuilding}
                                      loading={searchBuilding}
-                                     onClick={() => handleBuildSearch(file.name)}/>
+                                     onClick={() => handleBuildSearch(file.name)}>
+                            {searchBuilding ? 'Building...' : 'Build'}
+                        </APIButton>
                 }
-            </TableCell>
-            <TableCell collapsing>
+            </Table.Cell>
+            <Table.Cell>
                 <APIButton
-                    color='red'
-                    size='tiny'
+                    role='danger'
+                    size='xs'
                     confirmContent='Delete this map file?'
                     confirmButton='Delete'
                     onClick={() => handleDelete(file.name)}
                 >
                     Delete
                 </APIButton>
-            </TableCell>
-        </TableRow>;
+            </Table.Cell>
+        </Table.Row>;
     };
 
-    const emptyRow = <TableRow>
-        <TableCell colSpan={4}>No PMTiles map files were found in <b>map/</b></TableCell>
-    </TableRow>;
+    const emptyRow = <Table.Row>
+        <Table.Cell colSpan={4}>No PMTiles map files were found in <b>map/</b></Table.Cell>
+    </Table.Row>;
 
     // --- Catalog table ---
     const catalogHeaders = [
@@ -392,7 +384,7 @@ function ManageMap() {
 
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5em'}}>
             <Header as='h3'>Map Subscriptions</Header>
-            <Button size='tiny' icon='globe' content='View All Regions' onClick={() => setAllRegionsOpen(true)}/>
+            <Button size='xs' icon='globe' onClick={() => setAllRegionsOpen(true)}>View All Regions</Button>
         </div>
 
         <AllRegionsPreviewModal catalog={catalog} open={allRegionsOpen} onClose={() => setAllRegionsOpen(false)}/>
@@ -406,7 +398,7 @@ function ManageMap() {
         />
 
         <InfoMessage storageName='hint_map_subscribe'>
-            <Message.Header>How to get map files</Message.Header>
+            <div style={{fontWeight: 600, marginBottom: 4}}>How to get map files</div>
             <p>Subscribe to a map region to automatically download it. Subscriptions will
                 periodically check for updated maps. Downloads may take a long time depending on
                 the region size and your internet speed. You can monitor progress on
@@ -432,8 +424,8 @@ function PinEditRow({pin, onSave, onCancel}) {
     const [label, setLabel] = useState(pin.label);
     const [color, setColor] = useState(pin.color);
 
-    return <TableRow>
-        <TableCell collapsing>
+    return <Table.Row>
+        <Table.Cell>
             <div style={{display: "flex", gap: 4}}>
                 {PIN_COLORS.map(c =>
                     <div
@@ -441,27 +433,27 @@ function PinEditRow({pin, onSave, onCancel}) {
                         onClick={() => setColor(c)}
                         style={{
                             width: 20, height: 20, borderRadius: "50%", background: c, cursor: "pointer",
-                            border: color === c ? "3px solid #333" : "2px solid #ccc",
+                            border: color === c ? "3px solid var(--text)" : "2px solid var(--border)",
                         }}
                     />
                 )}
             </div>
-        </TableCell>
-        <TableCell>
-            <Input
-                size='small'
+        </Table.Cell>
+        <Table.Cell>
+            <TextInput
+                size='sm'
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && label.trim() && onSave(pin.id, label.trim(), color)}
             />
-        </TableCell>
-        <TableCell>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</TableCell>
-        <Media greaterThan='mobile'><TableCell>{pin.created}</TableCell></Media>
-        <TableCell collapsing>
-            <Button size='tiny' color='green' onClick={() => label.trim() && onSave(pin.id, label.trim(), color)}>Save</Button>
-            <Button size='tiny' onClick={onCancel}>Cancel</Button>
-        </TableCell>
-    </TableRow>;
+        </Table.Cell>
+        <Table.Cell>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</Table.Cell>
+        <Media greaterThan='mobile'><Table.Cell>{pin.created}</Table.Cell></Media>
+        <Table.Cell>
+            <Button size='xs' role='save' onClick={() => label.trim() && onSave(pin.id, label.trim(), color)}>Save</Button>
+            <Button size='xs' role='cancel' onClick={onCancel}>Cancel</Button>
+        </Table.Cell>
+    </Table.Row>;
 }
 
 function MapPins() {
@@ -517,38 +509,38 @@ function MapPins() {
                 onCancel={() => setEditingId(null)}
             />;
         }
-        return <TableRow key={pin.id}>
-            <TableCell collapsing>
+        return <Table.Row key={pin.id}>
+            <Table.Cell>
                 <div style={{
                     width: 16, height: 16, borderRadius: "50%",
-                    background: pin.color || "red", border: "1px solid #ccc",
+                    background: pin.color || "red", border: "1px solid var(--border)",
                 }}/>
-            </TableCell>
-            <TableCell>{pin.label}</TableCell>
-            <TableCell>
+            </Table.Cell>
+            <Table.Cell>{pin.label}</Table.Cell>
+            <Table.Cell>
                 <a href="#" onClick={(e) => {e.preventDefault(); handleNavigate(pin);}}>
                     {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}
                 </a>
-            </TableCell>
-            <TableCell>{pin.created}</TableCell>
-            <TableCell collapsing>
-                <Button size='tiny' icon='edit' onClick={() => setEditingId(pin.id)}/>
+            </Table.Cell>
+            <Table.Cell>{pin.created}</Table.Cell>
+            <Table.Cell>
+                <Button size='xs' icon='edit' onClick={() => setEditingId(pin.id)}/>
                 <AddToPlaylistButton
-                    size='tiny'
+                    size='xs'
                     icon='list'
                     content=''
                     url={{url: `/map?lat=${pin.lat}&lon=${pin.lon}&z=14`, title: pin.label}}
                 />
                 <APIButton
-                    size='tiny'
-                    color='red'
+                    size='xs'
+                    role='danger'
                     icon='trash'
                     confirmContent='Delete this pin?'
                     confirmButton='Delete'
                     onClick={() => handleDelete(pin.id)}
                 />
-            </TableCell>
-        </TableRow>;
+            </Table.Cell>
+        </Table.Row>;
     };
 
     // --- Mobile headers and row ---
@@ -559,35 +551,35 @@ function MapPins() {
     ];
 
     const mobileRowFunc = (pin) => {
-        return <TableRow key={pin.id}>
-            <TableCell collapsing>
+        return <Table.Row key={pin.id}>
+            <Table.Cell>
                 <div style={{
                     width: 16, height: 16, borderRadius: "50%",
-                    background: pin.color || "red", border: "1px solid #ccc",
+                    background: pin.color || "red", border: "1px solid var(--border)",
                 }}/>
-            </TableCell>
-            <TableCell>
+            </Table.Cell>
+            <Table.Cell>
                 <a href="#" onClick={(e) => {e.preventDefault(); handleNavigate(pin);}}>
                     {pin.label}
                 </a>
-                <div style={{fontSize: 11, color: '#888'}}>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</div>
-            </TableCell>
-            <TableCell collapsing>
+                <div style={{fontSize: 11, color: 'var(--muted)'}}>{pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}</div>
+            </Table.Cell>
+            <Table.Cell>
                 <APIButton
-                    size='tiny'
-                    color='red'
+                    size='xs'
+                    role='danger'
                     icon='trash'
                     confirmContent='Delete this pin?'
                     confirmButton='Delete'
                     onClick={() => handleDelete(pin.id)}
                 />
-            </TableCell>
-        </TableRow>;
+            </Table.Cell>
+        </Table.Row>;
     };
 
-    const emptyRow = <TableRow>
-        <TableCell colSpan={5}>No pins. Right-click on the map to add one.</TableCell>
-    </TableRow>;
+    const emptyRow = <Table.Row>
+        <Table.Cell colSpan={5}>No pins. Right-click on the map to add one.</Table.Cell>
+    </Table.Row>;
 
     const lowerFilter = filter.toLowerCase();
     const filteredPins = lowerFilter
@@ -598,8 +590,8 @@ function MapPins() {
         : pins;
 
     return <PageContainer>
-        <Input
-            icon='search'
+        <TextInput
+            leftSection={<Icon name='search'/>}
             placeholder='Filter by label or coordinates...'
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -607,7 +599,6 @@ function MapPins() {
         />
         <Media at='mobile'>
             <SortableTable
-                tableProps={{unstackable: true}}
                 tableHeaders={mobileHeaders}
                 data={filteredPins}
                 rowFunc={mobileRowFunc}
@@ -618,7 +609,6 @@ function MapPins() {
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <SortableTable
-                tableProps={{unstackable: true}}
                 tableHeaders={fullHeaders}
                 data={filteredPins}
                 rowFunc={fullRowFunc}

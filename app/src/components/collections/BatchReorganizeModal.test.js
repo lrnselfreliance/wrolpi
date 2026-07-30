@@ -68,7 +68,7 @@ describe('BatchReorganizeModal', () => {
         renderWithProviders(<BatchReorganizeModal {...defaultProps} />);
 
         // Should show loading initially
-        expect(screen.getByText(/Loading Preview/i)).toBeInTheDocument();
+        expect(screen.getByText(/Analyzing channels/i)).toBeInTheDocument();
 
         // Wait for preview to load
         await waitFor(() => {

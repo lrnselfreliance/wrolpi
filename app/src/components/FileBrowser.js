@@ -1,17 +1,20 @@
-import {Button, Header, Icon, Modal, Placeholder, Progress, Segment, Table} from "./Theme";
 import {
+    ActionInput,
+    Button,
     Checkbox,
-    Form,
-    Grid,
-    IconGroup,
-    Input,
-    PlaceholderLine,
-    TableBody,
-    TableCell,
-    TableHeader,
-    TableHeaderCell,
-    TableRow
-} from "semantic-ui-react";
+    Header,
+    Icon,
+    IconButton,
+    IconStack,
+    Modal,
+    Panel,
+    Placeholder,
+    Progress,
+    Skeleton,
+    Stack,
+    Table,
+    TextInput,
+} from "./ui";
 import {
     APIButton,
     DirectorySearch,
@@ -23,6 +26,7 @@ import {
     useIsIgnoredDirectory
 } from "./Common";
 import React, {useContext, useEffect, useState} from "react";
+import {IconArrowsMove, IconChevronsUp, IconCursorText, IconTags} from "@tabler/icons-react";
 import {useDropzone} from "react-dropzone";
 import {useHotkeys} from "react-hotkeys-hook";
 import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
@@ -111,23 +115,28 @@ function Folder({folder, onFolderClick, sortData, onFileClick, disabled, loading
     const isLoading = loadingFolders && loadingFolders.has(path);
     const depth = (path.match(/\//g) || []).length;
 
-    const f = <TableRow
+    const f = <Table.Row
         key={path}
-        disabled={isLoading || disabled}
         className={dragClass}
+        style={(isLoading || disabled) ? {opacity: 0.5, pointerEvents: 'none'} : undefined}
         onMouseDown={(e) => handleDragStart(path, e)}
         onMouseEnter={() => handleDragMove(path)}
     >
-        <TableCell collapsing>
+        <Table.Cell style={{width: '1%', whiteSpace: 'nowrap'}}>
             <Checkbox checked={showAsSelected} onChange={() => onSelect(folder['path'])}/>
-        </TableCell>
-        <TableCell onClick={() => shouldAllowClick() && onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
+        </Table.Cell>
+        <Table.Cell
+            onClick={() => shouldAllowClick() && onFolderClick(path)}
+            className='file-path'
+            colSpan={2}
+            style={is_empty ? {opacity: 0.5} : undefined}
+        >
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {ignored && <Icon name='eye slash' color='red'/>}
             {name}
-        </TableCell>
-    </TableRow>;
+        </Table.Cell>
+    </Table.Row>;
     if (children) {
         // Folder has children, recursively display them.
         children = sortData(children);
@@ -164,27 +173,27 @@ function File({file, onFileClick, disabled}) {
     const showAsSelected = (isInSelectedPaths && !isDragDeselecting) || isDragSelecting;
     // Visual highlight class
     const dragClass = isDragSelecting ? 'drag-selecting' : (isDragDeselecting ? 'drag-deselecting' : '');
-    return <TableRow
+    return <Table.Row
         key={path}
-        disabled={disabled}
         className={dragClass}
+        style={disabled ? {opacity: 0.5, pointerEvents: 'none'} : undefined}
         onMouseDown={(e) => handleDragStart(path, e)}
         onMouseEnter={() => handleDragMove(path)}
     >
-        <TableCell collapsing>
+        <Table.Cell style={{width: '1%', whiteSpace: 'nowrap'}}>
             <Checkbox checked={showAsSelected} onChange={() => onSelect(path)}/>
-        </TableCell>
-        <TableCell onClick={() => shouldAllowClick() && onFileClick(file)} className='file-path'>
+        </Table.Cell>
+        <Table.Cell onClick={() => shouldAllowClick() && onFileClick(file)} className='file-path'>
             {depthIndentation(path)}
             <FileRowTagIcon file={file}/>
             {/*null size to make icon the correct size*/}
             <FileIcon file={file} size={null}/>
             {pathName(path)}
-        </TableCell>
-        <TableCell collapsing textAlign='right'>
+        </Table.Cell>
+        <Table.Cell numeric style={{width: '1%', whiteSpace: 'nowrap'}}>
             {humanFileSize(size)}
-        </TableCell>
-    </TableRow>
+        </Table.Cell>
+    </Table.Row>
 }
 
 function Path({path, onFolderClick, onFileClick, sortData, disabled, loadingFolders}) {
@@ -209,17 +218,15 @@ function Path({path, onFolderClick, onFileClick, sortData, disabled, loadingFold
 function SkeletonFileRow({depth}) {
     const indentation = '\xa0\xa0\xa0\xa0'.repeat(depth);
     return (
-        <TableRow>
-            <TableCell collapsing>
+        <Table.Row>
+            <Table.Cell style={{width: '1%', whiteSpace: 'nowrap'}}>
                 <Checkbox disabled/>
-            </TableCell>
-            <TableCell className='file-path' colSpan={2}>
+            </Table.Cell>
+            <Table.Cell className='file-path' colSpan={2}>
                 {indentation}
-                <Placeholder style={{display: 'inline-block', width: '200px', marginLeft: '0.5em'}}>
-                    <PlaceholderLine/>
-                </Placeholder>
-            </TableCell>
-        </TableRow>
+                <Skeleton height={12} width={200} radius={0} animate style={{display: 'inline-block', marginLeft: '0.5em'}}/>
+            </Table.Cell>
+        </Table.Row>
     );
 }
 
@@ -387,28 +394,26 @@ export function FileBrowser() {
     const [footerRef, footerWidth] = useElementWidth();
     // Expand icon-only buttons to include labels once the footer is wide enough to fit them.
     const showLabels = footerWidth >= FOOTER_LABELS_MIN_WIDTH;
-    // Semantic UI renders a labeled icon button when `content` and `labelPosition` are set, else icon-only.
-    const labelProps = (content) => showLabels ? {content, labelPosition: 'left'} : {};
+    // Show a label alongside the icon once there's room; otherwise the icon carries the meaning alone.
+    const label = (text) => showLabels ? text : null;
 
     const footerClassName = `sticky-footer ${inverted}`;
     const footer = <div className={footerClassName} ref={footerRef}>
         <FilesRefreshButton paths={selectedPaths} showLabel={showLabels}/>
         <APIButton
             icon='trash'
-            color='red'
+            role='danger'
             confirmContent='Are you sure you want to delete these files?'
             confirmButton='Delete'
             onClick={onDelete}
             disabled={selectedPathsCount === 0}
             obeyWROLMode={true}
-            {...labelProps('Delete')}
-        />
-        <Button icon='text cursor'
+        >{label('Delete')}</APIButton>
+        <Button icon={IconCursorText}
                 color='yellow'
                 onClick={() => setRenameOpen(true)}
                 disabled={wrolModeEnabled || selectedPathsCount !== 1}
-                {...labelProps('Rename')}
-        />
+        >{label('Rename')}</Button>
         {selectedPathsCount === 1 ?
             <RenameModal
                 open={renameOpen}
@@ -417,12 +422,11 @@ export function FileBrowser() {
                 path={selectedPaths[0]}
                 onSubmit={reset}
             /> : null}
-        <Button icon='move'
+        <Button icon={IconArrowsMove}
                 color='teal'
                 disabled={wrolModeEnabled || selectedPathsCount === 0}
                 onClick={() => setMoveOpen(true)}
-                {...labelProps('Move')}
-        />
+        >{label('Move')}</Button>
         {selectedPathsCount > 0 ?
             <MoveModal open={moveOpen}
                        onClose={() => setMoveOpen(false)}
@@ -435,10 +439,9 @@ export function FileBrowser() {
             disabled={wrolModeEnabled}
             style={{paddingLeft: '1em', paddingRight: showLabels ? '1em' : '0.8em'}}
         >
-            <IconGroup>
+            <IconStack corner={<Icon name='add'/>} label='New folder'>
                 <Icon name='folder'/>
-                <Icon corner name='add'/>
-            </IconGroup>
+            </IconStack>
             {showLabels ? <>&nbsp;New Folder</> : null}
         </Button>
         <MakeDirectoryModal
@@ -452,8 +455,7 @@ export function FileBrowser() {
             color='green'
             disabled={wrolModeEnabled || (selectedPathsCount > 0 && !singleDirectorySelected)}
             onClick={() => setUploadOpen(true)}
-            {...labelProps('Upload')}
-        />
+        >{label('Upload')}</Button>
         <FileBrowserUploadModal
             open={uploadOpen}
             onClose={() => setUploadOpen(false)}
@@ -465,8 +467,7 @@ export function FileBrowser() {
             icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
             disabled={!singleDirectorySelected || wrolModeEnabled}
             onClick={() => setIgnoreDirectoryOpen(true)}
-            {...labelProps(isDirectoryIgnored ? 'Unignore' : 'Ignore')}
-        />
+        >{label(isDirectoryIgnored ? 'Unignore' : 'Ignore')}</Button>
         <IgnoreDirectoryModal
             open={ignoreDirectoryOpen}
             onClose={onIgnore}
@@ -476,11 +477,10 @@ export function FileBrowser() {
         />
         <Button
             color='violet'
-            icon='tags'
+            icon={IconTags}
             disabled={selectedPathsCount === 0}
             onClick={() => setBulkTagOpen(true)}
-            {...labelProps('Tag')}
-        />
+        >{label('Tag')}</Button>
         <BulkTagModal
             open={bulkTagOpen}
             onClose={() => setBulkTagOpen(false)}
@@ -536,10 +536,7 @@ export function FileBrowser() {
     );
 
     if (browseFiles === null) {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>;
+        return <Placeholder lines={2}/>;
     } else if (browseFiles === undefined) {
         return <ErrorMessage>Could not fetch files</ErrorMessage>
     }
@@ -551,31 +548,29 @@ export function FileBrowser() {
         openFolders={openFolders}
     >
         <div className='file-browser-filter-container'>
-            <Input
-                icon='filter'
-                iconPosition='left'
+            <ActionInput
+                leftSection={<Icon name='filter'/>}
                 placeholder='Filter files...'
                 value={filterStr}
-                onChange={(e, {value}) => setFilterStr(value)}
+                onChange={(e) => setFilterStr(e.target.value)}
                 aria-label='Filter files'
                 className='file-browser-filter'
                 ref={filterInputRef}
-                action={<Button
+                action={<IconButton
                     icon='close'
                     type='button'
                     onClick={() => setFilterStr('')}
                     disabled={!filterStr}
                     className='search-clear'
-                    aria-label='Clear filter'
+                    label='Clear filter'
                 />}
             />
-            <Button
-                icon='angle double up'
+            <IconButton
+                icon={IconChevronsUp}
                 type='button'
                 onClick={onCollapseAll}
                 disabled={!openFolders || openFolders.length === 0}
-                title='Close all folders'
-                aria-label='Close all folders'
+                label='Close all folders'
                 style={{marginLeft: '0.5em'}}
             />
         </div>
@@ -598,7 +593,6 @@ function FileBrowserContent({browseFiles, headers, onFolderClick, setPreviewFile
     return (
         <div style={{marginBottom: '4em'}} className={containerClassName}>
             <SortableTable
-                tableProps={{striped: true}}
                 data={browseFiles}
                 tableHeaders={headers}
                 defaultSortColumn='path'
@@ -624,11 +618,8 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
     const [value, setValue] = React.useState(name);
     const disabled = value === name;
 
-    const handleInputChange = (e, props) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setValue(props.value);
+    const handleInputChange = (e) => {
+        setValue(e.target.value);
     }
 
     const handleSubmit = async (e) => {
@@ -652,37 +643,37 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
         setValue(pathName(path));
     }, [path]);
 
-    return <Modal closeIcon
+    return <Modal
                   open={open}
                   onClose={onClose}
     >
         <Modal.Header>Rename: {name}</Modal.Header>
         <Modal.Content>
-            <Form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit}>
                 <Header as='h4'>New Name</Header>
                 <pre>{parent ? parent + '/' : null}{value}</pre>
 
-                <Input fluid
+                <TextInput
                        autoFocus
                        label='Name'
                        value={value}
                        onChange={handleInputChange}
                 />
-            </Form>
+            </form>
         </Modal.Content>
         <Modal.Actions>
+            <Button
+                onClick={() => setValue(name)}
+                style={{marginRight: 'auto'}}
+            >
+                Reset
+            </Button>
             <Button
                 color='violet'
                 disabled={disabled}
                 onClick={handleSubmit}
             >
                 Rename
-            </Button>
-            <Button
-                onClick={() => setValue(name)}
-                floated='left'
-            >
-                Reset
             </Button>
         </Modal.Actions>
     </Modal>
@@ -710,47 +701,47 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
         }
     }
 
-    const fileCell = i => <TableCell>
+    const fileCell = i => <Table.Cell>
         <pre style={{marginTop: 0, marginBottom: 0}}>{i}</pre>
-    </TableCell>;
+    </Table.Cell>;
 
-    const destinationRows = paths.map(i => <TableRow key={i}>
+    const destinationRows = paths.map(i => <Table.Row key={i}>
         {fileCell(i)}
         {destination ? fileCell(destination + '/' + pathName(i)) : fileCell(pathName(i))}
-    </TableRow>);
+    </Table.Row>);
 
-    return <Modal closeIcon
+    return <Modal
                   onClose={onClose}
                   open={open}
     >
         <Modal.Header>Move Files/Directories</Modal.Header>
         <Modal.Content>
             <p>Search for a directory to move your files into:</p>
-            <DirectorySearch onSelect={handleDirectory} disabled={pending} input={{autoFocus: true}}/>
+            <DirectorySearch onSelect={handleDirectory} disabled={pending} autoFocus/>
 
             <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHeaderCell>Source</TableHeaderCell>
-                        <TableHeaderCell>Destination</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
+                <Table.Header>
+                    <Table.Row>
+                        <Table.HeaderCell>Source</Table.HeaderCell>
+                        <Table.HeaderCell>Destination</Table.HeaderCell>
+                    </Table.Row>
+                </Table.Header>
+                <Table.Body>
                     {destinationRows}
-                </TableBody>
+                </Table.Body>
             </Table>
         </Modal.Content>
         <Modal.Actions>
+            <Button
+                onClick={() => setDestination(null)}
+                style={{marginRight: 'auto'}}
+                disabled={pending}
+            >Reset</Button>
             <Button
                 color='violet'
                 onClick={handleMove}
                 disabled={pending}
             >Move</Button>
-            <Button
-                onClick={() => setDestination(null)}
-                floated='left'
-                disabled={pending}
-            >Reset</Button>
         </Modal.Actions>
     </Modal>
 }
@@ -779,20 +770,20 @@ export function IgnoreDirectoryModal({open, onClose, onSubmit, directory, ignore
     const content = ignored ?
         'Remove ignore of the following directory?  You must refresh your files after this.'
         : 'Ignore the following directory? The files within will not be indexed and will not show in search results.';
-    let submitButton = <Button primary
+    let submitButton = <Button role='primary'
                                disabled={pending}
                                onClick={handleIgnore}
     >{ignored ? 'Un-ignore' : 'Ignore'}</Button>;
 
-    return <Modal closeIcon open={open} onClose={onClose}>
+    return <Modal open={open} onClose={onClose}>
         <Modal.Header>{header}</Modal.Header>
         <Modal.Content>
             {content}
             <pre>{mediaDirectory}/{directory}</pre>
         </Modal.Content>
         <Modal.Actions>
+            <Button role='cancel' style={{marginRight: 'auto'}} onClick={onClose}>Close</Button>
             {submitButton}
-            <Button secondary floated='left' onClick={onClose}>Close</Button>
         </Modal.Actions>
     </Modal>
 }
@@ -801,11 +792,8 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
     const [value, setValue] = useState('');
     const mediaDirectory = useMediaDirectory();
 
-    const handleInputChange = (e, props) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setValue(props.value);
+    const handleInputChange = (e) => {
+        setValue(e.target.value);
     }
 
     const handleSubmit = async (e) => {
@@ -824,18 +812,18 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
         }
     }
 
-    return <Modal closeIcon open={open} onClose={onClose}>
+    return <Modal open={open} onClose={onClose}>
         <Modal.Header>Make Directory</Modal.Header>
         <Modal.Content>
-            <Form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit}>
                 <pre>{mediaDirectory}/{parent}{value}</pre>
-                <Input fluid
+                <TextInput
                        autoFocus
                        label='Name'
                        value={value}
                        onChange={handleInputChange}
                 />
-            </Form>
+            </form>
         </Modal.Content>
         <Modal.Actions>
             <Button color='violet' onClick={handleSubmit}>Create</Button>
@@ -845,7 +833,6 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
 
 export function FileBrowserUploadModal({open, onClose, destination, onComplete}) {
     const mediaDirectory = useMediaDirectory();
-    const {t} = React.useContext(ThemeContext);
 
     const {
         setFiles,
@@ -909,27 +896,22 @@ export function FileBrowserUploadModal({open, onClose, destination, onComplete})
                 color = 'orange';
                 statusString = 'Already Exists:';
             }
-            let indicating = status === 'pending';
 
-            return <Grid.Row key={name}>
-                <Grid.Column mobile={3} tablet={2} computer={1}>
-                    <Icon name={mimetypeIconName(type, name.toLowerCase())} size='big'/>
-                </Grid.Column>
-                <Grid.Column mobile={13} tablet={14} computer={15}>
-                    <Progress progress indicating={indicating} percent={percent} color={color}>
-                        <p {...t}>{statusString} {name}</p>
-                    </Progress>
-                </Grid.Column>
-            </Grid.Row>
+            return <div key={name} style={{display: 'flex', alignItems: 'center', gap: '0.75em'}}>
+                <Icon name={mimetypeIconName(type, name.toLowerCase())} size='large'/>
+                <div style={{flex: 1}}>
+                    <Progress percent={percent} color={color} label={`${statusString} ${name}`}/>
+                </div>
+            </div>
         })
     }
 
     const displayPath = destination ? `${mediaDirectory}/${destination}` : mediaDirectory;
 
-    return <Modal closeIcon open={open} onClose={handleClose} size='large'>
+    return <Modal open={open} onClose={handleClose} size='large'>
         <Modal.Header>Upload to: {displayPath}</Modal.Header>
         <Modal.Content>
-            <Form>
+            <form onSubmit={e => e.preventDefault()}>
                 {tagsSelector}
                 <div style={{marginTop: '1em'}}>
                 <Toggle
@@ -939,49 +921,27 @@ export function FileBrowserUploadModal({open, onClose, destination, onComplete})
                     disabled={inProgress}
                 />
                 </div>
-            </Form>
+            </form>
 
-            <Segment>
-                <Grid columns={1}>
-                    <Grid.Row>
-                        <Grid.Column style={{padding: '1em'}}>
-                            <Form>
-                                <div {...getRootProps()}>
-                                    <input {...getInputProps()}/>
-                                    <Grid textAlign='center'>
-                                        <Grid.Row>
-                                            <Grid.Column>
-                                                <Header icon>
-                                                    <Icon name='file text'/>
-                                                    Click here, or drop files here to upload
-                                                </Header>
-                                            </Grid.Column>
-                                        </Grid.Row>
-                                    </Grid>
-                                </div>
-                            </Form>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </Segment>
+            <Panel style={{marginTop: '1em', padding: '1em'}}>
+                <div {...getRootProps()} style={{cursor: 'pointer', textAlign: 'center'}}>
+                    <input {...getInputProps()}/>
+                    <Header as='h4' icon='file text'>Click here, or drop files here to upload</Header>
+                </div>
+            </Panel>
 
-            <Grid>
-                <Grid.Row columns={1}>
-                    <Grid.Column>
-                        {progresses && Object.keys(progresses).length > 1 && <Progress progress
-                                                                                       percent={overallProgress}
-                                                                                       color='blue'
-                                                                                       label='Overall Progress'
-                        />}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-            <Grid columns={2}>
+            {progresses && Object.keys(progresses).length > 1 &&
+                <div style={{marginTop: '1em'}}>
+                    <Progress percent={overallProgress} color='blue' label='Overall Progress'/>
+                </div>}
+
+            <Stack gap={8} style={{marginTop: '1em'}}>
                 {progressBars}
-            </Grid>
+            </Stack>
         </Modal.Content>
         <Modal.Actions>
             <Button
+                role='cancel'
                 onClick={handleClose}
                 disabled={inProgress}
             >

@@ -1,4 +1,4 @@
-import React, {forwardRef} from 'react';
+import React, {forwardRef, useId} from 'react';
 import {
     Checkbox as MCheckbox,
     MultiSelect,
@@ -57,6 +57,66 @@ export function Toggle({style, className, ...props}: ToggleProps) {
         {...props}
     />
 }
+
+export interface PathInputProps
+    extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
+    label?: React.ReactNode;
+    description?: React.ReactNode;
+    error?: React.ReactNode;
+    /**
+     * A fixed, non-editable path the value hangs off — the media directory, say.  It is
+     * not part of the value, and typing never changes it.
+     */
+    prefix: string;
+}
+
+/**
+ * A path input with a fixed prefix shown to the left of what the user types.
+ *
+ * The prefix is a *sibling* of the input rather than a section layered inside it, which is
+ * the point: Mantine positions `leftSection` absolutely and reserves room for it with
+ * `--input-padding-inline-start`, so a call site that gets that width wrong prints the
+ * prefix straight through the value.  Passing `leftSectionWidth='auto'` did exactly that
+ * — `padding-inline-start: auto` is invalid, so it resolved to zero and every one of these
+ * fields rendered its path on top of its own contents.
+ *
+ * As two boxes in a flex row there is no width to compute and nothing to overlap.  It also
+ * sizes itself to any prefix, which matters here: the media directory is `/media/wrolpi`
+ * on a Pi and something else entirely under Docker.
+ */
+export const PathInput = forwardRef<HTMLInputElement, PathInputProps>((
+    {prefix, label, description, error, required, disabled, className, id, ...props}, ref
+) => {
+    const generated = useId();
+    const inputId = id ?? `${generated}-input`;
+    const prefixId = `${generated}-prefix`;
+
+    return <div className={['wrolpi-path-input', className].filter(Boolean).join(' ')}>
+        {label && <label className='wrolpi-path-input-label' htmlFor={inputId}>
+            {label}{required && <span aria-hidden='true'> *</span>}
+        </label>}
+        <div className='wrolpi-path-input-control' data-disabled={disabled ? true : undefined}
+             data-error={error ? true : undefined}>
+            {/*
+              Described rather than hidden: a screen reader should hear which directory the
+              typed path is relative to, since that is the whole point of showing it.
+            */}
+            <span className='wrolpi-path-input-prefix' id={prefixId}>{prefix}</span>
+            <input
+                ref={ref}
+                id={inputId}
+                type='text'
+                required={required}
+                disabled={disabled}
+                aria-describedby={prefixId}
+                {...props}
+            />
+        </div>
+        {description && <div className='wrolpi-path-input-description'>{description}</div>}
+        {error && <div className='wrolpi-path-input-error'>{error}</div>}
+    </div>
+});
+PathInput.displayName = 'PathInput';
 
 export interface ActionInputProps extends React.ComponentProps<typeof MTextInput> {
     /** Button (or buttons) attached to the input's trailing edge. */

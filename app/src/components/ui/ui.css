@@ -390,6 +390,91 @@ html[data-theme="amber"] .wrolpi-form-field input:focus {
     background: var(--bg);
 }
 
+/* --------------------------------------------------------------- Path input */
+/*
+ * Prefix and input are siblings in a flex row sharing one outline, so the prefix cannot
+ * print over the value -- the failure that Mantine's absolutely-positioned `leftSection`
+ * allowed when its reserved width was wrong.  The prefix takes its natural width, so any
+ * media directory fits without a number being maintained anywhere.
+ */
+
+.wrolpi-path-input-label {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.wrolpi-path-input-control {
+    display: flex;
+    align-items: stretch;
+    background: var(--panel);
+    border: 1px solid var(--border);
+}
+
+.wrolpi-path-input-control:focus-within {
+    border-color: var(--blue);
+}
+
+html[data-theme="night"] .wrolpi-path-input-control:focus-within,
+html[data-theme="amber"] .wrolpi-path-input-control:focus-within {
+    border-color: var(--text);
+}
+
+.wrolpi-path-input-control[data-error] {
+    border: 1.5px dashed var(--red);
+}
+
+.wrolpi-path-input-control[data-disabled] {
+    background: var(--bg);
+}
+
+/* Muted and on the header surface: it reads as context, not as something to edit. */
+.wrolpi-path-input-prefix {
+    display: flex;
+    align-items: center;
+    flex: none;
+    padding: 0 6px 0 9px;
+    background: var(--head);
+    border-right: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.wrolpi-path-input-control input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 9px;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+
+.wrolpi-path-input-control input::placeholder {
+    color: var(--muted);
+}
+
+.wrolpi-path-input-control input:disabled {
+    color: var(--muted);
+}
+
+.wrolpi-path-input-description {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
+.wrolpi-path-input-error {
+    font-size: 12px;
+    color: var(--red);
+    margin-top: 3px;
+}
+
 /* ---------------------------------------------------------- Action inputs */
 /*
  * Input and button share one outline: the input gives up its right border and

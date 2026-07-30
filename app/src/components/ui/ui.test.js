@@ -25,6 +25,7 @@ import {
     Message,
     Modal,
     Panel,
+    PathInput,
     Progress,
     resolveIconName,
     Status,
@@ -277,6 +278,111 @@ describe('Header', () => {
 
         expect(container.querySelector('svg')).toBeInTheDocument();
         expect(screen.getByText('Paste this into the extension')).toBeInTheDocument();
+    });
+});
+
+describe('PathInput', () => {
+    /*
+     * These need no mocks at all -- no context, no API, no router.  That is the point of
+     * putting the field in the library: the page that uses it needs a pile of provider and
+     * fetch mocks, so its inputs were never covered, which is how a field shipped printing
+     * its own prefix over its own value.
+     */
+
+    it('keeps the prefix out of the value', () => {
+        // The bug this exists to prevent: the prefix must be its own element, never part of
+        // the text the user is editing, so it cannot be typed over or submitted.
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Archive Directory'
+                            value='archive/%(domain)s' onChange={jest.fn()}/>);
+
+        const input = screen.getByLabelText(/Archive Directory/);
+        expect(input).toHaveValue('archive/%(domain)s');
+        expect(input.value).not.toContain('/media/wrolpi');
+        // A sibling, not a child: an element inside the box could overlap it.
+        expect(input.querySelector('*')).toBeNull();
+        expect(screen.getByText('/media/wrolpi/')).not.toBe(input);
+    });
+
+    it('reports only what was typed, never the prefix', async () => {
+        // Read the value inside the handler: React nulls `currentTarget` once the event has
+        // been dispatched, so inspecting it afterwards from mock.calls throws.
+        const seen = [];
+        const onChange = jest.fn(event => seen.push(event.currentTarget.value));
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Map Directory' onChange={onChange}/>);
+
+        await userEvent.type(screen.getByLabelText(/Map Directory/), 'map');
+
+        expect(seen).toEqual(['m', 'ma', 'map']);
+        seen.forEach(value => expect(value).not.toContain('/media/wrolpi'));
+    });
+
+    it('tells assistive technology what the path is relative to', () => {
+        // Sighted users get that from the prefix; hiding it would leave everyone else
+        // typing a relative path with no idea what it is relative to.
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Zims Directory' value='' onChange={jest.fn()}/>);
+
+        expect(screen.getByLabelText(/Zims Directory/)).toHaveAccessibleDescription('/media/wrolpi/');
+    });
+
+    it('disables the input, not just the wrapper', async () => {
+        const onChange = jest.fn();
+        renderUI(<PathInput prefix='/media/wrolpi/' label='Videos Directory' disabled
+                            value='videos' onChange={onChange}/>);
+
+        const input = screen.getByLabelText(/Videos Directory/);
+        expect(input).toBeDisabled();
+        await userEvent.type(input, 'x');
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('marks an invalid path so the dashed danger treatment applies', () => {
+        const {container} = renderUI(<PathInput prefix='/media/wrolpi/' label='Bad'
+                                                error='Not a directory' value='' onChange={jest.fn()}/>);
+
+        expect(container.querySelector('[data-error]')).toBeInTheDocument();
+        expect(screen.getByText('Not a directory')).toBeInTheDocument();
+    });
+
+    it('forwards a ref to the input, for callers that focus it', () => {
+        const ref = React.createRef();
+        renderUI(<PathInput ref={ref} prefix='/media/wrolpi/' label='Focusable'
+                            value='' onChange={jest.fn()}/>);
+
+        expect(ref.current.tagName).toBe('INPUT');
+    });
+});
+
+describe('no input reserves space for a section it cannot measure', () => {
+    it('nothing passes leftSectionWidth="auto"', () => {
+        /*
+         * `leftSectionWidth` becomes `--input-padding-inline-start`, and
+         * `padding-inline-start: auto` is not valid CSS -- it resolves to zero, so the
+         * section prints straight over the value.  Five fields on the Settings page shipped
+         * that way and were unreadable.  It fails silently, in CSS, at runtime only, which
+         * is exactly the kind of thing worth a source check.
+         */
+        const offenders = [];
+        const walk = (dir) => {
+            for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(js|jsx|tsx)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+                    // Comments are stripped first: the component that replaced this
+                    // pattern documents it by name, and prose about a mistake is not the
+                    // mistake.
+                    const source = fs.readFileSync(full, 'utf8')
+                        .replace(/\/\*[\s\S]*?\*\//g, '')
+                        .replace(/^\s*\/\/.*$/gm, '');
+                    if (/leftSectionWidth\s*=\s*['"`]auto['"`]/.test(source)
+                        || /rightSectionWidth\s*=\s*['"`]auto['"`]/.test(source)) {
+                        offenders.push(path.relative(path.join(__dirname, '..', '..'), full));
+                    }
+                }
+            }
+        };
+        walk(path.join(__dirname, '..', '..'));
+
+        expect(offenders).toEqual([]);
     });
 });
 

@@ -63,6 +63,32 @@ describe('PathInput lays its prefix beside the value, never over it', () => {
         });
     });
 
+    it('still leaves somewhere to type when the media directory is a long path', () => {
+        /*
+         * The prefix is whatever the API reports as the media directory, so its length is not
+         * ours to assume.  It is `/media/wrolpi` on a Pi, but a development box or an unusual
+         * Docker mount can report something far longer, and a prefix that refuses to shrink
+         * would take the whole row and leave the input at zero width -- a field that cannot
+         * be typed into at all.
+         */
+        cy.mountUI(
+            <div style={{width: 320}}>
+                <PathInput
+                    label='Archive Destination'
+                    prefix='/mnt/storage/external/wrolpi-media-library-volume/'
+                    defaultValue='archive/%(domain)s'
+                />
+            </div>,
+        );
+
+        cy.shouldNotOverlap('.wrolpi-path-input-prefix', '.wrolpi-path-input-control input');
+        cy.get('.wrolpi-path-input-control input').should(($input) =>
+            expect($input[0].clientWidth, 'input keeps a usable width').to.be.greaterThan(60));
+        // The control must not spill out of the column it was given either.
+        cy.get('.wrolpi-path-input-control').should(($control) =>
+            expect($control[0].getBoundingClientRect().width).to.be.at.most(320));
+    });
+
     it('detects the overlap that started this, so the check has teeth', () => {
         /*
          * The original defect, reproduced deliberately: Mantine turns leftSectionWidth into

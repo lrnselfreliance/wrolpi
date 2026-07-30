@@ -110,6 +110,13 @@ html[data-theme="amber"] .wrolpi-theme-option-active {
     line-height: 1.4;
 }
 
+/* Separated from the theme grid: it configures the chosen theme, it is not a choice. */
+.wrolpi-media-filter-setting {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
 /* ---------------------------------------------------------------- Modals */
 /*
  * Actions sit below the body, separated by a hairline rather than a raised bar.

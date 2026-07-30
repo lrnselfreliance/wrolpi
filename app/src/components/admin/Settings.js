@@ -28,6 +28,7 @@ import {
     Select,
     ThemePicker,
     toast,
+    PathInput,
     TextInput,
 } from "../ui";
 
@@ -776,9 +777,8 @@ export function SettingsPage() {
                                 position='top'
                             />
                         </label>
-                        <TextInput
-                            leftSectionWidth='auto'
-                            leftSection={<span style={{fontSize: '0.85em', paddingLeft: 4}}>{mediaDirectoryLabel}</span>}
+                        <PathInput
+                            prefix={mediaDirectoryLabel}
                             value={state.archive_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('archive_destination', e.currentTarget.value)}
@@ -804,9 +804,8 @@ export function SettingsPage() {
                                 position='top'
                             />
                         </label>
-                        <TextInput
-                            leftSectionWidth='auto'
-                            leftSection={<span style={{fontSize: '0.85em', paddingLeft: 4}}>{mediaDirectoryLabel}</span>}
+                        <PathInput
+                            prefix={mediaDirectoryLabel}
                             value={state.videos_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('videos_destination', e.currentTarget.value)}
@@ -814,9 +813,8 @@ export function SettingsPage() {
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
                         <label>Map Directory</label>
-                        <TextInput
-                            leftSectionWidth='auto'
-                            leftSection={<span style={{fontSize: '0.85em', paddingLeft: 4}}>{mediaDirectoryLabel}</span>}
+                        <PathInput
+                            prefix={mediaDirectoryLabel}
                             value={state.map_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('map_destination', e.currentTarget.value)}
@@ -824,9 +822,8 @@ export function SettingsPage() {
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
                         <label>Zims Directory</label>
-                        <TextInput
-                            leftSectionWidth='auto'
-                            leftSection={<span style={{fontSize: '0.85em', paddingLeft: 4}}>{mediaDirectoryLabel}</span>}
+                        <PathInput
+                            prefix={mediaDirectoryLabel}
                             value={state.zims_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('zims_destination', e.currentTarget.value)}
@@ -834,9 +831,8 @@ export function SettingsPage() {
                     </Grid.Col>
                     <Grid.Col span={{base: 12, sm: 6}}>
                         <label>Playlists Directory</label>
-                        <TextInput
-                            leftSectionWidth='auto'
-                            leftSection={<span style={{fontSize: '0.85em', paddingLeft: 4}}>{mediaDirectoryLabel}</span>}
+                        <PathInput
+                            prefix={mediaDirectoryLabel}
                             value={state.playlists_destination}
                             disabled={!editSpecialDirectories}
                             onChange={e => handleInputChange('playlists_destination', e.currentTarget.value)}

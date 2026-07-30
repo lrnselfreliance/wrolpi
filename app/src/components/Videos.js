@@ -15,6 +15,7 @@ import {
     HelpHeader,
     InfoHeader,
     isoDatetimeToAgoPopup,
+    mimetypeColor,
     PageContainer,
     PreviewLink,
     scrollToTop,
@@ -880,7 +881,8 @@ export function VideoCard({file}) {
         <div>{detailLine}</div>
     </>;
 
-    return <Card media={media} title={titleElm} meta={meta}/>
+    return <Card media={media} title={titleElm} meta={meta}
+                 color={mimetypeColor(file.mimetype, file.primary_path)}/>
 }
 
 export function VideoRowCells({file}) {

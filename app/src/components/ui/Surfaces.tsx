@@ -148,7 +148,8 @@ export function Card({media, title, meta, children, onClick, color, className}: 
             flexDirection: 'column',
             // An accent edge rather than a tinted surface: the design rules keep surfaces
             // flat, and a 3px edge survives night mode without becoming a bright patch.
-            borderTop: color ? `3px solid var(--${color})` : undefined,
+            // Along the bottom, where it does not compete with the poster's top edge.
+            borderBottom: color ? `3px solid var(--${color})` : undefined,
         }}
     >
         {media && <div style={{borderBottom: '1px solid var(--border)'}}>{media}</div>}

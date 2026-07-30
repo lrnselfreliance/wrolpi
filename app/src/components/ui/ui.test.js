@@ -440,13 +440,13 @@ describe('Card', () => {
         // files had dropped the accent because our Card had no equivalent.
         const {container} = renderUI(<Card title='Water Storage.pdf' color='red'/>);
 
-        expect(container.firstChild).toHaveStyle({borderTop: '3px solid var(--red)'});
+        expect(container.firstChild).toHaveStyle({borderBottom: '3px solid var(--red)'});
     });
 
     it('has no accent when no colour is given', () => {
         const {container} = renderUI(<Card title='Plain'/>);
 
-        expect(container.firstChild.style.borderTop).toBe('');
+        expect(container.firstChild.style.borderBottom).toBe('');
     });
 });
 

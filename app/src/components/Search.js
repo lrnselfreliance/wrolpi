@@ -517,7 +517,9 @@ export function SearchIconButton() {
     const {openSearchModal} = React.useContext(KeyboardShortcutsContext);
 
     return (
-        <a className='item' style={{paddingRight: '0.7em'}} onClick={openSearchModal}>
+        <a className='item' style={{paddingRight: '0.7em'}} onClick={openSearchModal}
+           role='button' tabIndex={0} aria-label='Search'
+           onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && openSearchModal()}>
             <Icon name='search'/>
             <ShortcutHint shortcutKey="K"/>
         </a>

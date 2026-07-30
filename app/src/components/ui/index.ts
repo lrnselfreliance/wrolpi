@@ -16,6 +16,8 @@ export * from './Button';
 export * from './Feedback';
 export * from './Surfaces';
 export * from './DataTable';
+export * from './Navigation';
+export * from './SearchBox';
 export * from './Inputs';
 export * from './Overlays';
 export * from './ThemePicker';

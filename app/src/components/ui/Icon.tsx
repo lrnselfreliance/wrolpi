@@ -92,6 +92,7 @@ const semanticNames: Record<string, keyof typeof Tabler> = {
     'map outline': 'IconMap',
     'microchip': 'IconCpu',
     'minus': 'IconMinus',
+    'paypal': 'IconBrandPaypal',
     'play': 'IconPlayerPlay',
     'plug': 'IconPlug',
     'plus': 'IconPlus',
@@ -133,6 +134,29 @@ const semanticNames: Record<string, keyof typeof Tabler> = {
     'wrench': 'IconTool',
     'x': 'IconX',
 };
+
+export interface IconStackProps {
+    /** The main glyph. */
+    children: React.ReactNode;
+    /** A smaller glyph pinned to the bottom-right, qualifying the first. */
+    corner: React.ReactNode;
+    /** Accessible name for the pair; the two glyphs mean one thing together. */
+    label: string;
+}
+
+/**
+ * Two icons composed into one symbol — a wifi glyph with a question mark on it,
+ * say.  Replaces Semantic's IconGroup.
+ *
+ * The corner glyph gets a background matching the surface so it stays legible
+ * over the icon beneath it.
+ */
+export function IconStack({children, corner, label}: IconStackProps) {
+    return <span className='wrolpi-icon-stack' role='img' aria-label={label}>
+        {children}
+        <span className='wrolpi-icon-stack-corner' aria-hidden='true'>{corner}</span>
+    </span>
+}
 
 export interface IconProps extends Omit<React.SVGProps<SVGSVGElement>, 'name' | 'ref'> {
     /** A Semantic UI icon name, for migrated call sites. */

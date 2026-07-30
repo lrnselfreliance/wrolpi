@@ -17,7 +17,6 @@ jest.mock('../api/controller', () => ({
     getControllerStats: jest.fn().mockResolvedValue({}),
 }));
 
-jest.mock('react-semantic-toasts-2', () => ({toast: jest.fn()}));
 
 const controllerApi = require('../api/controller');
 
